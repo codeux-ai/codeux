@@ -413,8 +413,20 @@ class JulesAgentServer {
   }
 
   private async startJulesTask(task: Subtask, sourceId: string, baseBranch: string): Promise<JulesSession> {
+    // Load the technical guide from markdown
+    let technicalGuide = "";
+    try {
+      technicalGuide = await fs.readFile(path.join(process.cwd(), "agents/sprint_agent_guide.md"), "utf-8");
+    } catch (error) {
+      console.error("Could not load sprint_agent_guide.md. Using subtask prompt only.");
+    }
+
+    const fullPrompt = technicalGuide 
+      ? `## SYSTEM INSTRUCTIONS & OPERATING GUIDE\n\n${technicalGuide}\n\n---\n\n## SUBTASK TO EXECUTE\n\n${task.prompt}`
+      : task.prompt;
+
     const data = {
-      prompt: task.prompt,
+      prompt: fullPrompt,
       title: `[${task.id}] ${task.title}`,
       sourceContext: {
         source: this.normalizeName("sources", sourceId),
