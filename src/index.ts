@@ -472,11 +472,21 @@ class JulesAgentServer {
         return { content: [{ type: "text", text: `Subtasks directory already exists: ${subtasksDir}.` }] };
       } catch {
         await fs.mkdir(subtasksDir, { recursive: true });
+        
+        let planningGuide = "";
+        try {
+          planningGuide = await this.getGuideContent("sprint_agent_guide.md", args.repo_path);
+          planningGuide = `\n\n### Technical Operating Standard\n\n${planningGuide}\n`;
+        } catch {
+          // Fallback if guide not found
+        }
+
         return { 
           content: [{ 
             type: "text", 
             text: `### Planning Phase for Sprint ${args.sprint_number}\n\n` +
                   `Created directory: \`${subtasksDir}\`.\n\n` +
+                  planningGuide +
                   `**Instructions for the calling Agent:**\n` +
                   `1. Read \`sprints/sprint-${args.sprint_number}.md\`.\n` +
                   `2. Break the sprint into small, well-planned tasks.\n` +
@@ -527,7 +537,7 @@ class JulesAgentServer {
     if (args.action === "orchestrate") {
       const readyTasks = subtasks.filter(t => t.status === "PENDING" && t.is_independent);
       for (const task of readyTasks) {
-        const session = await this.startJulesTask(task, args.source_id, defaultFeatureBranch);
+        const session = await this.startJulesTask(task, args.source_id, defaultFeatureBranch, args.repo_path);
         task.status = "RUNNING";
         task.session_id = session.id;
         report += `🚀 **Started Jules Session** for task \`${task.id}\`: [${session.id}](${session.id})\n`;
@@ -540,7 +550,42 @@ class JulesAgentServer {
       report += `- ${statusIcon} **${task.id}**: \`${task.status}\` - ${task.title}\n`;
     }
 
+    try {
+      const orchGuide = await this.getGuideContent("orchestrator.md", args.repo_path);
+      report += `\n---\n\n### Orchestration Guidance\n\n${orchGuide}`;
+    } catch {
+      // No orchestrator guide found
+    }
+
     return { content: [{ type: "text", text: report }] };
+  }
+
+  private async getGuideContent(guideName: string, repoPath?: string): Promise<string> {
+    const searchPaths = [
+      // 1. Check in the provided repo_path (highest priority)
+      ...(repoPath ? [
+        path.join(repoPath, "agents", guideName),
+        path.join(repoPath, ".gemini", "agents", guideName),
+        path.join(repoPath, guideName)
+      ] : []),
+      // 2. Check in the process CWD (where the CLI is running)
+      path.join(process.cwd(), "agents", guideName),
+      path.join(process.cwd(), ".gemini", "agents", guideName),
+      path.join(process.cwd(), guideName),
+      // 3. Fallback to the project root (the default guides)
+      path.join(projectRoot, "agents", guideName)
+    ];
+
+    for (const searchPath of searchPaths) {
+      try {
+        await fs.access(searchPath);
+        return await fs.readFile(searchPath, "utf-8");
+      } catch {
+        continue;
+      }
+    }
+    
+    throw new Error(`Guide not found: ${guideName}`);
   }
 
   private async loadSubtasks(dir: string): Promise<Subtask[]> {
@@ -566,8 +611,8 @@ class JulesAgentServer {
     return subtasks;
   }
 
-  private async startJulesTask(task: Subtask, sourceId: string, baseBranch: string): Promise<JulesSession> {
-    const workerGuide = await fs.readFile(path.join(projectRoot, "agents/worker.md"), "utf-8");
+  private async startJulesTask(task: Subtask, sourceId: string, baseBranch: string, repoPath: string): Promise<JulesSession> {
+    const workerGuide = await this.getGuideContent("worker.md", repoPath);
     const fullPrompt = `## SYSTEM INSTRUCTIONS & ENGINEERING STANDARDS\n\n${workerGuide}\n\n---\n\n## SUBTASK TO EXECUTE\n\n${task.prompt}`;
     const data = {
       prompt: fullPrompt,
