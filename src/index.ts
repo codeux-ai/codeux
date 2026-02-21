@@ -12,8 +12,13 @@ import type { AxiosInstance, AxiosError } from "axios";
 import dotenv from "dotenv";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { fileURLToPath } from "url";
 
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, "..");
+
+dotenv.config({ path: path.join(projectRoot, ".env") });
 
 /**
  * Jules Agent MCP Server (v1.5.0)
@@ -562,7 +567,7 @@ class JulesAgentServer {
   }
 
   private async startJulesTask(task: Subtask, sourceId: string, baseBranch: string): Promise<JulesSession> {
-    const workerGuide = await fs.readFile(path.join(process.cwd(), "agents/worker.md"), "utf-8");
+    const workerGuide = await fs.readFile(path.join(projectRoot, "agents/worker.md"), "utf-8");
     const fullPrompt = `## SYSTEM INSTRUCTIONS & ENGINEERING STANDARDS\n\n${workerGuide}\n\n---\n\n## SUBTASK TO EXECUTE\n\n${task.prompt}`;
     const data = {
       prompt: fullPrompt,

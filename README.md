@@ -170,6 +170,19 @@ If you want to contribute or run from source:
     ```bash
     npm link
     ```
+6.  **Add to Gemini CLI (Manual Build)**:
+    Once linked, you can use the `jules-agent` command globally:
+    ```bash
+    gemini mcp add jules jules-agent
+    ```
+    *Note: The server will automatically use the `.env` file and technical guides from the source directory, regardless of where you run the command.*
+
+7.  **Alternative: Run Local Source with npx**:
+    If you prefer not to use `npm link`, you can point `npx` directly to your project directory:
+    ```bash
+    gemini mcp add jules npx /path/to/jules-agent-mcp
+    ```
+    *This is useful for testing local changes without modifying your global system path.*
 
 ---
 
