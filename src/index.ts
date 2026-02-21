@@ -23,11 +23,20 @@ dotenv.config();
  */
 
 // Configuration
-const API_KEY = process.env.JULES_API_KEY || process.env.JULES_KEY;
+const args = process.argv.slice(2);
+const apiKeyArg = args.find(arg => arg.startsWith("--api-key="))?.split("=")[1] || 
+                  (args.indexOf("--api-key") !== -1 ? args[args.indexOf("--api-key") + 1] : null);
+
+const API_KEY = apiKeyArg || process.env.JULES_API_KEY || process.env.JULES_KEY;
 const BASE_URL = process.env.JULES_API_BASE_URL || "https://jules.googleapis.com/v1alpha";
 
 if (!API_KEY) {
-  console.error("Error: JULES_API_KEY or JULES_KEY environment variable is required.");
+  console.error("Error: Jules API Key is missing.");
+  console.error("Please provide it via:");
+  console.error("  1. Environment variable: JULES_API_KEY or JULES_KEY");
+  console.error("  2. Command line argument: --api-key <your_key>");
+  console.error("  3. A .env file in the current directory");
+  console.error("\nAvailable environment variables:", Object.keys(process.env).filter(k => k.includes("KEY") || k.includes("JULES")).join(", ") || "none");
   process.exit(1);
 }
 
