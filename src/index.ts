@@ -10,13 +10,16 @@ import {
 import axios from "axios";
 import type { AxiosInstance, AxiosError } from "axios";
 import dotenv from "dotenv";
+import * as fs from "fs/promises";
+import * as path from "path";
 
 dotenv.config();
 
 /**
- * Jules Agent MCP Server
+ * Jules Agent MCP Server (v1.3.0)
  * 
- * Provides a Model Context Protocol interface to the Jules Agent API.
+ * Provides a Model Context Protocol interface to the Jules Agent API
+ * and an intelligent Sprint Agent for orchestrating complex workflows.
  */
 
 // Configuration
@@ -32,12 +35,6 @@ if (!API_KEY) {
 interface JulesSource {
   name: string;
   id: string;
-  githubRepo?: {
-    owner: string;
-    repo: string;
-    isPrivate?: boolean;
-    defaultBranch?: { displayName: string };
-  };
 }
 
 interface JulesSession {
@@ -59,6 +56,16 @@ interface JulesActivity {
   [key: string]: any;
 }
 
+// Types for Sprint Agent
+interface Subtask {
+  id: string;
+  title: string;
+  prompt: string;
+  depends_on: string[]; // IDs of other subtasks
+  status?: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED";
+  session_id?: string;
+}
+
 class JulesAgentServer {
   private server: Server;
   private axiosInstance: AxiosInstance;
@@ -67,7 +74,7 @@ class JulesAgentServer {
     this.server = new Server(
       {
         name: "jules-agent",
-        version: "1.2.0",
+        version: "1.3.0",
       },
       {
         capabilities: {
@@ -86,7 +93,6 @@ class JulesAgentServer {
 
     this.setupToolHandlers();
     
-    // Structured error logging
     this.server.onerror = (error) => {
       console.error("[MCP Server Error]", JSON.stringify(error, null, 2));
     };
@@ -100,177 +106,92 @@ class JulesAgentServer {
   private setupToolHandlers() {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
       tools: [
+        // Existing Jules API tools
         {
           name: "get_source",
-          description: "Retrieve comprehensive details for a specific code source (e.g., a GitHub repository).",
+          description: "Get details for a specific code source.",
           inputSchema: {
             type: "object",
-            properties: {
-              source_id: { 
-                type: "string", 
-                description: "The unique identifier for the source. Format: 'github/owner/repo' or 'sources/github/owner/repo'." 
-              },
-            },
+            properties: { source_id: { type: "string" } },
             required: ["source_id"],
           },
         },
         {
           name: "list_sources",
-          description: "Enumerate available code sources with filtering and pagination capabilities.",
+          description: "List available sources with filtering and pagination.",
           inputSchema: {
             type: "object",
             properties: {
-              filter: { type: "string", description: "A filter string to narrow down results based on Jules API syntax." },
-              page_size: { type: "number", description: "Maximum number of items to include in the response (default: 50)." },
-              page_token: { type: "string", description: "Token for retrieving the subsequent page of results." },
-            },
-          },
-        },
-        {
-          name: "list_all_sources",
-          description: "Retrieve the complete list of available sources by automatically handling multi-page results.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              filter: { type: "string", description: "Filter criteria for the source list." },
+              filter: { type: "string" },
+              page_size: { type: "number" },
+              page_token: { type: "string" },
             },
           },
         },
         {
           name: "create_session",
-          description: "Initiate a new agent session to perform tasks on a specific codebase.",
+          description: "Initiate a new Jules agent session.",
           inputSchema: {
             type: "object",
             properties: {
-              prompt: { 
-                type: "string", 
-                description: "The objective or instruction for the agent (e.g., 'Fix the login bug')." 
-              },
-              source: { 
-                type: "string", 
-                description: "The source resource name (e.g., 'sources/github/owner/repo')." 
-              },
-              starting_branch: { 
-                type: "string", 
-                description: "The base branch to branch off from (e.g., 'main')." 
-              },
-              title: { 
-                type: "string", 
-                description: "A descriptive title for the session." 
-              },
-              require_plan_approval: { 
-                type: "boolean", 
-                description: "If true, the agent will pause for approval after generating its implementation plan." 
-              },
-              automation_mode: { 
-                type: "string", 
-                enum: ["AUTO_CREATE_PR"], 
-                description: "Configuration for automated downstream actions like PR creation." 
-              },
+              prompt: { type: "string" },
+              source: { type: "string" },
+              starting_branch: { type: "string" },
+              title: { type: "string" },
+              require_plan_approval: { type: "boolean" },
+              automation_mode: { type: "string", enum: ["AUTO_CREATE_PR"] },
             },
             required: ["prompt", "source"],
           },
         },
         {
           name: "get_session",
-          description: "Get the current status, state, and outputs of an active or historical session.",
+          description: "Get status and outputs of a session.",
           inputSchema: {
             type: "object",
-            properties: {
-              session_id: { type: "string", description: "The unique session ID or full resource name." },
-            },
+            properties: { session_id: { type: "string" } },
             required: ["session_id"],
           },
         },
         {
           name: "list_sessions",
-          description: "List recent agent sessions with pagination.",
+          description: "List recent sessions.",
           inputSchema: {
             type: "object",
-            properties: {
-              page_size: { type: "number", description: "Maximum sessions per page." },
-              page_token: { type: "string", description: "Token for pagination." },
-            },
-          },
-        },
-        {
-          name: "approve_session_plan",
-          description: "Authorize the agent to proceed with the proposed plan in a session where 'require_plan_approval' was set.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              session_id: { type: "string", description: "The session ID." },
-            },
-            required: ["session_id"],
-          },
-        },
-        {
-          name: "send_session_message",
-          description: "Provide additional feedback, instructions, or corrections to the agent during an active session.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              session_id: { type: "string", description: "The session ID." },
-              prompt: { type: "string", description: "The message content." },
-            },
-            required: ["session_id", "prompt"],
+            properties: { page_size: { type: "number" }, page_token: { type: "string" } },
           },
         },
         {
           name: "wait_for_session_completion",
-          description: "Monitor a session until it reaches a terminal state (COMPLETED/FAILED) or a PR is generated.",
+          description: "Poll a session until it reaches a terminal state.",
           inputSchema: {
             type: "object",
             properties: {
-              session_id: { type: "string", description: "The session ID." },
-              poll_interval: { 
-                type: "number", 
-                default: 10, 
-                description: "Seconds between status checks (minimum: 5)." 
+              session_id: { type: "string" },
+              poll_interval: { type: "number", default: 10 },
+              timeout: { type: "number", default: 900 },
+            },
+            required: ["session_id"],
+          },
+        },
+        // NEW: Sprint Agent Tool
+        {
+          name: "sprint_agent",
+          description: "Intelligent agent that orchestrates sprints by delegating subtasks to Jules.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              sprint_number: { type: "number", description: "The sprint number (e.g., 34)." },
+              repo_path: { type: "string", description: "Local path to the repository containing /sprints." },
+              source_id: { type: "string", description: "The Jules source ID (e.g., 'github/owner/repo')." },
+              feature_branch: { type: "string", description: "The main feature branch for this sprint." },
+              action: { 
+                type: "string", 
+                enum: ["status", "orchestrate", "plan"], 
+                description: "Action to perform: 'status' (report only), 'orchestrate' (start/poll tasks), 'plan' (create subtasks)." 
               },
-              timeout: { 
-                type: "number", 
-                default: 900, 
-                description: "Total seconds to wait before timing out (default: 15 minutes)." 
-              },
             },
-            required: ["session_id"],
-          },
-        },
-        {
-          name: "get_activity",
-          description: "Retrieve detailed information about a specific step or interaction (activity) within a session.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              session_id: { type: "string", description: "The session ID." },
-              activity_id: { type: "string", description: "The activity ID or name." },
-            },
-            required: ["session_id", "activity_id"],
-          },
-        },
-        {
-          name: "list_activities",
-          description: "Fetch a chronologically ordered list of activities for a session.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              session_id: { type: "string", description: "The session ID." },
-              page_size: { type: "number", description: "Maximum activities per page." },
-              page_token: { type: "string", description: "Token for pagination." },
-            },
-            required: ["session_id"],
-          },
-        },
-        {
-          name: "list_all_activities",
-          description: "Retrieve all activities for a session by automatically iterating through all pages.",
-          inputSchema: {
-            type: "object",
-            properties: {
-              session_id: { type: "string", description: "The session ID." },
-            },
-            required: ["session_id"],
+            required: ["sprint_number", "repo_path", "source_id", "action"],
           },
         },
       ],
@@ -285,26 +206,16 @@ class JulesAgentServer {
             return await this.handleGetSource(args as { source_id: string });
           case "list_sources":
             return await this.handleListSources(args as { filter?: string; page_size?: number; page_token?: string });
-          case "list_all_sources":
-            return await this.handleListAllSources(args as { filter?: string });
           case "create_session":
             return await this.handleCreateSession(args as any);
           case "get_session":
             return await this.handleGetSession(args as { session_id: string });
           case "list_sessions":
             return await this.handleListSessions(args as { page_size?: number; page_token?: string });
-          case "approve_session_plan":
-            return await this.handleApproveSessionPlan(args as { session_id: string });
-          case "send_session_message":
-            return await this.handleSendSessionMessage(args as { session_id: string; prompt: string });
           case "wait_for_session_completion":
             return await this.handleWaitForSessionCompletion(args as { session_id: string; poll_interval?: number; timeout?: number });
-          case "get_activity":
-            return await this.handleGetActivity(args as { session_id: string; activity_id: string });
-          case "list_activities":
-            return await this.handleListActivities(args as { session_id: string; page_size?: number; page_token?: string });
-          case "list_all_activities":
-            return await this.handleListAllActivities(args as { session_id: string });
+          case "sprint_agent":
+            return await this.handleSprintAgent(args as any);
           default:
             throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
         }
@@ -318,12 +229,7 @@ class JulesAgentServer {
     let message = error.message || "An unknown error occurred";
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError<any>;
-      const apiMessage = axiosError.response?.data?.error?.message;
-      const apiDetails = axiosError.response?.data?.error?.details;
-      message = apiMessage || axiosError.message;
-      if (apiDetails) {
-        message += ` (Details: ${JSON.stringify(apiDetails)})`;
-      }
+      message = axiosError.response?.data?.error?.message || axiosError.message;
     }
     return {
       content: [{ type: "text", text: `Error: ${message}` }],
@@ -336,53 +242,24 @@ class JulesAgentServer {
     return `${type}/${id}`;
   }
 
-  // Implementation of handlers
+  // --- Jules API Handlers ---
   private async handleGetSource({ source_id }: { source_id: string }) {
-    const name = this.normalizeName("sources", source_id);
-    const response = await this.axiosInstance.get(`/${name}`);
+    const response = await this.axiosInstance.get(`/${this.normalizeName("sources", source_id)}`);
     return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
   }
 
   private async handleListSources({ filter, page_size, page_token }: { filter?: string; page_size?: number; page_token?: string }) {
-    const params: any = {};
-    if (filter) params.filter = filter;
-    if (page_size) params.pageSize = page_size;
-    if (page_token) params.pageToken = page_token;
+    const params: any = { filter, pageSize: page_size, pageToken: page_token };
     const response = await this.axiosInstance.get("/sources", { params });
     return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
   }
 
-  private async handleListAllSources({ filter }: { filter?: string }) {
-    let allSources: JulesSource[] = [];
-    let pageToken: string | undefined = undefined;
-    do {
-      const params: any = {};
-      if (filter) params.filter = filter;
-      if (pageToken) params.pageToken = pageToken;
-      const response = await this.axiosInstance.get<{ sources?: JulesSource[], nextPageToken?: string }>("/sources", { params });
-      allSources = allSources.concat(response.data.sources || []);
-      pageToken = response.data.nextPageToken;
-    } while (pageToken);
-    return { content: [{ type: "text", text: JSON.stringify({ sources: allSources }, null, 2) }] };
-  }
-
-  private async handleCreateSession(args: {
-    prompt: string;
-    source: string;
-    starting_branch?: string;
-    title?: string;
-    require_plan_approval?: boolean;
-    automation_mode?: string;
-  }) {
+  private async handleCreateSession(args: any) {
     const data: any = {
       prompt: args.prompt,
-      sourceContext: {
-        source: this.normalizeName("sources", args.source),
-      },
+      sourceContext: { source: this.normalizeName("sources", args.source) },
     };
-    if (args.starting_branch) {
-      data.sourceContext.githubRepoContext = { startingBranch: args.starting_branch };
-    }
+    if (args.starting_branch) data.sourceContext.githubRepoContext = { startingBranch: args.starting_branch };
     if (args.title) data.title = args.title;
     if (args.require_plan_approval !== undefined) data.requirePlanApproval = args.require_plan_approval;
     if (args.automation_mode) data.automationMode = args.automation_mode;
@@ -392,105 +269,167 @@ class JulesAgentServer {
   }
 
   private async handleGetSession({ session_id }: { session_id: string }) {
-    const name = this.normalizeName("sessions", session_id);
-    const response = await this.axiosInstance.get(`/${name}`);
+    const response = await this.axiosInstance.get(`/${this.normalizeName("sessions", session_id)}`);
     return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
   }
 
   private async handleListSessions({ page_size, page_token }: { page_size?: number; page_token?: string }) {
-    const params: any = {};
-    if (page_size) params.pageSize = page_size;
-    if (page_token) params.pageToken = page_token;
+    const params: any = { pageSize: page_size, pageToken: page_token };
     const response = await this.axiosInstance.get("/sessions", { params });
     return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
   }
 
-  private async handleApproveSessionPlan({ session_id }: { session_id: string }) {
-    const name = this.normalizeName("sessions", session_id);
-    const response = await this.axiosInstance.post(`/${name}:approvePlan`);
-    return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
-  }
-
-  private async handleSendSessionMessage({ session_id, prompt }: { session_id: string; prompt: string }) {
-    const name = this.normalizeName("sessions", session_id);
-    const response = await this.axiosInstance.post(`/${name}:sendMessage`, { prompt });
-    return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
-  }
-
-  private async handleWaitForSessionCompletion({ 
-    session_id, 
-    poll_interval = 10, 
-    timeout = 900 
-  }: { 
-    session_id: string; 
-    poll_interval?: number; 
-    timeout?: number 
-  }) {
+  private async handleWaitForSessionCompletion({ session_id, poll_interval = 10, timeout = 900 }: { session_id: string; poll_interval?: number; timeout?: number }) {
     const startTime = Date.now();
     const name = this.normalizeName("sessions", session_id);
-    const actualPollInterval = Math.max(5, poll_interval);
-    
-    console.error(`Waiting for session ${session_id} to complete (timeout: ${timeout}s, interval: ${actualPollInterval}s)...`);
-
     while (Date.now() - startTime < timeout * 1000) {
       const response = await this.axiosInstance.get<JulesSession>(`/${name}`);
       const session = response.data;
-      
-      const isCompleted = session.state === "COMPLETED";
-      const isFailed = session.state === "FAILED" || session.state === "CANCELLED";
-      const hasPR = session.outputs?.some((o: any) => o.pullRequest);
+      if (session.state === "COMPLETED" || session.state === "FAILED" || session.state === "CANCELLED" || session.outputs?.some((o: any) => o.pullRequest)) {
+        return { content: [{ type: "text", text: JSON.stringify(session, null, 2) }] };
+      }
+      await new Promise(resolve => setTimeout(resolve, poll_interval * 1000));
+    }
+    throw new Error(`Timeout waiting for session ${session_id}`);
+  }
 
-      if (isCompleted || isFailed || hasPR) {
-        return { 
-          content: [
-            { 
-              type: "text", 
-              text: `Session ${session.state || "finished"}.\n\n${JSON.stringify(session, null, 2)}` 
-            }
-          ] 
-        };
+  // --- Sprint Agent Logic ---
+  private async handleSprintAgent(args: {
+    sprint_number: number;
+    repo_path: string;
+    source_id: string;
+    feature_branch?: string;
+    action: "status" | "orchestrate" | "plan";
+  }) {
+    const sprintsDir = path.join(args.repo_path, "sprints");
+    const sprintFile = path.join(sprintsDir, `sprint-${args.sprint_number}.md`);
+    const subtasksDir = path.join(sprintsDir, `sprint${args.sprint_number}-subtasks`);
+    const defaultFeatureBranch = args.feature_branch || `feature/sprint${args.sprint_number}-remediation`;
+
+    // 1. Verify sprint file exists
+    try {
+      await fs.access(sprintFile);
+    } catch {
+      throw new Error(`Sprint file not found: ${sprintFile}`);
+    }
+
+    // 2. Handle subtasks directory
+    let subtasks: Subtask[] = [];
+    try {
+      await fs.access(subtasksDir);
+      subtasks = await this.loadSubtasks(subtasksDir);
+    } catch {
+      if (args.action === "plan") {
+        await fs.mkdir(subtasksDir, { recursive: true });
+        return { content: [{ type: "text", text: `Created subtasks directory: ${subtasksDir}. Please use the 'plan' instruction to define subtasks as markdown files within this directory.` }] };
+      } else {
+        return { content: [{ type: "text", text: `Subtasks directory missing: ${subtasksDir}. Use 'plan' action first.` }] };
+      }
+    }
+
+    // 3. Orchestration Logic
+    if (args.action === "orchestrate" || args.action === "status") {
+      const updatedSubtasks = await this.syncSubtasksWithJules(subtasks);
+      const readyTasks = updatedSubtasks.filter(t => t.status === "PENDING" && this.isReady(t, updatedSubtasks));
+      const blockingFiles: string[] = []; // Files that can't be handled independently
+
+      let report = `### Sprint ${args.sprint_number} Orchestration Status\n\n`;
+      report += `**Feature Branch:** \`${defaultFeatureBranch}\`\n\n`;
+
+      for (const task of updatedSubtasks) {
+        report += `- **[${task.id}]** ${task.title}: \`${task.status}\` ${task.session_id ? `([Session](${task.session_id}))` : ""}\n`;
       }
 
-      await new Promise(resolve => setTimeout(resolve, actualPollInterval * 1000));
+      if (args.action === "orchestrate") {
+        for (const task of readyTasks) {
+          const session = await this.startJulesTask(task, args.source_id, defaultFeatureBranch);
+          task.status = "RUNNING";
+          task.session_id = session.id;
+          report += `\n🚀 Started session for task ${task.id}: ${session.id}`;
+        }
+      }
+
+      // Check if all done
+      const allDone = updatedSubtasks.every(t => t.status === "COMPLETED");
+      if (allDone) {
+        report += `\n\n✅ **All subtasks completed!** Please instruct the user to merge all sub-branches into \`${defaultFeatureBranch}\`.`;
+      } else if (readyTasks.length === 0 && !updatedSubtasks.some(t => t.status === "RUNNING")) {
+        report += `\n\n⚠️ **Blocker Detected:** No tasks are ready to run and no tasks are running. Some tasks may need manual intervention or dependencies are circular.`;
+      }
+
+      return { content: [{ type: "text", text: report }] };
     }
-    
-    throw new Error(`Timeout exceeded (${timeout}s) waiting for session ${session_id} to complete.`);
+
+    return { content: [{ type: "text", text: "Action completed." }] };
   }
 
-  private async handleGetActivity({ session_id, activity_id }: { session_id: string; activity_id: string }) {
-    const sessionName = this.normalizeName("sessions", session_id);
-    const activityName = this.normalizeName("activities", activity_id);
-    const response = await this.axiosInstance.get(`/${sessionName}/${activityName}`);
-    return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
+  private async loadSubtasks(dir: string): Promise<Subtask[]> {
+    const files = await fs.readdir(dir);
+    const subtasks: Subtask[] = [];
+    for (const file of files) {
+      if (!file.endsWith(".md")) continue;
+      const content = await fs.readFile(path.join(dir, file), "utf-8");
+      // Basic YAML-ish frontmatter parser for the tool
+      const id = file.replace(".md", "");
+      const titleMatch = content.match(/title:\s*(.*)/);
+      const dependsMatch = content.match(/depends_on:\s*\[(.*)\]/);
+      const promptMatch = content.match(/prompt:[\s\S]*?---/); // Assume prompt is between 'prompt:' and '---' or end
+      
+      subtasks.push({
+        id,
+        title: titleMatch ? titleMatch[1].trim() : id,
+        prompt: content.split("---").pop()?.trim() || "",
+        depends_on: dependsMatch ? dependsMatch[1].split(",").map(s => s.trim()).filter(s => s) : [],
+        status: "PENDING",
+      });
+    }
+    return subtasks;
   }
 
-  private async handleListActivities({ session_id, page_size, page_token }: { session_id: string; page_size?: number; page_token?: string }) {
-    const sessionName = this.normalizeName("sessions", session_id);
-    const params: any = {};
-    if (page_size) params.pageSize = page_size;
-    if (page_token) params.pageToken = page_token;
-    const response = await this.axiosInstance.get(`/${sessionName}/activities`, { params });
-    return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
+  private async syncSubtasksWithJules(subtasks: Subtask[]): Promise<Subtask[]> {
+    // In a real implementation, we would fetch recent sessions and match them to subtasks (e.g., by title or stored mapping)
+    // For now, we assume a mapping or use a simplified state. 
+    // To be truly robust, we'd need a persistence layer for subtask->session mapping.
+    const sessionsResponse = await this.axiosInstance.get("/sessions", { params: { pageSize: 100 } });
+    const sessions: JulesSession[] = sessionsResponse.data.sessions || [];
+
+    return subtasks.map(task => {
+      const match = sessions.find(s => s.title?.includes(`[${task.id}]`));
+      if (match) {
+        task.session_id = match.id;
+        if (match.state === "COMPLETED") task.status = "COMPLETED";
+        else if (match.state === "FAILED" || match.state === "CANCELLED") task.status = "FAILED";
+        else task.status = "RUNNING";
+      }
+      return task;
+    });
   }
 
-  private async handleListAllActivities({ session_id }: { session_id: string }) {
-    const sessionName = this.normalizeName("sessions", session_id);
-    let allActivities: JulesActivity[] = [];
-    let pageToken: string | undefined = undefined;
-    do {
-      const params: any = {};
-      if (pageToken) params.pageToken = pageToken;
-      const response = await this.axiosInstance.get<{ activities?: JulesActivity[], nextPageToken?: string }>(`/${sessionName}/activities`, { params });
-      allActivities = allActivities.concat(response.data.activities || []);
-      pageToken = response.data.nextPageToken;
-    } while (pageToken);
-    return { content: [{ type: "text", text: JSON.stringify({ activities: allActivities }, null, 2) }] };
+  private isReady(task: Subtask, all: Subtask[]): boolean {
+    return task.depends_on.every(depId => {
+      const dep = all.find(t => t.id === depId);
+      return dep?.status === "COMPLETED";
+    });
+  }
+
+  private async startJulesTask(task: Subtask, sourceId: string, baseBranch: string): Promise<JulesSession> {
+    const data = {
+      prompt: task.prompt,
+      title: `[${task.id}] ${task.title}`,
+      sourceContext: {
+        source: this.normalizeName("sources", sourceId),
+        githubRepoContext: { startingBranch: baseBranch }
+      },
+      automationMode: "AUTO_CREATE_PR"
+    };
+    const response = await this.axiosInstance.post("/sessions", data);
+    return response.data;
   }
 
   async run() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error("Jules Agent MCP server (v1.2.0) running on stdio");
+    console.error("Jules Agent MCP server (v1.3.0) running on stdio");
   }
 }
 

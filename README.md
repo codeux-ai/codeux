@@ -150,12 +150,30 @@ Add to your `claude_desktop_config.json`:
 | `send_session_message` | Interaction with the agent during a session. |
 | `wait_for_session_completion` | Polls until terminal state or PR creation. |
 
-### Activities
+### Sprint Orchestration (v1.3.0)
 | Tool | Description |
 |---|---|
-| `get_activity` | Get details for a specific activity step. |
-| `list_activities` | Paginated list of session interactions. |
-| `list_all_activities` | All interactions for a session. |
+| `sprint_agent` | Orchestrates sprint subtasks by delegating work to Jules agents. |
+
+#### `sprint_agent` Usage
+This tool reads your `/sprints/sprint-N.md` and looks for subtasks in `/sprints/sprintN-subtasks/`.
+- **`sprint_number`**: (e.g., 34)
+- **`repo_path`**: Local path to the project repository.
+- **`source_id`**: The Jules source ID for the repo.
+- **`action`**:
+    - `plan`: Creates the subtasks directory if missing.
+    - `status`: Reports the current state of all subtasks and sessions.
+    - `orchestrate`: Intelligently starts Jules sessions for ready subtasks (based on `depends_on`).
+
+Subtasks should be defined as markdown files (e.g., `task-1.md`) in the subtasks directory with the following structure:
+```markdown
+title: Implement Dashboard Component
+depends_on: [task-0, setup-env]
+prompt:
+Please implement the main dashboard component in src/components/Dashboard.tsx
+---
+(The prompt to be sent to Jules starts here)
+```
 
 ## Environment Variables
 
