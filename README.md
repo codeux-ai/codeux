@@ -109,6 +109,29 @@ Get a real-time report of all subtasks, their dependencies, and linked Jules ses
 
 ---
 
+## 🎨 Customizing Agent Guides
+
+The server uses Markdown guides to define engineering standards and orchestration logic. You can override the default guides by placing your own versions in your project repository or the current working directory.
+
+### 🔍 Search Priority
+The server searches for guides in this order:
+1.  **Repository Path**:
+    - `<repo_path>/agents/<guide>.md`
+    - `<repo_path>/.gemini/agents/<guide>.md`
+    - `<repo_path>/<guide>.md`
+2.  **Current Working Directory**:
+    - `./agents/<guide>.md`
+    - `./.gemini/agents/<guide>.md`
+    - `./<guide>.md`
+3.  **Built-in Defaults**: The standard guides included with the MCP server.
+
+### 📝 Overridable Guides
+- `worker.md`: Technical standards injected into every Jules agent session.
+- `sprint_agent_guide.md`: Operating guide for the main agent during the "plan" phase.
+- `orchestrator.md`: Guidance for the main agent during the "orchestrate" and "status" phases.
+
+---
+
 ## 🛠️ Available Tools
 
 ### 🏗️ Sprint Management
