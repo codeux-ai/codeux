@@ -30,8 +30,9 @@ npm install -g @jules-agent/mcp-server
 ## ⚙️ Client Configuration
 
 ### 🌌 Gemini CLI
-Add to your `~/.gemini/settings.json`:
+You can add the server by editing your `~/.gemini/settings.json` or using the one-line CLI command.
 
+**Manual Configuration:**
 ```json
 {
   "mcpServers": {
@@ -46,14 +47,25 @@ Add to your `~/.gemini/settings.json`:
 }
 ```
 
-### 💻 Codex CLI
-Add to your `~/.codex/config.toml`:
+**CLI Command:**
+```bash
+gemini mcp add jules npx -- -y @jules-agent/mcp-server --env JULES_API_KEY=your_api_key_here
+```
 
+### 💻 Codex CLI
+Add to your `~/.codex/config.toml` or use the one-line CLI command.
+
+**Manual Configuration:**
 ```toml
 [mcp_servers.jules]
 command = "npx"
 args = ["-y", "@jules-agent/mcp-server"]
 env = { JULES_API_KEY = "your_api_key_here" }
+```
+
+**CLI Command:**
+```bash
+codex mcp add jules --env JULES_API_KEY=your_api_key_here -- npx -y @jules-agent/mcp-server
 ```
 
 ### 🤖 Claude Desktop
