@@ -22,13 +22,45 @@ A production-ready [Model Context Protocol (MCP)](https://modelcontextprotocol.i
 npm install -g @jules-agent/mcp-server
 ```
 
-### From Source
-```bash
-git clone https://github.com/numnx/jules-agent-mcp.git
-cd jules-agent-mcp
-npm install
-npm run build
-```
+### From Source (Detailed)
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/numnx/jules-agent-mcp.git
+    cd jules-agent-mcp
+    ```
+
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
+
+3.  **Configure Environment:**
+    Create a `.env` file from the provided example and add your API key:
+    ```bash
+    cp .env.example .env
+    # Edit .env and replace your_api_key_here with your actual Jules API key
+    ```
+
+4.  **Build the project:**
+    This compiles the TypeScript source into executable JavaScript in the `dist/` directory:
+    ```bash
+    npm run build
+    ```
+
+5.  **Verify the installation:**
+    You can test if the server starts correctly by running it manually. It will wait for JSON-RPC input on `stdin`:
+    ```bash
+    node dist/index.js
+    # You should see: "Jules Agent MCP server (v1.1.0) running on stdio"
+    # Press Ctrl+C to exit.
+    ```
+
+6.  **Optional: Link globally for local development:**
+    ```bash
+    npm link
+    # Now you can use 'jules-agent' command anywhere on your system
+    ```
 
 ---
 
