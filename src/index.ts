@@ -21,7 +21,7 @@ const projectRoot = path.resolve(__dirname, "..");
 dotenv.config({ path: path.join(projectRoot, ".env") });
 
 /**
- * Jules Agent MCP Server (v1.5.0)
+ * Jules Subagents MCP Server (v1.2.0)
  * 
  * Provides a Model Context Protocol interface to the Jules Agent API
  * and an intelligent Sprint Orchestration Agent.
@@ -86,8 +86,8 @@ class JulesAgentServer {
   constructor() {
     this.server = new Server(
       {
-        name: "jules-agent",
-        version: "1.5.0",
+        name: "jules-subagents",
+        version: "1.2.0",
       },
       {
         capabilities: {
@@ -473,7 +473,7 @@ class JulesAgentServer {
     feature_branch?: string;
     action: "status" | "orchestrate" | "plan";
   }) {
-    const sprintsDir = path.join(args.repo_path, "sprints");
+    const sprintsDir = path.join(args.repo_path, ".jules-subagents", "sprints");
     const sprintFile = path.join(sprintsDir, `sprint-${args.sprint_number}.md`);
     const subtasksDir = path.join(sprintsDir, `sprint${args.sprint_number}-subtasks`);
     const defaultFeatureBranch = args.feature_branch || `feature/sprint${args.sprint_number}-implementation`;
@@ -627,15 +627,18 @@ class JulesAgentServer {
     const searchPaths = [
       // 1. Check in the provided repo_path (highest priority)
       ...(repoPath ? [
+        path.join(repoPath, ".jules-subagents", "agents", guideName),
         path.join(repoPath, "agents", guideName),
         path.join(repoPath, ".gemini", "agents", guideName),
         path.join(repoPath, guideName)
       ] : []),
       // 2. Check in the process CWD (where the CLI is running)
+      path.join(process.cwd(), ".jules-subagents", "agents", guideName),
       path.join(process.cwd(), "agents", guideName),
       path.join(process.cwd(), ".gemini", "agents", guideName),
       path.join(process.cwd(), guideName),
       // 3. Fallback to the project root (the default guides)
+      path.join(projectRoot, ".jules-subagents", "agents", guideName),
       path.join(projectRoot, "agents", guideName)
     ];
 
@@ -693,7 +696,7 @@ class JulesAgentServer {
   async run() {
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error("Jules Agent MCP server (v1.5.0) running on stdio");
+    console.error("Jules Subagents MCP server (v1.2.0) running on stdio");
   }
 }
 

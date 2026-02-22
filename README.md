@@ -1,4 +1,4 @@
-# 🤖 Jules Agent MCP Server (v1.5.0)
+# 🤖 Jules Subagents MCP Server (v1.2.0)
 
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
 [![Protocol: MCP](https://img.shields.io/badge/Protocol-MCP-green.svg)](https://modelcontextprotocol.io/)
@@ -19,10 +19,10 @@ A production-grade [Model Context Protocol (MCP)](https://modelcontextprotocol.i
 
 ## 📦 Quick Installation
 
-Install globally via NPM to use the `jules-agent` command anywhere:
+Install globally via NPM to use the `jules-subagents` command anywhere:
 
 ```bash
-npm install -g @jules-agent/mcp-server
+npm install -g jules-subagents
 ```
 
 ---
@@ -38,7 +38,7 @@ You can add the server by editing your `~/.gemini/settings.json` or using the on
   "mcpServers": {
     "jules": {
       "command": "npx",
-      "args": ["-y", "@jules-agent/mcp-server"],
+      "args": ["-y", "jules-subagents"],
       "env": {
         "JULES_API_KEY": "your_api_key_here"
       }
@@ -49,7 +49,7 @@ You can add the server by editing your `~/.gemini/settings.json` or using the on
 
 **CLI Command:**
 ```bash
-gemini mcp add jules npx -- -y @jules-agent/mcp-server --api-key your_api_key_here
+gemini mcp add jules npx -- -y jules-subagents --api-key your_api_key_here
 ```
 
 ### 💻 Codex CLI
@@ -59,12 +59,12 @@ Add to your `~/.codex/config.toml` or use the one-line CLI command.
 ```toml
 [mcp_servers.jules]
 command = "npx"
-args = ["-y", "@jules-agent/mcp-server", "--api-key", "your_api_key_here"]
+args = ["-y", "jules-subagents", "--api-key", "your_api_key_here"]
 ```
 
 **CLI Command:**
 ```bash
-codex mcp add jules -- npx -y @jules-agent/mcp-server --api-key your_api_key_here
+codex mcp add jules -- npx -y jules-subagents --api-key your_api_key_here
 ```
 
 ### 🤖 Claude Desktop
@@ -73,9 +73,9 @@ Add to your `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
-    "jules-agent": {
+    "jules-subagents": {
       "command": "npx",
-      "args": ["-y", "@jules-agent/mcp-server"],
+      "args": ["-y", "jules-subagents"],
       "env": {
         "JULES_API_KEY": "your_api_key_here"
       }
@@ -91,7 +91,7 @@ Add to your `claude_desktop_config.json`:
 The `sprint_agent` tool provides a professional framework for managing complex sprints.
 
 ### 1. Planning (`action: "plan"`)
-Initializes `/sprints/sprint<N>-subtasks/`. Break your sprint into independent and sequential tasks.
+Initializes `.jules-subagents/sprints/sprint<N>-subtasks/`. Break your sprint into independent and sequential tasks.
 ```markdown
 title: Implement Auth API
 depends_on: [setup-db]
@@ -116,10 +116,12 @@ The server uses Markdown guides to define engineering standards and orchestratio
 ### 🔍 Search Priority
 The server searches for guides in this order:
 1.  **Repository Path**:
+    - `<repo_path>/.jules-subagents/agents/<guide>.md`
     - `<repo_path>/agents/<guide>.md`
     - `<repo_path>/.gemini/agents/<guide>.md`
     - `<repo_path>/<guide>.md`
 2.  **Current Working Directory**:
+    - `./.jules-subagents/agents/<guide>.md`
     - `./agents/<guide>.md`
     - `./.gemini/agents/<guide>.md`
     - `./<guide>.md`
@@ -172,8 +174,8 @@ If you want to contribute or run from source:
 
 1.  **Clone & Install**:
     ```bash
-    git clone https://github.com/numnx/jules-agent-mcp.git
-    cd jules-agent-mcp
+    git clone https://github.com/numnx/jules-subagents-mcp.git
+    cd jules-subagents-mcp
     npm install
     ```
 2.  **Environment Setup**:
@@ -195,16 +197,16 @@ If you want to contribute or run from source:
     npm link
     ```
 6.  **Add to Gemini CLI (Manual Build)**:
-    Once linked, you can use the `jules-agent` command globally:
+    Once linked, you can use the `jules-subagents` command globally:
     ```bash
-    gemini mcp add jules jules-agent
+    gemini mcp add jules jules-subagents
     ```
     *Note: The server will automatically use the `.env` file and technical guides from the source directory, regardless of where you run the command.*
 
 7.  **Alternative: Run Local Source with npx**:
     If you prefer not to use `npm link`, you can point `npx` directly to your project directory:
     ```bash
-    gemini mcp add jules npx /path/to/jules-agent-mcp
+    gemini mcp add jules npx /path/to/jules-subagents-mcp
     ```
     *This is useful for testing local changes without modifying your global system path.*
 

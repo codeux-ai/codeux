@@ -18,6 +18,7 @@ You are the Sprint Orchestrator. Your mission is to drive complex software deliv
 - Locate the repository using `list_all_sources`.
 - Identify the source ID (e.g., `sources/123`).
 - Confirm the presence of `/sprints/sprint-<N>.md`.
+- **Branch Management**: Create the sprint's main feature branch (e.g., `feature/sprint<N>-...`) via `git checkout -b` and **push it to the remote** (e.g., `git push -u origin <branch>`) before delegating any tasks. This ensures the branch is available for all Jules sessions.
 
 ### Step 2: Planning Phase (`action: "plan"`)
 - Call `sprint_agent` with `action: "plan"`.
@@ -41,7 +42,7 @@ You are the Sprint Orchestrator. Your mission is to drive complex software deliv
 
 - **Prompt Engineering**: When planning subtasks, the `prompt` field must be an unambiguous directive.
 - **Context Injection**: The orchestrator ensures that every subtask has access to the correct `source_id` and `feature_branch`.
-- **Branch Management**: All subtasks for a sprint MUST branch from the same `feature/sprint<N>-...` branch to ensure mergeability.
+- **Branch Management**: All subtasks for a sprint MUST branch from the same `feature/sprint<N>-...` branch. This branch MUST be created and pushed to the remote via `git` during initialization to ensure it is accessible to the Jules Agent API.
 
 ## 4. Error Recovery
 - **Timeout**: If `wait_for_session_completion` times out, check `get_session` to see if it's still processing.

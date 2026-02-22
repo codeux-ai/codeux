@@ -1,11 +1,11 @@
 {
-  "name": "@jules-agent/mcp-server",
-  "version": "1.1.0",
+  "name": "jules-subagents",
+  "version": "1.2.0",
   "description": "Model Context Protocol server for the Jules Agent API.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "jules-agent": "dist/index.js"
+    "jules-subagents": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
