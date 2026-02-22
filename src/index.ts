@@ -11,6 +11,7 @@ import axios from "axios";
 import type { AxiosInstance, AxiosError } from "axios";
 import dotenv from "dotenv";
 import * as fs from "fs/promises";
+import { existsSync } from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 
@@ -18,7 +19,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
 
-dotenv.config({ path: path.join(projectRoot, ".env") });
+const envPath = path.join(projectRoot, ".env");
+if (existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+}
 
 /**
  * Jules Agent MCP Server (v1.5.0)
