@@ -369,18 +369,18 @@ export class JulesAgentServer {
   }
 
   // --- Jules API Handlers ---
-  private async handleGetSource({ source_id }: { source_id: string }) {
+  public async handleGetSource({ source_id }: { source_id: string }) {
     const response = await this.axiosInstance.get(`/${this.normalizeName("sources", source_id)}`);
     return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
   }
 
-  private async handleListSources({ filter, page_size, page_token }: { filter?: string; page_size?: number; page_token?: string }) {
+  public async handleListSources({ filter, page_size, page_token }: { filter?: string; page_size?: number; page_token?: string }) {
     const params: any = { filter, pageSize: page_size, pageToken: page_token };
     const response = await this.axiosInstance.get("/sources", { params });
     return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
   }
 
-  private async handleListAllSources({ filter }: { filter?: string }) {
+  public async handleListAllSources({ filter }: { filter?: string }) {
     let allSources: JulesSource[] = [];
     let pageToken: string | undefined = undefined;
     do {
@@ -392,7 +392,7 @@ export class JulesAgentServer {
     return { content: [{ type: "text", text: JSON.stringify({ sources: allSources }, null, 2) }] };
   }
 
-  private async handleCreateSession(args: any) {
+  public async handleCreateSession(args: any) {
     const data: any = {
       prompt: args.prompt,
       sourceContext: { source: this.normalizeName("sources", args.source) },
@@ -406,30 +406,30 @@ export class JulesAgentServer {
     return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
   }
 
-  private async handleGetSession({ session_id }: { session_id: string }) {
+  public async handleGetSession({ session_id }: { session_id: string }) {
     const response = await this.axiosInstance.get(`/${this.normalizeName("sessions", session_id)}`);
     return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
   }
 
-  private async handleListSessions({ page_size, page_token }: { page_size?: number; page_token?: string }) {
+  public async handleListSessions({ page_size, page_token }: { page_size?: number; page_token?: string }) {
     const params: any = { pageSize: page_size, pageToken: page_token };
     const response = await this.axiosInstance.get("/sessions", { params });
     return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
   }
 
-  private async handleApproveSessionPlan({ session_id }: { session_id: string }) {
+  public async handleApproveSessionPlan({ session_id }: { session_id: string }) {
     const name = this.normalizeName("sessions", session_id);
     const response = await this.axiosInstance.post(`/${name}:approvePlan`);
     return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
   }
 
-  private async handleSendSessionMessage({ session_id, prompt }: { session_id: string; prompt: string }) {
+  public async handleSendSessionMessage({ session_id, prompt }: { session_id: string; prompt: string }) {
     const name = this.normalizeName("sessions", session_id);
     const response = await this.axiosInstance.post(`/${name}:sendMessage`, { prompt });
     return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
   }
 
-  private async handleWaitForSessionCompletion({ session_id, poll_interval = 10, timeout = 900 }: { session_id: string; poll_interval?: number; timeout?: number }) {
+  public async handleWaitForSessionCompletion({ session_id, poll_interval = 10, timeout = 900 }: { session_id: string; poll_interval?: number; timeout?: number }) {
     const startTime = Date.now();
     const name = this.normalizeName("sessions", session_id);
     while (Date.now() - startTime < timeout * 1000) {
@@ -443,21 +443,21 @@ export class JulesAgentServer {
     throw new Error(`Timeout waiting for session ${session_id}`);
   }
 
-  private async handleGetActivity({ session_id, activity_id }: { session_id: string; activity_id: string }) {
+  public async handleGetActivity({ session_id, activity_id }: { session_id: string; activity_id: string }) {
     const sessionName = this.normalizeName("sessions", session_id);
     const activityName = this.normalizeName("activities", activity_id);
     const response = await this.axiosInstance.get(`/${sessionName}/${activityName}`);
     return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
   }
 
-  private async handleListActivities({ session_id, page_size, page_token }: { session_id: string; page_size?: number; page_token?: string }) {
+  public async handleListActivities({ session_id, page_size, page_token }: { session_id: string; page_size?: number; page_token?: string }) {
     const sessionName = this.normalizeName("sessions", session_id);
     const params: any = { pageSize: page_size, pageToken: page_token };
     const response = await this.axiosInstance.get(`/${sessionName}/activities`, { params });
     return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
   }
 
-  private async handleListAllActivities({ session_id }: { session_id: string }) {
+  public async handleListAllActivities({ session_id }: { session_id: string }) {
     const sessionName = this.normalizeName("sessions", session_id);
     let allActivities: JulesActivity[] = [];
     let pageToken: string | undefined = undefined;
@@ -471,7 +471,7 @@ export class JulesAgentServer {
   }
 
   // --- Sprint Agent Logic ---
-  private async handleSprintAgent(args: {
+  public async handleSprintAgent(args: {
     sprint_number: number;
     repo_path: string;
     source_id: string;
