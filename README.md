@@ -221,6 +221,14 @@ If you want to contribute or run from source:
 
 ---
 
+## 🧪 Unit Testing
+
+This project uses Vitest for unit testing. Tests are designed to be safe and do not make actual calls to the Jules API.
+
+```bash
+npm test
+```
+
 ## 📄 License
 
 This project is licensed under the **ISC License**.

@@ -65,6 +65,14 @@ The system uses a **tri-agent skill architecture** to ensure absolute precision 
 | **Monitoring** | `sprint_agent(action: "status")` | `get_session`, `wait_for_session_completion` |
 | **Verification** | `list_all_activities` | `get_activity` |
 
+## 🧪 Testing Strategy
+
+The project uses **Vitest** for unit testing. All tests are designed to run **without calling the Jules API** by mocking dependencies like `axios` and `fs`.
+
+- **Run Tests**: `npm test`
+- **Location**: `src/index.test.ts`
+- **Focus**: Verifying name normalization, prompt injection, and orchestration logic.
+
 ## 📁 Key Files & Directories
 
 - `src/index.ts`: The MCP server implementation.

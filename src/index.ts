@@ -79,11 +79,11 @@ interface Subtask {
   is_independent: boolean; // Flag to indicate if it can be delegated to Jules
 }
 
-class JulesAgentServer {
+export class JulesAgentServer {
   private server: Server;
   private axiosInstance: AxiosInstance;
 
-  constructor() {
+  constructor(apiKey: string = API_KEY || "", baseUrl: string = BASE_URL) {
     this.server = new Server(
       {
         name: "jules-agent",
@@ -97,9 +97,9 @@ class JulesAgentServer {
     );
 
     this.axiosInstance = axios.create({
-      baseURL: BASE_URL,
+      baseURL: baseUrl,
       headers: {
-        "X-Goog-Api-Key": API_KEY,
+        "X-Goog-Api-Key": apiKey,
         "Content-Type": "application/json",
       },
     });
@@ -114,6 +114,11 @@ class JulesAgentServer {
       await this.server.close();
       process.exit(0);
     });
+  }
+
+  // Exposed for testing
+  public getAxiosInstance() {
+    return this.axiosInstance;
   }
 
   private setupToolHandlers() {
@@ -358,7 +363,7 @@ class JulesAgentServer {
     };
   }
 
-  private normalizeName(type: string, id: string): string {
+  public normalizeName(type: string, id: string): string {
     if (id.startsWith(`${type}/`)) return id;
     return `${type}/${id}`;
   }
@@ -578,7 +583,7 @@ class JulesAgentServer {
     return { content: [{ type: "text", text: report }] };
   }
 
-  private async handleTaskAgent(args: {
+  public async handleTaskAgent(args: {
     prompt: string;
     source_id: string;
     repo_path: string;
@@ -697,8 +702,14 @@ class JulesAgentServer {
   }
 }
 
-const server = new JulesAgentServer();
-server.run().catch((error) => {
-  console.error("Fatal error starting server:", error);
-  process.exit(1);
-});
+if (process.argv[1] && (process.argv[1].endsWith("index.js") || process.argv[1].endsWith("index.ts"))) {
+  if (!API_KEY) {
+    console.error("Error: Jules API Key is missing.");
+    process.exit(1);
+  }
+  const server = new JulesAgentServer();
+  server.run().catch((error) => {
+    console.error("Fatal error starting server:", error);
+    process.exit(1);
+  });
+}
