@@ -65,6 +65,18 @@ The system uses a **tri-agent skill architecture** to ensure absolute precision 
 | **Monitoring** | `sprint_agent(action: "status")` | `get_session`, `wait_for_session_completion` |
 | **Verification** | `list_all_activities` | `get_activity` |
 
+## 🚀 CI/CD
+
+The project uses **GitHub Actions** for continuous integration.
+
+- **Workflow**: `.github/workflows/ci.yml`
+- **Trigger**: Pull requests to the `main` branch.
+- **Actions**:
+  1. Installs dependencies.
+  2. Builds the project (`npm run build`).
+  3. Runs unit tests (`npm test`).
+  4. **Auto-Merge**: Attempts to enable auto-merge for the PR if all checks pass.
+
 ## 🧪 Testing Strategy
 
 The project uses **Vitest** for unit testing. All tests are designed to run **without calling the Jules API** by mocking dependencies like `axios` and `fs`.
