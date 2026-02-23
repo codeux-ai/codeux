@@ -84,6 +84,7 @@ interface Subtask {
 class JulesAgentServer {
   private server: Server;
   private axiosInstance: AxiosInstance;
+  private completedSprints: Set<number> = new Set();
 
   constructor() {
     this.server = new Server(
@@ -508,6 +509,10 @@ class JulesAgentServer {
       throw new Error(`Sprint file not found: ${sprintFile}`);
     }
 
+    if (this.completedSprints.has(args.sprint_number)) {
+      return { content: [{ type: "text", text: `Sprint ${args.sprint_number} has already been finished in this session.` }] };
+    }
+
     if (args.action === "plan") {
       try {
         await fs.access(subtasksDir);
@@ -684,7 +689,8 @@ class JulesAgentServer {
           // Cleanup subtasks only if EVERY task is COMPLETED AND MERGED.
           if (subtasks.every(t => t.status === "COMPLETED" && t.is_merged)) {
             try {
-              console.error(`Cleaning up subtasks directory: ${subtasksDir}`);
+              console.error(`Marking sprint as completed and cleaning up subtasks directory: ${subtasksDir}`);
+              this.completedSprints.add(args.sprint_number);
               await fs.rm(subtasksDir, { recursive: true, force: true });
               fullReport += `\n🧹 **Cleanup:** All tasks completed and merged successfully. Deleted subtasks in \`${subtasksDir}\`.\n`;
               
