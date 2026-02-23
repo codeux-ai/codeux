@@ -281,7 +281,7 @@ class JulesAgentServer {
                 enum: ["status", "orchestrate", "plan"], 
                 description: "Action to perform: 'status', 'orchestrate', 'plan'." 
               },
-              wait: { type: "boolean", description: "Whether to wait and watch for all tasks to complete (polls every 120s).", default: false },
+              wait: { type: "boolean", description: "Whether to wait and watch for all tasks to complete (polls every 120s). Defaults to true for 'status' and 'orchestrate'.", default: true },
             },
             required: ["sprint_number", "repo_path", "source_id", "action"],
           },
@@ -589,7 +589,9 @@ class JulesAgentServer {
       return { subtasks, reportText, statusTable };
     };
 
-    if (args.wait) {
+    const shouldWait = args.wait !== undefined ? args.wait : (args.action === "status" || args.action === "orchestrate");
+
+    if (shouldWait) {
       let allFinished = false;
       let fullReport = `### Sprint ${args.sprint_number} Continuous Orchestration\n\n`;
       fullReport += `**Feature Branch:** \`${defaultFeatureBranch}\`\n\n`;
@@ -600,7 +602,7 @@ class JulesAgentServer {
         const { subtasks, reportText, statusTable } = await runOrchestrationCycle();
         
         const timestamp = new Date().toLocaleTimeString();
-        console.error(`[${timestamp}] Cycle complete. Status updated.`);
+        console.error(`[${timestamp}] Cycle complete. Status updated.\n${statusTable}`);
         
         if (reportText) {
           console.error(reportText);
