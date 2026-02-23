@@ -106,9 +106,32 @@ Get a real-time report of all subtasks, their dependencies, and linked Jules ses
 ### 3. Orchestration (`action: "orchestrate"`)
 - **Parallelism**: Automatically starts Jules sessions for all ready, independent tasks.
 - **Continuous Mode**: Defaults to `wait: true`. Monitors progress every 120s and automatically starts dependent tasks.
+- **Automatic Retries**: Failed tasks are automatically retried in a new session (default `retry_failed: true`).
 - **Mandatory Merge Step**: Dependent tasks are only started when their dependencies are both `COMPLETED` and have `merged: true` set in their subtask file.
 - **Integration Instructions**: Provides explicit CLI instructions for merging PRs and updating subtask states.
 - **Finalization**: Automatically provides steps for merging the main feature branch into `main` and proceeding to the next sprint.
+
+---
+
+## 🛠️ Tool Capabilities & Options
+
+### ⚡ Automation Mode
+The `create_session`, `task_agent`, and `sprint_agent` tools support `automation_mode: "AUTO_CREATE_PR"`. When enabled, Jules will automatically create a Pull Request upon successful task completion.
+
+### ⏳ Waiting for Completion
+Tools like `task_agent` and `wait_for_session_completion` allow you to block until a task is finished.
+- **Poll Interval**: Default 10s.
+- **Timeout**: Default 900s (15 minutes).
+
+### 📊 Sprint Status Icons
+| Icon | State | Action Required |
+|---|---|---|
+| ✅ | **MERGED** | None. Task is fully integrated. |
+| 🤝 | **COMPLETED** | **Manual**: Merge the PR and set `merged: true` in the subtask file. |
+| ⏳ | **RUNNING** | None. Jules is currently working. |
+| ❌ | **FAILED** | **Auto**: Retried in a new session (if `retry_failed: true`). |
+| 🚫 | **BLOCKED** | **Manual**: Check and merge dependencies. |
+| 💤 | **PENDING** | None. Waiting for resources or the next cycle. |
 
 ---
 
@@ -139,11 +162,11 @@ The server searches for guides in this order:
 
 ## 🛠️ Available Tools
 
-### 🏗️ Sprint & Task Management
+### 1. Sprint & Task Management
 | Tool | Description |
 |---|---|
 | `sprint_agent` | The core orchestrator for planning and executing complex multi-task sprints. |
-| `task_agent` | Execute a single specific task with built-in engineering standards and optional completion waiting. |
+| `task_agent` | Execute a single specific task with built-in engineering standards, support for custom titles/branches, and optional completion waiting (`wait: true`). |
 
 ### 📂 Sources
 | Tool | Description |
@@ -155,12 +178,12 @@ The server searches for guides in this order:
 ### 💬 Sessions
 | Tool | Description |
 |---|---|
-| `create_session` | Start a new agent task. |
-| `get_session` | Monitor state (`PENDING`, `RUNNING`, `COMPLETED`, `FAILED`). |
+| `create_session` | Start a new agent task. Supports `require_plan_approval` and `automation_mode: "AUTO_CREATE_PR"`. |
+| `get_session` | Monitor state (`PENDING`, `RUNNING`, `COMPLETED`, `FAILED`). Includes `last_activity` for real-time status updates. |
 | `list_sessions` | List recent agent interactions. |
 | `approve_session_plan` | Authorize an agent to proceed with a plan. |
 | `send_session_message` | Send follow-up instructions to an active agent. |
-| `wait_for_session_completion`| Poll until completion or PR creation. |
+| `wait_for_session_completion`| Poll until completion, failure, or PR creation with configurable `poll_interval` and `timeout`. |
 
 ### 📊 Activities
 | Tool | Description |

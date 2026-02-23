@@ -5,6 +5,7 @@ You are now in **Continuous Orchestration Mode**. Your goal is to oversee the au
 ## 1. Operating Mechanics
 - **Polling**: The system polls the Jules API and the local subtask state every 120 seconds.
 - **Integration Block**: A `PENDING` subtask will only be started if its dependencies are both `COMPLETED` and `merged: true` in their respective markdown files.
+- **Auto-Retry**: If a task fails, and `retry_failed` is enabled (default), the system will automatically trigger a **new session** for that task in the next cycle, provided its dependencies are still met.
 - **Reporting**: Each cycle produces a status table. Monitor this to track the "flow" of tasks through the pipeline.
 
 ## 2. Orchestrator Responsibilities during Watch

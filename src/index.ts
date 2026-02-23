@@ -57,6 +57,7 @@ interface JulesSession {
   title?: string;
   state?: string;
   prompt: string;
+  createTime?: string;
   outputs?: Array<{ pullRequest?: any; [key: string]: any }>;
 }
 
@@ -283,6 +284,7 @@ class JulesAgentServer {
                 description: "Action to perform: 'status', 'orchestrate', 'plan'." 
               },
               wait: { type: "boolean", description: "Whether to wait and watch for all tasks to complete (polls every 120s). Defaults to true for 'status' and 'orchestrate'.", default: true },
+              retry_failed: { type: "boolean", description: "Whether to automatically retry failed tasks. Defaults to true.", default: true },
             },
             required: ["sprint_number", "repo_path", "source_id", "action"],
           },
@@ -492,11 +494,13 @@ class JulesAgentServer {
     feature_branch?: string;
     action: "status" | "orchestrate" | "plan";
     wait?: boolean;
+    retry_failed?: boolean;
   }) {
     const sprintsDir = path.join(args.repo_path, ".jules-subagents", "sprints");
     const sprintFile = path.join(sprintsDir, `sprint-${args.sprint_number}.md`);
     const subtasksDir = path.join(sprintsDir, `sprint${args.sprint_number}-subtasks`);
     const defaultFeatureBranch = args.feature_branch || `feature/sprint${args.sprint_number}-implementation`;
+    const retryFailed = args.retry_failed !== false; // Default to true
 
     try {
       await fs.access(sprintFile);
@@ -551,15 +555,33 @@ class JulesAgentServer {
       }
 
       const sessionsResponse = await this.axiosInstance.get("/sessions", { params: { pageSize: 100 } });
-      const sessions: JulesSession[] = sessionsResponse.data.sessions || [];
+      let sessions: JulesSession[] = sessionsResponse.data.sessions || [];
+      
+      // Sort sessions by createTime descending (latest first)
+      sessions.sort((a, b) => {
+        if (!a.createTime || !b.createTime) return 0;
+        return new Date(b.createTime).getTime() - new Date(a.createTime).getTime();
+      });
 
       for (const task of subtasks) {
         const match = sessions.find(s => s.title?.includes(`[${task.id}]`));
         if (match) {
           task.session_id = match.id;
-          if (match.state === "COMPLETED") task.status = "COMPLETED";
-          else if (match.state === "FAILED" || match.state === "CANCELLED") task.status = "FAILED";
-          else task.status = "RUNNING";
+          if (match.state === "COMPLETED") {
+            task.status = "COMPLETED";
+          } else if (match.state === "FAILED" || match.state === "CANCELLED") {
+            if (retryFailed) {
+              const dependenciesMet = task.depends_on.every(depId => {
+                const dep = subtasks.find(t => t.id === depId);
+                return dep?.status === "COMPLETED" && dep?.is_merged;
+              });
+              task.status = dependenciesMet ? "PENDING" : "BLOCKED";
+            } else {
+              task.status = "FAILED";
+            }
+          } else {
+            task.status = "RUNNING";
+          }
         } else if (!task.is_independent) {
           task.status = "BLOCKED";
         } else {
