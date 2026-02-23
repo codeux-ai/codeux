@@ -3,6 +3,11 @@ import htm from 'https://esm.sh/htm';
 
 export const html = htm.bind(h);
 
+export const renderMarkdown = (text) => {
+    if (!text) return '';
+    return marked.parse(text);
+};
+
 export const getStatusColor = (s) => {
     switch(s) {
         case 'RUNNING': return 'bg-sky-500/10 text-sky-400 border-sky-500/20';

@@ -1,4 +1,4 @@
-import { html } from '../utils.js';
+import { html, renderMarkdown } from '../utils.js';
 
 export function ActivitySidebar({ reportText, instructions }) {
     return html`
@@ -13,8 +13,8 @@ export function ActivitySidebar({ reportText, instructions }) {
                         <svg class="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
                     </div>
                     <h4 class="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-4">Latest Logs</h4>
-                    <div class="text-xs text-slate-300 font-mono leading-relaxed space-y-2 whitespace-pre-wrap">
-                        ${reportText || 'Waiting for activity...'}
+                    <div class="prose prose-xs prose-invert max-w-none text-slate-300 font-mono"
+                         dangerouslySetInnerHTML=${{ __html: renderMarkdown(reportText) || 'Waiting for activity...' }}>
                     </div>
                 </div>
             </section>
@@ -26,8 +26,8 @@ export function ActivitySidebar({ reportText, instructions }) {
                 </h2>
                 <div class="bg-slate-900/50 backdrop-blur-md border border-amber-500/20 rounded-2xl p-6">
                     <h4 class="text-[10px] font-bold text-amber-500/60 uppercase tracking-[0.2em] mb-4">Action Required</h4>
-                    <div class="text-xs text-amber-100/70 font-mono leading-relaxed space-y-3 whitespace-pre-wrap">
-                        ${instructions || 'Orchestration optimal. No manual intervention needed.'}
+                    <div class="prose prose-xs prose-invert max-w-none text-amber-100/70 font-mono"
+                         dangerouslySetInnerHTML=${{ __html: renderMarkdown(instructions) || 'Orchestration optimal. No manual intervention needed.' }}>
                     </div>
                 </div>
             </section>
