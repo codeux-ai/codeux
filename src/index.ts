@@ -596,6 +596,14 @@ class JulesAgentServer {
         } else {
           fullReport += reportText;
           fullReport += statusTable;
+          
+          try {
+            const watchGuide = await this.getGuideContent("watch.md", args.repo_path);
+            fullReport += `\n---\n\n### Watch Loop Operating Standard\n\n${watchGuide}`;
+          } catch {
+            // No watch guide found
+          }
+
           fullReport += `\n✅ **Sprint Execution Finished.**\n`;
         }
       }
