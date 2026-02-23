@@ -281,6 +281,7 @@ class JulesAgentServer {
                 enum: ["status", "orchestrate", "plan"], 
                 description: "Action to perform: 'status', 'orchestrate', 'plan'." 
               },
+              wait: { type: "boolean", description: "Whether to wait and watch for all tasks to complete (polls every 120s).", default: false },
             },
             required: ["sprint_number", "repo_path", "source_id", "action"],
           },
@@ -472,6 +473,7 @@ class JulesAgentServer {
     source_id: string;
     feature_branch?: string;
     action: "status" | "orchestrate" | "plan";
+    wait?: boolean;
   }) {
     const sprintsDir = path.join(args.repo_path, ".jules-subagents", "sprints");
     const sprintFile = path.join(sprintsDir, `sprint-${args.sprint_number}.md`);
@@ -521,61 +523,99 @@ class JulesAgentServer {
       }
     }
 
-    let subtasks: Subtask[] = [];
-    try {
-      subtasks = await this.loadSubtasks(subtasksDir);
-    } catch (error) {
-      return { content: [{ type: "text", text: `Error loading subtasks from ${subtasksDir}.` }] };
-    }
-
-    const sessionsResponse = await this.axiosInstance.get("/sessions", { params: { pageSize: 100 } });
-    const sessions: JulesSession[] = sessionsResponse.data.sessions || [];
-
-    for (const task of subtasks) {
-      const match = sessions.find(s => s.title?.includes(`[${task.id}]`));
-      if (match) {
-        task.session_id = match.id;
-        if (match.state === "COMPLETED") task.status = "COMPLETED";
-        else if (match.state === "FAILED" || match.state === "CANCELLED") task.status = "FAILED";
-        else task.status = "RUNNING";
-      } else if (!task.is_independent) {
-        task.status = "BLOCKED";
-      } else {
-        const dependenciesMet = task.depends_on.every(depId => {
-          const dep = subtasks.find(t => t.id === depId);
-          return dep?.status === "COMPLETED";
-        });
-        task.status = dependenciesMet ? "PENDING" : "BLOCKED";
+    const runOrchestrationCycle = async () => {
+      let subtasks: Subtask[] = [];
+      try {
+        subtasks = await this.loadSubtasks(subtasksDir);
+      } catch (error) {
+        throw new Error(`Error loading subtasks from ${subtasksDir}.`);
       }
-    }
 
-    let report = `### Sprint ${args.sprint_number} Orchestration Report\n\n`;
-    report += `**Feature Branch:** \`${defaultFeatureBranch}\`\n\n`;
+      const sessionsResponse = await this.axiosInstance.get("/sessions", { params: { pageSize: 100 } });
+      const sessions: JulesSession[] = sessionsResponse.data.sessions || [];
 
-    if (args.action === "orchestrate") {
-      const readyTasks = subtasks.filter(t => t.status === "PENDING" && t.is_independent);
-      for (const task of readyTasks) {
-        const session = await this.startJulesTask(task, args.source_id, defaultFeatureBranch, args.repo_path);
-        task.status = "RUNNING";
-        task.session_id = session.id;
-        report += `🚀 **Started Jules Session** for task \`${task.id}\`: [${session.id}](${session.id})\n`;
+      for (const task of subtasks) {
+        const match = sessions.find(s => s.title?.includes(`[${task.id}]`));
+        if (match) {
+          task.session_id = match.id;
+          if (match.state === "COMPLETED") task.status = "COMPLETED";
+          else if (match.state === "FAILED" || match.state === "CANCELLED") task.status = "FAILED";
+          else task.status = "RUNNING";
+        } else if (!task.is_independent) {
+          task.status = "BLOCKED";
+        } else {
+          const dependenciesMet = task.depends_on.every(depId => {
+            const dep = subtasks.find(t => t.id === depId);
+            return dep?.status === "COMPLETED";
+          });
+          task.status = dependenciesMet ? "PENDING" : "BLOCKED";
+        }
       }
-    }
 
-    report += `#### Task Status:\n`;
-    for (const task of subtasks) {
-      const statusIcon = task.status === "COMPLETED" ? "✅" : (task.status === "RUNNING" ? "⏳" : (task.status === "BLOCKED" ? "🚫" : "💤"));
-      report += `- ${statusIcon} **${task.id}**: \`${task.status}\` - ${task.title}\n`;
-    }
+      let reportText = "";
+      if (args.action === "orchestrate") {
+        const readyTasks = subtasks.filter(t => t.status === "PENDING" && t.is_independent);
+        for (const task of readyTasks) {
+          const session = await this.startJulesTask(task, args.source_id, defaultFeatureBranch, args.repo_path);
+          task.status = "RUNNING";
+          task.session_id = session.id;
+          reportText += `🚀 **Started Jules Session** for task \`${task.id}\`: [${session.id}](${session.id})\n`;
+        }
+      }
 
-    try {
-      const orchGuide = await this.getGuideContent("orchestrator.md", args.repo_path);
-      report += `\n---\n\n### Orchestration Guidance\n\n${orchGuide}`;
-    } catch {
-      // No orchestrator guide found
-    }
+      let statusTable = `#### Task Status:\n`;
+      for (const task of subtasks) {
+        const statusIcon = task.status === "COMPLETED" ? "✅" : (task.status === "RUNNING" ? "⏳" : (task.status === "BLOCKED" ? "🚫" : "💤"));
+        statusTable += `- ${statusIcon} **${task.id}**: \`${task.status}\` - ${task.title}\n`;
+      }
 
-    return { content: [{ type: "text", text: report }] };
+      return { subtasks, reportText, statusTable };
+    };
+
+    if (args.wait) {
+      let allFinished = false;
+      let fullReport = `### Sprint ${args.sprint_number} Continuous Orchestration\n\n`;
+      fullReport += `**Feature Branch:** \`${defaultFeatureBranch}\`\n\n`;
+      
+      console.error(`Starting watch loop for Sprint ${args.sprint_number}...`);
+
+      while (!allFinished) {
+        const { subtasks, reportText, statusTable } = await runOrchestrationCycle();
+        
+        const timestamp = new Date().toLocaleTimeString();
+        console.error(`[${timestamp}] Cycle complete. Status updated.`);
+        
+        if (reportText) {
+          console.error(reportText);
+        }
+
+        allFinished = subtasks.every(t => t.status === "COMPLETED" || t.status === "FAILED");
+        
+        if (!allFinished) {
+          await new Promise(resolve => setTimeout(resolve, 120 * 1000));
+        } else {
+          fullReport += reportText;
+          fullReport += statusTable;
+          fullReport += `\n✅ **Sprint Execution Finished.**\n`;
+        }
+      }
+      return { content: [{ type: "text", text: fullReport }] };
+    } else {
+      const { subtasks, reportText, statusTable } = await runOrchestrationCycle();
+      let report = `### Sprint ${args.sprint_number} Orchestration Report\n\n`;
+      report += `**Feature Branch:** \`${defaultFeatureBranch}\`\n\n`;
+      report += reportText;
+      report += statusTable;
+
+      try {
+        const orchGuide = await this.getGuideContent("orchestrator.md", args.repo_path);
+        report += `\n---\n\n### Orchestration Guidance\n\n${orchGuide}`;
+      } catch {
+        // No orchestrator guide found
+      }
+
+      return { content: [{ type: "text", text: report }] };
+    }
   }
 
   private async handleTaskAgent(args: {
