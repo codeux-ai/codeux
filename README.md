@@ -110,25 +110,6 @@ Get a real-time report of all subtasks, their dependencies, and linked Jules ses
 
 ---
 
-## ⚡ Gemini CLI Skills
-
-This project includes specialized **Gemini CLI Skills** to automate common workflows.
-
-### 🕒 Watch Sprint Skill
-Automates the discovery and continuous orchestration of a sprint.
-
-**Installation:**
-```bash
-gemini skills install .jules-subagents/skills/watch-sprint.skill --scope workspace
-/skills reload
-```
-
-**Usage:**
-- "Watch sprint 5"
-- "What is the status of the current sprint?"
-
----
-
 ## 🎨 Customizing Agent Guides
 
 The server uses Markdown guides to define engineering standards and orchestration logic. You can override the default guides by placing your own versions in your project repository or the current working directory.

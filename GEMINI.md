@@ -18,7 +18,6 @@ This project is a production-grade **Model Context Protocol (MCP)** server for t
       - `orchestrator.md`: Defines the logic for the `sprint_agent` tool.
       - `sprint_agent_guide.md`: Operating instructions for the main orchestrator agent.
     - `sprints/`: Contains sprint definitions (`sprint-<N>.md`) and their corresponding subtasks.
-    - `skills/`: Packaged skills for Gemini CLI (e.g., `watch-sprint.skill`).
 
 ## 🛠️ Building and Running
 
