@@ -694,17 +694,22 @@ class JulesAgentServer {
 
         const runningTasks = subtasks.filter(t => t.status === "RUNNING");
         const readyTasks = subtasks.filter(t => t.status === "PENDING" && t.is_independent);
+        const awaitingMerge = subtasks.filter(t => t.status === "COMPLETED" && !t.is_merged);
         
         allFinished = subtasks.length > 0 && subtasks.every(t => (t.status === "COMPLETED" && t.is_merged) || t.status === "FAILED");
         const noMoreActionPossible = runningTasks.length === 0 && readyTasks.length === 0;
+        const needsManualMerge = awaitingMerge.length > 0;
         
-        if (allFinished || noMoreActionPossible) {
+        if (allFinished || noMoreActionPossible || needsManualMerge) {
           allFinished = true; // Force exit the loop
           fullReport += reportText;
           fullReport += statusTable;
           fullReport += instructions;
 
-          if (subtasks.length > 0 && !subtasks.every(t => (t.status === "COMPLETED" && t.is_merged) || t.status === "FAILED") && noMoreActionPossible) {
+          if (needsManualMerge) {
+            fullReport += `\n🛑 **Action Required: Merge Detected**\n`;
+            fullReport += `One or more tasks have finished. Please follow the **MERGE INSTRUCTIONS** below, then run \`orchestrate\` again to continue.\n`;
+          } else if (subtasks.length > 0 && !subtasks.every(t => (t.status === "COMPLETED" && t.is_merged) || t.status === "FAILED") && noMoreActionPossible) {
             fullReport += `\n🛑 **Action Required:** Orchestration paused. No tasks are running and no pending tasks can be started.\n`;
           }
           
