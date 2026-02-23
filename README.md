@@ -96,17 +96,19 @@ Initializes `.jules-subagents/sprints/sprint<N>-subtasks/`. Break your sprint in
 title: Implement Auth API
 depends_on: [setup-db]
 is_independent: true
+merged: false
 prompt: Create the login and register endpoints in src/auth.
 ```
 
 ### 2. Status (`action: "status"`)
-Get a real-time report of all subtasks, their dependencies, and linked Jules sessions.
+Get a real-time report of all subtasks, their dependencies, and linked Jules sessions. Defaults to continuous monitoring (`wait: true`).
 
 ### 3. Orchestration (`action: "orchestrate"`)
 - **Parallelism**: Automatically starts Jules sessions for all ready, independent tasks.
-- **Branching**: Subtasks are isolated on their own branches created from the main feature branch.
-- **Blocking**: Identifies and reports tasks that require manual intervention.
-- **Continuous Mode**: Use `wait: true` to enable a continuous watch loop that reports progress every 120s and automatically starts dependent tasks.
+- **Continuous Mode**: Defaults to `wait: true`. Monitors progress every 120s and automatically starts dependent tasks.
+- **Mandatory Merge Step**: Dependent tasks are only started when their dependencies are both `COMPLETED` and have `merged: true` set in their subtask file.
+- **Integration Instructions**: Provides explicit CLI instructions for merging PRs and updating subtask states.
+- **Finalization**: Automatically provides steps for merging the main feature branch into `main` and proceeding to the next sprint.
 
 ---
 

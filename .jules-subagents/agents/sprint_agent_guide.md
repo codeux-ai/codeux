@@ -26,6 +26,7 @@ For every subtask, create a file named `<task-id>.md` in `.jules-subagents/sprin
 title: <Short descriptive title>
 depends_on: [<dependency-task-id-1>, <dependency-task-id-2>]
 is_independent: <true | false>
+merged: false
 prompt:
 # Task Specification: [Task ID] - [Sprint Number]
 

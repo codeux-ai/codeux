@@ -34,11 +34,12 @@ You are the Sprint Orchestrator. Your mission is to drive complex software deliv
 - **Continuous Mode**: Set `wait: true` for autonomous delivery (uses `watch.md` protocol).
 - **Manual Mode**: Omit `wait` for a single wave of task delegation.
 
-### Step 4: Monitoring & Resolution
+### Step 4: Monitoring & Integration
 - Regularly poll `action: "status"` if not in Continuous Mode.
-- If a session is `COMPLETED`, its output will contain a PR link.
-- If a session is `FAILED`, analyze its activities using `list_all_activities` to diagnose the root cause.
-- Use `send_session_message` to correct a running agent if it deviates from the plan.
+- **Integration Step**: When a task is `COMPLETED`, it will show as 🤝 (Awaiting Merge).
+- **Merge PR**: Use your tools to merge the Jules PR into the main feature branch.
+- **Mark Merged**: Update the subtask markdown file in `.jules-subagents/sprints/sprint<N>-subtasks/` with `merged: true`. This is required for dependent tasks to proceed.
+- **Failure Recovery**: If a session is `FAILED`, analyze its activities using `list_all_activities` to diagnose the root cause.
 
 ## 3. Delegation Standards
 
