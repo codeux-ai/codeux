@@ -100,15 +100,13 @@
                                 <div class="card border-0 shadow-sm">
                                     <div class="card-body">
                                         <h6>Recent Activity</h6>
-                                        <div class="small mb-4">
-                                            ${status.reportText ? html`<div dangerouslySetInnerHTML=${{ __html: status.reportText.replace(/
-/g, '<br>') }} />` : 'No recent activity.'}
+                                        <div class="small mb-4" style="white-space: pre-wrap;">
+                                            ${status.reportText || 'No recent activity.'}
                                         </div>
                                         
                                         <h6>Instructions</h6>
-                                        <div class="small text-warning">
-                                            ${status.instructions ? html`<div dangerouslySetInnerHTML=${{ __html: status.instructions.replace(/
-/g, '<br>') }} />` : 'No pending instructions.'}
+                                        <div class="small text-warning" style="white-space: pre-wrap;">
+                                            ${status.instructions || 'No pending instructions.'}
                                         </div>
                                     </div>
                                 </div>
