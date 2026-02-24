@@ -68,6 +68,10 @@ export class SprintOrchestrator {
     const sprintsDir = path.join(args.repo_path, ".jules-subagents", "sprints");
     const subtasksDir = path.join(sprintsDir, `sprint${args.sprint_number}-subtasks`);
     const defaultFeatureBranch = args.feature_branch || `feature/sprint${args.sprint_number}-implementation`;
+    const defaultBranch = typeof this.deps.settings.defaultBranch === "string" && this.deps.settings.defaultBranch.trim().length > 0
+      ? this.deps.settings.defaultBranch
+      : "main";
+    const githubMode = this.deps.settings.githubMode === "LOCAL" ? "LOCAL" : "REMOTE";
     const retryFailed = args.retry_failed !== false;
 
     if (args.action === "plan" || args.action === "orchestrate") {
@@ -237,8 +241,14 @@ export class SprintOrchestrator {
       if (awaitingMerge.length > 0) {
         instructions += `\n### 📥 MERGE INSTRUCTIONS\n`;
         for (const task of awaitingMerge) {
-          instructions += `1. **Task ${task.id}**: Merge the Jules-created branch into \`${defaultFeatureBranch}\`.\n`;
-          instructions += `2. Update \`${path.join(subtasksDir, task.id + ".md")}\` with \`merged: true\`.\n`;
+          instructions += `1. **Task ${task.id}**: Use \`git_manager\` (${githubMode === "REMOTE" ? "`git_manager_remote`" : "`git_manager_local`"}) to merge the Jules PR/branch into \`${defaultFeatureBranch}\`.\n`;
+          if (githubMode === "REMOTE") {
+            instructions += `2. Before merge, run \`gh pr checks <number> --watch\` and merge only after required checks are green.\n`;
+          } else {
+            instructions += `2. In LOCAL mode, complete merge via non-interactive git commands and push feature branch.\n`;
+          }
+          instructions += `3. Update \`${path.join(subtasksDir, task.id + ".md")}\` with \`merged: true\`.\n`;
+          instructions += `4. Rerun \`sprint_agent(action: "orchestrate", wait: true)\`.\n`;
         }
       }
 
@@ -327,10 +337,15 @@ export class SprintOrchestrator {
               await fs.rm(subtasksDir, { recursive: true, force: true });
               fullReport += `\n🧹 **Cleanup:** All tasks completed and merged successfully. Deleted subtasks in \`${subtasksDir}\`.\n`;
               fullReport += `\n## 🏁 SPRINT COMPLETION STEPS\n`;
-              fullReport += `1. **Create Pull Request**: Merge \`${defaultFeatureBranch}\` into \`main\`.\n`;
-              fullReport += `2. **Final Review**: Review all code changes implemented by Jules subagents.\n`;
-              fullReport += `3. **CI/CD Verification**: Wait for all CI checks to turn green. If merge conflicts or CI errors occur, fix them locally and push until all checks pass.\n`;
-              fullReport += `4. **Next Sprint**: Proceed with the implementation of Sprint ${args.sprint_number + 1} (auto-continue: true).\n`;
+              fullReport += `1. **Final Merge via Git Manager**: Use \`git_manager\` (${githubMode === "REMOTE" ? "`git_manager_remote`" : "`git_manager_local`"}) to merge \`${defaultFeatureBranch}\` into \`${defaultBranch}\`.\n`;
+              if (githubMode === "REMOTE") {
+                fullReport += `2. **Watch Checks**: Run \`gh pr checks <number> --watch\` and merge only when all required checks are green.\n`;
+                fullReport += `3. **CI Not Starting Guardrail**: If CI checks do not start on \`${defaultBranch}\`, inspect merge conflicts/sync state immediately before retrying.\n`;
+              } else {
+                fullReport += `2. **Local CI Guardrail**: Complete local merge/push flow and verify local pipeline checks pass before continuing.\n`;
+              }
+              fullReport += `4. **Final Review**: Confirm PR comments are reviewed and addressed before final merge.\n`;
+              fullReport += `5. **Next Sprint**: Proceed with Sprint ${args.sprint_number + 1} once \`${defaultBranch}\` is green.\n`;
             } catch (cleanupError) {
               console.error(`Warning: Failed to cleanup subtasks: ${cleanupError}`);
             }

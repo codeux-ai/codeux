@@ -10,6 +10,7 @@ Purpose: provide a safe, deterministic connector for git operations in this MCP.
   - `git branch --show-current`
 - Enforce CI-first merge discipline:
   - never merge if required checks are failing or pending.
+  - always watch checks live before merge (`gh pr checks <number> --watch` in remote mode).
   - if CI checks do not start on `main` after merge, inspect merge conflicts immediately.
 - Keep auditability:
   - report each merge/PR/status action with command + result summary.

@@ -6,8 +6,9 @@ Use when `GitHub Mode = REMOTE`.
 - Repository: `gh repo view`
 - PR listing: `gh pr list --json ...`
 - PR details/comments: `gh pr view <number> --comments`
-- PR checks: `gh pr checks <number>`
+- PR checks: `gh pr checks <number> --watch`
 - CI runs: `gh run list --json ...`
+- CI run watch: `gh run watch <run-id>`
 - Merge: `gh pr merge <number> --merge` (or squash/rebase only when explicitly requested)
 
 ## Safe Merge Protocol
@@ -15,7 +16,7 @@ Use when `GitHub Mode = REMOTE`.
 2. Inspect PR comments completely.
 3. Add 👀 reactions while reviewing comments.
 4. Resolve comments and add ✅ reactions when done.
-5. Verify CI checks are green (`gh pr checks` / `gh run list`).
+5. Verify CI checks are green (`gh pr checks <number> --watch`; use `gh run watch <run-id>` when needed).
 6. Merge only when checks pass.
 
 ## CI Guardrail
