@@ -15,6 +15,7 @@ import * as path from "path";
 import { fileURLToPath } from "url";
 import express from "express";
 import os from "os";
+import { execSync } from "child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -566,6 +567,23 @@ class JulesAgentServer {
     return { content: [{ type: "text", text: JSON.stringify({ activities: allActivities }, null, 2) }] };
   }
 
+  private checkBranch(repoPath: string, branch: string): { existsLocal: boolean; existsRemote: boolean } {
+    let existsLocal = false;
+    let existsRemote = false;
+
+    try {
+      execSync(`git rev-parse --verify ${branch}`, { cwd: repoPath, stdio: "ignore" });
+      existsLocal = true;
+    } catch (e) {}
+
+    try {
+      const remoteOutput = execSync(`git ls-remote --heads origin ${branch}`, { cwd: repoPath, encoding: "utf-8" });
+      if (remoteOutput.trim()) existsRemote = true;
+    } catch (e) {}
+
+    return { existsLocal, existsRemote };
+  }
+
   // --- Sprint Agent Logic ---
   private async handleSprintAgent(args: {
     sprint_number: number;
@@ -581,6 +599,28 @@ class JulesAgentServer {
     const subtasksDir = path.join(sprintsDir, `sprint${args.sprint_number}-subtasks`);
     const defaultFeatureBranch = args.feature_branch || `feature/sprint${args.sprint_number}-implementation`;
     const retryFailed = args.retry_failed !== false; // Default to true
+
+    // --- Branch Blocker Logic ---
+    if (args.action === "plan" || args.action === "orchestrate") {
+      const { existsLocal, existsRemote } = this.checkBranch(args.repo_path, defaultFeatureBranch);
+      
+      if (!existsLocal || !existsRemote) {
+        let branchBlocker = `### 🛑 ACTION REQUIRED: Branch Configuration Missing\n\n`;
+        branchBlocker += `The feature branch \`${defaultFeatureBranch}\` is not ready. Jules agents require this branch to exist on the remote repository to begin work.\n\n`;
+        
+        if (!existsLocal) {
+          branchBlocker += `**Step 1:** Create the branch locally:\n\`\`\`bash\ngit checkout -b ${defaultFeatureBranch}\n\`\`\`\n\n`;
+        }
+        
+        if (!existsRemote) {
+          branchBlocker += `**Step ${!existsLocal ? "2" : "1"}:** Push the branch to remote origin:\n\`\`\`bash\ngit push -u origin ${defaultFeatureBranch}\n\`\`\`\n\n`;
+        }
+        
+        branchBlocker += `**Important:** Once these steps are completed, run this tool again to proceed with the \`${args.action}\` phase.`;
+        
+        return { content: [{ type: "text", text: branchBlocker }] };
+      }
+    }
 
     try {
       await fs.access(sprintFile);
