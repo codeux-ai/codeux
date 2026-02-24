@@ -86,7 +86,8 @@ This project is a production-grade **Model Context Protocol (MCP)** server for t
   - Start every change on a new feature branch.
   - Implement and validate locally (`npm run build` minimum; `npm run ci` preferred).
   - Open a PR to `main` using GitHub CLI.
-  - Merge only through PR once checks are green (or explicitly approved by user).
+  - Monitor CI continuously after opening the PR.
+  - Merge only through PR after all required CI checks pass without errors.
   - Delete merged feature branches to keep the branch list clean.
 
 ## Frontend Design Quality

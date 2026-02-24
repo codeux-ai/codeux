@@ -1,4 +1,5 @@
 import express, { type Express } from "express";
+import * as fs from "fs";
 import * as path from "path";
 import type { JulesActivity } from "./types.js";
 
@@ -33,7 +34,10 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   });
 
   app.get("/favicon.ico", (req, res) => res.status(204).end());
-  app.use(express.static(path.resolve(dashboardDir)));
+
+  const builtDashboardDir = path.join(path.resolve(dashboardDir), "dist");
+  const staticDir = fs.existsSync(builtDashboardDir) ? builtDashboardDir : path.resolve(dashboardDir);
+  app.use(express.static(staticDir));
 
   await new Promise<void>((resolve) => {
     app.listen(port, "localhost", () => {
