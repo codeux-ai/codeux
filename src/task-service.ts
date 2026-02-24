@@ -1,10 +1,11 @@
-import type { GuideRepository } from "./guide-repository.js";
 import type { JulesApiClient } from "./jules-api.js";
 import type { JulesSession, Subtask } from "./types.js";
 
 export interface TaskServiceDependencies {
   julesApi: JulesApiClient;
-  guideRepository: GuideRepository;
+  guideRepository: {
+    getGuideContent: (guideName: string, repoPath?: string) => Promise<string>;
+  };
   normalizeSourceName: (sourceId: string) => string;
 }
 

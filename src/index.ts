@@ -18,12 +18,14 @@ import os from "os";
 import { loadAppConfig } from "./config.js";
 import { setupDashboardServer } from "./dashboard.js";
 import { JulesApiClient } from "./jules-api.js";
-import type { JulesActivity, JulesSession, Settings, Subtask } from "./types.js";
+import type { DashboardSettings, JulesActivity, JulesSession, Settings, Subtask } from "./types.js";
 import { TOOL_DEFINITIONS, dispatchTool } from "./tools.js";
 import { SprintOrchestrator, type SprintAgentArgs } from "./sprint-orchestrator.js";
 import { GuideRepository } from "./guide-repository.js";
 import { SubtaskRepository } from "./subtask-repository.js";
 import { TaskService } from "./task-service.js";
+import { SettingsRepository } from "./settings-repository.js";
+import { formatSprintBranch } from "./branch-scheme.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -67,6 +69,8 @@ class JulesAgentServer {
   private sprintOrchestrator: SprintOrchestrator;
   private liveActivitiesCache: { timestamp: number; data: Record<string, JulesActivity[]> } = { timestamp: 0, data: {} };
   private liveActivitiesFetchPromise: Promise<Record<string, JulesActivity[]>> | null = null;
+  private settingsRepository: SettingsRepository;
+  private dashboardSettings: DashboardSettings;
 
   constructor() {
     this.server = new Server(
@@ -87,9 +91,13 @@ class JulesAgentServer {
     });
     this.guideRepository = new GuideRepository(projectRoot);
     this.subtaskRepository = new SubtaskRepository();
+    this.settingsRepository = new SettingsRepository();
+    this.dashboardSettings = this.settingsRepository.getSettings();
     this.taskService = new TaskService({
       julesApi: this.julesApi,
-      guideRepository: this.guideRepository,
+      guideRepository: {
+        getGuideContent: (guideName: string, repoPath?: string) => this.getGuideContentIfEnabled(guideName, repoPath),
+      },
       normalizeSourceName: (sourceId: string) => this.normalizeName("sources", sourceId),
     });
     this.sprintOrchestrator = new SprintOrchestrator({
@@ -108,7 +116,7 @@ class JulesAgentServer {
       loadSubtasks: (dir: string) => this.subtaskRepository.loadSubtasks(dir),
       startJulesTask: (task: Subtask, sourceId: string, baseBranch: string, repoPath: string, sprintNumber: number) =>
         this.taskService.startSprintTask(task, sourceId, baseBranch, repoPath, sprintNumber),
-      getGuideContent: (guideName: string, repoPath?: string) => this.guideRepository.getGuideContent(guideName, repoPath),
+      getGuideContent: (guideName: string, repoPath?: string) => this.getGuideContentIfEnabled(guideName, repoPath),
       updateLastStatus: (status: any) => {
         this.lastStatus = status;
       },
@@ -174,6 +182,11 @@ class JulesAgentServer {
       liveActivityCacheMs: JulesAgentServer.LIVE_ACTIVITY_CACHE_MS,
       getStatus: () => this.lastStatus,
       getLiveActivities: () => this.getLiveActivitiesForActiveTasks(),
+      getSettings: () => this.dashboardSettings,
+      saveSettings: (settings: DashboardSettings) => {
+        this.dashboardSettings = this.settingsRepository.saveSettings(settings);
+        return this.dashboardSettings;
+      },
     });
   }
 
@@ -248,6 +261,23 @@ class JulesAgentServer {
       return this.resolveSessionName({ id: task.session_id });
     }
     return undefined;
+  }
+
+  private getSkillNameForGuide(guideName: string): string {
+    return guideName.replace(/\.md$/i, "");
+  }
+
+  private isSkillEnabled(skillName: string): boolean {
+    const skill = this.dashboardSettings.skills.find((entry) => entry.name === skillName);
+    return skill ? skill.enabled : true;
+  }
+
+  private async getGuideContentIfEnabled(guideName: string, repoPath?: string): Promise<string> {
+    const skillName = this.getSkillNameForGuide(guideName);
+    if (!this.isSkillEnabled(skillName)) {
+      throw new Error(`Skill '${skillName}' is disabled in dashboard settings.`);
+    }
+    return this.guideRepository.getGuideContent(guideName, repoPath);
   }
 
   private async fetchRecentActivities(sessionName: string, pageSize: number = JulesAgentServer.DASHBOARD_ACTIVITY_PAGE_SIZE): Promise<JulesActivity[]> {
@@ -411,7 +441,11 @@ class JulesAgentServer {
 
   // --- Sprint Agent Logic ---
   private async handleSprintAgent(args: SprintAgentArgs) {
-    return await this.sprintOrchestrator.execute(args);
+    const resolvedArgs: SprintAgentArgs = {
+      ...args,
+      feature_branch: args.feature_branch || formatSprintBranch(this.dashboardSettings.git.sprintBranchScheme, args.sprint_number),
+    };
+    return await this.sprintOrchestrator.execute(resolvedArgs);
   }
 
   private async handleTaskAgent(args: {

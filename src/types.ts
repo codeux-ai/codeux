@@ -41,3 +41,30 @@ export interface Settings {
   maxFailures?: number;
   [key: string]: any;
 }
+
+export type AutomationLevel = "FULL" | "SEMI_AUTO" | "ALWAYS_ASK";
+
+export interface AiProviderSettings {
+  provider: "jules";
+  julesApiKey: string;
+}
+
+export interface GitSettings {
+  defaultBranch: string;
+  autoCreatePr: boolean;
+  featureBranchPrefix: string;
+  sprintBranchScheme: string;
+}
+
+export interface SkillToggle {
+  name: string;
+  enabled: boolean;
+  isInternal: boolean;
+}
+
+export interface DashboardSettings {
+  automationLevel: AutomationLevel;
+  aiProvider: AiProviderSettings;
+  git: GitSettings;
+  skills: SkillToggle[];
+}

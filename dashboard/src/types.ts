@@ -52,3 +52,26 @@ export interface DashboardStats {
   completed: number;
   failed: number;
 }
+
+export type AutomationLevel = "FULL" | "SEMI_AUTO" | "ALWAYS_ASK";
+
+export interface SkillToggle {
+  name: string;
+  enabled: boolean;
+  isInternal: boolean;
+}
+
+export interface DashboardSettings {
+  automationLevel: AutomationLevel;
+  aiProvider: {
+    provider: "jules";
+    julesApiKey: string;
+  };
+  git: {
+    defaultBranch: string;
+    autoCreatePr: boolean;
+    featureBranchPrefix: string;
+    sprintBranchScheme: string;
+  };
+  skills: SkillToggle[];
+}
