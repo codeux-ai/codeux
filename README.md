@@ -92,7 +92,8 @@ Add to your `claude_desktop_config.json`:
 The Jules Subagents MCP server includes a built-in, real-time web dashboard to visualize your sprint progress.
 
 - **URL**: `http://localhost:4444`
-- **Real-time**: Automatically polls every 4 seconds for live status updates.
+- **Real-time**: Automatically polls every 10 seconds for live status updates.
+- **Live Session Logs**: The dashboard consumes a dedicated local endpoint (`/api/live-activities`) that refreshes active task activities from Jules every 10 seconds.
 - **Visuals**: Track active tasks (⏳), completed integrations (✅), and potential blockers (🚫) with an award-winning UI.
 - **Activity Feed**: View live logs and automated protocol instructions in a clean, side-by-side view.
 
