@@ -54,6 +54,24 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
         return;
       }
     }
+    if (skill.name === "git_manager_remote" || skill.name === "git_manager_local") {
+      const nextMode = skill.name === "git_manager_remote" ? "REMOTE" : "LOCAL";
+      onChange({
+        ...settings,
+        git: {
+          ...settings.git,
+          githubMode: nextMode,
+        },
+        skills: settings.skills.map((entry) => {
+          if (entry.name === "git_manager_remote") return { ...entry, enabled: nextMode === "REMOTE" };
+          if (entry.name === "git_manager_local") return { ...entry, enabled: nextMode === "LOCAL" };
+          if (entry.name === "git_manager") return { ...entry, enabled: true };
+          return entry;
+        }),
+      });
+      return;
+    }
+
     onChange({
       ...settings,
       skills: updateSkill(settings.skills, index, enabled),
@@ -135,6 +153,37 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
 
         <article className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-2xl p-5 space-y-4">
           <h3 className="text-sm font-bold text-white">Git Settings</h3>
+          <label className="block space-y-2">
+            <span className="text-xs text-slate-400">GitHub Mode</span>
+            <select
+              value={settings.git.githubMode}
+              onChange={(event) =>
+                onChange((() => {
+                  const nextMode = event.currentTarget.value as DashboardSettings["git"]["githubMode"];
+                  return {
+                    ...settings,
+                    git: {
+                      ...settings.git,
+                      githubMode: nextMode,
+                    },
+                    skills: settings.skills.map((skill) => {
+                      if (skill.name === "git_manager_remote") return { ...skill, enabled: nextMode === "REMOTE" };
+                      if (skill.name === "git_manager_local") return { ...skill, enabled: nextMode === "LOCAL" };
+                      if (skill.name === "git_manager") return { ...skill, enabled: true };
+                      return skill;
+                    }),
+                  };
+                })())
+              }
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+            >
+              <option value="REMOTE">Remote (GitHub CLI)</option>
+              <option value="LOCAL">Local (Git Commands)</option>
+            </select>
+            <p className="text-[11px] text-slate-500">
+              Exactly one Git Manager skillset is active based on mode: remote enables <code>git_manager_remote</code>, local enables <code>git_manager_local</code>.
+            </p>
+          </label>
           <label className="block space-y-2">
             <span className="text-xs text-slate-400">Default Branch</span>
             <input
@@ -245,7 +294,7 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
                   <input
                     type="checkbox"
                     checked={skill.enabled}
-                    disabled={skill.isInternal && !internalSkillsUnlocked}
+                    disabled={skill.name === "git_manager" || (skill.isInternal && !internalSkillsUnlocked)}
                     onChange={(event) => handleSkillToggle(skill, index, event.currentTarget.checked)}
                     className="h-4 w-4 rounded border-slate-700 bg-slate-900"
                   />

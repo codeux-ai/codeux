@@ -1,12 +1,16 @@
 import type { FunctionComponent } from "preact";
 import { renderMarkdown } from "../lib/markdown.js";
+import { GitStatusPanel } from "./GitStatusPanel.js";
+import type { GitTrackingStatus } from "../types.js";
 
 interface ActivitySidebarProps {
   reportText?: string;
   instructions?: string;
+  gitStatus: GitTrackingStatus | null;
+  gitStatusError: string | null;
 }
 
-export const ActivitySidebar: FunctionComponent<ActivitySidebarProps> = ({ reportText, instructions }) => {
+export const ActivitySidebar: FunctionComponent<ActivitySidebarProps> = ({ reportText, instructions, gitStatus, gitStatusError }) => {
   return (
     <div className="space-y-8">
       <section>
@@ -36,6 +40,8 @@ export const ActivitySidebar: FunctionComponent<ActivitySidebarProps> = ({ repor
           />
         </div>
       </section>
+
+      <GitStatusPanel status={gitStatus} error={gitStatusError} />
     </div>
   );
 };

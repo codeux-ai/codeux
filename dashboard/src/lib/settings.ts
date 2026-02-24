@@ -7,6 +7,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     julesApiKey: "",
   },
   git: {
+    githubMode: "REMOTE",
     defaultBranch: "main",
     autoCreatePr: true,
     featureBranchPrefix: "feature/",
@@ -18,6 +19,9 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     { name: "watch", enabled: true, isInternal: true },
     { name: "watch-skill", enabled: true, isInternal: true },
     { name: "sprint_agent_guide", enabled: true, isInternal: true },
+    { name: "git_manager", enabled: true, isInternal: true },
+    { name: "git_manager_remote", enabled: true, isInternal: true },
+    { name: "git_manager_local", enabled: false, isInternal: true },
   ],
 };
 

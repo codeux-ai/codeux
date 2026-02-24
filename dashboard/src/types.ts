@@ -68,10 +68,64 @@ export interface DashboardSettings {
     julesApiKey: string;
   };
   git: {
+    githubMode: "REMOTE" | "LOCAL";
     defaultBranch: string;
     autoCreatePr: boolean;
     featureBranchPrefix: string;
     sprintBranchScheme: string;
   };
   skills: SkillToggle[];
+}
+
+export interface GitStatusCheck {
+  name: string;
+  status: string;
+  conclusion: string | null;
+}
+
+export interface GitPullRequestStatus {
+  number: number;
+  title: string;
+  url: string;
+  state: string;
+  isDraft: boolean;
+  mergeStateStatus: string | null;
+  reviewDecision: string | null;
+  updatedAt: string | null;
+  comments: number;
+  checks: GitStatusCheck[];
+}
+
+export interface GitCiRunStatus {
+  id: number | null;
+  name: string;
+  workflowName: string | null;
+  status: string;
+  conclusion: string | null;
+  event: string | null;
+  headBranch: string | null;
+  url: string;
+  updatedAt: string | null;
+}
+
+export interface GitMergeStatus {
+  number: number;
+  title: string;
+  url: string;
+  mergedAt: string | null;
+  mergedBy: string | null;
+}
+
+export interface GitTrackingStatus {
+  mode: "REMOTE" | "LOCAL";
+  available: boolean;
+  repositoryRoot: string | null;
+  branch: string | null;
+  hasRemote: boolean;
+  dirty: boolean;
+  openPullRequests: GitPullRequestStatus[];
+  ciRuns: GitCiRunStatus[];
+  mergedPullRequests: GitMergeStatus[];
+  warnings: string[];
+  lastUpdated: string;
 }

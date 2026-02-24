@@ -9,12 +9,21 @@ interface RowResult {
   payload: string;
 }
 
-const INTERNAL_SKILL_NAMES = ["orchestrator", "worker", "watch", "watch-skill", "sprint_agent_guide"] as const;
+const INTERNAL_SKILL_NAMES = [
+  "orchestrator",
+  "worker",
+  "watch",
+  "watch-skill",
+  "sprint_agent_guide",
+  "git_manager",
+  "git_manager_remote",
+  "git_manager_local",
+] as const;
 const INTERNAL_SKILL_SET = new Set<string>(INTERNAL_SKILL_NAMES);
 
 const DEFAULT_SKILLS: SkillToggle[] = INTERNAL_SKILL_NAMES.map((name) => ({
   name,
-  enabled: true,
+  enabled: name === "git_manager_local" ? false : true,
   isInternal: true,
 }));
 
@@ -25,6 +34,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     julesApiKey: "",
   },
   git: {
+    githubMode: "REMOTE",
     defaultBranch: "main",
     autoCreatePr: true,
     featureBranchPrefix: "feature/",
@@ -35,6 +45,21 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
 
 const SETTINGS_DIR = path.join(os.homedir(), "jules-subagents");
 const SETTINGS_DB_PATH = path.join(SETTINGS_DIR, "settings.db");
+
+const enforceGitManagerSkillset = (skills: SkillToggle[], githubMode: "REMOTE" | "LOCAL"): SkillToggle[] => {
+  return skills.map((skill) => {
+    if (skill.name === "git_manager_remote") {
+      return { ...skill, enabled: githubMode === "REMOTE" };
+    }
+    if (skill.name === "git_manager_local") {
+      return { ...skill, enabled: githubMode === "LOCAL" };
+    }
+    if (skill.name === "git_manager") {
+      return { ...skill, enabled: true };
+    }
+    return skill;
+  });
+};
 
 const sanitizeSkills = (value: unknown): SkillToggle[] => {
   if (!Array.isArray(value)) return DEFAULT_SKILLS.map((skill) => ({ ...skill }));
@@ -90,6 +115,7 @@ const sanitizeSettings = (value: unknown): DashboardSettings => {
 
   const gitInput = (input.git && typeof input.git === "object" ? input.git : {}) as Partial<DashboardSettings["git"]>;
   const git = {
+    githubMode: gitInput.githubMode === "LOCAL" ? "LOCAL" as const : "REMOTE" as const,
     defaultBranch: typeof gitInput.defaultBranch === "string" && gitInput.defaultBranch.trim().length > 0
       ? gitInput.defaultBranch.trim()
       : DEFAULT_DASHBOARD_SETTINGS.git.defaultBranch,
@@ -102,11 +128,13 @@ const sanitizeSettings = (value: unknown): DashboardSettings => {
       : DEFAULT_DASHBOARD_SETTINGS.git.sprintBranchScheme,
   };
 
+  const normalizedSkills = enforceGitManagerSkillset(sanitizeSkills(input.skills), git.githubMode);
+
   return {
     automationLevel: validAutomationLevel,
     aiProvider,
     git,
-    skills: sanitizeSkills(input.skills),
+    skills: normalizedSkills,
   };
 };
 

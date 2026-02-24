@@ -7,7 +7,7 @@ import { ActivitySidebar } from "./components/ActivitySidebar.js";
 import { SettingsPage } from "./components/SettingsPage.js";
 import { computeStats, mergeLiveActivities } from "./lib/status.js";
 import { cloneDefaultSettings } from "./lib/settings.js";
-import type { DashboardSettings, DashboardStatus, LiveActivitiesResponse } from "./types.js";
+import type { DashboardSettings, DashboardStatus, GitTrackingStatus, LiveActivitiesResponse } from "./types.js";
 
 const DEFAULT_LOG_POLL_INTERVAL_MS = 10000;
 
@@ -21,6 +21,8 @@ export const App: FunctionComponent = () => {
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [isSettingsLoading, setIsSettingsLoading] = useState<boolean>(false);
   const [isSettingsSaving, setIsSettingsSaving] = useState<boolean>(false);
+  const [gitStatus, setGitStatus] = useState<GitTrackingStatus | null>(null);
+  const [gitStatusError, setGitStatusError] = useState<string | null>(null);
 
   const fetchData = async (): Promise<void> => {
     try {
@@ -36,6 +38,20 @@ export const App: FunctionComponent = () => {
       setError(null);
     } catch {
       setError("Unable to connect to Orchestrator API");
+    }
+  };
+
+  const fetchGitStatus = async (): Promise<void> => {
+    try {
+      const response = await fetch("/api/git-status");
+      if (!response.ok) {
+        throw new Error("Failed to fetch git status");
+      }
+      const data: GitTrackingStatus = await response.json();
+      setGitStatus(data);
+      setGitStatusError(null);
+    } catch {
+      setGitStatusError("Unable to load git/ci/pr tracking.");
     }
   };
 
@@ -74,6 +90,7 @@ export const App: FunctionComponent = () => {
       setSettings(data);
       setSettingsError(null);
       setSaveMessage("Settings saved.");
+      await fetchGitStatus();
     } catch {
       setSettingsError("Unable to save settings");
     } finally {
@@ -84,8 +101,13 @@ export const App: FunctionComponent = () => {
   useEffect(() => {
     void fetchData();
     void fetchSettings();
+    void fetchGitStatus();
     const intervalId = window.setInterval(() => void fetchData(), DEFAULT_LOG_POLL_INTERVAL_MS);
-    return () => window.clearInterval(intervalId);
+    const gitIntervalId = window.setInterval(() => void fetchGitStatus(), DEFAULT_LOG_POLL_INTERVAL_MS);
+    return () => {
+      window.clearInterval(intervalId);
+      window.clearInterval(gitIntervalId);
+    };
   }, []);
 
   const tasksWithLiveActivities = useMemo(() => {
@@ -145,7 +167,12 @@ export const App: FunctionComponent = () => {
               </div>
 
               <div className="lg:col-span-4">
-                <ActivitySidebar reportText={status.reportText} instructions={status.instructions} />
+                <ActivitySidebar
+                  reportText={status.reportText}
+                  instructions={status.instructions}
+                  gitStatus={gitStatus}
+                  gitStatusError={gitStatusError}
+                />
               </div>
             </div>
           </>

@@ -24,8 +24,11 @@ describe("SettingsRepository", () => {
     expect(settings.automationLevel).toBe("SEMI_AUTO");
     expect(settings.aiProvider.provider).toBe("jules");
     expect(settings.git.defaultBranch).toBe("main");
+    expect(settings.git.githubMode).toBe("REMOTE");
     expect(settings.skills.length).toBeGreaterThan(0);
     expect(settings.skills.every((skill) => skill.isInternal)).toBe(true);
+    expect(settings.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(true);
+    expect(settings.skills.find((skill) => skill.name === "git_manager_local")?.enabled).toBe(false);
   });
 
   it("persists and reads settings", async () => {
@@ -37,6 +40,7 @@ describe("SettingsRepository", () => {
         julesApiKey: "test-key",
       },
       git: {
+        githubMode: "LOCAL",
         defaultBranch: "develop",
         autoCreatePr: false,
         featureBranchPrefix: "work/",
@@ -51,6 +55,9 @@ describe("SettingsRepository", () => {
     expect(saved.automationLevel).toBe("ALWAYS_ASK");
     expect(saved.aiProvider.julesApiKey).toBe("test-key");
     expect(saved.git.featureBranchPrefix).toBe("work/");
+    expect(saved.git.githubMode).toBe("LOCAL");
+    expect(saved.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(false);
+    expect(saved.skills.find((skill) => skill.name === "git_manager_local")?.enabled).toBe(true);
 
     const reloaded = new SettingsRepository(dbPath).getSettings();
     expect(reloaded).toEqual(saved);

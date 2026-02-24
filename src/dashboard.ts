@@ -1,8 +1,7 @@
 import express, { type Express } from "express";
 import * as fs from "fs";
 import * as path from "path";
-import type { JulesActivity } from "./types.js";
-import type { DashboardSettings } from "./types.js";
+import type { DashboardSettings, GitTrackingStatus, JulesActivity } from "./types.js";
 
 export interface DashboardServerOptions {
   app: Express;
@@ -11,12 +10,13 @@ export interface DashboardServerOptions {
   liveActivityCacheMs: number;
   getStatus: () => unknown;
   getLiveActivities: () => Promise<Record<string, JulesActivity[]>>;
+  getGitStatus: () => Promise<GitTrackingStatus>;
   getSettings: () => DashboardSettings;
   saveSettings: (settings: DashboardSettings) => DashboardSettings;
 }
 
 export const setupDashboardServer = async (options: DashboardServerOptions): Promise<void> => {
-  const { app, dashboardDir, port, liveActivityCacheMs, getStatus, getLiveActivities, getSettings, saveSettings } = options;
+  const { app, dashboardDir, port, liveActivityCacheMs, getStatus, getLiveActivities, getGitStatus, getSettings, saveSettings } = options;
   app.use(express.json({ limit: "1mb" }));
 
   app.get("/api/status", (req, res) => {
@@ -39,6 +39,16 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
 
   app.get("/api/settings", (req, res) => {
     res.json(getSettings());
+  });
+
+  app.get("/api/git-status", async (req, res) => {
+    try {
+      const status = await getGitStatus();
+      res.json(status);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      res.status(500).json({ error: `Failed to fetch git status: ${message}` });
+    }
   });
 
   app.put("/api/settings", (req, res) => {

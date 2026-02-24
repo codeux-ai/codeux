@@ -18,7 +18,7 @@ import os from "os";
 import { loadAppConfig } from "./config.js";
 import { setupDashboardServer } from "./dashboard.js";
 import { JulesApiClient } from "./jules-api.js";
-import type { DashboardSettings, JulesActivity, JulesSession, Settings, Subtask } from "./types.js";
+import type { DashboardSettings, GitTrackingStatus, JulesActivity, JulesSession, Settings, Subtask } from "./types.js";
 import { TOOL_DEFINITIONS, dispatchTool } from "./tools.js";
 import { SprintOrchestrator, type SprintAgentArgs } from "./sprint-orchestrator.js";
 import { GuideRepository } from "./guide-repository.js";
@@ -26,6 +26,7 @@ import { SubtaskRepository } from "./subtask-repository.js";
 import { TaskService } from "./task-service.js";
 import { SettingsRepository } from "./settings-repository.js";
 import { formatSprintBranch } from "./branch-scheme.js";
+import { GitStatusService } from "./git-status-service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,6 +57,7 @@ const requiredApiKey: string = apiKey;
 class JulesAgentServer {
   private static readonly DASHBOARD_ACTIVITY_PAGE_SIZE = 20;
   private static readonly LIVE_ACTIVITY_CACHE_MS = 10_000;
+  private static readonly GIT_STATUS_CACHE_MS = 10_000;
   private server: Server;
   private julesApi: JulesApiClient;
   private completedSprints: Set<number> = new Set();
@@ -71,6 +73,9 @@ class JulesAgentServer {
   private liveActivitiesFetchPromise: Promise<Record<string, JulesActivity[]>> | null = null;
   private settingsRepository: SettingsRepository;
   private dashboardSettings: DashboardSettings;
+  private gitStatusService: GitStatusService;
+  private gitStatusCache: { timestamp: number; data: GitTrackingStatus | null } = { timestamp: 0, data: null };
+  private gitStatusFetchPromise: Promise<GitTrackingStatus> | null = null;
 
   constructor() {
     this.server = new Server(
@@ -93,6 +98,7 @@ class JulesAgentServer {
     this.subtaskRepository = new SubtaskRepository();
     this.settingsRepository = new SettingsRepository();
     this.dashboardSettings = this.settingsRepository.getSettings();
+    this.gitStatusService = new GitStatusService(projectRoot);
     this.taskService = new TaskService({
       julesApi: this.julesApi,
       guideRepository: {
@@ -182,9 +188,11 @@ class JulesAgentServer {
       liveActivityCacheMs: JulesAgentServer.LIVE_ACTIVITY_CACHE_MS,
       getStatus: () => this.lastStatus,
       getLiveActivities: () => this.getLiveActivitiesForActiveTasks(),
+      getGitStatus: () => this.getGitStatus(),
       getSettings: () => this.dashboardSettings,
       saveSettings: (settings: DashboardSettings) => {
         this.dashboardSettings = this.settingsRepository.saveSettings(settings);
+        this.gitStatusCache = { timestamp: 0, data: null };
         return this.dashboardSettings;
       },
     });
@@ -282,6 +290,28 @@ class JulesAgentServer {
 
   private async fetchRecentActivities(sessionName: string, pageSize: number = JulesAgentServer.DASHBOARD_ACTIVITY_PAGE_SIZE): Promise<JulesActivity[]> {
     return this.julesApi.fetchRecentActivities(sessionName, pageSize);
+  }
+
+  private async getGitStatus(): Promise<GitTrackingStatus> {
+    const now = Date.now();
+    if (this.gitStatusCache.data && now - this.gitStatusCache.timestamp < JulesAgentServer.GIT_STATUS_CACHE_MS) {
+      return this.gitStatusCache.data;
+    }
+    if (this.gitStatusFetchPromise) {
+      return this.gitStatusFetchPromise;
+    }
+
+    this.gitStatusFetchPromise = this.gitStatusService
+      .getStatus(this.dashboardSettings.git.githubMode)
+      .then((status) => {
+        this.gitStatusCache = { timestamp: Date.now(), data: status };
+        return status;
+      })
+      .finally(() => {
+        this.gitStatusFetchPromise = null;
+      });
+
+    return this.gitStatusFetchPromise;
   }
 
   private async getLiveActivitiesForActiveTasks(): Promise<Record<string, JulesActivity[]>> {
