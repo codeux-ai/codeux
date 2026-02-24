@@ -14,6 +14,7 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import express from "express";
+import os from "os";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -84,12 +85,19 @@ interface Subtask {
   is_merged?: boolean; // Flag to indicate if the PR has been merged
 }
 
+interface Settings {
+  maxFailures?: number;
+  [key: string]: any;
+}
+
 class JulesAgentServer {
   private server: Server;
   private axiosInstance: AxiosInstance;
   private completedSprints: Set<number> = new Set();
   private lastStatus: any = { subtasks: [], timestamp: null };
   private app = express();
+  private settings: Settings = { maxFailures: 5 };
+  private consecutiveFailures: number = 0;
 
   constructor() {
     this.server = new Server(
@@ -112,6 +120,7 @@ class JulesAgentServer {
       },
     });
 
+    this.loadSettings();
     this.setupToolHandlers();
     this.setupDashboard();
     
@@ -123,6 +132,43 @@ class JulesAgentServer {
       await this.server.close();
       process.exit(0);
     });
+  }
+
+  private async loadSettings() {
+    // 1. Lowest priority: Environment variable
+    if (process.env.JULES_API_MAX_FAILS) {
+      this.settings.maxFailures = parseInt(process.env.JULES_API_MAX_FAILS);
+    }
+
+    // 2. Higher priorities: settings.json files (Reverse order for correct override: HOME -> PROJECT -> CWD)
+    const searchPaths = this.getSearchPaths(".jules-subagents/settings.json").reverse();
+    for (const settingsPath of searchPaths) {
+      try {
+        await fs.access(settingsPath);
+        const content = await fs.readFile(settingsPath, "utf-8");
+        const loadedSettings = JSON.parse(content);
+        
+        // Handle both camelCase and UPPER_SNAKE_CASE for backward compatibility if needed, 
+        // but prefer camelCase for the final settings.
+        if (loadedSettings.JULES_API_MAX_FAILS !== undefined) {
+          loadedSettings.maxFailures = loadedSettings.JULES_API_MAX_FAILS;
+        }
+        
+        this.settings = { ...this.settings, ...loadedSettings };
+        console.error(`Loaded settings from: ${settingsPath}`);
+      } catch (error) {
+        // Skip if not found or invalid
+      }
+    }
+  }
+
+  private getSearchPaths(relativePath: string): string[] {
+    const paths = [
+      path.join(process.cwd(), relativePath),
+      path.join(projectRoot, relativePath),
+      path.join(os.homedir(), relativePath),
+    ];
+    return [...new Set(paths)]; // Unique paths, highest priority first
   }
 
   private setupDashboard() {
@@ -415,6 +461,11 @@ class JulesAgentServer {
   }
 
   private async handleCreateSession(args: any) {
+    const maxFails = this.settings.maxFailures || 5;
+    if (this.consecutiveFailures >= maxFails) {
+      throw new Error(`CRITICAL: Emergency stop active. ${this.consecutiveFailures} consecutive task creation failures detected.`);
+    }
+
     const data: any = {
       prompt: args.prompt,
       sourceContext: { source: this.normalizeName("sources", args.source) },
@@ -424,8 +475,14 @@ class JulesAgentServer {
     if (args.require_plan_approval !== undefined) data.requirePlanApproval = args.require_plan_approval;
     if (args.automation_mode) data.automationMode = args.automation_mode;
 
-    const response = await this.axiosInstance.post("/sessions", data);
-    return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
+    try {
+      const response = await this.axiosInstance.post("/sessions", data);
+      this.consecutiveFailures = 0; // Reset on success
+      return { content: [{ type: "text", text: JSON.stringify(response.data, null, 2) }] };
+    } catch (error: any) {
+      this.consecutiveFailures++;
+      throw error;
+    }
   }
 
   private async handleGetSession({ session_id }: { session_id: string }) {
@@ -635,12 +692,29 @@ class JulesAgentServer {
       let reportText = "";
       let instructions = "";
       if (args.action === "orchestrate") {
+        // Pre-check for emergency stop
+        const maxFails = this.settings.maxFailures || 5;
+        if (this.consecutiveFailures >= maxFails) {
+          throw new Error(`CRITICAL: Emergency stop active. ${this.consecutiveFailures} consecutive task creation failures detected. Please check configuration and run again to reset.`);
+        }
+
         const readyTasks = subtasks.filter(t => t.status === "PENDING" && t.is_independent);
         for (const task of readyTasks) {
-          const session = await this.startJulesTask(task, args.source_id, defaultFeatureBranch, args.repo_path, args.sprint_number);
-          task.status = "RUNNING";
-          task.session_id = session.id;
-          reportText += `🚀 **Started Jules Session** for task \`${task.id}\`: [${session.id}](${session.id})\n`;
+          try {
+            const session = await this.startJulesTask(task, args.source_id, defaultFeatureBranch, args.repo_path, args.sprint_number);
+            task.status = "RUNNING";
+            task.session_id = session.id;
+            reportText += `🚀 **Started Jules Session** for task \`${task.id}\`: [${session.id}](${session.id})\n`;
+            this.consecutiveFailures = 0; // Reset on successful start
+          } catch (error: any) {
+            this.consecutiveFailures++;
+            const currentFails = this.consecutiveFailures;
+            console.error(`Error starting task ${task.id}: ${error.message} (Consecutive failures: ${currentFails}/${maxFails})`);
+            
+            if (currentFails >= maxFails) {
+              throw new Error(`CRITICAL: Emergency stop triggered after ${currentFails} consecutive task creation failures.`);
+            }
+          }
         }
       }
 
@@ -803,6 +877,11 @@ class JulesAgentServer {
       ? `## SYSTEM INSTRUCTIONS & ENGINEERING STANDARDS\n\n${workerGuide}\n\n---\n\n## TASK TO EXECUTE\n\n${args.prompt}`
       : args.prompt;
 
+    const maxFails = this.settings.maxFailures || 5;
+    if (this.consecutiveFailures >= maxFails) {
+      throw new Error(`CRITICAL: Emergency stop active. ${this.consecutiveFailures} consecutive task creation failures detected.`);
+    }
+
     const data: any = {
       prompt: fullPrompt,
       sourceContext: { 
@@ -818,34 +897,32 @@ class JulesAgentServer {
       data.title = args.title;
     }
 
-    const response = await this.axiosInstance.post<JulesSession>("/sessions", data);
-    const session = response.data;
+    try {
+      const response = await this.axiosInstance.post<JulesSession>("/sessions", data);
+      const session = response.data;
+      this.consecutiveFailures = 0; // Reset on success
 
-    if (args.wait) {
-      return await this.handleWaitForSessionCompletion({ session_id: session.id });
+      if (args.wait) {
+        return await this.handleWaitForSessionCompletion({ session_id: session.id });
+      }
+
+      return { content: [{ type: "text", text: JSON.stringify(session, null, 2) }] };
+    } catch (error: any) {
+      this.consecutiveFailures++;
+      throw error;
     }
-
-    return { content: [{ type: "text", text: JSON.stringify(session, null, 2) }] };
   }
 
   private async getGuideContent(guideName: string, repoPath?: string): Promise<string> {
-    const searchPaths = [
-      // 1. Check in the provided repo_path (highest priority)
-      ...(repoPath ? [
-        path.join(repoPath, ".jules-subagents", "agents", guideName),
-        path.join(repoPath, "agents", guideName),
-        path.join(repoPath, ".gemini", "agents", guideName),
-        path.join(repoPath, guideName)
-      ] : []),
-      // 2. Check in the process CWD (where the CLI is running)
-      path.join(process.cwd(), ".jules-subagents", "agents", guideName),
-      path.join(process.cwd(), "agents", guideName),
-      path.join(process.cwd(), ".gemini", "agents", guideName),
-      path.join(process.cwd(), guideName),
-      // 3. Fallback to the project root (the default guides)
-      path.join(projectRoot, ".jules-subagents", "agents", guideName),
-      path.join(projectRoot, "agents", guideName)
-    ];
+    const relativePath = path.join(".jules-subagents", "agents", guideName);
+    let searchPaths = this.getSearchPaths(relativePath);
+    
+    if (repoPath) {
+      const repoScopedPath = path.join(repoPath, relativePath);
+      if (!searchPaths.includes(repoScopedPath)) {
+        searchPaths.unshift(repoScopedPath); // Explicit repo_path takes top priority
+      }
+    }
 
     for (const searchPath of searchPaths) {
       try {
