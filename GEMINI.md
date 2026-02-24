@@ -34,11 +34,11 @@ This project is a production-grade **Model Context Protocol (MCP)** server for t
 - **Direct Execution**: `node dist/index.js --api-key YOUR_KEY`
 - **Global Command**: Once linked via `npm link`, use the `jules-subagents` command.
 
-### Configuration
-The server looks for the `JULES_API_KEY` in:
-1.  `--api-key` CLI flag
-2.  `JULES_API_KEY` environment variable
-3.  `.env` file in the working directory
+### Configuration & Safety
+The server looks for settings and guides in a hierarchical order (CWD > Project Root > Home Dir):
+1.  **API Key**: `--api-key` flag, `JULES_API_KEY` env, or `.env` file.
+2.  **Settings**: `settings.json` in `.jules-subagents/` folders.
+3.  **Emergency Stop**: Automatically halts task creation after 5 (default) consecutive failures, configurable via `maxFailures` or `JULES_API_MAX_FAILS`.
 
 ## 🏗️ Agent Orchestration Architecture
 

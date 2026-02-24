@@ -149,28 +149,43 @@ Tools like `task_agent` and `wait_for_session_completion` allow you to block unt
 
 ---
 
+## ⚙️ Configuration & Safety
+
+The server uses a hierarchical configuration system and built-in safety mechanisms to ensure reliable operation.
+
+### 🔍 Configuration Search Priority
+The server loads settings from `settings.json` and agent guides from `.jules-subagents/` in the following order (highest priority first):
+1.  **Current Working Directory**: `./.jules-subagents/`
+2.  **Project Root**: `<project_root>/.jules-subagents/`
+3.  **Home Directory**: `~/.jules-subagents/`
+4.  **Environment Variables**: (Lowest priority baseline)
+
+### 🛡️ Emergency Stop (Retry Safety)
+To prevent runaway API calls and excessive cost in case of persistent errors, the server implements an **Emergency Stop** mechanism:
+- **Consecutive Failure Tracking**: The server monitors consecutive failures when starting new Jules tasks.
+- **Stop Threshold**: If a specified number of tasks fail to start in a row, the server enters an emergency stop state and blocks further task creation.
+- **Default Threshold**: 5 consecutive failures.
+- **Configuration**: You can adjust this threshold using the `maxFailures` setting in your `settings.json` or via the `JULES_API_MAX_FAILS` environment variable.
+
+### 📝 Example `settings.json`
+Place this in `~/.jules-subagents/settings.json` or your project folder:
+```json
+{
+  "maxFailures": 10
+}
+```
+
+---
+
 ## 🎨 Customizing Agent Guides
 
-The server uses Markdown guides to define engineering standards and orchestration logic. You can override the default guides by placing your own versions in your project repository or the current working directory.
-
-### 🔍 Search Priority
-The server searches for guides in this order:
-1.  **Repository Path**:
-    - `<repo_path>/.jules-subagents/agents/<guide>.md`
-    - `<repo_path>/agents/<guide>.md`
-    - `<repo_path>/.gemini/agents/<guide>.md`
-    - `<repo_path>/<guide>.md`
-2.  **Current Working Directory**:
-    - `./.jules-subagents/agents/<guide>.md`
-    - `./agents/<guide>.md`
-    - `./.gemini/agents/<guide>.md`
-    - `./<guide>.md`
-3.  **Built-in Defaults**: The standard guides included with the MCP server.
+The server uses Markdown guides to define engineering standards and orchestration logic. You can override the default guides by placing your own versions in the hierarchical search paths mentioned above.
 
 ### 📝 Overridable Guides
 - `worker.md`: Technical standards injected into every Jules agent session.
 - `sprint_agent_guide.md`: Operating guide for the main agent during the "plan" phase.
 - `orchestrator.md`: Guidance for the main agent during the "orchestrate" and "status" phases.
+- `watch.md`: Operating instructions for the continuous orchestration loop.
 
 ---
 
