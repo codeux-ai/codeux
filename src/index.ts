@@ -11,6 +11,7 @@ import axios from "axios";
 import type { AxiosInstance, AxiosError } from "axios";
 import dotenv from "dotenv";
 import * as fs from "fs/promises";
+import * as fsSync from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import express from "express";
@@ -35,7 +36,36 @@ const args = process.argv.slice(2);
 const apiKeyArg = args.find(arg => arg.startsWith("--api-key="))?.split("=")[1] || 
                   (args.indexOf("--api-key") !== -1 ? args[args.indexOf("--api-key") + 1] : null);
 
-const API_KEY = apiKeyArg || process.env.JULES_API_KEY || process.env.JULES_KEY;
+const loadApiKeyFromSettings = (): string | null => {
+  const settingsRelativePath = path.join(".jules-subagents", "settings.json");
+  const searchPaths = [
+    path.join(process.cwd(), settingsRelativePath),
+    path.join(projectRoot, settingsRelativePath),
+    path.join(os.homedir(), settingsRelativePath),
+  ];
+
+  for (const settingsPath of [...new Set(searchPaths)]) {
+    try {
+      if (!fsSync.existsSync(settingsPath)) continue;
+      const raw = fsSync.readFileSync(settingsPath, "utf-8");
+      const parsed = JSON.parse(raw);
+      const key =
+        parsed?.julesApiKey ||
+        parsed?.JULES_API_KEY ||
+        parsed?.julesKey ||
+        parsed?.JULES_KEY;
+      if (typeof key === "string" && key.trim().length > 0) {
+        return key.trim();
+      }
+    } catch {
+      // Ignore invalid or unreadable settings files at startup key discovery time.
+    }
+  }
+
+  return null;
+};
+
+const API_KEY = apiKeyArg || process.env.JULES_API_KEY || process.env.JULES_KEY || loadApiKeyFromSettings();
 const BASE_URL = process.env.JULES_API_BASE_URL || "https://jules.googleapis.com/v1alpha";
 const DASHBOARD_PORT = parseInt(process.env.DASHBOARD_PORT || "4444");
 
@@ -81,6 +111,7 @@ interface Subtask {
   depends_on: string[]; // IDs of other subtasks
   status?: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED";
   session_id?: string;
+  session_name?: string;
   activities?: JulesActivity[];
   is_independent: boolean; // Flag to indicate if it can be delegated to Jules
   is_merged?: boolean; // Flag to indicate if the PR has been merged
@@ -92,6 +123,8 @@ interface Settings {
 }
 
 class JulesAgentServer {
+  private static readonly DASHBOARD_ACTIVITY_PAGE_SIZE = 20;
+  private static readonly LIVE_ACTIVITY_CACHE_MS = 10_000;
   private server: Server;
   private axiosInstance: AxiosInstance;
   private completedSprints: Set<number> = new Set();
@@ -99,6 +132,8 @@ class JulesAgentServer {
   private app = express();
   private settings: Settings = { maxFailures: 5 };
   private consecutiveFailures: number = 0;
+  private liveActivitiesCache: { timestamp: number; data: Record<string, JulesActivity[]> } = { timestamp: 0, data: {} };
+  private liveActivitiesFetchPromise: Promise<Record<string, JulesActivity[]>> | null = null;
 
   constructor() {
     this.server = new Server(
@@ -173,6 +208,20 @@ class JulesAgentServer {
   private async setupDashboard() {
     this.app.get("/api/status", (req, res) => {
       res.json(this.lastStatus);
+    });
+
+    this.app.get("/api/live-activities", async (req, res) => {
+      try {
+        const activitiesBySession = await this.getLiveActivitiesForActiveTasks();
+        res.json({
+          activitiesBySession,
+          polledAt: new Date().toISOString(),
+          cacheTtlMs: JulesAgentServer.LIVE_ACTIVITY_CACHE_MS,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        res.status(500).json({ error: `Failed to fetch live activities: ${message}` });
+      }
     });
 
     this.app.get("/favicon.ico", (req, res) => res.status(204).end());
@@ -449,6 +498,96 @@ class JulesAgentServer {
     return `${type}/${id}`;
   }
 
+  private extractSessionId(session: Partial<JulesSession>): string | undefined {
+    if (session.id) {
+      return session.id.replace(/^sessions\//, "");
+    }
+    if (session.name && session.name.startsWith("sessions/")) {
+      return session.name.replace(/^sessions\//, "");
+    }
+    return undefined;
+  }
+
+  private resolveSessionName(session: Partial<JulesSession>): string | undefined {
+    if (session.name && session.name.startsWith("sessions/")) {
+      return session.name;
+    }
+    const sessionId = this.extractSessionId(session);
+    return sessionId ? this.normalizeName("sessions", sessionId) : undefined;
+  }
+
+  private resolveSessionNameFromTask(task: Subtask): string | undefined {
+    if (task.session_name) {
+      return this.resolveSessionName({ name: task.session_name });
+    }
+    if (task.session_id) {
+      return this.resolveSessionName({ id: task.session_id });
+    }
+    return undefined;
+  }
+
+  private async fetchRecentActivities(sessionName: string, pageSize: number = JulesAgentServer.DASHBOARD_ACTIVITY_PAGE_SIZE): Promise<JulesActivity[]> {
+    const activitiesResponse = await this.axiosInstance.get<{ activities?: JulesActivity[] }>(
+      `/${sessionName}/activities`,
+      { params: { pageSize } }
+    );
+    const activities = activitiesResponse.data.activities || [];
+    return activities.slice().sort((a, b) => {
+      const left = new Date(a.createTime || 0).getTime();
+      const right = new Date(b.createTime || 0).getTime();
+      return left - right;
+    });
+  }
+
+  private async getLiveActivitiesForActiveTasks(): Promise<Record<string, JulesActivity[]>> {
+    const now = Date.now();
+    if (now - this.liveActivitiesCache.timestamp < JulesAgentServer.LIVE_ACTIVITY_CACHE_MS) {
+      return this.liveActivitiesCache.data;
+    }
+
+    if (this.liveActivitiesFetchPromise) {
+      return this.liveActivitiesFetchPromise;
+    }
+
+    this.liveActivitiesFetchPromise = (async () => {
+      const subtasks: Subtask[] = Array.isArray(this.lastStatus?.subtasks) ? this.lastStatus.subtasks : [];
+      const activeSessionNames = Array.from(
+        new Set(
+          subtasks
+            .filter((task) => task.status === "RUNNING")
+            .map((task) => this.resolveSessionNameFromTask(task))
+            .filter((value): value is string => Boolean(value))
+        )
+      );
+
+      if (activeSessionNames.length === 0) {
+        const empty: Record<string, JulesActivity[]> = {};
+        this.liveActivitiesCache = { timestamp: Date.now(), data: empty };
+        return empty;
+      }
+
+      const results = await Promise.all(
+        activeSessionNames.map(async (sessionName) => {
+          try {
+            const activities = await this.fetchRecentActivities(sessionName);
+            return [sessionName, activities] as const;
+          } catch {
+            console.error(`Warning: Could not fetch live activities for ${sessionName}`);
+            return [sessionName, []] as const;
+          }
+        })
+      );
+
+      const data = Object.fromEntries(results);
+      this.liveActivitiesCache = { timestamp: Date.now(), data };
+      return data;
+    })().finally(() => {
+      this.liveActivitiesFetchPromise = null;
+    });
+
+    return this.liveActivitiesFetchPromise;
+  }
+
   // --- Jules API Handlers ---
   private async handleGetSource({ source_id }: { source_id: string }) {
     const response = await this.axiosInstance.get(`/${this.normalizeName("sources", source_id)}`);
@@ -505,10 +644,7 @@ class JulesAgentServer {
 
     try {
       // Fetch activities to get the last message/activity
-      const activitiesResponse = await this.axiosInstance.get<{ activities?: JulesActivity[] }>(`/${name}/activities`, {
-        params: { pageSize: 50 }
-      });
-      const activities = activitiesResponse.data.activities || [];
+      const activities = await this.fetchRecentActivities(name, 50);
       if (activities.length > 0) {
         // Assume chronological order, last is most recent
         (session as any).last_activity = activities[activities.length - 1];
@@ -728,17 +864,18 @@ class JulesAgentServer {
       for (const task of subtasks) {
         const match = sessions.find(s => s.title?.includes(`[${task.id}]`));
         if (match) {
-          task.session_id = match.id;
+          const sessionName = this.resolveSessionName(match);
+          const sessionId = this.extractSessionId(match);
+          task.session_name = sessionName;
+          task.session_id = sessionId;
           
           // Fetch recent activities for this session
-          try {
-            const activitiesResponse = await this.axiosInstance.get<{ activities?: JulesActivity[] }>(
-              `/sessions/${match.id}/activities`, 
-              { params: { pageSize: 5 } }
-            );
-            task.activities = (activitiesResponse.data.activities || []).reverse(); // Oldest first for display
-          } catch (e) {
-            console.error(`Warning: Could not fetch activities for task ${task.id}`);
+          if (sessionName) {
+            try {
+              task.activities = await this.fetchRecentActivities(sessionName, 5);
+            } catch (e) {
+              console.error(`Warning: Could not fetch activities for task ${task.id}`);
+            }
           }
 
           if (match.state === "COMPLETED") {
@@ -781,7 +918,8 @@ class JulesAgentServer {
           try {
             const session = await this.startJulesTask(task, args.source_id, defaultFeatureBranch, args.repo_path, args.sprint_number);
             task.status = "RUNNING";
-            task.session_id = session.id;
+            task.session_name = this.resolveSessionName(session);
+            task.session_id = this.extractSessionId(session);
             reportText += `🚀 **Started Jules Session** for task \`${task.id}\`: [${session.id}](${session.id})\n`;
             this.consecutiveFailures = 0; // Reset on successful start
           } catch (error: any) {

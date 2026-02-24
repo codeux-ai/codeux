@@ -5,6 +5,8 @@ import { html, getStatusColor, renderMarkdown, formatTime } from '../utils.js';
 export function TaskCard({ task }) {
     const [isExpanded, setIsExpanded] = useState(false);
     const [showLogs, setShowLogs] = useState(false);
+    const hasSession = Boolean(task.session_id || task.session_name);
+    const sessionLabel = (task.session_id || task.session_name || '').replace(/^sessions\//, '');
 
     return html`
         <div class="bg-slate-900/50 backdrop-blur-md border border-slate-800 p-5 rounded-2xl hover:bg-slate-900/80 transition-all duration-300 group shadow-[0_0_15px_rgba(56,189,248,0)] hover:shadow-[0_0_15px_rgba(56,189,248,0.1)]">
@@ -16,7 +18,7 @@ export function TaskCard({ task }) {
                             <h3 class="font-semibold text-white group-hover:text-blue-400 transition-colors cursor-pointer" onClick=${() => setIsExpanded(!isExpanded)}>${task.title}</h3>
                         </div>
                         <div class="flex items-center gap-2">
-                            ${task.session_id && html`
+                            ${hasSession && html`
                                 <button 
                                     onClick=${() => setShowLogs(!showLogs)}
                                     class="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-slate-800/50 hover:bg-slate-800 text-slate-500 hover:text-sky-400 transition-all border border-slate-700/50"
@@ -100,9 +102,9 @@ export function TaskCard({ task }) {
                     <span class="px-3 py-1 rounded-full text-[10px] font-bold border transition-all duration-500 ${getStatusColor(task.status)}">
                         ${task.status}
                     </span>
-                    ${task.session_id && html`
+                    ${hasSession && html`
                         <div class="text-[9px] font-mono text-slate-600 group-hover:text-slate-400 transition-colors">
-                            ${task.session_id.substring(0, 12)}...
+                            ${sessionLabel.substring(0, 12)}...
                         </div>
                     `}
                 </div>

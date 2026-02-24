@@ -6,15 +6,32 @@ import { StatsGrid } from './components/StatsGrid.js';
 import { TaskCard } from './components/TaskCard.js';
 import { ActivitySidebar } from './components/ActivitySidebar.js';
 
+const DEFAULT_LOG_POLL_INTERVAL_MS = 10000;
+
+const normalizeSessionName = (task) => {
+    if (task?.session_name && task.session_name.startsWith('sessions/')) return task.session_name;
+    if (task?.session_id) return `sessions/${String(task.session_id).replace(/^sessions\//, '')}`;
+    return null;
+};
+
 export function App() {
     const [status, setStatus] = useState({ subtasks: [], timestamp: null });
     const [error, setError] = useState(null);
+    const [sessionActivities, setSessionActivities] = useState({});
 
     const fetchData = async () => {
         try {
-            const res = await fetch('/api/status');
-            const data = await res.json();
+            const [statusRes, activitiesRes] = await Promise.all([
+                fetch('/api/status'),
+                fetch('/api/live-activities'),
+            ]);
+            if (!statusRes.ok || !activitiesRes.ok) {
+                throw new Error('Failed to fetch dashboard data');
+            }
+            const data = await statusRes.json();
+            const activitiesData = await activitiesRes.json();
             setStatus(data);
+            setSessionActivities(activitiesData.activitiesBySession || {});
             setError(null);
         } catch (err) {
             setError('Unable to connect to Orchestrator API');
@@ -23,19 +40,29 @@ export function App() {
 
     useEffect(() => {
         fetchData();
-        const interval = setInterval(fetchData, 4000);
-        return () => clearInterval(interval);
+        const intervalId = setInterval(fetchData, DEFAULT_LOG_POLL_INTERVAL_MS);
+        return () => clearInterval(intervalId);
     }, []);
 
-    const stats = useMemo(() => {
+    const tasksWithLiveActivities = useMemo(() => {
         const tasks = status.subtasks || [];
+        return tasks.map(task => {
+            const sessionName = normalizeSessionName(task);
+            const liveActivities = sessionName ? sessionActivities[sessionName] : null;
+            if (!liveActivities) return task;
+            return { ...task, session_name: sessionName, activities: liveActivities };
+        });
+    }, [status.subtasks, sessionActivities]);
+
+    const stats = useMemo(() => {
+        const tasks = tasksWithLiveActivities || [];
         return {
             total: tasks.length,
             running: tasks.filter(t => t.status === 'RUNNING').length,
             completed: tasks.filter(t => t.status === 'COMPLETED').length,
             failed: tasks.filter(t => t.status === 'FAILED').length,
         };
-    }, [status.subtasks]);
+    }, [tasksWithLiveActivities]);
 
     if (error) return html`
         <div class="flex items-center justify-center min-h-screen">
@@ -77,7 +104,7 @@ export function App() {
                                 <div class="bg-slate-900/50 backdrop-blur-md border border-slate-800 border-dashed p-12 rounded-2xl text-center">
                                     <p class="text-slate-500">Awaiting sprint decomposition...</p>
                                 </div>
-                            ` : status.subtasks.map(task => html`<${TaskCard} key=${task.id} task=${task} />`)}
+                            ` : tasksWithLiveActivities.map(task => html`<${TaskCard} key=${task.id} task=${task} />`)}
                         </div>
                     </div>
 
