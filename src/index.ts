@@ -99,7 +99,7 @@ interface JulesActivity {
   name: string;
   id: string;
   createTime: string;
-  originator: "agent" | "user";
+  originator?: "agent" | "user" | "system" | string;
   [key: string]: any;
 }
 
@@ -112,6 +112,7 @@ interface Subtask {
   status?: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED";
   session_id?: string;
   session_name?: string;
+  session_state?: string;
   activities?: JulesActivity[];
   is_independent: boolean; // Flag to indicate if it can be delegated to Jules
   is_merged?: boolean; // Flag to indicate if the PR has been merged
@@ -498,6 +499,10 @@ class JulesAgentServer {
     return `${type}/${id}`;
   }
 
+  private isActionRequiredState(state?: string): boolean {
+    return state === "AWAITING_PLAN_APPROVAL" || state === "AWAITING_USER_FEEDBACK" || state === "PAUSED";
+  }
+
   private extractSessionId(session: Partial<JulesSession>): string | undefined {
     if (session.id) {
       return session.id.replace(/^sessions\//, "");
@@ -680,7 +685,12 @@ class JulesAgentServer {
     while (Date.now() - startTime < timeout * 1000) {
       const response = await this.axiosInstance.get<JulesSession>(`/${name}`);
       const session = response.data;
-      if (session.state === "COMPLETED" || session.state === "FAILED" || session.state === "CANCELLED" || session.outputs?.some((o: any) => o.pullRequest)) {
+      if (
+        session.state === "COMPLETED" ||
+        session.state === "FAILED" ||
+        this.isActionRequiredState(session.state) ||
+        session.outputs?.some((o: any) => o.pullRequest)
+      ) {
         return { content: [{ type: "text", text: JSON.stringify(session, null, 2) }] };
       }
       await new Promise(resolve => setTimeout(resolve, poll_interval * 1000));
@@ -868,6 +878,7 @@ class JulesAgentServer {
           const sessionId = this.extractSessionId(match);
           task.session_name = sessionName;
           task.session_id = sessionId;
+          task.session_state = match.state;
           
           // Fetch recent activities for this session
           if (sessionName) {
@@ -880,7 +891,7 @@ class JulesAgentServer {
 
           if (match.state === "COMPLETED") {
             task.status = "COMPLETED";
-          } else if (match.state === "FAILED" || match.state === "CANCELLED") {
+          } else if (match.state === "FAILED") {
             if (retryFailed) {
               const dependenciesMet = task.depends_on.every(depId => {
                 const dep = subtasks.find(t => t.id === depId);
@@ -890,6 +901,8 @@ class JulesAgentServer {
             } else {
               task.status = "FAILED";
             }
+          } else if (this.isActionRequiredState(match.state)) {
+            task.status = "BLOCKED";
           } else {
             task.status = "RUNNING";
           }
@@ -941,6 +954,14 @@ class JulesAgentServer {
         for (const task of awaitingMerge) {
           instructions += `1. **Task ${task.id}**: Merge the Jules-created branch into \`${defaultFeatureBranch}\`.\n`;
           instructions += `2. Update \`${path.join(subtasksDir, task.id + ".md")}\` with \`merged: true\`.\n`;
+        }
+      }
+
+      const actionRequiredTasks = subtasks.filter(t => t.status === "BLOCKED" && this.isActionRequiredState(t.session_state));
+      if (actionRequiredTasks.length > 0) {
+        instructions += `\n### ✋ JULES ACTION REQUIRED\n`;
+        for (const task of actionRequiredTasks) {
+          instructions += `- **Task ${task.id}** is \`${task.session_state}\`. Open the Jules session and resolve the pending action, then rerun orchestration.\n`;
         }
       }
 

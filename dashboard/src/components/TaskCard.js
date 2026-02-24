@@ -2,6 +2,24 @@ import { h } from 'https://esm.sh/preact';
 import { useState } from 'https://esm.sh/preact/hooks';
 import { html, getStatusColor, renderMarkdown, formatTime } from '../utils.js';
 
+const getActivityText = (activity) => {
+    if (!activity) return 'System activity...';
+    if (activity.agentMessaged?.agentMessage) return activity.agentMessaged.agentMessage;
+    if (activity.userMessaged?.userMessage) return activity.userMessaged.userMessage;
+    if (activity.progressUpdated?.title || activity.progressUpdated?.description) {
+        return activity.progressUpdated.title || activity.progressUpdated.description;
+    }
+    if (activity.planGenerated?.plan?.steps?.length) {
+        const firstStep = activity.planGenerated.plan.steps[0];
+        return firstStep?.title ? `Plan generated: ${firstStep.title}` : 'Plan generated';
+    }
+    if (activity.planApproved?.planId) return `Plan approved (${activity.planApproved.planId})`;
+    if (activity.sessionFailed?.reason) return `Session failed: ${activity.sessionFailed.reason}`;
+    if (activity.sessionCompleted) return 'Session completed';
+    if (activity.description) return activity.description;
+    return 'System activity...';
+};
+
 export function TaskCard({ task }) {
     const [isExpanded, setIsExpanded] = useState(false);
     const [showLogs, setShowLogs] = useState(false);
@@ -56,14 +74,14 @@ export function TaskCard({ task }) {
                                 ${(!task.activities || task.activities.length === 0) ? html`
                                     <p class="text-[10px] text-slate-600 italic">Connecting to session logs...</p>
                                 ` : task.activities.map(activity => html`
-                                    <div class="flex gap-3 text-xs border-l-2 ${activity.originator === 'agent' ? 'border-sky-500/30' : 'border-slate-700'} pl-3 py-1">
+                                    <div class="flex gap-3 text-xs border-l-2 ${activity.originator === 'agent' ? 'border-sky-500/30' : activity.originator === 'user' ? 'border-emerald-500/30' : 'border-slate-700'} pl-3 py-1">
                                         <div class="flex-grow">
                                             <div class="flex items-center gap-2 mb-1">
-                                                <span class="font-bold text-[10px] ${activity.originator === 'agent' ? 'text-sky-400' : 'text-slate-400'} uppercase">${activity.originator}</span>
+                                                <span class="font-bold text-[10px] ${activity.originator === 'agent' ? 'text-sky-400' : activity.originator === 'user' ? 'text-emerald-400' : 'text-slate-400'} uppercase">${activity.originator || 'system'}</span>
                                                 <span class="text-[9px] text-slate-600 font-mono">${formatTime(activity.createTime)}</span>
                                             </div>
                                             <div class="text-slate-300 leading-relaxed font-mono text-[11px] line-clamp-2 hover:line-clamp-none transition-all cursor-help">
-                                                ${activity.agentAction?.thought || activity.agentAction?.toolCall?.name || activity.userInput?.prompt || 'System activity...'}
+                                                ${getActivityText(activity)}
                                             </div>
                                         </div>
                                     </div>
