@@ -2,7 +2,7 @@ import * as fs from "fs";
 import os from "os";
 import * as path from "path";
 import { DatabaseSync } from "node:sqlite";
-import type { DashboardSettings, SkillToggle } from "./types.js";
+import type { DashboardSettings, ExternalSettingsHints, SkillToggle } from "./types.js";
 import { DEFAULT_SPRINT_BRANCH_SCHEME } from "./branch-scheme.js";
 
 interface RowResult {
@@ -35,6 +35,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   },
   git: {
     githubMode: "REMOTE",
+    githubToken: "",
     defaultBranch: "main",
     autoCreatePr: true,
     featureBranchPrefix: "feature/",
@@ -91,14 +92,20 @@ const sanitizeSkills = (value: unknown): SkillToggle[] => {
   return [...internalSkills, ...customSkills];
 };
 
-const cloneDefaults = (): DashboardSettings => ({
+const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardSettings => ({
   automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
-  aiProvider: { ...DEFAULT_DASHBOARD_SETTINGS.aiProvider },
-  git: { ...DEFAULT_DASHBOARD_SETTINGS.git },
+  aiProvider: {
+    ...DEFAULT_DASHBOARD_SETTINGS.aiProvider,
+    julesApiKey: externalHints?.resolved.julesApiKey || DEFAULT_DASHBOARD_SETTINGS.aiProvider.julesApiKey,
+  },
+  git: {
+    ...DEFAULT_DASHBOARD_SETTINGS.git,
+    githubToken: externalHints?.resolved.githubToken || DEFAULT_DASHBOARD_SETTINGS.git.githubToken,
+  },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
 });
 
-const sanitizeSettings = (value: unknown): DashboardSettings => {
+const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints): DashboardSettings => {
   const input = (value && typeof value === "object" ? value : {}) as Partial<DashboardSettings>;
   const automationLevel = input.automationLevel;
   const validAutomationLevel = automationLevel === "FULL" || automationLevel === "SEMI_AUTO" || automationLevel === "ALWAYS_ASK"
@@ -110,12 +117,15 @@ const sanitizeSettings = (value: unknown): DashboardSettings => {
     : {}) as Partial<DashboardSettings["aiProvider"]>;
   const aiProvider = {
     provider: "jules" as const,
-    julesApiKey: typeof aiProviderInput.julesApiKey === "string" ? aiProviderInput.julesApiKey : "",
+    julesApiKey: typeof aiProviderInput.julesApiKey === "string"
+      ? aiProviderInput.julesApiKey
+      : (externalHints?.resolved.julesApiKey || ""),
   };
 
   const gitInput = (input.git && typeof input.git === "object" ? input.git : {}) as Partial<DashboardSettings["git"]>;
   const git = {
     githubMode: gitInput.githubMode === "LOCAL" ? "LOCAL" as const : "REMOTE" as const,
+    githubToken: typeof gitInput.githubToken === "string" ? gitInput.githubToken : (externalHints?.resolved.githubToken || ""),
     defaultBranch: typeof gitInput.defaultBranch === "string" && gitInput.defaultBranch.trim().length > 0
       ? gitInput.defaultBranch.trim()
       : DEFAULT_DASHBOARD_SETTINGS.git.defaultBranch,
@@ -140,10 +150,12 @@ const sanitizeSettings = (value: unknown): DashboardSettings => {
 
 export class SettingsRepository {
   private readonly db: DatabaseSync;
+  private readonly externalHints: ExternalSettingsHints | undefined;
 
-  constructor(dbPath: string = SETTINGS_DB_PATH) {
+  constructor(dbPath: string = SETTINGS_DB_PATH, externalHints?: ExternalSettingsHints) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     this.db = new DatabaseSync(dbPath);
+    this.externalHints = externalHints;
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS app_settings (
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -156,19 +168,19 @@ export class SettingsRepository {
   getSettings(): DashboardSettings {
     const row = this.db.prepare("SELECT payload FROM app_settings WHERE id = 1").get() as RowResult | undefined;
     if (!row) {
-      return cloneDefaults();
+      return cloneDefaults(this.externalHints);
     }
 
     try {
       const parsed = JSON.parse(row.payload) as unknown;
-      return sanitizeSettings(parsed);
+      return sanitizeSettings(parsed, this.externalHints);
     } catch {
-      return cloneDefaults();
+      return cloneDefaults(this.externalHints);
     }
   }
 
   saveSettings(input: DashboardSettings): DashboardSettings {
-    const normalized = sanitizeSettings(input);
+    const normalized = sanitizeSettings(input, this.externalHints);
     this.db.prepare(`
       INSERT INTO app_settings (id, payload, updated_at)
       VALUES (1, ?, ?)

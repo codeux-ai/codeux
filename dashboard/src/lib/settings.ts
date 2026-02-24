@@ -8,6 +8,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   },
   git: {
     githubMode: "REMOTE",
+    githubToken: "",
     defaultBranch: "main",
     autoCreatePr: true,
     featureBranchPrefix: "feature/",

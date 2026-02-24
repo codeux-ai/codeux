@@ -16,8 +16,11 @@ Purpose: provide a safe, deterministic connector for git operations in this MCP.
   - report each merge/PR/status action with command + result summary.
 - For PR review workflow:
   - read all PR comments before merge.
+  - always fetch both comment streams:
+    - issue-style PR comments (`gh pr view <number> --comments`)
+    - inline review/code comments (`gh api repos/<owner>/<repo>/pulls/<number>/comments`)
   - add 👀 reaction to comments currently being reviewed.
-  - add ✅ reaction once comment is fully addressed.
+  - after implementing fixes, reply on each addressed inline comment with a resolution note and add ✅ reaction.
 
 ## Skillset Routing
 - Use `git_manager_remote` when GitHub mode is `REMOTE`.

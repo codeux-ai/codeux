@@ -41,6 +41,7 @@ describe("SettingsRepository", () => {
       },
       git: {
         githubMode: "LOCAL",
+        githubToken: "ghp_test",
         defaultBranch: "develop",
         autoCreatePr: false,
         featureBranchPrefix: "work/",
@@ -54,6 +55,7 @@ describe("SettingsRepository", () => {
 
     expect(saved.automationLevel).toBe("ALWAYS_ASK");
     expect(saved.aiProvider.julesApiKey).toBe("test-key");
+    expect(saved.git.githubToken).toBe("ghp_test");
     expect(saved.git.featureBranchPrefix).toBe("work/");
     expect(saved.git.githubMode).toBe("LOCAL");
     expect(saved.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(false);
@@ -63,5 +65,18 @@ describe("SettingsRepository", () => {
     expect(reloaded).toEqual(saved);
     expect(reloaded.skills.find((skill) => skill.name === "worker")?.enabled).toBe(false);
     expect(reloaded.skills.find((skill) => skill.name === "my-custom-skill")?.isInternal).toBe(false);
+  });
+
+  it("initializes defaults from external hints", async () => {
+    const { dbPath } = await createRepo();
+    const repo = new SettingsRepository(dbPath, {
+      env: { julesApiKey: "env-jules", githubToken: "env-gh" },
+      settingsJson: { julesApiKey: "", githubToken: "" },
+      resolved: { julesApiKey: "env-jules", githubToken: "env-gh" },
+    });
+
+    const settings = repo.getSettings();
+    expect(settings.aiProvider.julesApiKey).toBe("env-jules");
+    expect(settings.git.githubToken).toBe("env-gh");
   });
 });

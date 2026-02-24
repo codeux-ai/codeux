@@ -80,6 +80,12 @@ This project is a production-grade **Model Context Protocol (MCP)** server for t
   - Verification steps and results (`npm run ci` output summary).
   - Dashboard screenshots/GIFs for UI changes.
   - Risk/rollback notes for impactful changes.
+ - PR review protocol (mandatory before merge):
+  - Always review both comment streams:
+  - `gh pr view <number> --comments` (issue-style comments).
+  - `gh api repos/<owner>/<repo>/pulls/<number>/comments` (inline code review comments/suggestions).
+  - Add 👀 reaction to comments currently being reviewed.
+  - After implementing fixes, reply on addressed inline comments and add ✅ reaction before merging.
 
 ## Collaboration Workflow
 - Default working flow for our collaboration:

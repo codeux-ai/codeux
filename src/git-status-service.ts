@@ -7,13 +7,21 @@ interface CommandResult {
   stderr: string;
 }
 
-type CommandRunner = (command: string, args: string[], cwd: string) => Promise<CommandResult>;
+interface CommandContext {
+  cwd: string;
+  ghToken?: string;
+}
+
+type CommandRunner = (command: string, args: string[], context: CommandContext) => Promise<CommandResult>;
 
 const DEFAULT_TIMEOUT_MS = 8000;
 
-const defaultRunner: CommandRunner = (command, args, cwd) =>
+const defaultRunner: CommandRunner = (command, args, context) =>
   new Promise((resolve) => {
-    execFile(command, args, { cwd, timeout: DEFAULT_TIMEOUT_MS, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+    const env = context.ghToken && command === "gh"
+      ? { ...process.env, GH_TOKEN: context.ghToken, GITHUB_TOKEN: context.ghToken }
+      : process.env;
+    execFile(command, args, { cwd: context.cwd, timeout: DEFAULT_TIMEOUT_MS, maxBuffer: 1024 * 1024, env }, (error, stdout, stderr) => {
       if (error) {
         resolve({ ok: false, stdout: String(stdout || ""), stderr: String(stderr || error.message || "") });
         return;
@@ -39,15 +47,16 @@ export class GitStatusService {
     private readonly runner: CommandRunner = defaultRunner
   ) {}
 
-  private async run(command: string, args: string[]): Promise<CommandResult> {
-    return this.runner(command, args, this.repoPath);
+  private async run(command: string, args: string[], ghToken?: string): Promise<CommandResult> {
+    return this.runner(command, args, { cwd: this.repoPath, ghToken });
   }
 
-  async getStatus(mode: "REMOTE" | "LOCAL"): Promise<GitTrackingStatus> {
+  async getStatus(mode: "REMOTE" | "LOCAL", ghToken?: string): Promise<GitTrackingStatus> {
+    const effectiveToken = ghToken && ghToken.trim().length > 0 ? ghToken.trim() : undefined;
     const warnings: string[] = [];
     const now = new Date().toISOString();
 
-    const gitRepoCheck = await this.run("git", ["rev-parse", "--is-inside-work-tree"]);
+    const gitRepoCheck = await this.run("git", ["rev-parse", "--is-inside-work-tree"], effectiveToken);
     if (!gitRepoCheck.ok || gitRepoCheck.stdout.trim() !== "true") {
       return {
         mode,
@@ -64,10 +73,10 @@ export class GitStatusService {
       };
     }
 
-    const rootResult = await this.run("git", ["rev-parse", "--show-toplevel"]);
-    const branchResult = await this.run("git", ["branch", "--show-current"]);
-    const remoteResult = await this.run("git", ["remote"]);
-    const dirtyResult = await this.run("git", ["status", "--porcelain"]);
+    const rootResult = await this.run("git", ["rev-parse", "--show-toplevel"], effectiveToken);
+    const branchResult = await this.run("git", ["branch", "--show-current"], effectiveToken);
+    const remoteResult = await this.run("git", ["remote"], effectiveToken);
+    const dirtyResult = await this.run("git", ["status", "--porcelain"], effectiveToken);
 
     const repositoryRoot = rootResult.ok ? rootResult.stdout.trim() : null;
     const branch = branchResult.ok ? branchResult.stdout.trim() || null : null;
@@ -96,7 +105,7 @@ export class GitStatusService {
       };
     }
 
-    const ghVersion = await this.run("gh", ["--version"]);
+    const ghVersion = await this.run("gh", ["--version"], effectiveToken);
     if (!ghVersion.ok) {
       return {
         mode,
@@ -113,16 +122,16 @@ export class GitStatusService {
       };
     }
 
-    const authStatus = await this.run("gh", ["auth", "status"]);
+    const authStatus = await this.run("gh", ["auth", "status"], effectiveToken);
     if (!authStatus.ok) {
       warnings.push("GitHub CLI is not authenticated. Remote tracking may be unavailable.");
     }
 
-    const prs = await this.fetchOpenPrs();
+    const prs = await this.fetchOpenPrs(effectiveToken);
     if (prs.warning) warnings.push(prs.warning);
-    const ciRuns = await this.fetchCiRuns();
+    const ciRuns = await this.fetchCiRuns(effectiveToken);
     if (ciRuns.warning) warnings.push(ciRuns.warning);
-    const merged = await this.fetchMergedPrs();
+    const merged = await this.fetchMergedPrs(effectiveToken);
     if (merged.warning) warnings.push(merged.warning);
 
     if (prs.data.some((pr) => pr.mergeStateStatus === "DIRTY")) {
@@ -147,7 +156,7 @@ export class GitStatusService {
     };
   }
 
-  private async fetchOpenPrs(): Promise<{ data: GitPullRequestStatus[]; warning?: string }> {
+  private async fetchOpenPrs(ghToken?: string): Promise<{ data: GitPullRequestStatus[]; warning?: string }> {
     const result = await this.run("gh", [
       "pr",
       "list",
@@ -157,7 +166,7 @@ export class GitStatusService {
       "20",
       "--json",
       "number,title,url,state,isDraft,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup",
-    ]);
+    ], ghToken);
     if (!result.ok) {
       return { data: [], warning: "Failed to fetch open pull requests via gh CLI." };
     }
@@ -202,7 +211,7 @@ export class GitStatusService {
     return { data };
   }
 
-  private async fetchCiRuns(): Promise<{ data: GitCiRunStatus[]; warning?: string }> {
+  private async fetchCiRuns(ghToken?: string): Promise<{ data: GitCiRunStatus[]; warning?: string }> {
     const result = await this.run("gh", [
       "run",
       "list",
@@ -210,7 +219,7 @@ export class GitStatusService {
       "20",
       "--json",
       "databaseId,name,workflowName,status,conclusion,event,headBranch,url,updatedAt",
-    ]);
+    ], ghToken);
     if (!result.ok) {
       return { data: [], warning: "Failed to fetch GitHub Actions runs via gh CLI." };
     }
@@ -235,7 +244,7 @@ export class GitStatusService {
     return { data };
   }
 
-  private async fetchMergedPrs(): Promise<{ data: GitMergeStatus[]; warning?: string }> {
+  private async fetchMergedPrs(ghToken?: string): Promise<{ data: GitMergeStatus[]; warning?: string }> {
     const result = await this.run("gh", [
       "pr",
       "list",
@@ -245,7 +254,7 @@ export class GitStatusService {
       "10",
       "--json",
       "number,title,url,mergedAt,mergedBy",
-    ]);
+    ], ghToken);
     if (!result.ok) {
       return { data: [], warning: "Failed to fetch recently merged pull requests via gh CLI." };
     }

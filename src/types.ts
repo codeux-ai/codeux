@@ -51,6 +51,7 @@ export interface AiProviderSettings {
 
 export interface GitSettings {
   githubMode: "REMOTE" | "LOCAL";
+  githubToken: string;
   defaultBranch: string;
   autoCreatePr: boolean;
   featureBranchPrefix: string;
@@ -121,4 +122,19 @@ export interface GitTrackingStatus {
   mergedPullRequests: GitMergeStatus[];
   warnings: string[];
   lastUpdated: string;
+}
+
+export interface ExternalSettingsHints {
+  env: {
+    julesApiKey: string;
+    githubToken: string;
+  };
+  settingsJson: {
+    julesApiKey: string;
+    githubToken: string;
+  };
+  resolved: {
+    julesApiKey: string;
+    githubToken: string;
+  };
 }

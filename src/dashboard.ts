@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import * as fs from "fs";
 import * as path from "path";
-import type { DashboardSettings, GitTrackingStatus, JulesActivity } from "./types.js";
+import type { DashboardSettings, ExternalSettingsHints, GitTrackingStatus, JulesActivity } from "./types.js";
 
 export interface DashboardServerOptions {
   app: Express;
@@ -11,12 +11,13 @@ export interface DashboardServerOptions {
   getStatus: () => unknown;
   getLiveActivities: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
+  getExternalSettingsHints: () => ExternalSettingsHints;
   getSettings: () => DashboardSettings;
   saveSettings: (settings: DashboardSettings) => DashboardSettings;
 }
 
 export const setupDashboardServer = async (options: DashboardServerOptions): Promise<void> => {
-  const { app, dashboardDir, port, liveActivityCacheMs, getStatus, getLiveActivities, getGitStatus, getSettings, saveSettings } = options;
+  const { app, dashboardDir, port, liveActivityCacheMs, getStatus, getLiveActivities, getGitStatus, getExternalSettingsHints, getSettings, saveSettings } = options;
   app.use(express.json({ limit: "1mb" }));
 
   app.get("/api/status", (req, res) => {
@@ -39,6 +40,10 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
 
   app.get("/api/settings", (req, res) => {
     res.json(getSettings());
+  });
+
+  app.get("/api/settings/import-sources", (req, res) => {
+    res.json(getExternalSettingsHints());
   });
 
   app.get("/api/git-status", async (req, res) => {

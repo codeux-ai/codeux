@@ -7,7 +7,7 @@ import { ActivitySidebar } from "./components/ActivitySidebar.js";
 import { SettingsPage } from "./components/SettingsPage.js";
 import { computeStats, mergeLiveActivities } from "./lib/status.js";
 import { cloneDefaultSettings } from "./lib/settings.js";
-import type { DashboardSettings, DashboardStatus, GitTrackingStatus, LiveActivitiesResponse } from "./types.js";
+import type { DashboardSettings, DashboardStatus, ExternalSettingsHints, GitTrackingStatus, LiveActivitiesResponse } from "./types.js";
 
 const DEFAULT_LOG_POLL_INTERVAL_MS = 10000;
 
@@ -95,6 +95,31 @@ export const App: FunctionComponent = () => {
       setSettingsError("Unable to save settings");
     } finally {
       setIsSettingsSaving(false);
+    }
+  };
+
+  const importMissingSettings = async (): Promise<void> => {
+    try {
+      const response = await fetch("/api/settings/import-sources");
+      if (!response.ok) {
+        throw new Error("Failed to load external settings");
+      }
+      const hints: ExternalSettingsHints = await response.json();
+      setSettings((prev) => ({
+        ...prev,
+        aiProvider: {
+          ...prev.aiProvider,
+          julesApiKey: prev.aiProvider.julesApiKey.trim().length > 0 ? prev.aiProvider.julesApiKey : hints.resolved.julesApiKey,
+        },
+        git: {
+          ...prev.git,
+          githubToken: prev.git.githubToken.trim().length > 0 ? prev.git.githubToken : hints.resolved.githubToken,
+        },
+      }));
+      setSaveMessage("Imported missing values from .env/.jules-subagents/settings.json.");
+      setSettingsError(null);
+    } catch {
+      setSettingsError("Unable to import settings from .env/.json");
     }
   };
 
@@ -186,6 +211,7 @@ export const App: FunctionComponent = () => {
               saveMessage={saveMessage}
               onChange={setSettings}
               onSave={saveSettings}
+              onImportMissing={importMissingSettings}
             />
           </div>
         )}

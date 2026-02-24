@@ -27,6 +27,7 @@ import { TaskService } from "./task-service.js";
 import { SettingsRepository } from "./settings-repository.js";
 import { formatSprintBranch } from "./branch-scheme.js";
 import { GitStatusService } from "./git-status-service.js";
+import { loadExternalSettingsHints } from "./external-settings.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -73,6 +74,7 @@ class JulesAgentServer {
   private liveActivitiesFetchPromise: Promise<Record<string, JulesActivity[]>> | null = null;
   private settingsRepository: SettingsRepository;
   private dashboardSettings: DashboardSettings;
+  private externalSettingsHints = loadExternalSettingsHints(projectRoot);
   private gitStatusService: GitStatusService;
   private gitStatusCache: { timestamp: number; data: GitTrackingStatus | null } = { timestamp: 0, data: null };
   private gitStatusFetchPromise: Promise<GitTrackingStatus> | null = null;
@@ -96,7 +98,7 @@ class JulesAgentServer {
     });
     this.guideRepository = new GuideRepository(projectRoot);
     this.subtaskRepository = new SubtaskRepository();
-    this.settingsRepository = new SettingsRepository();
+    this.settingsRepository = new SettingsRepository(undefined, this.externalSettingsHints);
     this.dashboardSettings = this.settingsRepository.getSettings();
     this.gitStatusService = new GitStatusService(projectRoot);
     this.taskService = new TaskService({
@@ -182,6 +184,15 @@ class JulesAgentServer {
     this.settings.githubMode = this.dashboardSettings.git.githubMode;
   }
 
+  private getEffectiveGithubToken(): string | undefined {
+    const uiToken = this.dashboardSettings.git.githubToken?.trim();
+    if (uiToken && uiToken.length > 0) {
+      return uiToken;
+    }
+    const fallback = this.externalSettingsHints.resolved.githubToken.trim();
+    return fallback.length > 0 ? fallback : undefined;
+  }
+
   private async setupDashboard() {
     const dashboardDir = path.join(projectRoot, "dashboard");
     const port = this.settings.dashboardPort || appConfig.dashboardPort;
@@ -194,6 +205,7 @@ class JulesAgentServer {
       getStatus: () => this.lastStatus,
       getLiveActivities: () => this.getLiveActivitiesForActiveTasks(),
       getGitStatus: () => this.getGitStatus(),
+      getExternalSettingsHints: () => this.externalSettingsHints,
       getSettings: () => this.dashboardSettings,
       saveSettings: (settings: DashboardSettings) => {
         this.dashboardSettings = this.settingsRepository.saveSettings(settings);
@@ -308,7 +320,7 @@ class JulesAgentServer {
     }
 
     this.gitStatusFetchPromise = this.gitStatusService
-      .getStatus(this.dashboardSettings.git.githubMode)
+      .getStatus(this.dashboardSettings.git.githubMode, this.getEffectiveGithubToken())
       .then((status) => {
         this.gitStatusCache = { timestamp: Date.now(), data: status };
         return status;
