@@ -33,6 +33,11 @@ describe("SettingsRepository", () => {
     expect(settings.cliWorkflow.cleanupWorktreeOnFailure).toBe(false);
     expect(settings.cliWorkflow.retryOnReadFileNotFound).toBe(true);
     expect(settings.cliWorkflow.resumeFailedTaskInSameWorkspace).toBe(true);
+    expect(settings.cliWorkflow.executionMode).toBe("HOST");
+    expect(settings.cliWorkflow.containerImage).toBe("node:22-bookworm-slim");
+    expect(settings.cliWorkflow.containerMountCredentials).toBe(false);
+    expect(settings.cliWorkflow.containerMountGeminiAuth).toBe(true);
+    expect(settings.cliWorkflow.containerGeminiAuthPath).toBe("~/.gemini");
     expect(settings.skills.length).toBeGreaterThan(0);
     expect(settings.skills.every((skill) => skill.isInternal)).toBe(true);
     expect(settings.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(true);
@@ -85,6 +90,17 @@ describe("SettingsRepository", () => {
         cleanupWorktreeOnFailure: false,
         retryOnReadFileNotFound: true,
         resumeFailedTaskInSameWorkspace: true,
+        executionMode: "DOCKER",
+        containerImage: "node:22-bookworm-slim",
+        containerSetupScriptPath: ".jules-subagents/container/setup.sh",
+        containerMountCredentials: true,
+        containerMountGitConfig: true,
+        containerMountGithubAuth: true,
+        containerMountGeminiAuth: true,
+        containerMountCodexAuth: false,
+        containerGithubAuthPath: "~/.config/gh",
+        containerGeminiAuthPath: "~/.gemini",
+        containerCodexAuthPath: "~/.codex",
       },
       skills: [
         { name: "worker", enabled: false, isInternal: true },
@@ -103,6 +119,9 @@ describe("SettingsRepository", () => {
     expect(saved.sprintLoopSteps.watchLoop).toBe(false);
     expect(saved.cliWorkflow.cleanupWorktreeOnFailure).toBe(false);
     expect(saved.cliWorkflow.resumeFailedTaskInSameWorkspace).toBe(true);
+    expect(saved.cliWorkflow.executionMode).toBe("DOCKER");
+    expect(saved.cliWorkflow.containerMountCredentials).toBe(true);
+    expect(saved.cliWorkflow.containerMountCodexAuth).toBe(false);
     expect(saved.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(false);
     expect(saved.skills.find((skill) => skill.name === "git_manager_local")?.enabled).toBe(true);
 

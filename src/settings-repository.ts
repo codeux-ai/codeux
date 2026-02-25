@@ -3,6 +3,7 @@ import os from "os";
 import * as path from "path";
 import { DatabaseSync } from "node:sqlite";
 import type {
+  CliExecutionMode,
   DashboardSettings,
   ExternalSettingsHints,
   ProviderId,
@@ -38,6 +39,7 @@ const DEFAULT_SKILLS: SkillToggle[] = INTERNAL_SKILL_NAMES.map((name) => ({
 const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex"];
 const THINKING_MODES: ThinkingMode[] = ["SMALL", "MEDIUM", "HIGH"];
 const PROVIDER_STRATEGIES: ProviderStrategy[] = ["MANUAL", "WEIGHTED", "ORCHESTRATOR"];
+const CLI_EXECUTION_MODES: CliExecutionMode[] = ["HOST", "DOCKER"];
 
 const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
   jules: {
@@ -107,6 +109,17 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     cleanupWorktreeOnFailure: false,
     retryOnReadFileNotFound: true,
     resumeFailedTaskInSameWorkspace: true,
+    executionMode: "HOST",
+    containerImage: "node:22-bookworm-slim",
+    containerSetupScriptPath: "",
+    containerMountCredentials: false,
+    containerMountGitConfig: true,
+    containerMountGithubAuth: true,
+    containerMountGeminiAuth: true,
+    containerMountCodexAuth: true,
+    containerGithubAuthPath: "~/.config/gh",
+    containerGeminiAuthPath: "~/.gemini",
+    containerCodexAuthPath: "~/.codex",
   },
   skills: DEFAULT_SKILLS,
 };
@@ -116,6 +129,7 @@ const SETTINGS_DB_PATH = path.join(SETTINGS_DIR, "settings.db");
 const LEGACY_SETTINGS_DB_PATH = path.join(os.homedir(), "jules-subagents", "settings.db");
 
 const readBoolean = (value: unknown, fallback: boolean): boolean => (typeof value === "boolean" ? value : fallback);
+const readString = (value: unknown, fallback: string): string => (typeof value === "string" ? value : fallback);
 
 const resolveSettingsDbPath = (dbPath?: string): string => {
   if (dbPath && dbPath.trim().length > 0) {
@@ -342,6 +356,13 @@ const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints)
   const cliInput = (input.cliWorkflow && typeof input.cliWorkflow === "object"
     ? input.cliWorkflow
     : {}) as Partial<DashboardSettings["cliWorkflow"]>;
+  const normalizedExecutionMode = CLI_EXECUTION_MODES.includes(cliInput.executionMode as CliExecutionMode)
+    ? (cliInput.executionMode as CliExecutionMode)
+    : DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.executionMode;
+  const containerImage = readString(
+    cliInput.containerImage,
+    DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerImage
+  ).trim() || DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerImage;
   const cliWorkflow = {
     cleanupWorktreeOnSuccess: readBoolean(
       cliInput.cleanupWorktreeOnSuccess,
@@ -359,6 +380,44 @@ const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints)
       cliInput.resumeFailedTaskInSameWorkspace,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.resumeFailedTaskInSameWorkspace
     ),
+    executionMode: normalizedExecutionMode,
+    containerImage,
+    containerSetupScriptPath: readString(
+      cliInput.containerSetupScriptPath,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerSetupScriptPath
+    ).trim(),
+    containerMountCredentials: readBoolean(
+      cliInput.containerMountCredentials,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerMountCredentials
+    ),
+    containerMountGitConfig: readBoolean(
+      cliInput.containerMountGitConfig,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerMountGitConfig
+    ),
+    containerMountGithubAuth: readBoolean(
+      cliInput.containerMountGithubAuth,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerMountGithubAuth
+    ),
+    containerMountGeminiAuth: readBoolean(
+      cliInput.containerMountGeminiAuth,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerMountGeminiAuth
+    ),
+    containerMountCodexAuth: readBoolean(
+      cliInput.containerMountCodexAuth,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerMountCodexAuth
+    ),
+    containerGithubAuthPath: readString(
+      cliInput.containerGithubAuthPath,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerGithubAuthPath
+    ).trim() || DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerGithubAuthPath,
+    containerGeminiAuthPath: readString(
+      cliInput.containerGeminiAuthPath,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerGeminiAuthPath
+    ).trim() || DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerGeminiAuthPath,
+    containerCodexAuthPath: readString(
+      cliInput.containerCodexAuthPath,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerCodexAuthPath
+    ).trim() || DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerCodexAuthPath,
   };
 
   const normalizedSkills = enforceGitManagerSkillset(sanitizeSkills(input.skills), git.githubMode);

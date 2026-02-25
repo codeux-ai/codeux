@@ -381,6 +381,48 @@ Related files:
 - `dashboard/src/lib/settings.ts`
 - `dashboard/src/components/SettingsPage.tsx`
 
+## Incremental Update: Optional Docker Runtime For Gemini/Codex
+
+### Goal
+
+Allow background Gemini/Codex runs to execute in isolated containers while preserving host mode as default.
+
+### Settings Added
+
+`cliWorkflow` now includes:
+- `executionMode` (`HOST|DOCKER`, default `HOST`)
+- `containerImage` (default `node:22-bookworm-slim`)
+- `containerSetupScriptPath` (optional)
+- `containerMountCredentials` (master toggle, default `false`)
+- Credential mount toggles and paths:
+  - `containerMountGitConfig`
+  - `containerMountGithubAuth` + `containerGithubAuthPath`
+  - `containerMountGeminiAuth` + `containerGeminiAuthPath`
+  - `containerMountCodexAuth` + `containerCodexAuthPath`
+
+### Runtime Behavior
+
+- In `HOST` mode, behavior is unchanged.
+- In `DOCKER` mode, workflow runs provider commands through `docker run` with:
+  - worktree bind mount at `/workspace`
+  - optional read-only auth/config mounts from host paths
+  - optional setup script execution before provider command
+- Setup script resolution order:
+  1. `containerSetupScriptPath` (if set)
+  2. `<repo>/.jules-subagents/container/setup.sh`
+  3. `~/.jules-subagents/container/setup.sh`
+
+### Files
+
+- `src/types.ts`
+- `dashboard/src/types.ts`
+- `src/settings-repository.ts`
+- `src/cli-workflow-service.ts`
+- `dashboard/src/lib/settings.ts`
+- `dashboard/src/components/SettingsPage.tsx`
+- `docs/settings/configuration-and-storage.md`
+- `docs/operations/runbook.md`
+
 ## Incremental Update: Multi-Provider Task Workflow Parity
 
 ### Goal

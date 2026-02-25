@@ -3,7 +3,7 @@ import { spawn } from "child_process";
 import * as fs from "fs/promises";
 import os from "os";
 import * as path from "path";
-import type { DashboardSettings, JulesSession, ProviderId, Subtask, ThinkingMode } from "./types.js";
+import type { CliWorkflowSettings, DashboardSettings, JulesSession, ProviderId, Subtask, ThinkingMode } from "./types.js";
 import { SessionTrackingRepository } from "./session-tracking-repository.js";
 
 interface CommandResult {
@@ -26,6 +26,33 @@ interface StartCliTaskInput {
   featureBranch: string;
   sprintNumber: number;
 }
+
+interface ContainerMount {
+  source: string;
+  destination: string;
+  readonly: boolean;
+}
+
+const DEFAULT_CLI_WORKFLOW_SETTINGS: CliWorkflowSettings = {
+  cleanupWorktreeOnSuccess: true,
+  cleanupWorktreeOnFailure: false,
+  retryOnReadFileNotFound: true,
+  resumeFailedTaskInSameWorkspace: true,
+  executionMode: "HOST",
+  containerImage: "node:22-bookworm-slim",
+  containerSetupScriptPath: "",
+  containerMountCredentials: false,
+  containerMountGitConfig: true,
+  containerMountGithubAuth: true,
+  containerMountGeminiAuth: true,
+  containerMountCodexAuth: true,
+  containerGithubAuthPath: "~/.config/gh",
+  containerGeminiAuthPath: "~/.gemini",
+  containerCodexAuthPath: "~/.codex",
+};
+
+const CONTAINER_HOME = "/tmp/jules-home";
+const CONTAINER_SETUP_SCRIPT = "/opt/jules/setup.sh";
 
 const sanitizeToken = (value: string): string =>
   value
@@ -57,12 +84,7 @@ export class CliWorkflowService {
 
   async startTask(input: StartCliTaskInput): Promise<JulesSession> {
     const settings = this.deps.getDashboardSettings();
-    const workflowSettings = settings.cliWorkflow || {
-      cleanupWorktreeOnSuccess: true,
-      cleanupWorktreeOnFailure: false,
-      retryOnReadFileNotFound: true,
-      resumeFailedTaskInSameWorkspace: true,
-    };
+    const workflowSettings = this.resolveWorkflowSettings(settings);
 
     const sessionId = `cli-${input.provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     const resumeTarget = workflowSettings.resumeFailedTaskInSameWorkspace
@@ -128,12 +150,7 @@ export class CliWorkflowService {
     let resumedExistingWorkspace = false;
     try {
       const settings = this.deps.getDashboardSettings();
-      const workflowSettings = settings.cliWorkflow || {
-        cleanupWorktreeOnSuccess: true,
-        cleanupWorktreeOnFailure: false,
-        retryOnReadFileNotFound: true,
-        resumeFailedTaskInSameWorkspace: true,
-      };
+      const workflowSettings = this.resolveWorkflowSettings(settings);
       cleanupWorktreeOnSuccess = workflowSettings.cleanupWorktreeOnSuccess;
       cleanupWorktreeOnFailure = workflowSettings.cleanupWorktreeOnFailure;
       const providerSettings = settings.aiProvider.providers[args.provider];
@@ -191,8 +208,24 @@ export class CliWorkflowService {
       });
 
       let providerResult = args.provider === "gemini"
-        ? await this.runGemini(providerPrompt, worktreePath, providerSettings.model, providerSettings.apiKey, args.sessionId)
-        : await this.runCodex(providerPrompt, worktreePath, providerSettings.model, providerSettings.apiKey, args.sessionId);
+        ? await this.runGemini(
+          providerPrompt,
+          worktreePath,
+          providerSettings.model,
+          providerSettings.apiKey,
+          args.sessionId,
+          workflowSettings,
+          args.repoPath
+        )
+        : await this.runCodex(
+          providerPrompt,
+          worktreePath,
+          providerSettings.model,
+          providerSettings.apiKey,
+          args.sessionId,
+          workflowSettings,
+          args.repoPath
+        );
       if (!providerResult.ok && workflowSettings.retryOnReadFileNotFound && this.isReadFileNotFoundToolError(providerResult)) {
         this.deps.sessionTracking.appendActivity(args.sessionId, {
           originator: "system",
@@ -200,8 +233,24 @@ export class CliWorkflowService {
         });
         const retryPrompt = this.buildReadFileRetryPrompt(providerPrompt);
         providerResult = args.provider === "gemini"
-          ? await this.runGemini(retryPrompt, worktreePath, providerSettings.model, providerSettings.apiKey, args.sessionId)
-          : await this.runCodex(retryPrompt, worktreePath, providerSettings.model, providerSettings.apiKey, args.sessionId);
+          ? await this.runGemini(
+            retryPrompt,
+            worktreePath,
+            providerSettings.model,
+            providerSettings.apiKey,
+            args.sessionId,
+            workflowSettings,
+            args.repoPath
+          )
+          : await this.runCodex(
+            retryPrompt,
+            worktreePath,
+            providerSettings.model,
+            providerSettings.apiKey,
+            args.sessionId,
+            workflowSettings,
+            args.repoPath
+          );
       }
 
       if (!providerResult.ok) {
@@ -503,6 +552,15 @@ export class CliWorkflowService {
     ].join("\n");
   }
 
+  private resolveWorkflowSettings(settings: DashboardSettings): CliWorkflowSettings {
+    const merged: CliWorkflowSettings = {
+      ...DEFAULT_CLI_WORKFLOW_SETTINGS,
+      ...(settings.cliWorkflow || {}),
+    };
+    merged.containerImage = merged.containerImage.trim() || DEFAULT_CLI_WORKFLOW_SETTINGS.containerImage;
+    return merged;
+  }
+
   private async withRepoLock<T>(repoPath: string, fn: () => Promise<T>): Promise<T> {
     const current = this.repoLocks.get(repoPath) || Promise.resolve();
     let releaseLock: () => void = () => {};
@@ -532,13 +590,13 @@ export class CliWorkflowService {
     await fs.rm(worktreePath, { recursive: true, force: true });
   }
 
-  private withGithubToken(): NodeJS.ProcessEnv {
+  private withGithubToken(baseEnv: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
     const token = this.deps.getGithubToken();
     if (!token) {
-      return process.env;
+      return baseEnv;
     }
     return {
-      ...process.env,
+      ...baseEnv,
       GH_TOKEN: token,
       GITHUB_TOKEN: token,
     };
@@ -565,21 +623,263 @@ export class CliWorkflowService {
     return env;
   }
 
+  private resolveConfiguredPath(repoPath: string, rawValue: string): string {
+    const value = rawValue.trim();
+    if (!value) {
+      return "";
+    }
+    if (value === "~") {
+      return os.homedir();
+    }
+    if (value.startsWith("~/")) {
+      return path.join(os.homedir(), value.slice(2));
+    }
+    if (path.isAbsolute(value)) {
+      return value;
+    }
+    return path.resolve(repoPath, value);
+  }
+
+  private getDockerUserSpec(): string | undefined {
+    const getUid = (process as NodeJS.Process & { getuid?: () => number }).getuid;
+    const getGid = (process as NodeJS.Process & { getgid?: () => number }).getgid;
+    if (!getUid || !getGid) {
+      return undefined;
+    }
+    return `${getUid()}:${getGid()}`;
+  }
+
+  private toDockerMountArg(mount: ContainerMount): string {
+    const parts = [
+      "type=bind",
+      `source=${mount.source}`,
+      `target=${mount.destination}`,
+    ];
+    if (mount.readonly) {
+      parts.push("readonly");
+    }
+    return parts.join(",");
+  }
+
+  private pickContainerEnv(env: NodeJS.ProcessEnv): Array<{ key: string; value: string }> {
+    const allowed = new Set<string>([
+      "GEMINI_MODEL",
+      "GEMINI_API_KEY",
+      "CODEX_MODEL",
+      "OPENAI_API_KEY",
+      "OPENAI_BASE_URL",
+      "OPENAI_ORG_ID",
+      "OPENAI_PROJECT_ID",
+      "GH_TOKEN",
+      "GITHUB_TOKEN",
+      "HTTP_PROXY",
+      "HTTPS_PROXY",
+      "NO_PROXY",
+    ]);
+    const result: Array<{ key: string; value: string }> = [];
+    for (const [key, value] of Object.entries(env)) {
+      if (!allowed.has(key) || typeof value !== "string" || value.length === 0) {
+        continue;
+      }
+      result.push({ key, value });
+    }
+    return result;
+  }
+
+  private async resolveContainerSetupScriptPath(
+    workflowSettings: CliWorkflowSettings,
+    repoPath: string,
+    sessionId: string
+  ): Promise<string | undefined> {
+    const configured = workflowSettings.containerSetupScriptPath.trim();
+    if (configured.length > 0) {
+      const configuredPath = this.resolveConfiguredPath(repoPath, configured);
+      if (await this.pathExists(configuredPath)) {
+        return configuredPath;
+      }
+      this.deps.sessionTracking.appendActivity(sessionId, {
+        originator: "system",
+        description: `Configured container setup script not found: ${configuredPath}`,
+      });
+      return undefined;
+    }
+
+    const candidates = [
+      path.join(repoPath, ".jules-subagents", "container", "setup.sh"),
+      path.join(os.homedir(), ".jules-subagents", "container", "setup.sh"),
+    ];
+    for (const candidate of candidates) {
+      if (await this.pathExists(candidate)) {
+        return candidate;
+      }
+    }
+    return undefined;
+  }
+
+  private async buildCredentialMounts(
+    workflowSettings: CliWorkflowSettings,
+    repoPath: string,
+    sessionId: string
+  ): Promise<ContainerMount[]> {
+    if (!workflowSettings.containerMountCredentials) {
+      return [];
+    }
+
+    const mounts: ContainerMount[] = [];
+    if (workflowSettings.containerMountGitConfig) {
+      const gitConfigPath = this.resolveConfiguredPath(repoPath, "~/.gitconfig");
+      if (await this.pathExists(gitConfigPath)) {
+        mounts.push({
+          source: gitConfigPath,
+          destination: `${CONTAINER_HOME}/.gitconfig`,
+          readonly: true,
+        });
+      }
+    }
+
+    const requestedMounts: Array<{ enabled: boolean; sourcePath: string; targetPath: string; label: string }> = [
+      {
+        enabled: workflowSettings.containerMountGithubAuth,
+        sourcePath: workflowSettings.containerGithubAuthPath,
+        targetPath: `${CONTAINER_HOME}/.config/gh`,
+        label: "GitHub auth",
+      },
+      {
+        enabled: workflowSettings.containerMountGeminiAuth,
+        sourcePath: workflowSettings.containerGeminiAuthPath,
+        targetPath: `${CONTAINER_HOME}/.gemini`,
+        label: "Gemini auth",
+      },
+      {
+        enabled: workflowSettings.containerMountCodexAuth,
+        sourcePath: workflowSettings.containerCodexAuthPath,
+        targetPath: `${CONTAINER_HOME}/.codex`,
+        label: "Codex auth",
+      },
+    ];
+
+    for (const mount of requestedMounts) {
+      if (!mount.enabled) {
+        continue;
+      }
+      const sourcePath = this.resolveConfiguredPath(repoPath, mount.sourcePath);
+      if (await this.pathExists(sourcePath)) {
+        mounts.push({
+          source: sourcePath,
+          destination: mount.targetPath,
+          readonly: true,
+        });
+      } else {
+        this.deps.sessionTracking.appendActivity(sessionId, {
+          originator: "system",
+          description: `${mount.label} mount skipped; path not found: ${sourcePath}`,
+        });
+      }
+    }
+    return mounts;
+  }
+
+  private async runProviderInDocker(
+    command: string,
+    args: string[],
+    cwd: string,
+    providerEnv: NodeJS.ProcessEnv,
+    sessionId: string,
+    providerLabel: "gemini" | "codex",
+    workflowSettings: CliWorkflowSettings,
+    repoPath: string
+  ): Promise<CommandResult> {
+    const dockerArgs = [
+      "run",
+      "--rm",
+      "-i",
+      "--workdir",
+      "/workspace",
+      "--mount",
+      this.toDockerMountArg({
+        source: cwd,
+        destination: "/workspace",
+        readonly: false,
+      }),
+      "-e",
+      `HOME=${CONTAINER_HOME}`,
+    ];
+    const userSpec = this.getDockerUserSpec();
+    if (userSpec) {
+      dockerArgs.push("--user", userSpec);
+    }
+
+    const passthroughEnv = this.pickContainerEnv(providerEnv);
+    for (const variable of passthroughEnv) {
+      dockerArgs.push("-e", `${variable.key}=${variable.value}`);
+    }
+
+    const setupScriptPath = await this.resolveContainerSetupScriptPath(workflowSettings, repoPath, sessionId);
+    if (setupScriptPath) {
+      dockerArgs.push("--mount", this.toDockerMountArg({
+        source: setupScriptPath,
+        destination: CONTAINER_SETUP_SCRIPT,
+        readonly: true,
+      }));
+    }
+
+    const credentialMounts = await this.buildCredentialMounts(workflowSettings, repoPath, sessionId);
+    for (const mount of credentialMounts) {
+      dockerArgs.push("--mount", this.toDockerMountArg(mount));
+    }
+
+    const image = workflowSettings.containerImage.trim() || DEFAULT_CLI_WORKFLOW_SETTINGS.containerImage;
+    dockerArgs.push(
+      image,
+      "bash",
+      "-lc",
+      `set -euo pipefail; mkdir -p "${CONTAINER_HOME}" "${CONTAINER_HOME}/.config"; if [ -f "${CONTAINER_SETUP_SCRIPT}" ]; then bash "${CONTAINER_SETUP_SCRIPT}"; fi; exec "$@"`,
+      "provider-runner",
+      command,
+      ...args
+    );
+    this.deps.sessionTracking.appendActivity(sessionId, {
+      originator: "system",
+      description: `Running ${providerLabel} in Docker image ${image} (credentials mounted: ${credentialMounts.length > 0 ? "yes" : "no"}).`,
+    });
+    return this.runStreamingCommand("docker", dockerArgs, cwd, process.env, sessionId, providerLabel);
+  }
+
+  private async runProviderCommand(
+    command: string,
+    args: string[],
+    cwd: string,
+    providerEnv: NodeJS.ProcessEnv,
+    sessionId: string,
+    providerLabel: "gemini" | "codex",
+    workflowSettings: CliWorkflowSettings,
+    repoPath: string
+  ): Promise<CommandResult> {
+    if (workflowSettings.executionMode !== "DOCKER") {
+      return this.runStreamingCommand(command, args, cwd, providerEnv, sessionId, providerLabel);
+    }
+    return this.runProviderInDocker(command, args, cwd, providerEnv, sessionId, providerLabel, workflowSettings, repoPath);
+  }
+
   private async runGemini(
     prompt: string,
     cwd: string,
     model: string,
     apiKey: string,
-    sessionId: string
+    sessionId: string,
+    workflowSettings: CliWorkflowSettings,
+    repoPath: string
   ): Promise<CommandResult> {
     const args = ["--yolo", prompt];
-    return this.runStreamingCommand(
+    return this.runProviderCommand(
       "gemini",
       args,
       cwd,
-      this.withProviderEnv("gemini", model, apiKey),
+      this.withGithubToken(this.withProviderEnv("gemini", model, apiKey)),
       sessionId,
-      "gemini"
+      "gemini",
+      workflowSettings,
+      repoPath
     );
   }
 
@@ -588,20 +888,24 @@ export class CliWorkflowService {
     cwd: string,
     model: string,
     apiKey: string,
-    sessionId: string
+    sessionId: string,
+    workflowSettings: CliWorkflowSettings,
+    repoPath: string
   ): Promise<CommandResult> {
     const args = ["exec", "--full-auto", "--yolo", "--output-last-message"];
     if (model && model !== "default") {
       args.push("--model", model);
     }
     args.push(prompt);
-    return this.runStreamingCommand(
+    return this.runProviderCommand(
       "codex",
       args,
       cwd,
-      this.withProviderEnv("codex", model, apiKey),
+      this.withGithubToken(this.withProviderEnv("codex", model, apiKey)),
       sessionId,
-      "codex"
+      "codex",
+      workflowSettings,
+      repoPath
     );
   }
 

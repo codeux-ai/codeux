@@ -61,6 +61,11 @@ Checks:
 - Is auth available system-wide or via provider API key settings?
 - Did child task branch creation succeed from feature branch?
 - Are `git` and `gh` available in PATH for commit/push/PR steps?
+- If `Settings -> CLI Workflow -> Execution Mode` is `Docker`:
+  - Is Docker daemon available (`docker ps`)?
+  - Is the configured image pullable/runnable?
+  - If provider tools are not in the image, is a setup script configured (or present at `.jules-subagents/container/setup.sh`)?
+  - If auth is expected from host login state, is `Mount user credentials into container` enabled and are mount paths valid?
 - If logs show `Error executing tool read_file: File not found`, verify the retry setting:
   - `Settings -> CLI Workflow -> Retry once on read_file not found`
 - If you need post-failure recovery work, keep failed worktrees:

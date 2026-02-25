@@ -18,6 +18,7 @@ export type TaskStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "BLOCK
 export type ProviderId = "jules" | "gemini" | "codex";
 export type ProviderStrategy = "MANUAL" | "WEIGHTED" | "ORCHESTRATOR";
 export type ThinkingMode = "SMALL" | "MEDIUM" | "HIGH";
+export type CliExecutionMode = "HOST" | "DOCKER";
 
 export interface Subtask {
   id: string;
@@ -114,6 +115,17 @@ export interface DashboardSettings {
     cleanupWorktreeOnFailure: boolean;
     retryOnReadFileNotFound: boolean;
     resumeFailedTaskInSameWorkspace: boolean;
+    executionMode: CliExecutionMode;
+    containerImage: string;
+    containerSetupScriptPath: string;
+    containerMountCredentials: boolean;
+    containerMountGitConfig: boolean;
+    containerMountGithubAuth: boolean;
+    containerMountGeminiAuth: boolean;
+    containerMountCodexAuth: boolean;
+    containerGithubAuthPath: string;
+    containerGeminiAuthPath: string;
+    containerCodexAuthPath: string;
   };
   skills: SkillToggle[];
 }

@@ -36,6 +36,10 @@ const thinkingModeOptions: Array<{ value: "SMALL" | "MEDIUM" | "HIGH"; label: st
   { value: "MEDIUM", label: "Medium" },
   { value: "HIGH", label: "High" },
 ];
+const executionModeOptions: Array<{ value: DashboardSettings["cliWorkflow"]["executionMode"]; label: string }> = [
+  { value: "HOST", label: "Host Process" },
+  { value: "DOCKER", label: "Docker Container" },
+];
 
 const geminiModelOptions = [
   "default",
@@ -645,6 +649,26 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
           <p className="text-xs text-slate-500">
             Controls background Gemini/Codex worktree lifecycle and retry behavior.
           </p>
+          <label className="block space-y-2">
+            <span className="text-xs text-slate-400">Execution Mode</span>
+            <select
+              value={settings.cliWorkflow.executionMode}
+              onChange={(event) =>
+                onChange({
+                  ...settings,
+                  cliWorkflow: {
+                    ...settings.cliWorkflow,
+                    executionMode: event.currentTarget.value as DashboardSettings["cliWorkflow"]["executionMode"],
+                  },
+                })
+              }
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+            >
+              {executionModeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
           <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">
             <span className="text-sm text-slate-200">Cleanup worktree on success</span>
             <input
@@ -713,6 +737,200 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
               className="h-4 w-4 rounded border-slate-700 bg-slate-900"
             />
           </label>
+          {settings.cliWorkflow.executionMode === "DOCKER" && (
+            <div className="space-y-3 rounded-lg border border-slate-700/70 bg-slate-950/40 p-3">
+              <label className="block space-y-2">
+                <span className="text-xs text-slate-400">Container Image</span>
+                <input
+                  type="text"
+                  value={settings.cliWorkflow.containerImage}
+                  onInput={(event) =>
+                    onChange({
+                      ...settings,
+                      cliWorkflow: {
+                        ...settings.cliWorkflow,
+                        containerImage: event.currentTarget.value,
+                      },
+                    })
+                  }
+                  placeholder="node:22-bookworm-slim"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className="text-xs text-slate-400">Setup Script Path (optional)</span>
+                <input
+                  type="text"
+                  value={settings.cliWorkflow.containerSetupScriptPath}
+                  onInput={(event) =>
+                    onChange({
+                      ...settings,
+                      cliWorkflow: {
+                        ...settings.cliWorkflow,
+                        containerSetupScriptPath: event.currentTarget.value,
+                      },
+                    })
+                  }
+                  placeholder=".jules-subagents/container/setup.sh"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+                />
+                <p className="text-[11px] text-slate-500">
+                  If empty, runtime checks repo/home defaults under <code>.jules-subagents/container/setup.sh</code>.
+                </p>
+              </label>
+              <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">
+                <span className="text-sm text-slate-200">Mount user credentials into container</span>
+                <input
+                  type="checkbox"
+                  checked={settings.cliWorkflow.containerMountCredentials}
+                  onChange={(event) =>
+                    onChange({
+                      ...settings,
+                      cliWorkflow: {
+                        ...settings.cliWorkflow,
+                        containerMountCredentials: event.currentTarget.checked,
+                      },
+                    })
+                  }
+                  className="h-4 w-4 rounded border-slate-700 bg-slate-900"
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">
+                <span className="text-sm text-slate-200">Mount ~/.gitconfig</span>
+                <input
+                  type="checkbox"
+                  checked={settings.cliWorkflow.containerMountGitConfig}
+                  disabled={!settings.cliWorkflow.containerMountCredentials}
+                  onChange={(event) =>
+                    onChange({
+                      ...settings,
+                      cliWorkflow: {
+                        ...settings.cliWorkflow,
+                        containerMountGitConfig: event.currentTarget.checked,
+                      },
+                    })
+                  }
+                  className="h-4 w-4 rounded border-slate-700 bg-slate-900 disabled:opacity-50"
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">
+                <span className="text-sm text-slate-200">Mount GitHub CLI auth</span>
+                <input
+                  type="checkbox"
+                  checked={settings.cliWorkflow.containerMountGithubAuth}
+                  disabled={!settings.cliWorkflow.containerMountCredentials}
+                  onChange={(event) =>
+                    onChange({
+                      ...settings,
+                      cliWorkflow: {
+                        ...settings.cliWorkflow,
+                        containerMountGithubAuth: event.currentTarget.checked,
+                      },
+                    })
+                  }
+                  className="h-4 w-4 rounded border-slate-700 bg-slate-900 disabled:opacity-50"
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">
+                <span className="text-sm text-slate-200">Mount Gemini auth</span>
+                <input
+                  type="checkbox"
+                  checked={settings.cliWorkflow.containerMountGeminiAuth}
+                  disabled={!settings.cliWorkflow.containerMountCredentials}
+                  onChange={(event) =>
+                    onChange({
+                      ...settings,
+                      cliWorkflow: {
+                        ...settings.cliWorkflow,
+                        containerMountGeminiAuth: event.currentTarget.checked,
+                      },
+                    })
+                  }
+                  className="h-4 w-4 rounded border-slate-700 bg-slate-900 disabled:opacity-50"
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">
+                <span className="text-sm text-slate-200">Mount Codex auth</span>
+                <input
+                  type="checkbox"
+                  checked={settings.cliWorkflow.containerMountCodexAuth}
+                  disabled={!settings.cliWorkflow.containerMountCredentials}
+                  onChange={(event) =>
+                    onChange({
+                      ...settings,
+                      cliWorkflow: {
+                        ...settings.cliWorkflow,
+                        containerMountCodexAuth: event.currentTarget.checked,
+                      },
+                    })
+                  }
+                  className="h-4 w-4 rounded border-slate-700 bg-slate-900 disabled:opacity-50"
+                />
+              </label>
+              <div className="grid grid-cols-1 gap-2">
+                <label className="block space-y-1">
+                  <span className="text-[11px] text-slate-500">GitHub auth path</span>
+                  <input
+                    type="text"
+                    value={settings.cliWorkflow.containerGithubAuthPath}
+                    disabled={!settings.cliWorkflow.containerMountCredentials || !settings.cliWorkflow.containerMountGithubAuth}
+                    onInput={(event) =>
+                      onChange({
+                        ...settings,
+                        cliWorkflow: {
+                          ...settings.cliWorkflow,
+                          containerGithubAuthPath: event.currentTarget.value,
+                        },
+                      })
+                    }
+                    placeholder="~/.config/gh"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[11px] text-slate-500">Gemini auth path</span>
+                  <input
+                    type="text"
+                    value={settings.cliWorkflow.containerGeminiAuthPath}
+                    disabled={!settings.cliWorkflow.containerMountCredentials || !settings.cliWorkflow.containerMountGeminiAuth}
+                    onInput={(event) =>
+                      onChange({
+                        ...settings,
+                        cliWorkflow: {
+                          ...settings.cliWorkflow,
+                          containerGeminiAuthPath: event.currentTarget.value,
+                        },
+                      })
+                    }
+                    placeholder="~/.gemini"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[11px] text-slate-500">Codex auth path</span>
+                  <input
+                    type="text"
+                    value={settings.cliWorkflow.containerCodexAuthPath}
+                    disabled={!settings.cliWorkflow.containerMountCredentials || !settings.cliWorkflow.containerMountCodexAuth}
+                    onInput={(event) =>
+                      onChange({
+                        ...settings,
+                        cliWorkflow: {
+                          ...settings.cliWorkflow,
+                          containerCodexAuthPath: event.currentTarget.value,
+                        },
+                      })
+                    }
+                    placeholder="~/.codex"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
+                  />
+                </label>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Credential mounts are read-only and optional. Leave provider API keys empty if you want system/global auth to be used.
+              </p>
+            </div>
+          )}
           <p className="text-[11px] text-slate-500">
             Recommended default: keep failed worktrees for recovery and disable automatic cleanup on failure.
           </p>

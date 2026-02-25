@@ -47,6 +47,7 @@ Top-level fields:
 - `git`
 - `ciIntelligence`
 - `sprintLoopSteps`
+- `cliWorkflow`
 - `skills`
 
 `aiProvider` contains:
@@ -60,6 +61,26 @@ Backend contract:
 
 Frontend contract:
 - `dashboard/src/types.ts`
+
+`cliWorkflow` contains:
+- Retry/cleanup toggles:
+  - `cleanupWorktreeOnSuccess`
+  - `cleanupWorktreeOnFailure`
+  - `retryOnReadFileNotFound`
+  - `resumeFailedTaskInSameWorkspace`
+- Runtime mode:
+  - `executionMode` (`HOST|DOCKER`)
+- Docker runtime config:
+  - `containerImage`
+  - `containerSetupScriptPath` (optional; falls back to `.jules-subagents/container/setup.sh` in repo/home when empty)
+  - `containerMountCredentials` (master toggle)
+  - `containerMountGitConfig`
+  - `containerMountGithubAuth`
+  - `containerMountGeminiAuth`
+  - `containerMountCodexAuth`
+  - `containerGithubAuthPath` (default `~/.config/gh`)
+  - `containerGeminiAuthPath` (default `~/.gemini`)
+  - `containerCodexAuthPath` (default `~/.codex`)
 
 ## Default Values
 
