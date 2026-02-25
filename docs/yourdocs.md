@@ -428,6 +428,7 @@ Allow background Gemini/Codex runs to execute in isolated containers while prese
 Added repository demo setup script for Docker execution bootstrap:
 - Path: `.jules-subagents/container/setup.sh`
 - Purpose:
+  - ensure `git` and GitHub CLI `gh` are available
   - ensure `pnpm` is available
   - install Gemini CLI (`@google/gemini-cli`)
   - install Codex CLI (`@openai/codex`)

@@ -14,6 +14,21 @@ echo "[setup] npm: $(npm --version)"
 npm install -g npm@latest
 echo "[setup] npm (updated): $(npm --version)"
 
+# Ensure git + gh CLI exist for workflows that shell out to Git/GitHub.
+if ! command -v git >/dev/null 2>&1 || ! command -v gh >/dev/null 2>&1; then
+  if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends git gh
+    rm -rf /var/lib/apt/lists/*
+  else
+    echo "[setup] NOTE: git/gh missing but cannot install automatically (no root/apt-get)."
+  fi
+fi
+
+echo "[setup] git: $(git --version 2>/dev/null || echo missing)"
+echo "[setup] gh: $(gh --version 2>/dev/null | head -n 1 || echo missing)"
+
 # Keep pnpm available even on slim images.
 if command -v corepack >/dev/null 2>&1; then
   corepack enable

@@ -84,7 +84,7 @@ Frontend contract:
 
 Repository demo script:
 - `.jules-subagents/container/setup.sh` is included as a baseline bootstrap script.
-- It installs `pnpm`, `@google/gemini-cli`, `@openai/codex`, and Playwright Chromium (+ deps when root/apt is available).
+- It installs/updates `npm`, ensures `git` + `gh`, installs `pnpm`, `@google/gemini-cli`, `@openai/codex`, and Playwright Chromium (+ deps when root/apt is available).
 
 ## Default Values
 
