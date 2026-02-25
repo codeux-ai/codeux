@@ -28,6 +28,10 @@ interface ActivityRow {
   payload: string | null;
 }
 
+interface SessionIdRow {
+  id: string;
+}
+
 export interface CreateTrackedSessionInput {
   id: string;
   provider: ProviderId;
@@ -225,6 +229,54 @@ export class SessionTrackingRepository {
       ORDER BY create_time ASC
     `).all(toSessionId(sessionId)) as unknown as ActivityRow[];
     return rows.map((row) => this.rowToActivity(sessionId, row));
+  }
+
+  recoverInterruptedCliSessions(): { recoveredCount: number; sessionIds: string[] } {
+    const runningCliRows = this.db.prepare(`
+      SELECT id
+      FROM provider_sessions
+      WHERE state = 'RUNNING'
+        AND provider IN ('gemini', 'codex')
+        AND id LIKE 'cli-%'
+      ORDER BY create_time ASC
+    `).all() as unknown as SessionIdRow[];
+
+    const sessionIds = runningCliRows.map((row) => row.id);
+    if (sessionIds.length === 0) {
+      return { recoveredCount: 0, sessionIds: [] };
+    }
+
+    const now = new Date().toISOString();
+    const updateSessionState = this.db.prepare(`
+      UPDATE provider_sessions
+      SET state = ?, update_time = ?
+      WHERE id = ?
+    `);
+    const insertActivity = this.db.prepare(`
+      INSERT INTO provider_activities (session_id, activity_id, create_time, originator, description, payload)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      for (const id of sessionIds) {
+        updateSessionState.run("FAILED", now, id);
+        insertActivity.run(
+          id,
+          randomUUID(),
+          now,
+          "system",
+          "Recovered interrupted MCP process. Previous background CLI task is marked FAILED and can be retried safely.",
+          JSON.stringify({ recovery: "INTERRUPTED_PROCESS" })
+        );
+      }
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+
+    return { recoveredCount: sessionIds.length, sessionIds };
   }
 
   fetchRecentActivities(sessionName: string, pageSize: number): JulesActivity[] {
