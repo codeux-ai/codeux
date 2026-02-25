@@ -438,6 +438,20 @@ Added repository demo setup script for Docker execution bootstrap:
   - uses `playwright install --with-deps chromium` when root + `apt-get` are available
   - falls back to browser-only install when OS deps cannot be installed
 
+## Incremental Update: Docker-Only Execution Strictness
+
+Issue addressed:
+- Some Docker runs failed with bind-mount errors for home-scoped worktree paths (`bind source path does not exist` from daemon perspective).
+
+Change:
+- Docker mode now uses repo-scoped worktree paths by default so workspace binds are daemon-visible.
+- Resume logic in Docker mode skips incompatible old worktree paths outside the target repository.
+- Host fallback was removed; when Docker mode is selected, execution stays Docker-only.
+
+Files:
+- `src/cli-workflow-service.ts`
+- `docs/operations/runbook.md`
+
 ## Incremental Update: Multi-Provider Task Workflow Parity
 
 ### Goal

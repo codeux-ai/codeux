@@ -66,7 +66,7 @@ Checks:
   - Is the configured image pullable/runnable?
   - If provider tools are not in the image, is a setup script configured (or present at `.jules-subagents/container/setup.sh`)?
   - If auth is expected from host login state, is `Mount user credentials into container` enabled and are mount paths valid?
-  - If daemon mount-path visibility differs from MCP runtime path visibility, workflow now retries provider execution on host for that run and logs the fallback.
+  - Docker mode requires daemon-visible workspace paths. Runtime now prefers repo-scoped worktree paths for Docker sessions.
 - If logs show `Error executing tool read_file: File not found`, verify the retry setting:
   - `Settings -> CLI Workflow -> Retry once on read_file not found`
 - If you need post-failure recovery work, keep failed worktrees:

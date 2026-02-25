@@ -252,7 +252,7 @@ export class SessionTrackingRepository {
         AND state = 'FAILED'
         AND id LIKE 'cli-%'
         AND worker_branch IS NOT NULL
-      ORDER BY create_time DESC
+      ORDER BY create_time DESC, update_time DESC, id DESC
       LIMIT 1
     `).get(
       args.provider,

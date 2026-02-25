@@ -97,7 +97,7 @@ export class CliWorkflowService {
       : null;
     const workerBranch = resumeTarget?.workerBranch || buildWorkerBranch(input.featureBranch, input.task.id, input.provider);
     const resumeWorktreePath = resumeTarget
-      ? await this.resolveResumeWorktreePath(input.repoPath, resumeTarget.sessionId)
+      ? await this.resolveResumeWorktreePath(input.repoPath, resumeTarget.sessionId, workflowSettings.executionMode)
       : undefined;
     const title = `Sprint ${input.sprintNumber}: [${input.task.id}] ${input.task.title}`;
 
@@ -119,7 +119,9 @@ export class CliWorkflowService {
     if (resumeTarget) {
       this.deps.sessionTracking.appendActivity(sessionId, {
         originator: "system",
-        description: `Retry configured to resume failed workspace from ${resumeTarget.sessionId} at ${resumeWorktreePath}.`,
+        description: resumeWorktreePath
+          ? `Retry configured to resume failed workspace from ${resumeTarget.sessionId} at ${resumeWorktreePath}.`
+          : `Retry configured to resume failed workspace from ${resumeTarget.sessionId}.`,
       });
     }
 
@@ -143,7 +145,7 @@ export class CliWorkflowService {
     resumeWorktreePath?: string;
   }): Promise<void> {
     const workspaceSessionId = args.resumeFromFailedSessionId || args.sessionId;
-    let worktreePath = args.resumeWorktreePath || this.buildWorktreePath(args.repoPath, workspaceSessionId);
+    let worktreePath = args.resumeWorktreePath || "";
     let workflowSucceeded = false;
     let cleanupWorktreeOnSuccess = true;
     let cleanupWorktreeOnFailure = false;
@@ -151,6 +153,15 @@ export class CliWorkflowService {
     try {
       const settings = this.deps.getDashboardSettings();
       const workflowSettings = this.resolveWorkflowSettings(settings);
+      const preferredWorktreePath = this.buildWorktreePath(args.repoPath, workspaceSessionId, workflowSettings.executionMode);
+      worktreePath = worktreePath || preferredWorktreePath;
+      if (workflowSettings.executionMode === "DOCKER" && !this.isDockerCompatibleWorktreePath(args.repoPath, worktreePath)) {
+        this.deps.sessionTracking.appendActivity(args.sessionId, {
+          originator: "system",
+          description: `Skipping resume workspace outside repository for Docker mode: ${worktreePath}. Creating Docker-compatible workspace path.`,
+        });
+        worktreePath = preferredWorktreePath;
+      }
       cleanupWorktreeOnSuccess = workflowSettings.cleanupWorktreeOnSuccess;
       cleanupWorktreeOnFailure = workflowSettings.cleanupWorktreeOnFailure;
       const providerSettings = settings.aiProvider.providers[args.provider];
@@ -168,7 +179,12 @@ export class CliWorkflowService {
       await this.withRepoLock(args.repoPath, async () => {
         await fs.mkdir(path.dirname(worktreePath), { recursive: true });
         if (args.resumeFromFailedSessionId) {
-          const resumablePath = await this.resolveResumableWorktreePath(args.repoPath, args.workerBranch, worktreePath);
+          const resumablePath = await this.resolveResumableWorktreePath(
+            args.repoPath,
+            args.workerBranch,
+            worktreePath,
+            workflowSettings.executionMode
+          );
           if (resumablePath) {
             worktreePath = resumablePath;
             resumedExistingWorkspace = true;
@@ -356,7 +372,10 @@ export class CliWorkflowService {
     }
   }
 
-  private buildWorktreePath(repoPath: string, sessionId: string): string {
+  private buildWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): string {
+    if (executionMode === "DOCKER") {
+      return this.buildLegacyWorktreePath(repoPath, sessionId);
+    }
     const normalizedRepoPath = path.resolve(repoPath);
     const repoName = sanitizeToken(path.basename(normalizedRepoPath)) || "repo";
     const repoHash = createHash("sha256").update(normalizedRepoPath).digest("hex").slice(0, 12);
@@ -373,16 +392,23 @@ export class CliWorkflowService {
     return path.join(repoPath, ".jules-subagents", "worktrees", sanitizeToken(sessionId));
   }
 
-  private async resolveResumeWorktreePath(repoPath: string, sessionId: string): Promise<string> {
-    const primary = this.buildWorktreePath(repoPath, sessionId);
+  private async resolveResumeWorktreePath(
+    repoPath: string,
+    sessionId: string,
+    executionMode: CliWorkflowSettings["executionMode"]
+  ): Promise<string | undefined> {
+    const primary = this.buildWorktreePath(repoPath, sessionId, executionMode);
     if (await this.pathExists(primary)) {
       return primary;
     }
-    const legacy = this.buildLegacyWorktreePath(repoPath, sessionId);
-    if (await this.pathExists(legacy)) {
-      return legacy;
+    if (executionMode !== "DOCKER") {
+      const legacy = this.buildLegacyWorktreePath(repoPath, sessionId);
+      if (await this.pathExists(legacy)) {
+        return legacy;
+      }
+      return primary;
     }
-    return primary;
+    return undefined;
   }
 
   private async pathExists(targetPath: string): Promise<boolean> {
@@ -397,14 +423,22 @@ export class CliWorkflowService {
   private async resolveResumableWorktreePath(
     repoPath: string,
     expectedBranch: string,
-    preferredPath: string
+    preferredPath: string,
+    executionMode: CliWorkflowSettings["executionMode"]
   ): Promise<string | undefined> {
-    if (await this.canResumeExistingWorktree(preferredPath, expectedBranch)) {
+    if (
+      (executionMode !== "DOCKER" || this.isDockerCompatibleWorktreePath(repoPath, preferredPath))
+      && await this.canResumeExistingWorktree(preferredPath, expectedBranch)
+    ) {
       return preferredPath;
     }
 
     const branchWorktreePath = await this.findWorktreePathForBranch(repoPath, expectedBranch);
     if (branchWorktreePath && branchWorktreePath !== preferredPath) {
+      if (executionMode === "DOCKER" && !this.isDockerCompatibleWorktreePath(repoPath, branchWorktreePath)) {
+        await this.removeStaleWorktreeRegistration(repoPath, branchWorktreePath);
+        return undefined;
+      }
       if (await this.canResumeExistingWorktree(branchWorktreePath, expectedBranch)) {
         return branchWorktreePath;
       }
@@ -412,6 +446,13 @@ export class CliWorkflowService {
     }
 
     return undefined;
+  }
+
+  private isDockerCompatibleWorktreePath(repoPath: string, worktreePath: string): boolean {
+    const normalizedRepoPath = path.resolve(repoPath);
+    const normalizedWorktreePath = path.resolve(worktreePath);
+    return normalizedWorktreePath === normalizedRepoPath
+      || normalizedWorktreePath.startsWith(`${normalizedRepoPath}${path.sep}`);
   }
 
   private async findWorktreePathForBranch(repoPath: string, branch: string): Promise<string | undefined> {
@@ -876,9 +917,8 @@ export class CliWorkflowService {
     if (this.isDockerWorkspaceMountError(dockerResult) && await this.pathExists(cwd)) {
       this.deps.sessionTracking.appendActivity(sessionId, {
         originator: "system",
-        description: `Docker could not mount workspace path (${cwd}). Retrying ${providerLabel} on host process for this run.`,
+        description: `Docker could not mount workspace path (${cwd}) even though it exists locally. This indicates daemon path visibility mismatch; Docker mode requires daemon-visible worktree paths.`,
       });
-      return this.runStreamingCommand(command, args, cwd, providerEnv, sessionId, providerLabel);
     }
 
     return dockerResult;
