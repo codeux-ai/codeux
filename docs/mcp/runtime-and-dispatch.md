@@ -1,0 +1,49 @@
+# MCP Runtime and Dispatch
+
+This document explains how MCP requests flow through the server.
+
+## Server Startup
+
+Startup sequence in `src/index.ts`:
+
+1. Load environment and app config.
+2. Validate API key.
+3. Construct repositories and services.
+4. Construct tool handlers and sprint orchestrator.
+5. Register MCP request handlers.
+6. Start dashboard server.
+7. Connect MCP stdio transport.
+
+## MCP Request Handlers
+
+Registered schemas:
+- `ListToolsRequestSchema`
+- `CallToolRequestSchema`
+
+### Tool list handler
+Returns tool definitions from `src/tools.ts`.
+
+### Tool call handler
+- Resolves tool name.
+- Dispatches through handler map.
+- Wraps unknown tool as MCP `MethodNotFound`.
+- Normalizes runtime/API errors into `isError` response.
+
+## Dispatch Layers
+
+- Core dispatch target: `CoreToolHandler`
+- Agent dispatch target: `AgentToolHandler`
+
+This split keeps tool contracts stable while allowing orchestration internals to evolve independently.
+
+## Error Handling
+
+- Axios errors are unwrapped for user-friendly API messages.
+- Generic errors are returned as text with `isError: true`.
+- Server-level uncaught MCP errors are logged via `server.onerror`.
+
+## Shutdown Behavior
+
+On `SIGINT`:
+- Server closes MCP transport.
+- Process exits cleanly.

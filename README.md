@@ -5,6 +5,11 @@
 
 A production-grade [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) server for the [Jules Agent API](https://developers.google.com/jules). This server empowers LLMs to interact with Jules for codebase management, agent session creation, and intelligent sprint orchestration.
 
+## 📚 Documentation
+
+Project documentation index:
+- [`docs/index.md`](./docs/index.md)
+
 ---
 
 ## ✨ Key Features

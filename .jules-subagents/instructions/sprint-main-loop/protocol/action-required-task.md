@@ -1,0 +1,1 @@
+- **Task {{task_id}}** is `{{session_state}}`. Open the Jules session and resolve the pending action, then rerun orchestration.

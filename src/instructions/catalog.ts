@@ -1,0 +1,37 @@
+export const INSTRUCTION_TEMPLATE_PATHS = {
+  branchMissing: "sprint-main-loop/guards/branch-missing.md",
+  planningMissing: "sprint-main-loop/guards/planning-missing.md",
+  planningCreated: "sprint-main-loop/planning/planning-created.md",
+  mergeHeader: "sprint-main-loop/protocol/merge-header.md",
+  mergeTask: "sprint-main-loop/protocol/merge-task.md",
+  actionRequiredHeader: "sprint-main-loop/protocol/action-required-header.md",
+  actionRequiredTask: "sprint-main-loop/protocol/action-required-task.md",
+  watchHeader: "sprint-main-loop/watch/watch-header.md",
+  watchMergeRequired: "sprint-main-loop/watch/watch-merge-required.md",
+  watchNoMoreActions: "sprint-main-loop/watch/watch-no-more-actions.md",
+  completionSteps: "sprint-main-loop/watch/completion-steps.md",
+  cleanupAllMerged: "sprint-main-loop/cleanup/cleanup-all-merged.md",
+  cleanupFailed: "sprint-main-loop/cleanup/cleanup-failed.md",
+  cleanupDeferred: "sprint-main-loop/cleanup/cleanup-deferred.md",
+  cleanupEmpty: "sprint-main-loop/cleanup/cleanup-empty.md",
+} as const;
+
+export type InstructionTemplateId = keyof typeof INSTRUCTION_TEMPLATE_PATHS;
+
+export const DEFAULT_INSTRUCTION_TEMPLATES: Record<InstructionTemplateId, string> = {
+  branchMissing: `### 🛑 ACTION REQUIRED: Branch Configuration Missing\n\nThe feature branch \`{{feature_branch}}\` is not ready. Jules agents require this branch to exist on the remote repository to begin work.\n\n{{create_branch_step}}{{push_branch_step}}**Important:** Once these steps are completed, run this tool again to proceed with the \`{{action}}\` phase.`,
+  planningMissing: `### 🛑 ACTION REQUIRED: Sprint Planning Missing\n\nNo subtasks found in \`{{subtasks_dir}}\`. You must plan the sprint before orchestration can begin.\n\n**Instruction:** Run the \`sprint_agent\` with \`action: "plan"\` to initialize the subtasks and define the work items.`,
+  planningCreated: `### Planning Phase for Sprint {{sprint_number}}\n\nCreated directory: \`{{subtasks_dir}}\`.\n\n{{planning_guide_block}}**Instructions for the calling Agent:**\n1. Read \`sprints/sprint-{{sprint_number}}.md\`.\n2. Break the sprint into small, well-planned tasks.\n3. For each task, create a \`.md\` file in the subtasks directory with this format:\n\n\`\`\`markdown\ntitle: Task Title\ndepends_on: [task_id_1, task_id_2]\nis_independent: true\nmerged: false\nprompt:\nDetailed instructions for Jules.\n\`\`\``,
+  mergeHeader: `\n### 📥 MERGE INSTRUCTIONS\n`,
+  mergeTask: `- **Task {{task_id}}**: Use \`git_manager\` ({{git_manager_skill}}) to merge the Jules PR/branch into \`{{feature_branch}}\`.\n{{feature_ci_wait_line}}{{feature_comments_line}}- Update \`{{subtask_file}}\` with \`merged: true\`.\n- Rerun \`sprint_agent(action: "orchestrate", wait: true)\`.`,
+  actionRequiredHeader: `\n### ✋ JULES ACTION REQUIRED\n`,
+  actionRequiredTask: `- **Task {{task_id}}** is \`{{session_state}}\`. Open the Jules session and resolve the pending action, then rerun orchestration.`,
+  watchHeader: `### Sprint {{sprint_number}} Continuous Orchestration\n\n**Feature Branch:** \`{{feature_branch}}\`\n**Dashboard:** [http://localhost:{{dashboard_port}}](http://localhost:{{dashboard_port}})\n`,
+  watchMergeRequired: `\n🛑 **Action Required: Merge Detected**\nOne or more tasks have finished. Please follow the **MERGE INSTRUCTIONS** below, then run \`orchestrate\` again to continue.\n`,
+  watchNoMoreActions: `\n🛑 **Action Required:** Orchestration paused. No tasks are running and no pending tasks can be started.\n`,
+  completionSteps: `\n## 🏁 SPRINT COMPLETION STEPS\n1. **Final Merge via Git Manager**: Use \`git_manager\` ({{git_manager_skill}}) to merge \`{{feature_branch}}\` into \`{{default_branch}}\`.\n{{main_ci_wait_line}}{{main_comments_line}}2. **Next Sprint**: Proceed with Sprint {{next_sprint}} once \`{{default_branch}}\` is green.\n`,
+  cleanupAllMerged: `\n🧹 **Cleanup:** All tasks completed and merged successfully. Deleted subtasks in \`{{subtasks_dir}}\`.\n`,
+  cleanupFailed: `\n⚠️ **Cleanup Skipped:** Some tasks failed. Subtasks in \`{{subtasks_dir}}\` are preserved for debugging.\n`,
+  cleanupDeferred: `\n⏸️ **Cleanup Deferred:** Awaiting merges for completed tasks.\n`,
+  cleanupEmpty: `\n⚠️ **Sprint Empty:** No subtasks found. The sprint has not been planned yet.\n`,
+};

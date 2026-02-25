@@ -28,6 +28,9 @@ import { SettingsRepository } from "./settings-repository.js";
 import { formatSprintBranch } from "./branch-scheme.js";
 import { GitStatusService } from "./git-status-service.js";
 import { loadExternalSettingsHints } from "./external-settings.js";
+import { InstructionService } from "./instructions/service.js";
+import { CoreToolHandler } from "./mcp/core-tool-handler.js";
+import { AgentToolHandler } from "./mcp/agent-tool-handler.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -78,6 +81,9 @@ class JulesAgentServer {
   private gitStatusService: GitStatusService;
   private gitStatusCache: { timestamp: number; data: GitTrackingStatus | null } = { timestamp: 0, data: null };
   private gitStatusFetchPromise: Promise<GitTrackingStatus> | null = null;
+  private instructionService: InstructionService;
+  private coreToolHandler: CoreToolHandler;
+  private agentToolHandler: AgentToolHandler;
 
   constructor() {
     this.server = new Server(
@@ -101,6 +107,7 @@ class JulesAgentServer {
     this.settingsRepository = new SettingsRepository(undefined, this.externalSettingsHints);
     this.dashboardSettings = this.settingsRepository.getSettings();
     this.gitStatusService = new GitStatusService(projectRoot);
+    this.instructionService = new InstructionService(projectRoot);
     this.taskService = new TaskService({
       julesApi: this.julesApi,
       guideRepository: {
@@ -128,6 +135,34 @@ class JulesAgentServer {
       updateLastStatus: (status: any) => {
         this.lastStatus = status;
       },
+      getDashboardSettings: () => this.dashboardSettings,
+      renderInstruction: (templateId, variables, repoPath) =>
+        this.instructionService.render(templateId, variables, repoPath),
+    });
+    this.coreToolHandler = new CoreToolHandler({
+      julesApi: this.julesApi,
+      normalizeName: (type: string, id: string) => this.normalizeName(type, id),
+      resolveSessionName: (session: Partial<JulesSession>) => this.resolveSessionName(session),
+      fetchRecentActivities: (sessionName: string, pageSize?: number) => this.fetchRecentActivities(sessionName, pageSize),
+      isActionRequiredState: (state?: string) => this.isActionRequiredState(state),
+      getConsecutiveFailures: () => this.consecutiveFailures,
+      setConsecutiveFailures: (value: number) => {
+        this.consecutiveFailures = value;
+      },
+      getMaxFailures: () => this.settings.maxFailures || 5,
+    });
+    this.agentToolHandler = new AgentToolHandler({
+      sprintOrchestrator: this.sprintOrchestrator,
+      taskService: this.taskService,
+      getDashboardSettings: () => this.dashboardSettings,
+      formatSprintBranch,
+      getConsecutiveFailures: () => this.consecutiveFailures,
+      setConsecutiveFailures: (value: number) => {
+        this.consecutiveFailures = value;
+      },
+      getMaxFailures: () => this.settings.maxFailures || 5,
+      waitForSessionCompletion: (args: { session_id: string; poll_interval?: number; timeout?: number }) =>
+        this.coreToolHandler.handleWaitForSessionCompletion(args),
     });
 
     this.setupToolHandlers();
@@ -224,20 +259,22 @@ class JulesAgentServer {
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
       const handlers = {
-        get_source: (toolArgs: { source_id: string }) => this.handleGetSource(toolArgs),
-        list_sources: (toolArgs: { filter?: string; page_size?: number; page_token?: string }) => this.handleListSources(toolArgs),
-        list_all_sources: (toolArgs: { filter?: string }) => this.handleListAllSources(toolArgs),
-        create_session: (toolArgs: any) => this.handleCreateSession(toolArgs),
-        get_session: (toolArgs: { session_id: string }) => this.handleGetSession(toolArgs),
-        list_sessions: (toolArgs: { page_size?: number; page_token?: string }) => this.handleListSessions(toolArgs),
-        approve_session_plan: (toolArgs: { session_id: string }) => this.handleApproveSessionPlan(toolArgs),
-        send_session_message: (toolArgs: { session_id: string; prompt: string }) => this.handleSendSessionMessage(toolArgs),
-        wait_for_session_completion: (toolArgs: { session_id: string; poll_interval?: number; timeout?: number }) => this.handleWaitForSessionCompletion(toolArgs),
-        get_activity: (toolArgs: { session_id: string; activity_id: string }) => this.handleGetActivity(toolArgs),
-        list_activities: (toolArgs: { session_id: string; page_size?: number; page_token?: string }) => this.handleListActivities(toolArgs),
-        list_all_activities: (toolArgs: { session_id: string }) => this.handleListAllActivities(toolArgs),
-        sprint_agent: (toolArgs: SprintAgentArgs) => this.handleSprintAgent(toolArgs),
-        task_agent: (toolArgs: any) => this.handleTaskAgent(toolArgs),
+        get_source: (toolArgs: { source_id: string }) => this.coreToolHandler.handleGetSource(toolArgs),
+        list_sources: (toolArgs: { filter?: string; page_size?: number; page_token?: string }) => this.coreToolHandler.handleListSources(toolArgs),
+        list_all_sources: (toolArgs: { filter?: string }) => this.coreToolHandler.handleListAllSources(toolArgs),
+        create_session: (toolArgs: any) => this.coreToolHandler.handleCreateSession(toolArgs),
+        get_session: (toolArgs: { session_id: string }) => this.coreToolHandler.handleGetSession(toolArgs),
+        list_sessions: (toolArgs: { page_size?: number; page_token?: string }) => this.coreToolHandler.handleListSessions(toolArgs),
+        approve_session_plan: (toolArgs: { session_id: string }) => this.coreToolHandler.handleApproveSessionPlan(toolArgs),
+        send_session_message: (toolArgs: { session_id: string; prompt: string }) => this.coreToolHandler.handleSendSessionMessage(toolArgs),
+        wait_for_session_completion: (toolArgs: { session_id: string; poll_interval?: number; timeout?: number }) =>
+          this.coreToolHandler.handleWaitForSessionCompletion(toolArgs),
+        get_activity: (toolArgs: { session_id: string; activity_id: string }) => this.coreToolHandler.handleGetActivity(toolArgs),
+        list_activities: (toolArgs: { session_id: string; page_size?: number; page_token?: string }) =>
+          this.coreToolHandler.handleListActivities(toolArgs),
+        list_all_activities: (toolArgs: { session_id: string }) => this.coreToolHandler.handleListAllActivities(toolArgs),
+        sprint_agent: (toolArgs: SprintAgentArgs) => this.agentToolHandler.handleSprintAgent(toolArgs),
+        task_agent: (toolArgs: any) => this.agentToolHandler.handleTaskAgent(toolArgs),
       };
 
       try {
@@ -379,149 +416,6 @@ class JulesAgentServer {
     });
 
     return this.liveActivitiesFetchPromise;
-  }
-
-  // --- Jules API Handlers ---
-  private async handleGetSource({ source_id }: { source_id: string }) {
-    const source = await this.julesApi.getSource(source_id);
-    return { content: [{ type: "text", text: JSON.stringify(source, null, 2) }] };
-  }
-
-  private async handleListSources({ filter, page_size, page_token }: { filter?: string; page_size?: number; page_token?: string }) {
-    const sources = await this.julesApi.listSources({ filter, page_size, page_token });
-    return { content: [{ type: "text", text: JSON.stringify(sources, null, 2) }] };
-  }
-
-  private async handleListAllSources({ filter }: { filter?: string }) {
-    const allSources = await this.julesApi.listAllSources(filter);
-    return { content: [{ type: "text", text: JSON.stringify({ sources: allSources }, null, 2) }] };
-  }
-
-  private async handleCreateSession(args: any) {
-    const maxFails = this.settings.maxFailures || 5;
-    if (this.consecutiveFailures >= maxFails) {
-      throw new Error(`CRITICAL: Emergency stop active. ${this.consecutiveFailures} consecutive task creation failures detected.`);
-    }
-
-    const data: any = {
-      prompt: args.prompt,
-      sourceContext: { source: this.normalizeName("sources", args.source) },
-    };
-    if (args.starting_branch) data.sourceContext.githubRepoContext = { startingBranch: args.starting_branch };
-    if (args.title) data.title = args.title;
-    if (args.require_plan_approval !== undefined) data.requirePlanApproval = args.require_plan_approval;
-    if (args.automation_mode) data.automationMode = args.automation_mode;
-
-    try {
-      const response = await this.julesApi.createSession(data);
-      this.consecutiveFailures = 0; // Reset on success
-      return { content: [{ type: "text", text: JSON.stringify(response, null, 2) }] };
-    } catch (error: any) {
-      this.consecutiveFailures++;
-      throw error;
-    }
-  }
-
-  private async handleGetSession({ session_id }: { session_id: string }) {
-    const session = await this.julesApi.getSession(session_id);
-
-    try {
-      // Fetch activities to get the last message/activity
-      const sessionName = this.resolveSessionName(session) || this.normalizeName("sessions", session_id);
-      const activities = await this.fetchRecentActivities(sessionName, 50);
-      if (activities.length > 0) {
-        // Assume chronological order, last is most recent
-        (session as any).last_activity = activities[activities.length - 1];
-      }
-    } catch (error) {
-      console.error(`Warning: Could not fetch activities for session ${session_id}`);
-    }
-
-    return { content: [{ type: "text", text: JSON.stringify(session, null, 2) }] };
-  }
-
-  private async handleListSessions({ page_size, page_token }: { page_size?: number; page_token?: string }) {
-    const sessions = await this.julesApi.listSessions({ page_size, page_token });
-    return { content: [{ type: "text", text: JSON.stringify(sessions, null, 2) }] };
-  }
-
-  private async handleApproveSessionPlan({ session_id }: { session_id: string }) {
-    const response = await this.julesApi.approveSessionPlan(session_id);
-    return { content: [{ type: "text", text: JSON.stringify(response, null, 2) }] };
-  }
-
-  private async handleSendSessionMessage({ session_id, prompt }: { session_id: string; prompt: string }) {
-    const response = await this.julesApi.sendSessionMessage(session_id, prompt);
-    return { content: [{ type: "text", text: JSON.stringify(response, null, 2) }] };
-  }
-
-  private async handleWaitForSessionCompletion({ session_id, poll_interval = 10, timeout = 900 }: { session_id: string; poll_interval?: number; timeout?: number }) {
-    const startTime = Date.now();
-    while (Date.now() - startTime < timeout * 1000) {
-      const session = await this.julesApi.getSession(session_id);
-      if (
-        session.state === "COMPLETED" ||
-        session.state === "FAILED" ||
-        this.isActionRequiredState(session.state) ||
-        session.outputs?.some((o: any) => o.pullRequest)
-      ) {
-        return { content: [{ type: "text", text: JSON.stringify(session, null, 2) }] };
-      }
-      await new Promise(resolve => setTimeout(resolve, poll_interval * 1000));
-    }
-    throw new Error(`Timeout waiting for session ${session_id}`);
-  }
-
-  private async handleGetActivity({ session_id, activity_id }: { session_id: string; activity_id: string }) {
-    const activity = await this.julesApi.getActivity(session_id, activity_id);
-    return { content: [{ type: "text", text: JSON.stringify(activity, null, 2) }] };
-  }
-
-  private async handleListActivities({ session_id, page_size, page_token }: { session_id: string; page_size?: number; page_token?: string }) {
-    const activities = await this.julesApi.listActivities({ session_id, page_size, page_token });
-    return { content: [{ type: "text", text: JSON.stringify(activities, null, 2) }] };
-  }
-
-  private async handleListAllActivities({ session_id }: { session_id: string }) {
-    const allActivities = await this.julesApi.listAllActivities(session_id);
-    return { content: [{ type: "text", text: JSON.stringify({ activities: allActivities }, null, 2) }] };
-  }
-
-  // --- Sprint Agent Logic ---
-  private async handleSprintAgent(args: SprintAgentArgs) {
-    const resolvedArgs: SprintAgentArgs = {
-      ...args,
-      feature_branch: args.feature_branch || formatSprintBranch(this.dashboardSettings.git.sprintBranchScheme, args.sprint_number),
-    };
-    return await this.sprintOrchestrator.execute(resolvedArgs);
-  }
-
-  private async handleTaskAgent(args: {
-    prompt: string;
-    source_id: string;
-    repo_path: string;
-    title?: string;
-    branch?: string;
-    wait?: boolean;
-  }) {
-    const maxFails = this.settings.maxFailures || 5;
-    if (this.consecutiveFailures >= maxFails) {
-      throw new Error(`CRITICAL: Emergency stop active. ${this.consecutiveFailures} consecutive task creation failures detected.`);
-    }
-
-    try {
-      const session = await this.taskService.createTaskAgentSession(args);
-      this.consecutiveFailures = 0; // Reset on success
-
-      if (args.wait) {
-        return await this.handleWaitForSessionCompletion({ session_id: session.id });
-      }
-
-      return { content: [{ type: "text", text: JSON.stringify(session, null, 2) }] };
-    } catch (error: any) {
-      this.consecutiveFailures++;
-      throw error;
-    }
   }
 
   async run() {

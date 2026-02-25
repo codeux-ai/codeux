@@ -4,6 +4,7 @@ import * as path from "path";
 import * as os from "os";
 import { SprintOrchestrator } from "./sprint-orchestrator.js";
 import type { Subtask } from "./types.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "./settings-repository.js";
 
 const buildDeps = () => {
   const listSessions = vi.fn();
@@ -25,6 +26,25 @@ const buildDeps = () => {
     startJulesTask: vi.fn(),
     getGuideContent,
     updateLastStatus: vi.fn(),
+    getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+    renderInstruction: vi.fn(async (templateId: string, variables: Record<string, unknown>) => {
+      if (templateId === "planningMissing" && typeof variables.subtasks_dir === "string") {
+        return `### 🛑 ACTION REQUIRED: Sprint Planning Missing\n\nNo subtasks found in \`${variables.subtasks_dir}\`.`;
+      }
+      if (templateId === "branchMissing" && typeof variables.feature_branch === "string") {
+        return `### 🛑 ACTION REQUIRED: Branch Configuration Missing\n\nThe feature branch \`${variables.feature_branch}\` is not ready.`;
+      }
+      if (templateId === "actionRequiredHeader") {
+        return "\n### ✋ JULES ACTION REQUIRED\n";
+      }
+      if (templateId === "actionRequiredTask") {
+        return `- **Task ${variables.task_id}** is \`${variables.session_state}\`.`;
+      }
+      if (templateId === "watchHeader") {
+        return "### Sprint Header";
+      }
+      return "";
+    }),
   };
 
   return { deps, listSessions, loadSubtasks, getGuideContent };

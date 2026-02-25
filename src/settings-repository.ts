@@ -41,11 +41,51 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     featureBranchPrefix: "feature/",
     sprintBranchScheme: DEFAULT_SPRINT_BRANCH_SCHEME,
   },
+  ciIntelligence: {
+    enabled: true,
+    waitForCiBeforeMainMerge: true,
+    resolveAllCommentsBeforeMainMerge: true,
+    waitForCiBeforeFeatureMerge: true,
+    resolveAllCommentsBeforeFeatureMerge: true,
+  },
+  sprintLoopSteps: {
+    branchPreflight: true,
+    planningPreflight: true,
+    loadSubtasks: true,
+    sessionSync: true,
+    statusDerivation: true,
+    startReadyTasks: true,
+    mergeProtocol: true,
+    actionRequiredProtocol: true,
+    statusTable: true,
+    watchLoop: true,
+  },
   skills: DEFAULT_SKILLS,
 };
 
-const SETTINGS_DIR = path.join(os.homedir(), "jules-subagents");
+const SETTINGS_DIR = path.join(os.homedir(), ".jules-subagents");
 const SETTINGS_DB_PATH = path.join(SETTINGS_DIR, "settings.db");
+const LEGACY_SETTINGS_DB_PATH = path.join(os.homedir(), "jules-subagents", "settings.db");
+
+const readBoolean = (value: unknown, fallback: boolean): boolean => (typeof value === "boolean" ? value : fallback);
+
+const resolveSettingsDbPath = (dbPath?: string): string => {
+  if (dbPath && dbPath.trim().length > 0) {
+    return dbPath;
+  }
+
+  fs.mkdirSync(SETTINGS_DIR, { recursive: true });
+
+  if (!fs.existsSync(SETTINGS_DB_PATH) && fs.existsSync(LEGACY_SETTINGS_DB_PATH)) {
+    try {
+      fs.copyFileSync(LEGACY_SETTINGS_DB_PATH, SETTINGS_DB_PATH);
+    } catch {
+      // Continue with clean db if migration copy fails.
+    }
+  }
+
+  return SETTINGS_DB_PATH;
+};
 
 const enforceGitManagerSkillset = (skills: SkillToggle[], githubMode: "REMOTE" | "LOCAL"): SkillToggle[] => {
   return skills.map((skill) => {
@@ -102,6 +142,12 @@ const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardSettings
     ...DEFAULT_DASHBOARD_SETTINGS.git,
     githubToken: externalHints?.resolved.githubToken || DEFAULT_DASHBOARD_SETTINGS.git.githubToken,
   },
+  ciIntelligence: {
+    ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
+  },
+  sprintLoopSteps: {
+    ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps,
+  },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
 });
 
@@ -138,12 +184,53 @@ const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints)
       : DEFAULT_DASHBOARD_SETTINGS.git.sprintBranchScheme,
   };
 
+  const ciInput = (input.ciIntelligence && typeof input.ciIntelligence === "object"
+    ? input.ciIntelligence
+    : {}) as Partial<DashboardSettings["ciIntelligence"]>;
+  const ciIntelligence = {
+    enabled: readBoolean(ciInput.enabled, DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.enabled),
+    waitForCiBeforeMainMerge: readBoolean(
+      ciInput.waitForCiBeforeMainMerge,
+      DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.waitForCiBeforeMainMerge
+    ),
+    resolveAllCommentsBeforeMainMerge: readBoolean(
+      ciInput.resolveAllCommentsBeforeMainMerge,
+      DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.resolveAllCommentsBeforeMainMerge
+    ),
+    waitForCiBeforeFeatureMerge: readBoolean(
+      ciInput.waitForCiBeforeFeatureMerge,
+      DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.waitForCiBeforeFeatureMerge
+    ),
+    resolveAllCommentsBeforeFeatureMerge: readBoolean(
+      ciInput.resolveAllCommentsBeforeFeatureMerge,
+      DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.resolveAllCommentsBeforeFeatureMerge
+    ),
+  };
+
+  const loopInput = (input.sprintLoopSteps && typeof input.sprintLoopSteps === "object"
+    ? input.sprintLoopSteps
+    : {}) as Partial<DashboardSettings["sprintLoopSteps"]>;
+  const sprintLoopSteps = {
+    branchPreflight: readBoolean(loopInput.branchPreflight, DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps.branchPreflight),
+    planningPreflight: readBoolean(loopInput.planningPreflight, DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps.planningPreflight),
+    loadSubtasks: readBoolean(loopInput.loadSubtasks, DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps.loadSubtasks),
+    sessionSync: readBoolean(loopInput.sessionSync, DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps.sessionSync),
+    statusDerivation: readBoolean(loopInput.statusDerivation, DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps.statusDerivation),
+    startReadyTasks: readBoolean(loopInput.startReadyTasks, DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps.startReadyTasks),
+    mergeProtocol: readBoolean(loopInput.mergeProtocol, DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps.mergeProtocol),
+    actionRequiredProtocol: readBoolean(loopInput.actionRequiredProtocol, DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps.actionRequiredProtocol),
+    statusTable: readBoolean(loopInput.statusTable, DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps.statusTable),
+    watchLoop: readBoolean(loopInput.watchLoop, DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps.watchLoop),
+  };
+
   const normalizedSkills = enforceGitManagerSkillset(sanitizeSkills(input.skills), git.githubMode);
 
   return {
     automationLevel: validAutomationLevel,
     aiProvider,
     git,
+    ciIntelligence,
+    sprintLoopSteps,
     skills: normalizedSkills,
   };
 };
@@ -152,9 +239,10 @@ export class SettingsRepository {
   private readonly db: DatabaseSync;
   private readonly externalHints: ExternalSettingsHints | undefined;
 
-  constructor(dbPath: string = SETTINGS_DB_PATH, externalHints?: ExternalSettingsHints) {
-    fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-    this.db = new DatabaseSync(dbPath);
+  constructor(dbPath?: string, externalHints?: ExternalSettingsHints) {
+    const resolvedDbPath = resolveSettingsDbPath(dbPath);
+    fs.mkdirSync(path.dirname(resolvedDbPath), { recursive: true });
+    this.db = new DatabaseSync(resolvedDbPath);
     this.externalHints = externalHints;
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS app_settings (

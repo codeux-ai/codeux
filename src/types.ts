@@ -58,6 +58,27 @@ export interface GitSettings {
   sprintBranchScheme: string;
 }
 
+export interface CiIntelligenceSettings {
+  enabled: boolean;
+  waitForCiBeforeMainMerge: boolean;
+  resolveAllCommentsBeforeMainMerge: boolean;
+  waitForCiBeforeFeatureMerge: boolean;
+  resolveAllCommentsBeforeFeatureMerge: boolean;
+}
+
+export interface SprintLoopStepSettings {
+  branchPreflight: boolean;
+  planningPreflight: boolean;
+  loadSubtasks: boolean;
+  sessionSync: boolean;
+  statusDerivation: boolean;
+  startReadyTasks: boolean;
+  mergeProtocol: boolean;
+  actionRequiredProtocol: boolean;
+  statusTable: boolean;
+  watchLoop: boolean;
+}
+
 export interface SkillToggle {
   name: string;
   enabled: boolean;
@@ -68,6 +89,8 @@ export interface DashboardSettings {
   automationLevel: AutomationLevel;
   aiProvider: AiProviderSettings;
   git: GitSettings;
+  ciIntelligence: CiIntelligenceSettings;
+  sprintLoopSteps: SprintLoopStepSettings;
   skills: SkillToggle[];
 }
 

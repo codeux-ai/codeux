@@ -1,0 +1,17 @@
+# Documentation Summary
+
+- [Jules Subagents Documentation Index](./index.md)
+- [Quickstart](./getting-started/quickstart.md)
+- [System Overview](./architecture/system-overview.md)
+- [Repository Map](./architecture/repository-map.md)
+- [MCP Tools and Contracts](./mcp/tools-and-contracts.md)
+- [MCP Runtime and Dispatch](./mcp/runtime-and-dispatch.md)
+- [Atomic Sprint Loop](./sprint-loop/atomic-loop.md)
+- [Instruction Template System](./instructions/markdown-template-system.md)
+- [Dashboard Guide](./dashboard/dashboard-guide.md)
+- [Configuration and Storage](./settings/configuration-and-storage.md)
+- [Operations Runbook](./operations/runbook.md)
+- [Testing and Quality](./development/testing-and-quality.md)
+- [Documentation Standards](./development/documentation-standards.md)
+- [Glossary](./reference/glossary.md)
+- [Atomic Refactor Notes](./yourdocs.md)
