@@ -273,6 +273,113 @@ Fix:
 File:
 - `src/cli-workflow-service.ts`
 
+## Incremental Update: Configurable Failed-Worktree Retention + Read-File Retry
+
+Problem:
+- Failed CLI sessions could discard worktree state automatically, wasting progress.
+- Some Gemini/Codex runs failed early on `Error executing tool read_file: File not found`.
+
+Changes:
+1. Added CLI workflow settings (dashboard + backend persistence):
+- `cliWorkflow.cleanupWorktreeOnSuccess` (default: `true`)
+- `cliWorkflow.cleanupWorktreeOnFailure` (default: `false`)
+- `cliWorkflow.retryOnReadFileNotFound` (default: `true`)
+
+2. Runtime behavior:
+- Worktree cleanup now depends on success/failure + CLI workflow settings.
+- Default behavior preserves failed worktrees for recovery/follow-up.
+- On failure retention, activity log includes preserved workspace path and branch.
+
+3. Retry behavior for file-not-found reads:
+- If provider exits with `Error executing tool read_file: File not found`, workflow retries once with explicit file-discovery guidance appended to the prompt.
+- If retry still fails, session remains `FAILED` and preserved worktree policy is applied.
+
+Files:
+- `src/types.ts`
+- `dashboard/src/types.ts`
+- `src/settings-repository.ts`
+- `src/settings-repository.test.ts`
+- `dashboard/src/lib/settings.ts`
+- `dashboard/src/lib/settings.test.ts`
+- `dashboard/src/components/SettingsPage.tsx`
+- `src/cli-workflow-service.ts`
+- `docs/operations/runbook.md`
+
+## Incremental Update: Provider STDERR Labeling + Prompt De-duplication
+
+Problem:
+- Provider tool/runtime lines were shown as `system`, making MCP errors and provider stderr hard to distinguish.
+- CLI providers were receiving duplicated `worker.md` instruction blocks (one injected in task service, one in CLI workflow service), increasing prompt noise and instability risk.
+
+Changes:
+1. Activity origin clarity:
+- Background provider stderr is now stored with `originator: "provider"` and prefixed with provider label (e.g. `[gemini] ...`).
+- Dashboard task feed now renders `provider` origin with distinct styling.
+
+2. Prompt de-duplication:
+- `TaskService` now sends raw task prompt to Gemini/Codex workflow.
+- `CliWorkflowService` remains the single place that injects `worker.md` for background CLI runs.
+- Jules API sessions keep existing prompt-building flow.
+
+Files:
+- `src/cli-workflow-service.ts`
+- `dashboard/src/components/TaskCard.tsx`
+- `src/task-service.ts`
+
+## Incremental Update: Headless Path-Safety Guardrails
+
+Problem:
+- Headless provider runs can fail early on wrong file path assumptions (`read_file` not found), especially without interactive correction.
+
+Changes:
+- Added a workspace context block to every Gemini/Codex background prompt after worktree creation:
+  - explicit repository root
+  - explicit current working directory
+  - required path-discovery steps before `read_file`
+  - detected file-path hints from task prompt with existence pre-check (`exists` / `not-found`)
+- This guidance is injected directly in `CliWorkflowService`, so all headless runs share the same path discipline.
+
+Files:
+- `src/cli-workflow-service.ts`
+
+## Incremental Update: Worktree Location Relocation
+
+Change:
+- Background provider worktrees are now created under home-scoped runtime storage instead of inside the target repository.
+- New location pattern:
+  - `~/.jules-subagents/worktrees/<repo-name>-<repo-hash>/<session-id>`
+
+Rationale:
+- Prevents repository pollution when `.jules-subagents/worktrees` is not ignored.
+- Keeps transient execution workspaces in one runtime-managed location.
+
+File:
+- `src/cli-workflow-service.ts`
+
+## Incremental Update: Retry In Same Failed Workspace
+
+Change:
+- Added CLI workflow toggle:
+  - `cliWorkflow.resumeFailedTaskInSameWorkspace` (default: `true`)
+
+Behavior:
+- On retry, workflow looks up the latest failed CLI session for the same:
+  - provider
+  - task id
+  - feature branch
+  - repo path
+- If the failed workspace is still valid, the new retry run resumes in that same worktree and branch.
+- If resume target is unavailable/corrupted, workflow falls back to a fresh worktree.
+- Legacy compatibility: if a failed session used the old repo-local worktree path, resume checks that legacy path and can still continue from it.
+
+Related files:
+- `src/session-tracking-repository.ts`
+- `src/session-tracking-repository.test.ts`
+- `src/cli-workflow-service.ts`
+- `src/settings-repository.ts`
+- `dashboard/src/lib/settings.ts`
+- `dashboard/src/components/SettingsPage.tsx`
+
 ## Incremental Update: Multi-Provider Task Workflow Parity
 
 ### Goal

@@ -109,6 +109,12 @@ export interface DashboardSettings {
     statusTable: boolean;
     watchLoop: boolean;
   };
+  cliWorkflow: {
+    cleanupWorktreeOnSuccess: boolean;
+    cleanupWorktreeOnFailure: boolean;
+    retryOnReadFileNotFound: boolean;
+    resumeFailedTaskInSameWorkspace: boolean;
+  };
   skills: SkillToggle[];
 }
 

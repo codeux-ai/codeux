@@ -1,6 +1,7 @@
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { spawn } from "child_process";
 import * as fs from "fs/promises";
+import os from "os";
 import * as path from "path";
 import type { DashboardSettings, JulesSession, ProviderId, Subtask, ThinkingMode } from "./types.js";
 import { SessionTrackingRepository } from "./session-tracking-repository.js";
@@ -55,8 +56,27 @@ export class CliWorkflowService {
   constructor(private readonly deps: CliWorkflowServiceDependencies) {}
 
   async startTask(input: StartCliTaskInput): Promise<JulesSession> {
+    const settings = this.deps.getDashboardSettings();
+    const workflowSettings = settings.cliWorkflow || {
+      cleanupWorktreeOnSuccess: true,
+      cleanupWorktreeOnFailure: false,
+      retryOnReadFileNotFound: true,
+      resumeFailedTaskInSameWorkspace: true,
+    };
+
     const sessionId = `cli-${input.provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
-    const workerBranch = buildWorkerBranch(input.featureBranch, input.task.id, input.provider);
+    const resumeTarget = workflowSettings.resumeFailedTaskInSameWorkspace
+      ? this.deps.sessionTracking.findLatestFailedCliSessionForTask({
+        provider: input.provider,
+        taskId: input.task.id,
+        featureBranch: input.featureBranch,
+        repoPath: input.repoPath,
+      })
+      : null;
+    const workerBranch = resumeTarget?.workerBranch || buildWorkerBranch(input.featureBranch, input.task.id, input.provider);
+    const resumeWorktreePath = resumeTarget
+      ? await this.resolveResumeWorktreePath(input.repoPath, resumeTarget.sessionId)
+      : undefined;
     const title = `Sprint ${input.sprintNumber}: [${input.task.id}] ${input.task.title}`;
 
     const session = this.deps.sessionTracking.createSession({
@@ -74,21 +94,48 @@ export class CliWorkflowService {
       originator: "system",
       description: `Started ${input.provider} background workflow on branch ${workerBranch}.`,
     });
+    if (resumeTarget) {
+      this.deps.sessionTracking.appendActivity(sessionId, {
+        originator: "system",
+        description: `Retry configured to resume failed workspace from ${resumeTarget.sessionId} at ${resumeWorktreePath}.`,
+      });
+    }
 
     void this.runTaskWorkflow({
       ...input,
       sessionId,
       workerBranch,
       title,
+      resumeFromFailedSessionId: resumeTarget?.sessionId,
+      resumeWorktreePath,
     });
 
     return session;
   }
 
-  private async runTaskWorkflow(args: StartCliTaskInput & { sessionId: string; workerBranch: string; title: string }): Promise<void> {
-    const worktreePath = this.buildWorktreePath(args.repoPath, args.sessionId);
+  private async runTaskWorkflow(args: StartCliTaskInput & {
+    sessionId: string;
+    workerBranch: string;
+    title: string;
+    resumeFromFailedSessionId?: string;
+    resumeWorktreePath?: string;
+  }): Promise<void> {
+    const workspaceSessionId = args.resumeFromFailedSessionId || args.sessionId;
+    const worktreePath = args.resumeWorktreePath || this.buildWorktreePath(args.repoPath, workspaceSessionId);
+    let workflowSucceeded = false;
+    let cleanupWorktreeOnSuccess = true;
+    let cleanupWorktreeOnFailure = false;
+    let resumedExistingWorkspace = false;
     try {
       const settings = this.deps.getDashboardSettings();
+      const workflowSettings = settings.cliWorkflow || {
+        cleanupWorktreeOnSuccess: true,
+        cleanupWorktreeOnFailure: false,
+        retryOnReadFileNotFound: true,
+        resumeFailedTaskInSameWorkspace: true,
+      };
+      cleanupWorktreeOnSuccess = workflowSettings.cleanupWorktreeOnSuccess;
+      cleanupWorktreeOnFailure = workflowSettings.cleanupWorktreeOnFailure;
       const providerSettings = settings.aiProvider.providers[args.provider];
       let workerGuide = "";
       try {
@@ -100,10 +147,16 @@ export class CliWorkflowService {
       const promptBody = workerGuide
         ? `## SYSTEM INSTRUCTIONS & ENGINEERING STANDARDS\n\n${workerGuide}\n\n---\n\n## SUBTASK TO EXECUTE\n\n${args.task.prompt}`
         : args.task.prompt;
-      const providerPrompt = buildProviderPrompt(promptBody, providerSettings.thinkingMode);
 
       await this.withRepoLock(args.repoPath, async () => {
         await fs.mkdir(path.dirname(worktreePath), { recursive: true });
+        if (args.resumeFromFailedSessionId) {
+          const canResume = await this.canResumeExistingWorktree(worktreePath, args.workerBranch);
+          if (canResume) {
+            resumedExistingWorkspace = true;
+            return;
+          }
+        }
         await this.removeWorktree(args.repoPath, worktreePath);
         await this.runCommand("git", ["fetch", "origin"], args.repoPath);
         await this.runCommand(
@@ -112,16 +165,42 @@ export class CliWorkflowService {
           args.repoPath
         );
       });
+      const workspaceGuidance = await this.buildWorkspaceGuidance(args.task.prompt, worktreePath);
+      const providerPrompt = buildProviderPrompt(
+        `${promptBody}\n\n${workspaceGuidance}`,
+        providerSettings.thinkingMode
+      );
       const initialHead = (await this.runCommand("git", ["rev-parse", "HEAD"], worktreePath)).stdout.trim();
+      if (resumedExistingWorkspace) {
+        this.deps.sessionTracking.appendActivity(args.sessionId, {
+          originator: "system",
+          description: `Resumed failed workspace from ${args.resumeFromFailedSessionId} on branch ${args.workerBranch}.`,
+        });
+      } else if (args.resumeFromFailedSessionId) {
+        this.deps.sessionTracking.appendActivity(args.sessionId, {
+          originator: "system",
+          description: `Resume target ${args.resumeFromFailedSessionId} was unavailable. Started a fresh workspace.`,
+        });
+      }
 
       this.deps.sessionTracking.appendActivity(args.sessionId, {
         originator: "system",
         description: `Running ${args.provider} prompt on ${args.workerBranch} (workspace: ${worktreePath}).`,
       });
 
-      const providerResult = args.provider === "gemini"
+      let providerResult = args.provider === "gemini"
         ? await this.runGemini(providerPrompt, worktreePath, providerSettings.model, providerSettings.apiKey, args.sessionId)
         : await this.runCodex(providerPrompt, worktreePath, providerSettings.model, providerSettings.apiKey, args.sessionId);
+      if (!providerResult.ok && workflowSettings.retryOnReadFileNotFound && this.isReadFileNotFoundToolError(providerResult)) {
+        this.deps.sessionTracking.appendActivity(args.sessionId, {
+          originator: "system",
+          description: "Provider failed on missing file during tool read. Retrying once with file-discovery guidance.",
+        });
+        const retryPrompt = this.buildReadFileRetryPrompt(providerPrompt);
+        providerResult = args.provider === "gemini"
+          ? await this.runGemini(retryPrompt, worktreePath, providerSettings.model, providerSettings.apiKey, args.sessionId)
+          : await this.runCodex(retryPrompt, worktreePath, providerSettings.model, providerSettings.apiKey, args.sessionId);
+      }
 
       if (!providerResult.ok) {
         throw new Error(providerResult.stderr || providerResult.stdout || `${args.provider} command failed`);
@@ -147,6 +226,7 @@ export class CliWorkflowService {
           description: `No file changes produced by ${args.provider}.`,
         });
         this.deps.sessionTracking.updateSession(args.sessionId, { state: "COMPLETED" });
+        workflowSucceeded = true;
         return;
       }
 
@@ -201,6 +281,7 @@ export class CliWorkflowService {
           ? `Workflow completed. PR created: ${prUrl}`
           : "Workflow completed.",
       });
+      workflowSucceeded = true;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
@@ -210,14 +291,156 @@ export class CliWorkflowService {
       });
       console.error(`[CLI Workflow] ${args.sessionId} failed: ${message}`);
     } finally {
-      await this.withRepoLock(args.repoPath, async () => {
-        await this.removeWorktree(args.repoPath, worktreePath);
-      });
+      const shouldCleanupWorktree = workflowSucceeded ? cleanupWorktreeOnSuccess : cleanupWorktreeOnFailure;
+      if (shouldCleanupWorktree) {
+        await this.withRepoLock(args.repoPath, async () => {
+          await this.removeWorktree(args.repoPath, worktreePath);
+        });
+      } else {
+        this.deps.sessionTracking.appendActivity(args.sessionId, {
+          originator: "system",
+          description: `Preserving worktree for follow-up: ${worktreePath} (branch: ${args.workerBranch}).`,
+        });
+      }
     }
   }
 
   private buildWorktreePath(repoPath: string, sessionId: string): string {
+    const normalizedRepoPath = path.resolve(repoPath);
+    const repoName = sanitizeToken(path.basename(normalizedRepoPath)) || "repo";
+    const repoHash = createHash("sha256").update(normalizedRepoPath).digest("hex").slice(0, 12);
+    return path.join(
+      os.homedir(),
+      ".jules-subagents",
+      "worktrees",
+      `${repoName}-${repoHash}`,
+      sanitizeToken(sessionId)
+    );
+  }
+
+  private buildLegacyWorktreePath(repoPath: string, sessionId: string): string {
     return path.join(repoPath, ".jules-subagents", "worktrees", sanitizeToken(sessionId));
+  }
+
+  private async resolveResumeWorktreePath(repoPath: string, sessionId: string): Promise<string> {
+    const primary = this.buildWorktreePath(repoPath, sessionId);
+    if (await this.pathExists(primary)) {
+      return primary;
+    }
+    const legacy = this.buildLegacyWorktreePath(repoPath, sessionId);
+    if (await this.pathExists(legacy)) {
+      return legacy;
+    }
+    return primary;
+  }
+
+  private async pathExists(targetPath: string): Promise<boolean> {
+    try {
+      await fs.access(targetPath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async canResumeExistingWorktree(worktreePath: string, expectedBranch: string): Promise<boolean> {
+    try {
+      await fs.access(worktreePath);
+      const inside = (await this.runCommand("git", ["rev-parse", "--is-inside-work-tree"], worktreePath)).stdout.trim();
+      if (inside !== "true") {
+        return false;
+      }
+      const currentBranch = (await this.runCommand("git", ["rev-parse", "--abbrev-ref", "HEAD"], worktreePath)).stdout.trim();
+      if (currentBranch !== expectedBranch) {
+        await this.runCommand("git", ["checkout", expectedBranch], worktreePath);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async buildWorkspaceGuidance(taskPrompt: string, worktreePath: string): Promise<string> {
+    const repoRoot = (await this.runCommand("git", ["rev-parse", "--show-toplevel"], worktreePath)).stdout.trim();
+    const hints = this.extractPathHints(taskPrompt).slice(0, 10);
+    const hintStatuses = await Promise.all(
+      hints.map(async (hint) => {
+        const safePath = path.resolve(worktreePath, hint);
+        if (!safePath.startsWith(worktreePath)) {
+          return `- ${hint}: outside-workspace`;
+        }
+        try {
+          await fs.access(safePath);
+          return `- ${hint}: exists`;
+        } catch {
+          return `- ${hint}: not-found`;
+        }
+      })
+    );
+
+    const hintSection = hintStatuses.length > 0
+      ? [
+        "Task path hints (from prompt) with existence pre-check:",
+        ...hintStatuses,
+      ].join("\n")
+      : "Task path hints (from prompt): none detected.";
+
+    return [
+      "## Workspace Context (Headless Session)",
+      `Repository root: ${repoRoot}`,
+      `Current working directory: ${worktreePath}`,
+      "",
+      "Path safety requirements:",
+      "- Before any read_file call, discover exact paths first (glob/grep/find).",
+      "- Use repo-relative paths from the repository root shown above.",
+      "- Do not assume filenames or directories. Verify existence before reading.",
+      "- If a hinted path is not found, locate the nearest real file and continue.",
+      "",
+      hintSection,
+    ].join("\n");
+  }
+
+  private extractPathHints(text: string): string[] {
+    const candidates = new Set<string>();
+    const backtickMatches = text.match(/`[^`\n]+`/g) || [];
+    for (const token of backtickMatches) {
+      const normalized = token.slice(1, -1).trim();
+      if (this.looksLikeRelativePath(normalized)) {
+        candidates.add(normalized);
+      }
+    }
+    const lineMatches = text.match(/(?:^|\n)\s*-\s+([^\n]+)/g) || [];
+    for (const rawLine of lineMatches) {
+      const normalized = rawLine.replace(/^\s*-\s+/, "").trim();
+      if (this.looksLikeRelativePath(normalized)) {
+        candidates.add(normalized);
+      }
+    }
+    return Array.from(candidates);
+  }
+
+  private looksLikeRelativePath(value: string): boolean {
+    if (!value || value.length > 180) return false;
+    if (value.startsWith("/") || value.startsWith("~")) return false;
+    if (value.includes("..")) return false;
+    const cleaned = value.replace(/[.,;:!?]+$/g, "");
+    return /[a-zA-Z0-9_-]+\//.test(cleaned) || /\.[a-zA-Z0-9]{1,6}$/.test(cleaned);
+  }
+
+  private isReadFileNotFoundToolError(result: CommandResult): boolean {
+    const combined = `${result.stdout}\n${result.stderr}`.toLowerCase();
+    return combined.includes("error executing tool read_file: file not found");
+  }
+
+  private buildReadFileRetryPrompt(basePrompt: string): string {
+    return [
+      basePrompt,
+      "",
+      "## Retry Guidance",
+      "Previous attempt failed with a file-not-found read.",
+      "Before any read_file call, first enumerate files in the relevant area and use exact existing paths.",
+      "Do not assume filenames; verify paths then continue implementation.",
+    ].join("\n");
   }
 
   private async withRepoLock<T>(repoPath: string, fn: () => Promise<T>): Promise<T> {
@@ -295,7 +518,8 @@ export class CliWorkflowService {
       args,
       cwd,
       this.withProviderEnv("gemini", model, apiKey),
-      sessionId
+      sessionId,
+      "gemini"
     );
   }
 
@@ -316,7 +540,8 @@ export class CliWorkflowService {
       args,
       cwd,
       this.withProviderEnv("codex", model, apiKey),
-      sessionId
+      sessionId,
+      "codex"
     );
   }
 
@@ -325,7 +550,8 @@ export class CliWorkflowService {
     args: string[],
     cwd: string,
     env: NodeJS.ProcessEnv,
-    sessionId: string
+    sessionId: string,
+    providerLabel: "gemini" | "codex"
   ): Promise<CommandResult> {
     return new Promise<CommandResult>((resolve) => {
       const child = spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
@@ -348,8 +574,8 @@ export class CliWorkflowService {
         stderr += text;
         for (const line of text.split("\n").map((entry) => entry.trim()).filter((entry) => entry.length > 0)) {
           this.deps.sessionTracking.appendActivity(sessionId, {
-            originator: "system",
-            description: line.slice(0, 2000),
+            originator: "provider",
+            description: `[${providerLabel}] ${line}`.slice(0, 2000),
           });
         }
       });

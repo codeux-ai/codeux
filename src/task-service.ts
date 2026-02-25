@@ -60,20 +60,20 @@ export class TaskService {
       status: "PENDING",
     };
     const provider = this.resolveProvider(pseudoTask);
-    const fullPrompt = await this.buildPrompt(args.repo_path, "TASK TO EXECUTE", args.prompt);
 
     if (provider !== "jules") {
       return await this.deps.cliWorkflowService.startTask({
         provider,
         task: {
           ...pseudoTask,
-          prompt: fullPrompt,
+          prompt: args.prompt,
         },
         repoPath: args.repo_path,
         featureBranch: args.branch || this.deps.getDashboardSettings().git.defaultBranch,
         sprintNumber: 0,
       });
     }
+    const fullPrompt = await this.buildPrompt(args.repo_path, "TASK TO EXECUTE", args.prompt);
 
     const data: any = {
       prompt: fullPrompt,
@@ -97,15 +97,11 @@ export class TaskService {
 
   async startSprintTask(task: Subtask, sourceId: string, baseBranch: string, repoPath: string, sprintNumber: number): Promise<JulesSession> {
     const provider = this.resolveProvider(task);
-    const fullPrompt = await this.buildPrompt(repoPath, "SUBTASK TO EXECUTE", task.prompt);
 
     if (provider !== "jules") {
       const session = await this.deps.cliWorkflowService.startTask({
         provider,
-        task: {
-          ...task,
-          prompt: fullPrompt,
-        },
+        task,
         repoPath,
         featureBranch: baseBranch,
         sprintNumber,
@@ -113,6 +109,7 @@ export class TaskService {
       session.provider = provider;
       return session;
     }
+    const fullPrompt = await this.buildPrompt(repoPath, "SUBTASK TO EXECUTE", task.prompt);
 
     const data = {
       prompt: fullPrompt,

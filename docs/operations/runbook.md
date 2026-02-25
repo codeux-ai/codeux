@@ -61,6 +61,12 @@ Checks:
 - Is auth available system-wide or via provider API key settings?
 - Did child task branch creation succeed from feature branch?
 - Are `git` and `gh` available in PATH for commit/push/PR steps?
+- If logs show `Error executing tool read_file: File not found`, verify the retry setting:
+  - `Settings -> CLI Workflow -> Retry once on read_file not found`
+- If you need post-failure recovery work, keep failed worktrees:
+  - `Settings -> CLI Workflow -> Cleanup worktree on failure` should remain disabled (recommended default).
+- To continue retries in the same failed workspace:
+  - `Settings -> CLI Workflow -> Resume failed task in same workspace` should remain enabled (default).
 
 ### 5. Orchestration stuck with blocked tasks
 Checks:
@@ -92,6 +98,7 @@ Checks:
 - Use activities APIs to inspect detailed session trace.
 - Re-enable steps after diagnosis to restore normal operation.
 - On startup, interrupted local CLI sessions (`cli-*` with `RUNNING`) are auto-recovered to `FAILED` so orchestration can safely retry them.
+- Failed CLI sessions can preserve their worktree for manual follow-up or assisted retry, based on CLI Workflow settings.
 
 ## Useful Commands
 
