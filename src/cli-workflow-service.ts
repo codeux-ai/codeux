@@ -79,6 +79,7 @@ const buildProviderPrompt = (prompt: string, thinkingMode: ThinkingMode): string
 
 export class CliWorkflowService {
   private readonly repoLocks = new Map<string, Promise<void>>();
+  private readonly dockerHintLoggedSessions = new Set<string>();
 
   constructor(private readonly deps: CliWorkflowServiceDependencies) {}
 
@@ -830,6 +831,8 @@ export class CliWorkflowService {
     workflowSettings: CliWorkflowSettings,
     repoPath: string
   ): Promise<CommandResult> {
+    await this.maybeLogDockerPathMappingHint(sessionId, repoPath);
+    const workspaceSource = this.mapDockerSourcePathForDaemon(cwd, repoPath, sessionId, "workspace");
     const dockerArgs = [
       "run",
       "--rm",
@@ -838,7 +841,7 @@ export class CliWorkflowService {
       "/workspace",
       "--mount",
       this.toDockerMountArg({
-        source: cwd,
+        source: workspaceSource,
         destination: "/workspace",
         readonly: false,
       }),
@@ -857,8 +860,9 @@ export class CliWorkflowService {
 
     const setupScriptPath = await this.resolveContainerSetupScriptPath(workflowSettings, repoPath, sessionId);
     if (setupScriptPath) {
+      const setupScriptSource = this.mapDockerSourcePathForDaemon(setupScriptPath, repoPath, sessionId, "setup script");
       dockerArgs.push("--mount", this.toDockerMountArg({
-        source: setupScriptPath,
+        source: setupScriptSource,
         destination: CONTAINER_SETUP_SCRIPT,
         readonly: true,
       }));
@@ -866,7 +870,11 @@ export class CliWorkflowService {
 
     const credentialMounts = await this.buildCredentialMounts(workflowSettings, repoPath, sessionId);
     for (const mount of credentialMounts) {
-      dockerArgs.push("--mount", this.toDockerMountArg(mount));
+      const source = this.mapDockerSourcePathForDaemon(mount.source, repoPath, sessionId, "credentials");
+      dockerArgs.push("--mount", this.toDockerMountArg({
+        ...mount,
+        source,
+      }));
     }
 
     const image = workflowSettings.containerImage.trim() || DEFAULT_CLI_WORKFLOW_SETTINGS.containerImage;
@@ -884,6 +892,73 @@ export class CliWorkflowService {
       description: `Running ${providerLabel} in Docker image ${image} (credentials mounted: ${credentialMounts.length > 0 ? "yes" : "no"}).`,
     });
     return this.runStreamingCommand("docker", dockerArgs, cwd, process.env, sessionId, providerLabel);
+  }
+
+  private async maybeLogDockerPathMappingHint(sessionId: string, repoPath: string): Promise<void> {
+    if (this.dockerHintLoggedSessions.has(sessionId)) {
+      return;
+    }
+    this.dockerHintLoggedSessions.add(sessionId);
+    if (!(await this.pathExists("/.dockerenv"))) {
+      return;
+    }
+    const workspaceMapping = (process.env.JULES_DOCKER_HOST_WORKSPACE_ROOT || "").trim();
+    const homeMapping = (process.env.JULES_DOCKER_HOST_HOME_ROOT || "").trim();
+    if (workspaceMapping.length > 0) {
+      return;
+    }
+    this.deps.sessionTracking.appendActivity(sessionId, {
+      originator: "system",
+      description: [
+        "Docker mode is running inside a container.",
+        `If docker daemon is outside this container, set JULES_DOCKER_HOST_WORKSPACE_ROOT to host-visible path for ${repoPath}.`,
+        homeMapping.length > 0 ? "" : "Optionally set JULES_DOCKER_HOST_HOME_ROOT for host-visible credential paths.",
+      ].filter((line) => line.length > 0).join(" "),
+    });
+  }
+
+  private isPathWithin(basePath: string, targetPath: string): boolean {
+    const base = path.resolve(basePath);
+    const target = path.resolve(targetPath);
+    return target === base || target.startsWith(`${base}${path.sep}`);
+  }
+
+  private mapPathPrefix(sourcePath: string, fromPrefix: string, toPrefix: string): string {
+    const source = path.resolve(sourcePath);
+    const from = path.resolve(fromPrefix);
+    const to = path.resolve(toPrefix);
+    if (!this.isPathWithin(from, source)) {
+      return source;
+    }
+    const relative = path.relative(from, source);
+    return relative.length === 0 ? to : path.join(to, relative);
+  }
+
+  private mapDockerSourcePathForDaemon(
+    sourcePath: string,
+    repoPath: string,
+    sessionId: string,
+    mountLabel: "workspace" | "setup script" | "credentials"
+  ): string {
+    const normalizedSource = path.resolve(sourcePath);
+    const workspaceMapping = (process.env.JULES_DOCKER_HOST_WORKSPACE_ROOT || "").trim();
+    const homeMapping = (process.env.JULES_DOCKER_HOST_HOME_ROOT || "").trim();
+
+    let mapped = normalizedSource;
+    if (workspaceMapping.length > 0) {
+      mapped = this.mapPathPrefix(mapped, repoPath, workspaceMapping);
+    }
+    if (homeMapping.length > 0) {
+      mapped = this.mapPathPrefix(mapped, os.homedir(), homeMapping);
+    }
+
+    if (mapped !== normalizedSource) {
+      this.deps.sessionTracking.appendActivity(sessionId, {
+        originator: "system",
+        description: `Mapped Docker ${mountLabel} mount source from ${normalizedSource} to ${mapped}.`,
+      });
+    }
+    return mapped;
   }
 
   private async runProviderCommand(

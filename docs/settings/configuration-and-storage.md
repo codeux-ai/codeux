@@ -13,6 +13,8 @@ This guide explains runtime config sources, precedence, and persistence.
 Additional startup config:
 - `JULES_API_BASE_URL` (default: `https://jules.googleapis.com/v1alpha`)
 - `DASHBOARD_PORT` (default: `4444`)
+- `JULES_DOCKER_HOST_WORKSPACE_ROOT` (optional path mapping for Docker-in-Docker/remote-daemon setups)
+- `JULES_DOCKER_HOST_HOME_ROOT` (optional home-dir path mapping for Docker credential mounts)
 
 External hint env keys used for dashboard import:
 - `JULES_API_KEY` / `JULES_KEY`

@@ -452,6 +452,22 @@ Files:
 - `src/cli-workflow-service.ts`
 - `docs/operations/runbook.md`
 
+## Incremental Update: Docker Daemon Path Mapping (Nested Containers)
+
+Problem:
+- In container-in-container or remote daemon setups, Docker daemon may not see runtime container paths (for example `/root/affiliate/...`), causing bind-mount failures.
+
+Change:
+- Added optional environment path mapping for Docker mount sources:
+  - `JULES_DOCKER_HOST_WORKSPACE_ROOT`
+  - `JULES_DOCKER_HOST_HOME_ROOT`
+- Runtime applies these mappings for workspace/setup/credential mounts and logs mapped paths in live session activity.
+
+Files:
+- `src/cli-workflow-service.ts`
+- `docs/settings/configuration-and-storage.md`
+- `docs/operations/runbook.md`
+
 ## Incremental Update: Multi-Provider Task Workflow Parity
 
 ### Goal
