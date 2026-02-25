@@ -218,7 +218,60 @@ Files:
 - `src/types.ts`
 - `dashboard/src/types.ts`
 - `dashboard/src/components/GitStatusPanel.tsx`
-- `src/git-status-service.test.ts`
+
+## Incremental Update: Interrupted CLI Session Recovery
+
+Problem addressed:
+- If MCP was interrupted while Gemini/Codex background tasks were running, tracked sessions could remain in `RUNNING` state.
+- On the next orchestration cycle, session sync could bind tasks to those stale sessions, showing old logs and preventing fresh background starts.
+
+Implementation:
+1. Added startup recovery in server runtime:
+- On boot, scan tracked sessions for local CLI sessions in `RUNNING` state.
+- Mark those sessions `FAILED`.
+- Append a system activity explaining interrupted-process recovery.
+
+2. Recovery scope:
+- Applies only to tracked local CLI sessions:
+  - session id prefix `cli-*`
+  - providers `gemini` or `codex`
+- Jules API sessions are not modified.
+
+3. Orchestration effect:
+- Session sync now sees recovered sessions as `FAILED`.
+- With retry enabled (default), subtasks move back to `PENDING` and can start new background sessions.
+
+Files:
+- `src/session-tracking-repository.ts`
+- `src/index.ts`
+- `src/session-tracking-repository.test.ts`
+- `docs/operations/runbook.md`
+
+## Incremental Update: Background CLI `--yolo` Mode
+
+Change:
+- Added `--yolo` for both background provider runners to reduce approval/tool-gating friction during autonomous execution.
+
+Provider command behavior:
+- Gemini background run now uses: `gemini --yolo "<prompt>"`
+- Codex background run now uses: `codex exec --full-auto --yolo --output-last-message "<prompt>"`
+
+File:
+- `src/cli-workflow-service.ts`
+
+## Incremental Update: Detect Provider Commits With Clean Worktree
+
+Problem:
+- Background provider could commit/push directly.
+- MCP previously checked only `git status --porcelain`; if clean, it incorrectly reported “No file changes produced.”
+
+Fix:
+- Capture `HEAD` before provider run and compare with `HEAD` after run.
+- Treat `HEAD` movement as produced output, even when working tree is clean.
+- If provider changed branches during execution, switch back to the expected worker branch before finalize/push.
+
+File:
+- `src/cli-workflow-service.ts`
 
 ## Incremental Update: Multi-Provider Task Workflow Parity
 

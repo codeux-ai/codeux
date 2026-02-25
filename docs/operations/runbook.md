@@ -74,12 +74,24 @@ Checks:
 - Merge actually integrated into feature branch?
 - CI policy gates reflected in protocol text?
 
+### 7. Tasks show RUNNING after MCP was interrupted
+Symptoms:
+- Old activity logs keep appearing.
+- New orchestration cycles do not start fresh background CLI runs.
+
+Checks:
+- Restart MCP once to trigger startup recovery.
+- Verify startup logs for a recovery line:
+  - `[Recovery] Marked <N> interrupted CLI session(s) as FAILED ...`
+- Run `sprint_agent(action: "orchestrate")` again so failed tasks are retried.
+
 ## Recovery Techniques
 
 - Temporarily disable selected loop steps for diagnosis.
 - Run `status` action to inspect state without creating tasks.
 - Use activities APIs to inspect detailed session trace.
 - Re-enable steps after diagnosis to restore normal operation.
+- On startup, interrupted local CLI sessions (`cli-*` with `RUNNING`) are auto-recovered to `FAILED` so orchestration can safely retry them.
 
 ## Useful Commands
 

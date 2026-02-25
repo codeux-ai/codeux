@@ -112,6 +112,7 @@ export class CliWorkflowService {
           args.repoPath
         );
       });
+      const initialHead = (await this.runCommand("git", ["rev-parse", "HEAD"], worktreePath)).stdout.trim();
 
       this.deps.sessionTracking.appendActivity(args.sessionId, {
         originator: "system",
@@ -126,8 +127,21 @@ export class CliWorkflowService {
         throw new Error(providerResult.stderr || providerResult.stdout || `${args.provider} command failed`);
       }
 
+      const currentBranch = (await this.runCommand("git", ["rev-parse", "--abbrev-ref", "HEAD"], worktreePath)).stdout.trim();
+      if (currentBranch !== args.workerBranch) {
+        this.deps.sessionTracking.appendActivity(args.sessionId, {
+          originator: "system",
+          description: `Provider changed branch to ${currentBranch}. Switching back to ${args.workerBranch}.`,
+        });
+        await this.runCommand("git", ["checkout", args.workerBranch], worktreePath);
+      }
+
+      const finalHead = (await this.runCommand("git", ["rev-parse", "HEAD"], worktreePath)).stdout.trim();
       const statusResult = await this.runCommand("git", ["status", "--porcelain"], worktreePath);
-      if (!statusResult.stdout.trim()) {
+      const hasWorkingTreeChanges = statusResult.stdout.trim().length > 0;
+      const hasCommittedChanges = finalHead !== initialHead;
+
+      if (!hasWorkingTreeChanges && !hasCommittedChanges) {
         this.deps.sessionTracking.appendActivity(args.sessionId, {
           originator: "system",
           description: `No file changes produced by ${args.provider}.`,
@@ -136,12 +150,19 @@ export class CliWorkflowService {
         return;
       }
 
-      await this.runCommand("git", ["add", "-A"], worktreePath);
-      await this.runCommand(
-        "git",
-        ["commit", "-m", `feat(task ${args.task.id}): implement via ${args.provider}`],
-        worktreePath
-      );
+      if (hasWorkingTreeChanges) {
+        await this.runCommand("git", ["add", "-A"], worktreePath);
+        await this.runCommand(
+          "git",
+          ["commit", "-m", `feat(task ${args.task.id}): implement via ${args.provider}`],
+          worktreePath
+        );
+      } else {
+        this.deps.sessionTracking.appendActivity(args.sessionId, {
+          originator: "system",
+          description: `Detected provider-created commit(s) without pending working tree changes.`,
+        });
+      }
       await this.runCommand("git", ["push", "-u", "origin", args.workerBranch], worktreePath);
 
       let prUrl: string | undefined;
@@ -268,9 +289,10 @@ export class CliWorkflowService {
     apiKey: string,
     sessionId: string
   ): Promise<CommandResult> {
+    const args = ["--yolo", prompt];
     return this.runStreamingCommand(
       "gemini",
-      [prompt],
+      args,
       cwd,
       this.withProviderEnv("gemini", model, apiKey),
       sessionId
@@ -284,7 +306,7 @@ export class CliWorkflowService {
     apiKey: string,
     sessionId: string
   ): Promise<CommandResult> {
-    const args = ["exec", "--full-auto", "--output-last-message"];
+    const args = ["exec", "--full-auto", "--yolo", "--output-last-message"];
     if (model && model !== "default") {
       args.push("--model", model);
     }

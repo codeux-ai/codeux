@@ -553,6 +553,14 @@ class JulesAgentServer {
     await this.loadSettings();
     this.syncGitSettingsFromDashboard();
     this.refreshJulesApiKey();
+    const recovery = this.sessionTracking.recoverInterruptedCliSessions();
+    if (recovery.recoveredCount > 0) {
+      const sample = recovery.sessionIds.slice(0, 5).join(", ");
+      const remainder = recovery.recoveredCount > 5 ? ` (+${recovery.recoveredCount - 5} more)` : "";
+      console.error(
+        `[Recovery] Marked ${recovery.recoveredCount} interrupted CLI session(s) as FAILED: ${sample}${remainder}`
+      );
+    }
     await this.setupDashboard();
 
     if (!this.isJulesApiConfigured()) {
