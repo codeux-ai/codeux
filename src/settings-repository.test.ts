@@ -29,6 +29,10 @@ describe("SettingsRepository", () => {
     expect(settings.git.githubMode).toBe("REMOTE");
     expect(settings.ciIntelligence.enabled).toBe(true);
     expect(settings.sprintLoopSteps.watchLoop).toBe(true);
+    expect(settings.cliWorkflow.cleanupWorktreeOnSuccess).toBe(true);
+    expect(settings.cliWorkflow.cleanupWorktreeOnFailure).toBe(false);
+    expect(settings.cliWorkflow.retryOnReadFileNotFound).toBe(true);
+    expect(settings.cliWorkflow.resumeFailedTaskInSameWorkspace).toBe(true);
     expect(settings.skills.length).toBeGreaterThan(0);
     expect(settings.skills.every((skill) => skill.isInternal)).toBe(true);
     expect(settings.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(true);
@@ -76,6 +80,12 @@ describe("SettingsRepository", () => {
         statusTable: true,
         watchLoop: false,
       },
+      cliWorkflow: {
+        cleanupWorktreeOnSuccess: true,
+        cleanupWorktreeOnFailure: false,
+        retryOnReadFileNotFound: true,
+        resumeFailedTaskInSameWorkspace: true,
+      },
       skills: [
         { name: "worker", enabled: false, isInternal: true },
         { name: "my-custom-skill", enabled: true, isInternal: false },
@@ -91,6 +101,8 @@ describe("SettingsRepository", () => {
     expect(saved.git.githubMode).toBe("LOCAL");
     expect(saved.ciIntelligence.waitForCiBeforeMainMerge).toBe(false);
     expect(saved.sprintLoopSteps.watchLoop).toBe(false);
+    expect(saved.cliWorkflow.cleanupWorktreeOnFailure).toBe(false);
+    expect(saved.cliWorkflow.resumeFailedTaskInSameWorkspace).toBe(true);
     expect(saved.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(false);
     expect(saved.skills.find((skill) => skill.name === "git_manager_local")?.enabled).toBe(true);
 

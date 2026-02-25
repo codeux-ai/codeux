@@ -57,6 +57,12 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     statusTable: true,
     watchLoop: true,
   },
+  cliWorkflow: {
+    cleanupWorktreeOnSuccess: true,
+    cleanupWorktreeOnFailure: false,
+    retryOnReadFileNotFound: true,
+    resumeFailedTaskInSameWorkspace: true,
+  },
   skills: [
     { name: "orchestrator", enabled: true, isInternal: true },
     { name: "worker", enabled: true, isInternal: true },
@@ -82,5 +88,6 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
   git: { ...DEFAULT_DASHBOARD_SETTINGS.git },
   ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence },
   sprintLoopSteps: { ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps },
+  cliWorkflow: { ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
 });

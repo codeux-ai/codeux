@@ -75,4 +75,56 @@ describe("SessionTrackingRepository", () => {
     expect(second.recoveredCount).toBe(0);
     expect(repo.getSession("cli-codex-running")?.state).toBe("FAILED");
   });
+
+  it("finds latest failed cli session for task resume target", async () => {
+    const repo = await createRepo();
+
+    repo.createSession({
+      id: "cli-gemini-old",
+      provider: "gemini",
+      state: "FAILED",
+      prompt: "prompt",
+      title: "Sprint 1: [task-1] test",
+      taskId: "task-1",
+      featureBranch: "feature/sprint1",
+      workerBranch: "task/feature-sprint1-task-1-gemini-old",
+      repoPath: "/tmp/repo-a",
+    });
+
+    repo.createSession({
+      id: "cli-gemini-new",
+      provider: "gemini",
+      state: "FAILED",
+      prompt: "prompt",
+      title: "Sprint 1: [task-1] test",
+      taskId: "task-1",
+      featureBranch: "feature/sprint1",
+      workerBranch: "task/feature-sprint1-task-1-gemini-new",
+      repoPath: "/tmp/repo-a",
+    });
+
+    repo.createSession({
+      id: "cli-gemini-other-repo",
+      provider: "gemini",
+      state: "FAILED",
+      prompt: "prompt",
+      title: "Sprint 1: [task-1] test",
+      taskId: "task-1",
+      featureBranch: "feature/sprint1",
+      workerBranch: "task/feature-sprint1-task-1-gemini-other",
+      repoPath: "/tmp/repo-b",
+    });
+
+    const target = repo.findLatestFailedCliSessionForTask({
+      provider: "gemini",
+      taskId: "task-1",
+      featureBranch: "feature/sprint1",
+      repoPath: "/tmp/repo-a",
+    });
+
+    expect(target).toEqual({
+      sessionId: "cli-gemini-new",
+      workerBranch: "task/feature-sprint1-task-1-gemini-new",
+    });
+  });
 });

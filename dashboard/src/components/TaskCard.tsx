@@ -30,6 +30,19 @@ export const TaskCard: FunctionComponent<TaskCardProps> = ({ task }) => {
   const hasSession = Boolean(task.session_id || task.session_name);
   const sessionLabel = (task.session_id || task.session_name || "").replace(/^sessions\//, "");
   const providerLabel = task.provider ? task.provider.toUpperCase() : "JULES";
+  const getOriginatorClasses = (originator?: string): { border: string; text: string } => {
+    const normalized = (originator || "system").toLowerCase();
+    if (normalized === "agent") {
+      return { border: "border-sky-500/30", text: "text-sky-400" };
+    }
+    if (normalized === "user") {
+      return { border: "border-emerald-500/30", text: "text-emerald-400" };
+    }
+    if (normalized === "provider") {
+      return { border: "border-amber-500/30", text: "text-amber-400" };
+    }
+    return { border: "border-slate-700", text: "text-slate-400" };
+  };
 
   return (
     <div className="bg-slate-900/50 backdrop-blur-md border border-slate-800 p-5 rounded-2xl hover:bg-slate-900/80 transition-all duration-300 group">
@@ -79,11 +92,13 @@ export const TaskCard: FunctionComponent<TaskCardProps> = ({ task }) => {
                 {!task.activities || task.activities.length === 0 ? (
                   <p className="text-[10px] text-slate-600 italic">Connecting to session logs...</p>
                 ) : (
-                  task.activities.map((activity) => (
-                    <div key={activity.id} className={`flex gap-3 text-xs border-l-2 ${activity.originator === "agent" ? "border-sky-500/30" : activity.originator === "user" ? "border-emerald-500/30" : "border-slate-700"} pl-3 py-1`}>
+                  task.activities.map((activity) => {
+                    const originatorClasses = getOriginatorClasses(activity.originator);
+                    return (
+                    <div key={activity.id} className={`flex gap-3 text-xs border-l-2 ${originatorClasses.border} pl-3 py-1`}>
                       <div className="flex-grow">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className={`font-bold text-[10px] ${activity.originator === "agent" ? "text-sky-400" : activity.originator === "user" ? "text-emerald-400" : "text-slate-400"} uppercase`}>
+                          <span className={`font-bold text-[10px] ${originatorClasses.text} uppercase`}>
                             {activity.originator || "system"}
                           </span>
                           <span className="text-[9px] text-slate-600 font-mono">{formatTime(activity.createTime)}</span>
@@ -93,7 +108,8 @@ export const TaskCard: FunctionComponent<TaskCardProps> = ({ task }) => {
                         </div>
                       </div>
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

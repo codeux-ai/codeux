@@ -96,6 +96,13 @@ export interface SprintLoopStepSettings {
   watchLoop: boolean;
 }
 
+export interface CliWorkflowSettings {
+  cleanupWorktreeOnSuccess: boolean;
+  cleanupWorktreeOnFailure: boolean;
+  retryOnReadFileNotFound: boolean;
+  resumeFailedTaskInSameWorkspace: boolean;
+}
+
 export interface SkillToggle {
   name: string;
   enabled: boolean;
@@ -108,6 +115,7 @@ export interface DashboardSettings {
   git: GitSettings;
   ciIntelligence: CiIntelligenceSettings;
   sprintLoopSteps: SprintLoopStepSettings;
+  cliWorkflow: CliWorkflowSettings;
   skills: SkillToggle[];
 }
 

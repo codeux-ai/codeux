@@ -102,6 +102,12 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     statusTable: true,
     watchLoop: true,
   },
+  cliWorkflow: {
+    cleanupWorktreeOnSuccess: true,
+    cleanupWorktreeOnFailure: false,
+    retryOnReadFileNotFound: true,
+    resumeFailedTaskInSameWorkspace: true,
+  },
   skills: DEFAULT_SKILLS,
 };
 
@@ -203,6 +209,9 @@ const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardSettings
   },
   sprintLoopSteps: {
     ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps,
+  },
+  cliWorkflow: {
+    ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow,
   },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
 });
@@ -330,6 +339,28 @@ const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints)
     watchLoop: readBoolean(loopInput.watchLoop, DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps.watchLoop),
   };
 
+  const cliInput = (input.cliWorkflow && typeof input.cliWorkflow === "object"
+    ? input.cliWorkflow
+    : {}) as Partial<DashboardSettings["cliWorkflow"]>;
+  const cliWorkflow = {
+    cleanupWorktreeOnSuccess: readBoolean(
+      cliInput.cleanupWorktreeOnSuccess,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.cleanupWorktreeOnSuccess
+    ),
+    cleanupWorktreeOnFailure: readBoolean(
+      cliInput.cleanupWorktreeOnFailure,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.cleanupWorktreeOnFailure
+    ),
+    retryOnReadFileNotFound: readBoolean(
+      cliInput.retryOnReadFileNotFound,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.retryOnReadFileNotFound
+    ),
+    resumeFailedTaskInSameWorkspace: readBoolean(
+      cliInput.resumeFailedTaskInSameWorkspace,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.resumeFailedTaskInSameWorkspace
+    ),
+  };
+
   const normalizedSkills = enforceGitManagerSkillset(sanitizeSkills(input.skills), git.githubMode);
 
   return {
@@ -338,6 +369,7 @@ const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints)
     git,
     ciIntelligence,
     sprintLoopSteps,
+    cliWorkflow,
     skills: normalizedSkills,
   };
 };

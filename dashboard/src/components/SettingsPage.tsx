@@ -641,6 +641,84 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
         </article>
 
         <article className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-2xl p-5 space-y-4">
+          <h3 className="text-sm font-bold text-white">CLI Workflow</h3>
+          <p className="text-xs text-slate-500">
+            Controls background Gemini/Codex worktree lifecycle and retry behavior.
+          </p>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">
+            <span className="text-sm text-slate-200">Cleanup worktree on success</span>
+            <input
+              type="checkbox"
+              checked={settings.cliWorkflow.cleanupWorktreeOnSuccess}
+              onChange={(event) =>
+                onChange({
+                  ...settings,
+                  cliWorkflow: {
+                    ...settings.cliWorkflow,
+                    cleanupWorktreeOnSuccess: event.currentTarget.checked,
+                  },
+                })
+              }
+              className="h-4 w-4 rounded border-slate-700 bg-slate-900"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">
+            <span className="text-sm text-slate-200">Cleanup worktree on failure</span>
+            <input
+              type="checkbox"
+              checked={settings.cliWorkflow.cleanupWorktreeOnFailure}
+              onChange={(event) =>
+                onChange({
+                  ...settings,
+                  cliWorkflow: {
+                    ...settings.cliWorkflow,
+                    cleanupWorktreeOnFailure: event.currentTarget.checked,
+                  },
+                })
+              }
+              className="h-4 w-4 rounded border-slate-700 bg-slate-900"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">
+            <span className="text-sm text-slate-200">Retry once on `read_file` not found</span>
+            <input
+              type="checkbox"
+              checked={settings.cliWorkflow.retryOnReadFileNotFound}
+              onChange={(event) =>
+                onChange({
+                  ...settings,
+                  cliWorkflow: {
+                    ...settings.cliWorkflow,
+                    retryOnReadFileNotFound: event.currentTarget.checked,
+                  },
+                })
+              }
+              className="h-4 w-4 rounded border-slate-700 bg-slate-900"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">
+            <span className="text-sm text-slate-200">Resume failed task in same workspace</span>
+            <input
+              type="checkbox"
+              checked={settings.cliWorkflow.resumeFailedTaskInSameWorkspace}
+              onChange={(event) =>
+                onChange({
+                  ...settings,
+                  cliWorkflow: {
+                    ...settings.cliWorkflow,
+                    resumeFailedTaskInSameWorkspace: event.currentTarget.checked,
+                  },
+                })
+              }
+              className="h-4 w-4 rounded border-slate-700 bg-slate-900"
+            />
+          </label>
+          <p className="text-[11px] text-slate-500">
+            Recommended default: keep failed worktrees for recovery and disable automatic cleanup on failure.
+          </p>
+        </article>
+
+        <article className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-2xl p-5 space-y-4">
           <h3 className="text-sm font-bold text-white">Skills</h3>
           {!internalSkillsUnlocked && (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">

@@ -32,6 +32,11 @@ interface SessionIdRow {
   id: string;
 }
 
+export interface FailedCliSessionResumeTarget {
+  sessionId: string;
+  workerBranch: string;
+}
+
 export interface CreateTrackedSessionInput {
   id: string;
   provider: ProviderId;
@@ -229,6 +234,40 @@ export class SessionTrackingRepository {
       ORDER BY create_time ASC
     `).all(toSessionId(sessionId)) as unknown as ActivityRow[];
     return rows.map((row) => this.rowToActivity(sessionId, row));
+  }
+
+  findLatestFailedCliSessionForTask(args: {
+    provider: Extract<ProviderId, "gemini" | "codex">;
+    taskId: string;
+    featureBranch: string;
+    repoPath: string;
+  }): FailedCliSessionResumeTarget | null {
+    const row = this.db.prepare(`
+      SELECT id, worker_branch
+      FROM provider_sessions
+      WHERE provider = ?
+        AND task_id = ?
+        AND feature_branch = ?
+        AND repo_path = ?
+        AND state = 'FAILED'
+        AND id LIKE 'cli-%'
+        AND worker_branch IS NOT NULL
+      ORDER BY create_time DESC
+      LIMIT 1
+    `).get(
+      args.provider,
+      args.taskId,
+      args.featureBranch,
+      args.repoPath
+    ) as { id?: string; worker_branch?: string } | undefined;
+
+    if (!row?.id || !row.worker_branch) {
+      return null;
+    }
+    return {
+      sessionId: row.id,
+      workerBranch: row.worker_branch,
+    };
   }
 
   recoverInterruptedCliSessions(): { recoveredCount: number; sessionIds: string[] } {
