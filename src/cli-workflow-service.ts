@@ -858,7 +858,38 @@ export class CliWorkflowService {
     if (workflowSettings.executionMode !== "DOCKER") {
       return this.runStreamingCommand(command, args, cwd, providerEnv, sessionId, providerLabel);
     }
-    return this.runProviderInDocker(command, args, cwd, providerEnv, sessionId, providerLabel, workflowSettings, repoPath);
+
+    const dockerResult = await this.runProviderInDocker(
+      command,
+      args,
+      cwd,
+      providerEnv,
+      sessionId,
+      providerLabel,
+      workflowSettings,
+      repoPath
+    );
+    if (dockerResult.ok) {
+      return dockerResult;
+    }
+
+    if (this.isDockerWorkspaceMountError(dockerResult) && await this.pathExists(cwd)) {
+      this.deps.sessionTracking.appendActivity(sessionId, {
+        originator: "system",
+        description: `Docker could not mount workspace path (${cwd}). Retrying ${providerLabel} on host process for this run.`,
+      });
+      return this.runStreamingCommand(command, args, cwd, providerEnv, sessionId, providerLabel);
+    }
+
+    return dockerResult;
+  }
+
+  private isDockerWorkspaceMountError(result: CommandResult): boolean {
+    const combined = `${result.stdout}\n${result.stderr}`.toLowerCase();
+    const bindSourceMissing = combined.includes("invalid mount config for type \"bind\"")
+      && combined.includes("bind source path does not exist");
+    const mountPermission = combined.includes("mounts denied") || combined.includes("permission denied");
+    return bindSourceMissing || mountPermission;
   }
 
   private async runGemini(
