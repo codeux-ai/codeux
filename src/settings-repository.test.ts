@@ -25,6 +25,8 @@ describe("SettingsRepository", () => {
     expect(settings.aiProvider.provider).toBe("jules");
     expect(settings.git.defaultBranch).toBe("main");
     expect(settings.git.githubMode).toBe("REMOTE");
+    expect(settings.ciIntelligence.enabled).toBe(true);
+    expect(settings.sprintLoopSteps.watchLoop).toBe(true);
     expect(settings.skills.length).toBeGreaterThan(0);
     expect(settings.skills.every((skill) => skill.isInternal)).toBe(true);
     expect(settings.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(true);
@@ -47,6 +49,25 @@ describe("SettingsRepository", () => {
         featureBranchPrefix: "work/",
         sprintBranchScheme: "feature/sprint{sprint}-implementation",
       },
+      ciIntelligence: {
+        enabled: true,
+        waitForCiBeforeMainMerge: false,
+        resolveAllCommentsBeforeMainMerge: false,
+        waitForCiBeforeFeatureMerge: true,
+        resolveAllCommentsBeforeFeatureMerge: false,
+      },
+      sprintLoopSteps: {
+        branchPreflight: true,
+        planningPreflight: true,
+        loadSubtasks: true,
+        sessionSync: true,
+        statusDerivation: true,
+        startReadyTasks: true,
+        mergeProtocol: false,
+        actionRequiredProtocol: true,
+        statusTable: true,
+        watchLoop: false,
+      },
       skills: [
         { name: "worker", enabled: false, isInternal: true },
         { name: "my-custom-skill", enabled: true, isInternal: false },
@@ -58,6 +79,8 @@ describe("SettingsRepository", () => {
     expect(saved.git.githubToken).toBe("ghp_test");
     expect(saved.git.featureBranchPrefix).toBe("work/");
     expect(saved.git.githubMode).toBe("LOCAL");
+    expect(saved.ciIntelligence.waitForCiBeforeMainMerge).toBe(false);
+    expect(saved.sprintLoopSteps.watchLoop).toBe(false);
     expect(saved.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(false);
     expect(saved.skills.find((skill) => skill.name === "git_manager_local")?.enabled).toBe(true);
 

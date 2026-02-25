@@ -96,6 +96,12 @@ This project is a production-grade **Model Context Protocol (MCP)** server for t
   - Merge only through PR after all required CI checks pass without errors.
   - Delete merged feature branches to keep the branch list clean.
 
+## Documentation Workflow (Mandatory)
+- Documentation source of truth lives in `docs/` with the main entrypoint at `docs/index.md`.
+- The assistant must read relevant documentation at any time during task execution, especially before architectural or behavioral changes.
+- After each finished task, the assistant must extend or rewrite the affected documentation pages so docs remain current with code behavior.
+- If a new feature or subsystem is introduced, add a dedicated page under the correct `docs/` section and link it from both `docs/index.md` and `docs/SUMMARY.md`.
+
 ## Frontend Design Quality
 - Treat dashboard UX as production-grade: polished, accessible, and visually distinctive.
 - Avoid generic UI defaults; use intentional typography, spacing, color systems, and interaction states.

@@ -1,0 +1,56 @@
+# Testing and Quality
+
+This guide describes how to validate changes safely.
+
+## Core Commands
+
+- Run tests
+```bash
+npm test
+```
+
+- Build backend and dashboard
+```bash
+npm run build
+```
+
+- Run dashboard typecheck only
+```bash
+npm run typecheck:dashboard
+```
+
+## Test Coverage Areas
+
+### Backend
+- Sprint orchestration behavior
+- Settings repository defaults and persistence
+- Git status service parsing
+- Task service prompt construction
+- Instruction template rendering and fallback behavior
+
+### Dashboard
+- Settings default cloning
+- Activity helpers
+- Status helpers
+
+## Quality Expectations
+
+1. Keep strict TypeScript compatibility.
+2. Preserve existing tool contracts unless intentional migration.
+3. Add tests for behavioral changes.
+4. Validate both server and dashboard build.
+
+## Safe Refactor Pattern
+
+1. Add or update tests first for expected behavior.
+2. Isolate changes by layer.
+3. Run tests after each major phase.
+4. Run full build before finalizing.
+
+## Critical Regression Risks
+
+- Tool name or schema drift from `src/tools.ts`
+- Dashboard/backend type mismatch for settings
+- Instruction template key mismatch
+- Step toggle defaults becoming unsafe
+- Search path precedence changes affecting overrides

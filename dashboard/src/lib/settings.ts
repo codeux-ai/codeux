@@ -14,6 +14,25 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     featureBranchPrefix: "feature/",
     sprintBranchScheme: "feature/sprint{sprint}-implementation",
   },
+  ciIntelligence: {
+    enabled: true,
+    waitForCiBeforeMainMerge: true,
+    resolveAllCommentsBeforeMainMerge: true,
+    waitForCiBeforeFeatureMerge: true,
+    resolveAllCommentsBeforeFeatureMerge: true,
+  },
+  sprintLoopSteps: {
+    branchPreflight: true,
+    planningPreflight: true,
+    loadSubtasks: true,
+    sessionSync: true,
+    statusDerivation: true,
+    startReadyTasks: true,
+    mergeProtocol: true,
+    actionRequiredProtocol: true,
+    statusTable: true,
+    watchLoop: true,
+  },
   skills: [
     { name: "orchestrator", enabled: true, isInternal: true },
     { name: "worker", enabled: true, isInternal: true },
@@ -30,5 +49,7 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
   automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
   aiProvider: { ...DEFAULT_DASHBOARD_SETTINGS.aiProvider },
   git: { ...DEFAULT_DASHBOARD_SETTINGS.git },
+  ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence },
+  sprintLoopSteps: { ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
 });

@@ -75,6 +75,25 @@ export interface DashboardSettings {
     featureBranchPrefix: string;
     sprintBranchScheme: string;
   };
+  ciIntelligence: {
+    enabled: boolean;
+    waitForCiBeforeMainMerge: boolean;
+    resolveAllCommentsBeforeMainMerge: boolean;
+    waitForCiBeforeFeatureMerge: boolean;
+    resolveAllCommentsBeforeFeatureMerge: boolean;
+  };
+  sprintLoopSteps: {
+    branchPreflight: boolean;
+    planningPreflight: boolean;
+    loadSubtasks: boolean;
+    sessionSync: boolean;
+    statusDerivation: boolean;
+    startReadyTasks: boolean;
+    mergeProtocol: boolean;
+    actionRequiredProtocol: boolean;
+    statusTable: boolean;
+    watchLoop: boolean;
+  };
   skills: SkillToggle[];
 }
 
