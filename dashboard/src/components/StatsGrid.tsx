@@ -13,10 +13,14 @@ const Tile: FunctionComponent<{ label: string; value: number; tone: string }> = 
 );
 
 export const StatsGrid: FunctionComponent<StatsGridProps> = ({ stats }) => (
-  <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+  <section className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4 mb-8">
     <Tile label="Total" value={stats.total} tone="text-white" />
     <Tile label="Running" value={stats.running} tone="text-sky-400" />
     <Tile label="Completed" value={stats.completed} tone="text-emerald-400" />
     <Tile label="Failed" value={stats.failed} tone="text-red-400" />
+    <Tile label="CI" value={stats.ci} tone="text-cyan-300" />
+    <Tile label="Automerge" value={stats.automerge} tone="text-lime-300" />
+    <Tile label="Merged" value={stats.merged} tone="text-emerald-300" />
+    <Tile label="Merge Blocked" value={stats.mergeBlocked} tone="text-amber-300" />
   </section>
 );

@@ -289,6 +289,10 @@ export class SprintOrchestrator {
       githubMode: "REMOTE" | "LOCAL";
     }
   ): Promise<{ subtasks: Subtask[]; reportText: string }> {
+    for (const task of subtasks) {
+      task.merge_indicator = task.is_merged ? "MERGED" : undefined;
+    }
+
     if (
       !args.ciIntelligence.enabled ||
       !args.ciIntelligence.enableLivePrMonitoring ||
@@ -343,6 +347,7 @@ export class SprintOrchestrator {
           const mergeResult = await this.deps.autoMergeFeaturePr({ repoPath: args.repoPath, prNumber: pr.number });
           if (mergeResult.ok) {
             task.is_merged = true;
+            task.merge_indicator = "AUTOMERGE";
             await this.persistTaskMergedFlag(args.subtasksDir, task.id);
             reportText += `🤖 **Auto-Merged:** Task \`${task.id}\` wurde automatisch gemerged (PR #${pr.number}).\n`;
           } else {
@@ -351,11 +356,13 @@ export class SprintOrchestrator {
           }
           continue;
         }
+        task.merge_indicator = task.is_merged ? "MERGED" : undefined;
         reportText += `✅ **Feature PR Ready:** Task \`${task.id}\` kann für Merge in \`${args.featureBranch}\` freigegeben werden (PR #${pr.number}).\n`;
         continue;
       }
 
       task.status = "RUNNING";
+      task.merge_indicator = hasReviewBlockers && !hasFailedChecks && !hasPendingChecks ? "MERGE_BLOCKED" : "CI";
       const ciStateLabel = hasFailedChecks ? "failed" : hasPendingChecks ? "pending" : "green";
       const header = args.ciIntelligence.waitForJulesCiAutofix ? "CI/Review Autofix Wait" : "CI/Review Merge Gate";
       reportText += `⏳ **${header}:** Task \`${task.id}\` bleibt in Arbeit (PR #${pr.number}, Branch \`${workerBranch}\`).\n`;

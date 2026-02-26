@@ -3,7 +3,7 @@ import { useState } from "preact/hooks";
 import { renderMarkdown } from "../lib/markdown.js";
 import { formatTime } from "../lib/time.js";
 import { getActivityText } from "../lib/activity.js";
-import type { Subtask } from "../types.js";
+import type { Subtask, SubtaskMergeIndicator } from "../types.js";
 
 interface TaskCardProps {
   task: Subtask;
@@ -19,6 +19,21 @@ const getStatusColor = (status?: string): string => {
       return "bg-red-500/10 text-red-400 border-red-500/20";
     case "BLOCKED":
       return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+    default:
+      return "bg-slate-800/50 text-slate-400 border-slate-700";
+  }
+};
+
+const getIndicatorColor = (indicator?: SubtaskMergeIndicator): string => {
+  switch (indicator) {
+    case "CI":
+      return "bg-cyan-500/10 text-cyan-300 border-cyan-500/20";
+    case "AUTOMERGE":
+      return "bg-lime-500/10 text-lime-300 border-lime-500/20";
+    case "MERGED":
+      return "bg-emerald-500/10 text-emerald-300 border-emerald-500/20";
+    case "MERGE_BLOCKED":
+      return "bg-amber-500/10 text-amber-300 border-amber-500/20";
     default:
       return "bg-slate-800/50 text-slate-400 border-slate-700";
   }
@@ -128,6 +143,11 @@ export const TaskCard: FunctionComponent<TaskCardProps> = ({ task }) => {
           <span className={`px-3 py-1 rounded-full text-[10px] font-bold border transition-all duration-500 ${getStatusColor(task.status)}`}>
             {task.status}
           </span>
+          {task.merge_indicator && (
+            <span className={`px-3 py-1 rounded-full text-[10px] font-bold border ${getIndicatorColor(task.merge_indicator)}`}>
+              {task.merge_indicator}
+            </span>
+          )}
           {hasSession && <div className="text-[9px] font-mono text-slate-600">{sessionLabel.substring(0, 12)}...</div>}
           <div className="text-[9px] font-mono text-slate-600">{providerLabel}</div>
         </div>

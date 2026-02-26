@@ -16,4 +16,8 @@ export const computeStats = (tasks: Subtask[]): DashboardStats => ({
   running: tasks.filter((task) => task.status === "RUNNING").length,
   completed: tasks.filter((task) => task.status === "COMPLETED").length,
   failed: tasks.filter((task) => task.status === "FAILED").length,
+  ci: tasks.filter((task) => task.merge_indicator === "CI").length,
+  automerge: tasks.filter((task) => task.merge_indicator === "AUTOMERGE").length,
+  merged: tasks.filter((task) => task.merge_indicator === "MERGED" || task.is_merged).length,
+  mergeBlocked: tasks.filter((task) => task.merge_indicator === "MERGE_BLOCKED").length,
 });
