@@ -15,7 +15,7 @@ export interface JulesActivity {
 }
 
 export type TaskStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED";
-export type ProviderId = "jules" | "gemini" | "codex";
+export type ProviderId = "jules" | "gemini" | "codex" | "claude-code";
 export type ProviderStrategy = "MANUAL" | "WEIGHTED" | "ORCHESTRATOR";
 export type ThinkingMode = "SMALL" | "MEDIUM" | "HIGH";
 export type CliExecutionMode = "HOST" | "DOCKER";
@@ -124,9 +124,11 @@ export interface DashboardSettings {
     containerMountGithubAuth: boolean;
     containerMountGeminiAuth: boolean;
     containerMountCodexAuth: boolean;
+    containerMountClaudeCodeAuth: boolean;
     containerGithubAuthPath: string;
     containerGeminiAuthPath: string;
     containerCodexAuthPath: string;
+    containerClaudeCodeAuthPath: string;
   };
   skills: SkillToggle[];
 }
@@ -202,18 +204,21 @@ export interface ExternalSettingsHints {
     julesApiKey: string;
     geminiApiKey: string;
     codexApiKey: string;
+    claudeCodeApiKey: string;
     githubToken: string;
   };
   settingsJson: {
     julesApiKey: string;
     geminiApiKey: string;
     codexApiKey: string;
+    claudeCodeApiKey: string;
     githubToken: string;
   };
   resolved: {
     julesApiKey: string;
     geminiApiKey: string;
     codexApiKey: string;
+    claudeCodeApiKey: string;
     githubToken: string;
   };
 }

@@ -1,6 +1,6 @@
 import type { DashboardSettings, ProviderId, Subtask } from "./types.js";
 
-const PROVIDER_ORDER: ProviderId[] = ["jules", "gemini", "codex"];
+const PROVIDER_ORDER: ProviderId[] = ["jules", "gemini", "codex", "claude-code"];
 
 const hashString = (value: string): number => {
   let hash = 0;
@@ -40,6 +40,9 @@ const chooseOrchestratedProvider = (settings: DashboardSettings, task: Subtask, 
   const longPrompt = task.prompt.length > 800;
   const simplePrompt = task.prompt.length < 260;
 
+  if ((complexKeyword || longPrompt || dependencyCount > 1) && enabledProviders.includes("claude-code")) {
+    return "claude-code";
+  }
   if ((complexKeyword || longPrompt || dependencyCount > 1) && enabledProviders.includes("codex")) {
     return "codex";
   }

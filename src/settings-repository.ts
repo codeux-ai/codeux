@@ -36,7 +36,7 @@ const DEFAULT_SKILLS: SkillToggle[] = INTERNAL_SKILL_NAMES.map((name) => ({
   isInternal: true,
 }));
 
-const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex"];
+const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-code"];
 const THINKING_MODES: ThinkingMode[] = ["SMALL", "MEDIUM", "HIGH"];
 const PROVIDER_STRATEGIES: ProviderStrategy[] = ["MANUAL", "WEIGHTED", "ORCHESTRATOR"];
 const CLI_EXECUTION_MODES: CliExecutionMode[] = ["HOST", "DOCKER"];
@@ -65,6 +65,13 @@ const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     thinkingMode: "HIGH",
     apiKey: "",
   },
+  "claude-code": {
+    enabled: false,
+    model: "default",
+    weight: 0,
+    thinkingMode: "HIGH",
+    apiKey: "",
+  },
 };
 
 export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
@@ -76,6 +83,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       jules: { ...DEFAULT_PROVIDER_SETTINGS.jules },
       gemini: { ...DEFAULT_PROVIDER_SETTINGS.gemini },
       codex: { ...DEFAULT_PROVIDER_SETTINGS.codex },
+      "claude-code": { ...DEFAULT_PROVIDER_SETTINGS["claude-code"] },
     },
     julesApiKey: "",
   },
@@ -120,9 +128,11 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     containerMountGithubAuth: true,
     containerMountGeminiAuth: true,
     containerMountCodexAuth: true,
+    containerMountClaudeCodeAuth: true,
     containerGithubAuthPath: "~/.config/gh",
     containerGeminiAuthPath: "~/.gemini",
     containerCodexAuthPath: "~/.codex",
+    containerClaudeCodeAuthPath: "~/.claude",
   },
   skills: DEFAULT_SKILLS,
 };
@@ -216,6 +226,10 @@ const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardSettings
         ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.codex,
         apiKey: externalHints?.resolved.codexApiKey || DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.codex.apiKey,
       },
+      "claude-code": {
+        ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["claude-code"],
+        apiKey: externalHints?.resolved.claudeCodeApiKey || DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["claude-code"].apiKey,
+      },
     },
     julesApiKey: externalHints?.resolved.julesApiKey || DEFAULT_DASHBOARD_SETTINGS.aiProvider.julesApiKey,
   },
@@ -244,6 +258,7 @@ const normalizeProviderSettings = (
     jules: { ...DEFAULT_PROVIDER_SETTINGS.jules },
     gemini: { ...DEFAULT_PROVIDER_SETTINGS.gemini },
     codex: { ...DEFAULT_PROVIDER_SETTINGS.codex },
+    "claude-code": { ...DEFAULT_PROVIDER_SETTINGS["claude-code"] },
   };
 
   for (const providerId of PROVIDER_IDS) {
@@ -252,7 +267,9 @@ const normalizeProviderSettings = (
       ? (julesApiKeyFallback || externalHints?.resolved.julesApiKey || "")
       : providerId === "gemini"
         ? (externalHints?.resolved.geminiApiKey || "")
-        : (externalHints?.resolved.codexApiKey || "");
+        : providerId === "claude-code"
+          ? (externalHints?.resolved.claudeCodeApiKey || "")
+          : (externalHints?.resolved.codexApiKey || "");
 
     const normalizedThinkingMode = THINKING_MODES.includes(source?.thinkingMode as ThinkingMode)
       ? (source?.thinkingMode as ThinkingMode)
@@ -418,6 +435,10 @@ const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints)
       cliInput.containerMountCodexAuth,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerMountCodexAuth
     ),
+    containerMountClaudeCodeAuth: readBoolean(
+      cliInput.containerMountClaudeCodeAuth,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerMountClaudeCodeAuth
+    ),
     containerGithubAuthPath: readString(
       cliInput.containerGithubAuthPath,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerGithubAuthPath
@@ -430,6 +451,10 @@ const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints)
       cliInput.containerCodexAuthPath,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerCodexAuthPath
     ).trim() || DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerCodexAuthPath,
+    containerClaudeCodeAuthPath: readString(
+      cliInput.containerClaudeCodeAuthPath,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerClaudeCodeAuthPath
+    ).trim() || DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerClaudeCodeAuthPath,
   };
 
   const normalizedSkills = enforceGitManagerSkillset(sanitizeSkills(input.skills), git.githubMode);

@@ -23,6 +23,7 @@ const providerOptions: Array<{ value: DashboardSettings["aiProvider"]["provider"
   { value: "jules", label: "Jules" },
   { value: "gemini", label: "Gemini CLI" },
   { value: "codex", label: "Codex CLI" },
+  { value: "claude-code", label: "Claude Code" },
 ];
 
 const providerStrategyOptions: Array<{ value: DashboardSettings["aiProvider"]["strategy"]; label: string }> = [
@@ -49,6 +50,13 @@ const geminiModelOptions = [
   "gemini-3-flash-preview",
   "gemini-2.5-pro",
   "gemini-2.5-flash",
+] as const;
+
+const claudeCodeModelOptions = [
+  "default",
+  "claude-opus-4-6",
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5",
 ] as const;
 
 type SprintLoopToggleKey = Exclude<keyof DashboardSettings["sprintLoopSteps"], "watchLoopIntervalSeconds">;
@@ -227,6 +235,7 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
             {providerOptions.map((provider) => {
               const providerConfig = settings.aiProvider.providers[provider.value];
               const isGemini = provider.value === "gemini";
+              const isClaudeCode = provider.value === "claude-code";
               return (
                 <div key={provider.value} className="rounded-lg border border-slate-700/70 bg-slate-950/50 p-3 space-y-2">
                   <div className="flex items-center justify-between gap-3">
@@ -279,6 +288,30 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
                           className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
                         >
                           {geminiModelOptions.map((model) => (
+                            <option key={model} value={model}>{model}</option>
+                          ))}
+                        </select>
+                      ) : isClaudeCode ? (
+                        <select
+                          value={providerConfig.model}
+                          onChange={(event) =>
+                            onChange({
+                              ...settings,
+                              aiProvider: {
+                                ...settings.aiProvider,
+                                providers: {
+                                  ...settings.aiProvider.providers,
+                                  [provider.value]: {
+                                    ...providerConfig,
+                                    model: event.currentTarget.value,
+                                  },
+                                },
+                              },
+                            })
+                          }
+                          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+                        >
+                          {claudeCodeModelOptions.map((model) => (
                             <option key={model} value={model}>{model}</option>
                           ))}
                         </select>
@@ -379,7 +412,7 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
                           },
                         })
                       }
-                      placeholder={provider.value === "gemini" ? "GEMINI_API_KEY" : provider.value === "codex" ? "OPENAI_API_KEY" : "JULES_API_KEY"}
+                      placeholder={provider.value === "gemini" ? "GEMINI_API_KEY" : provider.value === "codex" ? "OPENAI_API_KEY" : provider.value === "claude-code" ? "ANTHROPIC_API_KEY" : "JULES_API_KEY"}
                       className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
                     />
                   </label>
@@ -670,7 +703,7 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
         <article className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-2xl p-5 space-y-4">
           <h3 className="text-sm font-bold text-white">CLI Workflow</h3>
           <p className="text-xs text-slate-500">
-            Controls background Gemini/Codex worktree lifecycle and retry behavior.
+            Controls background Gemini/Codex/Claude Code worktree lifecycle and retry behavior.
           </p>
           <label className="block space-y-2">
             <span className="text-xs text-slate-400">Execution Mode</span>
@@ -890,6 +923,24 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
                   className="h-4 w-4 rounded border-slate-700 bg-slate-900 disabled:opacity-50"
                 />
               </label>
+              <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">
+                <span className="text-sm text-slate-200">Mount Claude Code auth</span>
+                <input
+                  type="checkbox"
+                  checked={settings.cliWorkflow.containerMountClaudeCodeAuth}
+                  disabled={!settings.cliWorkflow.containerMountCredentials}
+                  onChange={(event) =>
+                    onChange({
+                      ...settings,
+                      cliWorkflow: {
+                        ...settings.cliWorkflow,
+                        containerMountClaudeCodeAuth: event.currentTarget.checked,
+                      },
+                    })
+                  }
+                  className="h-4 w-4 rounded border-slate-700 bg-slate-900 disabled:opacity-50"
+                />
+              </label>
               <div className="grid grid-cols-1 gap-2">
                 <label className="block space-y-1">
                   <span className="text-[11px] text-slate-500">GitHub auth path</span>
@@ -945,6 +996,25 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
                       })
                     }
                     placeholder="~/.codex"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[11px] text-slate-500">Claude Code auth path</span>
+                  <input
+                    type="text"
+                    value={settings.cliWorkflow.containerClaudeCodeAuthPath}
+                    disabled={!settings.cliWorkflow.containerMountCredentials || !settings.cliWorkflow.containerMountClaudeCodeAuth}
+                    onInput={(event) =>
+                      onChange({
+                        ...settings,
+                        cliWorkflow: {
+                          ...settings.cliWorkflow,
+                          containerClaudeCodeAuthPath: event.currentTarget.value,
+                        },
+                      })
+                    }
+                    placeholder="~/.claude"
                     className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
                   />
                 </label>
