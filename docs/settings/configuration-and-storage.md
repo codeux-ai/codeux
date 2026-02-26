@@ -84,6 +84,9 @@ Frontend contract:
   - `containerGeminiAuthPath` (default `~/.gemini`)
   - `containerCodexAuthPath` (default `~/.codex`)
 
+`sprintLoopSteps` also includes:
+- `watchLoopIntervalSeconds` (default `120`, clamped to `10..3600`)
+
 Repository demo script:
 - `.jules-subagents/container/setup.sh` is included as a baseline bootstrap script.
 - It installs/updates `npm`, ensures `git` + `gh`, installs `pnpm`, `@google/gemini-cli`, `@openai/codex`, and Playwright Chromium (+ deps when root/apt is available).

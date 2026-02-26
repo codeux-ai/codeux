@@ -56,6 +56,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     actionRequiredProtocol: true,
     statusTable: true,
     watchLoop: true,
+    watchLoopIntervalSeconds: 120,
   },
   cliWorkflow: {
     cleanupWorktreeOnSuccess: true,

@@ -40,6 +40,8 @@ const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex"];
 const THINKING_MODES: ThinkingMode[] = ["SMALL", "MEDIUM", "HIGH"];
 const PROVIDER_STRATEGIES: ProviderStrategy[] = ["MANUAL", "WEIGHTED", "ORCHESTRATOR"];
 const CLI_EXECUTION_MODES: CliExecutionMode[] = ["HOST", "DOCKER"];
+const MIN_WATCH_LOOP_INTERVAL_SECONDS = 10;
+const MAX_WATCH_LOOP_INTERVAL_SECONDS = 3600;
 
 const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
   jules: {
@@ -103,6 +105,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     actionRequiredProtocol: true,
     statusTable: true,
     watchLoop: true,
+    watchLoopIntervalSeconds: 120,
   },
   cliWorkflow: {
     cleanupWorktreeOnSuccess: true,
@@ -130,6 +133,8 @@ const LEGACY_SETTINGS_DB_PATH = path.join(os.homedir(), "jules-subagents", "sett
 
 const readBoolean = (value: unknown, fallback: boolean): boolean => (typeof value === "boolean" ? value : fallback);
 const readString = (value: unknown, fallback: string): string => (typeof value === "string" ? value : fallback);
+const readInteger = (value: unknown, fallback: number): number =>
+  (typeof value === "number" && Number.isFinite(value) ? Math.round(value) : fallback);
 
 const resolveSettingsDbPath = (dbPath?: string): string => {
   if (dbPath && dbPath.trim().length > 0) {
@@ -351,6 +356,13 @@ const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints)
     actionRequiredProtocol: readBoolean(loopInput.actionRequiredProtocol, DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps.actionRequiredProtocol),
     statusTable: readBoolean(loopInput.statusTable, DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps.statusTable),
     watchLoop: readBoolean(loopInput.watchLoop, DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps.watchLoop),
+    watchLoopIntervalSeconds: Math.min(
+      MAX_WATCH_LOOP_INTERVAL_SECONDS,
+      Math.max(
+        MIN_WATCH_LOOP_INTERVAL_SECONDS,
+        readInteger(loopInput.watchLoopIntervalSeconds, DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps.watchLoopIntervalSeconds)
+      )
+    ),
   };
 
   const cliInput = (input.cliWorkflow && typeof input.cliWorkflow === "object"

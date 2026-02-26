@@ -51,7 +51,8 @@ const geminiModelOptions = [
   "gemini-2.5-flash",
 ] as const;
 
-const loopStepOptions: Array<{ key: keyof DashboardSettings["sprintLoopSteps"]; label: string; detail: string }> = [
+type SprintLoopToggleKey = Exclude<keyof DashboardSettings["sprintLoopSteps"], "watchLoopIntervalSeconds">;
+const loopStepOptions: Array<{ key: SprintLoopToggleKey; label: string; detail: string }> = [
   { key: "branchPreflight", label: "Branch Preflight", detail: "Validate local/remote sprint branch before orchestration." },
   { key: "planningPreflight", label: "Planning Preflight", detail: "Block status/orchestration when no sprint subtasks exist." },
   { key: "loadSubtasks", label: "Load Subtasks", detail: "Read sprint subtask markdown files from disk." },
@@ -618,6 +619,28 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
           <p className="text-xs text-slate-500">
             Every sprint loop step is independently toggleable for custom orchestration flows.
           </p>
+          <label className="block space-y-2">
+            <span className="text-xs text-slate-400">Watch Loop Interval (seconds)</span>
+            <input
+              type="number"
+              min={10}
+              max={3600}
+              value={settings.sprintLoopSteps.watchLoopIntervalSeconds}
+              onInput={(event) =>
+                onChange({
+                  ...settings,
+                  sprintLoopSteps: {
+                    ...settings.sprintLoopSteps,
+                    watchLoopIntervalSeconds: Number(event.currentTarget.value),
+                  },
+                })
+              }
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+            />
+            <p className="text-[11px] text-slate-500">
+              Controls pause duration between watch-loop cycles. Lower values give faster updates but increase background activity.
+            </p>
+          </label>
           <div className="space-y-2">
             {loopStepOptions.map((step) => (
               <label key={step.key} className="flex items-start justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">

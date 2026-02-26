@@ -31,6 +31,7 @@ const DEFAULT_STEP_SETTINGS: SprintLoopStepSettings = {
   actionRequiredProtocol: true,
   statusTable: true,
   watchLoop: true,
+  watchLoopIntervalSeconds: 120,
 };
 
 const DEFAULT_CI_SETTINGS: CiIntelligenceSettings = {
@@ -284,6 +285,7 @@ export class SprintOrchestrator {
 
     const shouldWait = args.wait !== undefined ? args.wait : (args.action === "status" || args.action === "orchestrate");
     const watchEnabled = shouldWait && loopSteps.watchLoop;
+    const watchLoopIntervalMs = Math.max(10, loopSteps.watchLoopIntervalSeconds) * 1000;
 
     if (watchEnabled) {
       let allFinished = false;
@@ -382,7 +384,7 @@ export class SprintOrchestrator {
 
           fullReport += "\n✅ **Sprint Execution Finished.**\n";
         } else {
-          await new Promise((resolve) => setTimeout(resolve, 120 * 1000));
+          await new Promise((resolve) => setTimeout(resolve, watchLoopIntervalMs));
         }
       }
 
