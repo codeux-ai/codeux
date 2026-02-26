@@ -183,4 +183,68 @@ describe("CoreToolHandler compact responses", () => {
     expect(listAllSourcesParsed.sources[0]).toEqual({ id: "sources/2", name: "sources/2" });
     expect(listAllSourcesParsed.sources[0].gigantic).toBeUndefined();
   });
+
+  it("returns compact get_source, create_session, and action responses", async () => {
+    const { deps } = buildDeps();
+    const handler = new CoreToolHandler(deps as any);
+    const getSource = vi.fn();
+    const createSession = vi.fn();
+    const approveSessionPlan = vi.fn();
+    const sendSessionMessage = vi.fn();
+    deps.julesApi.getSource = getSource;
+    deps.julesApi.createSession = createSession;
+    deps.julesApi.approveSessionPlan = approveSessionPlan;
+    deps.julesApi.sendSessionMessage = sendSessionMessage;
+
+    getSource.mockResolvedValue({
+      id: "sources/123",
+      name: "sources/123",
+      huge: { payload: "x".repeat(2000) },
+    });
+    createSession.mockResolvedValue({
+      id: "sessions/new",
+      name: "sessions/new",
+      title: "New session",
+      state: "RUNNING",
+      provider: "jules",
+      prompt: "very large prompt",
+      outputs: [{ pullRequest: { url: "https://example.com/pr/new" } }],
+    });
+    approveSessionPlan.mockResolvedValue({
+      id: "sessions/new",
+      state: "RUNNING",
+      huge: { payload: "x".repeat(2000) },
+    });
+    sendSessionMessage.mockResolvedValue({
+      id: "sessions/new",
+      state: "RUNNING",
+      message: "ok",
+      huge: { payload: "x".repeat(2000) },
+    });
+
+    const sourceResponse = await handler.handleGetSource({ source_id: "123" });
+    const createResponse = await handler.handleCreateSession({ prompt: "run", source: "123" });
+    const approveResponse = await handler.handleApproveSessionPlan({ session_id: "new" });
+    const messageResponse = await handler.handleSendSessionMessage({ session_id: "new", prompt: "continue" });
+
+    const sourceParsed = JSON.parse(sourceResponse.content[0].text as string);
+    const createParsed = JSON.parse(createResponse.content[0].text as string);
+    const approveParsed = JSON.parse(approveResponse.content[0].text as string);
+    const messageParsed = JSON.parse(messageResponse.content[0].text as string);
+
+    expect(sourceParsed).toEqual({ id: "sources/123", name: "sources/123" });
+    expect(sourceParsed.huge).toBeUndefined();
+
+    expect(createParsed.id).toBe("sessions/new");
+    expect(createParsed.hasPullRequest).toBe(true);
+    expect(createParsed.prompt).toBeUndefined();
+
+    expect(approveParsed.action).toBe("approve_session_plan");
+    expect(approveParsed.id).toBe("sessions/new");
+    expect(approveParsed.huge).toBeUndefined();
+
+    expect(messageParsed.action).toBe("send_session_message");
+    expect(messageParsed.message).toBe("ok");
+    expect(messageParsed.huge).toBeUndefined();
+  });
 });

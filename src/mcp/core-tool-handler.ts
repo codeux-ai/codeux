@@ -170,6 +170,21 @@ export class CoreToolHandler {
     };
   }
 
+  private toSingleSourceSummary(payload: unknown, sourceIdFallback: string): Record<string, unknown> {
+    if (!payload || typeof payload !== "object") {
+      const normalizedId = sourceIdFallback.startsWith("sources/") ? sourceIdFallback : `sources/${sourceIdFallback}`;
+      return { id: normalizedId, name: normalizedId };
+    }
+    const record = payload as Partial<JulesSource>;
+    const id = typeof record.id === "string"
+      ? record.id
+      : (typeof record.name === "string" && record.name.startsWith("sources/")
+        ? record.name
+        : (sourceIdFallback.startsWith("sources/") ? sourceIdFallback : `sources/${sourceIdFallback}`));
+    const name = typeof record.name === "string" ? record.name : id;
+    return this.toSourceSummary({ id, name });
+  }
+
   private toSourcePageSummary(args: {
     sources: JulesSource[];
     nextPageToken?: string;
@@ -197,10 +212,32 @@ export class CoreToolHandler {
     return { sources, nextPageToken };
   }
 
+  private toActionResponseSummary(payload: unknown, action: string): Record<string, unknown> {
+    const summary: Record<string, unknown> = { action };
+    if (!payload || typeof payload !== "object") {
+      return summary;
+    }
+    const record = payload as Record<string, unknown>;
+    const copyIfPresent = (from: string, to: string = from): void => {
+      if (record[from] !== undefined) {
+        summary[to] = record[from];
+      }
+    };
+    copyIfPresent("id");
+    copyIfPresent("name");
+    copyIfPresent("state");
+    copyIfPresent("title");
+    copyIfPresent("createTime");
+    copyIfPresent("updateTime");
+    copyIfPresent("done");
+    copyIfPresent("message");
+    return summary;
+  }
+
   async handleGetSource({ source_id }: { source_id: string }) {
     this.ensureJulesApiConfigured();
     const source = await this.deps.julesApi.getSource(source_id);
-    return { content: [{ type: "text", text: JSON.stringify(source, null, 2) }] };
+    return { content: [{ type: "text", text: JSON.stringify(this.toSingleSourceSummary(source, source_id), null, 2) }] };
   }
 
   async handleListSources({ filter, page_size, page_token }: { filter?: string; page_size?: number; page_token?: string }) {
@@ -257,7 +294,7 @@ export class CoreToolHandler {
     try {
       const response = await this.deps.julesApi.createSession(data);
       this.deps.setConsecutiveFailures(0);
-      return { content: [{ type: "text", text: JSON.stringify(response, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(this.toSessionSummary(response), null, 2) }] };
     } catch (error: any) {
       this.deps.setConsecutiveFailures(this.deps.getConsecutiveFailures() + 1);
       throw error;
@@ -329,13 +366,13 @@ export class CoreToolHandler {
   async handleApproveSessionPlan({ session_id }: { session_id: string }) {
     this.ensureJulesApiConfigured();
     const response = await this.deps.julesApi.approveSessionPlan(session_id);
-    return { content: [{ type: "text", text: JSON.stringify(response, null, 2) }] };
+    return { content: [{ type: "text", text: JSON.stringify(this.toActionResponseSummary(response, "approve_session_plan"), null, 2) }] };
   }
 
   async handleSendSessionMessage({ session_id, prompt }: { session_id: string; prompt: string }) {
     this.ensureJulesApiConfigured();
     const response = await this.deps.julesApi.sendSessionMessage(session_id, prompt);
-    return { content: [{ type: "text", text: JSON.stringify(response, null, 2) }] };
+    return { content: [{ type: "text", text: JSON.stringify(this.toActionResponseSummary(response, "send_session_message"), null, 2) }] };
   }
 
   async handleWaitForSessionCompletion({

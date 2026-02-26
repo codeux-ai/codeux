@@ -45,8 +45,13 @@ Defined in `src/tools.ts`.
 - `list_all_activities`
 
 ### Output minimization
+- `get_source` returns a compact source summary (`id`, `name`).
 - `list_sources` returns compact source summaries (`id`, `name`) with page metadata.
 - `list_all_sources` returns compact source summaries (`id`, `name`) with result count.
+- `create_session` returns a compact session summary.
+- `approve_session_plan` returns a compact action summary.
+- `send_session_message` returns a compact action summary.
+- `task_agent` (non-`wait` mode) returns a compact session summary.
 - `get_session` returns a compact session summary (state, provider, PR links, last activity summary) instead of full raw payload.
 - `list_sessions` returns compact session summaries with pagination metadata instead of full raw session objects.
 - `wait_for_session_completion` returns the same compact session summary on terminal/action-required exit.

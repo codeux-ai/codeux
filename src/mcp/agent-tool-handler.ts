@@ -17,6 +17,33 @@ interface AgentToolHandlerDependencies {
 export class AgentToolHandler {
   constructor(private readonly deps: AgentToolHandlerDependencies) {}
 
+  private toSessionSummary(session: {
+    id?: string;
+    name?: string;
+    title?: string;
+    state?: string;
+    provider?: string;
+    createTime?: string;
+    outputs?: Array<{ pullRequest?: { url?: string } }>;
+  }): Record<string, unknown> {
+    const pullRequests = (session.outputs || [])
+      .map((output) => output.pullRequest)
+      .filter((pullRequest): pullRequest is { url?: string } => !!pullRequest)
+      .map((pullRequest) => ({ url: pullRequest.url }))
+      .filter((pullRequest) => typeof pullRequest.url === "string");
+
+    return {
+      id: session.id,
+      name: session.name,
+      title: session.title,
+      state: session.state,
+      provider: session.provider,
+      createTime: session.createTime,
+      hasPullRequest: pullRequests.length > 0,
+      pullRequests,
+    };
+  }
+
   async handleSprintAgent(args: SprintAgentArgs) {
     const settings = this.deps.getDashboardSettings();
     const resolvedArgs: SprintAgentArgs = {
@@ -49,7 +76,7 @@ export class AgentToolHandler {
         return await this.deps.waitForSessionCompletion({ session_id: session.id });
       }
 
-      return { content: [{ type: "text", text: JSON.stringify(session, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(this.toSessionSummary(session), null, 2) }] };
     } catch (error: any) {
       this.deps.setConsecutiveFailures(this.deps.getConsecutiveFailures() + 1);
       throw error;
