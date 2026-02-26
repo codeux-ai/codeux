@@ -75,6 +75,12 @@ export interface SkillToggle {
   isInternal: boolean;
 }
 
+export interface McpToolToggle {
+  name: string;
+  enabled: boolean;
+  isInternal: boolean;
+}
+
 export interface DashboardSettings {
   automationLevel: AutomationLevel;
   aiProvider: {
@@ -131,6 +137,7 @@ export interface DashboardSettings {
     containerClaudeCodeAuthPath: string;
   };
   skills: SkillToggle[];
+  mcpTools: McpToolToggle[];
 }
 
 export interface GitStatusCheck {

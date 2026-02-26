@@ -12,6 +12,7 @@ describe("dashboard settings helpers", () => {
     first.cliWorkflow.resumeFailedTaskInSameWorkspace = false;
     first.cliWorkflow.executionMode = "DOCKER";
     first.cliWorkflow.containerImage = "custom:image";
+    first.mcpTools[0].enabled = false;
     expect(second.git.defaultBranch).toBe("main");
     expect(second.aiProvider.providers.gemini.model).toBe("default");
     expect(second.sprintLoopSteps.watchLoopIntervalSeconds).toBe(120);
@@ -19,5 +20,6 @@ describe("dashboard settings helpers", () => {
     expect(second.cliWorkflow.resumeFailedTaskInSameWorkspace).toBe(true);
     expect(second.cliWorkflow.executionMode).toBe("HOST");
     expect(second.cliWorkflow.containerImage).toBe("node:22-bookworm-slim");
+    expect(second.mcpTools[0].enabled).toBe(true);
   });
 });

@@ -43,6 +43,7 @@ Implemented in `src/dashboard.ts`.
 - Git settings
 - CI Intelligence settings
 - Sprint loop step toggles
+- MCP tool toggles
 - Skill toggles
 
 ## Polling Behavior

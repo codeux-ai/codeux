@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { useState } from "preact/hooks";
-import type { DashboardSettings, SkillToggle } from "../types.js";
+import type { DashboardSettings, McpToolToggle, SkillToggle } from "../types.js";
 
 interface SettingsPageProps {
   settings: DashboardSettings;
@@ -75,6 +75,10 @@ const loopStepOptions: Array<{ key: SprintLoopToggleKey; label: string; detail: 
 
 const updateSkill = (skills: SkillToggle[], index: number, enabled: boolean): SkillToggle[] => {
   return skills.map((skill, currentIndex) => (currentIndex === index ? { ...skill, enabled } : skill));
+};
+
+const updateMcpTool = (tools: McpToolToggle[], index: number, enabled: boolean): McpToolToggle[] => {
+  return tools.map((tool, currentIndex) => (currentIndex === index ? { ...tool, enabled } : tool));
 };
 
 export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
@@ -1027,6 +1031,38 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
           <p className="text-[11px] text-slate-500">
             Recommended default: keep failed worktrees for recovery and disable automatic cleanup on failure.
           </p>
+        </article>
+
+        <article className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-2xl p-5 space-y-4">
+          <h3 className="text-sm font-bold text-white">MCP Tools</h3>
+          <p className="text-xs text-slate-500">
+            Controls which tools are listed and callable through MCP. Disabling a tool hides it and blocks calls at runtime.
+          </p>
+          <div className="space-y-3">
+            {settings.mcpTools.length === 0 ? (
+              <p className="text-sm text-slate-500">No MCP tools configured.</p>
+            ) : (
+              settings.mcpTools.map((tool, index) => (
+                <label
+                  key={tool.name}
+                  className="flex items-center justify-between rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2"
+                >
+                  <span className="text-sm text-slate-200">{tool.name}</span>
+                  <input
+                    type="checkbox"
+                    checked={tool.enabled}
+                    onChange={(event) =>
+                      onChange({
+                        ...settings,
+                        mcpTools: updateMcpTool(settings.mcpTools, index, event.currentTarget.checked),
+                      })
+                    }
+                    className="h-4 w-4 rounded border-slate-700 bg-slate-900"
+                  />
+                </label>
+              ))
+            )}
+          </div>
         </article>
 
         <article className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-2xl p-5 space-y-4">

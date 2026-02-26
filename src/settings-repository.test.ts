@@ -43,6 +43,9 @@ describe("SettingsRepository", () => {
     expect(settings.skills.every((skill) => skill.isInternal)).toBe(true);
     expect(settings.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(true);
     expect(settings.skills.find((skill) => skill.name === "git_manager_local")?.enabled).toBe(false);
+    expect(settings.mcpTools.length).toBeGreaterThan(0);
+    expect(settings.mcpTools.find((tool) => tool.name === "get_session")?.enabled).toBe(true);
+    expect(settings.mcpTools.find((tool) => tool.name === "list_all_activities")?.enabled).toBe(true);
   });
 
   it("persists and reads settings", async () => {
@@ -111,6 +114,10 @@ describe("SettingsRepository", () => {
         { name: "worker", enabled: false, isInternal: true },
         { name: "my-custom-skill", enabled: true, isInternal: false },
       ],
+      mcpTools: [
+        { name: "get_session", enabled: false, isInternal: true },
+        { name: "list_all_activities", enabled: false, isInternal: true },
+      ],
     });
 
     expect(saved.automationLevel).toBe("ALWAYS_ASK");
@@ -130,11 +137,14 @@ describe("SettingsRepository", () => {
     expect(saved.cliWorkflow.containerMountCodexAuth).toBe(false);
     expect(saved.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(false);
     expect(saved.skills.find((skill) => skill.name === "git_manager_local")?.enabled).toBe(true);
+    expect(saved.mcpTools.find((tool) => tool.name === "get_session")?.enabled).toBe(false);
+    expect(saved.mcpTools.find((tool) => tool.name === "list_all_activities")?.enabled).toBe(false);
 
     const reloaded = new SettingsRepository(dbPath).getSettings();
     expect(reloaded).toEqual(saved);
     expect(reloaded.skills.find((skill) => skill.name === "worker")?.enabled).toBe(false);
     expect(reloaded.skills.find((skill) => skill.name === "my-custom-skill")?.isInternal).toBe(false);
+    expect(reloaded.mcpTools.find((tool) => tool.name === "get_session")?.enabled).toBe(false);
   });
 
   it("initializes defaults from external hints", async () => {
