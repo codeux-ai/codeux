@@ -19,7 +19,7 @@ import { loadAppConfig } from "./config.js";
 import { setupDashboardServer } from "./dashboard.js";
 import { JulesApiClient } from "./jules-api.js";
 import type { DashboardSettings, GitTrackingStatus, JulesActivity, JulesSession, Settings, Subtask } from "./types.js";
-import { TOOL_DEFINITIONS, dispatchTool } from "./tools.js";
+import { dispatchTool } from "./tools.js";
 import { SprintOrchestrator, type SprintAgentArgs } from "./sprint-orchestrator.js";
 import { GuideRepository } from "./guide-repository.js";
 import { SubtaskRepository } from "./subtask-repository.js";
@@ -34,6 +34,7 @@ import { AgentToolHandler } from "./mcp/agent-tool-handler.js";
 import { buildMissingJulesApiKeyMessage } from "./api-key-guidance.js";
 import { SessionTrackingRepository } from "./session-tracking-repository.js";
 import { CliWorkflowService } from "./cli-workflow-service.js";
+import { getEnabledToolDefinitions, isToolEnabled } from "./mcp/tool-availability.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -345,11 +346,14 @@ class JulesAgentServer {
 
   private setupToolHandlers() {
     this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: TOOL_DEFINITIONS as any,
+      tools: getEnabledToolDefinitions(this.dashboardSettings) as any,
     }));
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
+      if (!isToolEnabled(this.dashboardSettings, name)) {
+        throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
+      }
       const handlers = {
         get_source: (toolArgs: { source_id: string }) => this.coreToolHandler.handleGetSource(toolArgs),
         list_sources: (toolArgs: { filter?: string; page_size?: number; page_token?: string }) => this.coreToolHandler.handleListSources(toolArgs),

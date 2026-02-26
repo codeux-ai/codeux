@@ -51,6 +51,7 @@ Top-level fields:
 - `sprintLoopSteps`
 - `cliWorkflow`
 - `skills`
+- `mcpTools`
 
 `aiProvider` contains:
 - `provider` (`jules|gemini|codex`)
@@ -86,6 +87,11 @@ Frontend contract:
 
 `sprintLoopSteps` also includes:
 - `watchLoopIntervalSeconds` (default `120`, clamped to `1..3600`)
+
+`mcpTools` contains:
+- `name` (MCP tool name from `src/tools.ts`)
+- `enabled` (whether tool is visible in MCP `list_tools` and callable)
+- `isInternal` (reserved/internal metadata; currently all built-in tools are internal)
 
 Repository demo script:
 - `.jules-subagents/container/setup.sh` is included as a baseline bootstrap script.

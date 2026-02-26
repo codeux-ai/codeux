@@ -124,6 +124,12 @@ export interface SkillToggle {
   isInternal: boolean;
 }
 
+export interface McpToolToggle {
+  name: string;
+  enabled: boolean;
+  isInternal: boolean;
+}
+
 export interface DashboardSettings {
   automationLevel: AutomationLevel;
   aiProvider: AiProviderSettings;
@@ -132,6 +138,7 @@ export interface DashboardSettings {
   sprintLoopSteps: SprintLoopStepSettings;
   cliWorkflow: CliWorkflowSettings;
   skills: SkillToggle[];
+  mcpTools: McpToolToggle[];
 }
 
 export interface GitStatusCheck {

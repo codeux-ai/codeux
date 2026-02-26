@@ -6,6 +6,7 @@ import type {
   CliExecutionMode,
   DashboardSettings,
   ExternalSettingsHints,
+  McpToolToggle,
   ProviderId,
   ProviderSettings,
   ProviderStrategy,
@@ -13,6 +14,7 @@ import type {
   ThinkingMode,
 } from "./types.js";
 import { DEFAULT_SPRINT_BRANCH_SCHEME } from "./branch-scheme.js";
+import { DEFAULT_MCP_TOOL_TOGGLES, sanitizeMcpToolToggles } from "./mcp/tool-availability.js";
 
 interface RowResult {
   payload: string;
@@ -135,6 +137,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     containerClaudeCodeAuthPath: "~/.claude",
   },
   skills: DEFAULT_SKILLS,
+  mcpTools: DEFAULT_MCP_TOOL_TOGGLES.map((tool) => ({ ...tool })),
 };
 
 const SETTINGS_DIR = path.join(os.homedir(), ".jules-subagents");
@@ -209,6 +212,10 @@ const sanitizeSkills = (value: unknown): SkillToggle[] => {
   return [...internalSkills, ...customSkills];
 };
 
+const sanitizeMcpTools = (value: unknown): McpToolToggle[] => {
+  return sanitizeMcpToolToggles(value).map((tool) => ({ ...tool }));
+};
+
 const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardSettings => ({
   automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
   aiProvider: {
@@ -247,6 +254,7 @@ const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardSettings
     ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow,
   },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
+  mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),
 });
 
 const normalizeProviderSettings = (
@@ -458,6 +466,7 @@ const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints)
   };
 
   const normalizedSkills = enforceGitManagerSkillset(sanitizeSkills(input.skills), git.githubMode);
+  const mcpTools = sanitizeMcpTools(input.mcpTools);
 
   return {
     automationLevel: validAutomationLevel,
@@ -467,6 +476,7 @@ const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints)
     sprintLoopSteps,
     cliWorkflow,
     skills: normalizedSkills,
+    mcpTools,
   };
 };
 

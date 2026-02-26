@@ -21,10 +21,11 @@ Registered schemas:
 - `CallToolRequestSchema`
 
 ### Tool list handler
-Returns tool definitions from `src/tools.ts`.
+Returns enabled tool definitions from `src/tools.ts`, filtered by dashboard `mcpTools` settings.
 
 ### Tool call handler
 - Resolves tool name.
+- Verifies tool is enabled in `mcpTools`.
 - Dispatches through handler map.
 - Wraps unknown tool as MCP `MethodNotFound`.
 - Normalizes runtime/API errors into `isError` response.

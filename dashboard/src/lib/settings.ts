@@ -94,6 +94,22 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     { name: "git_manager_remote", enabled: true, isInternal: true },
     { name: "git_manager_local", enabled: false, isInternal: true },
   ],
+  mcpTools: [
+    { name: "get_source", enabled: true, isInternal: true },
+    { name: "list_sources", enabled: true, isInternal: true },
+    { name: "list_all_sources", enabled: true, isInternal: true },
+    { name: "create_session", enabled: true, isInternal: true },
+    { name: "get_session", enabled: true, isInternal: true },
+    { name: "list_sessions", enabled: true, isInternal: true },
+    { name: "approve_session_plan", enabled: true, isInternal: true },
+    { name: "send_session_message", enabled: true, isInternal: true },
+    { name: "wait_for_session_completion", enabled: true, isInternal: true },
+    { name: "get_activity", enabled: true, isInternal: true },
+    { name: "list_activities", enabled: true, isInternal: true },
+    { name: "list_all_activities", enabled: true, isInternal: true },
+    { name: "sprint_agent", enabled: true, isInternal: true },
+    { name: "task_agent", enabled: true, isInternal: true },
+  ],
 };
 
 export const cloneDefaultSettings = (): DashboardSettings => ({
@@ -112,4 +128,5 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
   sprintLoopSteps: { ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps },
   cliWorkflow: { ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
+  mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),
 });

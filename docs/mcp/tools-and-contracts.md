@@ -104,3 +104,12 @@ When modifying tool contracts:
 2. Update both backend and dashboard types if shared payloads change.
 3. Add or update tests in `src/*.test.ts`.
 4. Document changes in `docs/` and `README.md`.
+
+## Runtime Tool Enablement
+
+MCP tool availability is runtime-configurable from dashboard settings (`mcpTools`).
+
+Behavior:
+- Disabled tools are omitted from `ListToolsRequestSchema` responses.
+- Calls to disabled tools return MCP `MethodNotFound`.
+- Toggle state is persisted in settings storage and applied without server restart.
