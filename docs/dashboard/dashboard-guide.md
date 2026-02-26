@@ -104,6 +104,7 @@ Use case:
 ## Git Status Panel Notes
 
 `git-status-service.ts` behavior:
+- Git/CI tracking uses the active sprint repository path (`repo_path`) from the latest sprint status update, not the MCP server repository root.
 - In `LOCAL` mode, PR/CI tracking is disabled.
 - In `REMOTE` mode, requires `gh` and auth.
 - Warnings include common conflict/CI trigger issues.

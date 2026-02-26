@@ -71,8 +71,11 @@ class JulesAgentServer {
   private settingsRepository: SettingsRepository;
   private dashboardSettings: DashboardSettings;
   private externalSettingsHints = loadExternalSettingsHints(projectRoot);
-  private gitStatusService: GitStatusService;
-  private gitStatusCache: { timestamp: number; data: GitTrackingStatus | null } = { timestamp: 0, data: null };
+  private gitStatusCache: { timestamp: number; data: GitTrackingStatus | null; repoPath: string | null } = {
+    timestamp: 0,
+    data: null,
+    repoPath: null,
+  };
   private gitStatusFetchPromise: Promise<GitTrackingStatus> | null = null;
   private instructionService: InstructionService;
   private sessionTracking: SessionTrackingRepository;
@@ -101,7 +104,6 @@ class JulesAgentServer {
     });
     this.guideRepository = new GuideRepository(projectRoot);
     this.subtaskRepository = new SubtaskRepository();
-    this.gitStatusService = new GitStatusService(projectRoot);
     this.instructionService = new InstructionService(projectRoot);
     this.sessionTracking = new SessionTrackingRepository();
     this.cliWorkflowService = new CliWorkflowService({
@@ -320,6 +322,11 @@ class JulesAgentServer {
     };
   }
 
+  private resolveGitStatusRepoPath(): string {
+    const statusRepoPath = typeof this.lastStatus?.repo_path === "string" ? this.lastStatus.repo_path.trim() : "";
+    return statusRepoPath.length > 0 ? statusRepoPath : projectRoot;
+  }
+
   private async setupDashboard() {
     const dashboardDir = path.join(projectRoot, "dashboard");
     const port = this.getDashboardPort();
@@ -338,7 +345,7 @@ class JulesAgentServer {
         this.dashboardSettings = this.settingsRepository.saveSettings(settings);
         this.syncGitSettingsFromDashboard();
         this.refreshJulesApiKey();
-        this.gitStatusCache = { timestamp: 0, data: null };
+        this.gitStatusCache = { timestamp: 0, data: null, repoPath: null };
         return this.dashboardSettings;
       },
     });
@@ -479,22 +486,28 @@ class JulesAgentServer {
   }
 
   private async getGitStatus(): Promise<GitTrackingStatus> {
+    const repoPath = this.resolveGitStatusRepoPath();
     const now = Date.now();
-    if (this.gitStatusCache.data && now - this.gitStatusCache.timestamp < JulesAgentServer.GIT_STATUS_CACHE_MS) {
+    if (
+      this.gitStatusCache.data &&
+      this.gitStatusCache.repoPath === repoPath &&
+      now - this.gitStatusCache.timestamp < JulesAgentServer.GIT_STATUS_CACHE_MS
+    ) {
       return this.gitStatusCache.data;
     }
     if (this.gitStatusFetchPromise) {
       return this.gitStatusFetchPromise;
     }
 
-    this.gitStatusFetchPromise = this.gitStatusService
+    const gitStatusService = new GitStatusService(repoPath);
+    this.gitStatusFetchPromise = gitStatusService
       .getStatus(
         this.dashboardSettings.git.githubMode,
         this.getEffectiveGithubToken(),
         this.resolveGitTrackingRequest()
       )
       .then((status) => {
-        this.gitStatusCache = { timestamp: Date.now(), data: status };
+        this.gitStatusCache = { timestamp: Date.now(), data: status, repoPath };
         return status;
       })
       .finally(() => {

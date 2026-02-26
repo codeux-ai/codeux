@@ -39,6 +39,7 @@ export interface Subtask {
 
 export interface DashboardStatus {
   sprint_number?: number;
+  repo_path?: string;
   feature_branch?: string;
   subtasks: Subtask[];
   reportText?: string;

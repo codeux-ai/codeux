@@ -321,6 +321,7 @@ export class SprintOrchestrator {
         const timestamp = new Date().toLocaleTimeString();
         this.deps.updateLastStatus({
           sprint_number: args.sprint_number,
+          repo_path: args.repo_path,
           feature_branch: defaultFeatureBranch,
           subtasks,
           reportText,
@@ -426,6 +427,7 @@ export class SprintOrchestrator {
 
     this.deps.updateLastStatus({
       sprint_number: args.sprint_number,
+      repo_path: args.repo_path,
       feature_branch: defaultFeatureBranch,
       subtasks,
       reportText,
