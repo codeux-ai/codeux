@@ -468,6 +468,21 @@ Files:
 - `docs/settings/configuration-and-storage.md`
 - `docs/operations/runbook.md`
 
+## Incremental Update: Configurable Watch Loop Interval
+
+Change:
+- Added dashboard setting `sprintLoopSteps.watchLoopIntervalSeconds` (default `120`).
+- Watch loop sleep is now configurable instead of hardcoded `120s`.
+- Value is sanitized and clamped to `10..3600` seconds.
+
+Files:
+- `src/types.ts`
+- `dashboard/src/types.ts`
+- `src/settings-repository.ts`
+- `dashboard/src/lib/settings.ts`
+- `dashboard/src/components/SettingsPage.tsx`
+- `src/sprint-orchestrator.ts`
+
 ## Incremental Update: Multi-Provider Task Workflow Parity
 
 ### Goal

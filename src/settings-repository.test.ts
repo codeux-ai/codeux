@@ -29,6 +29,7 @@ describe("SettingsRepository", () => {
     expect(settings.git.githubMode).toBe("REMOTE");
     expect(settings.ciIntelligence.enabled).toBe(true);
     expect(settings.sprintLoopSteps.watchLoop).toBe(true);
+    expect(settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(120);
     expect(settings.cliWorkflow.cleanupWorktreeOnSuccess).toBe(true);
     expect(settings.cliWorkflow.cleanupWorktreeOnFailure).toBe(false);
     expect(settings.cliWorkflow.retryOnReadFileNotFound).toBe(true);
@@ -84,6 +85,7 @@ describe("SettingsRepository", () => {
         actionRequiredProtocol: true,
         statusTable: true,
         watchLoop: false,
+        watchLoopIntervalSeconds: 30,
       },
       cliWorkflow: {
         cleanupWorktreeOnSuccess: true,
@@ -117,6 +119,7 @@ describe("SettingsRepository", () => {
     expect(saved.git.githubMode).toBe("LOCAL");
     expect(saved.ciIntelligence.waitForCiBeforeMainMerge).toBe(false);
     expect(saved.sprintLoopSteps.watchLoop).toBe(false);
+    expect(saved.sprintLoopSteps.watchLoopIntervalSeconds).toBe(30);
     expect(saved.cliWorkflow.cleanupWorktreeOnFailure).toBe(false);
     expect(saved.cliWorkflow.resumeFailedTaskInSameWorkspace).toBe(true);
     expect(saved.cliWorkflow.executionMode).toBe("DOCKER");
