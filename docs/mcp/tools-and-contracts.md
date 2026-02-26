@@ -44,6 +44,16 @@ Defined in `src/tools.ts`.
 - `list_activities`
 - `list_all_activities`
 
+### Output minimization
+- `list_sources` returns compact source summaries (`id`, `name`) with page metadata.
+- `list_all_sources` returns compact source summaries (`id`, `name`) with result count.
+- `get_session` returns a compact session summary (state, provider, PR links, last activity summary) instead of full raw payload.
+- `list_sessions` returns compact session summaries with pagination metadata instead of full raw session objects.
+- `wait_for_session_completion` returns the same compact session summary on terminal/action-required exit.
+- `get_activity` returns a compact activity summary.
+- `list_activities` returns compact activity summaries plus page metadata and kind counts.
+- `list_all_activities` returns aggregate metadata plus a small recent-activity preview list, not the full activity objects.
+
 ### Agent workflows
 - `sprint_agent`
 - `task_agent`
