@@ -99,6 +99,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   },
   ciIntelligence: {
     enabled: true,
+    enableLivePrMonitoring: true,
     waitForCiBeforeMainMerge: true,
     resolveAllCommentsBeforeMainMerge: true,
     waitForCiBeforeFeatureMerge: true,
@@ -351,6 +352,10 @@ const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints)
     : {}) as Partial<DashboardSettings["ciIntelligence"]>;
   const ciIntelligence = {
     enabled: readBoolean(ciInput.enabled, DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.enabled),
+    enableLivePrMonitoring: readBoolean(
+      ciInput.enableLivePrMonitoring,
+      DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.enableLivePrMonitoring
+    ),
     waitForCiBeforeMainMerge: readBoolean(
       ciInput.waitForCiBeforeMainMerge,
       DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.waitForCiBeforeMainMerge
@@ -376,6 +381,9 @@ const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints)
       DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.autoMergeFeaturePrWhenGreen
     ),
   };
+  if (git.githubMode === "LOCAL") {
+    ciIntelligence.enableLivePrMonitoring = false;
+  }
 
   const loopInput = (input.sprintLoopSteps && typeof input.sprintLoopSteps === "object"
     ? input.sprintLoopSteps

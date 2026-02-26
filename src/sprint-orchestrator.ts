@@ -37,6 +37,7 @@ const DEFAULT_STEP_SETTINGS: SprintLoopStepSettings = {
 
 const DEFAULT_CI_SETTINGS: CiIntelligenceSettings = {
   enabled: true,
+  enableLivePrMonitoring: true,
   waitForCiBeforeMainMerge: true,
   resolveAllCommentsBeforeMainMerge: true,
   waitForCiBeforeFeatureMerge: true,
@@ -290,6 +291,7 @@ export class SprintOrchestrator {
   ): Promise<{ subtasks: Subtask[]; reportText: string }> {
     if (
       !args.ciIntelligence.enabled ||
+      !args.ciIntelligence.enableLivePrMonitoring ||
       !args.ciIntelligence.waitForCiBeforeFeatureMerge ||
       args.githubMode !== "REMOTE" ||
       !this.deps.getCiStatusForScope
@@ -407,6 +409,7 @@ export class SprintOrchestrator {
   }): Promise<string> {
     if (
       !args.ciIntelligence.enabled ||
+      !args.ciIntelligence.enableLivePrMonitoring ||
       !args.ciIntelligence.waitForCiBeforeMainMerge ||
       args.githubMode !== "REMOTE" ||
       !this.deps.getCiStatusForScope

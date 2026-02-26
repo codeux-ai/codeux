@@ -100,6 +100,7 @@ export interface DashboardSettings {
   };
   ciIntelligence: {
     enabled: boolean;
+    enableLivePrMonitoring: boolean;
     waitForCiBeforeMainMerge: boolean;
     resolveAllCommentsBeforeMainMerge: boolean;
     waitForCiBeforeFeatureMerge: boolean;

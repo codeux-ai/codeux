@@ -578,6 +578,24 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
             />
           </label>
           <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">
+            <span className="text-sm text-slate-200">Enable Live PR Monitoring</span>
+            <input
+              type="checkbox"
+              checked={settings.ciIntelligence.enableLivePrMonitoring}
+              disabled={!settings.ciIntelligence.enabled || settings.git.githubMode === "LOCAL"}
+              onChange={(event) =>
+                onChange({
+                  ...settings,
+                  ciIntelligence: {
+                    ...settings.ciIntelligence,
+                    enableLivePrMonitoring: event.currentTarget.checked,
+                  },
+                })
+              }
+              className="h-4 w-4 rounded border-slate-700 bg-slate-900 disabled:opacity-50"
+            />
+          </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">
             <span className="text-sm text-slate-200">Wait for CI before merge into main</span>
             <input
               type="checkbox"

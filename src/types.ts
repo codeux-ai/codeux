@@ -78,6 +78,7 @@ export interface GitSettings {
 
 export interface CiIntelligenceSettings {
   enabled: boolean;
+  enableLivePrMonitoring: boolean;
   waitForCiBeforeMainMerge: boolean;
   resolveAllCommentsBeforeMainMerge: boolean;
   waitForCiBeforeFeatureMerge: boolean;
