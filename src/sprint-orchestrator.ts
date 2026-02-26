@@ -285,7 +285,7 @@ export class SprintOrchestrator {
 
     const shouldWait = args.wait !== undefined ? args.wait : (args.action === "status" || args.action === "orchestrate");
     const watchEnabled = shouldWait && loopSteps.watchLoop;
-    const watchLoopIntervalMs = Math.max(10, loopSteps.watchLoopIntervalSeconds) * 1000;
+    const watchLoopIntervalMs = Math.max(1, loopSteps.watchLoopIntervalSeconds) * 1000;
 
     if (watchEnabled) {
       let allFinished = false;

@@ -157,7 +157,7 @@ export const TOOL_DEFINITIONS = [
           enum: ["status", "orchestrate", "plan"],
           description: "Action to perform: 'status', 'orchestrate', 'plan'."
         },
-        wait: { type: "boolean", description: "Whether to wait and watch for all tasks to complete (polls every 120s). Defaults to true for 'status' and 'orchestrate'.", default: true },
+        wait: { type: "boolean", description: "Whether to wait and watch for all tasks to complete (poll interval is configurable in dashboard settings, default 120s). Defaults to true for 'status' and 'orchestrate'.", default: true },
         retry_failed: { type: "boolean", description: "Whether to automatically retry failed tasks. Defaults to true.", default: true },
       },
       required: ["sprint_number", "repo_path", "source_id", "action"],

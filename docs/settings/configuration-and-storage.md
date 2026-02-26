@@ -85,7 +85,7 @@ Frontend contract:
   - `containerCodexAuthPath` (default `~/.codex`)
 
 `sprintLoopSteps` also includes:
-- `watchLoopIntervalSeconds` (default `120`, clamped to `10..3600`)
+- `watchLoopIntervalSeconds` (default `120`, clamped to `1..3600`)
 
 Repository demo script:
 - `.jules-subagents/container/setup.sh` is included as a baseline bootstrap script.

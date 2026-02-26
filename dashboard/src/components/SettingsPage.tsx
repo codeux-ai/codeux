@@ -623,7 +623,7 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
             <span className="text-xs text-slate-400">Watch Loop Interval (seconds)</span>
             <input
               type="number"
-              min={10}
+              min={1}
               max={3600}
               value={settings.sprintLoopSteps.watchLoopIntervalSeconds}
               onInput={(event) =>

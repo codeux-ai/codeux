@@ -40,7 +40,7 @@ const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex"];
 const THINKING_MODES: ThinkingMode[] = ["SMALL", "MEDIUM", "HIGH"];
 const PROVIDER_STRATEGIES: ProviderStrategy[] = ["MANUAL", "WEIGHTED", "ORCHESTRATOR"];
 const CLI_EXECUTION_MODES: CliExecutionMode[] = ["HOST", "DOCKER"];
-const MIN_WATCH_LOOP_INTERVAL_SECONDS = 10;
+const MIN_WATCH_LOOP_INTERVAL_SECONDS = 1;
 const MAX_WATCH_LOOP_INTERVAL_SECONDS = 3600;
 
 const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {

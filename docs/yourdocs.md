@@ -473,7 +473,7 @@ Files:
 Change:
 - Added dashboard setting `sprintLoopSteps.watchLoopIntervalSeconds` (default `120`).
 - Watch loop sleep is now configurable instead of hardcoded `120s`.
-- Value is sanitized and clamped to `10..3600` seconds.
+- Value is sanitized and clamped to `1..3600` seconds.
 
 Files:
 - `src/types.ts`
