@@ -143,6 +143,7 @@ class JulesAgentServer {
         this.lastStatus = status;
       },
       getDashboardSettings: () => this.dashboardSettings,
+      getFeatureBranchCiStatus: (args) => this.getFeatureBranchCiStatus(args),
       renderInstruction: (templateId, variables, repoPath) =>
         this.instructionService.render(templateId, variables, repoPath),
     });
@@ -515,6 +516,29 @@ class JulesAgentServer {
       });
 
     return this.gitStatusFetchPromise;
+  }
+
+  private async getFeatureBranchCiStatus(args: {
+    repoPath: string;
+    featureBranch: string;
+    defaultBranch: string;
+    featureBranchPrefix: string;
+  }): Promise<GitTrackingStatus | null> {
+    const gitStatusService = new GitStatusService(args.repoPath);
+    try {
+      return await gitStatusService.getStatus(
+        "REMOTE",
+        this.getEffectiveGithubToken(),
+        {
+          scope: "FEATURE_PR_CI",
+          featureBranch: args.featureBranch,
+          defaultBranch: args.defaultBranch,
+          featureBranchPrefix: args.featureBranchPrefix,
+        }
+      );
+    } catch {
+      return null;
+    }
   }
 
   private async getLiveActivitiesForActiveTasks(): Promise<Record<string, JulesActivity[]>> {

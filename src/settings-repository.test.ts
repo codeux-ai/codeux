@@ -28,6 +28,7 @@ describe("SettingsRepository", () => {
     expect(settings.git.defaultBranch).toBe("main");
     expect(settings.git.githubMode).toBe("REMOTE");
     expect(settings.ciIntelligence.enabled).toBe(true);
+    expect(settings.ciIntelligence.waitForJulesCiAutofix).toBe(false);
     expect(settings.sprintLoopSteps.watchLoop).toBe(true);
     expect(settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(120);
     expect(settings.cliWorkflow.cleanupWorktreeOnSuccess).toBe(true);
@@ -77,6 +78,7 @@ describe("SettingsRepository", () => {
         resolveAllCommentsBeforeMainMerge: false,
         waitForCiBeforeFeatureMerge: true,
         resolveAllCommentsBeforeFeatureMerge: false,
+        waitForJulesCiAutofix: true,
       },
       sprintLoopSteps: {
         branchPreflight: true,
@@ -128,6 +130,7 @@ describe("SettingsRepository", () => {
     expect(saved.git.featureBranchPrefix).toBe("work/");
     expect(saved.git.githubMode).toBe("LOCAL");
     expect(saved.ciIntelligence.waitForCiBeforeMainMerge).toBe(false);
+    expect(saved.ciIntelligence.waitForJulesCiAutofix).toBe(true);
     expect(saved.sprintLoopSteps.watchLoop).toBe(false);
     expect(saved.sprintLoopSteps.watchLoopIntervalSeconds).toBe(30);
     expect(saved.cliWorkflow.cleanupWorktreeOnFailure).toBe(false);

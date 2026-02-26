@@ -14,6 +14,7 @@ import type { SprintAgentArgs, SprintCycleResult } from "./sprint/types.js";
 import type {
   CiIntelligenceSettings,
   DashboardSettings,
+  GitTrackingStatus,
   JulesSession,
   Settings,
   SprintLoopStepSettings,
@@ -40,6 +41,7 @@ const DEFAULT_CI_SETTINGS: CiIntelligenceSettings = {
   resolveAllCommentsBeforeMainMerge: true,
   waitForCiBeforeFeatureMerge: true,
   resolveAllCommentsBeforeFeatureMerge: true,
+  waitForJulesCiAutofix: false,
 };
 
 export interface SprintOrchestratorDependencies {
@@ -58,6 +60,7 @@ export interface SprintOrchestratorDependencies {
   getGuideContent: (guideName: string, repoPath?: string) => Promise<string>;
   updateLastStatus: (status: any) => void;
   getDashboardSettings: () => DashboardSettings;
+  getFeatureBranchCiStatus?: (args: { repoPath: string; featureBranch: string; defaultBranch: string; featureBranchPrefix: string }) => Promise<GitTrackingStatus | null>;
   renderInstruction: (templateId: InstructionTemplateId, variables: Record<string, unknown>, repoPath?: string) => Promise<string>;
 }
 
@@ -161,6 +164,8 @@ export class SprintOrchestrator {
     loopSteps: SprintLoopStepSettings;
     ciIntelligence: CiIntelligenceSettings;
     githubMode: "REMOTE" | "LOCAL";
+    defaultBranch: string;
+    featureBranchPrefix: string;
   }): Promise<SprintCycleResult & { awaitingMerge: Subtask[] }> {
     let subtasks: Subtask[] = [];
 
@@ -210,6 +215,19 @@ export class SprintOrchestrator {
       reportText += startResult.reportText;
     }
 
+    if (subtasks.length > 0) {
+      const ciAutofixResult = await this.applyFeatureBranchCiAutofixWait(subtasks, {
+        repoPath: args.repoPath,
+        featureBranch: args.defaultFeatureBranch,
+        defaultBranch: args.defaultBranch,
+        featureBranchPrefix: args.featureBranchPrefix,
+        ciIntelligence: args.ciIntelligence,
+        githubMode: args.githubMode,
+      });
+      subtasks = ciAutofixResult.subtasks;
+      reportText += ciAutofixResult.reportText;
+    }
+
     const protocolResult = await runProtocolStep(subtasks, {
       subtasksDir: args.subtasksDir,
       featureBranch: args.defaultFeatureBranch,
@@ -230,6 +248,91 @@ export class SprintOrchestrator {
       instructions: protocolResult.instructions,
       awaitingMerge: protocolResult.awaitingMerge,
     };
+  }
+
+  private isCiCheckFailed(status: string, conclusion: string | null): boolean {
+    const normalizedStatus = status.toLowerCase();
+    const normalizedConclusion = (conclusion || "").toLowerCase();
+    if (normalizedStatus !== "completed") {
+      return false;
+    }
+    return normalizedConclusion.length > 0 && normalizedConclusion !== "success" && normalizedConclusion !== "neutral" && normalizedConclusion !== "skipped";
+  }
+
+  private isCiCheckPending(status: string, conclusion: string | null): boolean {
+    const normalizedStatus = status.toLowerCase();
+    if (normalizedStatus !== "completed") {
+      return true;
+    }
+    return conclusion === null;
+  }
+
+  private async applyFeatureBranchCiAutofixWait(
+    subtasks: Subtask[],
+    args: {
+      repoPath: string;
+      featureBranch: string;
+      defaultBranch: string;
+      featureBranchPrefix: string;
+      ciIntelligence: CiIntelligenceSettings;
+      githubMode: "REMOTE" | "LOCAL";
+    }
+  ): Promise<{ subtasks: Subtask[]; reportText: string }> {
+    if (
+      !args.ciIntelligence.enabled ||
+      !args.ciIntelligence.waitForCiBeforeFeatureMerge ||
+      !args.ciIntelligence.waitForJulesCiAutofix ||
+      args.githubMode !== "REMOTE" ||
+      !this.deps.getFeatureBranchCiStatus
+    ) {
+      return { subtasks, reportText: "" };
+    }
+
+    const completedAwaitingMerge = subtasks.filter((task) => task.status === "COMPLETED" && !task.is_merged && !!task.worker_branch);
+    if (completedAwaitingMerge.length === 0) {
+      return { subtasks, reportText: "" };
+    }
+
+    const gitStatus = await this.deps.getFeatureBranchCiStatus({
+      repoPath: args.repoPath,
+      featureBranch: args.featureBranch,
+      defaultBranch: args.defaultBranch,
+      featureBranchPrefix: args.featureBranchPrefix,
+    });
+
+    if (!gitStatus?.available) {
+      return { subtasks, reportText: "" };
+    }
+
+    const prByHeadBranch = new Map<string, (typeof gitStatus.openPullRequests)[number]>();
+    for (const pr of gitStatus.openPullRequests) {
+      if (pr.headRefName) {
+        prByHeadBranch.set(pr.headRefName, pr);
+      }
+    }
+
+    let reportText = "";
+    for (const task of completedAwaitingMerge) {
+      const workerBranch = task.worker_branch!;
+      const pr = prByHeadBranch.get(workerBranch);
+      if (!pr) {
+        continue;
+      }
+
+      const checks = Array.isArray(pr.checks) ? pr.checks : [];
+      const hasFailedChecks = checks.some((check) => this.isCiCheckFailed(check.status, check.conclusion));
+      const hasPendingChecks = checks.length === 0 || checks.some((check) => this.isCiCheckPending(check.status, check.conclusion));
+
+      if (!hasFailedChecks && !hasPendingChecks) {
+        continue;
+      }
+
+      task.status = "RUNNING";
+      const ciStateLabel = hasFailedChecks ? "failed" : "pending";
+      reportText += `⏳ **CI Autofix Wait:** Task \`${task.id}\` bleibt in Arbeit, da Feature-PR CI ${ciStateLabel} ist (Branch \`${workerBranch}\`).\n`;
+    }
+
+    return { subtasks, reportText };
   }
 
   async execute(args: SprintAgentArgs): Promise<any> {
@@ -316,6 +419,8 @@ export class SprintOrchestrator {
           loopSteps,
           ciIntelligence,
           githubMode,
+          defaultBranch,
+          featureBranchPrefix: this.deps.getDashboardSettings().git.featureBranchPrefix,
         });
 
         const timestamp = new Date().toLocaleTimeString();
@@ -403,6 +508,8 @@ export class SprintOrchestrator {
       loopSteps,
       ciIntelligence,
       githubMode,
+      defaultBranch,
+      featureBranchPrefix: this.deps.getDashboardSettings().git.featureBranchPrefix,
     });
 
     const dashboardPort = this.deps.settings.dashboardPort || this.deps.dashboardPort;

@@ -649,6 +649,24 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
               className="h-4 w-4 rounded border-slate-700 bg-slate-900 disabled:opacity-50"
             />
           </label>
+          <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">
+            <span className="text-sm text-slate-200">Wait for Jules CI Autofix on feature PRs</span>
+            <input
+              type="checkbox"
+              checked={settings.ciIntelligence.waitForJulesCiAutofix}
+              disabled={!settings.ciIntelligence.enabled || !settings.ciIntelligence.waitForCiBeforeFeatureMerge}
+              onChange={(event) =>
+                onChange({
+                  ...settings,
+                  ciIntelligence: {
+                    ...settings.ciIntelligence,
+                    waitForJulesCiAutofix: event.currentTarget.checked,
+                  },
+                })
+              }
+              className="h-4 w-4 rounded border-slate-700 bg-slate-900 disabled:opacity-50"
+            />
+          </label>
         </article>
 
         <article className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-2xl p-5 space-y-4">

@@ -103,6 +103,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     resolveAllCommentsBeforeMainMerge: true,
     waitForCiBeforeFeatureMerge: true,
     resolveAllCommentsBeforeFeatureMerge: true,
+    waitForJulesCiAutofix: false,
   },
   sprintLoopSteps: {
     branchPreflight: true,
@@ -364,6 +365,10 @@ const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints)
     resolveAllCommentsBeforeFeatureMerge: readBoolean(
       ciInput.resolveAllCommentsBeforeFeatureMerge,
       DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.resolveAllCommentsBeforeFeatureMerge
+    ),
+    waitForJulesCiAutofix: readBoolean(
+      ciInput.waitForJulesCiAutofix,
+      DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.waitForJulesCiAutofix
     ),
   };
 

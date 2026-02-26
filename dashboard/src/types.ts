@@ -104,6 +104,7 @@ export interface DashboardSettings {
     resolveAllCommentsBeforeMainMerge: boolean;
     waitForCiBeforeFeatureMerge: boolean;
     resolveAllCommentsBeforeFeatureMerge: boolean;
+    waitForJulesCiAutofix: boolean;
   };
   sprintLoopSteps: {
     branchPreflight: boolean;

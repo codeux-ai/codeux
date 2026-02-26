@@ -88,6 +88,9 @@ Frontend contract:
 `sprintLoopSteps` also includes:
 - `watchLoopIntervalSeconds` (default `120`, clamped to `1..3600`)
 
+`ciIntelligence` also includes:
+- `waitForJulesCiAutofix` (default `false`): when enabled with feature-branch CI gating, completed tasks stay in work status while feature PR checks are pending/failed so Jules can apply CI autofix before merge.
+
 `mcpTools` contains:
 - `name` (MCP tool name from `src/tools.ts`)
 - `enabled` (whether tool is visible in MCP `list_tools` and callable)

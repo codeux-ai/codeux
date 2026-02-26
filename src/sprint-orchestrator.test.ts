@@ -27,6 +27,7 @@ const buildDeps = () => {
     getGuideContent,
     updateLastStatus: vi.fn(),
     getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+    getFeatureBranchCiStatus: vi.fn().mockResolvedValue(null),
     renderInstruction: vi.fn(async (templateId: string, variables: Record<string, unknown>) => {
       if (templateId === "planningMissing" && typeof variables.subtasks_dir === "string") {
         return `### 🛑 ACTION REQUIRED: Sprint Planning Missing\n\nNo subtasks found in \`${variables.subtasks_dir}\`.`;
@@ -138,6 +139,92 @@ describe("SprintOrchestrator", () => {
     expect(text).toContain("JULES ACTION REQUIRED");
     expect(text).toContain("AWAITING_USER_FEEDBACK");
     expect(text).toContain("`BLOCKED`");
+
+    await fs.rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("keeps completed tasks in work state while feature PR CI is failing when autofix wait is enabled", async () => {
+    const { deps, listSessions, loadSubtasks } = buildDeps();
+    deps.getDashboardSettings = () => ({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      ciIntelligence: {
+        ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
+        waitForCiBeforeFeatureMerge: true,
+        waitForJulesCiAutofix: true,
+      },
+    });
+    deps.getFeatureBranchCiStatus = vi.fn().mockResolvedValue({
+      mode: "REMOTE",
+      available: true,
+      repositoryRoot: "/tmp/repo",
+      branch: "feature/sprint1-implementation",
+      hasRemote: true,
+      dirty: false,
+      openPullRequests: [
+        {
+          number: 10,
+          title: "Task PR",
+          url: "https://example.com/pr/10",
+          state: "OPEN",
+          isDraft: false,
+          headRefName: "worker/task-01",
+          baseRefName: "feature/sprint1-implementation",
+          mergeStateStatus: null,
+          reviewDecision: null,
+          updatedAt: null,
+          comments: 0,
+          checks: [{ name: "ci", status: "completed", conclusion: "failure" }],
+        },
+      ],
+      ciRuns: [],
+      mergedPullRequests: [],
+      tracking: { scope: "FEATURE_PR_CI", label: "Feature PR CI", branch: "feature/sprint1-implementation" },
+      warnings: [],
+      lastUpdated: new Date().toISOString(),
+    });
+    const orchestrator = new SprintOrchestrator(deps as any);
+
+    const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-orch-autofix-"));
+    const subtasksDir = path.join(tmpRoot, ".jules-subagents", "sprints", "sprint1-subtasks");
+    await fs.mkdir(subtasksDir, { recursive: true });
+    await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
+
+    loadSubtasks.mockResolvedValue([
+      {
+        id: "01-task",
+        title: "Test task",
+        prompt: "Do it",
+        depends_on: [],
+        is_independent: true,
+      },
+    ]);
+
+    listSessions.mockResolvedValue({
+      sessions: [
+        {
+          id: "abc123",
+          name: "sessions/abc123",
+          title: "Sprint 1: [01-task] Test task",
+          state: "COMPLETED",
+          prompt: "x",
+          outputs: [{ pullRequest: { url: "https://example.com/pr/10", workerBranch: "worker/task-01" } }],
+        },
+      ],
+    });
+
+    const result = await orchestrator.execute({
+      sprint_number: 1,
+      repo_path: tmpRoot,
+      source_id: "sources/123",
+      action: "status",
+      wait: false,
+    });
+
+    const text = result.content[0].text as string;
+    expect(text).toContain("CI Autofix Wait");
+    expect(text).toContain("`01-task`");
+    expect(text).toContain("`RUNNING`");
+    expect(deps.getFeatureBranchCiStatus).toHaveBeenCalled();
 
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });
