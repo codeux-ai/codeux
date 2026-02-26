@@ -20,7 +20,7 @@ interface CliWorkflowServiceDependencies {
 }
 
 interface StartCliTaskInput {
-  provider: Extract<ProviderId, "gemini" | "codex">;
+  provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
   task: Subtask;
   repoPath: string;
   featureBranch: string;
@@ -46,9 +46,11 @@ const DEFAULT_CLI_WORKFLOW_SETTINGS: CliWorkflowSettings = {
   containerMountGithubAuth: true,
   containerMountGeminiAuth: true,
   containerMountCodexAuth: true,
+  containerMountClaudeCodeAuth: true,
   containerGithubAuthPath: "~/.config/gh",
   containerGeminiAuthPath: "~/.gemini",
   containerCodexAuthPath: "~/.codex",
+  containerClaudeCodeAuthPath: "~/.claude",
 };
 
 const CONTAINER_HOME = "/tmp/jules-home";
@@ -224,50 +226,23 @@ export class CliWorkflowService {
         description: `Running ${args.provider} prompt on ${args.workerBranch} (workspace: ${worktreePath}).`,
       });
 
-      let providerResult = args.provider === "gemini"
-        ? await this.runGemini(
-          providerPrompt,
-          worktreePath,
-          providerSettings.model,
-          providerSettings.apiKey,
-          args.sessionId,
-          workflowSettings,
-          args.repoPath
-        )
-        : await this.runCodex(
-          providerPrompt,
-          worktreePath,
-          providerSettings.model,
-          providerSettings.apiKey,
-          args.sessionId,
-          workflowSettings,
-          args.repoPath
-        );
+      const runProvider = (prompt: string): Promise<CommandResult> => {
+        if (args.provider === "gemini") {
+          return this.runGemini(prompt, worktreePath, providerSettings.model, providerSettings.apiKey, args.sessionId, workflowSettings, args.repoPath);
+        }
+        if (args.provider === "claude-code") {
+          return this.runClaudeCode(prompt, worktreePath, providerSettings.model, providerSettings.apiKey, args.sessionId, workflowSettings, args.repoPath);
+        }
+        return this.runCodex(prompt, worktreePath, providerSettings.model, providerSettings.apiKey, args.sessionId, workflowSettings, args.repoPath);
+      };
+
+      let providerResult = await runProvider(providerPrompt);
       if (!providerResult.ok && workflowSettings.retryOnReadFileNotFound && this.isReadFileNotFoundToolError(providerResult)) {
         this.deps.sessionTracking.appendActivity(args.sessionId, {
           originator: "system",
           description: "Provider failed on missing file during tool read. Retrying once with file-discovery guidance.",
         });
-        const retryPrompt = this.buildReadFileRetryPrompt(providerPrompt);
-        providerResult = args.provider === "gemini"
-          ? await this.runGemini(
-            retryPrompt,
-            worktreePath,
-            providerSettings.model,
-            providerSettings.apiKey,
-            args.sessionId,
-            workflowSettings,
-            args.repoPath
-          )
-          : await this.runCodex(
-            retryPrompt,
-            worktreePath,
-            providerSettings.model,
-            providerSettings.apiKey,
-            args.sessionId,
-            workflowSettings,
-            args.repoPath
-          );
+        providerResult = await runProvider(this.buildReadFileRetryPrompt(providerPrompt));
       }
 
       if (!providerResult.ok) {
@@ -644,7 +619,7 @@ export class CliWorkflowService {
     };
   }
 
-  private withProviderEnv(provider: Extract<ProviderId, "gemini" | "codex">, model: string, apiKey: string): NodeJS.ProcessEnv {
+  private withProviderEnv(provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">, model: string, apiKey: string): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = { ...process.env };
     if (provider === "gemini") {
       if (model && model !== "default") {
@@ -652,6 +627,13 @@ export class CliWorkflowService {
       }
       if (apiKey.trim().length > 0) {
         env.GEMINI_API_KEY = apiKey;
+      }
+      return env;
+    }
+
+    if (provider === "claude-code") {
+      if (apiKey.trim().length > 0) {
+        env.ANTHROPIC_API_KEY = apiKey;
       }
       return env;
     }
@@ -712,6 +694,7 @@ export class CliWorkflowService {
       "OPENAI_BASE_URL",
       "OPENAI_ORG_ID",
       "OPENAI_PROJECT_ID",
+      "ANTHROPIC_API_KEY",
       "GH_TOKEN",
       "GITHUB_TOKEN",
       "HTTP_PROXY",
@@ -798,6 +781,12 @@ export class CliWorkflowService {
         targetPath: `${CONTAINER_HOME}/.codex`,
         label: "Codex auth",
       },
+      {
+        enabled: workflowSettings.containerMountClaudeCodeAuth,
+        sourcePath: workflowSettings.containerClaudeCodeAuthPath,
+        targetPath: `${CONTAINER_HOME}/.claude`,
+        label: "Claude Code auth",
+      },
     ];
 
     for (const mount of requestedMounts) {
@@ -827,7 +816,7 @@ export class CliWorkflowService {
     cwd: string,
     providerEnv: NodeJS.ProcessEnv,
     sessionId: string,
-    providerLabel: "gemini" | "codex",
+    providerLabel: "gemini" | "codex" | "claude-code",
     workflowSettings: CliWorkflowSettings,
     repoPath: string
   ): Promise<CommandResult> {
@@ -967,7 +956,7 @@ export class CliWorkflowService {
     cwd: string,
     providerEnv: NodeJS.ProcessEnv,
     sessionId: string,
-    providerLabel: "gemini" | "codex",
+    providerLabel: "gemini" | "codex" | "claude-code",
     workflowSettings: CliWorkflowSettings,
     repoPath: string
   ): Promise<CommandResult> {
@@ -1055,13 +1044,39 @@ export class CliWorkflowService {
     );
   }
 
+  private async runClaudeCode(
+    prompt: string,
+    cwd: string,
+    model: string,
+    apiKey: string,
+    sessionId: string,
+    workflowSettings: CliWorkflowSettings,
+    repoPath: string
+  ): Promise<CommandResult> {
+    const args = ["--dangerously-skip-permissions", "--print"];
+    if (model && model !== "default") {
+      args.push("--model", model);
+    }
+    args.push(prompt);
+    return this.runProviderCommand(
+      "claude",
+      args,
+      cwd,
+      this.withGithubToken(this.withProviderEnv("claude-code", model, apiKey)),
+      sessionId,
+      "claude-code",
+      workflowSettings,
+      repoPath
+    );
+  }
+
   private async runStreamingCommand(
     command: string,
     args: string[],
     cwd: string,
     env: NodeJS.ProcessEnv,
     sessionId: string,
-    providerLabel: "gemini" | "codex"
+    providerLabel: "gemini" | "codex" | "claude-code"
   ): Promise<CommandResult> {
     return new Promise<CommandResult>((resolve) => {
       const child = spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });

@@ -56,6 +56,7 @@ describe("SettingsRepository", () => {
           jules: { enabled: true, model: "default", weight: 50, thinkingMode: "MEDIUM", apiKey: "test-key" },
           gemini: { enabled: true, model: "gemini-2.5-pro", weight: 25, thinkingMode: "MEDIUM", apiKey: "gem-key" },
           codex: { enabled: true, model: "gpt-5.3-codex", weight: 25, thinkingMode: "HIGH", apiKey: "codex-key" },
+          "claude-code": { enabled: false, model: "default", weight: 0, thinkingMode: "HIGH", apiKey: "" },
         },
         julesApiKey: "test-key",
       },
@@ -100,9 +101,11 @@ describe("SettingsRepository", () => {
         containerMountGithubAuth: true,
         containerMountGeminiAuth: true,
         containerMountCodexAuth: false,
+        containerMountClaudeCodeAuth: true,
         containerGithubAuthPath: "~/.config/gh",
         containerGeminiAuthPath: "~/.gemini",
         containerCodexAuthPath: "~/.codex",
+        containerClaudeCodeAuthPath: "~/.claude",
       },
       skills: [
         { name: "worker", enabled: false, isInternal: true },
@@ -137,9 +140,9 @@ describe("SettingsRepository", () => {
   it("initializes defaults from external hints", async () => {
     const { dbPath } = await createRepo();
     const repo = new SettingsRepository(dbPath, {
-      env: { julesApiKey: "env-jules", geminiApiKey: "env-gem", codexApiKey: "env-cdx", githubToken: "env-gh" },
-      settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", githubToken: "" },
-      resolved: { julesApiKey: "env-jules", geminiApiKey: "env-gem", codexApiKey: "env-cdx", githubToken: "env-gh" },
+      env: { julesApiKey: "env-jules", geminiApiKey: "env-gem", codexApiKey: "env-cdx", claudeCodeApiKey: "", githubToken: "env-gh" },
+      settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+      resolved: { julesApiKey: "env-jules", geminiApiKey: "env-gem", codexApiKey: "env-cdx", claudeCodeApiKey: "", githubToken: "env-gh" },
     });
 
     const settings = repo.getSettings();

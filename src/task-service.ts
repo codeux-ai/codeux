@@ -29,7 +29,7 @@ export class TaskService {
     const settings = this.deps.getDashboardSettings();
     const chosen = chooseProviderForTask(settings, task);
     if (chosen === "jules" && !this.deps.isJulesApiConfigured()) {
-      const fallback = (["gemini", "codex"] as const).find((provider) => settings.aiProvider.providers[provider].enabled);
+      const fallback = (["gemini", "codex", "claude-code"] as const).find((provider) => settings.aiProvider.providers[provider].enabled);
       if (fallback) {
         return fallback;
       }

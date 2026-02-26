@@ -237,7 +237,7 @@ export class SessionTrackingRepository {
   }
 
   findLatestFailedCliSessionForTask(args: {
-    provider: Extract<ProviderId, "gemini" | "codex">;
+    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
     taskId: string;
     featureBranch: string;
     repoPath: string;
@@ -275,7 +275,7 @@ export class SessionTrackingRepository {
       SELECT id
       FROM provider_sessions
       WHERE state = 'RUNNING'
-        AND provider IN ('gemini', 'codex')
+        AND provider IN ('gemini', 'codex', 'claude-code')
         AND id LIKE 'cli-%'
       ORDER BY create_time ASC
     `).all() as unknown as SessionIdRow[];
