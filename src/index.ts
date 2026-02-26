@@ -143,7 +143,7 @@ class JulesAgentServer {
         this.lastStatus = status;
       },
       getDashboardSettings: () => this.dashboardSettings,
-      getFeatureBranchCiStatus: (args) => this.getFeatureBranchCiStatus(args),
+      getCiStatusForScope: (args) => this.getCiStatusForScope(args),
       renderInstruction: (templateId, variables, repoPath) =>
         this.instructionService.render(templateId, variables, repoPath),
     });
@@ -518,8 +518,9 @@ class JulesAgentServer {
     return this.gitStatusFetchPromise;
   }
 
-  private async getFeatureBranchCiStatus(args: {
+  private async getCiStatusForScope(args: {
     repoPath: string;
+    scope: "FEATURE_PR_CI" | "MAIN_MERGE_PR_CI";
     featureBranch: string;
     defaultBranch: string;
     featureBranchPrefix: string;
@@ -530,7 +531,7 @@ class JulesAgentServer {
         "REMOTE",
         this.getEffectiveGithubToken(),
         {
-          scope: "FEATURE_PR_CI",
+          scope: args.scope,
           featureBranch: args.featureBranch,
           defaultBranch: args.defaultBranch,
           featureBranchPrefix: args.featureBranchPrefix,

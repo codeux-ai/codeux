@@ -60,7 +60,13 @@ export interface SprintOrchestratorDependencies {
   getGuideContent: (guideName: string, repoPath?: string) => Promise<string>;
   updateLastStatus: (status: any) => void;
   getDashboardSettings: () => DashboardSettings;
-  getFeatureBranchCiStatus?: (args: { repoPath: string; featureBranch: string; defaultBranch: string; featureBranchPrefix: string }) => Promise<GitTrackingStatus | null>;
+  getCiStatusForScope?: (args: {
+    repoPath: string;
+    scope: "FEATURE_PR_CI" | "MAIN_MERGE_PR_CI";
+    featureBranch: string;
+    defaultBranch: string;
+    featureBranchPrefix: string;
+  }) => Promise<GitTrackingStatus | null>;
   renderInstruction: (templateId: InstructionTemplateId, variables: Record<string, unknown>, repoPath?: string) => Promise<string>;
 }
 
@@ -216,7 +222,7 @@ export class SprintOrchestrator {
     }
 
     if (subtasks.length > 0) {
-      const ciAutofixResult = await this.applyFeatureBranchCiAutofixWait(subtasks, {
+      const ciAutofixResult = await this.applyFeatureBranchCiGate(subtasks, {
         repoPath: args.repoPath,
         featureBranch: args.defaultFeatureBranch,
         defaultBranch: args.defaultBranch,
@@ -267,7 +273,7 @@ export class SprintOrchestrator {
     return conclusion === null;
   }
 
-  private async applyFeatureBranchCiAutofixWait(
+  private async applyFeatureBranchCiGate(
     subtasks: Subtask[],
     args: {
       repoPath: string;
@@ -281,9 +287,8 @@ export class SprintOrchestrator {
     if (
       !args.ciIntelligence.enabled ||
       !args.ciIntelligence.waitForCiBeforeFeatureMerge ||
-      !args.ciIntelligence.waitForJulesCiAutofix ||
       args.githubMode !== "REMOTE" ||
-      !this.deps.getFeatureBranchCiStatus
+      !this.deps.getCiStatusForScope
     ) {
       return { subtasks, reportText: "" };
     }
@@ -293,8 +298,9 @@ export class SprintOrchestrator {
       return { subtasks, reportText: "" };
     }
 
-    const gitStatus = await this.deps.getFeatureBranchCiStatus({
+    const gitStatus = await this.deps.getCiStatusForScope({
       repoPath: args.repoPath,
+      scope: "FEATURE_PR_CI",
       featureBranch: args.featureBranch,
       defaultBranch: args.defaultBranch,
       featureBranchPrefix: args.featureBranchPrefix,
@@ -322,17 +328,105 @@ export class SprintOrchestrator {
       const checks = Array.isArray(pr.checks) ? pr.checks : [];
       const hasFailedChecks = checks.some((check) => this.isCiCheckFailed(check.status, check.conclusion));
       const hasPendingChecks = checks.length === 0 || checks.some((check) => this.isCiCheckPending(check.status, check.conclusion));
+      const hasReviewBlockers = pr.reviewDecision === "CHANGES_REQUESTED" || pr.comments > 0;
 
-      if (!hasFailedChecks && !hasPendingChecks) {
+      if (!hasFailedChecks && !hasPendingChecks && !hasReviewBlockers) {
+        reportText += `✅ **Feature PR Ready:** Task \`${task.id}\` kann für Merge in \`${args.featureBranch}\` freigegeben werden (PR #${pr.number}).\n`;
         continue;
       }
 
       task.status = "RUNNING";
-      const ciStateLabel = hasFailedChecks ? "failed" : "pending";
-      reportText += `⏳ **CI Autofix Wait:** Task \`${task.id}\` bleibt in Arbeit, da Feature-PR CI ${ciStateLabel} ist (Branch \`${workerBranch}\`).\n`;
+      const ciStateLabel = hasFailedChecks ? "failed" : hasPendingChecks ? "pending" : "green";
+      const header = args.ciIntelligence.waitForJulesCiAutofix ? "CI/Review Autofix Wait" : "CI/Review Merge Gate";
+      reportText += `⏳ **${header}:** Task \`${task.id}\` bleibt in Arbeit (PR #${pr.number}, Branch \`${workerBranch}\`).\n`;
+      reportText += `   - PR: ${pr.url}\n`;
+      reportText += `   - CI Status: \`${ciStateLabel.toUpperCase()}\`\n`;
+      reportText += `   - Prüfen: \`gh pr checks ${pr.number} --watch\`\n`;
+      if (hasFailedChecks) {
+        const failedChecks = checks
+          .filter((check) => this.isCiCheckFailed(check.status, check.conclusion))
+          .map((check) => check.name);
+        reportText += `   - Fehlgeschlagene Checks: ${failedChecks.join(", ")}\n`;
+        reportText += `   - Logs: \`gh run list --branch ${workerBranch} --event pull_request --limit 5\` und danach \`gh run view <run-id> --log-failed\`\n`;
+      }
+      if (hasReviewBlockers) {
+        reportText += `   - Review Blocker: \`reviewDecision=${pr.reviewDecision || "NONE"}\`, comments=${pr.comments}\n`;
+        reportText += `   - Kommentare prüfen: \`gh pr view ${pr.number} --comments\`\n`;
+        reportText += `   - Inline-Reviews prüfen: \`gh api repos/{owner}/{repo}/pulls/${pr.number}/comments\`\n`;
+      }
     }
 
     return { subtasks, reportText };
+  }
+
+  private async renderMainMergeCiFeedback(args: {
+    repoPath: string;
+    featureBranch: string;
+    defaultBranch: string;
+    featureBranchPrefix: string;
+    ciIntelligence: CiIntelligenceSettings;
+    githubMode: "REMOTE" | "LOCAL";
+  }): Promise<string> {
+    if (
+      !args.ciIntelligence.enabled ||
+      !args.ciIntelligence.waitForCiBeforeMainMerge ||
+      args.githubMode !== "REMOTE" ||
+      !this.deps.getCiStatusForScope
+    ) {
+      return "";
+    }
+
+    const gitStatus = await this.deps.getCiStatusForScope({
+      repoPath: args.repoPath,
+      scope: "MAIN_MERGE_PR_CI",
+      featureBranch: args.featureBranch,
+      defaultBranch: args.defaultBranch,
+      featureBranchPrefix: args.featureBranchPrefix,
+    });
+
+    if (!gitStatus?.available) {
+      return "";
+    }
+
+    const mainMergePr = gitStatus.openPullRequests.find(
+      (pr) => pr.baseRefName === args.defaultBranch && pr.headRefName === args.featureBranch
+    );
+    if (!mainMergePr) {
+      return `\nℹ️ **Main CI Gate:** Kein offener PR \`${args.featureBranch} -> ${args.defaultBranch}\` gefunden. Bitte PR erstellen und CI abwarten.\n`;
+    }
+
+    const checks = Array.isArray(mainMergePr.checks) ? mainMergePr.checks : [];
+    const hasFailedChecks = checks.some((check) => this.isCiCheckFailed(check.status, check.conclusion));
+    const hasPendingChecks = checks.length === 0 || checks.some((check) => this.isCiCheckPending(check.status, check.conclusion));
+    const hasReviewBlockers = mainMergePr.reviewDecision === "CHANGES_REQUESTED" || mainMergePr.comments > 0;
+
+    let text = `\n### Main Merge CI Gate\n`;
+    text += `- PR: ${mainMergePr.url}\n`;
+    text += `- Check Status: \`${hasFailedChecks ? "FAILED" : hasPendingChecks ? "PENDING" : "SUCCESS"}\`\n`;
+    text += `- Review Status: \`reviewDecision=${mainMergePr.reviewDecision || "NONE"}\`, comments=${mainMergePr.comments}\n`;
+    text += `- Prüfen: \`gh pr checks ${mainMergePr.number} --watch\`\n`;
+
+    if (hasFailedChecks) {
+      const failedChecks = checks
+        .filter((check) => this.isCiCheckFailed(check.status, check.conclusion))
+        .map((check) => check.name);
+      text += `- Fehlgeschlagene Checks: ${failedChecks.join(", ")}\n`;
+      text += `- Logs: \`gh run list --branch ${args.featureBranch} --event pull_request --limit 5\` und \`gh run view <run-id> --log-failed\`\n`;
+      text += `- Merge in \`${args.defaultBranch}\` erst nach grünen Checks freigeben.\n`;
+    } else if (hasPendingChecks) {
+      text += `- Merge in \`${args.defaultBranch}\` erst freigeben, wenn alle required checks grün sind.\n`;
+    } else if (hasReviewBlockers) {
+      text += `- Merge in \`${args.defaultBranch}\` blockiert bis offene Reviews/Kommentare abgearbeitet sind.\n`;
+    } else {
+      text += `- ✅ Required checks sind grün. Main-Merge kann freigegeben werden (Review/Comments beachten).\n`;
+    }
+
+    if (hasReviewBlockers) {
+      text += `- Kommentare prüfen: \`gh pr view ${mainMergePr.number} --comments\`\n`;
+      text += `- Inline-Reviews prüfen: \`gh api repos/{owner}/{repo}/pulls/${mainMergePr.number}/comments\`\n`;
+    }
+
+    return `${text}\n`;
   }
 
   async execute(args: SprintAgentArgs): Promise<any> {
@@ -476,6 +570,14 @@ export class SprintOrchestrator {
                 githubMode,
                 ciIntelligence,
                 renderInstruction: (templateId, variables) => this.renderInstruction(templateId, variables, args.repo_path),
+              });
+              fullReport += await this.renderMainMergeCiFeedback({
+                repoPath: args.repo_path,
+                featureBranch: defaultFeatureBranch,
+                defaultBranch,
+                featureBranchPrefix: this.deps.getDashboardSettings().git.featureBranchPrefix,
+                ciIntelligence,
+                githubMode,
               });
             } catch (cleanupError) {
               console.error(`Warning: Failed to cleanup subtasks: ${cleanupError}`);

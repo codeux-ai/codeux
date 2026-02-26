@@ -27,7 +27,7 @@ const buildDeps = () => {
     getGuideContent,
     updateLastStatus: vi.fn(),
     getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
-    getFeatureBranchCiStatus: vi.fn().mockResolvedValue(null),
+    getCiStatusForScope: vi.fn().mockResolvedValue(null),
     renderInstruction: vi.fn(async (templateId: string, variables: Record<string, unknown>) => {
       if (templateId === "planningMissing" && typeof variables.subtasks_dir === "string") {
         return `### 🛑 ACTION REQUIRED: Sprint Planning Missing\n\nNo subtasks found in \`${variables.subtasks_dir}\`.`;
@@ -153,7 +153,7 @@ describe("SprintOrchestrator", () => {
         waitForJulesCiAutofix: true,
       },
     });
-    deps.getFeatureBranchCiStatus = vi.fn().mockResolvedValue({
+    deps.getCiStatusForScope = vi.fn().mockResolvedValue({
       mode: "REMOTE",
       available: true,
       repositoryRoot: "/tmp/repo",
@@ -221,10 +221,10 @@ describe("SprintOrchestrator", () => {
     });
 
     const text = result.content[0].text as string;
-    expect(text).toContain("CI Autofix Wait");
+    expect(text).toContain("CI/Review Autofix Wait");
     expect(text).toContain("`01-task`");
     expect(text).toContain("`RUNNING`");
-    expect(deps.getFeatureBranchCiStatus).toHaveBeenCalled();
+    expect(deps.getCiStatusForScope).toHaveBeenCalled();
 
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });
