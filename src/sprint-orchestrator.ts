@@ -303,7 +303,7 @@ export class SprintOrchestrator {
       return { subtasks, reportText: "" };
     }
 
-    const completedAwaitingMerge = subtasks.filter((task) => task.status === "COMPLETED" && !task.is_merged && !!task.worker_branch);
+    const completedAwaitingMerge = subtasks.filter((task) => task.status === "COMPLETED" && !task.is_merged);
     if (completedAwaitingMerge.length === 0) {
       return { subtasks, reportText: "" };
     }
@@ -321,17 +321,26 @@ export class SprintOrchestrator {
     }
 
     const prByHeadBranch = new Map<string, (typeof gitStatus.openPullRequests)[number]>();
+    const prByUrl = new Map<string, (typeof gitStatus.openPullRequests)[number]>();
     for (const pr of gitStatus.openPullRequests) {
       if (pr.headRefName) {
         prByHeadBranch.set(pr.headRefName, pr);
+      }
+      if (typeof pr.url === "string" && pr.url.trim().length > 0) {
+        prByUrl.set(pr.url.trim(), pr);
       }
     }
 
     let reportText = "";
     for (const task of completedAwaitingMerge) {
-      const workerBranch = task.worker_branch!;
-      const pr = prByHeadBranch.get(workerBranch);
+      const workerBranch = typeof task.worker_branch === "string" ? task.worker_branch : null;
+      const taskPrUrl = typeof task.pr_url === "string" ? task.pr_url.trim() : "";
+      const pr = (workerBranch ? prByHeadBranch.get(workerBranch) : undefined) || (taskPrUrl ? prByUrl.get(taskPrUrl) : undefined);
       if (!pr) {
+        task.status = "RUNNING";
+        task.merge_indicator = "CI";
+        reportText += `⏳ **CI/Review Merge Gate:** Task \`${task.id}\` stays in progress because no open feature PR could be matched.\n`;
+        reportText += `   - Expected: PR with base \`${args.featureBranch}\` and matching worker branch or task PR URL.\n`;
         continue;
       }
 
@@ -349,15 +358,15 @@ export class SprintOrchestrator {
             task.is_merged = true;
             task.merge_indicator = "AUTOMERGE";
             await this.persistTaskMergedFlag(args.subtasksDir, task.id);
-            reportText += `🤖 **Auto-Merged:** Task \`${task.id}\` wurde automatisch gemerged (PR #${pr.number}).\n`;
+            reportText += `🤖 **Auto-Merged:** Task \`${task.id}\` was merged automatically (PR #${pr.number}).\n`;
           } else {
-            reportText += `⚠️ **Auto-Merge fehlgeschlagen:** Task \`${task.id}\` (PR #${pr.number}) - ${mergeResult.message || "unknown error"}\n`;
-            reportText += `   - Manuell prüfen: \`gh pr merge ${pr.number} --merge --delete-branch\`\n`;
+            reportText += `⚠️ **Auto-Merge Failed:** Task \`${task.id}\` (PR #${pr.number}) - ${mergeResult.message || "unknown error"}\n`;
+            reportText += `   - Manual check: \`gh pr merge ${pr.number} --merge --delete-branch\`\n`;
           }
           continue;
         }
         task.merge_indicator = task.is_merged ? "MERGED" : undefined;
-        reportText += `✅ **Feature PR Ready:** Task \`${task.id}\` kann für Merge in \`${args.featureBranch}\` freigegeben werden (PR #${pr.number}).\n`;
+        reportText += `✅ **Feature PR Ready:** Task \`${task.id}\` can be approved for merge into \`${args.featureBranch}\` (PR #${pr.number}).\n`;
         continue;
       }
 
@@ -365,21 +374,21 @@ export class SprintOrchestrator {
       task.merge_indicator = hasReviewBlockers && !hasFailedChecks && !hasPendingChecks ? "MERGE_BLOCKED" : "CI";
       const ciStateLabel = hasFailedChecks ? "failed" : hasPendingChecks ? "pending" : "green";
       const header = args.ciIntelligence.waitForJulesCiAutofix ? "CI/Review Autofix Wait" : "CI/Review Merge Gate";
-      reportText += `⏳ **${header}:** Task \`${task.id}\` bleibt in Arbeit (PR #${pr.number}, Branch \`${workerBranch}\`).\n`;
+      reportText += `⏳ **${header}:** Task \`${task.id}\` stays in progress (PR #${pr.number}, branch \`${workerBranch || args.featureBranch}\`).\n`;
       reportText += `   - PR: ${pr.url}\n`;
       reportText += `   - CI Status: \`${ciStateLabel.toUpperCase()}\`\n`;
-      reportText += `   - Prüfen: \`gh pr checks ${pr.number} --watch\`\n`;
+      reportText += `   - Check live: \`gh pr checks ${pr.number} --watch\`\n`;
       if (hasFailedChecks) {
         const failedChecks = checks
           .filter((check) => this.isCiCheckFailed(check.status, check.conclusion))
           .map((check) => check.name);
-        reportText += `   - Fehlgeschlagene Checks: ${failedChecks.join(", ")}\n`;
-        reportText += `   - Logs: \`gh run list --branch ${workerBranch} --event pull_request --limit 5\` und danach \`gh run view <run-id> --log-failed\`\n`;
+        reportText += `   - Failed checks: ${failedChecks.join(", ")}\n`;
+        reportText += `   - Logs: \`gh run list --branch ${workerBranch || args.featureBranch} --event pull_request --limit 5\` and then \`gh run view <run-id> --log-failed\`\n`;
       }
       if (hasReviewBlockers) {
         reportText += `   - Review Blocker: \`reviewDecision=${pr.reviewDecision || "NONE"}\`, comments=${pr.comments}\n`;
-        reportText += `   - Kommentare prüfen: \`gh pr view ${pr.number} --comments\`\n`;
-        reportText += `   - Inline-Reviews prüfen: \`gh api repos/{owner}/{repo}/pulls/${pr.number}/comments\`\n`;
+        reportText += `   - Review comments: \`gh pr view ${pr.number} --comments\`\n`;
+        reportText += `   - Inline reviews: \`gh api repos/{owner}/{repo}/pulls/${pr.number}/comments\`\n`;
       }
     }
 
@@ -440,7 +449,7 @@ export class SprintOrchestrator {
       (pr) => pr.baseRefName === args.defaultBranch && pr.headRefName === args.featureBranch
     );
     if (!mainMergePr) {
-      return `\nℹ️ **Main CI Gate:** Kein offener PR \`${args.featureBranch} -> ${args.defaultBranch}\` gefunden. Bitte PR erstellen und CI abwarten.\n`;
+      return `\nℹ️ **Main CI Gate:** No open PR \`${args.featureBranch} -> ${args.defaultBranch}\` found. Create the PR and wait for CI.\n`;
     }
 
     const checks = Array.isArray(mainMergePr.checks) ? mainMergePr.checks : [];
@@ -452,26 +461,26 @@ export class SprintOrchestrator {
     text += `- PR: ${mainMergePr.url}\n`;
     text += `- Check Status: \`${hasFailedChecks ? "FAILED" : hasPendingChecks ? "PENDING" : "SUCCESS"}\`\n`;
     text += `- Review Status: \`reviewDecision=${mainMergePr.reviewDecision || "NONE"}\`, comments=${mainMergePr.comments}\n`;
-    text += `- Prüfen: \`gh pr checks ${mainMergePr.number} --watch\`\n`;
+    text += `- Check live: \`gh pr checks ${mainMergePr.number} --watch\`\n`;
 
     if (hasFailedChecks) {
       const failedChecks = checks
         .filter((check) => this.isCiCheckFailed(check.status, check.conclusion))
         .map((check) => check.name);
-      text += `- Fehlgeschlagene Checks: ${failedChecks.join(", ")}\n`;
-      text += `- Logs: \`gh run list --branch ${args.featureBranch} --event pull_request --limit 5\` und \`gh run view <run-id> --log-failed\`\n`;
-      text += `- Merge in \`${args.defaultBranch}\` erst nach grünen Checks freigeben.\n`;
+      text += `- Failed checks: ${failedChecks.join(", ")}\n`;
+      text += `- Logs: \`gh run list --branch ${args.featureBranch} --event pull_request --limit 5\` and \`gh run view <run-id> --log-failed\`\n`;
+      text += `- Only approve merge into \`${args.defaultBranch}\` after checks are green.\n`;
     } else if (hasPendingChecks) {
-      text += `- Merge in \`${args.defaultBranch}\` erst freigeben, wenn alle required checks grün sind.\n`;
+      text += `- Only approve merge into \`${args.defaultBranch}\` once all required checks are green.\n`;
     } else if (hasReviewBlockers) {
-      text += `- Merge in \`${args.defaultBranch}\` blockiert bis offene Reviews/Kommentare abgearbeitet sind.\n`;
+      text += `- Merge into \`${args.defaultBranch}\` is blocked until open reviews/comments are resolved.\n`;
     } else {
-      text += `- ✅ Required checks sind grün. Main-Merge kann freigegeben werden (Review/Comments beachten).\n`;
+      text += `- ✅ Required checks are green. Main merge can be approved (verify reviews/comments).\n`;
     }
 
     if (hasReviewBlockers) {
-      text += `- Kommentare prüfen: \`gh pr view ${mainMergePr.number} --comments\`\n`;
-      text += `- Inline-Reviews prüfen: \`gh api repos/{owner}/{repo}/pulls/${mainMergePr.number}/comments\`\n`;
+      text += `- Review comments: \`gh pr view ${mainMergePr.number} --comments\`\n`;
+      text += `- Inline reviews: \`gh api repos/{owner}/{repo}/pulls/${mainMergePr.number}/comments\`\n`;
     }
 
     return `${text}\n`;
