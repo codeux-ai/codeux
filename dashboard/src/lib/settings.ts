@@ -59,6 +59,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     waitForCiBeforeFeatureMerge: true,
     resolveAllCommentsBeforeFeatureMerge: true,
     waitForJulesCiAutofix: false,
+    julesCiAutofixMaxRetries: 3,
     autoMergeFeaturePrWhenGreen: false,
   },
   sprintLoopSteps: {

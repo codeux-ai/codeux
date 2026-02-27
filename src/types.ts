@@ -96,6 +96,7 @@ export interface CiIntelligenceSettings {
   waitForCiBeforeFeatureMerge: boolean;
   resolveAllCommentsBeforeFeatureMerge: boolean;
   waitForJulesCiAutofix: boolean;
+  julesCiAutofixMaxRetries: number;
   autoMergeFeaturePrWhenGreen: boolean;
 }
 

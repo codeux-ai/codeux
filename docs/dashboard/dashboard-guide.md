@@ -81,6 +81,7 @@ Settings group:
 - `waitForCiBeforeFeatureMerge`
 - `resolveAllCommentsBeforeFeatureMerge`
 - `waitForJulesCiAutofix`
+- `julesCiAutofixMaxRetries`
 - `autoMergeFeaturePrWhenGreen`
 
 Effect:
@@ -90,6 +91,7 @@ Effect:
 - `waitForJulesCiAutofix` controls feedback mode while blocked:
   - enabled: explicit autofix-wait guidance for failed checks.
   - disabled: merge-gate guidance without autofix wording.
+- `julesCiAutofixMaxRetries` sets how many Jules autofix notifications are attempted before escalation. Escalation output includes exact task ids, PR links, and failed check names so no manual searching is needed.
 - `autoMergeFeaturePrWhenGreen` executes feature-PR auto-merge once checks are green and review blockers are clear.
 - Feature-PR CI wait/automerge matching uses worker branch first and falls back to the task `pr_url`, so tasks without a stored worker branch still remain gated correctly.
 - Main merge stage (`feature -> main`) now emits live CI/review gate feedback with failed check names and ready-to-run `gh` commands.

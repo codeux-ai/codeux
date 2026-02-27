@@ -46,6 +46,8 @@ const MIN_WATCH_LOOP_INTERVAL_SECONDS = 1;
 const MAX_WATCH_LOOP_INTERVAL_SECONDS = 3600;
 const MIN_WATCH_LOOP_OUTPUT_INTERVAL_SECONDS = 60;
 const MAX_WATCH_LOOP_OUTPUT_INTERVAL_SECONDS = 3600;
+const MIN_JULES_CI_AUTOFIX_RETRIES = 0;
+const MAX_JULES_CI_AUTOFIX_RETRIES = 20;
 
 const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
   jules: {
@@ -113,6 +115,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     waitForCiBeforeFeatureMerge: true,
     resolveAllCommentsBeforeFeatureMerge: true,
     waitForJulesCiAutofix: false,
+    julesCiAutofixMaxRetries: 3,
     autoMergeFeaturePrWhenGreen: false,
   },
   sprintLoopSteps: {
@@ -408,6 +411,16 @@ const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints)
     waitForJulesCiAutofix: readBoolean(
       ciInput.waitForJulesCiAutofix,
       DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.waitForJulesCiAutofix
+    ),
+    julesCiAutofixMaxRetries: Math.min(
+      MAX_JULES_CI_AUTOFIX_RETRIES,
+      Math.max(
+        MIN_JULES_CI_AUTOFIX_RETRIES,
+        readInteger(
+          ciInput.julesCiAutofixMaxRetries,
+          DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.julesCiAutofixMaxRetries
+        )
+      )
     ),
     autoMergeFeaturePrWhenGreen: readBoolean(
       ciInput.autoMergeFeaturePrWhenGreen,

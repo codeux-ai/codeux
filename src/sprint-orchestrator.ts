@@ -46,6 +46,7 @@ const DEFAULT_CI_SETTINGS: CiIntelligenceSettings = {
   waitForCiBeforeFeatureMerge: true,
   resolveAllCommentsBeforeFeatureMerge: true,
   waitForJulesCiAutofix: false,
+  julesCiAutofixMaxRetries: 3,
   autoMergeFeaturePrWhenGreen: false,
 };
 
@@ -88,7 +89,7 @@ export interface SprintOrchestratorDependencies {
 }
 
 export class SprintOrchestrator {
-  private readonly ciFailureNotified = new Set<string>();
+  private readonly ciAutofixRetryCounts = new Map<string, number>();
 
   constructor(private readonly deps: SprintOrchestratorDependencies) {}
 
@@ -260,6 +261,7 @@ export class SprintOrchestrator {
 
     if (subtasks.length > 0) {
       const ciAutofixResult = await this.applyFeatureBranchCiGate(subtasks, {
+        automationLevel: args.automationLevel,
         repoPath: args.repoPath,
         subtasksDir: args.subtasksDir,
         featureBranch: args.defaultFeatureBranch,
@@ -315,6 +317,15 @@ export class SprintOrchestrator {
       return task.session_name.replace(/^sessions\//, "");
     }
     return null;
+  }
+
+  private getCiAutofixRetryKey(task: Subtask, prNumber: number): string {
+    const sessionId = this.resolveTaskSessionId(task) || task.id;
+    return `${sessionId}:${prNumber}`;
+  }
+
+  private resolveCiEscalationOwner(automationLevel: AutomationLevel): "AGENT" | "HUMAN" {
+    return automationLevel === "FULL" ? "AGENT" : "HUMAN";
   }
 
   private shouldAutoIntervene(
@@ -483,6 +494,8 @@ export class SprintOrchestrator {
     prNumber: number;
     branchName: string;
     failedChecks: string[];
+    attempt: number;
+    maxRetries: number;
   }): Promise<{ sent: boolean; reason?: string }> {
     if (!this.isJulesManagedTask(args.task)) {
       return { sent: false, reason: "Task is not Jules-managed." };
@@ -495,27 +508,23 @@ export class SprintOrchestrator {
       return { sent: false, reason: "No session id available." };
     }
 
-    const dedupeKey = `${sessionId}:${args.prNumber}:${args.failedChecks.join("|")}`;
-    if (this.ciFailureNotified.has(dedupeKey)) {
-      return { sent: false, reason: "Already notified for this failure set." };
-    }
-
     const failedChecksLine = args.failedChecks.length > 0 ? args.failedChecks.join(", ") : "unknown checks";
     const prompt = [
       `CI failed for your task PR #${args.prNumber} on branch ${args.branchName}.`,
       `Failed checks: ${failedChecksLine}.`,
+      `Autofix attempt ${args.attempt} of ${args.maxRetries}.`,
       "Please fix the CI issues, commit the necessary changes, and push updates to the same branch.",
       "Continue until checks are green.",
     ].join(" ");
 
     await this.deps.sendSessionMessage(sessionId, prompt);
-    this.ciFailureNotified.add(dedupeKey);
     return { sent: true };
   }
 
   private async applyFeatureBranchCiGate(
     subtasks: Subtask[],
     args: {
+      automationLevel: AutomationLevel;
       repoPath: string;
       subtasksDir: string;
       featureBranch: string;
@@ -527,6 +536,10 @@ export class SprintOrchestrator {
   ): Promise<{ subtasks: Subtask[]; reportText: string }> {
     for (const task of subtasks) {
       task.merge_indicator = task.is_merged ? "MERGED" : undefined;
+      if (task.status === "COMPLETED") {
+        task.intervention_owner = undefined;
+        task.intervention_hint = undefined;
+      }
     }
 
     if (
@@ -588,6 +601,8 @@ export class SprintOrchestrator {
         : false;
 
       if (!hasFailedChecks && !hasPendingChecks && !hasReviewBlockers) {
+        const retryKey = this.getCiAutofixRetryKey(task, pr.number);
+        this.ciAutofixRetryCounts.delete(retryKey);
         if (args.ciIntelligence.autoMergeFeaturePrWhenGreen && this.deps.autoMergeFeaturePr) {
           const mergeResult = await this.deps.autoMergeFeaturePr({ repoPath: args.repoPath, prNumber: pr.number });
           if (mergeResult.ok) {
@@ -621,15 +636,32 @@ export class SprintOrchestrator {
         reportText += `   - Failed checks: ${failedChecks.join(", ")}\n`;
         reportText += `   - Logs: \`gh run list --branch ${workerBranch || args.featureBranch} --event pull_request --limit 5\` and then \`gh run view <run-id> --log-failed\`\n`;
         if (args.ciIntelligence.waitForJulesCiAutofix) {
+          const retryKey = this.getCiAutofixRetryKey(task, pr.number);
+          const maxRetries = Math.max(0, args.ciIntelligence.julesCiAutofixMaxRetries);
+          const currentRetries = this.ciAutofixRetryCounts.get(retryKey) || 0;
+          if (currentRetries >= maxRetries) {
+            const owner = this.resolveCiEscalationOwner(args.automationLevel);
+            task.status = "BLOCKED";
+            task.intervention_owner = owner;
+            task.intervention_hint = `CI autofix retry limit reached (${currentRetries}/${maxRetries}) for task ${task.id} - PR: ${pr.url} - Failed checks: ${failedChecks.join(", ")}`;
+            reportText += `   - 🚨 CI autofix retries exhausted (${currentRetries}/${maxRetries}).\n`;
+            reportText += `   - Escalation (${owner}): Task \`${task.id}\` has failing CI and cannot be merged yet.\n`;
+            reportText += `   - PR Link: ${pr.url}\n`;
+            reportText += `   - Required next action: fix failing checks, then continue merge flow.\n`;
+            continue;
+          }
           const notifyResult = await this.notifyJulesAboutFailedCi({
             task,
             prNumber: pr.number,
             branchName: workerBranch || args.featureBranch,
             failedChecks,
+            attempt: currentRetries + 1,
+            maxRetries,
           });
+          this.ciAutofixRetryCounts.set(retryKey, currentRetries + 1);
           if (notifyResult.sent) {
-            reportText += `   - Jules session notified to fix CI and continue work.\n`;
-          } else if (notifyResult.reason && notifyResult.reason !== "Already notified for this failure set.") {
+            reportText += `   - Jules session notified to fix CI and continue work (attempt ${currentRetries + 1}/${maxRetries}).\n`;
+          } else if (notifyResult.reason) {
             reportText += `   - CI autofix notify skipped: ${notifyResult.reason}\n`;
           }
         }

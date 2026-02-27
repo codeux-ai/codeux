@@ -155,6 +155,7 @@ For `action=status`:
 - Feature-branch merge instructions can require CI wait and comment resolution.
 - Final merge-to-main instructions can require CI wait and comment resolution.
 - If `waitForJulesCiAutofix` is enabled and feature PR checks fail, the sprint loop notifies the Jules session with failed-check context and keeps the task in work state.
+- CI autofix retries are capped by `julesCiAutofixMaxRetries`; once exhausted, the task is escalated as intervention-needed with exact task id, PR URL, and failed check names (focus: fix CI before merge).
 
 ## Files and Data Used
 

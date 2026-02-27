@@ -119,6 +119,7 @@ export interface DashboardSettings {
     waitForCiBeforeFeatureMerge: boolean;
     resolveAllCommentsBeforeFeatureMerge: boolean;
     waitForJulesCiAutofix: boolean;
+    julesCiAutofixMaxRetries: number;
     autoMergeFeaturePrWhenGreen: boolean;
   };
   sprintLoopSteps: {
