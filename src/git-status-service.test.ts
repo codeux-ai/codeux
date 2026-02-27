@@ -185,6 +185,54 @@ describe("GitStatusService", () => {
     expect(result.ciRuns[0].headBranch).toBe("feature/sprint1-implementation");
   });
 
+  it("parses numeric comment count from gh pr list payload", async () => {
+    const service = new GitStatusService("/tmp/repo", async (command, args, _context) => {
+      const key = `${command} ${args.join(" ")}`;
+      const responses: Record<string, { ok: boolean; stdout: string; stderr: string }> = {
+        "git rev-parse --is-inside-work-tree": { ok: true, stdout: "true\n", stderr: "" },
+        "git rev-parse --show-toplevel": { ok: true, stdout: "/tmp/repo\n", stderr: "" },
+        "git branch --show-current": { ok: true, stdout: "feature/sprint1-implementation\n", stderr: "" },
+        "git remote": { ok: true, stdout: "origin\n", stderr: "" },
+        "git status --porcelain": { ok: true, stdout: "", stderr: "" },
+        "gh --version": { ok: true, stdout: "gh version", stderr: "" },
+        "gh auth status": { ok: true, stdout: "ok", stderr: "" },
+        "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup": {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              number: 11,
+              title: "task PR",
+              url: "https://example/pr/11",
+              state: "OPEN",
+              isDraft: false,
+              headRefName: "task/one",
+              baseRefName: "feature/sprint1-implementation",
+              mergeStateStatus: "CLEAN",
+              reviewDecision: null,
+              updatedAt: "2026-02-25T00:00:00Z",
+              comments: 3,
+              statusCheckRollup: [],
+            },
+          ]),
+          stderr: "",
+        },
+        "gh run list --limit 50 --json databaseId,name,workflowName,status,conclusion,event,headBranch,url,updatedAt": { ok: true, stdout: "[]", stderr: "" },
+        "gh pr list --state merged --limit 100 --json number,title,url,headRefName,baseRefName,mergedAt,mergedBy": { ok: true, stdout: "[]", stderr: "" },
+      };
+      return responses[key] ?? { ok: false, stdout: "", stderr: "missing mock" };
+    });
+
+    const result = await service.getStatus("REMOTE", undefined, {
+      scope: "FEATURE_PR_CI",
+      featureBranch: "feature/sprint1-implementation",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+    });
+
+    expect(result.openPullRequests).toHaveLength(1);
+    expect(result.openPullRequests[0].comments).toBe(3);
+  });
+
   it("tracks main branch CI between feature merge windows", async () => {
     const service = new GitStatusService("/tmp/repo", async (command, args, _context) => {
       const key = `${command} ${args.join(" ")}`;

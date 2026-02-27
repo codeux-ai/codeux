@@ -90,9 +90,10 @@ Effect:
 - `waitForJulesCiAutofix` controls feedback mode while blocked:
   - enabled: explicit autofix-wait guidance for failed checks.
   - disabled: merge-gate guidance without autofix wording.
-- `autoMergeFeaturePrWhenGreen` allows automatic feature-PR merge once CI is green and review blockers are clear.
+- `autoMergeFeaturePrWhenGreen` executes feature-PR auto-merge once checks are green and review blockers are clear.
+- Feature-PR CI wait/automerge matching uses worker branch first and falls back to the task `pr_url`, so tasks without a stored worker branch still remain gated correctly.
 - Main merge stage (`feature -> main`) now emits live CI/review gate feedback with failed check names and ready-to-run `gh` commands.
-- They do not directly execute merges; they govern instruction policy output.
+- Main merge into default branch still stays manual.
 
 ## Sprint Loop Step Toggles
 
@@ -121,6 +122,7 @@ Use case:
 - Tracking scope is dynamic and shown in panel metadata:
   - `Feature PR CI` while sprint tasks are actively running and feature CI wait gate is enabled.
   - `Main Branch CI` outside active running-task windows (including final merge stage).
+- PR comment counters are sourced from GitHub `comments` payloads in both object and numeric shapes.
 - Recent merges list includes all fetched merges into feature-prefixed branches and the default branch.
 
 ## No-Key Startup Mode

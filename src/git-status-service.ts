@@ -386,7 +386,9 @@ export class GitStatusService {
       const commentsObj = (item.comments && typeof item.comments === "object")
         ? (item.comments as Record<string, unknown>)
         : null;
-      const comments = commentsObj ? (toInt(commentsObj.totalCount) ?? 0) : 0;
+      const commentsFromObject = commentsObj ? toInt(commentsObj.totalCount) : null;
+      const commentsFromNumber = toInt(item.comments);
+      const comments = commentsFromNumber ?? commentsFromObject ?? 0;
 
       return {
         number: toInt(item.number) ?? 0,
