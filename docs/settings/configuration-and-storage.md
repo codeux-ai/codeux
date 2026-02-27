@@ -45,6 +45,7 @@ Legacy migration:
 
 Top-level fields:
 - `automationLevel`
+- `automationInterventions`
 - `aiProvider`
 - `git`
 - `ciIntelligence`
@@ -58,6 +59,12 @@ Top-level fields:
 - `strategy` (`MANUAL|WEIGHTED|ORCHESTRATOR`)
 - `providers` map (enabled/model/weight/thinkingMode/apiKey per provider)
 - `julesApiKey` (backward-compatible alias synced with `providers.jules.apiKey`)
+
+`automationInterventions` contains:
+- `autoApprovePlan` (default `true`): auto-approve `AWAITING_PLAN_APPROVAL` sessions in `SEMI_AUTO`
+- `autoAnswerClarification` (default `false`): auto-answer `AWAITING_USER_FEEDBACK` sessions in `SEMI_AUTO`
+- `autoResumePaused` (default `false`): auto-send resume nudge for `PAUSED` sessions in `SEMI_AUTO`
+- `clarificationAnswerTemplate`: default response body used for clarification auto-replies
 
 Backend contract:
 - `src/types.ts`

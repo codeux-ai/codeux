@@ -45,6 +45,8 @@ export interface Subtask {
   is_independent: boolean;
   is_merged?: boolean;
   merge_indicator?: SubtaskMergeIndicator;
+  intervention_owner?: InterventionOwner;
+  intervention_hint?: string;
 }
 
 export interface Settings {
@@ -53,6 +55,14 @@ export interface Settings {
 }
 
 export type AutomationLevel = "FULL" | "SEMI_AUTO" | "ALWAYS_ASK";
+export type InterventionOwner = "HUMAN" | "AGENT";
+
+export interface AutomationInterventionsSettings {
+  autoApprovePlan: boolean;
+  autoAnswerClarification: boolean;
+  autoResumePaused: boolean;
+  clarificationAnswerTemplate: string;
+}
 
 export interface ProviderSettings {
   enabled: boolean;
@@ -138,6 +148,7 @@ export interface McpToolToggle {
 
 export interface DashboardSettings {
   automationLevel: AutomationLevel;
+  automationInterventions: AutomationInterventionsSettings;
   aiProvider: AiProviderSettings;
   git: GitSettings;
   ciIntelligence: CiIntelligenceSettings;

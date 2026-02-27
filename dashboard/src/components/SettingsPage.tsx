@@ -190,6 +190,84 @@ export const SettingsPage: FunctionComponent<SettingsPageProps> = ({
               ))}
             </select>
           </label>
+          <div className="rounded-lg border border-slate-700/70 bg-slate-950/50 p-3 space-y-3">
+            <p className="text-xs font-semibold text-slate-300">Jules Action Handling</p>
+            <p className="text-[11px] text-slate-500">
+              FULL auto-handles plan approvals, clarification replies, and paused sessions. ALWAYS_ASK requires human intervention. SEMI_AUTO follows the toggles below.
+            </p>
+            <label className="flex items-center justify-between gap-3 text-sm text-slate-200">
+              <span>Auto-approve plan requests</span>
+              <input
+                type="checkbox"
+                checked={settings.automationInterventions.autoApprovePlan}
+                disabled={settings.automationLevel !== "SEMI_AUTO"}
+                onChange={(event) =>
+                  onChange({
+                    ...settings,
+                    automationInterventions: {
+                      ...settings.automationInterventions,
+                      autoApprovePlan: event.currentTarget.checked,
+                    },
+                  })
+                }
+                className="h-4 w-4 rounded border-slate-700 bg-slate-900 disabled:opacity-50"
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-sm text-slate-200">
+              <span>Auto-answer clarification requests</span>
+              <input
+                type="checkbox"
+                checked={settings.automationInterventions.autoAnswerClarification}
+                disabled={settings.automationLevel !== "SEMI_AUTO"}
+                onChange={(event) =>
+                  onChange({
+                    ...settings,
+                    automationInterventions: {
+                      ...settings.automationInterventions,
+                      autoAnswerClarification: event.currentTarget.checked,
+                    },
+                  })
+                }
+                className="h-4 w-4 rounded border-slate-700 bg-slate-900 disabled:opacity-50"
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-sm text-slate-200">
+              <span>Auto-resume paused sessions</span>
+              <input
+                type="checkbox"
+                checked={settings.automationInterventions.autoResumePaused}
+                disabled={settings.automationLevel !== "SEMI_AUTO"}
+                onChange={(event) =>
+                  onChange({
+                    ...settings,
+                    automationInterventions: {
+                      ...settings.automationInterventions,
+                      autoResumePaused: event.currentTarget.checked,
+                    },
+                  })
+                }
+                className="h-4 w-4 rounded border-slate-700 bg-slate-900 disabled:opacity-50"
+              />
+            </label>
+            <label className="block space-y-2">
+              <span className="text-[11px] text-slate-500">Clarification auto-answer template</span>
+              <textarea
+                rows={4}
+                value={settings.automationInterventions.clarificationAnswerTemplate}
+                disabled={settings.automationLevel !== "SEMI_AUTO" && settings.automationLevel !== "FULL"}
+                onInput={(event) =>
+                  onChange({
+                    ...settings,
+                    automationInterventions: {
+                      ...settings.automationInterventions,
+                      clarificationAnswerTemplate: event.currentTarget.value,
+                    },
+                  })
+                }
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
+              />
+            </label>
+          </div>
         </article>
 
         <article className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-2xl p-5 space-y-4">

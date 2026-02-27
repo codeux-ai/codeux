@@ -51,9 +51,12 @@ Examples:
 - `planningCreated`
 - `mergeHeader`
 - `mergeTask`
-- `actionRequiredHeader`
-- `actionRequiredTask`
+- `actionRequiredAgentHeader`
+- `actionRequiredAgentTask`
+- `actionRequiredHumanHeader`
+- `actionRequiredHumanTask`
 - `watchHeader`
+- `watchContinue`
 - `watchMergeRequired`
 - `watchNoMoreActions`
 - `completionSteps`

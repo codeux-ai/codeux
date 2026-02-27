@@ -80,6 +80,12 @@ const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
 
 export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   automationLevel: "SEMI_AUTO",
+  automationInterventions: {
+    autoApprovePlan: true,
+    autoAnswerClarification: false,
+    autoResumePaused: false,
+    clarificationAnswerTemplate: "Proceed with the safest implementation path using repository conventions. If multiple valid options exist, choose the smallest-scope option and continue without waiting for clarification.",
+  },
   aiProvider: {
     provider: "jules",
     strategy: "MANUAL",
@@ -224,6 +230,9 @@ const sanitizeMcpTools = (value: unknown): McpToolToggle[] => {
 
 const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardSettings => ({
   automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
+  automationInterventions: {
+    ...DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+  },
   aiProvider: {
     ...DEFAULT_DASHBOARD_SETTINGS.aiProvider,
     providers: {
@@ -312,6 +321,27 @@ const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints)
   const validAutomationLevel = automationLevel === "FULL" || automationLevel === "SEMI_AUTO" || automationLevel === "ALWAYS_ASK"
     ? automationLevel
     : DEFAULT_DASHBOARD_SETTINGS.automationLevel;
+  const interventionInput = (input.automationInterventions && typeof input.automationInterventions === "object"
+    ? input.automationInterventions
+    : {}) as Partial<DashboardSettings["automationInterventions"]>;
+  const automationInterventions = {
+    autoApprovePlan: readBoolean(
+      interventionInput.autoApprovePlan,
+      DEFAULT_DASHBOARD_SETTINGS.automationInterventions.autoApprovePlan
+    ),
+    autoAnswerClarification: readBoolean(
+      interventionInput.autoAnswerClarification,
+      DEFAULT_DASHBOARD_SETTINGS.automationInterventions.autoAnswerClarification
+    ),
+    autoResumePaused: readBoolean(
+      interventionInput.autoResumePaused,
+      DEFAULT_DASHBOARD_SETTINGS.automationInterventions.autoResumePaused
+    ),
+    clarificationAnswerTemplate: readString(
+      interventionInput.clarificationAnswerTemplate,
+      DEFAULT_DASHBOARD_SETTINGS.automationInterventions.clarificationAnswerTemplate
+    ).trim() || DEFAULT_DASHBOARD_SETTINGS.automationInterventions.clarificationAnswerTemplate,
+  };
 
   const aiProviderInput = (input.aiProvider && typeof input.aiProvider === "object"
     ? input.aiProvider
@@ -501,6 +531,7 @@ const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints)
 
   return {
     automationLevel: validAutomationLevel,
+    automationInterventions,
     aiProvider,
     git,
     ciIntelligence,

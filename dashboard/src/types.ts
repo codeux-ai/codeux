@@ -68,6 +68,12 @@ export interface DashboardStats {
 }
 
 export type AutomationLevel = "FULL" | "SEMI_AUTO" | "ALWAYS_ASK";
+export interface AutomationInterventionsSettings {
+  autoApprovePlan: boolean;
+  autoAnswerClarification: boolean;
+  autoResumePaused: boolean;
+  clarificationAnswerTemplate: string;
+}
 export interface ProviderSettings {
   enabled: boolean;
   model: string;
@@ -90,6 +96,7 @@ export interface McpToolToggle {
 
 export interface DashboardSettings {
   automationLevel: AutomationLevel;
+  automationInterventions: AutomationInterventionsSettings;
   aiProvider: {
     provider: ProviderId;
     strategy: ProviderStrategy;

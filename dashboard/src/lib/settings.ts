@@ -2,6 +2,12 @@ import type { DashboardSettings } from "../types.js";
 
 export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   automationLevel: "SEMI_AUTO",
+  automationInterventions: {
+    autoApprovePlan: true,
+    autoAnswerClarification: false,
+    autoResumePaused: false,
+    clarificationAnswerTemplate: "Proceed with the safest implementation path using repository conventions. If multiple valid options exist, choose the smallest-scope option and continue without waiting for clarification.",
+  },
   aiProvider: {
     provider: "jules",
     strategy: "MANUAL",
@@ -118,6 +124,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
 
 export const cloneDefaultSettings = (): DashboardSettings => ({
   automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
+  automationInterventions: { ...DEFAULT_DASHBOARD_SETTINGS.automationInterventions },
   aiProvider: {
     ...DEFAULT_DASHBOARD_SETTINGS.aiProvider,
     providers: {

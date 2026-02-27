@@ -27,6 +27,9 @@ const buildDeps = () => {
     getGuideContent,
     updateLastStatus: vi.fn(),
     getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+    isJulesApiConfigured: () => true,
+    approveSessionPlan: vi.fn().mockResolvedValue({}),
+    sendSessionMessage: vi.fn().mockResolvedValue({}),
     getCiStatusForScope: vi.fn().mockResolvedValue(null),
     autoMergeFeaturePr: vi.fn().mockResolvedValue({ ok: true }),
     renderInstruction: vi.fn(async (templateId: string, variables: Record<string, unknown>) => {
@@ -36,11 +39,14 @@ const buildDeps = () => {
       if (templateId === "branchMissing" && typeof variables.feature_branch === "string") {
         return `### 🛑 ACTION REQUIRED: Branch Configuration Missing\n\nThe feature branch \`${variables.feature_branch}\` is not ready.`;
       }
-      if (templateId === "actionRequiredHeader") {
-        return "\n### ✋ JULES ACTION REQUIRED\n";
+      if (templateId === "actionRequiredAgentHeader") {
+        return "\n### 🤖 AGENT INTERVENTION NEEDED\n";
       }
-      if (templateId === "actionRequiredTask") {
+      if (templateId === "actionRequiredAgentTask" || templateId === "actionRequiredHumanTask") {
         return `- **Task ${variables.task_id}** is \`${variables.session_state}\`.`;
+      }
+      if (templateId === "actionRequiredHumanHeader") {
+        return "\n### ✋ HUMAN INTERVENTION NEEDED\n";
       }
       if (templateId === "watchHeader") {
         return "### Sprint Header";
@@ -137,9 +143,101 @@ describe("SprintOrchestrator", () => {
     });
 
     const text = result.content[0].text as string;
-    expect(text).toContain("JULES ACTION REQUIRED");
+    expect(text).toContain("HUMAN INTERVENTION NEEDED");
     expect(text).toContain("AWAITING_USER_FEEDBACK");
     expect(text).toContain("`BLOCKED`");
+
+    await fs.rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("auto-answers clarification in FULL automation mode", async () => {
+    const { deps, listSessions, loadSubtasks } = buildDeps();
+    deps.getDashboardSettings = () => ({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      automationLevel: "FULL",
+    });
+    const orchestrator = new SprintOrchestrator(deps as any);
+
+    const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-orch-full-auto-"));
+    const subtasksDir = path.join(tmpRoot, ".jules-subagents", "sprints", "sprint1-subtasks");
+    await fs.mkdir(subtasksDir, { recursive: true });
+    await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
+
+    loadSubtasks.mockResolvedValue([
+      { id: "01-task", title: "Test task", prompt: "Do it", depends_on: [], is_independent: true },
+    ]);
+    listSessions.mockResolvedValue({
+      sessions: [
+        {
+          id: "abc123",
+          name: "sessions/abc123",
+          title: "Sprint 1: [01-task] Test task",
+          state: "AWAITING_USER_FEEDBACK",
+          provider: "jules",
+          prompt: "x",
+        },
+      ],
+    });
+
+    const result = await orchestrator.execute({
+      sprint_number: 1,
+      repo_path: tmpRoot,
+      source_id: "sources/123",
+      action: "status",
+      wait: false,
+    });
+
+    const text = result.content[0].text as string;
+    expect(text).toContain("Auto-Answered Clarification");
+    expect(deps.sendSessionMessage).toHaveBeenCalledWith(
+      "abc123",
+      expect.stringContaining("Proceed with the safest implementation path")
+    );
+
+    await fs.rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("routes blocked tasks to agent intervention when auto-intervention fails", async () => {
+    const { deps, listSessions, loadSubtasks } = buildDeps();
+    deps.getDashboardSettings = () => ({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      automationLevel: "FULL",
+    });
+    deps.sendSessionMessage = vi.fn().mockRejectedValue(new Error("temporary Jules API error"));
+    const orchestrator = new SprintOrchestrator(deps as any);
+
+    const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-orch-agent-intervention-"));
+    const subtasksDir = path.join(tmpRoot, ".jules-subagents", "sprints", "sprint1-subtasks");
+    await fs.mkdir(subtasksDir, { recursive: true });
+    await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
+
+    loadSubtasks.mockResolvedValue([
+      { id: "01-task", title: "Test task", prompt: "Do it", depends_on: [], is_independent: true },
+    ]);
+    listSessions.mockResolvedValue({
+      sessions: [
+        {
+          id: "abc123",
+          name: "sessions/abc123",
+          title: "Sprint 1: [01-task] Test task",
+          state: "AWAITING_USER_FEEDBACK",
+          provider: "jules",
+          prompt: "x",
+        },
+      ],
+    });
+
+    const result = await orchestrator.execute({
+      sprint_number: 1,
+      repo_path: tmpRoot,
+      source_id: "sources/123",
+      action: "status",
+      wait: false,
+    });
+
+    const text = result.content[0].text as string;
+    expect(text).toContain("AGENT INTERVENTION NEEDED");
+    expect(text).toContain("Auto-Intervention Failed");
 
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });
@@ -226,6 +324,7 @@ describe("SprintOrchestrator", () => {
     expect(text).toContain("`01-task`");
     expect(text).toContain("`RUNNING`");
     expect(deps.getCiStatusForScope).toHaveBeenCalled();
+    expect(deps.sendSessionMessage).toHaveBeenCalled();
 
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });

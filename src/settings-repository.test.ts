@@ -22,6 +22,8 @@ describe("SettingsRepository", () => {
     const { repo } = await createRepo();
     const settings = repo.getSettings();
     expect(settings.automationLevel).toBe("SEMI_AUTO");
+    expect(settings.automationInterventions.autoApprovePlan).toBe(true);
+    expect(settings.automationInterventions.autoAnswerClarification).toBe(false);
     expect(settings.aiProvider.provider).toBe("jules");
     expect(settings.aiProvider.strategy).toBe("MANUAL");
     expect(settings.aiProvider.providers.codex.model).toBe("gpt-5.3-codex");
@@ -56,6 +58,12 @@ describe("SettingsRepository", () => {
     const { repo, dbPath } = await createRepo();
     const saved = repo.saveSettings({
       automationLevel: "ALWAYS_ASK",
+      automationInterventions: {
+        autoApprovePlan: false,
+        autoAnswerClarification: true,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "Proceed with defaults and continue.",
+      },
       aiProvider: {
         provider: "jules",
         strategy: "WEIGHTED",
@@ -129,6 +137,10 @@ describe("SettingsRepository", () => {
     });
 
     expect(saved.automationLevel).toBe("ALWAYS_ASK");
+    expect(saved.automationInterventions.autoApprovePlan).toBe(false);
+    expect(saved.automationInterventions.autoAnswerClarification).toBe(true);
+    expect(saved.automationInterventions.autoResumePaused).toBe(true);
+    expect(saved.automationInterventions.clarificationAnswerTemplate).toContain("Proceed with defaults");
     expect(saved.aiProvider.julesApiKey).toBe("test-key");
     expect(saved.aiProvider.providers.gemini.model).toBe("gemini-2.5-pro");
     expect(saved.aiProvider.strategy).toBe("WEIGHTED");

@@ -107,9 +107,21 @@ For `status` and `orchestrate`, each cycle can run:
 
 5. Build protocol instructions
 - `protocol-step.ts`
+ - Action-required tasks are separated into:
+   - `AGENT INTERVENTION NEEDED`
+   - `HUMAN INTERVENTION NEEDED`
 
 6. Build status table
 - `status-table-step.ts`
+
+### Automation intervention routing
+
+Action-required Jules sessions (`AWAITING_PLAN_APPROVAL`, `AWAITING_USER_FEEDBACK`, `PAUSED`) are routed by automation policy:
+- `FULL`: auto-intervene for all supported action-required states.
+- `SEMI_AUTO`: obey `automationInterventions` toggles.
+- `ALWAYS_ASK`: no auto-intervention.
+
+When auto-intervention fails, tasks are routed to `AGENT INTERVENTION NEEDED` with context.
 
 ## Watch Mode
 
@@ -142,6 +154,7 @@ For `action=status`:
 `ciIntelligence` settings affect generated protocol text:
 - Feature-branch merge instructions can require CI wait and comment resolution.
 - Final merge-to-main instructions can require CI wait and comment resolution.
+- If `waitForJulesCiAutofix` is enabled and feature PR checks fail, the sprint loop notifies the Jules session with failed-check context and keeps the task in work state.
 
 ## Files and Data Used
 

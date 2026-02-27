@@ -9,6 +9,7 @@ describe("dashboard settings helpers", () => {
     first.aiProvider.providers.gemini.model = "gemini-2.5-pro";
     first.sprintLoopSteps.watchLoopIntervalSeconds = 45;
     first.sprintLoopSteps.watchLoopOutputIntervalSeconds = 480;
+    first.automationInterventions.autoAnswerClarification = true;
     first.cliWorkflow.cleanupWorktreeOnFailure = true;
     first.cliWorkflow.resumeFailedTaskInSameWorkspace = false;
     first.cliWorkflow.executionMode = "DOCKER";
@@ -18,6 +19,7 @@ describe("dashboard settings helpers", () => {
     expect(second.aiProvider.providers.gemini.model).toBe("default");
     expect(second.sprintLoopSteps.watchLoopIntervalSeconds).toBe(120);
     expect(second.sprintLoopSteps.watchLoopOutputIntervalSeconds).toBe(300);
+    expect(second.automationInterventions.autoAnswerClarification).toBe(false);
     expect(second.cliWorkflow.cleanupWorktreeOnFailure).toBe(false);
     expect(second.cliWorkflow.resumeFailedTaskInSameWorkspace).toBe(true);
     expect(second.cliWorkflow.executionMode).toBe("HOST");

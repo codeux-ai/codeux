@@ -143,6 +143,9 @@ class JulesAgentServer {
         this.lastStatus = status;
       },
       getDashboardSettings: () => this.dashboardSettings,
+      isJulesApiConfigured: () => this.isJulesApiConfigured(),
+      approveSessionPlan: (sessionId: string) => this.julesApi.approveSessionPlan(sessionId),
+      sendSessionMessage: (sessionId: string, prompt: string) => this.julesApi.sendSessionMessage(sessionId, prompt),
       getCiStatusForScope: (args) => this.getCiStatusForScope(args),
       autoMergeFeaturePr: (args) => this.autoMergeFeaturePr(args),
       renderInstruction: (templateId, variables, repoPath) =>

@@ -17,6 +17,8 @@ export interface ProtocolStepResult {
   instructions: string;
   awaitingMerge: Subtask[];
   actionRequiredTasks: Subtask[];
+  agentInterventionTasks: Subtask[];
+  humanInterventionTasks: Subtask[];
 }
 
 const buildFeatureCiWaitLine = (settings: CiIntelligenceSettings): string => {
@@ -38,6 +40,8 @@ export const runProtocolStep = async (subtasks: Subtask[], options: ProtocolStep
   const actionRequiredTasks = subtasks.filter(
     (task) => task.status === "BLOCKED" && options.isActionRequiredState(task.session_state)
   );
+  const agentInterventionTasks = actionRequiredTasks.filter((task) => task.intervention_owner === "AGENT");
+  const humanInterventionTasks = actionRequiredTasks.filter((task) => task.intervention_owner !== "AGENT");
 
   let instructions = "";
 
@@ -58,18 +62,39 @@ export const runProtocolStep = async (subtasks: Subtask[], options: ProtocolStep
     }
   }
 
-  if (options.enableActionRequiredProtocol && actionRequiredTasks.length > 0) {
-    instructions += await options.renderInstruction("actionRequiredHeader", {});
+  if (options.enableActionRequiredProtocol && agentInterventionTasks.length > 0) {
+    instructions += await options.renderInstruction("actionRequiredAgentHeader", {});
 
-    for (const task of actionRequiredTasks) {
-      instructions += await options.renderInstruction("actionRequiredTask", {
+    for (const task of agentInterventionTasks) {
+      const interventionHintLine = typeof task.intervention_hint === "string" && task.intervention_hint.trim().length > 0
+        ? `- Context: ${task.intervention_hint.trim()}\n`
+        : "";
+      instructions += await options.renderInstruction("actionRequiredAgentTask", {
         task_id: task.id,
         session_state: task.session_state || "UNKNOWN",
         provider: task.provider || "jules",
+        intervention_hint_line: interventionHintLine,
       });
       instructions += "\n";
     }
   }
 
-  return { instructions, awaitingMerge, actionRequiredTasks };
+  if (options.enableActionRequiredProtocol && humanInterventionTasks.length > 0) {
+    instructions += await options.renderInstruction("actionRequiredHumanHeader", {});
+
+    for (const task of humanInterventionTasks) {
+      const interventionHintLine = typeof task.intervention_hint === "string" && task.intervention_hint.trim().length > 0
+        ? `- Context: ${task.intervention_hint.trim()}\n`
+        : "";
+      instructions += await options.renderInstruction("actionRequiredHumanTask", {
+        task_id: task.id,
+        session_state: task.session_state || "UNKNOWN",
+        provider: task.provider || "jules",
+        intervention_hint_line: interventionHintLine,
+      });
+      instructions += "\n";
+    }
+  }
+
+  return { instructions, awaitingMerge, actionRequiredTasks, agentInterventionTasks, humanInterventionTasks };
 };

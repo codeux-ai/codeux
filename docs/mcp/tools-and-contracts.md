@@ -112,6 +112,7 @@ Unknown tool names raise MCP `MethodNotFound`.
 - Resolves feature branch from dashboard branch scheme when not explicitly passed.
 - Executes atomic loop pipeline and emits markdown protocol instructions.
 - `status` is always single-cycle (instant output); wait-loop mode is only used by `orchestrate`.
+- In automation modes, action-required Jules tasks can be auto-handled (plan approval, clarification replies, paused-session resume) or explicitly routed as `AGENT` vs `HUMAN` intervention in protocol output.
 
 ## Stability Expectations
 
