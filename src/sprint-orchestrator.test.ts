@@ -409,6 +409,8 @@ describe("SprintOrchestrator", () => {
         ...DEFAULT_DASHBOARD_SETTINGS,
         sprintLoopSteps: {
           ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps,
+          branchPreflight: false,
+          planningPreflight: false,
           sessionSync: false,
           statusDerivation: false,
           startReadyTasks: false,
@@ -444,7 +446,7 @@ describe("SprintOrchestrator", () => {
         sprint_number: 1,
         repo_path: tmpRoot,
         source_id: "sources/123",
-        action: "status",
+        action: "orchestrate",
         wait: true,
       });
 
@@ -455,7 +457,7 @@ describe("SprintOrchestrator", () => {
       expect(deps.renderInstruction).toHaveBeenCalledWith(
         "watchContinue",
         expect.objectContaining({
-          action: "status",
+          action: "orchestrate",
           running_tasks: 1,
         }),
         tmpRoot
@@ -465,5 +467,49 @@ describe("SprintOrchestrator", () => {
     } finally {
       nowSpy.mockRestore();
     }
+  });
+
+  it("forces single-cycle execution for status even when wait=true", async () => {
+    const { deps, loadSubtasks } = buildDeps();
+    deps.getDashboardSettings = () => ({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      sprintLoopSteps: {
+        ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps,
+        sessionSync: false,
+        statusDerivation: false,
+        startReadyTasks: false,
+      },
+    });
+    const orchestrator = new SprintOrchestrator(deps as any);
+
+    const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-orch-status-nowait-"));
+    const subtasksDir = path.join(tmpRoot, ".jules-subagents", "sprints", "sprint1-subtasks");
+    await fs.mkdir(subtasksDir, { recursive: true });
+    await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
+
+    loadSubtasks.mockResolvedValue([
+      {
+        id: "01-task",
+        title: "Test task",
+        prompt: "Do it",
+        depends_on: [],
+        is_independent: true,
+        status: "RUNNING",
+      },
+    ]);
+
+    const result = await orchestrator.execute({
+      sprint_number: 1,
+      repo_path: tmpRoot,
+      source_id: "sources/123",
+      action: "status",
+      wait: true,
+    });
+
+    const text = result.content[0].text as string;
+    expect(text).toContain("Status Action is Instant");
+    expect(text).not.toContain("Sprint Header");
+
+    await fs.rm(tmpRoot, { recursive: true, force: true });
   });
 });

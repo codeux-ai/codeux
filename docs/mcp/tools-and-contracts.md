@@ -111,6 +111,7 @@ Unknown tool names raise MCP `MethodNotFound`.
 - Supports `plan`, `status`, `orchestrate`.
 - Resolves feature branch from dashboard branch scheme when not explicitly passed.
 - Executes atomic loop pipeline and emits markdown protocol instructions.
+- `status` is always single-cycle (instant output); wait-loop mode is only used by `orchestrate`.
 
 ## Stability Expectations
 

@@ -113,7 +113,7 @@ For `status` and `orchestrate`, each cycle can run:
 
 ## Watch Mode
 
-When `wait` is true and `watchLoop` is enabled:
+When `action=orchestrate`, `wait` is true, and `watchLoop` is enabled:
 - Orchestrator enters continuous loop.
 - Wait interval is 120 seconds between cycles.
 - Output interval defaults to 300 seconds: if tasks are still in progress at that point, the loop returns a status checkpoint and instructs the caller to rerun `sprint_agent(..., wait: true)`.
@@ -132,6 +132,10 @@ On completion it may:
 If caller requests wait mode but `watchLoop` toggle is disabled:
 - orchestrator runs one cycle,
 - returns normal report with a note that watch mode is disabled.
+
+For `action=status`:
+- orchestration always runs as a single cycle for immediate output,
+- `wait: true` is ignored and reported as informational text.
 
 ## CI Intelligence Integration
 

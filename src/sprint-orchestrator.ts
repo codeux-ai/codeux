@@ -538,7 +538,9 @@ export class SprintOrchestrator {
       return await this.runPlanningAction(args, subtasksDir);
     }
 
-    const shouldWait = args.wait !== undefined ? args.wait : (args.action === "status" || args.action === "orchestrate");
+    const supportsWatchMode = args.action === "orchestrate";
+    const requestedWait = args.wait !== undefined ? args.wait : supportsWatchMode;
+    const shouldWait = supportsWatchMode && requestedWait;
     const watchEnabled = shouldWait && loopSteps.watchLoop;
     const watchLoopIntervalMs = Math.max(1, loopSteps.watchLoopIntervalSeconds) * 1000;
     const watchLoopOutputIntervalMs = Math.max(60, loopSteps.watchLoopOutputIntervalSeconds) * 1000;
@@ -702,7 +704,9 @@ export class SprintOrchestrator {
     report += `**Feature Branch:** \`${defaultFeatureBranch}\`\n`;
     report += `**Dashboard:** [http://localhost:${dashboardPort}](http://localhost:${dashboardPort})\n\n`;
 
-    if (shouldWait && !loopSteps.watchLoop) {
+    if (args.action === "status" && args.wait) {
+      report += "ℹ️ **Status Action is Instant:** Ignoring `wait: true` and returning a single-cycle status report.\n\n";
+    } else if (shouldWait && !loopSteps.watchLoop) {
       report += "⚙️ **Watch Loop Disabled:** Running a single orchestration cycle because watch mode is disabled in settings.\n\n";
     }
 
