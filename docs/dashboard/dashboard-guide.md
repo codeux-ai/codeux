@@ -94,6 +94,7 @@ Effect:
 - `julesCiAutofixMaxRetries` sets how many Jules autofix notifications are attempted before escalation. Escalation output includes exact task ids, PR links, and failed check names so no manual searching is needed.
 - `autoMergeFeaturePrWhenGreen` executes feature-PR auto-merge once checks are green and review blockers are clear.
 - Feature-PR CI wait/automerge matching uses worker branch first and falls back to the task `pr_url`, so tasks without a stored worker branch still remain gated correctly.
+- CI Runs in `Feature PR CI` tracking include recent runs from PR head branches targeting the feature implementation branch (plus feature branch runs), sorted newest-first; the panel shows the latest 5.
 - Main merge stage (`feature -> main`) now emits live CI/review gate feedback with failed check names and ready-to-run `gh` commands.
 - Main merge into default branch still stays manual.
 

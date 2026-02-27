@@ -156,21 +156,21 @@ export class GitStatusService {
 
     if (tracking.scope === "FEATURE_PR_CI") {
       const featureBranch = normalizeBranch(tracking.featureBranch);
-      if (featureBranch) {
-        return runs.filter((run) => normalizeBranch(run.headBranch) === featureBranch);
-      }
       const trackedHeads = new Set(
         trackedPrs
           .map((pr) => normalizeBranch(pr.headRefName))
           .filter((value): value is string => value !== null)
       );
-      if (trackedHeads.size === 0) {
-        return [];
+      if (featureBranch) {
+        trackedHeads.add(featureBranch);
       }
-      return runs.filter((run) => {
-        const headBranch = normalizeBranch(run.headBranch);
-        return headBranch ? trackedHeads.has(headBranch) : false;
-      });
+      if (trackedHeads.size > 0) {
+        return runs.filter((run) => {
+          const headBranch = normalizeBranch(run.headBranch);
+          return headBranch ? trackedHeads.has(headBranch) : false;
+        });
+      }
+      return [];
     }
 
     if (tracking.scope === "MAIN_MERGE_PR_CI") {
@@ -189,6 +189,19 @@ export class GitStatusService {
     }
 
     return runs;
+  }
+
+  private sortCiRunsNewestFirst(runs: GitCiRunStatus[]): GitCiRunStatus[] {
+    return runs.slice().sort((left, right) => {
+      const leftTime = left.updatedAt ? new Date(left.updatedAt).getTime() : 0;
+      const rightTime = right.updatedAt ? new Date(right.updatedAt).getTime() : 0;
+      if (leftTime !== rightTime) {
+        return rightTime - leftTime;
+      }
+      const leftId = left.id ?? 0;
+      const rightId = right.id ?? 0;
+      return rightId - leftId;
+    });
   }
 
   private filterMergedPrs(merged: GitMergeStatus[], tracking?: GitTrackingRequest): GitMergeStatus[] {
@@ -306,7 +319,7 @@ export class GitStatusService {
     if (merged.warning) warnings.push(merged.warning);
 
     const trackedPrs = this.filterOpenPrs(prs.data, trackingRequest);
-    const trackedCiRuns = this.filterCiRuns(ciRuns.data, trackedPrs, trackingRequest);
+    const trackedCiRuns = this.sortCiRunsNewestFirst(this.filterCiRuns(ciRuns.data, trackedPrs, trackingRequest));
     const trackedMergedPrs = this.filterMergedPrs(merged.data, trackingRequest);
 
     if (trackedPrs.some((pr) => pr.mergeStateStatus === "DIRTY")) {

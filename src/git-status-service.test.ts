@@ -181,8 +181,85 @@ describe("GitStatusService", () => {
     expect(result.tracking.scope).toBe("FEATURE_PR_CI");
     expect(result.openPullRequests).toHaveLength(1);
     expect(result.openPullRequests[0].number).toBe(11);
-    expect(result.ciRuns).toHaveLength(1);
-    expect(result.ciRuns[0].headBranch).toBe("feature/sprint1-implementation");
+    expect(result.ciRuns).toHaveLength(2);
+    expect(result.ciRuns.map((run) => run.headBranch)).toEqual(["task/one", "feature/sprint1-implementation"]);
+  });
+
+  it("shows feature-targeting PR CI history even when feature branch itself has no runs", async () => {
+    const service = new GitStatusService("/tmp/repo", async (command, args, _context) => {
+      const key = `${command} ${args.join(" ")}`;
+      const responses: Record<string, { ok: boolean; stdout: string; stderr: string }> = {
+        "git rev-parse --is-inside-work-tree": { ok: true, stdout: "true\n", stderr: "" },
+        "git rev-parse --show-toplevel": { ok: true, stdout: "/tmp/repo\n", stderr: "" },
+        "git branch --show-current": { ok: true, stdout: "feature/sprint1-implementation\n", stderr: "" },
+        "git remote": { ok: true, stdout: "origin\n", stderr: "" },
+        "git status --porcelain": { ok: true, stdout: "", stderr: "" },
+        "gh --version": { ok: true, stdout: "gh version", stderr: "" },
+        "gh auth status": { ok: true, stdout: "ok", stderr: "" },
+        "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup": {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              number: 11,
+              title: "task PR",
+              url: "https://example/pr/11",
+              state: "OPEN",
+              isDraft: false,
+              headRefName: "task/one",
+              baseRefName: "feature/sprint1-implementation",
+              mergeStateStatus: "CLEAN",
+              reviewDecision: null,
+              updatedAt: "2026-02-25T00:00:00Z",
+              comments: 0,
+              statusCheckRollup: [],
+            },
+          ]),
+          stderr: "",
+        },
+        "gh run list --limit 50 --json databaseId,name,workflowName,status,conclusion,event,headBranch,url,updatedAt": {
+          ok: true,
+          stdout: JSON.stringify([
+            {
+              databaseId: 203,
+              name: "ci",
+              workflowName: "CI",
+              status: "completed",
+              conclusion: "failure",
+              event: "pull_request",
+              headBranch: "task/one",
+              url: "https://example/run/203",
+              updatedAt: "2026-02-26T00:00:00Z",
+            },
+            {
+              databaseId: 202,
+              name: "ci",
+              workflowName: "CI",
+              status: "completed",
+              conclusion: "success",
+              event: "pull_request",
+              headBranch: "task/one",
+              url: "https://example/run/202",
+              updatedAt: "2026-02-25T00:00:00Z",
+            },
+          ]),
+          stderr: "",
+        },
+        "gh pr list --state merged --limit 100 --json number,title,url,headRefName,baseRefName,mergedAt,mergedBy": { ok: true, stdout: "[]", stderr: "" },
+      };
+      return responses[key] ?? { ok: false, stdout: "", stderr: "missing mock" };
+    });
+
+    const result = await service.getStatus("REMOTE", undefined, {
+      scope: "FEATURE_PR_CI",
+      featureBranch: "feature/sprint1-implementation",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+    });
+
+    expect(result.ciRuns).toHaveLength(2);
+    expect(result.ciRuns[0].id).toBe(203);
+    expect(result.ciRuns[1].id).toBe(202);
+    expect(result.warnings.some((warning) => warning.includes("No CI runs found for active PRs"))).toBe(false);
   });
 
   it("parses numeric comment count from gh pr list payload", async () => {
