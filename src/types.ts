@@ -190,6 +190,16 @@ export interface GitCiRunStatus {
   headBranch: string | null;
   url: string;
   updatedAt: string | null;
+  failedJobs?: GitCiFailedJob[];
+}
+
+export interface GitCiFailedJob {
+  id: number | null;
+  name: string;
+  conclusion: string | null;
+  failedSteps: string[];
+  logExcerpt: string | null;
+  logCommand: string | null;
 }
 
 export interface GitMergeStatus {

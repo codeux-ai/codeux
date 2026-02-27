@@ -3,6 +3,7 @@ import type {
   GitTrackingScope,
   GitTrackingStatus,
   GitPullRequestStatus,
+  GitCiFailedJob,
   GitCiRunStatus,
   GitMergeStatus,
   GitTrackingTarget,
@@ -22,6 +23,9 @@ interface CommandContext {
 type CommandRunner = (command: string, args: string[], context: CommandContext) => Promise<CommandResult>;
 
 const DEFAULT_TIMEOUT_MS = 8000;
+const FAILED_RUN_DETAILS_LIMIT = 3;
+const FAILED_JOBS_PER_RUN_LIMIT = 3;
+const FAILED_JOB_LOG_MAX_CHARS = 2000;
 
 const defaultRunner: CommandRunner = (command, args, context) =>
   new Promise((resolve) => {
@@ -47,6 +51,10 @@ const parseJson = <T>(value: string): T | null => {
 
 const toInt = (value: unknown): number | null => (typeof value === "number" ? value : null);
 const toStr = (value: unknown): string | null => (typeof value === "string" ? value : null);
+const isFailedConclusion = (value: string | null): boolean => {
+  const normalized = (value || "").toLowerCase();
+  return normalized.length > 0 && normalized !== "success" && normalized !== "neutral" && normalized !== "skipped";
+};
 
 export interface GitTrackingRequest {
   scope: GitTrackingScope;
@@ -204,6 +212,143 @@ export class GitStatusService {
     });
   }
 
+  private isRunFailed(run: GitCiRunStatus): boolean {
+    const normalizedStatus = run.status.toLowerCase();
+    if (normalizedStatus !== "completed") {
+      return false;
+    }
+    return isFailedConclusion(run.conclusion);
+  }
+
+  private trimLogExcerpt(logText: string): string {
+    const normalized = logText.replace(/\r\n/g, "\n").trim();
+    if (normalized.length <= FAILED_JOB_LOG_MAX_CHARS) {
+      return normalized;
+    }
+    return `...${normalized.slice(normalized.length - FAILED_JOB_LOG_MAX_CHARS)}`;
+  }
+
+  private async fetchFailedJobLogExcerpt(
+    runId: number,
+    jobId: number,
+    ghToken?: string
+  ): Promise<{ logExcerpt: string | null; warning?: string }> {
+    const result = await this.run("gh", ["run", "view", String(runId), "--job", String(jobId), "--log-failed"], ghToken);
+    if (!result.ok) {
+      return { logExcerpt: null, warning: `Failed to fetch failed-job logs for run ${runId}, job ${jobId}.` };
+    }
+    const stdout = result.stdout.trim();
+    if (stdout.length === 0) {
+      return { logExcerpt: null };
+    }
+    return { logExcerpt: this.trimLogExcerpt(stdout) };
+  }
+
+  private async fetchFailedRunJobs(
+    runId: number,
+    ghToken?: string
+  ): Promise<{ failedJobs: GitCiFailedJob[]; warnings: string[] }> {
+    const warnings: string[] = [];
+    const result = await this.run("gh", ["run", "view", String(runId), "--json", "jobs"], ghToken);
+    if (!result.ok) {
+      return { failedJobs: [], warnings: [`Failed to fetch failed jobs for run ${runId}.`] };
+    }
+
+    const parsed = parseJson<Record<string, unknown>>(result.stdout);
+    const rawJobs = Array.isArray(parsed?.jobs) ? parsed.jobs : [];
+    const failedJobs: GitCiFailedJob[] = [];
+    for (const rawJob of rawJobs) {
+      if (!rawJob || typeof rawJob !== "object") {
+        continue;
+      }
+      const job = rawJob as Record<string, unknown>;
+      const steps = Array.isArray(job.steps) ? job.steps : [];
+      const failedSteps = steps
+        .map((rawStep) => {
+          if (!rawStep || typeof rawStep !== "object") {
+            return null;
+          }
+          const step = rawStep as Record<string, unknown>;
+          const stepConclusion = toStr(step.conclusion);
+          if (!isFailedConclusion(stepConclusion)) {
+            return null;
+          }
+          return toStr(step.name) || "failed step";
+        })
+        .filter((step): step is string => step !== null);
+
+      const conclusion = toStr(job.conclusion);
+      const hasFailure = isFailedConclusion(conclusion) || failedSteps.length > 0;
+      if (!hasFailure) {
+        continue;
+      }
+
+      const jobId = toInt(job.databaseId) ?? toInt(job.id);
+      const failedJob: GitCiFailedJob = {
+        id: jobId,
+        name: toStr(job.name) || "failed job",
+        conclusion,
+        failedSteps,
+        logExcerpt: null,
+        logCommand: jobId !== null ? `gh run view ${runId} --job ${jobId} --log-failed` : null,
+      };
+
+      if (jobId !== null && failedJobs.length < FAILED_JOBS_PER_RUN_LIMIT) {
+        const logResult = await this.fetchFailedJobLogExcerpt(runId, jobId, ghToken);
+        failedJob.logExcerpt = logResult.logExcerpt;
+        if (logResult.warning) {
+          warnings.push(logResult.warning);
+        }
+      }
+
+      failedJobs.push(failedJob);
+      if (failedJobs.length >= FAILED_JOBS_PER_RUN_LIMIT) {
+        break;
+      }
+    }
+
+    return { failedJobs, warnings };
+  }
+
+  private async enrichFailedRunDetails(
+    runs: GitCiRunStatus[],
+    ghToken?: string
+  ): Promise<{ runs: GitCiRunStatus[]; warnings: string[] }> {
+    const warnings: string[] = [];
+    const failedCandidates = runs
+      .filter((run) => run.id !== null && this.isRunFailed(run))
+      .slice(0, FAILED_RUN_DETAILS_LIMIT);
+    if (failedCandidates.length === 0) {
+      return { runs, warnings };
+    }
+
+    const failedJobsByRunId = new Map<number, GitCiFailedJob[]>();
+    for (const run of failedCandidates) {
+      const runId = run.id as number;
+      const details = await this.fetchFailedRunJobs(runId, ghToken);
+      if (details.warnings.length > 0) {
+        warnings.push(...details.warnings);
+      }
+      failedJobsByRunId.set(runId, details.failedJobs);
+    }
+
+    const enrichedRuns = runs.map((run) => {
+      if (run.id === null) {
+        return run;
+      }
+      const failedJobs = failedJobsByRunId.get(run.id);
+      if (!failedJobs) {
+        return run;
+      }
+      return {
+        ...run,
+        failedJobs,
+      };
+    });
+
+    return { runs: enrichedRuns, warnings };
+  }
+
   private filterMergedPrs(merged: GitMergeStatus[], tracking?: GitTrackingRequest): GitMergeStatus[] {
     if (!tracking) {
       return merged;
@@ -320,12 +465,16 @@ export class GitStatusService {
 
     const trackedPrs = this.filterOpenPrs(prs.data, trackingRequest);
     const trackedCiRuns = this.sortCiRunsNewestFirst(this.filterCiRuns(ciRuns.data, trackedPrs, trackingRequest));
+    const enrichedCiRuns = await this.enrichFailedRunDetails(trackedCiRuns, effectiveToken);
+    if (enrichedCiRuns.warnings.length > 0) {
+      warnings.push(...enrichedCiRuns.warnings);
+    }
     const trackedMergedPrs = this.filterMergedPrs(merged.data, trackingRequest);
 
     if (trackedPrs.some((pr) => pr.mergeStateStatus === "DIRTY")) {
       warnings.push("One or more PRs have merge conflicts (DIRTY). If CI checks do not start on main, inspect merge conflicts.");
     }
-    if (trackedCiRuns.length === 0 && trackedPrs.length > 0) {
+    if (enrichedCiRuns.runs.length === 0 && trackedPrs.length > 0) {
       warnings.push("No CI runs found for active PRs. Check workflow triggers and potential merge conflicts.");
     }
     if (tracking.scope === "FEATURE_PR_CI" && trackedPrs.length === 0) {
@@ -343,7 +492,7 @@ export class GitStatusService {
       hasRemote,
       dirty,
       openPullRequests: trackedPrs,
-      ciRuns: trackedCiRuns,
+      ciRuns: enrichedCiRuns.runs,
       mergedPullRequests: trackedMergedPrs,
       tracking,
       warnings,

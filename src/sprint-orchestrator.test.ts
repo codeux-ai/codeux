@@ -275,7 +275,29 @@ describe("SprintOrchestrator", () => {
           checks: [{ name: "ci", status: "completed", conclusion: "failure" }],
         },
       ],
-      ciRuns: [],
+      ciRuns: [
+        {
+          id: 9001,
+          name: "ci",
+          workflowName: "CI",
+          status: "completed",
+          conclusion: "failure",
+          event: "pull_request",
+          headBranch: "worker/task-01",
+          url: "https://example.com/run/9001",
+          updatedAt: new Date().toISOString(),
+          failedJobs: [
+            {
+              id: 7001,
+              name: "test",
+              conclusion: "failure",
+              failedSteps: ["unit"],
+              logExcerpt: "unit test failed: expected 1 to equal 2",
+              logCommand: "gh run view 9001 --job 7001 --log-failed",
+            },
+          ],
+        },
+      ],
       mergedPullRequests: [],
       tracking: { scope: "FEATURE_PR_CI", label: "Feature PR CI", branch: "feature/sprint1-implementation" },
       warnings: [],
@@ -323,8 +345,17 @@ describe("SprintOrchestrator", () => {
     expect(text).toContain("CI/Review Autofix Wait");
     expect(text).toContain("`01-task`");
     expect(text).toContain("`RUNNING`");
+    expect(text).toContain("Failed jobs:");
     expect(deps.getCiStatusForScope).toHaveBeenCalled();
     expect(deps.sendSessionMessage).toHaveBeenCalled();
+    expect(deps.sendSessionMessage).toHaveBeenCalledWith(
+      "abc123",
+      expect.stringContaining("Failed jobs: CI/test.")
+    );
+    expect(deps.sendSessionMessage).toHaveBeenCalledWith(
+      "abc123",
+      expect.stringContaining("unit test failed")
+    );
 
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });

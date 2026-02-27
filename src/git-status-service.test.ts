@@ -166,6 +166,28 @@ describe("GitStatusService", () => {
           ]),
           stderr: "",
         },
+        "gh run view 203 --json jobs": {
+          ok: true,
+          stdout: JSON.stringify({
+            jobs: [
+              {
+                databaseId: 8080,
+                name: "test",
+                conclusion: "failure",
+                steps: [
+                  { name: "install", conclusion: "success" },
+                  { name: "unit", conclusion: "failure" },
+                ],
+              },
+            ],
+          }),
+          stderr: "",
+        },
+        "gh run view 203 --job 8080 --log-failed": {
+          ok: true,
+          stdout: "unit step failed: assertion error",
+          stderr: "",
+        },
         "gh pr list --state merged --limit 100 --json number,title,url,headRefName,baseRefName,mergedAt,mergedBy": { ok: true, stdout: "[]", stderr: "" },
       };
       return responses[key] ?? { ok: false, stdout: "", stderr: "missing mock" };
@@ -244,6 +266,28 @@ describe("GitStatusService", () => {
           ]),
           stderr: "",
         },
+        "gh run view 203 --json jobs": {
+          ok: true,
+          stdout: JSON.stringify({
+            jobs: [
+              {
+                databaseId: 8080,
+                name: "test",
+                conclusion: "failure",
+                steps: [
+                  { name: "install", conclusion: "success" },
+                  { name: "unit", conclusion: "failure" },
+                ],
+              },
+            ],
+          }),
+          stderr: "",
+        },
+        "gh run view 203 --job 8080 --log-failed": {
+          ok: true,
+          stdout: "unit step failed: assertion error",
+          stderr: "",
+        },
         "gh pr list --state merged --limit 100 --json number,title,url,headRefName,baseRefName,mergedAt,mergedBy": { ok: true, stdout: "[]", stderr: "" },
       };
       return responses[key] ?? { ok: false, stdout: "", stderr: "missing mock" };
@@ -259,6 +303,8 @@ describe("GitStatusService", () => {
     expect(result.ciRuns).toHaveLength(2);
     expect(result.ciRuns[0].id).toBe(203);
     expect(result.ciRuns[1].id).toBe(202);
+    expect(result.ciRuns[0].failedJobs?.[0]?.name).toBe("test");
+    expect(result.ciRuns[0].failedJobs?.[0]?.logExcerpt).toContain("assertion error");
     expect(result.warnings.some((warning) => warning.includes("No CI runs found for active PRs"))).toBe(false);
   });
 

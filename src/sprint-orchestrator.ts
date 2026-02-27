@@ -16,6 +16,7 @@ import type {
   AutomationLevel,
   CiIntelligenceSettings,
   DashboardSettings,
+  GitCiRunStatus,
   GitTrackingStatus,
   JulesSession,
   Settings,
@@ -489,11 +490,68 @@ export class SprintOrchestrator {
     return conclusion === null;
   }
 
+  private isCiRunFailed(status: string, conclusion: string | null): boolean {
+    const normalizedStatus = status.toLowerCase();
+    const normalizedConclusion = (conclusion || "").toLowerCase();
+    if (normalizedStatus !== "completed") {
+      return false;
+    }
+    return normalizedConclusion.length > 0 && normalizedConclusion !== "success" && normalizedConclusion !== "neutral" && normalizedConclusion !== "skipped";
+  }
+
+  private selectFailedCiRuns(gitStatus: GitTrackingStatus, branchName: string): GitCiRunStatus[] {
+    const runs = Array.isArray(gitStatus.ciRuns) ? gitStatus.ciRuns : [];
+    const failedRuns = runs.filter((run) => this.isCiRunFailed(run.status, run.conclusion));
+    const branchMatched = failedRuns.filter((run) => run.headBranch === branchName);
+    if (branchMatched.length > 0) {
+      return branchMatched.slice(0, 2);
+    }
+    return failedRuns.slice(0, 2);
+  }
+
+  private getFailedJobLabels(failedRuns: GitCiRunStatus[]): string[] {
+    const labels: string[] = [];
+    for (const run of failedRuns) {
+      const runLabel = run.workflowName || run.name;
+      const jobs = Array.isArray(run.failedJobs) ? run.failedJobs : [];
+      for (const job of jobs) {
+        labels.push(`${runLabel}/${job.name}`);
+      }
+    }
+    return labels;
+  }
+
+  private getFailedLogSnippets(failedRuns: GitCiRunStatus[]): string[] {
+    const snippets: string[] = [];
+    for (const run of failedRuns) {
+      const runLabel = `${run.workflowName || run.name} (#${run.id ?? "?"})`;
+      const jobs = Array.isArray(run.failedJobs) ? run.failedJobs : [];
+      for (const job of jobs) {
+        if (!job.logExcerpt || job.logExcerpt.trim().length === 0) {
+          continue;
+        }
+        snippets.push(`[${runLabel} / ${job.name}]\n${job.logExcerpt}`);
+      }
+    }
+    return snippets.slice(0, 3);
+  }
+
+  private summarizeFailedRuns(failedRuns: GitCiRunStatus[]): string {
+    if (failedRuns.length === 0) {
+      return "none";
+    }
+    return failedRuns
+      .map((run) => `${run.workflowName || run.name}#${run.id ?? "?"}`)
+      .join(", ");
+  }
+
   private async notifyJulesAboutFailedCi(args: {
     task: Subtask;
     prNumber: number;
+    prUrl: string;
     branchName: string;
     failedChecks: string[];
+    failedRuns: GitCiRunStatus[];
     attempt: number;
     maxRetries: number;
   }): Promise<{ sent: boolean; reason?: string }> {
@@ -509,13 +567,22 @@ export class SprintOrchestrator {
     }
 
     const failedChecksLine = args.failedChecks.length > 0 ? args.failedChecks.join(", ") : "unknown checks";
+    const failedRunsLine = this.summarizeFailedRuns(args.failedRuns);
+    const failedJobsLine = this.getFailedJobLabels(args.failedRuns);
+    const failedLogSnippets = this.getFailedLogSnippets(args.failedRuns);
     const prompt = [
       `CI failed for your task PR #${args.prNumber} on branch ${args.branchName}.`,
+      `PR URL: ${args.prUrl}.`,
       `Failed checks: ${failedChecksLine}.`,
+      `Failed runs: ${failedRunsLine}.`,
+      `Failed jobs: ${failedJobsLine.length > 0 ? failedJobsLine.join(", ") : "unknown jobs"}.`,
       `Autofix attempt ${args.attempt} of ${args.maxRetries}.`,
       "Please fix the CI issues, commit the necessary changes, and push updates to the same branch.",
       "Continue until checks are green.",
-    ].join(" ");
+      failedLogSnippets.length > 0
+        ? `Failed job logs (excerpt):\n${failedLogSnippets.join("\n\n")}`
+        : "Failed job logs were not available from CI metadata. Use `gh run view <run-id> --log-failed`.",
+    ].join("\n");
 
     await this.deps.sendSessionMessage(sessionId, prompt);
     return { sent: true };
@@ -633,7 +700,17 @@ export class SprintOrchestrator {
         const failedChecks = checks
           .filter((check) => this.isCiCheckFailed(check.status, check.conclusion))
           .map((check) => check.name);
+        const branchName = workerBranch || args.featureBranch;
+        const failedRuns = this.selectFailedCiRuns(gitStatus, branchName);
+        const failedJobLabels = this.getFailedJobLabels(failedRuns);
         reportText += `   - Failed checks: ${failedChecks.join(", ")}\n`;
+        if (failedRuns.length > 0) {
+          reportText += `   - Failed runs: ${this.summarizeFailedRuns(failedRuns)}\n`;
+          reportText += `   - Failed run URLs: ${failedRuns.map((run) => run.url).filter((url) => url.length > 0).join(", ")}\n`;
+        }
+        if (failedJobLabels.length > 0) {
+          reportText += `   - Failed jobs: ${failedJobLabels.join(", ")}\n`;
+        }
         reportText += `   - Logs: \`gh run list --branch ${workerBranch || args.featureBranch} --event pull_request --limit 5\` and then \`gh run view <run-id> --log-failed\`\n`;
         if (args.ciIntelligence.waitForJulesCiAutofix) {
           const retryKey = this.getCiAutofixRetryKey(task, pr.number);
@@ -643,7 +720,7 @@ export class SprintOrchestrator {
             const owner = this.resolveCiEscalationOwner(args.automationLevel);
             task.status = "BLOCKED";
             task.intervention_owner = owner;
-            task.intervention_hint = `CI autofix retry limit reached (${currentRetries}/${maxRetries}) for task ${task.id} - PR: ${pr.url} - Failed checks: ${failedChecks.join(", ")}`;
+            task.intervention_hint = `CI autofix retry limit reached (${currentRetries}/${maxRetries}) for task ${task.id} - PR: ${pr.url} - Failed checks: ${failedChecks.join(", ")} - Failed jobs: ${failedJobLabels.length > 0 ? failedJobLabels.join(", ") : "unknown jobs"} - Failed runs: ${this.summarizeFailedRuns(failedRuns)}`;
             reportText += `   - 🚨 CI autofix retries exhausted (${currentRetries}/${maxRetries}).\n`;
             reportText += `   - Escalation (${owner}): Task \`${task.id}\` has failing CI and cannot be merged yet.\n`;
             reportText += `   - PR Link: ${pr.url}\n`;
@@ -653,8 +730,10 @@ export class SprintOrchestrator {
           const notifyResult = await this.notifyJulesAboutFailedCi({
             task,
             prNumber: pr.number,
-            branchName: workerBranch || args.featureBranch,
+            prUrl: pr.url,
+            branchName,
             failedChecks,
+            failedRuns,
             attempt: currentRetries + 1,
             maxRetries,
           });
