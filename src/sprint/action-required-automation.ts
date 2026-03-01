@@ -1,0 +1,179 @@
+import type {
+  AutomationInterventionsSettings,
+  AutomationLevel,
+  Subtask,
+} from "../contracts/app-types.js";
+
+export const isJulesManagedTask = (task: Subtask): boolean => {
+  if (task.provider && task.provider !== "jules") {
+    return false;
+  }
+  if (typeof task.session_id === "string" && task.session_id.startsWith("cli-")) {
+    return false;
+  }
+  if (typeof task.session_name === "string" && task.session_name.startsWith("sessions/cli-")) {
+    return false;
+  }
+  return true;
+};
+
+export const resolveTaskSessionId = (task: Subtask): string | null => {
+  if (typeof task.session_id === "string" && task.session_id.trim().length > 0) {
+    return task.session_id.replace(/^sessions\//, "");
+  }
+  if (typeof task.session_name === "string" && task.session_name.trim().length > 0) {
+    return task.session_name.replace(/^sessions\//, "");
+  }
+  return null;
+};
+
+const shouldAutoIntervene = (
+  state: string | undefined,
+  automationLevel: AutomationLevel,
+  settings: AutomationInterventionsSettings,
+  isActionRequiredState: (state?: string) => boolean
+): boolean => {
+  if (!isActionRequiredState(state)) {
+    return false;
+  }
+  if (automationLevel === "FULL") {
+    return true;
+  }
+  if (automationLevel === "ALWAYS_ASK") {
+    return false;
+  }
+  if (state === "AWAITING_PLAN_APPROVAL") {
+    return settings.autoApprovePlan;
+  }
+  if (state === "AWAITING_USER_FEEDBACK") {
+    return settings.autoAnswerClarification;
+  }
+  if (state === "PAUSED") {
+    return settings.autoResumePaused;
+  }
+  return false;
+};
+
+const getSemiAutoDisabledReason = (state: string | undefined, settings: AutomationInterventionsSettings): string => {
+  if (state === "AWAITING_PLAN_APPROVAL" && !settings.autoApprovePlan) {
+    return "SEMI_AUTO policy disabled auto-approval for session plans.";
+  }
+  if (state === "AWAITING_USER_FEEDBACK" && !settings.autoAnswerClarification) {
+    return "SEMI_AUTO policy disabled auto-answer for clarification requests.";
+  }
+  if (state === "PAUSED" && !settings.autoResumePaused) {
+    return "SEMI_AUTO policy disabled auto-resume for paused sessions.";
+  }
+  return "SEMI_AUTO policy did not allow auto-intervention for this state.";
+};
+
+const getLatestAgentPrompt = (task: Subtask): string => {
+  const activities = Array.isArray(task.activities) ? task.activities : [];
+  for (let index = activities.length - 1; index >= 0; index -= 1) {
+    const entry = activities[index] as Record<string, unknown>;
+    const agentMessaged = entry.agentMessaged as Record<string, unknown> | undefined;
+    const agentMessage = typeof agentMessaged?.agentMessage === "string" ? agentMessaged.agentMessage.trim() : "";
+    if (agentMessage.length > 0) {
+      return agentMessage;
+    }
+    const description = typeof entry.description === "string" ? entry.description.trim() : "";
+    if (description.length > 0) {
+      return description;
+    }
+  }
+  return "";
+};
+
+const buildClarificationAutoReply = (task: Subtask, template: string): string => {
+  const latestPrompt = getLatestAgentPrompt(task);
+  const contextBlock = latestPrompt.length > 0
+    ? `Context from latest agent request: "${latestPrompt.slice(0, 400)}"\n\n`
+    : "";
+  return `${contextBlock}${template}`;
+};
+
+export interface ApplyActionRequiredAutomationArgs {
+  automationLevel: AutomationLevel;
+  settings: AutomationInterventionsSettings;
+  isActionRequiredState: (state?: string) => boolean;
+  isJulesApiConfigured: () => boolean;
+  approveSessionPlan: (sessionId: string) => Promise<unknown>;
+  sendSessionMessage: (sessionId: string, prompt: string) => Promise<unknown>;
+}
+
+export const applyActionRequiredAutomation = async (
+  subtasks: Subtask[],
+  args: ApplyActionRequiredAutomationArgs
+): Promise<{ subtasks: Subtask[]; reportText: string }> => {
+  let reportText = "";
+
+  for (const task of subtasks) {
+    task.intervention_owner = undefined;
+    task.intervention_hint = undefined;
+
+    if (task.status !== "BLOCKED" || !args.isActionRequiredState(task.session_state)) {
+      continue;
+    }
+
+    if (!isJulesManagedTask(task)) {
+      task.intervention_owner = "AGENT";
+      task.intervention_hint = "Task is not Jules-managed; resolve manually in provider-specific workflow.";
+      continue;
+    }
+
+    if (!args.isJulesApiConfigured()) {
+      task.intervention_owner = "HUMAN";
+      task.intervention_hint = "Jules API key is not configured; automatic intervention is unavailable.";
+      continue;
+    }
+
+    const autoIntervene = shouldAutoIntervene(task.session_state, args.automationLevel, args.settings, args.isActionRequiredState);
+    if (!autoIntervene) {
+      task.intervention_owner = "HUMAN";
+      task.intervention_hint = args.automationLevel === "ALWAYS_ASK"
+        ? "Automation level is ALWAYS_ASK."
+        : getSemiAutoDisabledReason(task.session_state, args.settings);
+      continue;
+    }
+
+    const sessionId = resolveTaskSessionId(task);
+    if (!sessionId) {
+      task.intervention_owner = "AGENT";
+      task.intervention_hint = "No session id available for automatic intervention.";
+      continue;
+    }
+
+    try {
+      if (task.session_state === "AWAITING_PLAN_APPROVAL") {
+        await args.approveSessionPlan(sessionId);
+        task.status = "RUNNING";
+        reportText += `🤖 **Auto-Approved Plan:** Task \`${task.id}\` session \`${sessionId}\` moved back to in-progress.\n`;
+        continue;
+      }
+
+      if (task.session_state === "AWAITING_USER_FEEDBACK") {
+        const reply = buildClarificationAutoReply(task, args.settings.clarificationAnswerTemplate);
+        await args.sendSessionMessage(sessionId, reply);
+        task.status = "RUNNING";
+        reportText += `🤖 **Auto-Answered Clarification:** Task \`${task.id}\` session \`${sessionId}\` received an automated response and stays in progress.\n`;
+        continue;
+      }
+
+      if (task.session_state === "PAUSED") {
+        await args.sendSessionMessage(
+          sessionId,
+          "Continue execution using the current plan and repository conventions. Resume work and report progress."
+        );
+        task.status = "RUNNING";
+        reportText += `🤖 **Auto-Resumed Session:** Task \`${task.id}\` session \`${sessionId}\` was nudged to continue.\n`;
+        continue;
+      }
+    } catch (error) {
+      task.intervention_owner = "AGENT";
+      task.intervention_hint = `Auto-intervention failed: ${error instanceof Error ? error.message : String(error)}`;
+      reportText += `⚠️ **Auto-Intervention Failed:** Task \`${task.id}\` could not be unblocked automatically.\n`;
+    }
+  }
+
+  return { subtasks, reportText };
+};

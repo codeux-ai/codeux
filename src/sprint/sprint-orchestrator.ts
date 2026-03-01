@@ -1,6 +1,15 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import type { InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
+import { applyActionRequiredAutomation, isJulesManagedTask, resolveTaskSessionId } from "./action-required-automation.js";
+import {
+  getFailedJobLabels,
+  getFailedLogSnippets,
+  isCiCheckFailed,
+  isCiCheckPending,
+  selectFailedCiRuns,
+  summarizeFailedRuns,
+} from "./ci-status-utils.js";
 import {
   DEFAULT_AUTOMATION_INTERVENTIONS_SETTINGS,
   DEFAULT_CI_INTELLIGENCE_SETTINGS,
@@ -222,9 +231,13 @@ export class SprintOrchestrator {
     }
 
     if (subtasks.length > 0) {
-      const interventionResult = await this.applyActionRequiredAutomation(subtasks, {
+      const interventionResult = await applyActionRequiredAutomation(subtasks, {
         automationLevel: args.automationLevel,
         settings: args.automationInterventions,
+        isActionRequiredState: this.deps.isActionRequiredState,
+        isJulesApiConfigured: this.deps.isJulesApiConfigured,
+        approveSessionPlan: this.deps.approveSessionPlan,
+        sendSessionMessage: this.deps.sendSessionMessage,
       });
       subtasks = interventionResult.subtasks;
       reportText += interventionResult.reportText;
@@ -267,252 +280,13 @@ export class SprintOrchestrator {
     };
   }
 
-  private isJulesManagedTask(task: Subtask): boolean {
-    if (task.provider && task.provider !== "jules") {
-      return false;
-    }
-    if (typeof task.session_id === "string" && task.session_id.startsWith("cli-")) {
-      return false;
-    }
-    if (typeof task.session_name === "string" && task.session_name.startsWith("sessions/cli-")) {
-      return false;
-    }
-    return true;
-  }
-
-  private resolveTaskSessionId(task: Subtask): string | null {
-    if (typeof task.session_id === "string" && task.session_id.trim().length > 0) {
-      return task.session_id.replace(/^sessions\//, "");
-    }
-    if (typeof task.session_name === "string" && task.session_name.trim().length > 0) {
-      return task.session_name.replace(/^sessions\//, "");
-    }
-    return null;
-  }
-
   private getCiAutofixRetryKey(task: Subtask, prNumber: number): string {
-    const sessionId = this.resolveTaskSessionId(task) || task.id;
+    const sessionId = resolveTaskSessionId(task) || task.id;
     return `${sessionId}:${prNumber}`;
   }
 
   private resolveCiEscalationOwner(automationLevel: AutomationLevel): "AGENT" | "HUMAN" {
     return automationLevel === "FULL" ? "AGENT" : "HUMAN";
-  }
-
-  private shouldAutoIntervene(
-    state: string | undefined,
-    automationLevel: AutomationLevel,
-    settings: AutomationInterventionsSettings
-  ): boolean {
-    if (!this.deps.isActionRequiredState(state)) {
-      return false;
-    }
-    if (automationLevel === "FULL") {
-      return true;
-    }
-    if (automationLevel === "ALWAYS_ASK") {
-      return false;
-    }
-    if (state === "AWAITING_PLAN_APPROVAL") {
-      return settings.autoApprovePlan;
-    }
-    if (state === "AWAITING_USER_FEEDBACK") {
-      return settings.autoAnswerClarification;
-    }
-    if (state === "PAUSED") {
-      return settings.autoResumePaused;
-    }
-    return false;
-  }
-
-  private getSemiAutoDisabledReason(state: string | undefined, settings: AutomationInterventionsSettings): string {
-    if (state === "AWAITING_PLAN_APPROVAL" && !settings.autoApprovePlan) {
-      return "SEMI_AUTO policy disabled auto-approval for session plans.";
-    }
-    if (state === "AWAITING_USER_FEEDBACK" && !settings.autoAnswerClarification) {
-      return "SEMI_AUTO policy disabled auto-answer for clarification requests.";
-    }
-    if (state === "PAUSED" && !settings.autoResumePaused) {
-      return "SEMI_AUTO policy disabled auto-resume for paused sessions.";
-    }
-    return "SEMI_AUTO policy did not allow auto-intervention for this state.";
-  }
-
-  private getLatestAgentPrompt(task: Subtask): string {
-    const activities = Array.isArray(task.activities) ? task.activities : [];
-    for (let index = activities.length - 1; index >= 0; index -= 1) {
-      const entry = activities[index] as Record<string, unknown>;
-      const agentMessaged = entry.agentMessaged as Record<string, unknown> | undefined;
-      const agentMessage = typeof agentMessaged?.agentMessage === "string" ? agentMessaged.agentMessage.trim() : "";
-      if (agentMessage.length > 0) {
-        return agentMessage;
-      }
-      const description = typeof entry.description === "string" ? entry.description.trim() : "";
-      if (description.length > 0) {
-        return description;
-      }
-    }
-    return "";
-  }
-
-  private buildClarificationAutoReply(task: Subtask, template: string): string {
-    const latestPrompt = this.getLatestAgentPrompt(task);
-    const contextBlock = latestPrompt.length > 0
-      ? `Context from latest agent request: "${latestPrompt.slice(0, 400)}"\n\n`
-      : "";
-    return `${contextBlock}${template}`;
-  }
-
-  private async applyActionRequiredAutomation(
-    subtasks: Subtask[],
-    args: {
-      automationLevel: AutomationLevel;
-      settings: AutomationInterventionsSettings;
-    }
-  ): Promise<{ subtasks: Subtask[]; reportText: string }> {
-    let reportText = "";
-
-    for (const task of subtasks) {
-      task.intervention_owner = undefined;
-      task.intervention_hint = undefined;
-
-      if (task.status !== "BLOCKED" || !this.deps.isActionRequiredState(task.session_state)) {
-        continue;
-      }
-
-      if (!this.isJulesManagedTask(task)) {
-        task.intervention_owner = "AGENT";
-        task.intervention_hint = "Task is not Jules-managed; resolve manually in provider-specific workflow.";
-        continue;
-      }
-
-      if (!this.deps.isJulesApiConfigured()) {
-        task.intervention_owner = "HUMAN";
-        task.intervention_hint = "Jules API key is not configured; automatic intervention is unavailable.";
-        continue;
-      }
-
-      const autoIntervene = this.shouldAutoIntervene(task.session_state, args.automationLevel, args.settings);
-      if (!autoIntervene) {
-        task.intervention_owner = "HUMAN";
-        task.intervention_hint = args.automationLevel === "ALWAYS_ASK"
-          ? "Automation level is ALWAYS_ASK."
-          : this.getSemiAutoDisabledReason(task.session_state, args.settings);
-        continue;
-      }
-
-      const sessionId = this.resolveTaskSessionId(task);
-      if (!sessionId) {
-        task.intervention_owner = "AGENT";
-        task.intervention_hint = "No session id available for automatic intervention.";
-        continue;
-      }
-
-      try {
-        if (task.session_state === "AWAITING_PLAN_APPROVAL") {
-          await this.deps.approveSessionPlan(sessionId);
-          task.status = "RUNNING";
-          reportText += `🤖 **Auto-Approved Plan:** Task \`${task.id}\` session \`${sessionId}\` moved back to in-progress.\n`;
-          continue;
-        }
-
-        if (task.session_state === "AWAITING_USER_FEEDBACK") {
-          const reply = this.buildClarificationAutoReply(task, args.settings.clarificationAnswerTemplate);
-          await this.deps.sendSessionMessage(sessionId, reply);
-          task.status = "RUNNING";
-          reportText += `🤖 **Auto-Answered Clarification:** Task \`${task.id}\` session \`${sessionId}\` received an automated response and stays in progress.\n`;
-          continue;
-        }
-
-        if (task.session_state === "PAUSED") {
-          await this.deps.sendSessionMessage(
-            sessionId,
-            "Continue execution using the current plan and repository conventions. Resume work and report progress."
-          );
-          task.status = "RUNNING";
-          reportText += `🤖 **Auto-Resumed Session:** Task \`${task.id}\` session \`${sessionId}\` was nudged to continue.\n`;
-          continue;
-        }
-      } catch (error) {
-        task.intervention_owner = "AGENT";
-        task.intervention_hint = `Auto-intervention failed: ${error instanceof Error ? error.message : String(error)}`;
-        reportText += `⚠️ **Auto-Intervention Failed:** Task \`${task.id}\` could not be unblocked automatically.\n`;
-      }
-    }
-
-    return { subtasks, reportText };
-  }
-
-  private isCiCheckFailed(status: string, conclusion: string | null): boolean {
-    const normalizedStatus = status.toLowerCase();
-    const normalizedConclusion = (conclusion || "").toLowerCase();
-    if (normalizedStatus !== "completed") {
-      return false;
-    }
-    return normalizedConclusion.length > 0 && normalizedConclusion !== "success" && normalizedConclusion !== "neutral" && normalizedConclusion !== "skipped";
-  }
-
-  private isCiCheckPending(status: string, conclusion: string | null): boolean {
-    const normalizedStatus = status.toLowerCase();
-    if (normalizedStatus !== "completed") {
-      return true;
-    }
-    return conclusion === null;
-  }
-
-  private isCiRunFailed(status: string, conclusion: string | null): boolean {
-    const normalizedStatus = status.toLowerCase();
-    const normalizedConclusion = (conclusion || "").toLowerCase();
-    if (normalizedStatus !== "completed") {
-      return false;
-    }
-    return normalizedConclusion.length > 0 && normalizedConclusion !== "success" && normalizedConclusion !== "neutral" && normalizedConclusion !== "skipped";
-  }
-
-  private selectFailedCiRuns(gitStatus: GitTrackingStatus, branchName: string): GitCiRunStatus[] {
-    const runs = Array.isArray(gitStatus.ciRuns) ? gitStatus.ciRuns : [];
-    const failedRuns = runs.filter((run) => this.isCiRunFailed(run.status, run.conclusion));
-    const branchMatched = failedRuns.filter((run) => run.headBranch === branchName);
-    if (branchMatched.length > 0) {
-      return branchMatched.slice(0, 2);
-    }
-    return failedRuns.slice(0, 2);
-  }
-
-  private getFailedJobLabels(failedRuns: GitCiRunStatus[]): string[] {
-    const labels: string[] = [];
-    for (const run of failedRuns) {
-      const runLabel = run.workflowName || run.name;
-      const jobs = Array.isArray(run.failedJobs) ? run.failedJobs : [];
-      for (const job of jobs) {
-        labels.push(`${runLabel}/${job.name}`);
-      }
-    }
-    return labels;
-  }
-
-  private getFailedLogSnippets(failedRuns: GitCiRunStatus[]): string[] {
-    const snippets: string[] = [];
-    for (const run of failedRuns) {
-      const runLabel = `${run.workflowName || run.name} (#${run.id ?? "?"})`;
-      const jobs = Array.isArray(run.failedJobs) ? run.failedJobs : [];
-      for (const job of jobs) {
-        if (!job.logExcerpt || job.logExcerpt.trim().length === 0) {
-          continue;
-        }
-        snippets.push(`[${runLabel} / ${job.name}]\n${job.logExcerpt}`);
-      }
-    }
-    return snippets.slice(0, 3);
-  }
-
-  private summarizeFailedRuns(failedRuns: GitCiRunStatus[]): string {
-    if (failedRuns.length === 0) {
-      return "none";
-    }
-    return failedRuns
-      .map((run) => `${run.workflowName || run.name}#${run.id ?? "?"}`)
-      .join(", ");
   }
 
   private async notifyJulesAboutFailedCi(args: {
@@ -525,21 +299,21 @@ export class SprintOrchestrator {
     attempt: number;
     maxRetries: number;
   }): Promise<{ sent: boolean; reason?: string }> {
-    if (!this.isJulesManagedTask(args.task)) {
+    if (!isJulesManagedTask(args.task)) {
       return { sent: false, reason: "Task is not Jules-managed." };
     }
     if (!this.deps.isJulesApiConfigured()) {
       return { sent: false, reason: "Jules API key is not configured." };
     }
-    const sessionId = this.resolveTaskSessionId(args.task);
+    const sessionId = resolveTaskSessionId(args.task);
     if (!sessionId) {
       return { sent: false, reason: "No session id available." };
     }
 
     const failedChecksLine = args.failedChecks.length > 0 ? args.failedChecks.join(", ") : "unknown checks";
-    const failedRunsLine = this.summarizeFailedRuns(args.failedRuns);
-    const failedJobsLine = this.getFailedJobLabels(args.failedRuns);
-    const failedLogSnippets = this.getFailedLogSnippets(args.failedRuns);
+    const failedRunsLine = summarizeFailedRuns(args.failedRuns);
+    const failedJobsLine = getFailedJobLabels(args.failedRuns);
+    const failedLogSnippets = getFailedLogSnippets(args.failedRuns);
     const prompt = [
       `CI failed for your task PR #${args.prNumber} on branch ${args.branchName}.`,
       `PR URL: ${args.prUrl}.`,
@@ -631,8 +405,8 @@ export class SprintOrchestrator {
       }
 
       const checks = Array.isArray(pr.checks) ? pr.checks : [];
-      const hasFailedChecks = checks.some((check) => this.isCiCheckFailed(check.status, check.conclusion));
-      const hasPendingChecks = checks.length === 0 || checks.some((check) => this.isCiCheckPending(check.status, check.conclusion));
+      const hasFailedChecks = checks.some((check) => isCiCheckFailed(check.status, check.conclusion));
+      const hasPendingChecks = checks.length === 0 || checks.some((check) => isCiCheckPending(check.status, check.conclusion));
       const hasReviewBlockers = args.ciIntelligence.resolveAllCommentsBeforeFeatureMerge
         ? pr.reviewDecision === "CHANGES_REQUESTED" || pr.comments > 0
         : false;
@@ -668,14 +442,14 @@ export class SprintOrchestrator {
       reportText += `   - Check live: \`gh pr checks ${pr.number} --watch\`\n`;
       if (hasFailedChecks) {
         const failedChecks = checks
-          .filter((check) => this.isCiCheckFailed(check.status, check.conclusion))
+          .filter((check) => isCiCheckFailed(check.status, check.conclusion))
           .map((check) => check.name);
         const branchName = workerBranch || args.featureBranch;
-        const failedRuns = this.selectFailedCiRuns(gitStatus, branchName);
-        const failedJobLabels = this.getFailedJobLabels(failedRuns);
+        const failedRuns = selectFailedCiRuns(gitStatus, branchName);
+        const failedJobLabels = getFailedJobLabels(failedRuns);
         reportText += `   - Failed checks: ${failedChecks.join(", ")}\n`;
         if (failedRuns.length > 0) {
-          reportText += `   - Failed runs: ${this.summarizeFailedRuns(failedRuns)}\n`;
+          reportText += `   - Failed runs: ${summarizeFailedRuns(failedRuns)}\n`;
           reportText += `   - Failed run URLs: ${failedRuns.map((run) => run.url).filter((url) => url.length > 0).join(", ")}\n`;
         }
         if (failedJobLabels.length > 0) {
@@ -690,7 +464,7 @@ export class SprintOrchestrator {
             const owner = this.resolveCiEscalationOwner(args.automationLevel);
             task.status = "BLOCKED";
             task.intervention_owner = owner;
-            task.intervention_hint = `CI autofix retry limit reached (${currentRetries}/${maxRetries}) for task ${task.id} - PR: ${pr.url} - Failed checks: ${failedChecks.join(", ")} - Failed jobs: ${failedJobLabels.length > 0 ? failedJobLabels.join(", ") : "unknown jobs"} - Failed runs: ${this.summarizeFailedRuns(failedRuns)}`;
+            task.intervention_hint = `CI autofix retry limit reached (${currentRetries}/${maxRetries}) for task ${task.id} - PR: ${pr.url} - Failed checks: ${failedChecks.join(", ")} - Failed jobs: ${failedJobLabels.length > 0 ? failedJobLabels.join(", ") : "unknown jobs"} - Failed runs: ${summarizeFailedRuns(failedRuns)}`;
             reportText += `   - 🚨 CI autofix retries exhausted (${currentRetries}/${maxRetries}).\n`;
             reportText += `   - Escalation (${owner}): Task \`${task.id}\` has failing CI and cannot be merged yet.\n`;
             reportText += `   - PR Link: ${pr.url}\n`;
@@ -783,8 +557,8 @@ export class SprintOrchestrator {
     }
 
     const checks = Array.isArray(mainMergePr.checks) ? mainMergePr.checks : [];
-    const hasFailedChecks = checks.some((check) => this.isCiCheckFailed(check.status, check.conclusion));
-    const hasPendingChecks = checks.length === 0 || checks.some((check) => this.isCiCheckPending(check.status, check.conclusion));
+    const hasFailedChecks = checks.some((check) => isCiCheckFailed(check.status, check.conclusion));
+    const hasPendingChecks = checks.length === 0 || checks.some((check) => isCiCheckPending(check.status, check.conclusion));
     const hasReviewBlockers = mainMergePr.reviewDecision === "CHANGES_REQUESTED" || mainMergePr.comments > 0;
 
     let text = `\n### Main Merge CI Gate\n`;
@@ -795,7 +569,7 @@ export class SprintOrchestrator {
 
     if (hasFailedChecks) {
       const failedChecks = checks
-        .filter((check) => this.isCiCheckFailed(check.status, check.conclusion))
+        .filter((check) => isCiCheckFailed(check.status, check.conclusion))
         .map((check) => check.name);
       text += `- Failed checks: ${failedChecks.join(", ")}\n`;
       text += `- Logs: \`gh run list --branch ${args.featureBranch} --event pull_request --limit 5\` and \`gh run view <run-id> --log-failed\`\n`;

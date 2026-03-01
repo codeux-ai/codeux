@@ -33,6 +33,8 @@ This project is a Model Context Protocol (MCP) server for Jules APIs with an int
 
 ### 3. Sprint orchestration engine
 - `src/sprint/sprint-orchestrator.ts`
+- `src/sprint/action-required-automation.ts`
+- `src/sprint/ci-status-utils.ts`
 - Atomic step modules in `src/sprint/steps/*`
 
 ### 4. Instruction template system
