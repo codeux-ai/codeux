@@ -13,7 +13,7 @@ Configured by:
 
 ## API Endpoints Used by Dashboard
 
-Implemented in `src/dashboard.ts`.
+Implemented in `src/server/dashboard-server.ts`.
 
 - `GET /api/status`
   - Current orchestrator status payload (`sprint_number`, `subtasks`, `instructions`, etc.)
@@ -48,9 +48,12 @@ Implemented in `src/dashboard.ts`.
 
 ## Polling Behavior
 
-From `dashboard/src/app.tsx`:
+From `dashboard/src/hooks/use-dashboard-runtime-data.ts`:
 - Status and live activities poll every 10 seconds.
 - Git status polls every 10 seconds.
+
+Settings are loaded from `dashboard/src/hooks/use-dashboard-settings.ts` and saved through
+`dashboard/src/lib/api/dashboard-api.ts` request helpers.
 
 ## Multi-Provider Settings
 
@@ -118,7 +121,7 @@ Use case:
 
 ## Git Status Panel Notes
 
-`git-status-service.ts` behavior:
+`src/services/git-status-service.ts` behavior:
 - Git/CI tracking uses the active sprint repository path (`repo_path`) from the latest sprint status update, not the MCP server repository root.
 - In `LOCAL` mode, PR/CI tracking is disabled.
 - In `REMOTE` mode, requires `gh` and auth.
@@ -159,3 +162,14 @@ For Gemini/Codex runs, sessions are tracked locally and surfaced with the same d
 - Token priority for git status:
   - UI token first
   - then external hint fallback
+- Markdown rendering now strips raw inline HTML before inserting into the DOM, reducing script injection risk from activity/prompt content.
+
+## Frontend Architecture Notes
+
+- `dashboard/src/app.tsx` now focuses on view composition only.
+- Runtime status polling, live activity merge, and stat derivation are encapsulated in `use-dashboard-runtime-data`.
+- Settings load/save/import flows are encapsulated in `use-dashboard-settings`.
+- HTTP calls are centralized in `dashboard/src/lib/api/dashboard-api.ts` for consistent error handling and easier testability.
+- `dashboard/src/components/SettingsPage.tsx` now acts as a container and delegates each settings domain to focused section components under `dashboard/src/components/settings/`.
+- Shared settings UI primitives now live in `dashboard/src/components/settings/primitives.tsx` (`SettingsCard`, `ToggleRow`, `FieldLabel`) to reduce duplicate form markup and keep section components consistent.
+- Task cards use button semantics and ARIA expansion state for title/details/log toggles.

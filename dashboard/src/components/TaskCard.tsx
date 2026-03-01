@@ -42,6 +42,8 @@ const getIndicatorColor = (indicator?: SubtaskMergeIndicator): string => {
 export const TaskCard: FunctionComponent<TaskCardProps> = ({ task }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
+  const detailPanelId = `task-details-${task.id}`;
+  const livePanelId = `task-live-${task.id}`;
   const hasSession = Boolean(task.session_id || task.session_name);
   const sessionLabel = (task.session_id || task.session_name || "").replace(/^sessions\//, "");
   const providerLabel = task.provider ? task.provider.toUpperCase() : "JULES";
@@ -66,21 +68,33 @@ export const TaskCard: FunctionComponent<TaskCardProps> = ({ task }) => {
           <div className="flex items-center justify-between mb-2 gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <span className="font-mono text-[10px] font-bold px-2 py-0.5 bg-slate-800 rounded text-slate-400">#{task.id}</span>
-              <h3 className="font-semibold text-white truncate cursor-pointer" onClick={() => setIsExpanded(!isExpanded)}>
-                {task.title}
+              <h3 className="font-semibold text-white truncate">
+                <button
+                  type="button"
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="truncate text-left hover:text-slate-200 transition-colors"
+                >
+                  {task.title}
+                </button>
               </h3>
             </div>
             <div className="flex items-center gap-2">
               {hasSession && (
                 <button
+                  type="button"
                   onClick={() => setShowLogs(!showLogs)}
+                  aria-expanded={showLogs}
+                  aria-controls={livePanelId}
                   className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-slate-800/50 hover:bg-slate-800 text-slate-500 hover:text-sky-400 transition-all border border-slate-700/50"
                 >
                   {showLogs ? "Hide Logs" : "View Logs"}
                 </button>
               )}
               <button
+                type="button"
                 onClick={() => setIsExpanded(!isExpanded)}
+                aria-expanded={isExpanded}
+                aria-controls={detailPanelId}
                 className="p-1 hover:bg-slate-800 rounded-lg transition-colors text-slate-500 hover:text-white"
                 title={isExpanded ? "Collapse" : "Expand"}
               >
@@ -92,12 +106,16 @@ export const TaskCard: FunctionComponent<TaskCardProps> = ({ task }) => {
           </div>
 
           <div className={`transition-all duration-300 ${isExpanded || showLogs ? "h-0 opacity-0 mb-0 overflow-hidden" : "h-6 opacity-100 mb-4"}`}>
-            <p className="text-sm text-slate-500 line-clamp-1 cursor-pointer" onClick={() => setIsExpanded(true)}>
+            <button
+              type="button"
+              onClick={() => setIsExpanded(true)}
+              className="text-sm text-slate-500 line-clamp-1 text-left w-full hover:text-slate-300 transition-colors"
+            >
               {task.prompt.substring(0, 120)}...
-            </p>
+            </button>
           </div>
 
-          <div className={`expand-grid ${showLogs ? "expanded" : ""}`}>
+          <div id={livePanelId} className={`expand-grid ${showLogs ? "expanded" : ""}`}>
             <div className="expand-content">
               <div className="space-y-3 mb-6 p-4 bg-slate-950/50 rounded-xl border border-slate-800/50">
                 <h4 className="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-2 flex items-center gap-2">
@@ -130,7 +148,7 @@ export const TaskCard: FunctionComponent<TaskCardProps> = ({ task }) => {
             </div>
           </div>
 
-          <div className={`expand-grid ${isExpanded ? "expanded" : ""}`}>
+          <div id={detailPanelId} className={`expand-grid ${isExpanded ? "expanded" : ""}`}>
             <div className="expand-content">
               <div className="prose prose-sm prose-invert max-w-none mb-8 text-slate-400 prose-headings:text-slate-200 prose-a:text-blue-400 prose-code:text-sky-300 prose-code:bg-slate-800/50 prose-code:px-1 prose-code:rounded prose-strong:text-slate-200">
                 <div dangerouslySetInnerHTML={{ __html: renderMarkdown(task.prompt) }} />

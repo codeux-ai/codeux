@@ -1,5 +1,5 @@
-import type { JulesSession, Subtask } from "../../types.js";
-import type { SessionSyncDependencies } from "../types.js";
+import type { JulesSession, Subtask } from "../../contracts/app-types.js";
+import type { SessionSyncDependencies } from "../sprint-types.js";
 
 export const runSessionSyncStep = async (
   subtasks: Subtask[],

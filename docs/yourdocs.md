@@ -56,7 +56,7 @@ The orchestrator now executes these steps in sequence, and each step can be togg
 Agent invocation flow is separated from loop internals:
 - Agent entry and tool contracts are handled in `src/mcp/agent-tool-handler.ts`.
 - Loop internals are in `src/sprint-orchestrator.ts` and `src/sprint/steps/*`.
-- Shared sprint input types are in `src/sprint/types.ts`.
+- Shared sprint input types are in `src/sprint/sprint-types.ts`.
 
 This makes loop behavior reorderable/editable without touching MCP tool plumbing.
 
@@ -82,18 +82,18 @@ Template placeholder syntax:
 - Nested values: `{{group.key}}`
 
 Implementation:
-- `src/instructions/template-engine.ts`
+- `src/instructions/instruction-template-renderer.ts`
 
 Repository lookup + fallback:
-- `src/instructions/repository.ts`
+- `src/instructions/instruction-template-repository.ts`
   - Search precedence: repo path, current working directory, project root, home.
-- `src/instructions/service.ts`
+- `src/instructions/instruction-template-service.ts`
   - Uses file template if present.
-  - Falls back to built-in defaults in `src/instructions/catalog.ts`.
+  - Falls back to built-in defaults in `src/instructions/instruction-template-catalog.ts`.
 
 ### 3. Instruction Catalog
 Template IDs and default markdown mappings are centralized in:
-- `src/instructions/catalog.ts`
+- `src/instructions/instruction-template-catalog.ts`
 
 Sprint orchestrator calls instruction templates by ID for:
 - Branch missing preflight blocker.
@@ -152,8 +152,8 @@ Dashboard UI controls:
 ## Test Coverage Added/Updated
 
 New tests:
-- `src/instructions/template-engine.test.ts`
-- `src/instructions/service.test.ts`
+- `src/instructions/instruction-template-renderer.test.ts`
+- `src/instructions/instruction-template-service.test.ts`
 
 Updated tests:
 - `src/sprint-orchestrator.test.ts`
@@ -561,5 +561,5 @@ Files:
 - `src/sprint/steps/session-sync-step.ts`
 - `src/sprint/steps/protocol-step.ts`
 - `src/sprint/steps/status-table-step.ts`
-- `src/instructions/catalog.ts`
+- `src/instructions/instruction-template-catalog.ts`
 - `.jules-subagents/instructions/sprint-main-loop/protocol/*.md`

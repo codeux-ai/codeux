@@ -1,7 +1,7 @@
-import type { TaskService } from "../task-service.js";
-import type { DashboardSettings } from "../types.js";
-import type { SprintOrchestrator } from "../sprint-orchestrator.js";
-import type { SprintAgentArgs } from "../sprint/types.js";
+import type { TaskService } from "../services/task-service.js";
+import type { DashboardSettings } from "../contracts/app-types.js";
+import type { SprintOrchestrator } from "../sprint/sprint-orchestrator.js";
+import type { SprintAgentArgs } from "../sprint/sprint-types.js";
 
 interface AgentToolHandlerDependencies {
   sprintOrchestrator: SprintOrchestrator;

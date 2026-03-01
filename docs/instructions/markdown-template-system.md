@@ -10,14 +10,14 @@ The sprint loop uses editable markdown templates for all major operator-facing i
 
 ## Template Service Components
 
-- `src/instructions/template-engine.ts`
+- `src/instructions/instruction-template-renderer.ts`
   - Replaces placeholders like `{{key}}`.
   - Supports nested keys like `{{group.subkey}}`.
-- `src/instructions/repository.ts`
+- `src/instructions/instruction-template-repository.ts`
   - Resolves templates from override paths.
-- `src/instructions/catalog.ts`
+- `src/instructions/instruction-template-catalog.ts`
   - Maps template IDs to relative paths and fallback defaults.
-- `src/instructions/service.ts`
+- `src/instructions/instruction-template-service.ts`
   - Loads override template or fallback, then renders placeholders.
 
 ## Search Paths
@@ -112,5 +112,5 @@ Rendered output:
 ## Testing
 
 Template behavior tests:
-- `src/instructions/template-engine.test.ts`
-- `src/instructions/service.test.ts`
+- `tests/backend/instructions/instruction-template-renderer.test.ts`
+- `tests/backend/instructions/instruction-template-service.test.ts`

@@ -1,0 +1,127 @@
+import type { FunctionComponent } from "preact";
+import type { DashboardSettings } from "../../types.js";
+import { FieldLabel, SettingsCard, ToggleRow } from "./primitives.js";
+import type { SettingsSectionProps } from "./types.js";
+
+export const GitSettingsSection: FunctionComponent<SettingsSectionProps> = ({ settings, onChange }) => (
+  <SettingsCard title="Git Settings">
+    <label className="block space-y-2">
+      <FieldLabel>GitHub Mode</FieldLabel>
+      <select
+        value={settings.git.githubMode}
+        onChange={(event) =>
+          onChange((() => {
+            const nextMode = event.currentTarget.value as DashboardSettings["git"]["githubMode"];
+            return {
+              ...settings,
+              git: {
+                ...settings.git,
+                githubMode: nextMode,
+              },
+              skills: settings.skills.map((skill) => {
+                if (skill.name === "git_manager_remote") return { ...skill, enabled: nextMode === "REMOTE" };
+                if (skill.name === "git_manager_local") return { ...skill, enabled: nextMode === "LOCAL" };
+                if (skill.name === "git_manager") return { ...skill, enabled: true };
+                return skill;
+              }),
+            };
+          })())
+        }
+        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+      >
+        <option value="REMOTE">Remote (GitHub CLI)</option>
+        <option value="LOCAL">Local (Git Commands)</option>
+      </select>
+      <p className="text-[11px] text-slate-500">
+        Exactly one Git Manager skillset is active based on mode: remote enables <code>git_manager_remote</code>, local enables <code>git_manager_local</code>.
+      </p>
+    </label>
+    <label className="block space-y-2">
+      <FieldLabel>Default Branch</FieldLabel>
+      <input
+        type="text"
+        value={settings.git.defaultBranch}
+        onInput={(event) =>
+          onChange({
+            ...settings,
+            git: {
+              ...settings.git,
+              defaultBranch: event.currentTarget.value,
+            },
+          })
+        }
+        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+        placeholder="main"
+      />
+    </label>
+    <label className="block space-y-2">
+      <FieldLabel>Feature Branch Prefix</FieldLabel>
+      <input
+        type="text"
+        value={settings.git.featureBranchPrefix}
+        onInput={(event) =>
+          onChange({
+            ...settings,
+            git: {
+              ...settings.git,
+              featureBranchPrefix: event.currentTarget.value,
+            },
+          })
+        }
+        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+        placeholder="feature/"
+      />
+    </label>
+    <label className="block space-y-2">
+      <FieldLabel>Sprint Branch Scheme</FieldLabel>
+      <input
+        type="text"
+        value={settings.git.sprintBranchScheme}
+        onInput={(event) =>
+          onChange({
+            ...settings,
+            git: {
+              ...settings.git,
+              sprintBranchScheme: event.currentTarget.value,
+            },
+          })
+        }
+        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+        placeholder="feature/sprint{sprint}-implementation"
+      />
+      <p className="text-[11px] text-slate-500">Use {"{sprint}"} or {"{n}"} as placeholder, e.g. <code>feature/sprint{"{sprint}"}-implementation</code>.</p>
+    </label>
+    <label className="block space-y-2">
+      <FieldLabel>GitHub Token</FieldLabel>
+      <input
+        type="password"
+        value={settings.git.githubToken}
+        onInput={(event) =>
+          onChange({
+            ...settings,
+            git: {
+              ...settings.git,
+              githubToken: event.currentTarget.value,
+            },
+          })
+        }
+        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+        placeholder="ghp_..."
+      />
+      <p className="text-[11px] text-slate-500">Priority: UI value first. If empty, fallback to env/settings.json/system auth.</p>
+    </label>
+    <ToggleRow
+      label="Auto create PR when available"
+      checked={settings.git.autoCreatePr}
+      onToggle={(checked) =>
+        onChange({
+          ...settings,
+          git: {
+            ...settings.git,
+            autoCreatePr: checked,
+          },
+        })
+      }
+    />
+  </SettingsCard>
+);

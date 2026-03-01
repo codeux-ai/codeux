@@ -24,7 +24,7 @@ These cover:
 
 ## Registered Tools
 
-Defined in `src/tools.ts`.
+Defined in `src/contracts/mcp-tool-definitions.ts`.
 
 ### Sources
 - `get_source`
@@ -119,7 +119,7 @@ Unknown tool names raise MCP `MethodNotFound`.
 When modifying tool contracts:
 1. Keep argument names backward compatible where possible.
 2. Update both backend and dashboard types if shared payloads change.
-3. Add or update tests in `src/*.test.ts`.
+3. Add or update tests in `tests/backend/**/*.test.ts` or `tests/dashboard/**/*.test.ts`.
 4. Document changes in `docs/` and `README.md`.
 
 ## Runtime Tool Enablement

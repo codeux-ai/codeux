@@ -1,5 +1,5 @@
-import type { CiIntelligenceSettings } from "../../types.js";
-import type { InstructionTemplateId } from "../../instructions/catalog.js";
+import type { CiIntelligenceSettings } from "../../contracts/app-types.js";
+import type { InstructionTemplateId } from "../../instructions/instruction-template-catalog.js";
 
 interface CompletionStepOptions {
   defaultBranch: string;

@@ -1,4 +1,4 @@
-import type { Subtask } from "../../types.js";
+import type { Subtask } from "../../contracts/app-types.js";
 
 interface StartReadyTasksOptions {
   action: "status" | "orchestrate" | "plan";

@@ -1,166 +1,38 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
+import { ActivitySidebar } from "./components/ActivitySidebar.js";
 import { Header, type DashboardView } from "./components/Header.js";
+import { SettingsPage } from "./components/SettingsPage.js";
 import { StatsGrid } from "./components/StatsGrid.js";
 import { TaskCard } from "./components/TaskCard.js";
-import { ActivitySidebar } from "./components/ActivitySidebar.js";
-import { SettingsPage } from "./components/SettingsPage.js";
-import { computeStats, mergeLiveActivities } from "./lib/status.js";
-import { cloneDefaultSettings } from "./lib/settings.js";
-import type { DashboardSettings, DashboardStatus, ExternalSettingsHints, GitTrackingStatus, LiveActivitiesResponse } from "./types.js";
-
-const DEFAULT_LOG_POLL_INTERVAL_MS = 10000;
+import { useDashboardRuntimeData } from "./hooks/use-dashboard-runtime-data.js";
+import { useDashboardSettings } from "./hooks/use-dashboard-settings.js";
 
 export const App: FunctionComponent = () => {
   const [view, setView] = useState<DashboardView>("dashboard");
-  const [status, setStatus] = useState<DashboardStatus>({ subtasks: [], timestamp: null });
-  const [error, setError] = useState<string | null>(null);
-  const [liveActivities, setLiveActivities] = useState<Record<string, LiveActivitiesResponse["activitiesBySession"][string]>>({});
-  const [settings, setSettings] = useState<DashboardSettings>(cloneDefaultSettings());
-  const [settingsError, setSettingsError] = useState<string | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [isSettingsLoading, setIsSettingsLoading] = useState<boolean>(false);
-  const [isSettingsSaving, setIsSettingsSaving] = useState<boolean>(false);
-  const [gitStatus, setGitStatus] = useState<GitTrackingStatus | null>(null);
-  const [gitStatusError, setGitStatusError] = useState<string | null>(null);
-
-  const fetchData = async (): Promise<void> => {
-    try {
-      const [statusRes, activitiesRes] = await Promise.all([fetch("/api/status"), fetch("/api/live-activities")]);
-      if (!statusRes.ok || !activitiesRes.ok) {
-        throw new Error("Failed to fetch dashboard data");
-      }
-
-      const statusData: DashboardStatus = await statusRes.json();
-      const activitiesData: LiveActivitiesResponse = await activitiesRes.json();
-      setStatus(statusData);
-      setLiveActivities(activitiesData.activitiesBySession || {});
-      setError(null);
-    } catch {
-      setError("Unable to connect to Orchestrator API");
-    }
-  };
-
-  const fetchGitStatus = async (): Promise<void> => {
-    try {
-      const response = await fetch("/api/git-status");
-      if (!response.ok) {
-        throw new Error("Failed to fetch git status");
-      }
-      const data: GitTrackingStatus = await response.json();
-      setGitStatus(data);
-      setGitStatusError(null);
-    } catch {
-      setGitStatusError("Unable to load git/ci/pr tracking.");
-    }
-  };
-
-  const fetchSettings = async (): Promise<void> => {
-    setIsSettingsLoading(true);
-    try {
-      const response = await fetch("/api/settings");
-      if (!response.ok) {
-        throw new Error("Failed to fetch settings");
-      }
-      const data: DashboardSettings = await response.json();
-      setSettings(data);
-      setSettingsError(null);
-    } catch {
-      setSettingsError("Unable to load settings");
-    } finally {
-      setIsSettingsLoading(false);
-    }
-  };
-
-  const saveSettings = async (): Promise<void> => {
-    setIsSettingsSaving(true);
-    setSaveMessage(null);
-    try {
-      const response = await fetch("/api/settings", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(settings),
-      });
-      if (!response.ok) {
-        throw new Error("Failed to save settings");
-      }
-      const data: DashboardSettings = await response.json();
-      setSettings(data);
-      setSettingsError(null);
-      setSaveMessage("Settings saved.");
-      await fetchGitStatus();
-    } catch {
-      setSettingsError("Unable to save settings");
-    } finally {
-      setIsSettingsSaving(false);
-    }
-  };
-
-  const importMissingSettings = async (): Promise<void> => {
-    try {
-      const response = await fetch("/api/settings/import-sources");
-      if (!response.ok) {
-        throw new Error("Failed to load external settings");
-      }
-      const hints: ExternalSettingsHints = await response.json();
-      setSettings((prev) => ({
-        ...prev,
-        aiProvider: {
-          ...prev.aiProvider,
-          julesApiKey: prev.aiProvider.julesApiKey.trim().length > 0 ? prev.aiProvider.julesApiKey : hints.resolved.julesApiKey,
-          providers: {
-            ...prev.aiProvider.providers,
-            jules: {
-              ...prev.aiProvider.providers.jules,
-              apiKey: prev.aiProvider.providers.jules.apiKey.trim().length > 0
-                ? prev.aiProvider.providers.jules.apiKey
-                : hints.resolved.julesApiKey,
-            },
-            gemini: {
-              ...prev.aiProvider.providers.gemini,
-              apiKey: prev.aiProvider.providers.gemini.apiKey.trim().length > 0
-                ? prev.aiProvider.providers.gemini.apiKey
-                : hints.resolved.geminiApiKey,
-            },
-            codex: {
-              ...prev.aiProvider.providers.codex,
-              apiKey: prev.aiProvider.providers.codex.apiKey.trim().length > 0
-                ? prev.aiProvider.providers.codex.apiKey
-                : hints.resolved.codexApiKey,
-            },
-          },
-        },
-        git: {
-          ...prev.git,
-          githubToken: prev.git.githubToken.trim().length > 0 ? prev.git.githubToken : hints.resolved.githubToken,
-        },
-      }));
-      setSaveMessage("Imported missing values from .env/.jules-subagents/settings.json.");
-      setSettingsError(null);
-    } catch {
-      setSettingsError("Unable to import settings from .env/.json");
-    }
-  };
+  const { error, gitStatus, gitStatusError, refreshGitStatus, status, stats, tasksWithLiveActivities } = useDashboardRuntimeData();
+  const {
+    fetchSettings,
+    importMissingSettings,
+    isLoading,
+    isSaving,
+    saveMessage,
+    saveSettings,
+    settings,
+    settingsError,
+    setSettings,
+  } = useDashboardSettings();
 
   useEffect(() => {
-    void fetchData();
     void fetchSettings();
-    void fetchGitStatus();
-    const intervalId = window.setInterval(() => void fetchData(), DEFAULT_LOG_POLL_INTERVAL_MS);
-    const gitIntervalId = window.setInterval(() => void fetchGitStatus(), DEFAULT_LOG_POLL_INTERVAL_MS);
-    return () => {
-      window.clearInterval(intervalId);
-      window.clearInterval(gitIntervalId);
-    };
-  }, []);
+  }, [fetchSettings]);
 
-  const tasksWithLiveActivities = useMemo(() => {
-    return mergeLiveActivities(status.subtasks || [], liveActivities);
-  }, [status.subtasks, liveActivities]);
-
-  const stats = useMemo(() => computeStats(tasksWithLiveActivities), [tasksWithLiveActivities]);
+  const handleSaveSettings = async (): Promise<void> => {
+    const saveSucceeded = await saveSettings();
+    if (saveSucceeded) {
+      await refreshGitStatus();
+    }
+  };
 
   if (error) {
     return (
@@ -226,12 +98,12 @@ export const App: FunctionComponent = () => {
           <div className="max-w-5xl">
             <SettingsPage
               settings={settings}
-              isLoading={isSettingsLoading}
-              isSaving={isSettingsSaving}
+              isLoading={isLoading}
+              isSaving={isSaving}
               error={settingsError}
               saveMessage={saveMessage}
               onChange={setSettings}
-              onSave={saveSettings}
+              onSave={handleSaveSettings}
               onImportMissing={importMissingSettings}
             />
           </div>

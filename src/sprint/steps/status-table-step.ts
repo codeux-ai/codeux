@@ -1,4 +1,4 @@
-import type { Subtask } from "../../types.js";
+import type { Subtask } from "../../contracts/app-types.js";
 
 const resolveStatusIcon = (task: Subtask): string => {
   if (task.status === "COMPLETED") return task.is_merged ? "✅" : "🤝";

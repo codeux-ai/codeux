@@ -4,7 +4,7 @@ This guide explains runtime config sources, precedence, and persistence.
 
 ## Startup Config Sources
 
-`src/config.ts` resolves API key in this order:
+`src/config/app-config.ts` resolves API key in this order:
 
 1. CLI `--api-key`
 2. `JULES_API_KEY` or `JULES_KEY`
@@ -32,7 +32,7 @@ For `.jules-subagents/settings.json`, search roots include:
 ## Dashboard Settings Persistence
 
 Backend file:
-- `src/settings-repository.ts`
+- `src/repositories/settings-repository.ts`
 
 Storage:
 - sqlite DB at `~/.jules-subagents/settings.db`
@@ -67,7 +67,7 @@ Top-level fields:
 - `clarificationAnswerTemplate`: default response body used for clarification auto-replies
 
 Backend contract:
-- `src/types.ts`
+- `src/contracts/app-types.ts`
 
 Frontend contract:
 - `dashboard/src/types.ts`
@@ -82,7 +82,8 @@ Frontend contract:
   - `executionMode` (`HOST|DOCKER`)
 - Docker runtime config:
   - `containerImage`
-  - `containerSetupScriptPath` (optional; falls back to `.jules-subagents/container/setup.sh` in repo/home when empty)
+  - `containerSetupScriptPath` (optional; when set to a relative path, runtime checks both sprint repo root and current server working directory)
+    - if empty, falls back to `.jules-subagents/container/setup.sh` in repo root, server working directory, then home directory
   - `containerMountCredentials` (master toggle)
   - `containerMountGitConfig`
   - `containerMountGithubAuth`
@@ -103,23 +104,27 @@ Frontend contract:
 - `autoMergeFeaturePrWhenGreen` (default `false`): when enabled, feature PRs are auto-merged by the sprint loop once checks are green and review blockers are cleared.
 
 `mcpTools` contains:
-- `name` (MCP tool name from `src/tools.ts`)
+- `name` (MCP tool name from `src/contracts/mcp-tool-definitions.ts`)
 - `enabled` (whether tool is visible in MCP `list_tools` and callable)
 - `isInternal` (reserved/internal metadata; currently all built-in tools are internal)
 
 Repository demo script:
 - `.jules-subagents/container/setup.sh` is included as a baseline bootstrap script.
 - It installs/updates `npm`, ensures `git` + `gh`, installs `pnpm`, `@google/gemini-cli`, `@openai/codex`, and Playwright Chromium (+ deps when root/apt is available).
+- Docker provider runner sets `HOME=/workspace/.jules-home` (worktree-local persistent home) and uses writable tmp npm paths for fallback installs in non-root container mode.
+- If setup script is missing or does not provide the requested provider CLI, the runner attempts a provider-specific fallback install (`gemini` or `codex`) before failing.
 
 ## Default Values
 
 Defined in:
-- `src/settings-repository.ts` (backend canonical defaults)
+- `src/repositories/settings-defaults.ts` (backend canonical defaults)
+- `src/repositories/settings-sanitizer.ts` (backend sanitization + normalization)
+- `src/repositories/settings-db-storage.ts` (sqlite persistence and migration path resolution)
 - `dashboard/src/lib/settings.ts` (frontend default clone)
 
 ## External Settings Hints
 
-`src/external-settings.ts` loads hints from:
+`src/config/external-settings.ts` loads hints from:
 - environment
 - settings json
 

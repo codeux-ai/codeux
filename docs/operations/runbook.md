@@ -65,6 +65,10 @@ Checks:
   - Is Docker daemon available (`docker ps`)?
   - Is the configured image pullable/runnable?
   - If provider tools are not in the image, is a setup script configured (or present at `.jules-subagents/container/setup.sh`)?
+  - Check session activity for setup resolution details:
+    - `Configured container setup script not found: ...`
+    - `No container setup script found. Checked: ...`
+  - Provider runner now falls back to installing missing `gemini`/`codex` CLI in-container (user-local npm prefix) before failing.
   - If auth is expected from host login state, is `Mount user credentials into container` enabled and are mount paths valid?
   - Docker mode requires daemon-visible workspace paths. Runtime now prefers repo-scoped worktree paths for Docker sessions.
   - For Docker-in-Docker or remote daemon path mismatches, configure:
