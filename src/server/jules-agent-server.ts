@@ -1,11 +1,5 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ErrorCode,
-  ListToolsRequestSchema,
-  McpError,
-} from "@modelcontextprotocol/sdk/types.js";
 import axios from "axios";
 import type { AxiosError } from "axios";
 import * as fs from "fs/promises";
@@ -24,8 +18,7 @@ import type {
   Settings,
   Subtask,
 } from "../contracts/app-types.js";
-import { dispatchTool } from "../contracts/mcp-tool-definitions.js";
-import { SprintOrchestrator, type SprintAgentArgs } from "../sprint/sprint-orchestrator.js";
+import { SprintOrchestrator } from "../sprint/sprint-orchestrator.js";
 import { GuideRepository } from "../repositories/guide-repository.js";
 import { SubtaskRepository } from "../repositories/subtask-repository.js";
 import { TaskService } from "../services/task-service.js";
@@ -39,7 +32,8 @@ import { AgentToolHandler } from "../mcp/agent-tool-handler.js";
 import { buildMissingJulesApiKeyMessage } from "../mcp/api-key-guidance.js";
 import { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
 import { CliWorkflowService } from "../services/cli-workflow-service.js";
-import { getEnabledToolDefinitions, isToolEnabled } from "../mcp/mcp-tool-availability.js";
+import { ActivityCacheService } from "./activity-cache-service.js";
+import { registerMcpRequestHandlers } from "./mcp-request-router.js";
 
 export interface JulesAgentServerOptions {
   projectRoot: string;
@@ -63,22 +57,15 @@ export class JulesAgentServer {
   private subtaskRepository: SubtaskRepository;
   private taskService: TaskService;
   private sprintOrchestrator: SprintOrchestrator;
-  private liveActivitiesCache: { timestamp: number; data: Record<string, JulesActivity[]> } = { timestamp: 0, data: {} };
-  private liveActivitiesFetchPromise: Promise<Record<string, JulesActivity[]>> | null = null;
   private settingsRepository: SettingsRepository;
   private dashboardSettings: DashboardSettings;
   private externalSettingsHints: ExternalSettingsHints;
-  private gitStatusCache: { timestamp: number; data: GitTrackingStatus | null; repoPath: string | null } = {
-    timestamp: 0,
-    data: null,
-    repoPath: null,
-  };
-  private gitStatusFetchPromise: Promise<GitTrackingStatus> | null = null;
   private instructionService: InstructionService;
   private sessionTracking: SessionTrackingRepository;
   private cliWorkflowService: CliWorkflowService;
   private coreToolHandler: CoreToolHandler;
   private agentToolHandler: AgentToolHandler;
+  private activityCacheService: ActivityCacheService;
 
   constructor(options: JulesAgentServerOptions) {
     this.projectRoot = options.projectRoot;
@@ -186,8 +173,26 @@ export class JulesAgentServer {
       waitForSessionCompletion: (args: { session_id: string; poll_interval?: number; timeout?: number }) =>
         this.coreToolHandler.handleWaitForSessionCompletion(args),
     });
+    this.activityCacheService = new ActivityCacheService(
+      {
+        getSubtasks: () => (Array.isArray(this.lastStatus?.subtasks) ? this.lastStatus.subtasks : []),
+        resolveSessionNameFromTask: (task) => this.resolveSessionNameFromTask(task),
+        fetchRecentActivities: (sessionName, pageSize) => this.fetchRecentActivities(sessionName, pageSize),
+        resolveGitStatusRepoPath: () => this.resolveGitStatusRepoPath(),
+        fetchGitStatusForRepo: (repoPath) => this.fetchGitStatusForRepo(repoPath),
+      },
+      JulesAgentServer.LIVE_ACTIVITY_CACHE_MS,
+      JulesAgentServer.GIT_STATUS_CACHE_MS,
+      JulesAgentServer.DASHBOARD_ACTIVITY_PAGE_SIZE
+    );
 
-    this.setupToolHandlers();
+    registerMcpRequestHandlers({
+      server: this.server,
+      coreToolHandler: this.coreToolHandler,
+      agentToolHandler: this.agentToolHandler,
+      getDashboardSettings: () => this.dashboardSettings,
+      formatError: (error: unknown) => this.formatError(error),
+    });
     
     this.server.onerror = (error) => {
       console.error("[MCP Server Error]", JSON.stringify(error, null, 2));
@@ -337,56 +342,17 @@ export class JulesAgentServer {
         this.dashboardSettings = this.settingsRepository.saveSettings(settings);
         this.syncGitSettingsFromDashboard();
         this.refreshJulesApiKey();
-        this.gitStatusCache = { timestamp: 0, data: null, repoPath: null };
+        this.activityCacheService.invalidateGitStatusCache();
         return this.dashboardSettings;
       },
     });
   }
 
-  private setupToolHandlers() {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: getEnabledToolDefinitions(this.dashboardSettings) as any,
-    }));
-
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: args } = request.params;
-      if (!isToolEnabled(this.dashboardSettings, name)) {
-        throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
-      }
-      const handlers = {
-        get_source: (toolArgs: { source_id: string }) => this.coreToolHandler.handleGetSource(toolArgs),
-        list_sources: (toolArgs: { filter?: string; page_size?: number; page_token?: string }) => this.coreToolHandler.handleListSources(toolArgs),
-        list_all_sources: (toolArgs: { filter?: string }) => this.coreToolHandler.handleListAllSources(toolArgs),
-        create_session: (toolArgs: any) => this.coreToolHandler.handleCreateSession(toolArgs),
-        get_session: (toolArgs: { session_id: string }) => this.coreToolHandler.handleGetSession(toolArgs),
-        list_sessions: (toolArgs: { page_size?: number; page_token?: string }) => this.coreToolHandler.handleListSessions(toolArgs),
-        approve_session_plan: (toolArgs: { session_id: string }) => this.coreToolHandler.handleApproveSessionPlan(toolArgs),
-        send_session_message: (toolArgs: { session_id: string; prompt: string }) => this.coreToolHandler.handleSendSessionMessage(toolArgs),
-        wait_for_session_completion: (toolArgs: { session_id: string; poll_interval?: number; timeout?: number }) =>
-          this.coreToolHandler.handleWaitForSessionCompletion(toolArgs),
-        get_activity: (toolArgs: { session_id: string; activity_id: string }) => this.coreToolHandler.handleGetActivity(toolArgs),
-        list_activities: (toolArgs: { session_id: string; page_size?: number; page_token?: string }) =>
-          this.coreToolHandler.handleListActivities(toolArgs),
-        list_all_activities: (toolArgs: { session_id: string }) => this.coreToolHandler.handleListAllActivities(toolArgs),
-        sprint_agent: (toolArgs: SprintAgentArgs) => this.agentToolHandler.handleSprintAgent(toolArgs),
-        task_agent: (toolArgs: any) => this.agentToolHandler.handleTaskAgent(toolArgs),
-      };
-
-      try {
-        return await dispatchTool(name, args, handlers);
-      } catch (error: any) {
-        if (error instanceof Error && error.message.startsWith("Tool not found:")) {
-          throw new McpError(ErrorCode.MethodNotFound, error.message);
-        }
-        return this.formatError(error);
-      }
-    });
-  }
-
-  private formatError(error: any) {
-    let message = error.message || "An unknown error occurred";
+  private formatError(error: unknown): { content: Array<{ type: string; text: string }>; isError: true } {
+    const maybeError = error as { message?: string };
+    let message = maybeError?.message || "An unknown error occurred";
     if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError<any>;
+      const axiosError = error as AxiosError<{ error?: { message?: string } }>;
       message = axiosError.response?.data?.error?.message || axiosError.message;
     }
     return {
@@ -477,36 +443,17 @@ export class JulesAgentServer {
     return this.julesApi.fetchRecentActivities(sessionName, pageSize);
   }
 
-  private async getGitStatus(): Promise<GitTrackingStatus> {
-    const repoPath = this.resolveGitStatusRepoPath();
-    const now = Date.now();
-    if (
-      this.gitStatusCache.data &&
-      this.gitStatusCache.repoPath === repoPath &&
-      now - this.gitStatusCache.timestamp < JulesAgentServer.GIT_STATUS_CACHE_MS
-    ) {
-      return this.gitStatusCache.data;
-    }
-    if (this.gitStatusFetchPromise) {
-      return this.gitStatusFetchPromise;
-    }
-
+  private async fetchGitStatusForRepo(repoPath: string): Promise<GitTrackingStatus> {
     const gitStatusService = new GitStatusService(repoPath);
-    this.gitStatusFetchPromise = gitStatusService
-      .getStatus(
-        this.dashboardSettings.git.githubMode,
-        this.getEffectiveGithubToken(),
-        this.resolveGitTrackingRequest()
-      )
-      .then((status) => {
-        this.gitStatusCache = { timestamp: Date.now(), data: status, repoPath };
-        return status;
-      })
-      .finally(() => {
-        this.gitStatusFetchPromise = null;
-      });
+    return await gitStatusService.getStatus(
+      this.dashboardSettings.git.githubMode,
+      this.getEffectiveGithubToken(),
+      this.resolveGitTrackingRequest()
+    );
+  }
 
-    return this.gitStatusFetchPromise;
+  private async getGitStatus(): Promise<GitTrackingStatus> {
+    return await this.activityCacheService.getGitStatus();
   }
 
   private async getCiStatusForScope(args: {
@@ -545,52 +492,7 @@ export class JulesAgentServer {
   }
 
   private async getLiveActivitiesForActiveTasks(): Promise<Record<string, JulesActivity[]>> {
-    const now = Date.now();
-    if (now - this.liveActivitiesCache.timestamp < JulesAgentServer.LIVE_ACTIVITY_CACHE_MS) {
-      return this.liveActivitiesCache.data;
-    }
-
-    if (this.liveActivitiesFetchPromise) {
-      return this.liveActivitiesFetchPromise;
-    }
-
-    this.liveActivitiesFetchPromise = (async () => {
-      const subtasks: Subtask[] = Array.isArray(this.lastStatus?.subtasks) ? this.lastStatus.subtasks : [];
-      const activeSessionNames = Array.from(
-        new Set(
-          subtasks
-            .filter((task) => task.status === "RUNNING")
-            .map((task) => this.resolveSessionNameFromTask(task))
-            .filter((value): value is string => Boolean(value))
-        )
-      );
-
-      if (activeSessionNames.length === 0) {
-        const empty: Record<string, JulesActivity[]> = {};
-        this.liveActivitiesCache = { timestamp: Date.now(), data: empty };
-        return empty;
-      }
-
-      const results = await Promise.all(
-        activeSessionNames.map(async (sessionName) => {
-          try {
-            const activities = await this.fetchRecentActivities(sessionName);
-            return [sessionName, activities] as const;
-          } catch {
-            console.error(`Warning: Could not fetch live activities for ${sessionName}`);
-            return [sessionName, []] as const;
-          }
-        })
-      );
-
-      const data = Object.fromEntries(results);
-      this.liveActivitiesCache = { timestamp: Date.now(), data };
-      return data;
-    })().finally(() => {
-      this.liveActivitiesFetchPromise = null;
-    });
-
-    return this.liveActivitiesFetchPromise;
+    return await this.activityCacheService.getLiveActivitiesForActiveTasks();
   }
 
   async run() {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cloneDefaultSettings } from "./settings.js";
+import { cloneDefaultSettings } from "../../../dashboard/src/lib/settings.js";
 
 describe("dashboard settings helpers", () => {
   it("returns fresh default objects", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { AgentToolHandler } from "./agent-tool-handler.js";
+import { AgentToolHandler } from "../../../src/mcp/agent-tool-handler.js";
 
 describe("AgentToolHandler", () => {
   it("returns compact task_agent response when wait is false", async () => {

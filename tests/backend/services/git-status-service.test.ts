@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GitStatusService } from "./git-status-service.js";
+import { GitStatusService } from "../../../src/services/git-status-service.js";
 
 describe("GitStatusService", () => {
   it("returns unavailable when not a git repository", async () => {

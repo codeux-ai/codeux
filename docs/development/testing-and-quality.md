@@ -2,6 +2,10 @@
 
 This guide describes how to validate changes safely.
 
+Test files are organized under `tests/`:
+- `tests/backend/**`
+- `tests/dashboard/**`
+
 ## Core Commands
 
 - Run tests

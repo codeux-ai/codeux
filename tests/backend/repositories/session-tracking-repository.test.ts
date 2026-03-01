@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { SessionTrackingRepository } from "./session-tracking-repository.js";
+import { SessionTrackingRepository } from "../../../src/repositories/session-tracking-repository.js";
 
 const tempDirs: string[] = [];
 

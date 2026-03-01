@@ -114,7 +114,9 @@ Repository demo script:
 ## Default Values
 
 Defined in:
-- `src/repositories/settings-repository.ts` (backend canonical defaults)
+- `src/repositories/settings-defaults.ts` (backend canonical defaults)
+- `src/repositories/settings-sanitizer.ts` (backend sanitization + normalization)
+- `src/repositories/settings-db-storage.ts` (sqlite persistence and migration path resolution)
 - `dashboard/src/lib/settings.ts` (frontend default clone)
 
 ## External Settings Hints

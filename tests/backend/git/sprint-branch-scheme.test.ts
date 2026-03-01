@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatSprintBranch } from "./sprint-branch-scheme.js";
+import { formatSprintBranch } from "../../../src/git/sprint-branch-scheme.js";
 
 describe("formatSprintBranch", () => {
   it("formats using {sprint}", () => {

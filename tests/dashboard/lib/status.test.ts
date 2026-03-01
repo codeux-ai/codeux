@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeStats, mergeLiveActivities } from "./status.js";
+import { computeStats, mergeLiveActivities } from "../../../dashboard/src/lib/status.js";
 
 describe("dashboard status helpers", () => {
   it("computes stats by status", () => {

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { SettingsRepository } from "./settings-repository.js";
+import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
 
 const tempDirs: string[] = [];
 

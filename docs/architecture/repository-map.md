@@ -7,6 +7,7 @@ This map explains where major responsibilities live.
 ```text
 .
 ├─ src/                        # Backend MCP server and orchestration engine
+├─ tests/                      # Dedicated backend + dashboard test suites
 ├─ dashboard/                  # Preact dashboard app
 ├─ .jules-subagents/           # Local default guides + instruction templates
 ├─ docs/                       # Project documentation
@@ -30,10 +31,17 @@ This map explains where major responsibilities live.
 - `server/`
   - `jules-agent-server.ts`
   - Main runtime composition and MCP server class.
+  - `mcp-request-router.ts`
+  - MCP list/call handler registration and dispatch routing.
+  - `activity-cache-service.ts`
+  - Live-activity + git-status caching for dashboard endpoints.
   - `dashboard-server.ts`
   - Express routes for dashboard APIs and static assets.
 - `repositories/`
   - `settings-repository.ts`
+  - `settings-defaults.ts`
+  - `settings-sanitizer.ts`
+  - `settings-db-storage.ts`
   - `guide-repository.ts`
   - `subtask-repository.ts`
   - `session-tracking-repository.ts`

@@ -112,5 +112,5 @@ Rendered output:
 ## Testing
 
 Template behavior tests:
-- `src/instructions/instruction-template-renderer.test.ts`
-- `src/instructions/instruction-template-service.test.ts`
+- `tests/backend/instructions/instruction-template-renderer.test.ts`
+- `tests/backend/instructions/instruction-template-service.test.ts`

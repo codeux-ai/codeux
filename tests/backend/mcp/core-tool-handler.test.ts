@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { JulesActivity, JulesSession } from "../contracts/app-types.js";
-import { CoreToolHandler } from "./core-tool-handler.js";
+import type { JulesActivity, JulesSession } from "../../../src/contracts/app-types.js";
+import { CoreToolHandler } from "../../../src/mcp/core-tool-handler.js";
 
 const buildDeps = () => {
   const getSession = vi.fn();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderTemplate } from "./instruction-template-renderer.js";
+import { renderTemplate } from "../../../src/instructions/instruction-template-renderer.js";
 
 describe("renderTemplate", () => {
   it("replaces simple placeholders", () => {

@@ -2,9 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as os from "os";
-import { SprintOrchestrator } from "./sprint-orchestrator.js";
-import type { Subtask } from "../contracts/app-types.js";
-import { DEFAULT_DASHBOARD_SETTINGS } from "../repositories/settings-repository.js";
+import { SprintOrchestrator } from "../../../src/sprint/sprint-orchestrator.js";
+import type { Subtask } from "../../../src/contracts/app-types.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-repository.js";
 
 const buildDeps = () => {
   const listSessions = vi.fn();

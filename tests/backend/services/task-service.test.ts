@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { TaskService } from "./task-service.js";
+import { TaskService } from "../../../src/services/task-service.js";
 
 describe("TaskService", () => {
   const createSession = vi.fn();

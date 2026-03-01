@@ -2,7 +2,7 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { afterEach, describe, expect, it } from "vitest";
-import { InstructionService } from "./instruction-template-service.js";
+import { InstructionService } from "../../../src/instructions/instruction-template-service.js";
 
 const tempDirs: string[] = [];
 

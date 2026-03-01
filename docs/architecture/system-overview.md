@@ -21,9 +21,10 @@ This project is a Model Context Protocol (MCP) server for Jules APIs with an int
 - Runtime composition file: `src/server/jules-agent-server.ts`
 - Responsibilities:
   - Instantiate repositories, services, handlers, orchestrator.
-  - Register MCP request handlers.
+  - Register MCP request handlers via `src/server/mcp-request-router.ts`.
   - Start dashboard HTTP server.
   - Start MCP stdio transport.
+  - Serve cached dashboard live activity and git status via `src/server/activity-cache-service.ts`.
 
 ### 2. MCP tool handlers
 - `src/mcp/core-tool-handler.ts`
@@ -51,6 +52,7 @@ This project is a Model Context Protocol (MCP) server for Jules APIs with an int
 - Guides: `src/repositories/guide-repository.ts`
 - Subtasks: `src/repositories/subtask-repository.ts`
 - Settings DB: `src/repositories/settings-repository.ts`
+- Settings defaults/sanitization/storage: `src/repositories/settings-defaults.ts`, `src/repositories/settings-sanitizer.ts`, `src/repositories/settings-db-storage.ts`
 
 ### 7. CLI workflow execution helpers
 - `src/services/cli-workflow-service.ts`

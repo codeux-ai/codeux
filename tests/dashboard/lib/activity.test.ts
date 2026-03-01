@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getActivityText } from "./activity.js";
+import { getActivityText } from "../../../dashboard/src/lib/activity.js";
 
 describe("getActivityText", () => {
   it("prefers agent message", () => {
