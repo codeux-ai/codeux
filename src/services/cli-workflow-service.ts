@@ -575,23 +575,24 @@ export class CliWorkflowService {
       if (!path.isAbsolute(configured) && !configured.startsWith("~")) {
         configuredCandidates.push(path.resolve(process.cwd(), configured));
       }
-      for (const configuredPath of configuredCandidates) {
+      const uniqueConfiguredCandidates = [...new Set(configuredCandidates)];
+      for (const configuredPath of uniqueConfiguredCandidates) {
         if (await this.pathExists(configuredPath)) {
           return configuredPath;
         }
       }
       this.deps.sessionTracking.appendActivity(sessionId, {
         originator: "system",
-        description: `Configured container setup script not found: ${configuredCandidates.join(", ")}`,
+        description: `Configured container setup script not found: ${uniqueConfiguredCandidates.join(", ")}`,
       });
       return undefined;
     }
 
-    const candidates = [
+    const candidates = [...new Set([
       path.join(repoPath, ".jules-subagents", "container", "setup.sh"),
       path.join(process.cwd(), ".jules-subagents", "container", "setup.sh"),
       path.join(os.homedir(), ".jules-subagents", "container", "setup.sh"),
-    ];
+    ])];
     for (const candidate of candidates) {
       if (await this.pathExists(candidate)) {
         return candidate;
@@ -747,7 +748,7 @@ export class CliWorkflowService {
       "  exit 127",
       "fi",
       "exec \"$@\"",
-    ].join("; ");
+    ].join("\n");
     dockerArgs.push(
       image,
       "bash",
