@@ -1,6 +1,6 @@
-import { DEFAULT_INSTRUCTION_TEMPLATES, INSTRUCTION_TEMPLATE_PATHS, type InstructionTemplateId } from "./catalog.js";
-import { InstructionRepository } from "./repository.js";
-import { renderTemplate, type TemplateVariables } from "./template-engine.js";
+import { DEFAULT_INSTRUCTION_TEMPLATES, INSTRUCTION_TEMPLATE_PATHS, type InstructionTemplateId } from "./instruction-template-catalog.js";
+import { InstructionRepository } from "./instruction-template-repository.js";
+import { renderTemplate, type TemplateVariables } from "./instruction-template-renderer.js";
 
 export class InstructionService {
   private readonly repository: InstructionRepository;

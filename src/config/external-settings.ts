@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import os from "os";
 import * as path from "path";
-import type { ExternalSettingsHints } from "./types.js";
+import type { ExternalSettingsHints } from "../contracts/app-types.js";
 
 const getSearchPaths = (projectRoot: string): string[] => {
   const settingsRelativePath = path.join(".jules-subagents", "settings.json");

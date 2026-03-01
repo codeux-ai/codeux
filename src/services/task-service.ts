@@ -1,6 +1,6 @@
-import type { JulesApiClient } from "./jules-api.js";
+import type { JulesApiClient } from "../integrations/jules-api-client.js";
 import { chooseProviderForTask } from "./provider-routing.js";
-import type { DashboardSettings, JulesSession, ProviderId, Subtask } from "./types.js";
+import type { DashboardSettings, JulesSession, ProviderId, Subtask } from "../contracts/app-types.js";
 import type { CliWorkflowService } from "./cli-workflow-service.js";
 
 export interface TaskServiceDependencies {

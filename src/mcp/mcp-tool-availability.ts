@@ -1,5 +1,5 @@
-import type { DashboardSettings, McpToolToggle } from "../types.js";
-import { TOOL_DEFINITIONS, type ToolName } from "../tools.js";
+import type { DashboardSettings, McpToolToggle } from "../contracts/app-types.js";
+import { TOOL_DEFINITIONS, type ToolName } from "../contracts/mcp-tool-definitions.js";
 
 export const DEFAULT_MCP_TOOL_TOGGLES: McpToolToggle[] = TOOL_DEFINITIONS.map((tool) => ({
   name: tool.name,

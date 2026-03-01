@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_DASHBOARD_SETTINGS } from "../settings-repository.js";
-import { getEnabledToolDefinitions, isToolEnabled, sanitizeMcpToolToggles } from "./tool-availability.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../repositories/settings-repository.js";
+import { getEnabledToolDefinitions, isToolEnabled, sanitizeMcpToolToggles } from "./mcp-tool-availability.js";
 
 describe("tool availability", () => {
   it("enables all MCP tools by default", () => {

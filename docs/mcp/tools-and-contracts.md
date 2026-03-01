@@ -24,7 +24,7 @@ These cover:
 
 ## Registered Tools
 
-Defined in `src/tools.ts`.
+Defined in `src/contracts/mcp-tool-definitions.ts`.
 
 ### Sources
 - `get_source`

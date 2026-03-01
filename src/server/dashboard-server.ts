@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import * as fs from "fs";
 import * as path from "path";
-import type { DashboardSettings, ExternalSettingsHints, GitTrackingStatus, JulesActivity } from "./types.js";
+import type { DashboardSettings, ExternalSettingsHints, GitTrackingStatus, JulesActivity } from "../contracts/app-types.js";
 
 export interface DashboardServerOptions {
   app: Express;

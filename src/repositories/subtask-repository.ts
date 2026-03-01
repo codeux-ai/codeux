@@ -1,6 +1,6 @@
 import * as fs from "fs/promises";
 import * as path from "path";
-import type { Subtask } from "./types.js";
+import type { Subtask } from "../contracts/app-types.js";
 
 export class SubtaskRepository {
   async loadSubtasks(dir: string): Promise<Subtask[]> {

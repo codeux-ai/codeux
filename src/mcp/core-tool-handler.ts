@@ -1,5 +1,5 @@
-import type { JulesApiClient } from "../jules-api.js";
-import type { JulesActivity, JulesSession, JulesSource } from "../types.js";
+import type { JulesApiClient } from "../integrations/jules-api-client.js";
+import type { JulesActivity, JulesSession, JulesSource } from "../contracts/app-types.js";
 
 interface CoreToolHandlerDependencies {
   julesApi: JulesApiClient;

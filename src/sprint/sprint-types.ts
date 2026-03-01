@@ -1,4 +1,4 @@
-import type { JulesActivity, JulesSession, Subtask } from "../types.js";
+import type { JulesActivity, JulesSession, Subtask } from "../contracts/app-types.js";
 
 export interface SprintAgentArgs {
   sprint_number: number;

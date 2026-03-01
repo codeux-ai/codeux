@@ -1,6 +1,6 @@
 import * as path from "path";
-import type { CiIntelligenceSettings, Subtask } from "../../types.js";
-import type { InstructionTemplateId } from "../../instructions/catalog.js";
+import type { CiIntelligenceSettings, Subtask } from "../../contracts/app-types.js";
+import type { InstructionTemplateId } from "../../instructions/instruction-template-catalog.js";
 
 interface ProtocolStepOptions {
   subtasksDir: string;

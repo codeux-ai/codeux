@@ -4,15 +4,14 @@ This document explains how MCP requests flow through the server.
 
 ## Server Startup
 
-Startup sequence in `src/index.ts`:
+Startup sequence:
 
-1. Load environment and app config.
-2. Validate API key.
-3. Construct repositories and services.
-4. Construct tool handlers and sprint orchestrator.
-5. Register MCP request handlers.
-6. Start dashboard server.
-7. Connect MCP stdio transport.
+1. `src/index.ts` loads environment and app config.
+2. `src/index.ts` constructs `JulesAgentServer`.
+3. `src/server/jules-agent-server.ts` constructs repositories/services/handlers/orchestrator.
+4. `src/server/jules-agent-server.ts` registers MCP request handlers.
+5. `src/server/jules-agent-server.ts` starts dashboard server.
+6. `src/server/jules-agent-server.ts` connects MCP stdio transport.
 
 ## MCP Request Handlers
 
@@ -21,7 +20,7 @@ Registered schemas:
 - `CallToolRequestSchema`
 
 ### Tool list handler
-Returns enabled tool definitions from `src/tools.ts`, filtered by dashboard `mcpTools` settings.
+Returns enabled tool definitions from `src/contracts/mcp-tool-definitions.ts`, filtered by dashboard `mcpTools` settings.
 
 ### Tool call handler
 - Resolves tool name.

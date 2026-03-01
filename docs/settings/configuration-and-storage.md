@@ -4,7 +4,7 @@ This guide explains runtime config sources, precedence, and persistence.
 
 ## Startup Config Sources
 
-`src/config.ts` resolves API key in this order:
+`src/config/app-config.ts` resolves API key in this order:
 
 1. CLI `--api-key`
 2. `JULES_API_KEY` or `JULES_KEY`
@@ -32,7 +32,7 @@ For `.jules-subagents/settings.json`, search roots include:
 ## Dashboard Settings Persistence
 
 Backend file:
-- `src/settings-repository.ts`
+- `src/repositories/settings-repository.ts`
 
 Storage:
 - sqlite DB at `~/.jules-subagents/settings.db`
@@ -67,7 +67,7 @@ Top-level fields:
 - `clarificationAnswerTemplate`: default response body used for clarification auto-replies
 
 Backend contract:
-- `src/types.ts`
+- `src/contracts/app-types.ts`
 
 Frontend contract:
 - `dashboard/src/types.ts`
@@ -103,7 +103,7 @@ Frontend contract:
 - `autoMergeFeaturePrWhenGreen` (default `false`): when enabled, feature PRs are auto-merged by the sprint loop once checks are green and review blockers are cleared.
 
 `mcpTools` contains:
-- `name` (MCP tool name from `src/tools.ts`)
+- `name` (MCP tool name from `src/contracts/mcp-tool-definitions.ts`)
 - `enabled` (whether tool is visible in MCP `list_tools` and callable)
 - `isInternal` (reserved/internal metadata; currently all built-in tools are internal)
 
@@ -114,12 +114,12 @@ Repository demo script:
 ## Default Values
 
 Defined in:
-- `src/settings-repository.ts` (backend canonical defaults)
+- `src/repositories/settings-repository.ts` (backend canonical defaults)
 - `dashboard/src/lib/settings.ts` (frontend default clone)
 
 ## External Settings Hints
 
-`src/external-settings.ts` loads hints from:
+`src/config/external-settings.ts` loads hints from:
 - environment
 - settings json
 

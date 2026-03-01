@@ -3,7 +3,7 @@ import os from "os";
 import * as path from "path";
 import { randomUUID } from "crypto";
 import { DatabaseSync } from "node:sqlite";
-import type { JulesActivity, JulesSession, ProviderId } from "./types.js";
+import type { JulesActivity, JulesSession, ProviderId } from "../contracts/app-types.js";
 
 interface SessionRow {
   id: string;

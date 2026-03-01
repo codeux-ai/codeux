@@ -13,6 +13,7 @@ npm test
 ```bash
 npm run build
 ```
+  - The build script intentionally runs toolchain commands directly (`tsc`, dashboard typecheck, `vite build`) instead of nested `npm run` calls to avoid npm env-config warning noise in child npm processes.
 
 - Run dashboard typecheck only
 ```bash
@@ -49,7 +50,7 @@ npm run typecheck:dashboard
 
 ## Critical Regression Risks
 
-- Tool name or schema drift from `src/tools.ts`
+- Tool name or schema drift from `src/contracts/mcp-tool-definitions.ts`
 - Dashboard/backend type mismatch for settings
 - Instruction template key mismatch
 - Step toggle defaults becoming unsafe

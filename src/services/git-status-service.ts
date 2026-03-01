@@ -7,7 +7,7 @@ import type {
   GitCiRunStatus,
   GitMergeStatus,
   GitTrackingTarget,
-} from "./types.js";
+} from "../contracts/app-types.js";
 
 interface CommandResult {
   ok: boolean;

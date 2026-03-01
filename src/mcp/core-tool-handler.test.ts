@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { JulesActivity, JulesSession } from "../types.js";
+import type { JulesActivity, JulesSession } from "../contracts/app-types.js";
 import { CoreToolHandler } from "./core-tool-handler.js";
 
 const buildDeps = () => {

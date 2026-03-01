@@ -17,28 +17,44 @@ This map explains where major responsibilities live.
 ## Backend (`src/`)
 
 - `index.ts`
-  - Runtime composition and server startup.
+  - Minimal bootstrap (`dotenv`, app config, server launch).
+- `config/`
+  - `app-config.ts`, `external-settings.ts`
+  - Startup/env config loading and external settings hints.
+- `contracts/`
+  - `app-types.ts`, `mcp-tool-definitions.ts`
+  - Shared backend contracts and MCP tool definitions.
+- `integrations/`
+  - `jules-api-client.ts`
+  - Jules API HTTP client.
+- `server/`
+  - `jules-agent-server.ts`
+  - Main runtime composition and MCP server class.
+  - `dashboard-server.ts`
+  - Express routes for dashboard APIs and static assets.
+- `repositories/`
+  - `settings-repository.ts`
+  - `guide-repository.ts`
+  - `subtask-repository.ts`
+  - `session-tracking-repository.ts`
 - `mcp/`
   - `core-tool-handler.ts`
   - `agent-tool-handler.ts`
-- `sprint-orchestrator.ts`
+- `services/`
+  - `task-service.ts`
+  - `git-status-service.ts`
+  - `cli-workflow-service.ts`
+  - `provider-routing.ts`
+- `git/`
+  - `sprint-branch-scheme.ts`
+- `sprint/sprint-orchestrator.ts`
   - Main sprint orchestration coordinator.
+- `sprint/sprint-types.ts`
+  - Shared sprint orchestration argument/result contracts.
 - `sprint/steps/`
   - Atomic step modules used by orchestrator.
 - `instructions/`
   - Template loading, fallback, and placeholder rendering.
-- `jules-api.ts`
-  - Jules API HTTP client.
-- `dashboard.ts`
-  - Express routes for dashboard APIs and static assets.
-- `settings-repository.ts`
-  - Persistent dashboard settings in sqlite.
-- `guide-repository.ts`
-  - Guide markdown search and loading.
-- `subtask-repository.ts`
-  - Subtask markdown parsing.
-- `git-status-service.ts`
-  - Git/PR/CI tracking abstraction.
 
 ## Dashboard (`dashboard/src/`)
 

@@ -1,4 +1,4 @@
-import type { DashboardSettings, ProviderId, Subtask } from "./types.js";
+import type { DashboardSettings, ProviderId, Subtask } from "../contracts/app-types.js";
 
 const PROVIDER_ORDER: ProviderId[] = ["jules", "gemini", "codex", "claude-code"];
 

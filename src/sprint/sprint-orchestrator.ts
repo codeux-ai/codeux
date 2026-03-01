@@ -1,16 +1,21 @@
 import * as fs from "fs/promises";
 import * as path from "path";
-import type { InstructionTemplateId } from "./instructions/catalog.js";
-import { runBranchPreflightStep } from "./sprint/steps/branch-preflight-step.js";
-import { runPlanningPreflightStep } from "./sprint/steps/planning-preflight-step.js";
-import { runLoadSubtasksStep } from "./sprint/steps/load-subtasks-step.js";
-import { runSessionSyncStep } from "./sprint/steps/session-sync-step.js";
-import { runStatusDerivationStep } from "./sprint/steps/status-derivation-step.js";
-import { runStartReadyTasksStep } from "./sprint/steps/start-ready-tasks-step.js";
-import { runStatusTableStep } from "./sprint/steps/status-table-step.js";
-import { runProtocolStep } from "./sprint/steps/protocol-step.js";
-import { runCompletionStep } from "./sprint/steps/completion-step.js";
-import type { SprintAgentArgs, SprintCycleResult } from "./sprint/types.js";
+import type { InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
+import {
+  DEFAULT_AUTOMATION_INTERVENTIONS_SETTINGS,
+  DEFAULT_CI_INTELLIGENCE_SETTINGS,
+  DEFAULT_SPRINT_LOOP_STEP_SETTINGS,
+} from "./sprint-orchestrator-defaults.js";
+import { runBranchPreflightStep } from "./steps/branch-preflight-step.js";
+import { runPlanningPreflightStep } from "./steps/planning-preflight-step.js";
+import { runLoadSubtasksStep } from "./steps/load-subtasks-step.js";
+import { runSessionSyncStep } from "./steps/session-sync-step.js";
+import { runStatusDerivationStep } from "./steps/status-derivation-step.js";
+import { runStartReadyTasksStep } from "./steps/start-ready-tasks-step.js";
+import { runStatusTableStep } from "./steps/status-table-step.js";
+import { runProtocolStep } from "./steps/protocol-step.js";
+import { runCompletionStep } from "./steps/completion-step.js";
+import type { SprintAgentArgs, SprintCycleResult } from "./sprint-types.js";
 import type {
   AutomationInterventionsSettings,
   AutomationLevel,
@@ -22,42 +27,7 @@ import type {
   Settings,
   SprintLoopStepSettings,
   Subtask,
-} from "./types.js";
-
-const DEFAULT_STEP_SETTINGS: SprintLoopStepSettings = {
-  branchPreflight: true,
-  planningPreflight: true,
-  loadSubtasks: true,
-  sessionSync: true,
-  statusDerivation: true,
-  startReadyTasks: true,
-  mergeProtocol: true,
-  actionRequiredProtocol: true,
-  statusTable: true,
-  watchLoop: true,
-  watchLoopIntervalSeconds: 120,
-  watchLoopOutputIntervalSeconds: 300,
-};
-
-const DEFAULT_CI_SETTINGS: CiIntelligenceSettings = {
-  enabled: true,
-  enableLivePrMonitoring: true,
-  waitForCiBeforeMainMerge: true,
-  resolveAllCommentsBeforeMainMerge: true,
-  waitForCiBeforeFeatureMerge: true,
-  resolveAllCommentsBeforeFeatureMerge: true,
-  waitForJulesCiAutofix: false,
-  julesCiAutofixMaxRetries: 3,
-  autoMergeFeaturePrWhenGreen: false,
-};
-
-const DEFAULT_AUTOMATION_INTERVENTIONS: AutomationInterventionsSettings = {
-  autoApprovePlan: true,
-  autoAnswerClarification: false,
-  autoResumePaused: false,
-  clarificationAnswerTemplate:
-    "Proceed with the safest implementation path using repository conventions. If multiple valid options exist, choose the smallest-scope option and continue without waiting for clarification.",
-};
+} from "../contracts/app-types.js";
 
 export interface SprintOrchestratorDependencies {
   settings: Settings;
@@ -96,21 +66,21 @@ export class SprintOrchestrator {
 
   private getLoopStepSettings(): SprintLoopStepSettings {
     return {
-      ...DEFAULT_STEP_SETTINGS,
+      ...DEFAULT_SPRINT_LOOP_STEP_SETTINGS,
       ...this.deps.getDashboardSettings().sprintLoopSteps,
     };
   }
 
   private getCiIntelligenceSettings(): CiIntelligenceSettings {
     return {
-      ...DEFAULT_CI_SETTINGS,
+      ...DEFAULT_CI_INTELLIGENCE_SETTINGS,
       ...this.deps.getDashboardSettings().ciIntelligence,
     };
   }
 
   private getAutomationInterventionsSettings(): AutomationInterventionsSettings {
     return {
-      ...DEFAULT_AUTOMATION_INTERVENTIONS,
+      ...DEFAULT_AUTOMATION_INTERVENTIONS_SETTINGS,
       ...this.deps.getDashboardSettings().automationInterventions,
     };
   }
@@ -1101,4 +1071,4 @@ export class SprintOrchestrator {
   }
 }
 
-export type { SprintAgentArgs } from "./sprint/types.js";
+export type { SprintAgentArgs } from "./sprint-types.js";

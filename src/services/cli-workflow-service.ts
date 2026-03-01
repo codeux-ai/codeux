@@ -3,8 +3,16 @@ import { spawn } from "child_process";
 import * as fs from "fs/promises";
 import os from "os";
 import * as path from "path";
-import type { CliWorkflowSettings, DashboardSettings, JulesSession, ProviderId, Subtask, ThinkingMode } from "./types.js";
-import { SessionTrackingRepository } from "./session-tracking-repository.js";
+import type { CliWorkflowSettings, DashboardSettings, JulesSession, ProviderId, Subtask, ThinkingMode } from "../contracts/app-types.js";
+import { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
+import {
+  buildProviderPrompt,
+  buildWorkerBranch,
+  CONTAINER_HOME,
+  CONTAINER_SETUP_SCRIPT,
+  DEFAULT_CLI_WORKFLOW_SETTINGS,
+  sanitizeToken,
+} from "./cli-workflow-utils.js";
 
 interface CommandResult {
   ok: boolean;
@@ -32,52 +40,6 @@ interface ContainerMount {
   destination: string;
   readonly: boolean;
 }
-
-const DEFAULT_CLI_WORKFLOW_SETTINGS: CliWorkflowSettings = {
-  cleanupWorktreeOnSuccess: true,
-  cleanupWorktreeOnFailure: false,
-  retryOnReadFileNotFound: true,
-  resumeFailedTaskInSameWorkspace: true,
-  executionMode: "HOST",
-  containerImage: "node:22-bookworm-slim",
-  containerSetupScriptPath: "",
-  containerMountCredentials: false,
-  containerMountGitConfig: true,
-  containerMountGithubAuth: true,
-  containerMountGeminiAuth: true,
-  containerMountCodexAuth: true,
-  containerMountClaudeCodeAuth: true,
-  containerGithubAuthPath: "~/.config/gh",
-  containerGeminiAuthPath: "~/.gemini",
-  containerCodexAuthPath: "~/.codex",
-  containerClaudeCodeAuthPath: "~/.claude",
-};
-
-const CONTAINER_HOME = "/tmp/jules-home";
-const CONTAINER_SETUP_SCRIPT = "/opt/jules/setup.sh";
-
-const sanitizeToken = (value: string): string =>
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48);
-
-const buildWorkerBranch = (featureBranch: string, taskId: string, provider: ProviderId): string => {
-  const feature = sanitizeToken(featureBranch.replace(/\//g, "-"));
-  const task = sanitizeToken(taskId);
-  const suffix = Date.now().toString(36);
-  return `task/${feature}-${task}-${provider}-${suffix}`;
-};
-
-const buildProviderPrompt = (prompt: string, thinkingMode: ThinkingMode): string => {
-  return [
-    `# Thinking Mode`,
-    `Use ${thinkingMode} reasoning depth.`,
-    "",
-    prompt,
-  ].join("\n");
-};
 
 export class CliWorkflowService {
   private readonly repoLocks = new Map<string, Promise<void>>();

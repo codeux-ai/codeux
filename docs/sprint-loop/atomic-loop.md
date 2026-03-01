@@ -4,9 +4,9 @@ This document explains the sprint orchestrator control flow and each atomic step
 
 ## Entry Point
 
-- File: `src/sprint-orchestrator.ts`
+- File: `src/sprint/sprint-orchestrator.ts`
 - Public method: `execute(args: SprintAgentArgs)`
-- Shared args type: `src/sprint/types.ts`
+- Shared args type: `src/sprint/sprint-types.ts`
 
 ## Actions
 

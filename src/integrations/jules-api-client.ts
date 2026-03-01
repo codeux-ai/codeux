@@ -1,6 +1,6 @@
 import axios from "axios";
 import type { AxiosInstance } from "axios";
-import type { JulesActivity, JulesSession, JulesSource } from "./types.js";
+import type { JulesActivity, JulesSession, JulesSource } from "../contracts/app-types.js";
 
 export interface JulesApiClientOptions {
   apiKey?: string | null;

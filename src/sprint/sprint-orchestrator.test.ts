@@ -3,8 +3,8 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as os from "os";
 import { SprintOrchestrator } from "./sprint-orchestrator.js";
-import type { Subtask } from "./types.js";
-import { DEFAULT_DASHBOARD_SETTINGS } from "./settings-repository.js";
+import type { Subtask } from "../contracts/app-types.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../repositories/settings-repository.js";
 
 const buildDeps = () => {
   const listSessions = vi.fn();

@@ -12,9 +12,9 @@ import type {
   ProviderStrategy,
   SkillToggle,
   ThinkingMode,
-} from "./types.js";
-import { DEFAULT_SPRINT_BRANCH_SCHEME } from "./branch-scheme.js";
-import { DEFAULT_MCP_TOOL_TOGGLES, sanitizeMcpToolToggles } from "./mcp/tool-availability.js";
+} from "../contracts/app-types.js";
+import { DEFAULT_SPRINT_BRANCH_SCHEME } from "../git/sprint-branch-scheme.js";
+import { DEFAULT_MCP_TOOL_TOGGLES, sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 
 interface RowResult {
   payload: string;
