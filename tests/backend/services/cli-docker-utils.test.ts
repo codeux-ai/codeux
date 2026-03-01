@@ -1,6 +1,6 @@
 import os from "os";
 import { describe, expect, it } from "vitest";
-import { mapPathPrefix, pickContainerEnv, resolveConfiguredPath } from "../../../src/services/cli-docker-utils.js";
+import { isDockerWorkspaceMountError, mapPathPrefix, pickContainerEnv, resolveConfiguredPath } from "../../../src/services/cli-docker-utils.js";
 
 describe("cli-docker-utils", () => {
   it("resolves configured paths", () => {
@@ -23,5 +23,10 @@ describe("cli-docker-utils", () => {
       ])
     );
     expect(vars.find((entry) => entry.key === "FOO")).toBeUndefined();
+  });
+
+  it("detects mount-specific permission errors only", () => {
+    expect(isDockerWorkspaceMountError({ ok: false, stdout: "", stderr: "permission denied while processing mounts" })).toBe(true);
+    expect(isDockerWorkspaceMountError({ ok: false, stdout: "", stderr: "cp: cannot create regular file: Permission denied" })).toBe(false);
   });
 });

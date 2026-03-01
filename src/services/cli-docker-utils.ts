@@ -93,6 +93,7 @@ export const isDockerWorkspaceMountError = (result: CommandResult): boolean => {
   const combined = `${result.stdout}\n${result.stderr}`.toLowerCase();
   const bindSourceMissing = combined.includes('invalid mount config for type "bind"')
     && combined.includes("bind source path does not exist");
-  const mountPermission = combined.includes("mounts denied") || combined.includes("permission denied");
+  const mountPermission = combined.includes("mounts denied")
+    || (combined.includes("permission denied") && combined.includes("mount"));
   return bindSourceMissing || mountPermission;
 };
