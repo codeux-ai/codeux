@@ -895,7 +895,7 @@ export class CliWorkflowService {
     workflowSettings: CliWorkflowSettings,
     repoPath: string
   ): Promise<CommandResult> {
-    const args = ["exec", "--full-auto", "--yolo", "--output-last-message"];
+    const args = ["exec", "--full-auto", "--yolo", "--output-last-message", "/tmp/codex-last-message.txt"];
     if (model && model !== "default") {
       args.push("--model", model);
     }
