@@ -1,6 +1,7 @@
 import type {
   CliExecutionMode,
   DashboardSettings,
+  FeaturePrAutoMergeMode,
   ProviderId,
   ProviderSettings,
   ProviderStrategy,
@@ -33,6 +34,7 @@ export const PROVIDER_IDS: ProviderId[] = ["jules", "gemini", "codex", "claude-c
 export const THINKING_MODES: ThinkingMode[] = ["SMALL", "MEDIUM", "HIGH"];
 export const PROVIDER_STRATEGIES: ProviderStrategy[] = ["MANUAL", "WEIGHTED", "ORCHESTRATOR"];
 export const CLI_EXECUTION_MODES: CliExecutionMode[] = ["HOST", "DOCKER"];
+export const FEATURE_PR_AUTOMERGE_MODES: FeaturePrAutoMergeMode[] = ["OFF", "WHEN_GREEN", "ALWAYS"];
 
 export const MIN_WATCH_LOOP_INTERVAL_SECONDS = 1;
 export const MAX_WATCH_LOOP_INTERVAL_SECONDS = 3600;
@@ -108,7 +110,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     resolveAllCommentsBeforeFeatureMerge: true,
     waitForJulesCiAutofix: false,
     julesCiAutofixMaxRetries: 3,
-    autoMergeFeaturePrWhenGreen: false,
+    featurePrAutoMergeMode: "OFF",
   },
   sprintLoopSteps: {
     branchPreflight: true,

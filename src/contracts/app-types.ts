@@ -28,6 +28,7 @@ export type ProviderId = "jules" | "gemini" | "codex" | "claude-code";
 export type ProviderStrategy = "MANUAL" | "WEIGHTED" | "ORCHESTRATOR";
 export type ThinkingMode = "SMALL" | "MEDIUM" | "HIGH";
 export type CliExecutionMode = "HOST" | "DOCKER";
+export type FeaturePrAutoMergeMode = "OFF" | "WHEN_GREEN" | "ALWAYS";
 
 export interface Subtask {
   id: string;
@@ -97,7 +98,7 @@ export interface CiIntelligenceSettings {
   resolveAllCommentsBeforeFeatureMerge: boolean;
   waitForJulesCiAutofix: boolean;
   julesCiAutofixMaxRetries: number;
-  autoMergeFeaturePrWhenGreen: boolean;
+  featurePrAutoMergeMode: FeaturePrAutoMergeMode;
 }
 
 export interface SprintLoopStepSettings {

@@ -2,6 +2,7 @@ import type {
   CliExecutionMode,
   DashboardSettings,
   ExternalSettingsHints,
+  FeaturePrAutoMergeMode,
   McpToolToggle,
   ProviderId,
   ProviderSettings,
@@ -15,6 +16,7 @@ import {
   DEFAULT_DASHBOARD_SETTINGS,
   DEFAULT_PROVIDER_SETTINGS,
   DEFAULT_SKILLS,
+  FEATURE_PR_AUTOMERGE_MODES,
   INTERNAL_SKILL_NAMES,
   INTERNAL_SKILL_SET,
   MAX_JULES_CI_AUTOFIX_RETRIES,
@@ -32,6 +34,12 @@ const readBoolean = (value: unknown, fallback: boolean): boolean => (typeof valu
 const readString = (value: unknown, fallback: string): string => (typeof value === "string" ? value : fallback);
 const readInteger = (value: unknown, fallback: number): number =>
   (typeof value === "number" && Number.isFinite(value) ? Math.round(value) : fallback);
+const readFeaturePrAutoMergeMode = (value: unknown, fallback: FeaturePrAutoMergeMode): FeaturePrAutoMergeMode => {
+  if (typeof value === "string" && FEATURE_PR_AUTOMERGE_MODES.includes(value as FeaturePrAutoMergeMode)) {
+    return value as FeaturePrAutoMergeMode;
+  }
+  return fallback;
+};
 
 const enforceGitManagerSkillset = (skills: SkillToggle[], githubMode: "REMOTE" | "LOCAL"): SkillToggle[] => {
   return skills.map((skill) => {
@@ -236,7 +244,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
 
   const ciInput = (input.ciIntelligence && typeof input.ciIntelligence === "object"
     ? input.ciIntelligence
-    : {}) as Partial<DashboardSettings["ciIntelligence"]>;
+    : {}) as Partial<DashboardSettings["ciIntelligence"]> & { autoMergeFeaturePrWhenGreen?: unknown };
   const ciIntelligence = {
     enabled: readBoolean(ciInput.enabled, DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.enabled),
     enableLivePrMonitoring: readBoolean(
@@ -273,9 +281,14 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
         )
       )
     ),
-    autoMergeFeaturePrWhenGreen: readBoolean(
-      ciInput.autoMergeFeaturePrWhenGreen,
-      DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.autoMergeFeaturePrWhenGreen
+    featurePrAutoMergeMode: readFeaturePrAutoMergeMode(
+      ciInput.featurePrAutoMergeMode,
+      readBoolean(
+        ciInput.autoMergeFeaturePrWhenGreen,
+        false
+      )
+        ? "WHEN_GREEN"
+        : DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.featurePrAutoMergeMode
     ),
   };
   if (git.githubMode === "LOCAL") {

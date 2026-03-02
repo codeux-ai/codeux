@@ -33,7 +33,7 @@ describe("SettingsRepository", () => {
     expect(settings.ciIntelligence.enableLivePrMonitoring).toBe(true);
     expect(settings.ciIntelligence.waitForJulesCiAutofix).toBe(false);
     expect(settings.ciIntelligence.julesCiAutofixMaxRetries).toBe(3);
-    expect(settings.ciIntelligence.autoMergeFeaturePrWhenGreen).toBe(false);
+    expect(settings.ciIntelligence.featurePrAutoMergeMode).toBe("OFF");
     expect(settings.sprintLoopSteps.watchLoop).toBe(true);
     expect(settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(120);
     expect(settings.sprintLoopSteps.watchLoopOutputIntervalSeconds).toBe(300);
@@ -93,7 +93,7 @@ describe("SettingsRepository", () => {
         resolveAllCommentsBeforeFeatureMerge: false,
         waitForJulesCiAutofix: true,
         julesCiAutofixMaxRetries: 7,
-        autoMergeFeaturePrWhenGreen: true,
+        featurePrAutoMergeMode: "WHEN_GREEN",
       },
       sprintLoopSteps: {
         branchPreflight: true,
@@ -153,7 +153,7 @@ describe("SettingsRepository", () => {
     expect(saved.ciIntelligence.enableLivePrMonitoring).toBe(false);
     expect(saved.ciIntelligence.waitForJulesCiAutofix).toBe(true);
     expect(saved.ciIntelligence.julesCiAutofixMaxRetries).toBe(7);
-    expect(saved.ciIntelligence.autoMergeFeaturePrWhenGreen).toBe(true);
+    expect(saved.ciIntelligence.featurePrAutoMergeMode).toBe("WHEN_GREEN");
     expect(saved.sprintLoopSteps.watchLoop).toBe(false);
     expect(saved.sprintLoopSteps.watchLoopIntervalSeconds).toBe(30);
     expect(saved.sprintLoopSteps.watchLoopOutputIntervalSeconds).toBe(420);

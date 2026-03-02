@@ -101,7 +101,10 @@ Frontend contract:
 - `enableLivePrMonitoring` (default `true`): controls live PR/CI monitoring gates in sprint loop (`REMOTE` mode only; auto-disabled in `LOCAL` mode).
 - `waitForJulesCiAutofix` (default `false`): when enabled with feature-branch CI gating, completed tasks stay in work status while feature PR checks are pending/failed so Jules can apply CI autofix before merge.
 - `julesCiAutofixMaxRetries` (default `3`, clamped to `0..20`): max Jules CI autofix notify attempts before escalation to intervention (`FULL -> AGENT`, `SEMI_AUTO/ALWAYS_ASK -> HUMAN`) with explicit task IDs, PR links, and failed check names.
-- `autoMergeFeaturePrWhenGreen` (default `false`): when enabled, feature PRs are auto-merged by the sprint loop once checks are green and review blockers are cleared.
+- `featurePrAutoMergeMode` (default `"OFF"`):
+  - `"OFF"`: no feature PR auto-merge
+  - `"WHEN_GREEN"`: auto-merge when merge gates are clear. If `waitForCiBeforeFeatureMerge` is enabled, this requires green checks; if disabled, CI status is not waited on.
+  - `"ALWAYS"`: always attempt feature PR auto-merge (still subject to repository merge protection/rules)
 
 `mcpTools` contains:
 - `name` (MCP tool name from `src/contracts/mcp-tool-definitions.ts`)

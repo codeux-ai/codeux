@@ -127,19 +127,29 @@ export const CiIntelligenceSection: FunctionComponent<SettingsSectionProps> = ({
         After this many failed CI autofix attempts, escalation is raised with exact task IDs and PR links.
       </p>
     </label>
-    <ToggleRow
-      label="Auto-merge feature PR when green"
-      checked={settings.ciIntelligence.autoMergeFeaturePrWhenGreen}
-      disabled={!settings.ciIntelligence.enabled || !settings.ciIntelligence.waitForCiBeforeFeatureMerge}
-      onToggle={(checked) =>
-        onChange({
-          ...settings,
-          ciIntelligence: {
-            ...settings.ciIntelligence,
-            autoMergeFeaturePrWhenGreen: checked,
-          },
-        })
-      }
-    />
+    <label className="block space-y-2 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">
+      <span className="text-sm text-slate-200">Feature PR Auto-merge Policy</span>
+      <select
+        value={settings.ciIntelligence.featurePrAutoMergeMode}
+        disabled={!settings.ciIntelligence.enabled}
+        onChange={(event) =>
+          onChange({
+            ...settings,
+            ciIntelligence: {
+              ...settings.ciIntelligence,
+              featurePrAutoMergeMode: event.currentTarget.value as typeof settings.ciIntelligence.featurePrAutoMergeMode,
+            },
+          })
+        }
+        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
+      >
+        <option value="OFF">Disabled</option>
+        <option value="WHEN_GREEN">When CI and review are clear</option>
+        <option value="ALWAYS">Always attempt auto-merge</option>
+      </select>
+      <p className="text-[11px] text-slate-500">
+        Choose whether feature PR auto-merge is disabled, gated on green checks, or always attempted.
+      </p>
+    </label>
   </SettingsCard>
 );

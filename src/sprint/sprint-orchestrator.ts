@@ -355,10 +355,9 @@ export class SprintOrchestrator {
 
     if (
       !args.ciIntelligence.enabled ||
-      !args.ciIntelligence.enableLivePrMonitoring ||
-      !args.ciIntelligence.waitForCiBeforeFeatureMerge ||
       args.githubMode !== "REMOTE" ||
-      !this.deps.getCiStatusForScope
+      !this.deps.getCiStatusForScope ||
+      (!args.ciIntelligence.enableLivePrMonitoring && args.ciIntelligence.featurePrAutoMergeMode === "OFF")
     ) {
       return { subtasks, reportText: "" };
     }
@@ -405,16 +404,38 @@ export class SprintOrchestrator {
       }
 
       const checks = Array.isArray(pr.checks) ? pr.checks : [];
-      const hasFailedChecks = checks.some((check) => isCiCheckFailed(check.status, check.conclusion));
-      const hasPendingChecks = checks.length === 0 || checks.some((check) => isCiCheckPending(check.status, check.conclusion));
+      const waitForFeatureCi = args.ciIntelligence.waitForCiBeforeFeatureMerge;
+      const hasFailedChecks = waitForFeatureCi
+        ? checks.some((check) => isCiCheckFailed(check.status, check.conclusion))
+        : false;
+      const hasPendingChecks = waitForFeatureCi
+        ? checks.length === 0 || checks.some((check) => isCiCheckPending(check.status, check.conclusion))
+        : false;
       const hasReviewBlockers = args.ciIntelligence.resolveAllCommentsBeforeFeatureMerge
         ? pr.reviewDecision === "CHANGES_REQUESTED" || pr.comments > 0
         : false;
 
-      if (!hasFailedChecks && !hasPendingChecks && !hasReviewBlockers) {
+      const autoMergeMode = args.ciIntelligence.featurePrAutoMergeMode;
+      const shouldAutoMergeAlways = autoMergeMode === "ALWAYS";
+      const shouldAutoMergeWhenGreen = autoMergeMode === "WHEN_GREEN";
+      const isMergeReady = !hasFailedChecks && !hasPendingChecks && !hasReviewBlockers;
+
+      if (shouldAutoMergeAlways && !hasReviewBlockers && this.deps.autoMergeFeaturePr) {
+        const mergeResult = await this.deps.autoMergeFeaturePr({ repoPath: args.repoPath, prNumber: pr.number });
+        if (mergeResult.ok) {
+          task.is_merged = true;
+          task.merge_indicator = "AUTOMERGE";
+          await this.persistTaskMergedFlag(args.subtasksDir, task.id);
+          reportText += `🤖 **Auto-Merged:** Task \`${task.id}\` was merged automatically (PR #${pr.number}, mode: always).\n`;
+          continue;
+        }
+        reportText += `⚠️ **Auto-Merge Failed:** Task \`${task.id}\` (PR #${pr.number}, mode: always) - ${mergeResult.message || "unknown error"}\n`;
+      }
+
+      if (isMergeReady) {
         const retryKey = this.getCiAutofixRetryKey(task, pr.number);
         this.ciAutofixRetryCounts.delete(retryKey);
-        if (args.ciIntelligence.autoMergeFeaturePrWhenGreen && this.deps.autoMergeFeaturePr) {
+        if (shouldAutoMergeWhenGreen && this.deps.autoMergeFeaturePr) {
           const mergeResult = await this.deps.autoMergeFeaturePr({ repoPath: args.repoPath, prNumber: pr.number });
           if (mergeResult.ok) {
             task.is_merged = true;

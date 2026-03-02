@@ -28,7 +28,7 @@ export const DEFAULT_CI_INTELLIGENCE_SETTINGS: CiIntelligenceSettings = {
   resolveAllCommentsBeforeFeatureMerge: true,
   waitForJulesCiAutofix: false,
   julesCiAutofixMaxRetries: 3,
-  autoMergeFeaturePrWhenGreen: false,
+  featurePrAutoMergeMode: "OFF",
 };
 
 export const DEFAULT_AUTOMATION_INTERVENTIONS_SETTINGS: AutomationInterventionsSettings = {

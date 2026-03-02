@@ -229,8 +229,17 @@ export class CliWorkflowService {
       const statusResult = await this.runCommand("git", ["status", "--porcelain"], worktreePath);
       const hasWorkingTreeChanges = statusResult.stdout.trim().length > 0;
       const hasCommittedChanges = finalHead !== initialHead;
+      const hasUnpushedCommits = await this.hasUnpushedWorkerBranchCommits(
+        worktreePath,
+        args.workerBranch,
+        args.featureBranch
+      );
+      const hasWorkerBranchCommitsForPr = await this.hasWorkerBranchCommitsAgainstFeature(
+        worktreePath,
+        args.featureBranch
+      );
 
-      if (!hasWorkingTreeChanges && !hasCommittedChanges) {
+      if (!hasWorkingTreeChanges && !hasCommittedChanges && !hasUnpushedCommits && !hasWorkerBranchCommitsForPr) {
         this.deps.sessionTracking.appendActivity(args.sessionId, {
           originator: "system",
           description: `No file changes produced by ${args.provider}.`,
@@ -250,34 +259,32 @@ export class CliWorkflowService {
       } else {
         this.deps.sessionTracking.appendActivity(args.sessionId, {
           originator: "system",
-          description: `Detected provider-created commit(s) without pending working tree changes.`,
+          description: hasUnpushedCommits
+            ? "Detected existing unpushed commit(s) without pending working tree changes."
+            : hasWorkerBranchCommitsForPr
+              ? "Detected existing worker-branch commit(s) ahead of feature branch without pending working tree changes."
+              : `Detected provider-created commit(s) without pending working tree changes.`,
         });
       }
       await this.runCommand("git", ["push", "-u", "origin", args.workerBranch], worktreePath);
 
       let prUrl: string | undefined;
       if (settings.git.autoCreatePr) {
-        const bodyLines = [
-          `Automated task execution for \`${args.task.id}\` via ${args.provider}.`,
-          "",
-          `Base: \`${args.featureBranch}\``,
-          `Head: \`${args.workerBranch}\``,
-        ];
-        const prTitle = `${args.title} (${args.provider})`;
-        const prResult = await this.runCommand("gh", [
-          "pr",
-          "create",
-          "--base",
-          args.featureBranch,
-          "--head",
-          args.workerBranch,
-          "--title",
-          prTitle,
-          "--body",
-          bodyLines.join("\n"),
-        ], worktreePath, this.withGithubToken());
-        if (prResult.ok) {
-          prUrl = prResult.stdout.trim().split("\n").find((line) => line.startsWith("http"));
+        prUrl = await this.resolveOrCreateFeaturePr(
+          {
+            taskId: args.task.id,
+            provider: args.provider,
+            title: args.title,
+            featureBranch: args.featureBranch,
+            workerBranch: args.workerBranch,
+          },
+          worktreePath
+        );
+        if (!prUrl) {
+          this.deps.sessionTracking.appendActivity(args.sessionId, {
+            originator: "system",
+            description: "Workflow completed, but no PR URL could be resolved or created automatically.",
+          });
         }
       }
 
@@ -360,6 +367,130 @@ export class CliWorkflowService {
       return true;
     } catch {
       return false;
+    }
+  }
+
+  private async hasUnpushedWorkerBranchCommits(
+    worktreePath: string,
+    workerBranch: string,
+    featureBranch: string
+  ): Promise<boolean> {
+    const remoteWorkerRef = `refs/remotes/origin/${workerBranch}`;
+    if (await this.gitRefExists(worktreePath, remoteWorkerRef)) {
+      const aheadCount = await this.gitRevListCount(worktreePath, `origin/${workerBranch}..HEAD`);
+      return aheadCount > 0;
+    }
+    const remoteFeatureRef = `refs/remotes/origin/${featureBranch}`;
+    if (await this.gitRefExists(worktreePath, remoteFeatureRef)) {
+      const aheadOfFeature = await this.gitRevListCount(worktreePath, `origin/${featureBranch}..HEAD`);
+      return aheadOfFeature > 0;
+    }
+    return false;
+  }
+
+  private async hasWorkerBranchCommitsAgainstFeature(
+    worktreePath: string,
+    featureBranch: string
+  ): Promise<boolean> {
+    const remoteFeatureRef = `refs/remotes/origin/${featureBranch}`;
+    if (await this.gitRefExists(worktreePath, remoteFeatureRef)) {
+      const aheadOfFeature = await this.gitRevListCount(worktreePath, `origin/${featureBranch}..HEAD`);
+      return aheadOfFeature > 0;
+    }
+    const localFeatureRef = `refs/heads/${featureBranch}`;
+    if (await this.gitRefExists(worktreePath, localFeatureRef)) {
+      const aheadOfFeature = await this.gitRevListCount(worktreePath, `${featureBranch}..HEAD`);
+      return aheadOfFeature > 0;
+    }
+    return false;
+  }
+
+  private async gitRefExists(worktreePath: string, ref: string): Promise<boolean> {
+    try {
+      await this.runCommand("git", ["show-ref", "--verify", "--quiet", ref], worktreePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private async gitRevListCount(worktreePath: string, range: string): Promise<number> {
+    try {
+      const result = await this.runCommand("git", ["rev-list", "--count", range], worktreePath);
+      const parsed = Number.parseInt(result.stdout.trim(), 10);
+      return Number.isFinite(parsed) ? parsed : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  private async resolveOrCreateFeaturePr(
+    args: {
+      taskId: string;
+      provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+      title: string;
+      featureBranch: string;
+      workerBranch: string;
+    },
+    worktreePath: string
+  ): Promise<string | undefined> {
+    try {
+      const existingResult = await this.runCommand(
+        "gh",
+        [
+          "pr",
+          "list",
+          "--state",
+          "open",
+          "--base",
+          args.featureBranch,
+          "--head",
+          args.workerBranch,
+          "--json",
+          "url",
+          "--limit",
+          "1",
+        ],
+        worktreePath,
+        this.withGithubToken()
+      );
+      const parsed = JSON.parse(existingResult.stdout) as Array<{ url?: string }>;
+      const existingUrl = parsed.find((entry) => typeof entry.url === "string" && entry.url.trim().length > 0)?.url?.trim();
+      if (existingUrl) {
+        return existingUrl;
+      }
+    } catch {
+      // fall through to create attempt
+    }
+
+    try {
+      const bodyLines = [
+        `Automated task execution for \`${args.taskId}\` via ${args.provider}.`,
+        "",
+        `Base: \`${args.featureBranch}\``,
+        `Head: \`${args.workerBranch}\``,
+      ];
+      const prTitle = `${args.title} (${args.provider})`;
+      const createResult = await this.runCommand(
+        "gh",
+        [
+          "pr",
+          "create",
+          "--base",
+          args.featureBranch,
+          "--head",
+          args.workerBranch,
+          "--title",
+          prTitle,
+          "--body",
+          bodyLines.join("\n"),
+        ],
+        worktreePath,
+        this.withGithubToken()
+      );
+      return createResult.stdout.trim().split("\n").find((line) => line.startsWith("http"));
+    } catch {
+      return undefined;
     }
   }
 
