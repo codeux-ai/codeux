@@ -718,6 +718,9 @@ export class CliWorkflowService {
     // preventing Docker from creating it as root when setting up bind mounts.
     await fs.mkdir(path.join(cwd, ".jules-home", ".config"), { recursive: true }).catch(() => {});
     await fs.mkdir(path.join(cwd, ".jules-home", ".codex"), { recursive: true }).catch(() => {});
+    await fs.writeFile(path.join(cwd, ".jules-home", ".gitignore"), "*\n").catch(() => {});
+    await fs.mkdir(path.join(repoPath, ".jules-runner"), { recursive: true }).catch(() => {});
+    await fs.writeFile(path.join(repoPath, ".jules-runner", ".gitignore"), "*\n").catch(() => {});
     const repoSource = this.mapDockerSourcePathForDaemon(repoPath, repoPath, sessionId, "workspace");
     const containerHome = `${cwd}/.jules-home`;
     const dockerArgs = [
@@ -772,6 +775,7 @@ export class CliWorkflowService {
       "if ! touch \"$HOME/.codex/.write-test\" 2>/dev/null; then",
       `  export HOME="${cwd}/.jules-home-\${UID}"`,
       "  mkdir -p \"$HOME/.config\" \"$HOME/.codex\"",
+      "  echo '*' > \"$HOME/.gitignore\" 2>/dev/null || true",
       "fi",
       "rm -f \"$HOME/.codex/.write-test\" 2>/dev/null || true",
       `if [ -e "${GITCONFIG_CREDENTIALS_MOUNT}" ]; then`,
@@ -794,6 +798,7 @@ export class CliWorkflowService {
       `export NPM_CONFIG_CACHE="${repoPath}/.jules-runner/npm-cache"`,
       "export npm_config_cache=\"$NPM_CONFIG_CACHE\"",
       "mkdir -p \"$NPM_CONFIG_PREFIX\" \"$NPM_CONFIG_CACHE\"",
+      `echo '*' > "${repoPath}/.jules-runner/.gitignore" 2>/dev/null || true`,
       "export PATH=\"$NPM_CONFIG_PREFIX/bin:$PATH\"",
       `if [ -f "${CONTAINER_SETUP_SCRIPT}" ]; then`,
       `  if ! bash "${CONTAINER_SETUP_SCRIPT}"; then`,
