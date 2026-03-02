@@ -77,6 +77,9 @@ Checks:
   - Runtime now syncs only those Claude auth files before launch, avoiding recursive copy of all `.claude` state.
   - If auth is expected from host login state, is `Mount user credentials into container` enabled and are mount paths valid?
   - Docker mode requires daemon-visible workspace paths. Runtime now prefers repo-scoped worktree paths for Docker sessions.
+  - Docker runtime state is stored under `~/.jules-subagents/runtime/docker/<repo-hash>/` by default (override with `JULES_DOCKER_RUNTIME_ROOT`).
+  - Codex uses per-session container home directories under that runtime root to prevent stale state from previous Codex runs.
+  - GitHub/Gemini credential sync copies mount contents into fixed dirs (`~/.config/gh`, `~/.gemini`) to avoid nested auth directories across repeated runs.
   - For Docker-in-Docker or remote daemon path mismatches, configure:
     - `JULES_DOCKER_HOST_WORKSPACE_ROOT=<host-visible-repo-root>`
     - `JULES_DOCKER_HOST_HOME_ROOT=<host-visible-home-root>` (optional, for auth mounts)

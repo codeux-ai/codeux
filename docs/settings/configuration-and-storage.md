@@ -111,12 +111,18 @@ Frontend contract:
 Repository demo script:
 - `.jules-subagents/container/setup.sh` is included as a baseline bootstrap script.
 - It installs/updates `npm`, ensures `git` + `gh`, installs `pnpm`, `@google/gemini-cli`, `@openai/codex`, and Playwright Chromium (+ deps when root/apt is available).
-- Docker provider runner sets `HOME=/workspace/.jules-home` (worktree-local persistent home) and uses writable tmp npm paths for fallback installs in non-root container mode.
+- Docker provider runner stores runtime state outside the project under `~/.jules-subagents/runtime/docker/<repo-hash>/` by default:
+  - `home/` (container `HOME`)
+  - `npm-global/` (CLI fallback install prefix)
+  - `npm-cache/` (npm cache)
+  - Codex runs use isolated per-session homes (`home-codex-<session-id>`) to avoid stale local state interference between runs.
+  - Optional override: `JULES_DOCKER_RUNTIME_ROOT` (absolute path, `~` supported, repo-relative when relative)
 - If setup script is missing or does not provide the requested provider CLI, the runner attempts a provider-specific fallback install (`gemini`, `codex`, or `claude`) before failing.
   - `claude` fallback uses the official installer: `curl -fsSL https://claude.ai/install.sh | bash`
   - Claude runner uses explicit headless prompt mode (`claude -p "<prompt>"`) with `--dangerously-skip-permissions`.
   - When Claude credential mounts are enabled, runtime mounts `~/.claude` and also `~/.claude.json` when present.
   - Runtime syncs only Claude auth artifacts into container home before launch (`~/.claude/.credentials.json` and `~/.claude.json`) instead of recursively copying the full `.claude` state tree.
+  - GitHub/Gemini sync now copies directory contents into fixed destinations (`~/.config/gh`, `~/.gemini`) to avoid nested paths on repeated runs.
 
 ## Default Values
 

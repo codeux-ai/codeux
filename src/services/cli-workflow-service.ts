@@ -19,7 +19,6 @@ import { buildReadFileRetryPrompt, extractPathHints, isReadFileNotFoundToolError
 import {
   buildProviderPrompt,
   buildWorkerBranch,
-  CONTAINER_HOME,
   CONTAINER_SETUP_SCRIPT,
   DEFAULT_CLI_WORKFLOW_SETTINGS,
   sanitizeToken,
@@ -726,15 +725,19 @@ export class CliWorkflowService {
     repoPath: string
   ): Promise<CommandResult> {
     await this.maybeLogDockerPathMappingHint(sessionId, repoPath);
-    // Pre-create the container HOME inside the workspace so the Jules process owns it,
-    // preventing Docker from creating it as root when setting up bind mounts.
-    await fs.mkdir(path.join(cwd, ".jules-home", ".config"), { recursive: true }).catch(() => { });
-    await fs.mkdir(path.join(cwd, ".jules-home", ".codex"), { recursive: true }).catch(() => { });
-    await fs.writeFile(path.join(cwd, ".jules-home", ".gitignore"), "*\n").catch(() => { });
-    await fs.mkdir(path.join(repoPath, ".jules-runner"), { recursive: true }).catch(() => { });
-    await fs.writeFile(path.join(repoPath, ".jules-runner", ".gitignore"), "*\n").catch(() => { });
+    const runtimeRoot = this.resolveDockerRuntimeRoot(repoPath);
+    const runtimeHome = providerLabel === "codex"
+      ? path.join(runtimeRoot, `home-codex-${sanitizeToken(sessionId)}`)
+      : path.join(runtimeRoot, "home");
+    const runtimeNpmPrefix = path.join(runtimeRoot, "npm-global");
+    const runtimeNpmCache = path.join(runtimeRoot, "npm-cache");
+    await fs.mkdir(path.join(runtimeHome, ".config"), { recursive: true });
+    await fs.mkdir(path.join(runtimeHome, ".codex"), { recursive: true });
+    await fs.mkdir(runtimeNpmPrefix, { recursive: true });
+    await fs.mkdir(runtimeNpmCache, { recursive: true });
+
     const repoSource = this.mapDockerSourcePathForDaemon(repoPath, repoPath, sessionId, "workspace");
-    const containerHome = `${cwd}/.jules-home`;
+    const runtimeSource = this.mapDockerSourcePathForDaemon(runtimeRoot, repoPath, sessionId, "runtime");
     const dockerArgs = [
       "run",
       "--rm",
@@ -749,8 +752,14 @@ export class CliWorkflowService {
         destination: repoPath,
         readonly: false,
       }),
+      "--mount",
+      toDockerMountArg({
+        source: runtimeSource,
+        destination: runtimeRoot,
+        readonly: false,
+      }),
       "-e",
-      `HOME=${containerHome}`,
+      `HOME=${runtimeHome}`,
     ];
     const userSpec = await this.resolveDockerUserSpec(cwd);
     if (userSpec) {
@@ -787,35 +796,42 @@ export class CliWorkflowService {
     });
     const bootstrapScript = [
       "set -euo pipefail",
-      "mkdir -p \"$HOME/.config\" \"$HOME/.codex\" 2>/dev/null || true",
-      "if ! touch \"$HOME/.codex/.write-test\" 2>/dev/null; then",
-      `  export HOME="${cwd}/.jules-home-\${UID}"`,
-      "  mkdir -p \"$HOME/.config\" \"$HOME/.codex\"",
-      "  echo '*' > \"$HOME/.gitignore\" 2>/dev/null || true",
-      "fi",
-      "rm -f \"$HOME/.codex/.write-test\" 2>/dev/null || true",
+      "mkdir -p \"$HOME/.config\" \"$HOME/.codex\" \"$HOME/.claude\" \"$HOME/.gemini\"",
+      "sync_dir_contents() {",
+      "  local source=\"$1\"",
+      "  local destination=\"$2\"",
+      "  local label=\"$3\"",
+      "  mkdir -p \"$destination\"",
+      "  if ! cp -r \"$source/.\" \"$destination/\"; then",
+      "    echo \"provider-runner: warning: failed to copy $label credentials\" >&2",
+      "  fi",
+      "}",
       `if [ -e "${GITCONFIG_CREDENTIALS_MOUNT}" ]; then`,
-      `  cp -f "${GITCONFIG_CREDENTIALS_MOUNT}" "$HOME/.gitconfig" 2>/dev/null || echo "provider-runner: warning: failed to copy .gitconfig" >&2`,
+      `  if ! cp -f "${GITCONFIG_CREDENTIALS_MOUNT}" "$HOME/.gitconfig"; then`,
+      "    echo \"provider-runner: warning: failed to copy .gitconfig\" >&2",
+      "  fi",
       "fi",
       `if [ -d "${CODEX_CREDENTIALS_MOUNT}" ]; then`,
-      `  if [ -f "${CODEX_CREDENTIALS_MOUNT}/auth.json" ]; then cp -f "${CODEX_CREDENTIALS_MOUNT}/auth.json" "$HOME/.codex/auth.json" || echo "provider-runner: warning: failed to copy codex auth.json" >&2; fi`,
-      `  if [ -f "${CODEX_CREDENTIALS_MOUNT}/config.toml" ]; then cp -f "${CODEX_CREDENTIALS_MOUNT}/config.toml" "$HOME/.codex/config.toml" || echo "provider-runner: warning: failed to copy codex config.toml" >&2; fi`,
+      `  if [ -f "${CODEX_CREDENTIALS_MOUNT}/auth.json" ]; then`,
+      `    cp -f "${CODEX_CREDENTIALS_MOUNT}/auth.json" "$HOME/.codex/auth.json" || echo "provider-runner: warning: failed to copy codex auth.json" >&2`,
+      "  fi",
+      `  if [ -f "${CODEX_CREDENTIALS_MOUNT}/config.toml" ]; then`,
+      `    cp -f "${CODEX_CREDENTIALS_MOUNT}/config.toml" "$HOME/.codex/config.toml" || echo "provider-runner: warning: failed to copy codex config.toml" >&2`,
+      "  fi",
       "fi",
-      `if [ -e "${GITHUB_CREDENTIALS_MOUNT}" ]; then`,
-      `  cp -r "${GITHUB_CREDENTIALS_MOUNT}" "$HOME/.config/gh" 2>/dev/null || echo "provider-runner: warning: failed to copy gh credentials" >&2`,
+      `if [ -d "${GITHUB_CREDENTIALS_MOUNT}" ]; then`,
+      `  sync_dir_contents "${GITHUB_CREDENTIALS_MOUNT}" "$HOME/.config/gh" "gh"`,
       "fi",
-      `if [ -e "${GEMINI_CREDENTIALS_MOUNT}" ]; then`,
-      `  cp -r "${GEMINI_CREDENTIALS_MOUNT}" "$HOME/.gemini" 2>/dev/null || echo "provider-runner: warning: failed to copy gemini credentials" >&2`,
+      `if [ -d "${GEMINI_CREDENTIALS_MOUNT}" ]; then`,
+      `  sync_dir_contents "${GEMINI_CREDENTIALS_MOUNT}" "$HOME/.gemini" "gemini"`,
       "fi",
-      `export NPM_CONFIG_PREFIX="${repoPath}/.jules-runner/npm-global"`,
-      `export NPM_CONFIG_CACHE="${repoPath}/.jules-runner/npm-cache"`,
+      `export NPM_CONFIG_PREFIX="${runtimeNpmPrefix}"`,
+      `export NPM_CONFIG_CACHE="${runtimeNpmCache}"`,
       "export npm_config_cache=\"$NPM_CONFIG_CACHE\"",
       "mkdir -p \"$NPM_CONFIG_PREFIX\" \"$NPM_CONFIG_CACHE\"",
-      `echo '*' > "${repoPath}/.jules-runner/.gitignore" 2>/dev/null || true`,
       "export PATH=\"$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH\"",
       "sync_claude_auth() {",
       "  local copied=0",
-      "  mkdir -p \"$HOME/.claude\"",
       `  if [ -f "${CLAUDE_CODE_CREDENTIALS_MOUNT}/.credentials.json" ]; then`,
       `    cp -f "${CLAUDE_CODE_CREDENTIALS_MOUNT}/.credentials.json" "$HOME/.claude/.credentials.json" || echo "provider-runner: warning: failed to copy claude-code .credentials.json" >&2`,
       "    copied=1",
@@ -875,6 +891,7 @@ export class CliWorkflowService {
     });
     const mountSummary = [
       `workspace:${repoSource}->${repoPath}`,
+      `runtime:${runtimeSource}->${runtimeRoot}`,
       setupScriptPath ? `setup:${setupScriptPath}->${CONTAINER_SETUP_SCRIPT}` : "setup:none",
       ...credentialMounts.map((mount) => `${mount.source}->${mount.destination}${mount.readonly ? ":ro" : ""}`),
     ];
@@ -890,6 +907,15 @@ export class CliWorkflowService {
         : `Docker provider run failed (${providerLabel}). stderr=${result.stderr.slice(0, 600).replace(/\s+/g, " ").trim() || "(empty)"}`,
     });
     return result;
+  }
+
+  private resolveDockerRuntimeRoot(repoPath: string): string {
+    const configured = (process.env.JULES_DOCKER_RUNTIME_ROOT || "").trim();
+    if (configured.length > 0) {
+      return resolveConfiguredPath(repoPath, configured);
+    }
+    const repoHash = createHash("sha1").update(path.resolve(repoPath)).digest("hex").slice(0, 12);
+    return path.join(os.homedir(), ".jules-subagents", "runtime", "docker", repoHash);
   }
 
   private async maybeLogDockerPathMappingHint(sessionId: string, repoPath: string): Promise<void> {
@@ -919,7 +945,7 @@ export class CliWorkflowService {
     sourcePath: string,
     repoPath: string,
     sessionId: string,
-    mountLabel: "workspace" | "setup script" | "credentials"
+    mountLabel: "workspace" | "setup script" | "credentials" | "runtime"
   ): string {
     const normalizedSource = path.resolve(sourcePath);
     const workspaceMapping = (process.env.JULES_DOCKER_HOST_WORKSPACE_ROOT || "").trim();

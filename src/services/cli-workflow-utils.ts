@@ -20,7 +20,6 @@ export const DEFAULT_CLI_WORKFLOW_SETTINGS: CliWorkflowSettings = {
   containerClaudeCodeAuthPath: "~/.claude",
 };
 
-export const CONTAINER_HOME = "/workspace/.jules-home";
 export const CONTAINER_SETUP_SCRIPT = "/opt/jules/setup.sh";
 
 export const sanitizeToken = (value: string): string =>
