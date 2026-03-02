@@ -29,6 +29,7 @@ const CODEX_CREDENTIALS_MOUNT = "/opt/credentials/codex";
 const GITHUB_CREDENTIALS_MOUNT = "/opt/credentials/gh";
 const GEMINI_CREDENTIALS_MOUNT = "/opt/credentials/gemini";
 const CLAUDE_CODE_CREDENTIALS_MOUNT = "/opt/credentials/claude-code";
+const CLAUDE_CODE_AUTH_JSON_MOUNT = "/opt/credentials/claude-code-auth.json";
 const GITCONFIG_CREDENTIALS_MOUNT = "/opt/credentials/gitconfig";
 
 interface CliWorkflowServiceDependencies {
@@ -694,6 +695,16 @@ export class CliWorkflowService {
             : `${mount.mountBase}/${path.basename(sourcePath)}`,
           readonly: true,
         });
+        if (mount.label === "Claude Code auth" && await this.isDirectory(sourcePath)) {
+          const authJsonPath = path.join(path.dirname(sourcePath), ".claude.json");
+          if (await this.pathExists(authJsonPath)) {
+            mounts.push({
+              source: authJsonPath,
+              destination: CLAUDE_CODE_AUTH_JSON_MOUNT,
+              readonly: true,
+            });
+          }
+        }
       } else {
         this.deps.sessionTracking.appendActivity(sessionId, {
           originator: "system",
@@ -797,7 +808,11 @@ export class CliWorkflowService {
       `  cp -r "${GEMINI_CREDENTIALS_MOUNT}" "$HOME/.gemini" 2>/dev/null || echo "provider-runner: warning: failed to copy gemini credentials" >&2`,
       "fi",
       `if [ -e "${CLAUDE_CODE_CREDENTIALS_MOUNT}" ]; then`,
-      `  cp -r "${CLAUDE_CODE_CREDENTIALS_MOUNT}" "$HOME/.claude" 2>/dev/null || echo "provider-runner: warning: failed to copy claude-code credentials" >&2`,
+      `  mkdir -p "$HOME/.claude"`,
+      `  cp -r "${CLAUDE_CODE_CREDENTIALS_MOUNT}/." "$HOME/.claude/" 2>/dev/null || echo "provider-runner: warning: failed to copy claude-code credentials" >&2`,
+      "fi",
+      `if [ -f "${CLAUDE_CODE_AUTH_JSON_MOUNT}" ]; then`,
+      `  cp -f "${CLAUDE_CODE_AUTH_JSON_MOUNT}" "$HOME/.claude.json" 2>/dev/null || echo "provider-runner: warning: failed to copy claude-code auth json" >&2`,
       "fi",
       `export NPM_CONFIG_PREFIX="${repoPath}/.jules-runner/npm-global"`,
       `export NPM_CONFIG_CACHE="${repoPath}/.jules-runner/npm-cache"`,
@@ -815,9 +830,27 @@ export class CliWorkflowService {
       ...fallbackInstallCases,
       "  esac",
       "fi",
+      "if [ \"$1\" = \"claude\" ]; then",
+      `  if [ -e "${CLAUDE_CODE_CREDENTIALS_MOUNT}" ]; then`,
+      "    mkdir -p \"$HOME/.claude\"",
+      `    cp -r "${CLAUDE_CODE_CREDENTIALS_MOUNT}/." "$HOME/.claude/" 2>/dev/null || echo "provider-runner: warning: failed to restore claude-code credentials after install" >&2`,
+      "  fi",
+      `  if [ -f "${CLAUDE_CODE_AUTH_JSON_MOUNT}" ]; then`,
+      `    cp -f "${CLAUDE_CODE_AUTH_JSON_MOUNT}" "$HOME/.claude.json" 2>/dev/null || echo "provider-runner: warning: failed to restore claude-code auth json after install" >&2`,
+      "  fi",
+      "fi",
       "if ! command -v \"$1\" >/dev/null 2>&1; then",
       "  echo \"provider-runner: required command '$1' not found in PATH: $PATH\" >&2",
       "  exit 127",
+      "fi",
+      "if [ \"$1\" = \"claude\" ]; then",
+      "  if [ -n \"${ANTHROPIC_API_KEY:-}\" ]; then",
+      "    echo \"provider-runner: claude auth: ANTHROPIC_API_KEY is set\" >&2",
+      "  elif [ -f \"$HOME/.claude.json\" ] || [ -d \"$HOME/.claude\" ]; then",
+      "    echo \"provider-runner: claude auth: mounted local claude credentials\" >&2",
+      "  else",
+      "    echo \"provider-runner: warning: claude auth is missing (no ANTHROPIC_API_KEY and no ~/.claude(.json)); command may wait for login\" >&2",
+      "  fi",
       "fi",
       "if [ \"$1\" = \"gemini\" ] && [ -z \"${GEMINI_API_KEY:-}\" ] && [ ! -e \"$HOME/.gemini\" ]; then",
       "  echo \"provider-runner: warning: GEMINI_API_KEY is empty and $HOME/.gemini is not mounted; gemini may wait for auth.\" >&2",
@@ -1028,11 +1061,11 @@ export class CliWorkflowService {
     workflowSettings: CliWorkflowSettings,
     repoPath: string
   ): Promise<CommandResult> {
-    const args = ["--dangerously-skip-permissions", "--print"];
+    const args = ["--dangerously-skip-permissions"];
     if (model && model !== "default") {
       args.push("--model", model);
     }
-    args.push(prompt);
+    args.push("-p", prompt);
     return this.runProviderCommand(
       "claude",
       args,

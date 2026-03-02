@@ -72,6 +72,8 @@ Checks:
     - `gemini`: `npm install -g @google/gemini-cli`
     - `codex`: `npm install -g @openai/codex`
     - `claude`: `curl -fsSL https://claude.ai/install.sh | bash`
+  - Claude runner executes headless using `claude -p "<prompt>" --dangerously-skip-permissions`.
+  - For Claude auth mounts, ensure host has `~/.claude`; if auth still stalls, also verify `~/.claude.json` exists (runtime mounts it automatically when present).
   - If auth is expected from host login state, is `Mount user credentials into container` enabled and are mount paths valid?
   - Docker mode requires daemon-visible workspace paths. Runtime now prefers repo-scoped worktree paths for Docker sessions.
   - For Docker-in-Docker or remote daemon path mismatches, configure:

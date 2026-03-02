@@ -114,6 +114,8 @@ Repository demo script:
 - Docker provider runner sets `HOME=/workspace/.jules-home` (worktree-local persistent home) and uses writable tmp npm paths for fallback installs in non-root container mode.
 - If setup script is missing or does not provide the requested provider CLI, the runner attempts a provider-specific fallback install (`gemini`, `codex`, or `claude`) before failing.
   - `claude` fallback uses the official installer: `curl -fsSL https://claude.ai/install.sh | bash`
+  - Claude runner uses explicit headless prompt mode (`claude -p "<prompt>"`) with `--dangerously-skip-permissions`.
+  - When Claude credential mounts are enabled, runtime mounts `~/.claude` and also `~/.claude.json` when present.
 
 ## Default Values
 
