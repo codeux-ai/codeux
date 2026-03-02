@@ -716,11 +716,11 @@ export class CliWorkflowService {
     await this.maybeLogDockerPathMappingHint(sessionId, repoPath);
     // Pre-create the container HOME inside the workspace so the Jules process owns it,
     // preventing Docker from creating it as root when setting up bind mounts.
-    await fs.mkdir(path.join(cwd, ".jules-home", ".config"), { recursive: true }).catch(() => {});
-    await fs.mkdir(path.join(cwd, ".jules-home", ".codex"), { recursive: true }).catch(() => {});
-    await fs.writeFile(path.join(cwd, ".jules-home", ".gitignore"), "*\n").catch(() => {});
-    await fs.mkdir(path.join(repoPath, ".jules-runner"), { recursive: true }).catch(() => {});
-    await fs.writeFile(path.join(repoPath, ".jules-runner", ".gitignore"), "*\n").catch(() => {});
+    await fs.mkdir(path.join(cwd, ".jules-home", ".config"), { recursive: true }).catch(() => { });
+    await fs.mkdir(path.join(cwd, ".jules-home", ".codex"), { recursive: true }).catch(() => { });
+    await fs.writeFile(path.join(cwd, ".jules-home", ".gitignore"), "*\n").catch(() => { });
+    await fs.mkdir(path.join(repoPath, ".jules-runner"), { recursive: true }).catch(() => { });
+    await fs.writeFile(path.join(repoPath, ".jules-runner", ".gitignore"), "*\n").catch(() => { });
     const repoSource = this.mapDockerSourcePathForDaemon(repoPath, repoPath, sessionId, "workspace");
     const containerHome = `${cwd}/.jules-home`;
     const dockerArgs = [
@@ -950,7 +950,7 @@ export class CliWorkflowService {
     workflowSettings: CliWorkflowSettings,
     repoPath: string
   ): Promise<CommandResult> {
-    const args = ["--yolo", prompt];
+    const args = ["--yolo", "--p", prompt];
     return this.runProviderCommand(
       "gemini",
       args,
