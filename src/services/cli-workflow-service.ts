@@ -718,7 +718,8 @@ export class CliWorkflowService {
     // preventing Docker from creating it as root when setting up bind mounts.
     await fs.mkdir(path.join(cwd, ".jules-home", ".config"), { recursive: true }).catch(() => {});
     await fs.mkdir(path.join(cwd, ".jules-home", ".codex"), { recursive: true }).catch(() => {});
-    const workspaceSource = this.mapDockerSourcePathForDaemon(cwd, repoPath, sessionId, "workspace");
+    const repoSource = this.mapDockerSourcePathForDaemon(repoPath, repoPath, sessionId, "workspace");
+    const containerHome = `${cwd}/.jules-home`;
     const dockerArgs = [
       "run",
       "--rm",
@@ -726,15 +727,15 @@ export class CliWorkflowService {
       "--network",
       "host",
       "--workdir",
-      "/workspace",
+      cwd,
       "--mount",
       toDockerMountArg({
-        source: workspaceSource,
-        destination: "/workspace",
+        source: repoSource,
+        destination: repoPath,
         readonly: false,
       }),
       "-e",
-      `HOME=${CONTAINER_HOME}`,
+      `HOME=${containerHome}`,
     ];
     const userSpec = await this.resolveDockerUserSpec(cwd);
     if (userSpec) {
@@ -769,7 +770,7 @@ export class CliWorkflowService {
       "set -euo pipefail",
       "mkdir -p \"$HOME/.config\" \"$HOME/.codex\" 2>/dev/null || true",
       "if ! touch \"$HOME/.codex/.write-test\" 2>/dev/null; then",
-      "  export HOME=\"/workspace/.jules-home-${UID}\"",
+      `  export HOME="${cwd}/.jules-home-\${UID}"`,
       "  mkdir -p \"$HOME/.config\" \"$HOME/.codex\"",
       "fi",
       "rm -f \"$HOME/.codex/.write-test\" 2>/dev/null || true",
@@ -789,8 +790,8 @@ export class CliWorkflowService {
       `if [ -e "${CLAUDE_CODE_CREDENTIALS_MOUNT}" ]; then`,
       `  cp -r "${CLAUDE_CODE_CREDENTIALS_MOUNT}" "$HOME/.claude" 2>/dev/null || echo "provider-runner: warning: failed to copy claude-code credentials" >&2`,
       "fi",
-      "export NPM_CONFIG_PREFIX=\"/workspace/.jules-runner/npm-global\"",
-      "export NPM_CONFIG_CACHE=\"/workspace/.jules-runner/npm-cache\"",
+      `export NPM_CONFIG_PREFIX="${repoPath}/.jules-runner/npm-global"`,
+      `export NPM_CONFIG_CACHE="${repoPath}/.jules-runner/npm-cache"`,
       "export npm_config_cache=\"$NPM_CONFIG_CACHE\"",
       "mkdir -p \"$NPM_CONFIG_PREFIX\" \"$NPM_CONFIG_CACHE\"",
       "export PATH=\"$NPM_CONFIG_PREFIX/bin:$PATH\"",
@@ -829,7 +830,7 @@ export class CliWorkflowService {
       description: `Running ${providerLabel} in Docker image ${image} (credentials mounted: ${credentialMounts.length > 0 ? "yes" : "no"}).`,
     });
     const mountSummary = [
-      `workspace:${workspaceSource}->/workspace`,
+      `workspace:${repoSource}->${repoPath}`,
       setupScriptPath ? `setup:${setupScriptPath}->${CONTAINER_SETUP_SCRIPT}` : "setup:none",
       ...credentialMounts.map((mount) => `${mount.source}->${mount.destination}${mount.readonly ? ":ro" : ""}`),
     ];
