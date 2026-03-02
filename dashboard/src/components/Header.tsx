@@ -15,7 +15,7 @@ export const Header: FunctionComponent<HeaderProps> = ({ sprintNumber, featureBr
     <header className="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-20">
       <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">Jules Sprint Dashboard</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">Jules Sprint Dashboard v1.0</h1>
           <p className="text-xs text-slate-400 mt-1">
             {featureBranch ? `Branch: ${featureBranch}` : "Awaiting orchestration"}
           </p>

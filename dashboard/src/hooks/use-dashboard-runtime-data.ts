@@ -26,7 +26,7 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
     try {
       const data = await fetchRuntimeDashboardPayload();
       setStatus(data.status);
-      setLiveActivities(data.liveActivities);
+      setLiveActivities((prev) => ({ ...prev, ...data.liveActivities }));
       setError(null);
     } catch {
       setError("Unable to connect to Orchestrator API");

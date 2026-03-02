@@ -27,4 +27,29 @@
     transform: translateY(0) scale(1);
     transition-delay: 50ms;
   }
+
+  .dashboard-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(56 189 248 / 0.45) rgb(15 23 42 / 0.3);
+  }
+
+  .dashboard-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .dashboard-scrollbar::-webkit-scrollbar-track {
+    background: linear-gradient(180deg, rgb(15 23 42 / 0.2), rgb(15 23 42 / 0.55));
+    border-radius: 9999px;
+  }
+
+  .dashboard-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgb(56 189 248 / 0.6), rgb(59 130 246 / 0.55));
+    border: 2px solid rgb(15 23 42 / 0.65);
+    border-radius: 9999px;
+  }
+
+  .dashboard-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgb(56 189 248 / 0.85), rgb(59 130 246 / 0.8));
+  }
 }

@@ -21,7 +21,7 @@ export const ActivitySidebar: FunctionComponent<ActivitySidebarProps> = ({ repor
         <div className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-2xl p-6 relative overflow-hidden">
           <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-4">Latest Logs</h4>
           <div
-            className="prose prose-xs prose-invert max-w-none text-slate-300 font-mono"
+            className="prose prose-xs prose-invert max-w-none text-slate-300 font-mono max-h-80 overflow-y-auto pr-2 dashboard-scrollbar"
             dangerouslySetInnerHTML={{ __html: renderMarkdown(reportText) || "Waiting for activity..." }}
           />
         </div>
@@ -35,7 +35,7 @@ export const ActivitySidebar: FunctionComponent<ActivitySidebarProps> = ({ repor
         <div className="bg-slate-900/50 backdrop-blur-md border border-amber-500/20 rounded-2xl p-6">
           <h4 className="text-[10px] font-bold text-amber-500/70 uppercase tracking-[0.2em] mb-4">Action Required</h4>
           <div
-            className="prose prose-xs prose-invert max-w-none text-amber-100/70 font-mono"
+            className="prose prose-xs prose-invert max-w-none text-amber-100/70 font-mono max-h-80 overflow-y-auto pr-2 dashboard-scrollbar"
             dangerouslySetInnerHTML={{ __html: renderMarkdown(instructions) || "Orchestration optimal. No manual intervention needed." }}
           />
         </div>

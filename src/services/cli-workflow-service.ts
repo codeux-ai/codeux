@@ -25,6 +25,10 @@ import {
 } from "./cli-workflow-utils.js";
 
 const CODEX_CREDENTIALS_MOUNT = "/opt/credentials/codex";
+const GITHUB_CREDENTIALS_MOUNT = "/opt/credentials/gh";
+const GEMINI_CREDENTIALS_MOUNT = "/opt/credentials/gemini";
+const CLAUDE_CODE_CREDENTIALS_MOUNT = "/opt/credentials/claude-code";
+const GITCONFIG_CREDENTIALS_MOUNT = "/opt/credentials/gitconfig";
 
 interface CliWorkflowServiceDependencies {
   sessionTracking: SessionTrackingRepository;
@@ -45,7 +49,7 @@ export class CliWorkflowService {
   private readonly repoLocks = new Map<string, Promise<void>>();
   private readonly dockerHintLoggedSessions = new Set<string>();
 
-  constructor(private readonly deps: CliWorkflowServiceDependencies) {}
+  constructor(private readonly deps: CliWorkflowServiceDependencies) { }
 
   async startTask(input: StartCliTaskInput): Promise<JulesSession> {
     const settings = this.deps.getDashboardSettings();
@@ -520,7 +524,7 @@ export class CliWorkflowService {
 
   private async withRepoLock<T>(repoPath: string, fn: () => Promise<T>): Promise<T> {
     const current = this.repoLocks.get(repoPath) || Promise.resolve();
-    let releaseLock: () => void = () => {};
+    let releaseLock: () => void = () => { };
     const next = new Promise<void>((resolve) => {
       releaseLock = resolve;
     });
@@ -643,35 +647,35 @@ export class CliWorkflowService {
       if (await this.pathExists(gitConfigPath)) {
         mounts.push({
           source: gitConfigPath,
-          destination: `${CONTAINER_HOME}/.gitconfig`,
+          destination: GITCONFIG_CREDENTIALS_MOUNT,
           readonly: true,
         });
       }
     }
 
-    const requestedMounts: Array<{ enabled: boolean; sourcePath: string; targetPath: string; label: string }> = [
+    const requestedMounts: Array<{ enabled: boolean; sourcePath: string; mountBase: string; label: string }> = [
       {
         enabled: workflowSettings.containerMountGithubAuth,
         sourcePath: workflowSettings.containerGithubAuthPath,
-        targetPath: `${CONTAINER_HOME}/.config/gh`,
+        mountBase: GITHUB_CREDENTIALS_MOUNT,
         label: "GitHub auth",
       },
       {
         enabled: workflowSettings.containerMountGeminiAuth,
         sourcePath: workflowSettings.containerGeminiAuthPath,
-        targetPath: `${CONTAINER_HOME}/.gemini`,
+        mountBase: GEMINI_CREDENTIALS_MOUNT,
         label: "Gemini auth",
       },
       {
         enabled: workflowSettings.containerMountCodexAuth,
         sourcePath: workflowSettings.containerCodexAuthPath,
-        targetPath: `${CONTAINER_HOME}/.codex`,
+        mountBase: CODEX_CREDENTIALS_MOUNT,
         label: "Codex auth",
       },
       {
         enabled: workflowSettings.containerMountClaudeCodeAuth,
         sourcePath: workflowSettings.containerClaudeCodeAuthPath,
-        targetPath: `${CONTAINER_HOME}/.claude`,
+        mountBase: CLAUDE_CODE_CREDENTIALS_MOUNT,
         label: "Claude Code auth",
       },
     ];
@@ -682,19 +686,11 @@ export class CliWorkflowService {
       }
       const sourcePath = resolveConfiguredPath(repoPath, mount.sourcePath);
       if (await this.pathExists(sourcePath)) {
-        if (mount.label === "Codex auth") {
-          mounts.push({
-            source: sourcePath,
-            destination: await this.isDirectory(sourcePath)
-              ? CODEX_CREDENTIALS_MOUNT
-              : `${CODEX_CREDENTIALS_MOUNT}/${path.basename(sourcePath)}`,
-            readonly: true,
-          });
-          continue;
-        }
         mounts.push({
           source: sourcePath,
-          destination: mount.targetPath,
+          destination: await this.isDirectory(sourcePath)
+            ? mount.mountBase
+            : `${mount.mountBase}/${path.basename(sourcePath)}`,
           readonly: true,
         });
       } else {
@@ -718,11 +714,17 @@ export class CliWorkflowService {
     repoPath: string
   ): Promise<CommandResult> {
     await this.maybeLogDockerPathMappingHint(sessionId, repoPath);
+    // Pre-create the container HOME inside the workspace so the Jules process owns it,
+    // preventing Docker from creating it as root when setting up bind mounts.
+    await fs.mkdir(path.join(cwd, ".jules-home", ".config"), { recursive: true }).catch(() => {});
+    await fs.mkdir(path.join(cwd, ".jules-home", ".codex"), { recursive: true }).catch(() => {});
     const workspaceSource = this.mapDockerSourcePathForDaemon(cwd, repoPath, sessionId, "workspace");
     const dockerArgs = [
       "run",
       "--rm",
       "-i",
+      "--network",
+      "host",
       "--workdir",
       "/workspace",
       "--mount",
@@ -743,8 +745,6 @@ export class CliWorkflowService {
     for (const variable of passthroughEnv) {
       dockerArgs.push("-e", `${variable.key}=${variable.value}`);
     }
-    const passthroughEnvKeys = passthroughEnv.map((entry) => entry.key);
-
     const setupScriptPath = await this.resolveContainerSetupScriptPath(workflowSettings, repoPath, sessionId);
     if (setupScriptPath) {
       const setupScriptSource = this.mapDockerSourcePathForDaemon(setupScriptPath, repoPath, sessionId, "setup script");
@@ -767,28 +767,30 @@ export class CliWorkflowService {
     const image = workflowSettings.containerImage.trim() || DEFAULT_CLI_WORKFLOW_SETTINGS.containerImage;
     const bootstrapScript = [
       "set -euo pipefail",
-      "PREFERRED_HOME=\"$HOME\"",
-      "FALLBACK_HOME=\"/workspace/.jules-home-runtime\"",
-      "if ! mkdir -p \"$PREFERRED_HOME\" \"$PREFERRED_HOME/.config\" \"$PREFERRED_HOME/.codex\" 2>/dev/null; then",
-      "  echo \"provider-runner: preferred HOME not writable ($PREFERRED_HOME); falling back to $FALLBACK_HOME\" >&2",
-      "  export HOME=\"$FALLBACK_HOME\"",
-      "fi",
-      "mkdir -p \"$HOME\" \"$HOME/.config\" \"$HOME/.codex\"",
+      "mkdir -p \"$HOME/.config\" \"$HOME/.codex\" 2>/dev/null || true",
       "if ! touch \"$HOME/.codex/.write-test\" 2>/dev/null; then",
-      "  echo \"provider-runner: HOME codex dir not writable ($HOME/.codex); falling back to $FALLBACK_HOME\" >&2",
-      "  export HOME=\"$FALLBACK_HOME\"",
-      "  mkdir -p \"$HOME\" \"$HOME/.config\" \"$HOME/.codex\"",
-      "  if ! touch \"$HOME/.codex/.write-test\" 2>/dev/null; then",
-      "    echo \"provider-runner: warning: codex home remains non-writable ($HOME/.codex)\" >&2",
-      "  fi",
+      "  export HOME=\"/workspace/.jules-home-${UID}\"",
+      "  mkdir -p \"$HOME/.config\" \"$HOME/.codex\"",
       "fi",
       "rm -f \"$HOME/.codex/.write-test\" 2>/dev/null || true",
+      `if [ -e "${GITCONFIG_CREDENTIALS_MOUNT}" ]; then`,
+      `  cp -f "${GITCONFIG_CREDENTIALS_MOUNT}" "$HOME/.gitconfig" 2>/dev/null || echo "provider-runner: warning: failed to copy .gitconfig" >&2`,
+      "fi",
       `if [ -d "${CODEX_CREDENTIALS_MOUNT}" ]; then`,
       `  if [ -f "${CODEX_CREDENTIALS_MOUNT}/auth.json" ]; then cp -f "${CODEX_CREDENTIALS_MOUNT}/auth.json" "$HOME/.codex/auth.json" || echo "provider-runner: warning: failed to copy codex auth.json" >&2; fi`,
       `  if [ -f "${CODEX_CREDENTIALS_MOUNT}/config.toml" ]; then cp -f "${CODEX_CREDENTIALS_MOUNT}/config.toml" "$HOME/.codex/config.toml" || echo "provider-runner: warning: failed to copy codex config.toml" >&2; fi`,
       "fi",
-      "export NPM_CONFIG_PREFIX=\"/tmp/jules-npm-global\"",
-      "export NPM_CONFIG_CACHE=\"/tmp/jules-npm-cache\"",
+      `if [ -e "${GITHUB_CREDENTIALS_MOUNT}" ]; then`,
+      `  cp -r "${GITHUB_CREDENTIALS_MOUNT}" "$HOME/.config/gh" 2>/dev/null || echo "provider-runner: warning: failed to copy gh credentials" >&2`,
+      "fi",
+      `if [ -e "${GEMINI_CREDENTIALS_MOUNT}" ]; then`,
+      `  cp -r "${GEMINI_CREDENTIALS_MOUNT}" "$HOME/.gemini" 2>/dev/null || echo "provider-runner: warning: failed to copy gemini credentials" >&2`,
+      "fi",
+      `if [ -e "${CLAUDE_CODE_CREDENTIALS_MOUNT}" ]; then`,
+      `  cp -r "${CLAUDE_CODE_CREDENTIALS_MOUNT}" "$HOME/.claude" 2>/dev/null || echo "provider-runner: warning: failed to copy claude-code credentials" >&2`,
+      "fi",
+      "export NPM_CONFIG_PREFIX=\"/workspace/.jules-runner/npm-global\"",
+      "export NPM_CONFIG_CACHE=\"/workspace/.jules-runner/npm-cache\"",
       "export npm_config_cache=\"$NPM_CONFIG_CACHE\"",
       "mkdir -p \"$NPM_CONFIG_PREFIX\" \"$NPM_CONFIG_CACHE\"",
       "export PATH=\"$NPM_CONFIG_PREFIX/bin:$PATH\"",
@@ -816,7 +818,7 @@ export class CliWorkflowService {
     dockerArgs.push(
       image,
       "bash",
-      "-lc",
+      "-c",
       bootstrapScript,
       "provider-runner",
       command,
@@ -833,7 +835,7 @@ export class CliWorkflowService {
     ];
     this.deps.sessionTracking.appendActivity(sessionId, {
       originator: "system",
-      description: `Docker debug: provider=${providerLabel} command=${command} envKeys=${passthroughEnvKeys.length > 0 ? passthroughEnvKeys.join(",") : "none"} mounts=${mountSummary.join(" | ")}`,
+      description: `Docker debug: provider=${providerLabel} command=${command} mounts=${mountSummary.join(" | ")}`,
     });
     const result = await this.runStreamingCommand("docker", dockerArgs, cwd, process.env, sessionId, providerLabel);
     this.deps.sessionTracking.appendActivity(sessionId, {

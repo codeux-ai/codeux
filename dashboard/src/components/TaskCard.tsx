@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { renderMarkdown } from "../lib/markdown.js";
 import { formatTime } from "../lib/time.js";
 import { getActivityText } from "../lib/activity.js";
@@ -42,6 +42,16 @@ const getIndicatorColor = (indicator?: SubtaskMergeIndicator): string => {
 export const TaskCard: FunctionComponent<TaskCardProps> = ({ task }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
+  const feedScrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = feedScrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceFromBottom < 120) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [task.activities]);
   const detailPanelId = `task-details-${task.id}`;
   const livePanelId = `task-live-${task.id}`;
   const hasSession = Boolean(task.session_id || task.session_name);
@@ -125,24 +135,26 @@ export const TaskCard: FunctionComponent<TaskCardProps> = ({ task }) => {
                 {!task.activities || task.activities.length === 0 ? (
                   <p className="text-[10px] text-slate-600 italic">Connecting to session logs...</p>
                 ) : (
-                  task.activities.map((activity) => {
-                    const originatorClasses = getOriginatorClasses(activity.originator);
-                    return (
-                    <div key={activity.id} className={`flex gap-3 text-xs border-l-2 ${originatorClasses.border} pl-3 py-1`}>
-                      <div className="flex-grow">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className={`font-bold text-[10px] ${originatorClasses.text} uppercase`}>
-                            {activity.originator || "system"}
-                          </span>
-                          <span className="text-[9px] text-slate-600 font-mono">{formatTime(activity.createTime)}</span>
-                        </div>
-                        <div className="text-slate-300 leading-relaxed font-mono text-[11px] line-clamp-2 hover:line-clamp-none transition-all cursor-help">
-                          {getActivityText(activity)}
+                  <div ref={feedScrollRef} className="max-h-72 overflow-y-auto pr-2 dashboard-scrollbar">
+                    {task.activities.map((activity) => {
+                      const originatorClasses = getOriginatorClasses(activity.originator);
+                      return (
+                      <div key={activity.id} className={`flex gap-3 text-xs border-l-2 ${originatorClasses.border} pl-3 py-1`}>
+                        <div className="flex-grow">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`font-bold text-[10px] ${originatorClasses.text} uppercase`}>
+                              {activity.originator || "system"}
+                            </span>
+                            <span className="text-[9px] text-slate-600 font-mono">{formatTime(activity.createTime)}</span>
+                          </div>
+                          <div className="text-slate-300 leading-relaxed font-mono text-[11px] line-clamp-2 hover:line-clamp-none transition-all cursor-help">
+                            {getActivityText(activity)}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    );
-                  })
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             </div>
