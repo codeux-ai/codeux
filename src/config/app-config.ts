@@ -49,11 +49,48 @@ const loadApiKeyFromSettings = (projectRoot: string): string | null => {
   return null;
 };
 
+const readPortValue = (value: unknown): number | null => {
+  const parsed = typeof value === "string" ? Number.parseInt(value, 10) : value;
+  if (typeof parsed !== "number" || !Number.isFinite(parsed)) return null;
+  const rounded = Math.round(parsed);
+  if (rounded < 1 || rounded > 65535) return null;
+  return rounded;
+};
+
+const loadDashboardPortFromConfigJson = (projectRoot: string): number | null => {
+  const searchPaths = [
+    path.join(process.cwd(), "config.json"),
+    path.join(projectRoot, "config.json"),
+  ];
+
+  for (const configPath of [...new Set(searchPaths)]) {
+    try {
+      if (!fs.existsSync(configPath)) continue;
+      const raw = fs.readFileSync(configPath, "utf-8");
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const candidates: unknown[] = [
+        parsed.dashboardPort,
+        parsed.DASHBOARD_PORT,
+        (parsed.dashboard as Record<string, unknown> | undefined)?.port,
+        (parsed.dashboard as Record<string, unknown> | undefined)?.dashboardPort,
+      ];
+      for (const candidate of candidates) {
+        const port = readPortValue(candidate);
+        if (port !== null) return port;
+      }
+    } catch {
+      // Ignore invalid config file while loading startup config.
+    }
+  }
+
+  return null;
+};
+
 export const loadAppConfig = (argv: string[], projectRoot: string): AppConfig => {
   const apiKeyArg = parseApiKeyArg(argv);
   const apiKey = apiKeyArg || process.env.JULES_API_KEY || process.env.JULES_KEY || loadApiKeyFromSettings(projectRoot);
   const baseUrl = process.env.JULES_API_BASE_URL || "https://jules.googleapis.com/v1alpha";
-  const dashboardPort = parseInt(process.env.DASHBOARD_PORT || "4444", 10);
+  const dashboardPort = readPortValue(process.env.DASHBOARD_PORT) || loadDashboardPortFromConfigJson(projectRoot) || 4444;
 
   return {
     apiKey,

@@ -1,6 +1,8 @@
 import express, { type Express } from "express";
 import * as fs from "fs";
 import * as path from "path";
+import type { Server } from "http";
+import { createServer } from "http";
 import type { DashboardSettings, ExternalSettingsHints, GitTrackingStatus, JulesActivity } from "../contracts/app-types.js";
 
 export interface DashboardServerOptions {
@@ -17,7 +19,36 @@ export interface DashboardServerOptions {
   rerunTask: (taskId: string) => Promise<unknown>;
 }
 
-export const setupDashboardServer = async (options: DashboardServerOptions): Promise<void> => {
+export interface DashboardServerHandle {
+  port: number;
+  server: Server;
+}
+
+const bindDashboardServer = async (app: Express, startPort: number): Promise<DashboardServerHandle> => {
+  let port = Math.max(1, Math.min(65535, Math.round(startPort)));
+
+  while (port <= 65535) {
+    try {
+      const server = await new Promise<Server>((resolve, reject) => {
+        const listeningServer = createServer(app);
+        listeningServer.listen(port, "127.0.0.1", () => resolve(listeningServer));
+        listeningServer.on("error", reject);
+      });
+      return { port, server };
+    } catch (error) {
+      const message = error as NodeJS.ErrnoException;
+      if (message.code !== "EADDRINUSE") {
+        throw error;
+      }
+      console.error(`Warning: Dashboard port ${port} is already in use. Trying ${port + 1}...`);
+      port += 1;
+    }
+  }
+
+  throw new Error("No available dashboard port found in range 1-65535.");
+};
+
+export const setupDashboardServer = async (options: DashboardServerOptions): Promise<DashboardServerHandle> => {
   const {
     app,
     dashboardDir,
@@ -100,19 +131,11 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   const staticDir = fs.existsSync(builtDashboardDir) ? builtDashboardDir : path.resolve(dashboardDir);
   app.use(express.static(staticDir));
 
-  await new Promise<void>((resolve) => {
-    app.listen(port, "localhost", () => {
-      console.error(`\n🚀 [DASHBOARD] Live status available at:`);
-      console.error(`   - http://localhost:${port}`);
-      console.error(`   - http://127.0.0.1:${port}\n`);
-      resolve();
-    }).on("error", (err: any) => {
-      if (err.code === "EADDRINUSE") {
-        console.error(`Warning: Dashboard port ${port} is already in use. Dashboard will not be available.`);
-      } else {
-        console.error(`Warning: Failed to start dashboard server: ${err.message}`);
-      }
-      resolve();
-    });
-  });
+  const handle = await bindDashboardServer(app, port);
+
+  console.error(`\n🚀 [DASHBOARD] Live status available at:`);
+  console.error(`   - http://localhost:${handle.port}`);
+  console.error(`   - http://127.0.0.1:${handle.port}\n`);
+
+  return handle;
 };

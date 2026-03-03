@@ -70,6 +70,7 @@ export class JulesAgentServer {
   private agentToolHandler: AgentToolHandler;
   private activityCacheService: ActivityCacheService;
   private taskRerunService: TaskRerunService;
+  private dashboardRuntimePort: number | null = null;
 
   constructor(options: JulesAgentServerOptions) {
     this.projectRoot = options.projectRoot;
@@ -121,6 +122,7 @@ export class JulesAgentServer {
     this.sprintOrchestrator = new SprintOrchestrator({
       settings: this.settings,
       dashboardPort: this.appConfig.dashboardPort,
+      getDashboardPort: () => this.getDashboardPort(),
       completedSprints: this.completedSprints,
       getConsecutiveFailures: () => this.consecutiveFailures,
       setConsecutiveFailures: (value: number) => {
@@ -297,7 +299,8 @@ export class JulesAgentServer {
   }
 
   private getDashboardPort(): number {
-    return this.settings.dashboardPort || this.appConfig.dashboardPort;
+    if (this.dashboardRuntimePort !== null) return this.dashboardRuntimePort;
+    return this.dashboardSettings.dashboardPort || this.settings.dashboardPort || this.appConfig.dashboardPort;
   }
 
   private getMissingJulesApiKeyInstruction(): string {
@@ -349,7 +352,7 @@ export class JulesAgentServer {
     const dashboardDir = path.join(this.projectRoot, "dashboard");
     const port = this.getDashboardPort();
 
-    await setupDashboardServer({
+    const handle = await setupDashboardServer({
       app: this.app,
       dashboardDir,
       port,
@@ -372,6 +375,7 @@ export class JulesAgentServer {
         return task;
       },
     });
+    this.dashboardRuntimePort = handle.port;
   }
 
   private async persistTaskMergedFlag(args: {

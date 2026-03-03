@@ -22,6 +22,7 @@ describe("SettingsRepository", () => {
     const { repo } = await createRepo();
     const settings = repo.getSettings();
     expect(settings.automationLevel).toBe("SEMI_AUTO");
+    expect(settings.dashboardPort).toBe(4444);
     expect(settings.automationInterventions.autoApprovePlan).toBe(true);
     expect(settings.automationInterventions.autoAnswerClarification).toBe(false);
     expect(settings.aiProvider.provider).toBe("jules");
@@ -42,7 +43,7 @@ describe("SettingsRepository", () => {
     expect(settings.cliWorkflow.retryOnReadFileNotFound).toBe(true);
     expect(settings.cliWorkflow.resumeFailedTaskInSameWorkspace).toBe(true);
     expect(settings.cliWorkflow.executionMode).toBe("HOST");
-    expect(settings.cliWorkflow.containerImage).toBe("node:22-bookworm-slim");
+    expect(settings.cliWorkflow.containerImage).toBe("node:24-bookworm");
     expect(settings.cliWorkflow.containerMountCredentials).toBe(false);
     expect(settings.cliWorkflow.containerMountGeminiAuth).toBe(true);
     expect(settings.cliWorkflow.containerGeminiAuthPath).toBe("~/.gemini");
@@ -58,6 +59,7 @@ describe("SettingsRepository", () => {
   it("persists and reads settings", async () => {
     const { repo, dbPath } = await createRepo();
     const saved = repo.saveSettings({
+      dashboardPort: 4450,
       automationLevel: "ALWAYS_ASK",
       automationInterventions: {
         autoApprovePlan: false,
@@ -115,7 +117,7 @@ describe("SettingsRepository", () => {
         retryOnReadFileNotFound: true,
         resumeFailedTaskInSameWorkspace: true,
         executionMode: "DOCKER",
-        containerImage: "node:22-bookworm-slim",
+        containerImage: "node:24-bookworm",
         containerSetupScriptPath: ".jules-subagents/container/setup.sh",
         containerMountCredentials: true,
         containerMountGitConfig: true,
@@ -139,6 +141,7 @@ describe("SettingsRepository", () => {
     });
 
     expect(saved.automationLevel).toBe("ALWAYS_ASK");
+    expect(saved.dashboardPort).toBe(4450);
     expect(saved.automationInterventions.autoApprovePlan).toBe(false);
     expect(saved.automationInterventions.autoAnswerClarification).toBe(true);
     expect(saved.automationInterventions.autoResumePaused).toBe(true);

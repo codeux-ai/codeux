@@ -5,6 +5,7 @@ describe("dashboard settings helpers", () => {
   it("returns fresh default objects", () => {
     const first = cloneDefaultSettings();
     const second = cloneDefaultSettings();
+    first.dashboardPort = 4999;
     first.git.defaultBranch = "develop";
     first.aiProvider.providers.gemini.model = "gemini-2.5-pro";
     first.sprintLoopSteps.watchLoopIntervalSeconds = 45;
@@ -17,6 +18,7 @@ describe("dashboard settings helpers", () => {
     first.cliWorkflow.containerImage = "custom:image";
     first.mcpTools[0].enabled = false;
     expect(second.git.defaultBranch).toBe("main");
+    expect(second.dashboardPort).toBe(4444);
     expect(second.aiProvider.providers.gemini.model).toBe("default");
     expect(second.sprintLoopSteps.watchLoopIntervalSeconds).toBe(120);
     expect(second.sprintLoopSteps.watchLoopOutputIntervalSeconds).toBe(300);
@@ -25,7 +27,7 @@ describe("dashboard settings helpers", () => {
     expect(second.cliWorkflow.cleanupWorktreeOnFailure).toBe(false);
     expect(second.cliWorkflow.resumeFailedTaskInSameWorkspace).toBe(true);
     expect(second.cliWorkflow.executionMode).toBe("HOST");
-    expect(second.cliWorkflow.containerImage).toBe("node:22-bookworm-slim");
+    expect(second.cliWorkflow.containerImage).toBe("node:24-bookworm");
     expect(second.mcpTools[0].enabled).toBe(true);
   });
 

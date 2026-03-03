@@ -99,7 +99,7 @@ export const CliWorkflowSection: FunctionComponent<SettingsSectionProps> = ({ se
                 },
               })
             }
-            placeholder="node:22-bookworm-slim"
+            placeholder="node:24-bookworm"
             className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
           />
         </label>

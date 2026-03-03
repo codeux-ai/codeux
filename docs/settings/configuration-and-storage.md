@@ -13,6 +13,7 @@ This guide explains runtime config sources, precedence, and persistence.
 Additional startup config:
 - `JULES_API_BASE_URL` (default: `https://jules.googleapis.com/v1alpha`)
 - `DASHBOARD_PORT` (default: `4444`)
+  - if not set, `config.json` is checked (`dashboardPort`, `DASHBOARD_PORT`, `dashboard.port`, `dashboard.dashboardPort`)
 - `JULES_DOCKER_HOST_WORKSPACE_ROOT` (optional path mapping for Docker-in-Docker/remote-daemon setups)
 - `JULES_DOCKER_HOST_HOME_ROOT` (optional home-dir path mapping for Docker credential mounts)
 
@@ -44,6 +45,7 @@ Legacy migration:
 ## Persisted Dashboard Settings Model
 
 Top-level fields:
+- `dashboardPort`
 - `automationLevel`
 - `automationInterventions`
 - `aiProvider`
@@ -157,3 +159,15 @@ Git manager skill toggles are mode-aware:
 - Keep secrets in environment or local secured settings.
 - Use dashboard settings for behavior toggles, not hardcoded logic edits.
 - Treat sqlite DB as local runtime state, not source-of-truth config for production deployment.
+
+## Dashboard Port Resolution
+
+Runtime precedence for dashboard port is:
+1. Bound runtime port (actual listening port; may differ when fallback increments)
+2. Dashboard settings (`dashboardPort`) in sqlite settings
+3. `.jules-subagents/settings.json` (`dashboardPort`)
+4. `.env` (`DASHBOARD_PORT`)
+5. `config.json`
+6. Default `4444`
+
+If the configured port is already occupied, startup automatically increments by one (`4444`, `4445`, `4446`, ...) until a free port is found.

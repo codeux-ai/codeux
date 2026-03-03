@@ -62,6 +62,7 @@ Default URL:
 - `http://localhost:4444`
 
 The dashboard starts automatically when the server starts.
+If `4444` is occupied, startup automatically retries `4445`, `4446`, and so on.
 
 ## Verify Health via API Endpoints
 
@@ -87,7 +88,7 @@ curl http://localhost:4444/api/git-status
 - `Jules API Key is missing`
   - Confirm key source and priority order.
 - Dashboard port in use
-  - Set `DASHBOARD_PORT` env var to another port.
+  - Set `DASHBOARD_PORT` in `.env`, or configure `dashboardPort` in `config.json` or Dashboard Settings.
 - Remote mode has no PR/CI data
   - Verify `gh` is installed and authenticated.
 

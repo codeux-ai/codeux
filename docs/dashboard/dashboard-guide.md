@@ -8,8 +8,12 @@ Default URL:
 - `http://localhost:4444`
 
 Configured by:
-- `DASHBOARD_PORT` environment variable
+- dashboard settings (`dashboardPort`)
+- `.env` (`DASHBOARD_PORT`)
+- `config.json` (`dashboardPort` / `DASHBOARD_PORT` / `dashboard.port`)
 - fallback default `4444`
+
+If the requested port is busy, startup automatically retries the next port (`+1`) until it finds a free port.
 
 ## API Endpoints Used by Dashboard
 
@@ -42,6 +46,7 @@ Implemented in `src/server/dashboard-server.ts`.
 
 ### Settings view
 - Basic settings
+  - includes `Dashboard Port` field
 - AI provider settings
 - Git settings
 - CI Intelligence settings

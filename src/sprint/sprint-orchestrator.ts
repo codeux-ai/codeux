@@ -41,6 +41,7 @@ import type {
 export interface SprintOrchestratorDependencies {
   settings: Settings;
   dashboardPort: number;
+  getDashboardPort?: () => number;
   completedSprints: Set<number>;
   getConsecutiveFailures: () => number;
   setConsecutiveFailures: (value: number) => void;
@@ -72,6 +73,10 @@ export class SprintOrchestrator {
   private readonly ciAutofixRetryCounts = new Map<string, number>();
 
   constructor(private readonly deps: SprintOrchestratorDependencies) {}
+
+  private getDashboardPort(): number {
+    return this.deps.getDashboardPort?.() || this.deps.settings.dashboardPort || this.deps.dashboardPort;
+  }
 
   private getLoopStepSettings(): SprintLoopStepSettings {
     return {
@@ -680,7 +685,7 @@ export class SprintOrchestrator {
     if (watchEnabled) {
       let allFinished = false;
       const watchStartedAt = Date.now();
-      const dashboardPort = this.deps.settings.dashboardPort || this.deps.dashboardPort;
+      const dashboardPort = this.getDashboardPort();
       let fullReport = await this.renderInstruction(
         "watchHeader",
         {
@@ -836,7 +841,7 @@ export class SprintOrchestrator {
       featureBranchPrefix: this.deps.getDashboardSettings().git.featureBranchPrefix,
     });
 
-    const dashboardPort = this.deps.settings.dashboardPort || this.deps.dashboardPort;
+    const dashboardPort = this.getDashboardPort();
     let report = `### Sprint ${args.sprint_number} Orchestration Report\n\n`;
     report += `**Feature Branch:** \`${defaultFeatureBranch}\`\n`;
     report += `**Dashboard:** [http://localhost:${dashboardPort}](http://localhost:${dashboardPort})\n\n`;

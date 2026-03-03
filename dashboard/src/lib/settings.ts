@@ -1,6 +1,7 @@
 import type { DashboardSettings, ExternalSettingsHints } from "../types.js";
 
 export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
+  dashboardPort: 4444,
   automationLevel: "SEMI_AUTO",
   automationInterventions: {
     autoApprovePlan: true,
@@ -82,7 +83,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     retryOnReadFileNotFound: true,
     resumeFailedTaskInSameWorkspace: true,
     executionMode: "HOST",
-    containerImage: "node:22-bookworm-slim",
+    containerImage: "node:24-bookworm",
     containerSetupScriptPath: "",
     containerMountCredentials: false,
     containerMountGitConfig: true,
@@ -124,6 +125,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
 };
 
 export const cloneDefaultSettings = (): DashboardSettings => ({
+  dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
   automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
   automationInterventions: { ...DEFAULT_DASHBOARD_SETTINGS.automationInterventions },
   aiProvider: {

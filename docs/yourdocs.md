@@ -391,7 +391,7 @@ Allow background Gemini/Codex runs to execute in isolated containers while prese
 
 `cliWorkflow` now includes:
 - `executionMode` (`HOST|DOCKER`, default `HOST`)
-- `containerImage` (default `node:22-bookworm-slim`)
+- `containerImage` (default `node:24-bookworm`)
 - `containerSetupScriptPath` (optional)
 - `containerMountCredentials` (master toggle, default `false`)
 - Credential mount toggles and paths:

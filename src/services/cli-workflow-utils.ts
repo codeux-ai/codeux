@@ -6,7 +6,7 @@ export const DEFAULT_CLI_WORKFLOW_SETTINGS: CliWorkflowSettings = {
   retryOnReadFileNotFound: true,
   resumeFailedTaskInSameWorkspace: true,
   executionMode: "HOST",
-  containerImage: "node:22-bookworm",
+  containerImage: "node:24-bookworm",
   containerSetupScriptPath: "",
   containerMountCredentials: false,
   containerMountGitConfig: true,

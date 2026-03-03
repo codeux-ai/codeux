@@ -34,6 +34,13 @@ const readBoolean = (value: unknown, fallback: boolean): boolean => (typeof valu
 const readString = (value: unknown, fallback: string): string => (typeof value === "string" ? value : fallback);
 const readInteger = (value: unknown, fallback: number): number =>
   (typeof value === "number" && Number.isFinite(value) ? Math.round(value) : fallback);
+const readPort = (value: unknown, fallback: number): number => {
+  const parsed = typeof value === "string" ? Number.parseInt(value, 10) : readInteger(value, fallback);
+  if (!Number.isFinite(parsed)) return fallback;
+  const rounded = Math.round(parsed);
+  if (rounded < 1 || rounded > 65535) return fallback;
+  return rounded;
+};
 const readFeaturePrAutoMergeMode = (value: unknown, fallback: FeaturePrAutoMergeMode): FeaturePrAutoMergeMode => {
   if (typeof value === "string" && FEATURE_PR_AUTOMERGE_MODES.includes(value as FeaturePrAutoMergeMode)) {
     return value as FeaturePrAutoMergeMode;
@@ -91,6 +98,7 @@ const sanitizeMcpTools = (value: unknown): McpToolToggle[] => {
 };
 
 export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardSettings => ({
+  dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
   automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
   automationInterventions: {
     ...DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
@@ -179,6 +187,7 @@ const normalizeProviderSettings = (
 
 export const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints): DashboardSettings => {
   const input = (value && typeof value === "object" ? value : {}) as Partial<DashboardSettings>;
+  const dashboardPort = readPort(input.dashboardPort, DEFAULT_DASHBOARD_SETTINGS.dashboardPort);
   const automationLevel = input.automationLevel;
   const validAutomationLevel = automationLevel === "FULL" || automationLevel === "SEMI_AUTO" || automationLevel === "ALWAYS_ASK"
     ? automationLevel
@@ -407,6 +416,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const mcpTools = sanitizeMcpTools(input.mcpTools);
 
   return {
+    dashboardPort,
     automationLevel: validAutomationLevel,
     automationInterventions,
     aiProvider,

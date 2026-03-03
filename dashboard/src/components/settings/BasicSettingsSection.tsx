@@ -7,6 +7,24 @@ import type { SettingsSectionProps } from "./types.js";
 export const BasicSettingsSection: FunctionComponent<SettingsSectionProps> = ({ settings, onChange }) => (
   <SettingsCard title="Basic Settings">
     <label className="block space-y-2">
+      <FieldLabel>Dashboard Port</FieldLabel>
+      <input
+        type="number"
+        min={1}
+        max={65535}
+        step={1}
+        value={settings.dashboardPort}
+        onInput={(event) =>
+          onChange({
+            ...settings,
+            dashboardPort: Math.max(1, Math.min(65535, Number.parseInt(event.currentTarget.value || "4444", 10) || 4444)),
+          })
+        }
+        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+      />
+      <p className="text-[11px] text-slate-500">Default `4444`. If the port is occupied, server startup automatically tries the next port.</p>
+    </label>
+    <label className="block space-y-2">
       <FieldLabel>Automation Level</FieldLabel>
       <select
         value={settings.automationLevel}
