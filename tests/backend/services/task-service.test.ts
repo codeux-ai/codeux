@@ -5,11 +5,12 @@ describe("TaskService", () => {
   const createSession = vi.fn();
   const getGuideContent = vi.fn();
   const startCliTask = vi.fn();
+  const resolveJulesSourceId = vi.fn();
 
   const service = new TaskService({
     julesApi: { createSession } as any,
     guideRepository: { getGuideContent } as any,
-    normalizeSourceName: (sourceId: string) => `sources/${sourceId}`,
+    resolveJulesSourceId,
     getDashboardSettings: () => ({
       aiProvider: {
         provider: "jules",
@@ -29,6 +30,9 @@ describe("TaskService", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resolveJulesSourceId.mockImplementation(async ({ sourceId }: { sourceId?: string }) =>
+      sourceId?.startsWith("sources/") ? sourceId : `sources/${sourceId || "auto"}`
+    );
   });
 
   it("creates task_agent session with worker guide injected", async () => {
@@ -68,6 +72,23 @@ describe("TaskService", () => {
     expect(payload.prompt).toBe("Raw prompt only");
   });
 
+  it("auto-resolves source id when omitted", async () => {
+    getGuideContent.mockResolvedValue("Rules");
+    createSession.mockResolvedValue({ id: "s-auto" });
+
+    await service.createTaskAgentSession({
+      prompt: "Auto source",
+      repo_path: "/tmp/repo",
+    });
+
+    expect(resolveJulesSourceId).toHaveBeenCalledWith({
+      repoPath: "/tmp/repo",
+      sourceId: undefined,
+    });
+    const payload = createSession.mock.calls[0][0];
+    expect(payload.sourceContext.source).toBe("sources/auto");
+  });
+
   it("creates sprint task session payload with sprint metadata", async () => {
     getGuideContent.mockResolvedValue("Rules");
     createSession.mockResolvedValue({ id: "s3" });
@@ -97,7 +118,7 @@ describe("TaskService", () => {
     const fallbackService = new TaskService({
       julesApi: { createSession } as any,
       guideRepository: { getGuideContent } as any,
-      normalizeSourceName: (sourceId: string) => `sources/${sourceId}`,
+      resolveJulesSourceId,
       getDashboardSettings: () => ({
         aiProvider: {
           provider: "jules",

@@ -12,9 +12,9 @@ Call the `sprint_agent` tool with the following parameters:
 - `action`: "orchestrate"
 - `wait`: true
 - `sprint_number`: <The current sprint number>
-- `repo_path`: <The local repository path>
-- `source_id`: <The Jules source ID>
 - `feature_branch`: <The sprint's feature branch>
+
+`source_id` is optional and only needed as an override when Jules source auto-resolution is unavailable.
 
 ## Protocol
 1.  **Sync**: Ensure your local state is synced with the remote feature branch.

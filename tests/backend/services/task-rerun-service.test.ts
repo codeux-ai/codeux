@@ -115,7 +115,7 @@ describe("TaskRerunService", () => {
   });
 
   it("rejects rerun when sprint context is incomplete", async () => {
-    status.source_id = undefined;
+    status.repo_path = undefined;
 
     await expect(service.rerunTask("01-task")).rejects.toThrow("sprint context is incomplete");
     expect(startTask).not.toHaveBeenCalled();

@@ -149,8 +149,7 @@ export const TOOL_DEFINITIONS = [
       type: "object",
       properties: {
         sprint_number: { type: "number", description: "The sprint number (e.g., 34)." },
-        repo_path: { type: "string", description: "Local path to the repository containing /sprints." },
-        source_id: { type: "string", description: "The Jules source ID." },
+        source_id: { type: "string", description: "Optional Jules source ID override. If omitted, it is auto-resolved from repo git remote when Jules is used." },
         feature_branch: { type: "string", description: "The main feature branch for this sprint." },
         action: {
           type: "string",
@@ -160,7 +159,7 @@ export const TOOL_DEFINITIONS = [
         wait: { type: "boolean", description: "Whether to wait and watch for all tasks to complete (poll interval is configurable in dashboard settings, default 120s). Defaults to true for 'status' and 'orchestrate'.", default: true },
         retry_failed: { type: "boolean", description: "Whether to automatically retry failed tasks. Defaults to true.", default: true },
       },
-      required: ["sprint_number", "repo_path", "source_id", "action"],
+      required: ["sprint_number", "action"],
     },
   },
   {
@@ -170,13 +169,12 @@ export const TOOL_DEFINITIONS = [
       type: "object",
       properties: {
         prompt: { type: "string", description: "The specific task to perform." },
-        source_id: { type: "string", description: "The Jules source ID (e.g., 'sources/123')." },
-        repo_path: { type: "string", description: "Local path to the repository to find worker.md." },
+        source_id: { type: "string", description: "Optional Jules source ID override (e.g., 'sources/123'). Auto-resolved from repo path when omitted." },
         title: { type: "string", description: "Optional title for the session." },
         branch: { type: "string", description: "Optional starting branch." },
         wait: { type: "boolean", description: "Whether to wait for the task to reach a terminal state (COMPLETED/FAILED).", default: false }
       },
-      required: ["prompt", "source_id", "repo_path"],
+      required: ["prompt"],
     },
   },
 ] as const;

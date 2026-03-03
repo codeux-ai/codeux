@@ -148,6 +148,7 @@ export class CliWorkflowService {
 
       await this.withRepoLock(args.repoPath, async () => {
         await fs.mkdir(path.dirname(worktreePath), { recursive: true });
+        await this.runCommand("git", ["fetch", "origin"], args.repoPath);
         if (args.resumeFromFailedSessionId) {
           const resumablePath = await this.resolveResumableWorktreePath(
             args.repoPath,
@@ -163,7 +164,6 @@ export class CliWorkflowService {
         }
         await this.removeWorktree(args.repoPath, worktreePath);
         await this.runCommand("git", ["worktree", "prune"], args.repoPath);
-        await this.runCommand("git", ["fetch", "origin"], args.repoPath);
         await this.runCommand(
           "git",
           ["worktree", "add", "--force", "-B", args.workerBranch, worktreePath, `origin/${args.featureBranch}`],
@@ -181,6 +181,18 @@ export class CliWorkflowService {
           originator: "system",
           description: `Resumed failed workspace from ${args.resumeFromFailedSessionId} on branch ${args.workerBranch}.`,
         });
+        try {
+          await this.runCommand("git", ["merge", "--ff-only", `origin/${args.featureBranch}`], worktreePath);
+          this.deps.sessionTracking.appendActivity(args.sessionId, {
+            originator: "system",
+            description: `Synced resumed workspace with latest origin/${args.featureBranch} (fast-forward).`,
+          });
+        } catch {
+          this.deps.sessionTracking.appendActivity(args.sessionId, {
+            originator: "system",
+            description: `Resumed workspace has task commits and could not fast-forward to origin/${args.featureBranch}; continuing on existing branch state.`,
+          });
+        }
       } else if (args.resumeFromFailedSessionId) {
         this.deps.sessionTracking.appendActivity(args.sessionId, {
           originator: "system",

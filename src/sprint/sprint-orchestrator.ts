@@ -50,7 +50,7 @@ export interface SprintOrchestratorDependencies {
   fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<any[]>;
   listSessions: () => Promise<{ sessions?: JulesSession[] }>;
   loadSubtasks: (dir: string) => Promise<Subtask[]>;
-  startTask: (task: Subtask, sourceId: string, baseBranch: string, repoPath: string, sprintNumber: number) => Promise<JulesSession>;
+  startTask: (task: Subtask, sourceId: string | undefined, baseBranch: string, repoPath: string, sprintNumber: number) => Promise<JulesSession>;
   getGuideContent: (guideName: string, repoPath?: string) => Promise<string>;
   updateLastStatus: (status: any) => void;
   getDashboardSettings: () => DashboardSettings;
@@ -103,7 +103,8 @@ export class SprintOrchestrator {
   }
 
   private async renderBranchBlocker(
-    args: SprintAgentArgs,
+    args: Pick<SprintAgentArgs, "action">,
+    repoPath: string,
     defaultFeatureBranch: string,
     existsLocal: boolean,
     existsRemote: boolean
@@ -123,21 +124,21 @@ export class SprintOrchestrator {
         create_branch_step: createBranchStep,
         push_branch_step: pushBranchStep,
       },
-      args.repo_path
+      repoPath
     );
   }
 
-  private async renderPlanningBlocker(args: SprintAgentArgs, subtasksDir: string): Promise<string> {
+  private async renderPlanningBlocker(subtasksDir: string, repoPath: string): Promise<string> {
     return await this.renderInstruction(
       "planningMissing",
       {
         subtasks_dir: subtasksDir,
       },
-      args.repo_path
+      repoPath
     );
   }
 
-  private async runPlanningAction(args: SprintAgentArgs, subtasksDir: string): Promise<any> {
+  private async runPlanningAction(args: SprintAgentArgs, subtasksDir: string, repoPath: string): Promise<any> {
     try {
       await fs.access(subtasksDir);
       return { content: [{ type: "text", text: `Subtasks directory already exists: ${subtasksDir}.` }] };
@@ -146,7 +147,7 @@ export class SprintOrchestrator {
 
       let planningGuideBlock = "";
       try {
-        const planningGuide = await this.deps.getGuideContent("sprint_agent_guide.md", args.repo_path);
+        const planningGuide = await this.deps.getGuideContent("sprint_agent_guide.md", repoPath);
         planningGuideBlock = `\n\n### Technical Operating Standard\n\n${planningGuide}\n`;
       } catch {
         // Guide is optional.
@@ -159,7 +160,7 @@ export class SprintOrchestrator {
           subtasks_dir: subtasksDir,
           planning_guide_block: planningGuideBlock,
         },
-        args.repo_path
+        repoPath
       );
 
       return { content: [{ type: "text", text }] };
@@ -172,7 +173,7 @@ export class SprintOrchestrator {
     automationInterventions: AutomationInterventionsSettings;
     sprintNumber: number;
     repoPath: string;
-    sourceId: string;
+    sourceId?: string;
     defaultFeatureBranch: string;
     subtasksDir: string;
     retryFailed: boolean;
@@ -612,7 +613,8 @@ export class SprintOrchestrator {
   }
 
   async execute(args: SprintAgentArgs): Promise<any> {
-    const sprintsDir = path.join(args.repo_path, ".jules-subagents", "sprints");
+    const repoPath = typeof args.repo_path === "string" && args.repo_path.trim().length > 0 ? args.repo_path : process.cwd();
+    const sprintsDir = path.join(repoPath, ".jules-subagents", "sprints");
     const subtasksDir = path.join(sprintsDir, `sprint${args.sprint_number}-subtasks`);
     const defaultFeatureBranch = args.feature_branch || `feature/sprint${args.sprint_number}-implementation`;
     const defaultBranch = typeof this.deps.settings.defaultBranch === "string" && this.deps.settings.defaultBranch.trim().length > 0
@@ -641,9 +643,9 @@ export class SprintOrchestrator {
     }
 
     if (loopSteps.branchPreflight && (args.action === "plan" || args.action === "orchestrate")) {
-      const { existsLocal, existsRemote } = runBranchPreflightStep(args.repo_path, defaultFeatureBranch);
+      const { existsLocal, existsRemote } = runBranchPreflightStep(repoPath, defaultFeatureBranch);
       if (!existsLocal || !existsRemote) {
-        const branchBlocker = await this.renderBranchBlocker(args, defaultFeatureBranch, existsLocal, existsRemote);
+        const branchBlocker = await this.renderBranchBlocker(args, repoPath, defaultFeatureBranch, existsLocal, existsRemote);
         return { content: [{ type: "text", text: branchBlocker }] };
       }
     }
@@ -651,7 +653,7 @@ export class SprintOrchestrator {
     if (loopSteps.planningPreflight && (args.action === "orchestrate" || args.action === "status")) {
       const hasSubtasks = await runPlanningPreflightStep(subtasksDir);
       if (!hasSubtasks) {
-        const planningBlocker = await this.renderPlanningBlocker(args, subtasksDir);
+        const planningBlocker = await this.renderPlanningBlocker(subtasksDir, repoPath);
         return { content: [{ type: "text", text: planningBlocker }] };
       }
     }
@@ -661,7 +663,7 @@ export class SprintOrchestrator {
     }
 
     if (args.action === "plan") {
-      return await this.runPlanningAction(args, subtasksDir);
+      return await this.runPlanningAction(args, subtasksDir, repoPath);
     }
 
     const supportsWatchMode = args.action === "orchestrate";
@@ -682,7 +684,7 @@ export class SprintOrchestrator {
           feature_branch: defaultFeatureBranch,
           dashboard_port: dashboardPort,
         },
-        args.repo_path
+        repoPath
       );
       fullReport += "\n";
 
@@ -695,7 +697,7 @@ export class SprintOrchestrator {
           automationLevel,
           automationInterventions,
           sprintNumber: args.sprint_number,
-          repoPath: args.repo_path,
+          repoPath,
           sourceId: args.source_id,
           defaultFeatureBranch,
           subtasksDir,
@@ -711,7 +713,7 @@ export class SprintOrchestrator {
         this.deps.updateLastStatus({
           sprint_number: args.sprint_number,
           source_id: args.source_id,
-          repo_path: args.repo_path,
+          repo_path: repoPath,
           feature_branch: defaultFeatureBranch,
           subtasks,
           reportText,
@@ -739,13 +741,13 @@ export class SprintOrchestrator {
           fullReport += instructions;
 
           if (needsManualMerge) {
-            fullReport += await this.renderInstruction("watchMergeRequired", {}, args.repo_path);
+            fullReport += await this.renderInstruction("watchMergeRequired", {}, repoPath);
           } else if (subtasks.length > 0 && !allTerminal && noMoreActionPossible) {
-            fullReport += await this.renderInstruction("watchNoMoreActions", {}, args.repo_path);
+            fullReport += await this.renderInstruction("watchNoMoreActions", {}, repoPath);
           }
 
           try {
-            const watchGuide = await this.deps.getGuideContent("watch.md", args.repo_path);
+            const watchGuide = await this.deps.getGuideContent("watch.md", repoPath);
             fullReport += `\n---\n\n### Watch Loop Operating Standard\n\n${watchGuide}`;
           } catch {
             // Guide is optional.
@@ -755,17 +757,17 @@ export class SprintOrchestrator {
             try {
               this.deps.completedSprints.add(args.sprint_number);
               await fs.rm(subtasksDir, { recursive: true, force: true });
-              fullReport += await this.renderInstruction("cleanupAllMerged", { subtasks_dir: subtasksDir }, args.repo_path);
+              fullReport += await this.renderInstruction("cleanupAllMerged", { subtasks_dir: subtasksDir }, repoPath);
               fullReport += await runCompletionStep({
                 defaultBranch,
                 featureBranch: defaultFeatureBranch,
                 sprintNumber: args.sprint_number,
                 githubMode,
                 ciIntelligence,
-                renderInstruction: (templateId, variables) => this.renderInstruction(templateId, variables, args.repo_path),
+                renderInstruction: (templateId, variables) => this.renderInstruction(templateId, variables, repoPath),
               });
               fullReport += await this.renderMainMergeCiFeedback({
-                repoPath: args.repo_path,
+                repoPath,
                 featureBranch: defaultFeatureBranch,
                 defaultBranch,
                 featureBranchPrefix: this.deps.getDashboardSettings().git.featureBranchPrefix,
@@ -776,11 +778,11 @@ export class SprintOrchestrator {
               console.error(`Warning: Failed to cleanup subtasks: ${cleanupError}`);
             }
           } else if (subtasks.some((task) => task.status === "FAILED")) {
-            fullReport += await this.renderInstruction("cleanupFailed", { subtasks_dir: subtasksDir }, args.repo_path);
+            fullReport += await this.renderInstruction("cleanupFailed", { subtasks_dir: subtasksDir }, repoPath);
           } else if (subtasks.some((task) => task.status === "COMPLETED" && !task.is_merged)) {
-            fullReport += await this.renderInstruction("cleanupDeferred", {}, args.repo_path);
+            fullReport += await this.renderInstruction("cleanupDeferred", {}, repoPath);
           } else if (subtasks.length === 0) {
-            fullReport += await this.renderInstruction("cleanupEmpty", {}, args.repo_path);
+            fullReport += await this.renderInstruction("cleanupEmpty", {}, repoPath);
           }
 
           fullReport += "\n✅ **Sprint Execution Finished.**\n";
@@ -802,7 +804,7 @@ export class SprintOrchestrator {
               completed_tasks: completedTasks.length,
               failed_tasks: failedTasks.length,
             },
-            args.repo_path
+            repoPath
           );
           return { content: [{ type: "text", text: fullReport }] };
         } else {
@@ -818,7 +820,7 @@ export class SprintOrchestrator {
       automationLevel,
       automationInterventions,
       sprintNumber: args.sprint_number,
-      repoPath: args.repo_path,
+      repoPath,
       sourceId: args.source_id,
       defaultFeatureBranch,
       subtasksDir,
@@ -846,7 +848,7 @@ export class SprintOrchestrator {
     report += instructions;
 
     try {
-      const orchGuide = await this.deps.getGuideContent("orchestrator.md", args.repo_path);
+      const orchGuide = await this.deps.getGuideContent("orchestrator.md", repoPath);
       report += `\n---\n\n### Orchestration Guidance\n\n${orchGuide}`;
     } catch {
       // Guide is optional.
@@ -855,7 +857,7 @@ export class SprintOrchestrator {
     this.deps.updateLastStatus({
       sprint_number: args.sprint_number,
       source_id: args.source_id,
-      repo_path: args.repo_path,
+      repo_path: repoPath,
       feature_branch: defaultFeatureBranch,
       subtasks,
       reportText,

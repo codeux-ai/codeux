@@ -27,7 +27,6 @@ describe("AgentToolHandler", () => {
     const response = await handler.handleTaskAgent({
       prompt: "do work",
       source_id: "123",
-      repo_path: "/tmp/repo",
       wait: false,
     });
 
@@ -36,5 +35,10 @@ describe("AgentToolHandler", () => {
     expect(parsed.hasPullRequest).toBe(true);
     expect(parsed.pullRequests).toEqual([{ url: "https://example.com/pr/new" }]);
     expect(parsed.prompt).toBeUndefined();
+    expect(createTaskAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo_path: process.cwd(),
+      })
+    );
   });
 });

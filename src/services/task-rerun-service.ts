@@ -18,7 +18,7 @@ export interface TaskRerunServiceDependencies {
   updateStatus: (status: TaskRerunContext) => void;
   startTask: (args: {
     task: Subtask;
-    sourceId: string;
+    sourceId?: string;
     featureBranch: string;
     repoPath: string;
     sprintNumber: number;
@@ -49,13 +49,13 @@ export class TaskRerunService {
   async rerunTask(taskId: string): Promise<Subtask> {
     const status = this.deps.getStatus();
     const sprintNumber = typeof status.sprint_number === "number" ? status.sprint_number : null;
-    const sourceId = typeof status.source_id === "string" && status.source_id.trim().length > 0 ? status.source_id.trim() : null;
+    const sourceId = typeof status.source_id === "string" && status.source_id.trim().length > 0 ? status.source_id.trim() : undefined;
     const repoPath = typeof status.repo_path === "string" && status.repo_path.trim().length > 0 ? status.repo_path.trim() : null;
     const featureBranch =
       typeof status.feature_branch === "string" && status.feature_branch.trim().length > 0 ? status.feature_branch.trim() : null;
     const subtasks = Array.isArray(status.subtasks) ? status.subtasks : [];
 
-    if (sprintNumber === null || sourceId === null || repoPath === null || featureBranch === null) {
+    if (sprintNumber === null || repoPath === null || featureBranch === null) {
       throw new Error("Cannot rerun task: sprint context is incomplete. Run orchestration/status first.");
     }
 

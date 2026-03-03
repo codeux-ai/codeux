@@ -55,8 +55,7 @@ export class AgentToolHandler {
 
   async handleTaskAgent(args: {
     prompt: string;
-    source_id: string;
-    repo_path: string;
+    source_id?: string;
     title?: string;
     branch?: string;
     wait?: boolean;
@@ -69,7 +68,10 @@ export class AgentToolHandler {
     }
 
     try {
-      const session = await this.deps.taskService.createTaskAgentSession(args);
+      const session = await this.deps.taskService.createTaskAgentSession({
+        ...args,
+        repo_path: process.cwd(),
+      });
       this.deps.setConsecutiveFailures(0);
 
       if (args.wait) {

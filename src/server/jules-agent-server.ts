@@ -35,6 +35,7 @@ import { CliWorkflowService } from "../services/cli-workflow-service.js";
 import { ActivityCacheService } from "./activity-cache-service.js";
 import { registerMcpRequestHandlers } from "./mcp-request-router.js";
 import { TaskRerunService } from "../services/task-rerun-service.js";
+import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 
 export interface JulesAgentServerOptions {
   projectRoot: string;
@@ -57,6 +58,7 @@ export class JulesAgentServer {
   private guideRepository: GuideRepository;
   private subtaskRepository: SubtaskRepository;
   private taskService: TaskService;
+  private julesSourceResolver: JulesSourceResolver;
   private sprintOrchestrator: SprintOrchestrator;
   private settingsRepository: SettingsRepository;
   private dashboardSettings: DashboardSettings;
@@ -95,6 +97,7 @@ export class JulesAgentServer {
     this.subtaskRepository = new SubtaskRepository();
     this.instructionService = new InstructionService(this.projectRoot);
     this.sessionTracking = new SessionTrackingRepository();
+    this.julesSourceResolver = new JulesSourceResolver(this.julesApi);
     this.cliWorkflowService = new CliWorkflowService({
       sessionTracking: this.sessionTracking,
       getDashboardSettings: () => this.dashboardSettings,
@@ -106,7 +109,11 @@ export class JulesAgentServer {
       guideRepository: {
         getGuideContent: (guideName: string, repoPath?: string) => this.getGuideContentIfEnabled(guideName, repoPath),
       },
-      normalizeSourceName: (sourceId: string) => this.normalizeName("sources", sourceId),
+      resolveJulesSourceId: (args: { repoPath: string; sourceId?: string }) =>
+        this.julesSourceResolver.resolveSourceId({
+          repoPath: args.repoPath,
+          requestedSourceId: args.sourceId,
+        }),
       getDashboardSettings: () => this.dashboardSettings,
       isJulesApiConfigured: () => this.isJulesApiConfigured(),
       cliWorkflowService: this.cliWorkflowService,
@@ -125,7 +132,7 @@ export class JulesAgentServer {
       fetchRecentActivities: (sessionName: string, pageSize?: number) => this.fetchRecentActivities(sessionName, pageSize),
       listSessions: () => this.listSessionsForSync(),
       loadSubtasks: (dir: string) => this.subtaskRepository.loadSubtasks(dir),
-      startTask: (task: Subtask, sourceId: string, baseBranch: string, repoPath: string, sprintNumber: number) =>
+      startTask: (task: Subtask, sourceId: string | undefined, baseBranch: string, repoPath: string, sprintNumber: number) =>
         this.taskService.startSprintTask(task, sourceId, baseBranch, repoPath, sprintNumber),
       getGuideContent: (guideName: string, repoPath?: string) => this.getGuideContentIfEnabled(guideName, repoPath),
       updateLastStatus: (status: any) => {

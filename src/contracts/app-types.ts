@@ -1,6 +1,7 @@
 export interface JulesSource {
   name: string;
   id: string;
+  [key: string]: unknown;
 }
 
 export interface JulesSession {

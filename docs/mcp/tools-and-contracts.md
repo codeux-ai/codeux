@@ -105,11 +105,14 @@ Unknown tool names raise MCP `MethodNotFound`.
 ### `task_agent` behavior
 - Injects `worker.md` into prompt when guide is found.
 - Creates session with `AUTO_CREATE_PR`.
+- `source_id` is optional; when provider is Jules and `source_id` is omitted, source is auto-resolved from the repo's `remote.origin.url`.
+- For Jules sessions, explicit `source_id` values are validated against the repo remote and rejected on mismatch.
 - Optional `wait: true` delegates to session completion wait flow.
 
 ### `sprint_agent` behavior
 - Supports `plan`, `status`, `orchestrate`.
 - Resolves feature branch from dashboard branch scheme when not explicitly passed.
+- `source_id` is optional for orchestration; Jules source resolution only occurs when a Jules task is actually started.
 - Executes atomic loop pipeline and emits markdown protocol instructions.
 - `status` is always single-cycle (instant output); wait-loop mode is only used by `orchestrate`.
 - In automation modes, action-required Jules tasks can be auto-handled (plan approval, clarification replies, paused-session resume) or explicitly routed as `AGENT` vs `HUMAN` intervention in protocol output.

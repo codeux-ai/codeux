@@ -8,7 +8,7 @@ export interface TaskServiceDependencies {
   guideRepository: {
     getGuideContent: (guideName: string, repoPath?: string) => Promise<string>;
   };
-  normalizeSourceName: (sourceId: string) => string;
+  resolveJulesSourceId: (args: { repoPath: string; sourceId?: string }) => Promise<string>;
   getDashboardSettings: () => DashboardSettings;
   isJulesApiConfigured: () => boolean;
   cliWorkflowService: CliWorkflowService;
@@ -16,7 +16,7 @@ export interface TaskServiceDependencies {
 
 export interface TaskAgentSessionArgs {
   prompt: string;
-  source_id: string;
+  source_id?: string;
   repo_path: string;
   title?: string;
   branch?: string;
@@ -73,12 +73,16 @@ export class TaskService {
         sprintNumber: 0,
       });
     }
+    const sourceId = await this.deps.resolveJulesSourceId({
+      repoPath: args.repo_path,
+      sourceId: args.source_id,
+    });
     const fullPrompt = await this.buildPrompt(args.repo_path, "TASK TO EXECUTE", args.prompt);
 
     const data: any = {
       prompt: fullPrompt,
       sourceContext: {
-        source: this.deps.normalizeSourceName(args.source_id),
+        source: sourceId,
       },
       automationMode: "AUTO_CREATE_PR",
     };
@@ -95,7 +99,7 @@ export class TaskService {
     return session;
   }
 
-  async startSprintTask(task: Subtask, sourceId: string, baseBranch: string, repoPath: string, sprintNumber: number): Promise<JulesSession> {
+  async startSprintTask(task: Subtask, sourceId: string | undefined, baseBranch: string, repoPath: string, sprintNumber: number): Promise<JulesSession> {
     const provider = this.resolveProvider(task);
 
     if (provider !== "jules") {
@@ -109,13 +113,17 @@ export class TaskService {
       session.provider = provider;
       return session;
     }
+    const resolvedSourceId = await this.deps.resolveJulesSourceId({
+      repoPath,
+      sourceId,
+    });
     const fullPrompt = await this.buildPrompt(repoPath, "SUBTASK TO EXECUTE", task.prompt);
 
     const data = {
       prompt: fullPrompt,
       title: `Sprint ${sprintNumber}: [${task.id}] ${task.title}`,
       sourceContext: {
-        source: this.deps.normalizeSourceName(sourceId),
+        source: resolvedSourceId,
         githubRepoContext: { startingBranch: baseBranch },
       },
       automationMode: "AUTO_CREATE_PR",

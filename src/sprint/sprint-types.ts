@@ -2,8 +2,8 @@ import type { JulesActivity, JulesSession, Subtask } from "../contracts/app-type
 
 export interface SprintAgentArgs {
   sprint_number: number;
-  repo_path: string;
-  source_id: string;
+  repo_path?: string;
+  source_id?: string;
   feature_branch?: string;
   action: "status" | "orchestrate" | "plan";
   wait?: boolean;
