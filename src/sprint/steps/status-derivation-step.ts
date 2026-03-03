@@ -28,7 +28,7 @@ export const runStatusDerivationStep = (subtasks: Subtask[], options: DeriveStat
       continue;
     }
 
-    if (!task.is_independent) {
+    if (!task.is_independent && task.depends_on.length === 0) {
       task.status = "BLOCKED";
       continue;
     }

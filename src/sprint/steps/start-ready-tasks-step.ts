@@ -26,7 +26,7 @@ export const runStartReadyTasksStep = async (
     );
   }
 
-  const readyTasks = subtasks.filter((task) => task.status === "PENDING" && task.is_independent);
+  const readyTasks = subtasks.filter((task) => task.status === "PENDING");
   for (const task of readyTasks) {
     try {
       const session = await options.startTask(task);
