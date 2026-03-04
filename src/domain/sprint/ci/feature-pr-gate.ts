@@ -19,6 +19,7 @@ import type {
   GitTrackingStatus,
   Subtask,
 } from "../../../contracts/app-types.js";
+import type { SubtaskFileRepository } from "../../../infrastructure/repositories/subtask-file-repository.js";
 
 export interface CiGateContext {
   automationLevel: AutomationLevel;
@@ -34,6 +35,7 @@ export interface CiGateContext {
   isJulesApiConfigured: () => boolean;
   sendSessionMessage: (sessionId: string, message: string) => Promise<void>;
   autoMergeFeaturePr?: (args: { repoPath: string; prNumber: number }) => Promise<{ ok: boolean; message?: string }>;
+  subtaskFileRepository: SubtaskFileRepository;
 }
 
 export interface CiGateResult {
@@ -123,7 +125,11 @@ export class FeaturePrGateService {
         if (mergeResult.ok) {
           task.is_merged = true;
           task.merge_indicator = "AUTOMERGE";
-          await this.persistTaskMergedFlag(context.subtasksDir, task.id);
+          try {
+            await context.subtaskFileRepository.setMerged(context.subtasksDir, task.id, true);
+          } catch {
+            // Keep runtime status update even if file persistence fails.
+          }
           reportText += `🤖 **Auto-Merged:** Task \`${task.id}\` was merged automatically (PR #${pr.number}, mode: always).\n`;
           continue;
         }
@@ -143,7 +149,11 @@ export class FeaturePrGateService {
           if (mergeResult.ok) {
             task.is_merged = true;
             task.merge_indicator = "AUTOMERGE";
-            await this.persistTaskMergedFlag(context.subtasksDir, task.id);
+            try {
+              await context.subtaskFileRepository.setMerged(context.subtasksDir, task.id, true);
+            } catch {
+              // Keep runtime status update even if file persistence fails.
+            }
             reportText += `🤖 **Auto-Merged:** Task \`${task.id}\` was merged automatically (PR #${pr.number}).\n`;
           } else {
             reportText += `⚠️ **Auto-Merge Failed:** Task \`${task.id}\` (PR #${pr.number}) - ${
@@ -297,25 +307,5 @@ export class FeaturePrGateService {
 
     await args.sendSessionMessage(sessionId, prompt);
     return { sent: true };
-  }
-
-  private async persistTaskMergedFlag(subtasksDir: string, taskId: string): Promise<void> {
-    const filePath = path.join(subtasksDir, `${taskId}.md`);
-    try {
-      const content = await fs.readFile(filePath, "utf-8");
-      let updated = content;
-      if (/^\s*merged:\s*(true|false)\s*$/m.test(content)) {
-        updated = content.replace(/^\s*merged:\s*(true|false)\s*$/m, "merged: true");
-      } else if (/^\s*prompt:\s*/m.test(content)) {
-        updated = content.replace(/^\s*prompt:\s*/m, "merged: true\nprompt:");
-      } else {
-        updated = `${content.trimEnd()}\nmerged: true\n`;
-      }
-      if (updated !== content) {
-        await fs.writeFile(filePath, updated, "utf-8");
-      }
-    } catch {
-      // Keep runtime status update even if file persistence fails.
-    }
   }
 }

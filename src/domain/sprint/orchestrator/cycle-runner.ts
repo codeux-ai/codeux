@@ -138,6 +138,7 @@ export class CycleRunner {
           await this.deps.sendSessionMessage(sessionId, message);
         },
         autoMergeFeaturePr: this.deps.autoMergeFeaturePr,
+        subtaskFileRepository: this.deps.subtaskRepository,
       });
       subtasks = ciAutofixResult.subtasks;
       reportText += ciAutofixResult.reportText;
