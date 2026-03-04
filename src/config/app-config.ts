@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import os from "os";
 import { buildCandidatePaths } from "../shared/config/search-paths.js";
+import { readPortValue } from "../shared/config/value-readers.js";
 
 export interface AppConfig {
   apiKey: string | null;
@@ -44,14 +45,6 @@ const loadApiKeyFromSettings = (projectRoot: string): string | null => {
   }
 
   return null;
-};
-
-const readPortValue = (value: unknown): number | null => {
-  const parsed = typeof value === "string" ? Number.parseInt(value, 10) : value;
-  if (typeof parsed !== "number" || !Number.isFinite(parsed)) return null;
-  const rounded = Math.round(parsed);
-  if (rounded < 1 || rounded > 65535) return null;
-  return rounded;
 };
 
 const loadDashboardPortFromConfigJson = (projectRoot: string): number | null => {

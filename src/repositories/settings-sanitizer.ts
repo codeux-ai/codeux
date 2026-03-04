@@ -1,3 +1,9 @@
+import {
+  readBoolean,
+  readString,
+  readInteger,
+  readPort,
+} from "../shared/config/value-readers.js";
 import type {
   CliExecutionMode,
   DashboardSettings,
@@ -30,17 +36,6 @@ import {
   THINKING_MODES,
 } from "./settings-defaults.js";
 
-const readBoolean = (value: unknown, fallback: boolean): boolean => (typeof value === "boolean" ? value : fallback);
-const readString = (value: unknown, fallback: string): string => (typeof value === "string" ? value : fallback);
-const readInteger = (value: unknown, fallback: number): number =>
-  (typeof value === "number" && Number.isFinite(value) ? Math.round(value) : fallback);
-const readPort = (value: unknown, fallback: number): number => {
-  const parsed = typeof value === "string" ? Number.parseInt(value, 10) : readInteger(value, fallback);
-  if (!Number.isFinite(parsed)) return fallback;
-  const rounded = Math.round(parsed);
-  if (rounded < 1 || rounded > 65535) return fallback;
-  return rounded;
-};
 const readFeaturePrAutoMergeMode = (value: unknown, fallback: FeaturePrAutoMergeMode): FeaturePrAutoMergeMode => {
   if (typeof value === "string" && FEATURE_PR_AUTOMERGE_MODES.includes(value as FeaturePrAutoMergeMode)) {
     return value as FeaturePrAutoMergeMode;
