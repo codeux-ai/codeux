@@ -8,10 +8,6 @@ import {
 } from "./sprint-orchestrator-defaults.js";
 import { runBranchPreflightStep } from "./steps/branch-preflight-step.js";
 import { runPlanningPreflightStep } from "./steps/planning-preflight-step.js";
-import {
-  isCiCheckFailed,
-  isCiCheckPending,
-} from "./ci-status-utils.js";
 import type { SprintAgentArgs } from "./sprint-types.js";
 import type {
   AutomationInterventionsSettings,
@@ -26,6 +22,7 @@ import type {
 } from "../contracts/app-types.js";
 import { CycleRunner } from "../domain/sprint/orchestrator/cycle-runner.js";
 import { WatchLoopRunner } from "../domain/sprint/orchestrator/watch-loop-runner.js";
+import { MainMergeGateService } from "../domain/sprint/ci/main-merge-gate.js";
 
 export interface SprintOrchestratorDependencies {
   settings: Settings;
@@ -177,13 +174,7 @@ export class SprintOrchestrator {
     ciIntelligence: CiIntelligenceSettings;
     githubMode: "REMOTE" | "LOCAL";
   }): Promise<string> {
-    if (
-      !args.ciIntelligence.enabled ||
-      !args.ciIntelligence.enableLivePrMonitoring ||
-      !args.ciIntelligence.waitForCiBeforeMainMerge ||
-      args.githubMode !== "REMOTE" ||
-      !this.deps.getCiStatusForScope
-    ) {
+    if (!this.deps.getCiStatusForScope) {
       return "";
     }
 
@@ -195,49 +186,10 @@ export class SprintOrchestrator {
       featureBranchPrefix: args.featureBranchPrefix,
     });
 
-    if (!gitStatus?.available) {
-      return "";
-    }
-
-    const mainMergePr = gitStatus.openPullRequests.find(
-      (pr) => pr.baseRefName === args.defaultBranch && pr.headRefName === args.featureBranch
-    );
-    if (!mainMergePr) {
-      return `\nℹ️ **Main CI Gate:** No open PR \`${args.featureBranch} -> ${args.defaultBranch}\` found. Create the PR and wait for CI.\n`;
-    }
-
-    const checks = Array.isArray(mainMergePr.checks) ? mainMergePr.checks : [];
-    const hasFailedChecks = checks.some((check) => isCiCheckFailed(check.status, check.conclusion));
-    const hasPendingChecks = checks.length === 0 || checks.some((check) => isCiCheckPending(check.status, check.conclusion));
-    const hasReviewBlockers = mainMergePr.reviewDecision === "CHANGES_REQUESTED" || mainMergePr.comments > 0;
-
-    let text = `\n### Main Merge CI Gate\n`;
-    text += `- PR: ${mainMergePr.url}\n`;
-    text += `- Check Status: \`${hasFailedChecks ? "FAILED" : hasPendingChecks ? "PENDING" : "SUCCESS"}\`\n`;
-    text += `- Review Status: \`reviewDecision=${mainMergePr.reviewDecision || "NONE"}\`, comments=${mainMergePr.comments}\n`;
-    text += `- Check live: \`gh pr checks ${mainMergePr.number} --watch\`\n`;
-
-    if (hasFailedChecks) {
-      const failedChecks = checks
-        .filter((check) => isCiCheckFailed(check.status, check.conclusion))
-        .map((check) => check.name);
-      text += `- Failed checks: ${failedChecks.join(", ")}\n`;
-      text += `- Logs: \`gh run list --branch ${args.featureBranch} --event pull_request --limit 5\` and \`gh run view <run-id> --log-failed\`\n`;
-      text += `- Only approve merge into \`${args.defaultBranch}\` after checks are green.\n`;
-    } else if (hasPendingChecks) {
-      text += `- Only approve merge into \`${args.defaultBranch}\` once all required checks are green.\n`;
-    } else if (hasReviewBlockers) {
-      text += `- Merge into \`${args.defaultBranch}\` is blocked until open reviews/comments are resolved.\n`;
-    } else {
-      text += `- ✅ Required checks are green. Main merge can be approved (verify reviews/comments).\n`;
-    }
-
-    if (hasReviewBlockers) {
-      text += `- Review comments: \`gh pr view ${mainMergePr.number} --comments\`\n`;
-      text += `- Inline reviews: \`gh api repos/{owner}/{repo}/pulls/${mainMergePr.number}/comments\`\n`;
-    }
-
-    return `${text}\n`;
+    return MainMergeGateService.renderMergeFeedback({
+      ...args,
+      gitStatus,
+    });
   }
 
   async execute(args: SprintAgentArgs): Promise<any> {
