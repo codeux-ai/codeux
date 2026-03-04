@@ -20,7 +20,7 @@ import type {
 } from "../contracts/app-types.js";
 import { SprintOrchestrator } from "../sprint/sprint-orchestrator.js";
 import { GuideRepository } from "../repositories/guide-repository.js";
-import { SubtaskRepository } from "../repositories/subtask-repository.js";
+import { SubtaskFileRepository } from "../infrastructure/repositories/subtask-file-repository.js";
 import { TaskService } from "../services/task-service.js";
 import { SettingsRepository } from "../repositories/settings-repository.js";
 import { GitStatusService, type GitTrackingRequest } from "../services/git-status-service.js";
@@ -59,7 +59,7 @@ export class JulesAgentServer {
   private settings: Settings = { maxFailures: 5 };
   private consecutiveFailures: number = 0;
   private guideRepository: GuideRepository;
-  private subtaskRepository: SubtaskRepository;
+  private subtaskRepository: SubtaskFileRepository;
   private taskService: TaskService;
   private julesSourceResolver: JulesSourceResolver;
   private sprintOrchestrator: SprintOrchestrator;
@@ -356,22 +356,7 @@ export class JulesAgentServer {
     merged: boolean;
   }): Promise<void> {
     const subtasksDir = path.join(args.repoPath, ".jules-subagents", "sprints", `sprint${args.sprintNumber}-subtasks`);
-    const filePath = path.join(subtasksDir, `${args.taskId}.md`);
-    const mergedValue = args.merged ? "true" : "false";
-    const content = await fs.readFile(filePath, "utf-8");
-    let updated = content;
-
-    if (/^\s*merged:\s*(true|false)\s*$/m.test(content)) {
-      updated = content.replace(/^\s*merged:\s*(true|false)\s*$/m, `merged: ${mergedValue}`);
-    } else if (/^\s*prompt:\s*/m.test(content)) {
-      updated = content.replace(/^\s*prompt:\s*/m, `merged: ${mergedValue}\nprompt:`);
-    } else {
-      updated = `${content.trimEnd()}\nmerged: ${mergedValue}\n`;
-    }
-
-    if (updated !== content) {
-      await fs.writeFile(filePath, updated, "utf-8");
-    }
+    await this.subtaskRepository.setMerged(subtasksDir, args.taskId, args.merged);
   }
 
   private formatError(error: unknown): { content: Array<{ type: string; text: string }>; isError: true } {

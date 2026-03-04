@@ -22,7 +22,7 @@ import type {
 } from "../contracts/app-types.js";
 import { CycleRunner } from "../domain/sprint/orchestrator/cycle-runner.js";
 import { WatchLoopRunner } from "../domain/sprint/orchestrator/watch-loop-runner.js";
-import type { Logger } from "../shared/logging/logger.js";
+import { SubtaskFileRepository } from "../infrastructure/repositories/subtask-file-repository.js";
 
 export interface SprintOrchestratorDependencies {
   settings: Settings;
@@ -36,7 +36,7 @@ export interface SprintOrchestratorDependencies {
   extractSessionId: (session: Partial<JulesSession>) => string | undefined;
   fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<any[]>;
   listSessions: () => Promise<{ sessions?: JulesSession[] }>;
-  loadSubtasks: (dir: string) => Promise<Subtask[]>;
+  subtaskRepository: SubtaskFileRepository;
   startTask: (task: Subtask, sourceId: string | undefined, baseBranch: string, repoPath: string, sprintNumber: number) => Promise<JulesSession>;
   getGuideContent: (guideName: string, repoPath?: string) => Promise<string>;
   updateLastStatus: (status: any) => void;
