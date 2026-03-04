@@ -72,7 +72,7 @@ export class SprintOrchestrator {
   }
 
   private getDashboardPort(): number {
-    return this.deps.getDashboardPort?.() || this.deps.settings.dashboardPort || this.deps.dashboardPort;
+    return this.deps.getDashboardPort?.() || (this.deps.settings.dashboardPort as number) || this.deps.dashboardPort;
   }
 
   private getLoopStepSettings(): SprintLoopStepSettings {

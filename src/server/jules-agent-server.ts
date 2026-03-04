@@ -211,7 +211,7 @@ export class JulesAgentServer {
         // Handle both camelCase and UPPER_SNAKE_CASE for backward compatibility if needed,
         // but prefer camelCase for the final settings.
         if (loadedSettings.JULES_API_MAX_FAILS !== undefined) {
-          loadedSettings.maxFailures = loadedSettings.JULES_API_MAX_FAILS;
+          loadedSettings.maxFailures = parseInt(loadedSettings.JULES_API_MAX_FAILS as string);
         }
 
         Object.assign(this.settings, loadedSettings);
@@ -270,7 +270,7 @@ export class JulesAgentServer {
   private getDashboardPort(): number {
     if (this.dashboardRuntimePort !== null) return this.dashboardRuntimePort;
     const settings = this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
-    return settings.dashboardPort || this.settings.dashboardPort || this.appConfig.dashboardPort;
+    return settings.dashboardPort || (this.settings.dashboardPort as number) || this.appConfig.dashboardPort;
   }
 
   private getMissingJulesApiKeyInstruction(): string {

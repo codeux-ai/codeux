@@ -47,7 +47,7 @@ describe("CoreToolHandler compact responses", () => {
       state: "RUNNING",
       provider: "jules",
       createTime: "2026-02-26T21:00:00.000Z",
-      outputs: [{ pullRequest: { url: "https://github.com/example/repo/pull/1" } }],
+      outputs: [{ pullRequest: { url: "https://github.com/example/repo/pull/1", workerBranch: "feature/1" } }],
     } satisfies JulesSession);
     fetchRecentActivities.mockResolvedValue([
       {
@@ -64,7 +64,7 @@ describe("CoreToolHandler compact responses", () => {
 
     expect(parsed.id).toBe("sessions/abc");
     expect(parsed.hasPullRequest).toBe(true);
-    expect(parsed.pullRequests).toEqual([{ url: "https://github.com/example/repo/pull/1" }]);
+    expect(parsed.pullRequests).toEqual([{ url: "https://github.com/example/repo/pull/1", workerBranch: "feature/1" }]);
     expect(parsed.lastActivity.kind).toBe("agent_message");
     expect(parsed.prompt).toBeUndefined();
   });
@@ -120,7 +120,7 @@ describe("CoreToolHandler compact responses", () => {
           title: "A session",
           state: "RUNNING",
           provider: "jules",
-          outputs: [{ pullRequest: { url: "https://example.com/pr/1" } }],
+          outputs: [{ pullRequest: { url: "https://example.com/pr/1", workerBranch: "feature/pr-1" } }],
           prompt: "large prompt",
         },
       ],
@@ -140,7 +140,7 @@ describe("CoreToolHandler compact responses", () => {
 
     expect(sessionsParsed.returnedCount).toBe(1);
     expect(sessionsParsed.sessions[0].hasPullRequest).toBe(true);
-    expect(sessionsParsed.sessions[0].pullRequests).toEqual([{ url: "https://example.com/pr/1" }]);
+    expect(sessionsParsed.sessions[0].pullRequests).toEqual([{ url: "https://example.com/pr/1", workerBranch: "feature/pr-1" }]);
     expect(sessionsParsed.sessions[0].prompt).toBeUndefined();
     expect(sessionsParsed.nextPageToken).toBe("next-session-token");
     expect(listAllActivities).not.toHaveBeenCalled();
@@ -211,7 +211,7 @@ describe("CoreToolHandler compact responses", () => {
       state: "RUNNING",
       provider: "jules",
       prompt: "very large prompt",
-      outputs: [{ pullRequest: { url: "https://example.com/pr/new" } }],
+      outputs: [{ pullRequest: { url: "https://example.com/pr/new", workerBranch: "feature/new" } }],
     });
     approveSessionPlan.mockResolvedValue({
       id: "sessions/new",
