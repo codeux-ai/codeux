@@ -13,15 +13,8 @@ import {
   ContainerMount,
 } from "../../../services/cli-docker-utils.js";
 import { CONTAINER_SETUP_SCRIPT } from "../../../services/cli-workflow-utils.js";
-import {
-  DockerBootstrapBuilder,
-  CODEX_CREDENTIALS_MOUNT,
-  GITHUB_CREDENTIALS_MOUNT,
-  GEMINI_CREDENTIALS_MOUNT,
-  CLAUDE_CODE_CREDENTIALS_MOUNT,
-  GITCONFIG_CREDENTIALS_MOUNT,
-  CLAUDE_CODE_AUTH_JSON_MOUNT,
-} from "./docker-bootstrap-builder.js";
+import { DockerBootstrapBuilder } from "./docker-bootstrap-builder.js";
+import { DockerCredentialMountBuilder } from "./docker-credential-mount-builder.js";
 
 export interface IDockerRunner {
   runProviderInDocker(args: {
@@ -90,7 +83,7 @@ export class DockerRunner implements IDockerRunner {
       dockerArgs.push("--mount", toDockerMountArg({ source: setupScriptSource, destination: CONTAINER_SETUP_SCRIPT, readonly: true }));
     }
 
-    const credentialMounts = await this.buildCredentialMounts(workflowSettings, repoPath, sessionId, onActivity);
+    const credentialMounts = await new DockerCredentialMountBuilder().build(workflowSettings, repoPath, onActivity);
     for (const mount of credentialMounts) {
       const source = this.mapDockerSourcePathForDaemon(mount.source, repoPath, sessionId, "credentials", onActivity);
       dockerArgs.push("--mount", toDockerMountArg({ ...mount, source }));
@@ -158,20 +151,4 @@ export class DockerRunner implements IDockerRunner {
     return undefined;
   }
 
-  private async buildCredentialMounts(workflowSettings: CliWorkflowSettings, repoPath: string, sessionId: string, onActivity: (desc: string) => void): Promise<ContainerMount[]> {
-    if (!workflowSettings.containerMountCredentials) return [];
-    const mounts: ContainerMount[] = [];
-    // Simplified for brevity, logic remains same as original
-    const addMount = async (enabled: boolean, source: string, dest: string) => {
-      if (!enabled) return;
-      const p = resolveConfiguredPath(repoPath, source);
-      try { await fs.access(p); mounts.push({ source: p, destination: dest, readonly: true }); } catch { /* ignore */ }
-    };
-    await addMount(workflowSettings.containerMountGitConfig, "~/.gitconfig", GITCONFIG_CREDENTIALS_MOUNT);
-    await addMount(workflowSettings.containerMountGithubAuth, workflowSettings.containerGithubAuthPath, GITHUB_CREDENTIALS_MOUNT);
-    await addMount(workflowSettings.containerMountGeminiAuth, workflowSettings.containerGeminiAuthPath, GEMINI_CREDENTIALS_MOUNT);
-    await addMount(workflowSettings.containerMountCodexAuth, workflowSettings.containerCodexAuthPath, CODEX_CREDENTIALS_MOUNT);
-    await addMount(workflowSettings.containerMountClaudeCodeAuth, workflowSettings.containerClaudeCodeAuthPath, CLAUDE_CODE_CREDENTIALS_MOUNT);
-    return mounts;
-  }
 }
