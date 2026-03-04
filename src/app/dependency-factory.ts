@@ -98,6 +98,8 @@ export function createRuntimeDependencies(
     {
       capabilities: {
         tools: {},
+        resources: {},
+        prompts: {},
       },
     }
   );

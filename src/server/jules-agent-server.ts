@@ -38,6 +38,7 @@ import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import { createRuntimeDependencies, ServerContext } from "../app/dependency-factory.js";
 import { generateCorrelationId, runWithCorrelationId } from "../shared/logging/correlation-id.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../repositories/settings-defaults.js";
 
 export interface JulesAgentServerOptions {
   projectRoot: string;
@@ -125,7 +126,7 @@ export class JulesAgentServer {
       getProjectRoot: () => this.projectRoot,
       getAppConfig: () => this.appConfig,
       getSettings: () => this.settings,
-      getDashboardSettings: () => this.dashboardSettings,
+      getDashboardSettings: () => this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
       getEffectiveJulesApiKey: () => this.getEffectiveJulesApiKey(),
       getEffectiveGithubToken: () => this.getEffectiveGithubToken(),
       getDashboardPort: () => this.getDashboardPort(),
@@ -230,16 +231,18 @@ export class JulesAgentServer {
   }
 
   private syncGitSettingsFromDashboard(): void {
-    this.settings.defaultBranch = this.dashboardSettings.git.defaultBranch;
-    this.settings.githubMode = this.dashboardSettings.git.githubMode;
+    const git = (this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS).git;
+    this.settings.defaultBranch = git.defaultBranch;
+    this.settings.githubMode = git.githubMode;
   }
 
   private getEffectiveJulesApiKey(): string | undefined {
-    const uiProviderKey = this.dashboardSettings.aiProvider.providers?.jules?.apiKey?.trim();
+    const settings = this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
+    const uiProviderKey = settings.aiProvider?.providers?.jules?.apiKey?.trim();
     if (uiProviderKey && uiProviderKey.length > 0) {
       return uiProviderKey;
     }
-    const uiKey = this.dashboardSettings.aiProvider.julesApiKey?.trim();
+    const uiKey = settings.aiProvider?.julesApiKey?.trim();
     if (uiKey && uiKey.length > 0) {
       return uiKey;
     }
@@ -247,12 +250,12 @@ export class JulesAgentServer {
     if (liveEnvKey && liveEnvKey.length > 0) {
       return liveEnvKey;
     }
-    const configKey = this.appConfig.apiKey?.trim();
+    const configKey = this.appConfig?.apiKey?.trim();
     if (configKey && configKey.length > 0) {
       return configKey;
     }
-    const fallback = this.externalSettingsHints.resolved.julesApiKey.trim();
-    return fallback.length > 0 ? fallback : undefined;
+    const fallback = this.externalSettingsHints?.resolved?.julesApiKey?.trim();
+    return (fallback && fallback.length > 0) ? fallback : undefined;
   }
 
   private refreshJulesApiKey(): void {
@@ -265,7 +268,8 @@ export class JulesAgentServer {
 
   private getDashboardPort(): number {
     if (this.dashboardRuntimePort !== null) return this.dashboardRuntimePort;
-    return this.dashboardSettings.dashboardPort || this.settings.dashboardPort || this.appConfig.dashboardPort;
+    const settings = this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
+    return settings.dashboardPort || this.settings.dashboardPort || this.appConfig.dashboardPort;
   }
 
   private getMissingJulesApiKeyInstruction(): string {
@@ -273,22 +277,28 @@ export class JulesAgentServer {
   }
 
   private getEffectiveGithubToken(): string | undefined {
-    const uiToken = this.dashboardSettings.git.githubToken?.trim();
+    const settings = this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
+    const uiToken = settings.git?.githubToken?.trim();
     if (uiToken && uiToken.length > 0) {
       return uiToken;
     }
-    const fallback = this.externalSettingsHints.resolved.githubToken.trim();
-    return fallback.length > 0 ? fallback : undefined;
+    const liveEnvToken = process.env.GITHUB_TOKEN?.trim();
+    if (liveEnvToken && liveEnvToken.length > 0) {
+      return liveEnvToken;
+    }
+    const fallback = this.externalSettingsHints?.resolved?.githubToken?.trim();
+    return (fallback && fallback.length > 0) ? fallback : undefined;
   }
 
   private resolveGitTrackingRequest(): GitTrackingRequest {
-    const ci = this.dashboardSettings.ciIntelligence;
+    const settings = this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
+    const ci = settings.ciIntelligence;
     const subtasks: Subtask[] = Array.isArray(this.lastStatus?.subtasks) ? this.lastStatus.subtasks : [];
     const featureBranch = typeof this.lastStatus?.feature_branch === "string" && this.lastStatus.feature_branch.trim().length > 0
       ? this.lastStatus.feature_branch.trim()
       : null;
-    const defaultBranch = this.dashboardSettings.git.defaultBranch?.trim() || "main";
-    const featureBranchPrefix = this.dashboardSettings.git.featureBranchPrefix?.trim() || "feature/";
+    const defaultBranch = settings.git.defaultBranch?.trim() || "main";
+    const featureBranchPrefix = settings.git.featureBranchPrefix?.trim() || "feature/";
 
     const hasRunningTasks = subtasks.some((task) => task.status === "RUNNING");
     if (ci.enabled && ci.waitForCiBeforeFeatureMerge && hasRunningTasks && featureBranch) {
@@ -403,7 +413,8 @@ export class JulesAgentServer {
   }
 
   private isSkillEnabled(skillName: string): boolean {
-    const skill = this.dashboardSettings.skills.find((entry) => entry.name === skillName);
+    const settings = this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
+    const skill = settings.skills.find((entry) => entry.name === skillName);
     return skill ? skill.enabled : true;
   }
 
@@ -411,6 +422,9 @@ export class JulesAgentServer {
     const skillName = this.getSkillNameForGuide(guideName);
     if (!this.isSkillEnabled(skillName)) {
       throw new Error(`Skill '${skillName}' is disabled in dashboard settings.`);
+    }
+    if (!this.guideRepository) {
+      return "";
     }
     return this.guideRepository.getGuideContent(guideName, repoPath);
   }
@@ -456,8 +470,9 @@ export class JulesAgentServer {
 
   private async fetchGitStatusForRepo(repoPath: string): Promise<GitTrackingStatus> {
     const gitStatusService = new GitStatusService(repoPath);
+    const settings = this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
     return await gitStatusService.getStatus(
-      this.dashboardSettings.git.githubMode,
+      settings.git.githubMode,
       this.getEffectiveGithubToken(),
       this.resolveGitTrackingRequest()
     );

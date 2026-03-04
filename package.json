@@ -17,6 +17,7 @@
     "lint": "echo 'linting...' && tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "ci": "npm run typecheck && npm run lint && npm test",
+    "smoke-test": "node dist/index.js --help",
     "build:server": "tsc",
     "build:dashboard": "tsc -p dashboard/tsconfig.json --noEmit && vite build",
     "dev:dashboard": "vite",

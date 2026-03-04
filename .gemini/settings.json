@@ -1,11 +1,11 @@
 {
+  "general": {
+    "maxAttempts": 10
+  },
   "mcpServers": {
     "jules": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@jules-agent/mcp-server"
-      ]
+      "command": "jules-agent",
+      "args": []
     }
   }
 }

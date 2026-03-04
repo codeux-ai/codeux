@@ -1,5 +1,5 @@
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, ListResourcesRequestSchema, ListPromptsRequestSchema, McpError } from "@modelcontextprotocol/sdk/types.js";
 import type { McpToolArgsByName, McpToolResponse } from "../api/mcp/tool-registry.js";
 import { ToolRegistry } from "../api/mcp/tool-registry.js";
 import type { DashboardSettings } from "../contracts/app-types.js";
@@ -42,6 +42,14 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
     return {
       tools: getEnabledToolDefinitions(args.getDashboardSettings()) as any,
     };
+  });
+
+  args.server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    return { resources: [] };
+  });
+
+  args.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+    return { prompts: [] };
   });
 
   args.server.setRequestHandler(CallToolRequestSchema, async (request) => {

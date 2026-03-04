@@ -1,5 +1,8 @@
-node_modules/
-dist/
+.jules-subagents/worktrees/
+node_modules
+dist
 .env
+
 .DS_Store
 server.log
+.pnpm-store
