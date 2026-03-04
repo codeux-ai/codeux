@@ -12,6 +12,7 @@ import { SprintOrchestrator } from "../sprint/sprint-orchestrator.js";
 import { CoreToolHandler } from "../mcp/core-tool-handler.js";
 import { AgentToolHandler } from "../mcp/agent-tool-handler.js";
 import { ActivityCacheService } from "../server/activity-cache-service.js";
+import { ActivitySummaryService } from "../domain/sessions/activity-summary.js";
 import { TaskRerunService } from "../services/task-rerun-service.js";
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import {
@@ -42,6 +43,7 @@ export interface RuntimeDependencies {
   cliWorkflowService: CliWorkflowService;
   coreToolHandler: CoreToolHandler;
   agentToolHandler: AgentToolHandler;
+  activitySummary: ActivitySummaryService;
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
   externalSettingsHints: ExternalSettingsHints;
@@ -109,6 +111,7 @@ export function createRuntimeDependencies(
   const instructionService = new InstructionService(options.projectRoot);
   const sessionTracking = new SessionTrackingRepository();
   const julesSourceResolver = new JulesSourceResolver(julesApi);
+  const activitySummary = new ActivitySummaryService();
 
   const cliWorkflowService = new CliWorkflowService({
     sessionTracking,
@@ -165,6 +168,7 @@ export function createRuntimeDependencies(
 
   const coreToolHandler = new CoreToolHandler({
     julesApi,
+    activitySummary,
     normalizeName: (type, id) => context.normalizeName(type, id),
     resolveSessionName: (session) => context.resolveSessionName(session),
     fetchRecentActivities: (sessionName, pageSize) => context.fetchRecentActivities(sessionName, pageSize),
@@ -242,6 +246,7 @@ export function createRuntimeDependencies(
     cliWorkflowService,
     coreToolHandler,
     agentToolHandler,
+    activitySummary,
     activityCacheService,
     taskRerunService,
     externalSettingsHints,
