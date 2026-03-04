@@ -234,7 +234,7 @@ export class SprintOrchestrator {
     }
 
     if (loopSteps.branchPreflight && (args.action === "plan" || args.action === "orchestrate")) {
-      const { existsLocal, existsRemote } = runBranchPreflightStep(repoPath, defaultFeatureBranch);
+      const { existsLocal, existsRemote } = await runBranchPreflightStep(repoPath, defaultFeatureBranch);
       if (!existsLocal || !existsRemote) {
         const branchBlocker = await this.renderBranchBlocker(args, repoPath, defaultFeatureBranch, existsLocal, existsRemote);
         return { content: [{ type: "text", text: branchBlocker }] };
