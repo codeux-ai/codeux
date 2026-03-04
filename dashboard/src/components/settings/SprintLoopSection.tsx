@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "preact";
+import { updateSprintLoopStep } from "../../lib/settings-updaters.js";
 import { SettingsCard } from "./primitives.js";
 import { loopStepOptions } from "./settings-options.js";
 import type { SettingsSectionProps } from "./types.js";
@@ -16,13 +17,7 @@ export const SprintLoopSection: FunctionComponent<SettingsSectionProps> = ({ set
         max={3600}
         value={settings.sprintLoopSteps.watchLoopIntervalSeconds}
         onInput={(event) =>
-          onChange({
-            ...settings,
-            sprintLoopSteps: {
-              ...settings.sprintLoopSteps,
-              watchLoopIntervalSeconds: Number(event.currentTarget.value),
-            },
-          })
+          onChange(updateSprintLoopStep(settings, "watchLoopIntervalSeconds", Number(event.currentTarget.value)))
         }
         className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
       />
@@ -38,13 +33,7 @@ export const SprintLoopSection: FunctionComponent<SettingsSectionProps> = ({ set
         max={3600}
         value={settings.sprintLoopSteps.watchLoopOutputIntervalSeconds}
         onInput={(event) =>
-          onChange({
-            ...settings,
-            sprintLoopSteps: {
-              ...settings.sprintLoopSteps,
-              watchLoopOutputIntervalSeconds: Number(event.currentTarget.value),
-            },
-          })
+          onChange(updateSprintLoopStep(settings, "watchLoopOutputIntervalSeconds", Number(event.currentTarget.value)))
         }
         className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
       />
@@ -63,13 +52,7 @@ export const SprintLoopSection: FunctionComponent<SettingsSectionProps> = ({ set
             type="checkbox"
             checked={settings.sprintLoopSteps[step.key]}
             onChange={(event) =>
-              onChange({
-                ...settings,
-                sprintLoopSteps: {
-                  ...settings.sprintLoopSteps,
-                  [step.key]: event.currentTarget.checked,
-                },
-              })
+              onChange(updateSprintLoopStep(settings, step.key, event.currentTarget.checked))
             }
             className="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-900"
           />

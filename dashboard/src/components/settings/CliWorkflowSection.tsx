@@ -1,5 +1,6 @@
 import type { FunctionComponent } from "preact";
 import type { DashboardSettings } from "../../types.js";
+import { updateCliWorkflow } from "../../lib/settings-updaters.js";
 import { executionModeOptions } from "./settings-options.js";
 import { FieldLabel, SettingsCard, ToggleRow } from "./primitives.js";
 import type { SettingsSectionProps } from "./types.js";
@@ -14,13 +15,9 @@ export const CliWorkflowSection: FunctionComponent<SettingsSectionProps> = ({ se
       <select
         value={settings.cliWorkflow.executionMode}
         onChange={(event) =>
-          onChange({
-            ...settings,
-            cliWorkflow: {
-              ...settings.cliWorkflow,
-              executionMode: event.currentTarget.value as DashboardSettings["cliWorkflow"]["executionMode"],
-            },
-          })
+          onChange(updateCliWorkflow(settings, {
+            executionMode: event.currentTarget.value as DashboardSettings["cliWorkflow"]["executionMode"],
+          }))
         }
         className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
       >
@@ -34,52 +31,36 @@ export const CliWorkflowSection: FunctionComponent<SettingsSectionProps> = ({ se
       label="Cleanup worktree on success"
       checked={settings.cliWorkflow.cleanupWorktreeOnSuccess}
       onToggle={(checked) =>
-        onChange({
-          ...settings,
-          cliWorkflow: {
-            ...settings.cliWorkflow,
-            cleanupWorktreeOnSuccess: checked,
-          },
-        })
+        onChange(updateCliWorkflow(settings, {
+          cleanupWorktreeOnSuccess: checked,
+        }))
       }
     />
     <ToggleRow
       label="Cleanup worktree on failure"
       checked={settings.cliWorkflow.cleanupWorktreeOnFailure}
       onToggle={(checked) =>
-        onChange({
-          ...settings,
-          cliWorkflow: {
-            ...settings.cliWorkflow,
-            cleanupWorktreeOnFailure: checked,
-          },
-        })
+        onChange(updateCliWorkflow(settings, {
+          cleanupWorktreeOnFailure: checked,
+        }))
       }
     />
     <ToggleRow
       label="Retry once on `read_file` not found"
       checked={settings.cliWorkflow.retryOnReadFileNotFound}
       onToggle={(checked) =>
-        onChange({
-          ...settings,
-          cliWorkflow: {
-            ...settings.cliWorkflow,
-            retryOnReadFileNotFound: checked,
-          },
-        })
+        onChange(updateCliWorkflow(settings, {
+          retryOnReadFileNotFound: checked,
+        }))
       }
     />
     <ToggleRow
       label="Resume failed task in same workspace"
       checked={settings.cliWorkflow.resumeFailedTaskInSameWorkspace}
       onToggle={(checked) =>
-        onChange({
-          ...settings,
-          cliWorkflow: {
-            ...settings.cliWorkflow,
-            resumeFailedTaskInSameWorkspace: checked,
-          },
-        })
+        onChange(updateCliWorkflow(settings, {
+          resumeFailedTaskInSameWorkspace: checked,
+        }))
       }
     />
 
@@ -91,13 +72,9 @@ export const CliWorkflowSection: FunctionComponent<SettingsSectionProps> = ({ se
             type="text"
             value={settings.cliWorkflow.containerImage}
             onInput={(event) =>
-              onChange({
-                ...settings,
-                cliWorkflow: {
-                  ...settings.cliWorkflow,
-                  containerImage: event.currentTarget.value,
-                },
-              })
+              onChange(updateCliWorkflow(settings, {
+                containerImage: event.currentTarget.value,
+              }))
             }
             placeholder="node:24-bookworm"
             className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
@@ -110,13 +87,9 @@ export const CliWorkflowSection: FunctionComponent<SettingsSectionProps> = ({ se
             type="text"
             value={settings.cliWorkflow.containerSetupScriptPath}
             onInput={(event) =>
-              onChange({
-                ...settings,
-                cliWorkflow: {
-                  ...settings.cliWorkflow,
-                  containerSetupScriptPath: event.currentTarget.value,
-                },
-              })
+              onChange(updateCliWorkflow(settings, {
+                containerSetupScriptPath: event.currentTarget.value,
+              }))
             }
             placeholder=".jules-subagents/container/setup.sh"
             className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
@@ -130,13 +103,9 @@ export const CliWorkflowSection: FunctionComponent<SettingsSectionProps> = ({ se
           label="Mount user credentials into container"
           checked={settings.cliWorkflow.containerMountCredentials}
           onToggle={(checked) =>
-            onChange({
-              ...settings,
-              cliWorkflow: {
-                ...settings.cliWorkflow,
-                containerMountCredentials: checked,
-              },
-            })
+            onChange(updateCliWorkflow(settings, {
+              containerMountCredentials: checked,
+            }))
           }
         />
         <ToggleRow
@@ -144,13 +113,9 @@ export const CliWorkflowSection: FunctionComponent<SettingsSectionProps> = ({ se
           checked={settings.cliWorkflow.containerMountGitConfig}
           disabled={!settings.cliWorkflow.containerMountCredentials}
           onToggle={(checked) =>
-            onChange({
-              ...settings,
-              cliWorkflow: {
-                ...settings.cliWorkflow,
-                containerMountGitConfig: checked,
-              },
-            })
+            onChange(updateCliWorkflow(settings, {
+              containerMountGitConfig: checked,
+            }))
           }
         />
         <ToggleRow
@@ -158,13 +123,9 @@ export const CliWorkflowSection: FunctionComponent<SettingsSectionProps> = ({ se
           checked={settings.cliWorkflow.containerMountGithubAuth}
           disabled={!settings.cliWorkflow.containerMountCredentials}
           onToggle={(checked) =>
-            onChange({
-              ...settings,
-              cliWorkflow: {
-                ...settings.cliWorkflow,
-                containerMountGithubAuth: checked,
-              },
-            })
+            onChange(updateCliWorkflow(settings, {
+              containerMountGithubAuth: checked,
+            }))
           }
         />
         <ToggleRow
@@ -172,13 +133,9 @@ export const CliWorkflowSection: FunctionComponent<SettingsSectionProps> = ({ se
           checked={settings.cliWorkflow.containerMountGeminiAuth}
           disabled={!settings.cliWorkflow.containerMountCredentials}
           onToggle={(checked) =>
-            onChange({
-              ...settings,
-              cliWorkflow: {
-                ...settings.cliWorkflow,
-                containerMountGeminiAuth: checked,
-              },
-            })
+            onChange(updateCliWorkflow(settings, {
+              containerMountGeminiAuth: checked,
+            }))
           }
         />
         <ToggleRow
@@ -186,13 +143,9 @@ export const CliWorkflowSection: FunctionComponent<SettingsSectionProps> = ({ se
           checked={settings.cliWorkflow.containerMountCodexAuth}
           disabled={!settings.cliWorkflow.containerMountCredentials}
           onToggle={(checked) =>
-            onChange({
-              ...settings,
-              cliWorkflow: {
-                ...settings.cliWorkflow,
-                containerMountCodexAuth: checked,
-              },
-            })
+            onChange(updateCliWorkflow(settings, {
+              containerMountCodexAuth: checked,
+            }))
           }
         />
         <ToggleRow
@@ -200,13 +153,9 @@ export const CliWorkflowSection: FunctionComponent<SettingsSectionProps> = ({ se
           checked={settings.cliWorkflow.containerMountClaudeCodeAuth}
           disabled={!settings.cliWorkflow.containerMountCredentials}
           onToggle={(checked) =>
-            onChange({
-              ...settings,
-              cliWorkflow: {
-                ...settings.cliWorkflow,
-                containerMountClaudeCodeAuth: checked,
-              },
-            })
+            onChange(updateCliWorkflow(settings, {
+              containerMountClaudeCodeAuth: checked,
+            }))
           }
         />
 
@@ -218,13 +167,9 @@ export const CliWorkflowSection: FunctionComponent<SettingsSectionProps> = ({ se
               value={settings.cliWorkflow.containerGithubAuthPath}
               disabled={!settings.cliWorkflow.containerMountCredentials || !settings.cliWorkflow.containerMountGithubAuth}
               onInput={(event) =>
-                onChange({
-                  ...settings,
-                  cliWorkflow: {
-                    ...settings.cliWorkflow,
-                    containerGithubAuthPath: event.currentTarget.value,
-                  },
-                })
+                onChange(updateCliWorkflow(settings, {
+                  containerGithubAuthPath: event.currentTarget.value,
+                }))
               }
               placeholder="~/.config/gh"
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
@@ -237,13 +182,9 @@ export const CliWorkflowSection: FunctionComponent<SettingsSectionProps> = ({ se
               value={settings.cliWorkflow.containerGeminiAuthPath}
               disabled={!settings.cliWorkflow.containerMountCredentials || !settings.cliWorkflow.containerMountGeminiAuth}
               onInput={(event) =>
-                onChange({
-                  ...settings,
-                  cliWorkflow: {
-                    ...settings.cliWorkflow,
-                    containerGeminiAuthPath: event.currentTarget.value,
-                  },
-                })
+                onChange(updateCliWorkflow(settings, {
+                  containerGeminiAuthPath: event.currentTarget.value,
+                }))
               }
               placeholder="~/.gemini"
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
@@ -256,13 +197,9 @@ export const CliWorkflowSection: FunctionComponent<SettingsSectionProps> = ({ se
               value={settings.cliWorkflow.containerCodexAuthPath}
               disabled={!settings.cliWorkflow.containerMountCredentials || !settings.cliWorkflow.containerMountCodexAuth}
               onInput={(event) =>
-                onChange({
-                  ...settings,
-                  cliWorkflow: {
-                    ...settings.cliWorkflow,
-                    containerCodexAuthPath: event.currentTarget.value,
-                  },
-                })
+                onChange(updateCliWorkflow(settings, {
+                  containerCodexAuthPath: event.currentTarget.value,
+                }))
               }
               placeholder="~/.codex"
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
@@ -275,13 +212,9 @@ export const CliWorkflowSection: FunctionComponent<SettingsSectionProps> = ({ se
               value={settings.cliWorkflow.containerClaudeCodeAuthPath}
               disabled={!settings.cliWorkflow.containerMountCredentials || !settings.cliWorkflow.containerMountClaudeCodeAuth}
               onInput={(event) =>
-                onChange({
-                  ...settings,
-                  cliWorkflow: {
-                    ...settings.cliWorkflow,
-                    containerClaudeCodeAuthPath: event.currentTarget.value,
-                  },
-                })
+                onChange(updateCliWorkflow(settings, {
+                  containerClaudeCodeAuthPath: event.currentTarget.value,
+                }))
               }
               placeholder="~/.claude"
               className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"

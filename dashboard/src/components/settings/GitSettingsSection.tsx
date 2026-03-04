@@ -1,5 +1,6 @@
 import type { FunctionComponent } from "preact";
 import type { DashboardSettings } from "../../types.js";
+import { updateGitHubMode, updateGitSettings } from "../../lib/settings-updaters.js";
 import { FieldLabel, SettingsCard, ToggleRow } from "./primitives.js";
 import type { SettingsSectionProps } from "./types.js";
 
@@ -9,24 +10,10 @@ export const GitSettingsSection: FunctionComponent<SettingsSectionProps> = ({ se
       <FieldLabel>GitHub Mode</FieldLabel>
       <select
         value={settings.git.githubMode}
-        onChange={(event) =>
-          onChange((() => {
-            const nextMode = event.currentTarget.value as DashboardSettings["git"]["githubMode"];
-            return {
-              ...settings,
-              git: {
-                ...settings.git,
-                githubMode: nextMode,
-              },
-              skills: settings.skills.map((skill) => {
-                if (skill.name === "git_manager_remote") return { ...skill, enabled: nextMode === "REMOTE" };
-                if (skill.name === "git_manager_local") return { ...skill, enabled: nextMode === "LOCAL" };
-                if (skill.name === "git_manager") return { ...skill, enabled: true };
-                return skill;
-              }),
-            };
-          })())
-        }
+        onChange={(event) => {
+          const nextMode = event.currentTarget.value as DashboardSettings["git"]["githubMode"];
+          onChange(updateGitHubMode(settings, nextMode));
+        }}
         className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
       >
         <option value="REMOTE">Remote (GitHub CLI)</option>
@@ -42,13 +29,9 @@ export const GitSettingsSection: FunctionComponent<SettingsSectionProps> = ({ se
         type="text"
         value={settings.git.defaultBranch}
         onInput={(event) =>
-          onChange({
-            ...settings,
-            git: {
-              ...settings.git,
-              defaultBranch: event.currentTarget.value,
-            },
-          })
+          onChange(updateGitSettings(settings, {
+            defaultBranch: event.currentTarget.value,
+          }))
         }
         className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
         placeholder="main"
@@ -60,13 +43,9 @@ export const GitSettingsSection: FunctionComponent<SettingsSectionProps> = ({ se
         type="text"
         value={settings.git.featureBranchPrefix}
         onInput={(event) =>
-          onChange({
-            ...settings,
-            git: {
-              ...settings.git,
-              featureBranchPrefix: event.currentTarget.value,
-            },
-          })
+          onChange(updateGitSettings(settings, {
+            featureBranchPrefix: event.currentTarget.value,
+          }))
         }
         className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
         placeholder="feature/"
@@ -78,13 +57,9 @@ export const GitSettingsSection: FunctionComponent<SettingsSectionProps> = ({ se
         type="text"
         value={settings.git.sprintBranchScheme}
         onInput={(event) =>
-          onChange({
-            ...settings,
-            git: {
-              ...settings.git,
-              sprintBranchScheme: event.currentTarget.value,
-            },
-          })
+          onChange(updateGitSettings(settings, {
+            sprintBranchScheme: event.currentTarget.value,
+          }))
         }
         className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
         placeholder="feature/sprint{sprint}-implementation"
@@ -97,13 +72,9 @@ export const GitSettingsSection: FunctionComponent<SettingsSectionProps> = ({ se
         type="password"
         value={settings.git.githubToken}
         onInput={(event) =>
-          onChange({
-            ...settings,
-            git: {
-              ...settings.git,
-              githubToken: event.currentTarget.value,
-            },
-          })
+          onChange(updateGitSettings(settings, {
+            githubToken: event.currentTarget.value,
+          }))
         }
         className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
         placeholder="ghp_..."
@@ -114,13 +85,9 @@ export const GitSettingsSection: FunctionComponent<SettingsSectionProps> = ({ se
       label="Auto create PR when available"
       checked={settings.git.autoCreatePr}
       onToggle={(checked) =>
-        onChange({
-          ...settings,
-          git: {
-            ...settings.git,
-            autoCreatePr: checked,
-          },
-        })
+        onChange(updateGitSettings(settings, {
+          autoCreatePr: checked,
+        }))
       }
     />
   </SettingsCard>
