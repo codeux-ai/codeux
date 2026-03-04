@@ -64,4 +64,4 @@
 - Finding: Thresholds are currently blocking PR merge.
 - Instructions: Perform a final sweep of any remaining uncovered lines across the project. Ensure `npm run test:coverage` passes locally with the 80% threshold.
 - Done criteria: All coverage thresholds are met; CI passes without administrative override.
-- Dependencies: T01-T09.
+- Dependencies: T01, T02, T03, T04, T05, T06, T07, T08, T09.
