@@ -1,5 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import axios from "axios";
 import type { AxiosError } from "axios";
 import * as fs from "fs/promises";
@@ -323,7 +324,7 @@ export class JulesAgentServer {
     }
   }
 
-  private formatError(error: unknown): { content: Array<{ type: string; text: string }>; isError: true } {
+  private formatError(error: unknown): CallToolResult {
     const maybeError = error as { message?: string };
     let message = maybeError?.message || "An unknown error occurred";
     if (axios.isAxiosError(error)) {

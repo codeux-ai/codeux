@@ -25,7 +25,7 @@ Returns enabled tool definitions from `src/contracts/mcp-tool-definitions.ts`, f
 ### Tool call handler
 - Resolves tool name.
 - Verifies tool is enabled in `mcpTools`.
-- Dispatches through handler map.
+- Dispatches through the typed registry in `src/api/mcp/tool-registry.ts`.
 - Wraps unknown tool as MCP `MethodNotFound`.
 - Normalizes runtime/API errors into `isError` response.
 
@@ -33,6 +33,9 @@ Returns enabled tool definitions from `src/contracts/mcp-tool-definitions.ts`, f
 
 - Core dispatch target: `CoreToolHandler`
 - Agent dispatch target: `AgentToolHandler`
+- Registry layer: `McpToolRegistry` (`src/api/mcp/tool-registry.ts`)
+  - Enforces per-tool argument contracts derived from `src/contracts/mcp-tool-definitions.ts`.
+  - Validates required fields, primitive types, and enum constraints before handler execution.
 
 This split keeps tool contracts stable while allowing orchestration internals to evolve independently.
 

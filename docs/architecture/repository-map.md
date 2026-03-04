@@ -25,6 +25,9 @@ This map explains where major responsibilities live.
 - `contracts/`
   - `app-types.ts`, `mcp-tool-definitions.ts`
   - Shared backend contracts and MCP tool definitions.
+- `api/mcp/`
+  - `tool-registry.ts`
+  - Typed MCP tool argument contracts, registration, and dispatch validation.
 - `integrations/`
   - `jules-api-client.ts`
   - Jules API HTTP client.

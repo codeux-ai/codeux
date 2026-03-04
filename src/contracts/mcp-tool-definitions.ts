@@ -180,13 +180,3 @@ export const TOOL_DEFINITIONS = [
 ] as const;
 
 export type ToolName = (typeof TOOL_DEFINITIONS)[number]["name"];
-
-export type ToolHandlerMap = Record<string, (args: any) => Promise<any>>;
-
-export const dispatchTool = async (name: string, args: any, handlers: ToolHandlerMap): Promise<any> => {
-  const handler = handlers[name];
-  if (!handler) {
-    throw new Error(`Tool not found: ${name}`);
-  }
-  return await handler(args);
-};
