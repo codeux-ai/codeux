@@ -1,9 +1,12 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import type { Subtask } from "../../contracts/app-types.js";
+import type { Logger } from "../../shared/logging/logger.js";
 import { SubtaskParser } from "./subtask-parser.js";
 
 export class SubtaskFileRepository {
+  constructor(private readonly logger?: Logger) {}
+
   /**
    * Loads a single subtask by its ID from the specified directory.
    */
@@ -15,25 +18,36 @@ export class SubtaskFileRepository {
   }
 
   /**
-   * Loads all subtasks from the specified directory.
+   * Loads all subtasks from the specified directory in parallel,
+   * returning them in deterministic (alphabetical by ID) order.
    */
   async loadSubtasks(dir: string): Promise<Subtask[]> {
     const files = await fs.readdir(dir);
     const subtasks: Subtask[] = [];
+    const loadPromises: Promise<void>[] = [];
 
     for (const file of files) {
       if (!file.endsWith(".md")) continue;
       const id = file.replace(".md", "");
-      try {
-        const subtask = await this.loadSubtask(dir, id);
-        subtasks.push(subtask);
-      } catch (err) {
-        // Skip files that cannot be parsed as subtasks
-        console.error(`Failed to load subtask ${id}:`, err);
-      }
+
+      const loadPromise = this.loadSubtask(dir, id)
+        .then((subtask) => {
+          subtasks.push(subtask);
+        })
+        .catch((err: unknown) => {
+          // Skip files that cannot be parsed as subtasks
+          if (this.logger) {
+            this.logger.warn(`Failed to load subtask ${id}`, { error: err });
+          }
+        });
+
+      loadPromises.push(loadPromise);
     }
 
-    return subtasks;
+    await Promise.all(loadPromises);
+
+    // Sort deterministically by ID
+    return subtasks.sort((a, b) => a.id.localeCompare(b.id));
   }
 
   /**
