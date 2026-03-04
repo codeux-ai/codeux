@@ -17,6 +17,10 @@ import type {
   JulesSession,
   Settings,
   Subtask,
+  DashboardStatus,
+  GetCiStatusForScopeArgs,
+  AutoMergeFeaturePrArgs,
+  PersistTaskMergedFlagArgs,
 } from "../contracts/app-types.js";
 import { SprintOrchestrator } from "../sprint/sprint-orchestrator.js";
 import { GuideRepository } from "../repositories/guide-repository.js";
@@ -55,7 +59,7 @@ export class JulesAgentServer {
   private logger: Logger;
   private julesApi: JulesApiClient;
   private completedSprints: Set<number> = new Set();
-  private lastStatus: any = { subtasks: [], timestamp: null };
+  private lastStatus: Partial<DashboardStatus> | null = { subtasks: [], timestamp: null };
   private app = express();
   private settings: Settings = { maxFailures: 5 };
   private consecutiveFailures: number = 0;
@@ -372,12 +376,7 @@ export class JulesAgentServer {
     });
   }
 
-  private async persistTaskMergedFlag(args: {
-    repoPath: string;
-    sprintNumber: number;
-    taskId: string;
-    merged: boolean;
-  }): Promise<void> {
+  private async persistTaskMergedFlag(args: PersistTaskMergedFlagArgs): Promise<void> {
     const subtasksDir = path.join(args.repoPath, ".jules-subagents", "sprints", `sprint${args.sprintNumber}-subtasks`);
     await this.subtaskRepository.setMerged(subtasksDir, args.taskId, args.merged);
   }
@@ -495,13 +494,7 @@ export class JulesAgentServer {
     return await this.activityCacheService.getGitStatus();
   }
 
-  private async getCiStatusForScope(args: {
-    repoPath: string;
-    scope: "FEATURE_PR_CI" | "MAIN_MERGE_PR_CI";
-    featureBranch: string;
-    defaultBranch: string;
-    featureBranchPrefix: string;
-  }): Promise<GitTrackingStatus | null> {
+  private async getCiStatusForScope(args: GetCiStatusForScopeArgs): Promise<GitTrackingStatus | null> {
     const gitStatusService = new GitStatusService(args.repoPath);
     try {
       return await gitStatusService.getStatus(
@@ -519,7 +512,7 @@ export class JulesAgentServer {
     }
   }
 
-  private async autoMergeFeaturePr(args: { repoPath: string; prNumber: number }): Promise<{ ok: boolean; message?: string }> {
+  private async autoMergeFeaturePr(args: AutoMergeFeaturePrArgs): Promise<{ ok: boolean; message?: string }> {
     const gitStatusService = new GitStatusService(args.repoPath);
     try {
       const result = await gitStatusService.mergePullRequest(args.prNumber, this.getEffectiveGithubToken());

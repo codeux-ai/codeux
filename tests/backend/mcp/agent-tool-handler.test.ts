@@ -14,9 +14,9 @@ describe("AgentToolHandler", () => {
     });
 
     const handler = new AgentToolHandler({
-      sprintOrchestrator: { execute: vi.fn() } as any,
-      taskService: { createTaskAgentSession } as any,
-      getDashboardSettings: () => ({ git: { sprintBranchScheme: "feature/sprint{sprint}-implementation" } }) as any,
+      sprintOrchestrator: { execute: vi.fn() } as unknown as import("../../../src/sprint/sprint-orchestrator.js").SprintOrchestrator,
+      taskService: { createTaskAgentSession } as unknown as import("../../../src/services/task-service.js").TaskService,
+      getDashboardSettings: () => ({ git: { sprintBranchScheme: "feature/sprint{sprint}-implementation" } }) as unknown as import("../../../src/contracts/app-types.js").DashboardSettings,
       formatSprintBranch: (scheme: string | undefined, sprint: number) => (scheme || "feature/sprint{sprint}-implementation").replace("{sprint}", String(sprint)),
       getConsecutiveFailures: () => 0,
       setConsecutiveFailures: vi.fn(),

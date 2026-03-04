@@ -310,3 +310,23 @@ export interface ExternalSettingsHints {
     githubToken: string;
   };
 }
+
+export interface GetCiStatusForScopeArgs {
+  repoPath: string;
+  scope: "FEATURE_PR_CI" | "MAIN_MERGE_PR_CI";
+  featureBranch: string;
+  defaultBranch: string;
+  featureBranchPrefix: string;
+}
+
+export interface AutoMergeFeaturePrArgs {
+  repoPath: string;
+  prNumber: number;
+}
+
+export interface PersistTaskMergedFlagArgs {
+  repoPath: string;
+  sprintNumber: number;
+  taskId: string;
+  merged: boolean;
+}
