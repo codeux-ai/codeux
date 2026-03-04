@@ -6,12 +6,14 @@ import { runStatusDerivationStep } from "../../../sprint/steps/status-derivation
 import { runStartReadyTasksStep } from "../../../sprint/steps/start-ready-tasks-step.js";
 import { runStatusTableStep } from "../../../sprint/steps/status-table-step.js";
 import { runProtocolStep } from "../../../sprint/steps/protocol-step.js";
-import { isCiCheckFailed, isCiCheckPending, selectFailedCiRuns, getFailedJobLabels, summarizeFailedRuns, getFailedLogSnippets } from "../../../sprint/ci-status-utils.js";
+import { isCiFailure, isCiPending, selectFailedCiRuns, getFailedJobLabels, summarizeFailedRuns, getFailedLogSnippets } from "../../../sprint/ci-status-utils.js";
 import type { SprintCycleResult } from "../../../sprint/sprint-types.js";
 import type {
   AutomationInterventionsSettings,
   AutomationLevel,
   CiIntelligenceSettings,
+  GitCiRunStatus,
+  GitTrackingStatus,
   SprintLoopStepSettings,
   Subtask,
 } from "../../../contracts/app-types.js";
@@ -204,10 +206,10 @@ export class CycleRunner {
       const checks = Array.isArray(pr.checks) ? pr.checks : [];
       const waitForFeatureCi = args.ciIntelligence.waitForCiBeforeFeatureMerge;
       const hasFailedChecks = waitForFeatureCi
-        ? checks.some((check) => isCiCheckFailed(check.status, check.conclusion))
+        ? checks.some((check) => isCiFailure(check.status, check.conclusion))
         : false;
       const hasPendingChecks = waitForFeatureCi
-        ? checks.length === 0 || checks.some((check) => isCiCheckPending(check.status, check.conclusion))
+        ? checks.length === 0 || checks.some((check) => isCiPending(check.status, check.conclusion))
         : false;
       const hasReviewBlockers = args.ciIntelligence.resolveAllCommentsBeforeFeatureMerge
         ? pr.reviewDecision === "CHANGES_REQUESTED" || pr.comments > 0
@@ -261,7 +263,7 @@ export class CycleRunner {
       reportText += `   - Check live: \`gh pr checks ${pr.number} --watch\`\n`;
       if (hasFailedChecks) {
         const failedChecks = checks
-          .filter((check) => isCiCheckFailed(check.status, check.conclusion))
+          .filter((check) => isCiFailure(check.status, check.conclusion))
           .map((check) => check.name);
         const branchName = workerBranch || args.featureBranch;
         const failedRuns = selectFailedCiRuns(gitStatus, branchName);

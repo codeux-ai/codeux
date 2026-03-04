@@ -23,6 +23,8 @@ import type {
 import { CycleRunner } from "../domain/sprint/orchestrator/cycle-runner.js";
 import { WatchLoopRunner } from "../domain/sprint/orchestrator/watch-loop-runner.js";
 import { SubtaskFileRepository } from "../infrastructure/repositories/subtask-file-repository.js";
+import type { Logger } from "../shared/logging/logger.js";
+import { MainMergeGateService } from "../domain/sprint/ci/main-merge-gate.js";
 
 export interface SprintOrchestratorDependencies {
   settings: Settings;
