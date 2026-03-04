@@ -1,223 +1,48 @@
-import { commandRunner, CommandResult } from "../shared/subprocess/command-runner.js";
 import type {
-  GitTrackingScope,
   GitTrackingStatus,
   GitPullRequestStatus,
   GitCiFailedJob,
   GitCiRunStatus,
   GitMergeStatus,
-  GitTrackingTarget,
 } from "../contracts/app-types.js";
+import {
+  GitStatusQueryClient,
+  CommandRunner,
+  defaultRunner,
+} from "../infrastructure/git/git-status-query-client.js";
+import {
+  parseOpenPrs,
+  parseCiRuns,
+  parseMergedPrs,
+  parseJson,
+  toStr,
+  toInt,
+} from "../infrastructure/git/git-status-mappers.js";
+import {
+  GitTrackingRequest,
+  buildTrackingTarget,
+  filterOpenPrs,
+  filterCiRuns,
+  sortCiRunsNewestFirst,
+  isRunFailed,
+  isFailedConclusion,
+  trimLogExcerpt,
+  filterMergedPrs,
+} from "../infrastructure/git/git-status-policy.js";
 
-interface CommandContext {
-  cwd: string;
-  ghToken?: string;
-}
+export type { GitTrackingRequest };
 
-type CommandRunner = (command: string, args: string[], context: CommandContext) => Promise<CommandResult>;
-
-const DEFAULT_TIMEOUT_MS = 8000;
 const FAILED_RUN_DETAILS_LIMIT = 3;
 const FAILED_JOBS_PER_RUN_LIMIT = 3;
-const FAILED_JOB_LOG_MAX_CHARS = 2000;
-
-const defaultRunner: CommandRunner = (command, args, context) => {
-  const env = context.ghToken && command === "gh"
-    ? { ...process.env, GH_TOKEN: context.ghToken, GITHUB_TOKEN: context.ghToken }
-    : process.env;
-  
-  return commandRunner.run(command, args, {
-    cwd: context.cwd,
-    timeout: DEFAULT_TIMEOUT_MS,
-    env,
-  });
-};
-
-const parseJson = <T>(value: string): T | null => {
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return null;
-  }
-};
-
-const toInt = (value: unknown): number | null => (typeof value === "number" ? value : null);
-const toStr = (value: unknown): string | null => (typeof value === "string" ? value : null);
-const isFailedConclusion = (value: string | null): boolean => {
-  const normalized = (value || "").toLowerCase();
-  return normalized.length > 0 && normalized !== "success" && normalized !== "neutral" && normalized !== "skipped";
-};
-
-export interface GitTrackingRequest {
-  scope: GitTrackingScope;
-  featureBranch?: string | null;
-  defaultBranch?: string | null;
-  featureBranchPrefix?: string | null;
-}
-
-const normalizeBranch = (value?: string | null): string | null => {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-};
-
-const buildTrackingTarget = (request?: GitTrackingRequest): GitTrackingTarget => {
-  const scope = request?.scope ?? "REPOSITORY";
-  const featureBranch = normalizeBranch(request?.featureBranch);
-  const defaultBranch = normalizeBranch(request?.defaultBranch);
-
-  switch (scope) {
-    case "FEATURE_PR_CI":
-      return {
-        scope,
-        label: featureBranch ? `Feature PR CI (${featureBranch})` : "Feature PR CI",
-        branch: featureBranch,
-      };
-    case "MAIN_MERGE_PR_CI":
-      return {
-        scope,
-        label: featureBranch && defaultBranch
-          ? `Main Merge PR CI (${featureBranch} -> ${defaultBranch})`
-          : "Main Merge PR CI",
-        branch: defaultBranch,
-      };
-    case "MAIN_BRANCH_CI":
-      return {
-        scope,
-        label: defaultBranch ? `Main Branch CI (${defaultBranch})` : "Main Branch CI",
-        branch: defaultBranch,
-      };
-    default:
-      return {
-        scope: "REPOSITORY",
-        label: "Repository-wide",
-        branch: null,
-      };
-  }
-};
 
 export class GitStatusService {
+  private queryClient: GitStatusQueryClient;
+
   constructor(
     private readonly repoPath: string,
     private readonly runner: CommandRunner = defaultRunner
-  ) {}
-
-  private async run(command: string, args: string[], ghToken?: string): Promise<CommandResult> {
-    return this.runner(command, args, { cwd: this.repoPath, ghToken });
-  }
-
-  private filterOpenPrs(prs: GitPullRequestStatus[], tracking?: GitTrackingRequest): GitPullRequestStatus[] {
-    if (!tracking) {
-      return prs;
-    }
-
-    const featureBranch = normalizeBranch(tracking.featureBranch);
-    const defaultBranch = normalizeBranch(tracking.defaultBranch);
-
-    switch (tracking.scope) {
-      case "FEATURE_PR_CI":
-        return featureBranch
-          ? prs.filter((pr) => normalizeBranch(pr.baseRefName) === featureBranch)
-          : prs;
-      case "MAIN_MERGE_PR_CI":
-        if (!featureBranch || !defaultBranch) {
-          return prs;
-        }
-        return prs.filter((pr) =>
-          normalizeBranch(pr.baseRefName) === defaultBranch &&
-          normalizeBranch(pr.headRefName) === featureBranch
-        );
-      case "MAIN_BRANCH_CI":
-        return defaultBranch
-          ? prs.filter((pr) => normalizeBranch(pr.baseRefName) === defaultBranch)
-          : prs;
-      default:
-        return prs;
-    }
-  }
-
-  private filterCiRuns(
-    runs: GitCiRunStatus[],
-    trackedPrs: GitPullRequestStatus[],
-    tracking?: GitTrackingRequest
-  ): GitCiRunStatus[] {
-    if (!tracking) {
-      return runs;
-    }
-
-    if (tracking.scope === "MAIN_BRANCH_CI") {
-      const defaultBranch = normalizeBranch(tracking.defaultBranch);
-      return defaultBranch
-        ? runs.filter((run) => normalizeBranch(run.headBranch) === defaultBranch)
-        : runs;
-    }
-
-    if (tracking.scope === "FEATURE_PR_CI") {
-      const featureBranch = normalizeBranch(tracking.featureBranch);
-      const trackedHeads = new Set(
-        trackedPrs
-          .map((pr) => normalizeBranch(pr.headRefName))
-          .filter((value): value is string => value !== null)
-      );
-      if (featureBranch) {
-        trackedHeads.add(featureBranch);
-      }
-      if (trackedHeads.size > 0) {
-        return runs.filter((run) => {
-          const headBranch = normalizeBranch(run.headBranch);
-          return headBranch ? trackedHeads.has(headBranch) : false;
-        });
-      }
-      return [];
-    }
-
-    if (tracking.scope === "MAIN_MERGE_PR_CI") {
-      const trackedHeads = new Set(
-        trackedPrs
-          .map((pr) => normalizeBranch(pr.headRefName))
-          .filter((value): value is string => value !== null)
-      );
-      if (trackedHeads.size === 0) {
-        return [];
-      }
-      return runs.filter((run) => {
-        const headBranch = normalizeBranch(run.headBranch);
-        return headBranch ? trackedHeads.has(headBranch) : false;
-      });
-    }
-
-    return runs;
-  }
-
-  private sortCiRunsNewestFirst(runs: GitCiRunStatus[]): GitCiRunStatus[] {
-    return runs.slice().sort((left, right) => {
-      const leftTime = left.updatedAt ? new Date(left.updatedAt).getTime() : 0;
-      const rightTime = right.updatedAt ? new Date(right.updatedAt).getTime() : 0;
-      if (leftTime !== rightTime) {
-        return rightTime - leftTime;
-      }
-      const leftId = left.id ?? 0;
-      const rightId = right.id ?? 0;
-      return rightId - leftId;
-    });
-  }
-
-  private isRunFailed(run: GitCiRunStatus): boolean {
-    const normalizedStatus = run.status.toLowerCase();
-    if (normalizedStatus !== "completed") {
-      return false;
-    }
-    return isFailedConclusion(run.conclusion);
-  }
-
-  private trimLogExcerpt(logText: string): string {
-    const normalized = logText.replace(/\r\n/g, "\n").trim();
-    if (normalized.length <= FAILED_JOB_LOG_MAX_CHARS) {
-      return normalized;
-    }
-    return `...${normalized.slice(normalized.length - FAILED_JOB_LOG_MAX_CHARS)}`;
+  ) {
+    this.queryClient = new GitStatusQueryClient(this.repoPath, this.runner);
   }
 
   private async fetchFailedJobLogExcerpt(
@@ -225,7 +50,7 @@ export class GitStatusService {
     jobId: number,
     ghToken?: string
   ): Promise<{ logExcerpt: string | null; warning?: string }> {
-    const result = await this.run("gh", ["run", "view", String(runId), "--job", String(jobId), "--log-failed"], ghToken);
+    const result = await this.queryClient.ghRunViewLogFailed(runId, jobId, ghToken);
     if (!result.ok) {
       return { logExcerpt: null, warning: `Failed to fetch failed-job logs for run ${runId}, job ${jobId}.` };
     }
@@ -233,7 +58,7 @@ export class GitStatusService {
     if (stdout.length === 0) {
       return { logExcerpt: null };
     }
-    return { logExcerpt: this.trimLogExcerpt(stdout) };
+    return { logExcerpt: trimLogExcerpt(stdout) };
   }
 
   private async fetchFailedRunJobs(
@@ -241,7 +66,7 @@ export class GitStatusService {
     ghToken?: string
   ): Promise<{ failedJobs: GitCiFailedJob[]; warnings: string[] }> {
     const warnings: string[] = [];
-    const result = await this.run("gh", ["run", "view", String(runId), "--json", "jobs"], ghToken);
+    const result = await this.queryClient.ghRunViewJobs(runId, ghToken);
     if (!result.ok) {
       return { failedJobs: [], warnings: [`Failed to fetch failed jobs for run ${runId}.`] };
     }
@@ -308,7 +133,7 @@ export class GitStatusService {
   ): Promise<{ runs: GitCiRunStatus[]; warnings: string[] }> {
     const warnings: string[] = [];
     const failedCandidates = runs
-      .filter((run) => run.id !== null && this.isRunFailed(run))
+      .filter((run) => run.id !== null && isRunFailed(run))
       .slice(0, FAILED_RUN_DETAILS_LIMIT);
     if (failedCandidates.length === 0) {
       return { runs, warnings };
@@ -341,40 +166,13 @@ export class GitStatusService {
     return { runs: enrichedRuns, warnings };
   }
 
-  private filterMergedPrs(merged: GitMergeStatus[], tracking?: GitTrackingRequest): GitMergeStatus[] {
-    if (!tracking) {
-      return merged;
-    }
-
-    const defaultBranch = normalizeBranch(tracking.defaultBranch);
-    const featureBranch = normalizeBranch(tracking.featureBranch);
-    const featurePrefix = normalizeBranch(tracking.featureBranchPrefix);
-    if (!defaultBranch && !featureBranch && !featurePrefix) {
-      return merged;
-    }
-
-    return merged.filter((pr) => {
-      const base = normalizeBranch(pr.baseRefName);
-      if (!base) {
-        return false;
-      }
-      if (defaultBranch && base === defaultBranch) {
-        return true;
-      }
-      if (featureBranch && base === featureBranch) {
-        return true;
-      }
-      return featurePrefix ? base.startsWith(featurePrefix) : false;
-    });
-  }
-
   async getStatus(mode: "REMOTE" | "LOCAL", ghToken?: string, trackingRequest?: GitTrackingRequest): Promise<GitTrackingStatus> {
     const effectiveToken = ghToken && ghToken.trim().length > 0 ? ghToken.trim() : undefined;
     const warnings: string[] = [];
     const now = new Date().toISOString();
     const tracking = buildTrackingTarget(trackingRequest);
 
-    const gitRepoCheck = await this.run("git", ["rev-parse", "--is-inside-work-tree"], effectiveToken);
+    const gitRepoCheck = await this.queryClient.gitRevParseIsInsideWorkTree(effectiveToken);
     if (!gitRepoCheck.ok || gitRepoCheck.stdout.trim() !== "true") {
       return {
         mode,
@@ -392,10 +190,10 @@ export class GitStatusService {
       };
     }
 
-    const rootResult = await this.run("git", ["rev-parse", "--show-toplevel"], effectiveToken);
-    const branchResult = await this.run("git", ["branch", "--show-current"], effectiveToken);
-    const remoteResult = await this.run("git", ["remote"], effectiveToken);
-    const dirtyResult = await this.run("git", ["status", "--porcelain"], effectiveToken);
+    const rootResult = await this.queryClient.gitRevParseShowToplevel(effectiveToken);
+    const branchResult = await this.queryClient.gitBranchShowCurrent(effectiveToken);
+    const remoteResult = await this.queryClient.gitRemote(effectiveToken);
+    const dirtyResult = await this.queryClient.gitStatusPorcelain(effectiveToken);
 
     const repositoryRoot = rootResult.ok ? rootResult.stdout.trim() : null;
     const branch = branchResult.ok ? branchResult.stdout.trim() || null : null;
@@ -425,7 +223,7 @@ export class GitStatusService {
       };
     }
 
-    const ghVersion = await this.run("gh", ["--version"], effectiveToken);
+    const ghVersion = await this.queryClient.ghVersion(effectiveToken);
     if (!ghVersion.ok) {
       return {
         mode,
@@ -443,7 +241,7 @@ export class GitStatusService {
       };
     }
 
-    const authStatus = await this.run("gh", ["auth", "status"], effectiveToken);
+    const authStatus = await this.queryClient.ghAuthStatus(effectiveToken);
     if (!authStatus.ok) {
       warnings.push("GitHub CLI is not authenticated. Remote tracking may be unavailable.");
     }
@@ -455,13 +253,13 @@ export class GitStatusService {
     const merged = await this.fetchMergedPrs(effectiveToken);
     if (merged.warning) warnings.push(merged.warning);
 
-    const trackedPrs = this.filterOpenPrs(prs.data, trackingRequest);
-    const trackedCiRuns = this.sortCiRunsNewestFirst(this.filterCiRuns(ciRuns.data, trackedPrs, trackingRequest));
+    const trackedPrs = filterOpenPrs(prs.data, trackingRequest);
+    const trackedCiRuns = sortCiRunsNewestFirst(filterCiRuns(ciRuns.data, trackedPrs, trackingRequest));
     const enrichedCiRuns = await this.enrichFailedRunDetails(trackedCiRuns, effectiveToken);
     if (enrichedCiRuns.warnings.length > 0) {
       warnings.push(...enrichedCiRuns.warnings);
     }
-    const trackedMergedPrs = this.filterMergedPrs(merged.data, trackingRequest);
+    const trackedMergedPrs = filterMergedPrs(merged.data, trackingRequest);
 
     if (trackedPrs.some((pr) => pr.mergeStateStatus === "DIRTY")) {
       warnings.push("One or more PRs have merge conflicts (DIRTY). If CI checks do not start on main, inspect merge conflicts.");
@@ -494,7 +292,7 @@ export class GitStatusService {
 
   async mergePullRequest(prNumber: number, ghToken?: string): Promise<{ ok: boolean; message?: string }> {
     const effectiveToken = ghToken && ghToken.trim().length > 0 ? ghToken.trim() : undefined;
-    const result = await this.run("gh", ["pr", "merge", String(prNumber), "--merge", "--delete-branch"], effectiveToken);
+    const result = await this.queryClient.ghPrMerge(prNumber, effectiveToken);
     if (!result.ok) {
       return {
         ok: false,
@@ -505,132 +303,26 @@ export class GitStatusService {
   }
 
   private async fetchOpenPrs(ghToken?: string): Promise<{ data: GitPullRequestStatus[]; warning?: string }> {
-    const result = await this.run("gh", [
-      "pr",
-      "list",
-      "--state",
-      "open",
-      "--limit",
-      "50",
-      "--json",
-      "number,title,url,state,isDraft,headRefName,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup",
-    ], ghToken);
+    const result = await this.queryClient.ghPrListOpen(ghToken);
     if (!result.ok) {
       return { data: [], warning: "Failed to fetch open pull requests via gh CLI." };
     }
-
-    const parsed = parseJson<Array<Record<string, unknown>>>(result.stdout);
-    if (!parsed) {
-      return { data: [], warning: "Could not parse pull request status response." };
-    }
-
-    const data: GitPullRequestStatus[] = parsed.map((item) => {
-      const rollup = Array.isArray(item.statusCheckRollup) ? item.statusCheckRollup : [];
-      const checks = rollup
-        .map((check) => {
-          if (!check || typeof check !== "object") return null;
-          const candidate = check as Record<string, unknown>;
-          const name = toStr(candidate.name) || toStr(candidate.context) || "check";
-          const status = toStr(candidate.status) || "UNKNOWN";
-          const conclusion = toStr(candidate.conclusion);
-          return { name, status, conclusion };
-        })
-        .filter((check): check is { name: string; status: string; conclusion: string | null } => check !== null);
-
-      const commentsObj = (item.comments && typeof item.comments === "object")
-        ? (item.comments as Record<string, unknown>)
-        : null;
-      const commentsFromObject = commentsObj ? toInt(commentsObj.totalCount) : null;
-      const commentsFromNumber = toInt(item.comments);
-      const comments = commentsFromNumber ?? commentsFromObject ?? 0;
-
-      return {
-        number: toInt(item.number) ?? 0,
-        title: toStr(item.title) ?? "Untitled PR",
-        url: toStr(item.url) ?? "",
-        state: toStr(item.state) ?? "UNKNOWN",
-        isDraft: item.isDraft === true,
-        headRefName: toStr(item.headRefName),
-        baseRefName: toStr(item.baseRefName),
-        mergeStateStatus: toStr(item.mergeStateStatus),
-        reviewDecision: toStr(item.reviewDecision),
-        updatedAt: toStr(item.updatedAt),
-        comments,
-        checks,
-      };
-    });
-
-    return { data };
+    return parseOpenPrs(result.stdout);
   }
 
   private async fetchCiRuns(ghToken?: string): Promise<{ data: GitCiRunStatus[]; warning?: string }> {
-    const result = await this.run("gh", [
-      "run",
-      "list",
-      "--limit",
-      "50",
-      "--json",
-      "databaseId,name,workflowName,status,conclusion,event,headBranch,url,updatedAt",
-    ], ghToken);
+    const result = await this.queryClient.ghRunList(ghToken);
     if (!result.ok) {
       return { data: [], warning: "Failed to fetch GitHub Actions runs via gh CLI." };
     }
-
-    const parsed = parseJson<Array<Record<string, unknown>>>(result.stdout);
-    if (!parsed) {
-      return { data: [], warning: "Could not parse CI run response." };
-    }
-
-    const data: GitCiRunStatus[] = parsed.map((item) => ({
-      id: toInt(item.databaseId),
-      name: toStr(item.name) ?? "workflow",
-      workflowName: toStr(item.workflowName),
-      status: toStr(item.status) ?? "UNKNOWN",
-      conclusion: toStr(item.conclusion),
-      event: toStr(item.event),
-      headBranch: toStr(item.headBranch),
-      url: toStr(item.url) ?? "",
-      updatedAt: toStr(item.updatedAt),
-    }));
-
-    return { data };
+    return parseCiRuns(result.stdout);
   }
 
   private async fetchMergedPrs(ghToken?: string): Promise<{ data: GitMergeStatus[]; warning?: string }> {
-    const result = await this.run("gh", [
-      "pr",
-      "list",
-      "--state",
-      "merged",
-      "--limit",
-      "100",
-      "--json",
-      "number,title,url,headRefName,baseRefName,mergedAt,mergedBy",
-    ], ghToken);
+    const result = await this.queryClient.ghPrListMerged(ghToken);
     if (!result.ok) {
       return { data: [], warning: "Failed to fetch recently merged pull requests via gh CLI." };
     }
-
-    const parsed = parseJson<Array<Record<string, unknown>>>(result.stdout);
-    if (!parsed) {
-      return { data: [], warning: "Could not parse merged PR response." };
-    }
-
-    const data: GitMergeStatus[] = parsed.map((item) => {
-      const mergedByObj = (item.mergedBy && typeof item.mergedBy === "object")
-        ? (item.mergedBy as Record<string, unknown>)
-        : null;
-      return {
-        number: toInt(item.number) ?? 0,
-        title: toStr(item.title) ?? "Merged PR",
-        url: toStr(item.url) ?? "",
-        headRefName: toStr(item.headRefName),
-        baseRefName: toStr(item.baseRefName),
-        mergedAt: toStr(item.mergedAt),
-        mergedBy: mergedByObj ? toStr(mergedByObj.login) : null,
-      };
-    });
-
-    return { data };
+    return parseMergedPrs(result.stdout);
   }
 }
