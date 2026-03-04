@@ -47,14 +47,9 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
     }
   }, []);
 
-  const runtimePoll = useDashboardPollManager({
+  const unifiedPoll = useDashboardPollManager({
     intervalMs: DEFAULT_POLL_INTERVAL_MS,
-    onPoll: refreshRuntimeStatusAction,
-  });
-
-  const gitPoll = useDashboardPollManager({
-    intervalMs: DEFAULT_POLL_INTERVAL_MS,
-    onPoll: refreshGitStatusAction,
+    onPoll: [refreshRuntimeStatusAction, refreshGitStatusAction],
   });
 
   const tasksWithLiveActivities = useMemo(() => {
@@ -67,8 +62,8 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
     error,
     gitStatus,
     gitStatusError,
-    refreshGitStatus: gitPoll.refreshNow,
-    refreshRuntimeStatus: runtimePoll.refreshNow,
+    refreshGitStatus: refreshGitStatusAction,
+    refreshRuntimeStatus: refreshRuntimeStatusAction,
     status,
     stats,
     tasksWithLiveActivities,

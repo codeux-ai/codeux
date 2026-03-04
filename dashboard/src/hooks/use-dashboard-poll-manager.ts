@@ -6,7 +6,7 @@ const BACKOFF_FACTOR = 1.5;
 
 interface PollOptions {
   intervalMs?: number;
-  onPoll: () => Promise<void>;
+  onPoll: Array<() => Promise<void>>;
   onError?: (error: Error) => void;
   onSuccess?: () => void;
   enabled?: boolean;
@@ -56,7 +56,13 @@ export const useDashboardPollManager = (options: PollOptions): PollManager => {
     clearTimer();
 
     try {
-      await onPollRef.current();
+      const results = await Promise.allSettled(onPollRef.current.map((fn) => fn()));
+
+      const rejections = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (rejections.length > 0) {
+        throw rejections[0].reason;
+      }
+
       setConsecutiveFailures(0);
       onSuccess?.();
       
