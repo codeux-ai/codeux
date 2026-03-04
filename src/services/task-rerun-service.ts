@@ -1,4 +1,5 @@
 import type { JulesSession, Subtask } from "../contracts/app-types.js";
+import type { Logger } from "../shared/logging/logger.js";
 
 export interface TaskRerunContext {
   sprint_number?: number;
@@ -26,6 +27,7 @@ export interface TaskRerunServiceDependencies {
   resolveSessionName: (session: Partial<JulesSession>) => string | undefined;
   extractSessionId: (session: Partial<JulesSession>) => string | undefined;
   persistMergedFlag: (args: { repoPath: string; sprintNumber: number; taskId: string; merged: boolean }) => Promise<void>;
+  logger?: Logger;
 }
 
 const resetTaskState = (task: Subtask): Subtask => ({
@@ -81,7 +83,10 @@ export class TaskRerunService {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[TaskRerunService] Warning: failed to persist merged=false for task '${taskId}': ${message}`);
+      this.deps.logger?.warn("Failed to persist merged=false while rerunning task", {
+        taskId,
+        message,
+      });
     }
 
     try {

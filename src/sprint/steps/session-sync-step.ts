@@ -16,12 +16,17 @@ export const runSessionSyncStep = async (
     return new Date(b.createTime).getTime() - new Date(a.createTime).getTime();
   });
 
+  const sessionMap = new Map<string, JulesSession>();
+  for (const session of sessions) {
+    const runKey = extractTaskRunKeyFromTitle(session.title);
+    if (runKey && !sessionMap.has(runKey)) {
+      sessionMap.set(runKey, session);
+    }
+  }
+
   for (const task of subtasks) {
     const expectedRunKey = buildTaskRunKey(context.repoPath, context.sprintNumber, task.id);
-    const match = sessions.find((session) => {
-      const runKey = extractTaskRunKeyFromTitle(session.title);
-      return runKey === expectedRunKey;
-    });
+    const match = sessionMap.get(expectedRunKey);
     if (!match) {
       continue;
     }
@@ -54,7 +59,7 @@ export const runSessionSyncStep = async (
       try {
         task.activities = await deps.fetchRecentActivities(sessionName, 5);
       } catch {
-        console.error(`Warning: Could not fetch activities for task ${task.id}`);
+        deps.logger.warn("Could not fetch activities for task", { taskId: task.id });
       }
     }
 

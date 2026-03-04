@@ -22,6 +22,9 @@ This map explains where major responsibilities live.
 - `config/`
   - `app-config.ts`, `external-settings.ts`
   - Startup/env config loading and external settings hints.
+- `api/mcp/`
+  - `tool-registry.ts`
+  - Typed MCP tool argument contracts and register/dispatch registry.
 - `contracts/`
   - `app-types.ts`, `mcp-tool-definitions.ts`
   - Shared backend contracts and MCP tool definitions.
@@ -45,6 +48,9 @@ This map explains where major responsibilities live.
   - `guide-repository.ts`
   - `subtask-repository.ts`
   - `session-tracking-repository.ts`
+- `infrastructure/repositories/`
+  - `file-template-repository.ts`
+  - Shared file lookup implementation used by guide and instruction template repositories.
 - `mcp/`
   - `core-tool-handler.ts`
   - `agent-tool-handler.ts`
@@ -57,6 +63,9 @@ This map explains where major responsibilities live.
   - `cli-workflow-text-utils.ts`
   - `cli-workflow-utils.ts`
   - `provider-routing.ts`
+- `shared/logging/`
+  - `logger.ts`
+  - `correlation-id.ts`
 - `git/`
   - `sprint-branch-scheme.ts`
 - `sprint/sprint-orchestrator.ts`

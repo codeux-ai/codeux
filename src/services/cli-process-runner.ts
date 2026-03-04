@@ -1,10 +1,6 @@
-import { spawn } from "child_process";
+import { commandRunner, CommandResult } from "../shared/subprocess/command-runner.js";
 
-export interface CommandResult {
-  ok: boolean;
-  stdout: string;
-  stderr: string;
-}
+export { CommandResult };
 
 export interface StreamingCommandOptions {
   onStdoutLine?: (line: string) => void;
@@ -18,46 +14,11 @@ export const runStreamingCommand = async (
   env: NodeJS.ProcessEnv,
   options: StreamingCommandOptions = {}
 ): Promise<CommandResult> => {
-  return await new Promise<CommandResult>((resolve) => {
-    const child = spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-
-    child.stdout.on("data", (chunk) => {
-      const text = String(chunk);
-      stdout += text;
-      if (options.onStdoutLine) {
-        for (const line of text.split("\n").map((entry) => entry.trim()).filter((entry) => entry.length > 0)) {
-          options.onStdoutLine(line);
-        }
-      }
-    });
-
-    child.stderr.on("data", (chunk) => {
-      const text = String(chunk);
-      stderr += text;
-      if (options.onStderrLine) {
-        for (const line of text.split("\n").map((entry) => entry.trim()).filter((entry) => entry.length > 0)) {
-          options.onStderrLine(line);
-        }
-      }
-    });
-
-    child.on("error", (error) => {
-      resolve({
-        ok: false,
-        stdout,
-        stderr: `${stderr}\n${error.message}`.trim(),
-      });
-    });
-
-    child.on("close", (code) => {
-      resolve({
-        ok: code === 0,
-        stdout,
-        stderr,
-      });
-    });
+  return commandRunner.run(command, args, {
+    cwd,
+    env,
+    onStdoutLine: options.onStdoutLine,
+    onStderrLine: options.onStderrLine,
   });
 };
 
@@ -67,9 +28,5 @@ export const runCommandStrict = async (
   cwd: string,
   env: NodeJS.ProcessEnv = process.env
 ): Promise<CommandResult> => {
-  const result = await runStreamingCommand(command, args, cwd, env);
-  if (!result.ok) {
-    throw new Error(`${command} ${args.join(" ")} failed: ${result.stderr || result.stdout}`);
-  }
-  return result;
+  return commandRunner.runStrict(command, args, { cwd, env });
 };

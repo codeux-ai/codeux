@@ -1,43 +1,25 @@
-import * as fs from "fs/promises";
-import os from "os";
 import * as path from "path";
+import { FileTemplateRepository } from "../infrastructure/repositories/file-template-repository.js";
 
-const INSTRUCTION_DIR_CANDIDATES = ["instructions", "intructions"];
+const INSTRUCTION_DIR_CANDIDATES = [
+  path.join(".jules-subagents", "instructions"),
+  path.join(".jules-subagents", "intructions"),
+];
 
 export class InstructionRepository {
-  constructor(private readonly projectRoot: string) {}
+  private readonly repository: FileTemplateRepository;
 
-  private buildBaseSearchRoots(repoPath?: string): string[] {
-    const roots = [process.cwd(), this.projectRoot, os.homedir()];
-    if (repoPath && repoPath.trim().length > 0) {
-      roots.unshift(repoPath);
-    }
-    return [...new Set(roots)];
-  }
-
-  private buildCandidatePaths(relativeInstructionPath: string, repoPath?: string): string[] {
-    const roots = this.buildBaseSearchRoots(repoPath);
-    const paths: string[] = [];
-
-    for (const root of roots) {
-      for (const dirName of INSTRUCTION_DIR_CANDIDATES) {
-        paths.push(path.join(root, ".jules-subagents", dirName, relativeInstructionPath));
-      }
-    }
-
-    return paths;
+  constructor(projectRoot: string) {
+    this.repository = new FileTemplateRepository(projectRoot, INSTRUCTION_DIR_CANDIDATES);
   }
 
   async loadInstruction(relativeInstructionPath: string, repoPath?: string): Promise<string> {
-    for (const candidatePath of this.buildCandidatePaths(relativeInstructionPath, repoPath)) {
-      try {
-        await fs.access(candidatePath);
-        return await fs.readFile(candidatePath, "utf-8");
-      } catch {
-        continue;
-      }
-    }
+    const normalizedRepoPath = repoPath?.trim() ? repoPath : undefined;
 
-    throw new Error(`Instruction template not found: ${relativeInstructionPath}`);
+    try {
+      return await this.repository.loadFile(relativeInstructionPath, normalizedRepoPath);
+    } catch {
+      throw new Error(`Instruction template not found: ${relativeInstructionPath}`);
+    }
   }
 }

@@ -14,7 +14,9 @@ The sprint loop uses editable markdown templates for all major operator-facing i
   - Replaces placeholders like `{{key}}`.
   - Supports nested keys like `{{group.subkey}}`.
 - `src/instructions/instruction-template-repository.ts`
-  - Resolves templates from override paths.
+  - Instruction-specific adapter for template file lookup.
+- `src/infrastructure/repositories/file-template-repository.ts`
+  - Shared file lookup logic backed by `buildSearchRoots`.
 - `src/instructions/instruction-template-catalog.ts`
   - Maps template IDs to relative paths and fallback defaults.
 - `src/instructions/instruction-template-service.ts`

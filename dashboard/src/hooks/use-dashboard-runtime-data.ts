@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
+import { useCallback, useMemo, useState } from "preact/hooks";
 import { computeStats, mergeLiveActivities } from "../lib/status.js";
 import { fetchGitTrackingStatus, fetchRuntimeDashboardPayload } from "../lib/api/dashboard-api.js";
 import type { DashboardStatus, GitTrackingStatus, LiveActivitiesResponse } from "../types.js";
+import { useDashboardPollManager } from "./use-dashboard-poll-manager.js";
 
 const DEFAULT_POLL_INTERVAL_MS = 10000;
 
@@ -23,39 +24,38 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
   const [gitStatus, setGitStatus] = useState<GitTrackingStatus | null>(null);
   const [gitStatusError, setGitStatusError] = useState<string | null>(null);
 
-  const refreshRuntimeStatus = useCallback(async (): Promise<void> => {
+  const refreshRuntimeStatusAction = useCallback(async (): Promise<void> => {
     try {
       const data = await fetchRuntimeDashboardPayload();
       setStatus(data.status);
       setLiveActivities((prev) => ({ ...prev, ...data.liveActivities }));
       setError(null);
-    } catch {
+    } catch (err) {
       setError("Unable to connect to Orchestrator API");
+      throw err;
     }
   }, []);
 
-  const refreshGitStatus = useCallback(async (): Promise<void> => {
+  const refreshGitStatusAction = useCallback(async (): Promise<void> => {
     try {
       const data = await fetchGitTrackingStatus();
       setGitStatus(data);
       setGitStatusError(null);
-    } catch {
+    } catch (err) {
       setGitStatusError("Unable to load git/ci/pr tracking.");
+      throw err;
     }
   }, []);
 
-  useEffect(() => {
-    void refreshRuntimeStatus();
-    void refreshGitStatus();
+  const runtimePoll = useDashboardPollManager({
+    intervalMs: DEFAULT_POLL_INTERVAL_MS,
+    onPoll: refreshRuntimeStatusAction,
+  });
 
-    const runtimeIntervalId = window.setInterval(() => void refreshRuntimeStatus(), DEFAULT_POLL_INTERVAL_MS);
-    const gitIntervalId = window.setInterval(() => void refreshGitStatus(), DEFAULT_POLL_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(runtimeIntervalId);
-      window.clearInterval(gitIntervalId);
-    };
-  }, [refreshGitStatus, refreshRuntimeStatus]);
+  const gitPoll = useDashboardPollManager({
+    intervalMs: DEFAULT_POLL_INTERVAL_MS,
+    onPoll: refreshGitStatusAction,
+  });
 
   const tasksWithLiveActivities = useMemo(() => {
     return mergeLiveActivities(status.subtasks || [], liveActivities);
@@ -67,8 +67,8 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
     error,
     gitStatus,
     gitStatusError,
-    refreshGitStatus,
-    refreshRuntimeStatus,
+    refreshGitStatus: gitPoll.refreshNow,
+    refreshRuntimeStatus: runtimePoll.refreshNow,
     status,
     stats,
     tasksWithLiveActivities,

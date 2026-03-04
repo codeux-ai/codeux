@@ -8,6 +8,7 @@ This project is a Model Context Protocol (MCP) server for Jules APIs with an int
 - Orchestrate sprint subtasks with dependency-aware scheduling.
 - Inject engineering guides into Jules task prompts.
 - Provide an operational dashboard for status, activity, git, CI, and settings.
+- Emit structured logs with request correlation IDs across dashboard and MCP dispatch paths.
 - Support editable markdown instruction templates for sprint loop messaging.
 
 ## Runtime Components
@@ -59,6 +60,10 @@ This project is a Model Context Protocol (MCP) server for Jules APIs with an int
 - `src/services/cli-process-runner.ts`
 - `src/services/cli-docker-utils.ts`
 - `src/services/cli-workflow-text-utils.ts`
+
+### 8. Shared logging and correlation
+- `src/shared/logging/logger.ts`
+- `src/shared/logging/correlation-id.ts`
 
 ## Runtime Architecture Diagram
 

@@ -20,10 +20,9 @@ import type {
 } from "../contracts/app-types.js";
 import { SprintOrchestrator } from "../sprint/sprint-orchestrator.js";
 import { GuideRepository } from "../repositories/guide-repository.js";
-import { SubtaskRepository } from "../repositories/subtask-repository.js";
+import { SubtaskFileRepository } from "../infrastructure/repositories/subtask-file-repository.js";
 import { TaskService } from "../services/task-service.js";
 import { SettingsRepository } from "../repositories/settings-repository.js";
-import { formatSprintBranch } from "../git/sprint-branch-scheme.js";
 import { GitStatusService, type GitTrackingRequest } from "../services/git-status-service.js";
 import { loadExternalSettingsHints } from "../config/external-settings.js";
 import { InstructionService } from "../instructions/instruction-template-service.js";
@@ -36,6 +35,9 @@ import { ActivityCacheService } from "./activity-cache-service.js";
 import { registerMcpRequestHandlers } from "./mcp-request-router.js";
 import { TaskRerunService } from "../services/task-rerun-service.js";
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
+import { createRuntimeDependencies, ServerContext } from "../app/dependency-factory.js";
+import { generateCorrelationId, runWithCorrelationId } from "../shared/logging/correlation-id.js";
+import type { Logger } from "../shared/logging/logger.js";
 
 export interface JulesAgentServerOptions {
   projectRoot: string;
@@ -49,6 +51,7 @@ export class JulesAgentServer {
   private readonly projectRoot: string;
   private readonly appConfig: AppConfig;
   private server: Server;
+  private logger: Logger;
   private julesApi: JulesApiClient;
   private completedSprints: Set<number> = new Set();
   private lastStatus: any = { subtasks: [], timestamp: null };
@@ -56,7 +59,7 @@ export class JulesAgentServer {
   private settings: Settings = { maxFailures: 5 };
   private consecutiveFailures: number = 0;
   private guideRepository: GuideRepository;
-  private subtaskRepository: SubtaskRepository;
+  private subtaskRepository: SubtaskFileRepository;
   private taskService: TaskService;
   private julesSourceResolver: JulesSourceResolver;
   private sprintOrchestrator: SprintOrchestrator;
@@ -75,139 +78,27 @@ export class JulesAgentServer {
   constructor(options: JulesAgentServerOptions) {
     this.projectRoot = options.projectRoot;
     this.appConfig = options.appConfig;
-    this.externalSettingsHints = loadExternalSettingsHints(this.projectRoot);
-    this.server = new Server(
-      {
-        name: "jules-subagents",
-        version: "1.2.0",
-      },
-      {
-        capabilities: {
-          tools: {},
-        },
-      }
-    );
 
-    this.settingsRepository = new SettingsRepository(undefined, this.externalSettingsHints);
-    this.dashboardSettings = this.settingsRepository.getSettings();
-    this.julesApi = new JulesApiClient({
-      apiKey: this.getEffectiveJulesApiKey(),
-      baseUrl: this.appConfig.baseUrl,
-    });
-    this.guideRepository = new GuideRepository(this.projectRoot);
-    this.subtaskRepository = new SubtaskRepository();
-    this.instructionService = new InstructionService(this.projectRoot);
-    this.sessionTracking = new SessionTrackingRepository();
-    this.julesSourceResolver = new JulesSourceResolver(this.julesApi);
-    this.cliWorkflowService = new CliWorkflowService({
-      sessionTracking: this.sessionTracking,
-      getDashboardSettings: () => this.dashboardSettings,
-      getGuideContent: (guideName: string, repoPath?: string) => this.getGuideContentIfEnabled(guideName, repoPath),
-      getGithubToken: () => this.getEffectiveGithubToken(),
-    });
-    this.taskService = new TaskService({
-      julesApi: this.julesApi,
-      guideRepository: {
-        getGuideContent: (guideName: string, repoPath?: string) => this.getGuideContentIfEnabled(guideName, repoPath),
-      },
-      resolveJulesSourceId: (args: { repoPath: string; sourceId?: string }) =>
-        this.julesSourceResolver.resolveSourceId({
-          repoPath: args.repoPath,
-          requestedSourceId: args.sourceId,
-        }),
-      getDashboardSettings: () => this.dashboardSettings,
-      isJulesApiConfigured: () => this.isJulesApiConfigured(),
-      cliWorkflowService: this.cliWorkflowService,
-    });
-    this.sprintOrchestrator = new SprintOrchestrator({
-      settings: this.settings,
-      dashboardPort: this.appConfig.dashboardPort,
-      getDashboardPort: () => this.getDashboardPort(),
-      completedSprints: this.completedSprints,
-      getConsecutiveFailures: () => this.consecutiveFailures,
-      setConsecutiveFailures: (value: number) => {
-        this.consecutiveFailures = value;
-      },
-      isActionRequiredState: (state?: string) => this.isActionRequiredState(state),
-      resolveSessionName: (session: Partial<JulesSession>) => this.resolveSessionName(session),
-      extractSessionId: (session: Partial<JulesSession>) => this.extractSessionId(session),
-      fetchRecentActivities: (sessionName: string, pageSize?: number) => this.fetchRecentActivities(sessionName, pageSize),
-      listSessions: () => this.listSessionsForSync(),
-      loadSubtasks: (dir: string) => this.subtaskRepository.loadSubtasks(dir),
-      startTask: (task: Subtask, sourceId: string | undefined, baseBranch: string, repoPath: string, sprintNumber: number) =>
-        this.taskService.startSprintTask(task, sourceId, baseBranch, repoPath, sprintNumber),
-      getGuideContent: (guideName: string, repoPath?: string) => this.getGuideContentIfEnabled(guideName, repoPath),
-      updateLastStatus: (status: any) => {
-        this.lastStatus = status;
-      },
-      getDashboardSettings: () => this.dashboardSettings,
-      isJulesApiConfigured: () => this.isJulesApiConfigured(),
-      approveSessionPlan: (sessionId: string) => this.julesApi.approveSessionPlan(sessionId),
-      sendSessionMessage: (sessionId: string, prompt: string) => this.julesApi.sendSessionMessage(sessionId, prompt),
-      getCiStatusForScope: (args) => this.getCiStatusForScope(args),
-      autoMergeFeaturePr: (args) => this.autoMergeFeaturePr(args),
-      renderInstruction: (templateId, variables, repoPath) =>
-        this.instructionService.render(templateId, variables, repoPath),
-    });
-    this.coreToolHandler = new CoreToolHandler({
-      julesApi: this.julesApi,
-      normalizeName: (type: string, id: string) => this.normalizeName(type, id),
-      resolveSessionName: (session: Partial<JulesSession>) => this.resolveSessionName(session),
-      fetchRecentActivities: (sessionName: string, pageSize?: number) => this.fetchRecentActivities(sessionName, pageSize),
-      isActionRequiredState: (state?: string) => this.isActionRequiredState(state),
-      getConsecutiveFailures: () => this.consecutiveFailures,
-      setConsecutiveFailures: (value: number) => {
-        this.consecutiveFailures = value;
-      },
-      getMaxFailures: () => this.settings.maxFailures || 5,
-      isJulesApiConfigured: () => this.isJulesApiConfigured(),
-      getMissingJulesApiKeyInstruction: () => this.getMissingJulesApiKeyInstruction(),
-      isTrackedCliSession: (sessionId: string) => {
-        const normalized = sessionId.startsWith("sessions/") ? sessionId : `sessions/${sessionId}`;
-        return this.isTrackedCliSession(normalized);
-      },
-      getTrackedSession: (sessionId: string) => this.sessionTracking.getSession(sessionId),
-      listTrackedSessions: (limit?: number) => this.sessionTracking.listSessions(limit),
-      listTrackedActivities: (args) => this.sessionTracking.listActivities(args),
-      listAllTrackedActivities: (sessionId: string) => this.sessionTracking.listAllActivities(sessionId),
-    });
-    this.agentToolHandler = new AgentToolHandler({
-      sprintOrchestrator: this.sprintOrchestrator,
-      taskService: this.taskService,
-      getDashboardSettings: () => this.dashboardSettings,
-      formatSprintBranch,
-      getConsecutiveFailures: () => this.consecutiveFailures,
-      setConsecutiveFailures: (value: number) => {
-        this.consecutiveFailures = value;
-      },
-      getMaxFailures: () => this.settings.maxFailures || 5,
-      waitForSessionCompletion: (args: { session_id: string; poll_interval?: number; timeout?: number }) =>
-        this.coreToolHandler.handleWaitForSessionCompletion(args),
-    });
-    this.activityCacheService = new ActivityCacheService(
-      {
-        getSubtasks: () => (Array.isArray(this.lastStatus?.subtasks) ? this.lastStatus.subtasks : []),
-        resolveSessionNameFromTask: (task) => this.resolveSessionNameFromTask(task),
-        fetchRecentActivities: (sessionName, pageSize) => this.fetchRecentActivities(sessionName, pageSize),
-        resolveGitStatusRepoPath: () => this.resolveGitStatusRepoPath(),
-        fetchGitStatusForRepo: (repoPath) => this.fetchGitStatusForRepo(repoPath),
-      },
-      JulesAgentServer.LIVE_ACTIVITY_CACHE_MS,
-      JulesAgentServer.GIT_STATUS_CACHE_MS,
-      JulesAgentServer.DASHBOARD_ACTIVITY_PAGE_SIZE
-    );
-    this.taskRerunService = new TaskRerunService({
-      getStatus: () => this.lastStatus,
-      updateStatus: (status) => {
-        this.lastStatus = status;
-        this.activityCacheService.invalidateLiveActivitiesCache();
-      },
-      startTask: ({ task, sourceId, featureBranch, repoPath, sprintNumber }) =>
-        this.taskService.startSprintTask(task, sourceId, featureBranch, repoPath, sprintNumber),
-      resolveSessionName: (session) => this.resolveSessionName(session),
-      extractSessionId: (session) => this.extractSessionId(session),
-      persistMergedFlag: (args) => this.persistTaskMergedFlag(args),
-    });
+    const deps = createRuntimeDependencies(options, this.createContext());
+
+    this.server = deps.server;
+    this.logger = deps.logger;
+    this.julesApi = deps.julesApi;
+    this.guideRepository = deps.guideRepository;
+    this.subtaskRepository = deps.subtaskRepository;
+    this.taskService = deps.taskService;
+    this.julesSourceResolver = deps.julesSourceResolver;
+    this.sprintOrchestrator = deps.sprintOrchestrator;
+    this.settingsRepository = deps.settingsRepository;
+    this.dashboardSettings = deps.dashboardSettings;
+    this.externalSettingsHints = deps.externalSettingsHints;
+    this.instructionService = deps.instructionService;
+    this.sessionTracking = deps.sessionTracking;
+    this.cliWorkflowService = deps.cliWorkflowService;
+    this.coreToolHandler = deps.coreToolHandler;
+    this.agentToolHandler = deps.agentToolHandler;
+    this.activityCacheService = deps.activityCacheService;
+    this.taskRerunService = deps.taskRerunService;
 
     registerMcpRequestHandlers({
       server: this.server,
@@ -215,16 +106,90 @@ export class JulesAgentServer {
       agentToolHandler: this.agentToolHandler,
       getDashboardSettings: () => this.dashboardSettings,
       formatError: (error: unknown) => this.formatError(error),
+      logger: this.logger.child({ component: "mcp-request-router" }),
+      withCorrelationContext: (request, operation) => this.runWithMcpCorrelationContext(request, operation),
     });
-    
+
     this.server.onerror = (error) => {
-      console.error("[MCP Server Error]", JSON.stringify(error, null, 2));
+      this.logger.error("MCP server error", { error });
     };
 
     process.on("SIGINT", async () => {
       await this.server.close();
       process.exit(0);
     });
+  }
+
+  private createContext(): ServerContext {
+    return {
+      getProjectRoot: () => this.projectRoot,
+      getAppConfig: () => this.appConfig,
+      getSettings: () => this.settings,
+      getDashboardSettings: () => this.dashboardSettings,
+      getEffectiveJulesApiKey: () => this.getEffectiveJulesApiKey(),
+      getEffectiveGithubToken: () => this.getEffectiveGithubToken(),
+      getDashboardPort: () => this.getDashboardPort(),
+      isJulesApiConfigured: () => this.isJulesApiConfigured(),
+      getMissingJulesApiKeyInstruction: () => this.getMissingJulesApiKeyInstruction(),
+      getGuideContentIfEnabled: (guideName, repoPath) => this.getGuideContentIfEnabled(guideName, repoPath),
+      getConsecutiveFailures: () => this.consecutiveFailures,
+      setConsecutiveFailures: (value) => { this.consecutiveFailures = value; },
+      isActionRequiredState: (state) => this.isActionRequiredState(state),
+      resolveSessionName: (session) => this.resolveSessionName(session),
+      extractSessionId: (session) => this.extractSessionId(session),
+      fetchRecentActivities: (sessionName, pageSize) => this.fetchRecentActivities(sessionName, pageSize),
+      listSessionsForSync: () => this.listSessionsForSync(),
+      updateLastStatus: (status) => { this.lastStatus = status; },
+      getLastStatus: () => this.lastStatus,
+      getCiStatusForScope: (args) => this.getCiStatusForScope(args),
+      autoMergeFeaturePr: (args) => this.autoMergeFeaturePr(args),
+      resolveSessionNameFromTask: (task) => this.resolveSessionNameFromTask(task),
+      resolveGitStatusRepoPath: () => this.resolveGitStatusRepoPath(),
+      fetchGitStatusForRepo: (repoPath) => this.fetchGitStatusForRepo(repoPath),
+      persistTaskMergedFlag: (args) => this.persistTaskMergedFlag(args),
+      normalizeName: (type, id) => this.normalizeName(type, id),
+      isTrackedCliSession: (sessionId) => this.isTrackedCliSession(sessionId),
+    };
+  }
+
+  private runWithMcpCorrelationContext<T>(request: unknown, operation: () => Promise<T>): Promise<T> {
+    const correlationId = this.extractMcpCorrelationId(request) ?? generateCorrelationId();
+    return runWithCorrelationId(correlationId, operation);
+  }
+
+  private extractMcpCorrelationId(request: unknown): string | undefined {
+    const requestRecord = request as { id?: unknown; params?: Record<string, unknown> };
+    const params = requestRecord.params && typeof requestRecord.params === "object"
+      ? requestRecord.params
+      : undefined;
+    const meta = params?._meta && typeof params._meta === "object"
+      ? (params._meta as Record<string, unknown>)
+      : undefined;
+    const argumentsRecord = params?.arguments && typeof params.arguments === "object"
+      ? (params.arguments as Record<string, unknown>)
+      : undefined;
+
+    const candidates: unknown[] = [
+      meta?.correlationId,
+      meta?.["x-correlation-id"],
+      meta?.requestId,
+      argumentsRecord?.correlationId,
+      requestRecord.id,
+    ];
+
+    for (const candidate of candidates) {
+      if (typeof candidate === "string") {
+        const trimmed = candidate.trim();
+        if (trimmed.length > 0) {
+          return trimmed;
+        }
+      }
+      if (typeof candidate === "number" && Number.isFinite(candidate)) {
+        return `mcp-${candidate}`;
+      }
+    }
+
+    return undefined;
   }
 
   private async loadSettings() {
@@ -240,15 +205,15 @@ export class JulesAgentServer {
         await fs.access(settingsPath);
         const content = await fs.readFile(settingsPath, "utf-8");
         const loadedSettings = JSON.parse(content);
-        
-        // Handle both camelCase and UPPER_SNAKE_CASE for backward compatibility if needed, 
+
+        // Handle both camelCase and UPPER_SNAKE_CASE for backward compatibility if needed,
         // but prefer camelCase for the final settings.
         if (loadedSettings.JULES_API_MAX_FAILS !== undefined) {
           loadedSettings.maxFailures = loadedSettings.JULES_API_MAX_FAILS;
         }
-        
+
         Object.assign(this.settings, loadedSettings);
-        console.error(`Loaded settings from: ${settingsPath}`);
+        this.logger.info("Loaded settings", { settingsPath });
       } catch (error) {
         // Skip if not found or invalid
       }
@@ -348,6 +313,10 @@ export class JulesAgentServer {
     return statusRepoPath.length > 0 ? statusRepoPath : this.projectRoot;
   }
 
+  private isReady(): boolean {
+    return !!this.lastStatus?.timestamp;
+  }
+
   private async setupDashboard() {
     const dashboardDir = path.join(this.projectRoot, "dashboard");
     const port = this.getDashboardPort();
@@ -374,6 +343,8 @@ export class JulesAgentServer {
         this.activityCacheService.invalidateGitStatusCache();
         return task;
       },
+      logger: this.logger.child({ component: "dashboard-server" }),
+      isReady: () => this.isReady(),
     });
     this.dashboardRuntimePort = handle.port;
   }
@@ -385,22 +356,7 @@ export class JulesAgentServer {
     merged: boolean;
   }): Promise<void> {
     const subtasksDir = path.join(args.repoPath, ".jules-subagents", "sprints", `sprint${args.sprintNumber}-subtasks`);
-    const filePath = path.join(subtasksDir, `${args.taskId}.md`);
-    const mergedValue = args.merged ? "true" : "false";
-    const content = await fs.readFile(filePath, "utf-8");
-    let updated = content;
-
-    if (/^\s*merged:\s*(true|false)\s*$/m.test(content)) {
-      updated = content.replace(/^\s*merged:\s*(true|false)\s*$/m, `merged: ${mergedValue}`);
-    } else if (/^\s*prompt:\s*/m.test(content)) {
-      updated = content.replace(/^\s*prompt:\s*/m, `merged: ${mergedValue}\nprompt:`);
-    } else {
-      updated = `${content.trimEnd()}\nmerged: ${mergedValue}\n`;
-    }
-
-    if (updated !== content) {
-      await fs.writeFile(filePath, updated, "utf-8");
-    }
+    await this.subtaskRepository.setMerged(subtasksDir, args.taskId, args.merged);
   }
 
   private formatError(error: unknown): { content: Array<{ type: string; text: string }>; isError: true } {
@@ -557,20 +513,21 @@ export class JulesAgentServer {
     const recovery = this.sessionTracking.recoverInterruptedCliSessions();
     if (recovery.recoveredCount > 0) {
       const sample = recovery.sessionIds.slice(0, 5).join(", ");
-      const remainder = recovery.recoveredCount > 5 ? ` (+${recovery.recoveredCount - 5} more)` : "";
-      console.error(
-        `[Recovery] Marked ${recovery.recoveredCount} interrupted CLI session(s) as FAILED: ${sample}${remainder}`
-      );
+      this.logger.warn("Recovered interrupted CLI sessions", {
+        recoveredCount: recovery.recoveredCount,
+        sampleSessionIds: sample,
+        additionalRecoveredCount: Math.max(recovery.recoveredCount - 5, 0),
+      });
     }
     await this.setupDashboard();
 
     if (!this.isJulesApiConfigured()) {
-      console.error("Warning: Jules API key is not set. Jules-native tools are disabled; Gemini/Codex CLI providers can still run.");
-      console.error(this.getMissingJulesApiKeyInstruction());
+      this.logger.warn("Jules API key is not set. Jules-native tools are disabled; Gemini/Codex CLI providers can still run.");
+      this.logger.warn(this.getMissingJulesApiKeyInstruction());
     }
-    
+
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error("Jules Subagents MCP server (v1.2.0) running on stdio");
+    this.logger.info("Jules Subagents MCP server running on stdio", { version: "1.2.0" });
   }
 }

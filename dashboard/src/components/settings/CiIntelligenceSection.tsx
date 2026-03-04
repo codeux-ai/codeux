@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "preact";
+import { updateCiIntelligence } from "../../lib/settings-updaters.js";
 import { SettingsCard, ToggleRow } from "./primitives.js";
 import type { SettingsSectionProps } from "./types.js";
 
@@ -11,13 +12,9 @@ export const CiIntelligenceSection: FunctionComponent<SettingsSectionProps> = ({
       label="Enable CI Intelligence"
       checked={settings.ciIntelligence.enabled}
       onToggle={(checked) =>
-        onChange({
-          ...settings,
-          ciIntelligence: {
-            ...settings.ciIntelligence,
-            enabled: checked,
-          },
-        })
+        onChange(updateCiIntelligence(settings, {
+          enabled: checked,
+        }))
       }
     />
     <ToggleRow
@@ -25,13 +22,9 @@ export const CiIntelligenceSection: FunctionComponent<SettingsSectionProps> = ({
       checked={settings.ciIntelligence.enableLivePrMonitoring}
       disabled={!settings.ciIntelligence.enabled || settings.git.githubMode === "LOCAL"}
       onToggle={(checked) =>
-        onChange({
-          ...settings,
-          ciIntelligence: {
-            ...settings.ciIntelligence,
-            enableLivePrMonitoring: checked,
-          },
-        })
+        onChange(updateCiIntelligence(settings, {
+          enableLivePrMonitoring: checked,
+        }))
       }
     />
     <ToggleRow
@@ -39,13 +32,9 @@ export const CiIntelligenceSection: FunctionComponent<SettingsSectionProps> = ({
       checked={settings.ciIntelligence.waitForCiBeforeMainMerge}
       disabled={!settings.ciIntelligence.enabled}
       onToggle={(checked) =>
-        onChange({
-          ...settings,
-          ciIntelligence: {
-            ...settings.ciIntelligence,
-            waitForCiBeforeMainMerge: checked,
-          },
-        })
+        onChange(updateCiIntelligence(settings, {
+          waitForCiBeforeMainMerge: checked,
+        }))
       }
     />
     <ToggleRow
@@ -53,13 +42,9 @@ export const CiIntelligenceSection: FunctionComponent<SettingsSectionProps> = ({
       checked={settings.ciIntelligence.resolveAllCommentsBeforeMainMerge}
       disabled={!settings.ciIntelligence.enabled}
       onToggle={(checked) =>
-        onChange({
-          ...settings,
-          ciIntelligence: {
-            ...settings.ciIntelligence,
-            resolveAllCommentsBeforeMainMerge: checked,
-          },
-        })
+        onChange(updateCiIntelligence(settings, {
+          resolveAllCommentsBeforeMainMerge: checked,
+        }))
       }
     />
     <ToggleRow
@@ -67,13 +52,9 @@ export const CiIntelligenceSection: FunctionComponent<SettingsSectionProps> = ({
       checked={settings.ciIntelligence.waitForCiBeforeFeatureMerge}
       disabled={!settings.ciIntelligence.enabled}
       onToggle={(checked) =>
-        onChange({
-          ...settings,
-          ciIntelligence: {
-            ...settings.ciIntelligence,
-            waitForCiBeforeFeatureMerge: checked,
-          },
-        })
+        onChange(updateCiIntelligence(settings, {
+          waitForCiBeforeFeatureMerge: checked,
+        }))
       }
     />
     <ToggleRow
@@ -81,13 +62,9 @@ export const CiIntelligenceSection: FunctionComponent<SettingsSectionProps> = ({
       checked={settings.ciIntelligence.resolveAllCommentsBeforeFeatureMerge}
       disabled={!settings.ciIntelligence.enabled}
       onToggle={(checked) =>
-        onChange({
-          ...settings,
-          ciIntelligence: {
-            ...settings.ciIntelligence,
-            resolveAllCommentsBeforeFeatureMerge: checked,
-          },
-        })
+        onChange(updateCiIntelligence(settings, {
+          resolveAllCommentsBeforeFeatureMerge: checked,
+        }))
       }
     />
     <ToggleRow
@@ -95,13 +72,9 @@ export const CiIntelligenceSection: FunctionComponent<SettingsSectionProps> = ({
       checked={settings.ciIntelligence.waitForJulesCiAutofix}
       disabled={!settings.ciIntelligence.enabled || !settings.ciIntelligence.waitForCiBeforeFeatureMerge}
       onToggle={(checked) =>
-        onChange({
-          ...settings,
-          ciIntelligence: {
-            ...settings.ciIntelligence,
-            waitForJulesCiAutofix: checked,
-          },
-        })
+        onChange(updateCiIntelligence(settings, {
+          waitForJulesCiAutofix: checked,
+        }))
       }
     />
     <label className="block space-y-2 rounded-lg border border-slate-700/70 bg-slate-950/50 px-3 py-2">
@@ -113,13 +86,9 @@ export const CiIntelligenceSection: FunctionComponent<SettingsSectionProps> = ({
         value={settings.ciIntelligence.julesCiAutofixMaxRetries}
         disabled={!settings.ciIntelligence.enabled || !settings.ciIntelligence.waitForJulesCiAutofix}
         onInput={(event) =>
-          onChange({
-            ...settings,
-            ciIntelligence: {
-              ...settings.ciIntelligence,
-              julesCiAutofixMaxRetries: Number(event.currentTarget.value),
-            },
-          })
+          onChange(updateCiIntelligence(settings, {
+            julesCiAutofixMaxRetries: Number(event.currentTarget.value),
+          }))
         }
         className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
       />
@@ -133,13 +102,9 @@ export const CiIntelligenceSection: FunctionComponent<SettingsSectionProps> = ({
         value={settings.ciIntelligence.featurePrAutoMergeMode}
         disabled={!settings.ciIntelligence.enabled}
         onChange={(event) =>
-          onChange({
-            ...settings,
-            ciIntelligence: {
-              ...settings.ciIntelligence,
-              featurePrAutoMergeMode: event.currentTarget.value as typeof settings.ciIntelligence.featurePrAutoMergeMode,
-            },
-          })
+          onChange(updateCiIntelligence(settings, {
+            featurePrAutoMergeMode: event.currentTarget.value as typeof settings.ciIntelligence.featurePrAutoMergeMode,
+          }))
         }
         className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
       >

@@ -4,6 +4,8 @@ import * as path from "path";
 import type { Server } from "http";
 import { createServer } from "http";
 import type { DashboardSettings, ExternalSettingsHints, GitTrackingStatus, JulesActivity } from "../contracts/app-types.js";
+import { correlationIdMiddleware } from "../shared/logging/correlation-id.js";
+import { createLogger, type Logger } from "../shared/logging/logger.js";
 
 export interface DashboardServerOptions {
   app: Express;
@@ -17,6 +19,8 @@ export interface DashboardServerOptions {
   getSettings: () => DashboardSettings;
   saveSettings: (settings: DashboardSettings) => DashboardSettings;
   rerunTask: (taskId: string) => Promise<unknown>;
+  logger?: Logger;
+  isReady?: () => boolean;
 }
 
 export interface DashboardServerHandle {
@@ -24,7 +28,11 @@ export interface DashboardServerHandle {
   server: Server;
 }
 
-const bindDashboardServer = async (app: Express, startPort: number): Promise<DashboardServerHandle> => {
+const bindDashboardServer = async (
+  app: Express,
+  startPort: number,
+  logger: Logger
+): Promise<DashboardServerHandle> => {
   let port = Math.max(1, Math.min(65535, Math.round(startPort)));
 
   while (port <= 65535) {
@@ -40,7 +48,10 @@ const bindDashboardServer = async (app: Express, startPort: number): Promise<Das
       if (message.code !== "EADDRINUSE") {
         throw error;
       }
-      console.error(`Warning: Dashboard port ${port} is already in use. Trying ${port + 1}...`);
+      logger.warn("Dashboard port in use. Trying next port.", {
+        attemptedPort: port,
+        nextPort: port + 1,
+      });
       port += 1;
     }
   }
@@ -61,8 +72,40 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     getSettings,
     saveSettings,
     rerunTask,
+    logger,
+    isReady,
   } = options;
+
+  const dashboardLogger = logger ?? createLogger({ bindings: { component: "dashboard-server" } });
+
+  app.use(correlationIdMiddleware());
+  app.use((req, res, next) => {
+    const startedAt = Date.now();
+    res.on("finish", () => {
+      dashboardLogger.info("Dashboard request completed", {
+        method: req.method,
+        path: req.originalUrl,
+        statusCode: res.statusCode,
+        durationMs: Date.now() - startedAt,
+      });
+    });
+    next();
+  });
+
   app.use(express.json({ limit: "1mb" }));
+
+  app.get("/health", (req, res) => {
+    res.json({ status: "UP" });
+  });
+
+  app.get("/ready", (req, res) => {
+    const ready = isReady ? isReady() : true;
+    if (ready) {
+      res.json({ status: "READY" });
+    } else {
+      res.status(503).json({ status: "NOT_READY" });
+    }
+  });
 
   app.get("/api/status", (req, res) => {
     res.json(getStatus());
@@ -131,11 +174,13 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   const staticDir = fs.existsSync(builtDashboardDir) ? builtDashboardDir : path.resolve(dashboardDir);
   app.use(express.static(staticDir));
 
-  const handle = await bindDashboardServer(app, port);
+  const handle = await bindDashboardServer(app, port, dashboardLogger);
 
-  console.error(`\n🚀 [DASHBOARD] Live status available at:`);
-  console.error(`   - http://localhost:${handle.port}`);
-  console.error(`   - http://127.0.0.1:${handle.port}\n`);
+  dashboardLogger.info("Dashboard server started", {
+    port: handle.port,
+    localhostUrl: `http://localhost:${handle.port}`,
+    loopbackUrl: `http://127.0.0.1:${handle.port}`,
+  });
 
   return handle;
 };

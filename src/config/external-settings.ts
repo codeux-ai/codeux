@@ -1,20 +1,27 @@
 import * as fs from "fs";
-import os from "os";
 import * as path from "path";
 import type { ExternalSettingsHints } from "../contracts/app-types.js";
+import { buildCandidatePaths } from "../shared/config/search-paths.js";
+import { readString } from "../shared/config/value-readers.js";
 
-const getSearchPaths = (projectRoot: string): string[] => {
-  const settingsRelativePath = path.join(".jules-subagents", "settings.json");
-  const paths = [
-    path.join(process.cwd(), settingsRelativePath),
-    path.join(projectRoot, settingsRelativePath),
-    path.join(os.homedir(), settingsRelativePath),
-  ];
-  return [...new Set(paths)];
-};
+/**
+ * Normalization map for setting keys across different sources (Env, JSON).
+ */
+const PROVIDER_KEY_MAP = {
+  julesApiKey: ["julesApiKey", "JULES_API_KEY", "julesKey", "JULES_KEY"],
+  geminiApiKey: ["geminiApiKey", "GEMINI_API_KEY"],
+  codexApiKey: ["codexApiKey", "OPENAI_API_KEY"],
+  claudeCodeApiKey: ["claudeCodeApiKey", "ANTHROPIC_API_KEY", "claudeApiKey", "CLAUDE_API_KEY"],
+  githubToken: ["githubToken", "GITHUB_TOKEN", "GH_TOKEN"],
+} as const;
+
+type ProviderKey = keyof typeof PROVIDER_KEY_MAP;
 
 const readSettingsJson = (projectRoot: string): Record<string, unknown> => {
-  for (const settingsPath of getSearchPaths(projectRoot)) {
+  const settingsRelativePath = path.join(".jules-subagents", "settings.json");
+  const searchPaths = buildCandidatePaths(settingsRelativePath, projectRoot);
+
+  for (const settingsPath of searchPaths) {
     try {
       if (!fs.existsSync(settingsPath)) continue;
       const raw = fs.readFileSync(settingsPath, "utf-8");
@@ -29,48 +36,42 @@ const readSettingsJson = (projectRoot: string): Record<string, unknown> => {
   return {};
 };
 
-const getString = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
+/**
+ * Resolves a key from multiple potential aliases in a source.
+ */
+const resolveFromSource = (source: Record<string, unknown>, keys: readonly string[]): string => {
+  for (const key of keys) {
+    const value = source[key];
+    if (value !== undefined) {
+      const resolved = readString(value, "").trim();
+      if (resolved) {
+        return resolved;
+      }
+    }
+  }
+  return "";
+};
 
 export const loadExternalSettingsHints = (projectRoot: string): ExternalSettingsHints => {
   const parsedSettings = readSettingsJson(projectRoot);
+  const envSource = process.env as Record<string, unknown>;
 
-  const envJules = getString(process.env.JULES_API_KEY || process.env.JULES_KEY);
-  const envGemini = getString(process.env.GEMINI_API_KEY);
-  const envCodex = getString(process.env.OPENAI_API_KEY);
-  const envClaudeCode = getString(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY);
-  const envGithub = getString(process.env.GH_TOKEN || process.env.GITHUB_TOKEN);
+  const envHints: Record<string, string> = {};
+  const jsonHints: Record<string, string> = {};
+  const resolvedHints: Record<string, string> = {};
 
-  const jsonJules = getString(
-    parsedSettings.julesApiKey ?? parsedSettings.JULES_API_KEY ?? parsedSettings.julesKey ?? parsedSettings.JULES_KEY
-  );
-  const jsonGemini = getString(parsedSettings.geminiApiKey ?? parsedSettings.GEMINI_API_KEY);
-  const jsonCodex = getString(parsedSettings.codexApiKey ?? parsedSettings.OPENAI_API_KEY);
-  const jsonClaudeCode = getString(
-    parsedSettings.claudeCodeApiKey ?? parsedSettings.ANTHROPIC_API_KEY ?? parsedSettings.claudeApiKey ?? parsedSettings.CLAUDE_API_KEY
-  );
-  const jsonGithub = getString(parsedSettings.githubToken ?? parsedSettings.GITHUB_TOKEN ?? parsedSettings.GH_TOKEN);
+  for (const [provider, aliases] of Object.entries(PROVIDER_KEY_MAP)) {
+    const envValue = resolveFromSource(envSource, aliases);
+    const jsonValue = resolveFromSource(parsedSettings, aliases);
+
+    envHints[provider] = envValue;
+    jsonHints[provider] = jsonValue;
+    resolvedHints[provider] = envValue || jsonValue;
+  }
 
   return {
-    env: {
-      julesApiKey: envJules,
-      geminiApiKey: envGemini,
-      codexApiKey: envCodex,
-      claudeCodeApiKey: envClaudeCode,
-      githubToken: envGithub,
-    },
-    settingsJson: {
-      julesApiKey: jsonJules,
-      geminiApiKey: jsonGemini,
-      codexApiKey: jsonCodex,
-      claudeCodeApiKey: jsonClaudeCode,
-      githubToken: jsonGithub,
-    },
-    resolved: {
-      julesApiKey: envJules || jsonJules,
-      geminiApiKey: envGemini || jsonGemini,
-      codexApiKey: envCodex || jsonCodex,
-      claudeCodeApiKey: envClaudeCode || jsonClaudeCode,
-      githubToken: envGithub || jsonGithub,
-    },
+    env: envHints as ExternalSettingsHints["env"],
+    settingsJson: jsonHints as ExternalSettingsHints["settingsJson"],
+    resolved: resolvedHints as ExternalSettingsHints["resolved"],
   };
 };

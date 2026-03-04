@@ -116,14 +116,14 @@ export class JulesSourceResolver {
 
     if (args.requestedSourceId) {
       const requested = toCanonicalSourceName(args.requestedSourceId);
-      const details = (await this.julesApi.getSource(requested)) as Record<string, unknown>;
+      const details = await this.julesApi.getSource(requested);
       if (!sourceMatchesRepo(details, repo)) {
         throw new Error(`Provided source_id '${requested}' does not match repository '${repo.owner}/${repo.repo}'.`);
       }
       return requested;
     }
 
-    const sources = (await this.julesApi.listAllSources()) as unknown as Array<Record<string, unknown>>;
+    const sources = await this.julesApi.listAllSources();
     const matched = sources.find((source) => sourceMatchesRepo(source, repo));
     if (!matched) {
       throw new Error(`No Jules source matches repository '${repo.owner}/${repo.repo}'.`);

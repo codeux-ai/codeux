@@ -1,4 +1,4 @@
-import { execFile } from "child_process";
+import { commandRunner, CommandResult } from "../shared/subprocess/command-runner.js";
 import type {
   GitTrackingScope,
   GitTrackingStatus,
@@ -8,12 +8,6 @@ import type {
   GitMergeStatus,
   GitTrackingTarget,
 } from "../contracts/app-types.js";
-
-interface CommandResult {
-  ok: boolean;
-  stdout: string;
-  stderr: string;
-}
 
 interface CommandContext {
   cwd: string;
@@ -27,19 +21,17 @@ const FAILED_RUN_DETAILS_LIMIT = 3;
 const FAILED_JOBS_PER_RUN_LIMIT = 3;
 const FAILED_JOB_LOG_MAX_CHARS = 2000;
 
-const defaultRunner: CommandRunner = (command, args, context) =>
-  new Promise((resolve) => {
-    const env = context.ghToken && command === "gh"
-      ? { ...process.env, GH_TOKEN: context.ghToken, GITHUB_TOKEN: context.ghToken }
-      : process.env;
-    execFile(command, args, { cwd: context.cwd, timeout: DEFAULT_TIMEOUT_MS, maxBuffer: 1024 * 1024, env }, (error, stdout, stderr) => {
-      if (error) {
-        resolve({ ok: false, stdout: String(stdout || ""), stderr: String(stderr || error.message || "") });
-        return;
-      }
-      resolve({ ok: true, stdout: String(stdout || ""), stderr: String(stderr || "") });
-    });
+const defaultRunner: CommandRunner = (command, args, context) => {
+  const env = context.ghToken && command === "gh"
+    ? { ...process.env, GH_TOKEN: context.ghToken, GITHUB_TOKEN: context.ghToken }
+    : process.env;
+  
+  return commandRunner.run(command, args, {
+    cwd: context.cwd,
+    timeout: DEFAULT_TIMEOUT_MS,
+    env,
   });
+};
 
 const parseJson = <T>(value: string): T | null => {
   try {

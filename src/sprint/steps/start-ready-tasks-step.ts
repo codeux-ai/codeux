@@ -1,4 +1,5 @@
 import type { Subtask } from "../../contracts/app-types.js";
+import type { Logger } from "../../shared/logging/logger.js";
 
 interface StartReadyTasksOptions {
   action: "status" | "orchestrate" | "plan";
@@ -8,6 +9,7 @@ interface StartReadyTasksOptions {
   startTask: (task: Subtask) => Promise<{ id?: string; name?: string; provider?: string }>;
   resolveSessionName: (session: { id?: string; name?: string }) => string | undefined;
   extractSessionId: (session: { id?: string; name?: string }) => string | undefined;
+  logger: Logger;
 }
 
 export const runStartReadyTasksStep = async (
@@ -41,7 +43,12 @@ export const runStartReadyTasksStep = async (
       const currentFails = options.getConsecutiveFailures() + 1;
       options.setConsecutiveFailures(currentFails);
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`Error starting task ${task.id}: ${message} (Consecutive failures: ${currentFails}/${options.maxFailures})`);
+      options.logger.error("Error starting task", {
+        taskId: task.id,
+        error: message,
+        consecutiveFailures: currentFails,
+        maxFailures: options.maxFailures,
+      });
       if (currentFails >= options.maxFailures) {
         throw new Error(`CRITICAL: Emergency stop triggered after ${currentFails} consecutive task creation failures.`);
       }

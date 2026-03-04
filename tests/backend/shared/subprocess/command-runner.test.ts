@@ -1,0 +1,68 @@
+import { describe, it, expect } from "vitest";
+import { CommandRunner } from "../../../../src/shared/subprocess/command-runner.js";
+
+describe("CommandRunner", () => {
+  const runner = new CommandRunner();
+
+  it("should run a simple command (echo)", async () => {
+    const result = await runner.run("echo", ["hello"]);
+    expect(result.ok).toBe(true);
+    expect(result.stdout).toBe("hello");
+    expect(result.code).toBe(0);
+  });
+
+  it("should return ok: false for non-existent command", async () => {
+    const result = await runner.run("non-existent-command-12345", []);
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe(null);
+    expect(result.stderr).toContain("ENOENT");
+  });
+
+  it("should handle error exit code", async () => {
+    // Use 'sh -c exit 1' to be cross-platform or just 'false' if on linux
+    const result = await runner.run("sh", ["-c", "exit 1"]);
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe(1);
+  });
+
+  it("should respect timeout", async () => {
+    // sleep for 10 seconds but timeout after 100ms
+    const result = await runner.run("sleep", ["10"], { timeout: 100 });
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toContain("timed out");
+  });
+
+  it("should call streaming callbacks", async () => {
+    const stdoutLines: string[] = [];
+    await runner.run("echo", ["line1\nline2"], {
+      onStdoutLine: (line) => stdoutLines.push(line),
+    });
+    // Depending on how echo handles newlines, it might be one or two lines
+    // In many shells echo "line1\nline2" might not interpret \n without -e
+    // Let's use printf or multiple echoes
+    const result = await runner.run("sh", ["-c", "echo line1; echo line2"], {
+      onStdoutLine: (line) => stdoutLines.push(line),
+    });
+    expect(stdoutLines).toContain("line1");
+    expect(stdoutLines).toContain("line2");
+  });
+
+  it("should clip stderr if too long", async () => {
+    // Generate 100 'a's on stderr
+    const result = await runner.run("sh", ["-c", "for i in $(seq 1 100); do printf 'a' >&2; done"], {
+      maxStderrChars: 10,
+    });
+    expect(result.stderr.length).toBeLessThanOrEqual(13); // "..." + 10 chars
+    expect(result.stderr.startsWith("...")).toBe(true);
+    expect(result.stderr.endsWith("aaaaaaaaaa")).toBe(true);
+  });
+
+  it("runStrict should throw on failure", async () => {
+    await expect(runner.runStrict("sh", ["-c", "exit 1"])).rejects.toThrow("sh -c exit 1 failed");
+  });
+
+  it("runStrict should return result on success", async () => {
+    const result = await runner.runStrict("echo", ["ok"]);
+    expect(result.stdout).toBe("ok");
+  });
+});

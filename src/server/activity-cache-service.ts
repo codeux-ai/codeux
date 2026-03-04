@@ -1,4 +1,5 @@
 import type { GitTrackingStatus, JulesActivity, Subtask } from "../contracts/app-types.js";
+import type { Logger } from "../shared/logging/logger.js";
 
 export interface ActivityCacheServiceDependencies {
   getSubtasks: () => Subtask[];
@@ -6,6 +7,7 @@ export interface ActivityCacheServiceDependencies {
   fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
   resolveGitStatusRepoPath: () => string;
   fetchGitStatusForRepo: (repoPath: string) => Promise<GitTrackingStatus>;
+  logger?: Logger;
 }
 
 export class ActivityCacheService {
@@ -94,7 +96,7 @@ export class ActivityCacheService {
             const activities = await this.deps.fetchRecentActivities(sessionName, this.activityPageSize);
             return [sessionName, activities] as const;
           } catch {
-            console.error(`Warning: Could not fetch live activities for ${sessionName}`);
+            this.deps.logger?.warn("Could not fetch live activities", { sessionName });
             return [sessionName, []] as const;
           }
         })

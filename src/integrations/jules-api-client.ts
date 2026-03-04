@@ -7,6 +7,72 @@ export interface JulesApiClientOptions {
   baseUrl: string;
 }
 
+export interface JulesPageRequest {
+  page_size?: number;
+  page_token?: string;
+}
+
+export interface JulesListSourcesRequest extends JulesPageRequest {
+  filter?: string;
+}
+
+export interface JulesListSourcesResponse {
+  sources?: JulesSource[];
+  nextPageToken?: string;
+}
+
+export interface JulesListSessionsRequest extends JulesPageRequest {}
+
+export interface JulesListSessionsResponse {
+  sessions?: JulesSession[];
+  nextPageToken?: string;
+}
+
+export interface JulesListActivitiesRequest extends JulesPageRequest {
+  session_id: string;
+}
+
+export interface JulesListActivitiesResponse {
+  activities?: JulesActivity[];
+  nextPageToken?: string;
+}
+
+export interface JulesSourceContext {
+  source: string;
+  githubRepoContext?: {
+    startingBranch?: string;
+  };
+}
+
+export interface JulesCreateSessionRequest {
+  prompt: string;
+  sourceContext: JulesSourceContext;
+  title?: string;
+  requirePlanApproval?: boolean;
+  automationMode?: string;
+}
+
+export interface JulesSessionActionResponse {
+  id?: string;
+  name?: string;
+  state?: string;
+  title?: string;
+  createTime?: string;
+  updateTime?: string;
+  done?: boolean;
+  message?: string;
+  [key: string]: unknown;
+}
+
+interface JulesPageQuery {
+  pageSize?: number;
+  pageToken?: string;
+}
+
+interface JulesListSourcesQuery extends JulesPageQuery {
+  filter?: string;
+}
+
 export class JulesApiClient {
   private readonly axiosInstance: AxiosInstance;
   private apiKey: string | null;
@@ -59,34 +125,51 @@ export class JulesApiClient {
     return `${type}/${id}`;
   }
 
+  private toSessionId(sessionNameOrId: string): string {
+    return sessionNameOrId.replace(/^sessions\//, "");
+  }
+
+  private toSessionName(sessionNameOrId: string): string {
+    return this.normalizeName("sessions", this.toSessionId(sessionNameOrId));
+  }
+
+  private toPageQuery(args: JulesPageRequest): JulesPageQuery {
+    return {
+      pageSize: args.page_size,
+      pageToken: args.page_token,
+    };
+  }
+
   extractSessionId(session: Partial<JulesSession>): string | undefined {
-    if (session.id) {
-      return session.id.replace(/^sessions\//, "");
+    if (typeof session.id === "string" && session.id.length > 0) {
+      return this.toSessionId(session.id);
     }
-    if (session.name && session.name.startsWith("sessions/")) {
-      return session.name.replace(/^sessions\//, "");
+    if (typeof session.name === "string" && session.name.length > 0) {
+      return this.toSessionId(session.name);
     }
     return undefined;
   }
 
   resolveSessionName(session: Partial<JulesSession>): string | undefined {
-    if (session.name && session.name.startsWith("sessions/")) {
-      return session.name;
+    if (typeof session.name === "string" && session.name.length > 0) {
+      return this.toSessionName(session.name);
     }
-    const sessionId = this.extractSessionId(session);
-    return sessionId ? this.normalizeName("sessions", sessionId) : undefined;
+    if (typeof session.id === "string" && session.id.length > 0) {
+      return this.toSessionName(session.id);
+    }
+    return undefined;
   }
 
-  async getSource(sourceId: string): Promise<unknown> {
+  async getSource(sourceId: string): Promise<JulesSource> {
     this.ensureApiKey();
-    const response = await this.axiosInstance.get(`/${this.normalizeName("sources", sourceId)}`);
+    const response = await this.axiosInstance.get<JulesSource>(`/${this.normalizeName("sources", sourceId)}`);
     return response.data;
   }
 
-  async listSources(args: { filter?: string; page_size?: number; page_token?: string }): Promise<unknown> {
+  async listSources(args: JulesListSourcesRequest): Promise<JulesListSourcesResponse> {
     this.ensureApiKey();
-    const params: any = { filter: args.filter, pageSize: args.page_size, pageToken: args.page_token };
-    const response = await this.axiosInstance.get("/sources", { params });
+    const params: JulesListSourcesQuery = { filter: args.filter, ...this.toPageQuery(args) };
+    const response = await this.axiosInstance.get<JulesListSourcesResponse>("/sources", { params });
     return response.data;
   }
 
@@ -96,8 +179,8 @@ export class JulesApiClient {
     let pageToken: string | undefined = undefined;
 
     do {
-      const params: any = { filter, pageToken };
-      const response = await this.axiosInstance.get<{ sources?: JulesSource[]; nextPageToken?: string }>("/sources", { params });
+      const params: JulesListSourcesQuery = { filter, pageToken };
+      const response = await this.axiosInstance.get<JulesListSourcesResponse>("/sources", { params });
       allSources = allSources.concat(response.data.sources || []);
       pageToken = response.data.nextPageToken;
     } while (pageToken);
@@ -105,7 +188,7 @@ export class JulesApiClient {
     return allSources;
   }
 
-  async createSession(data: any): Promise<JulesSession> {
+  async createSession(data: JulesCreateSessionRequest): Promise<JulesSession> {
     this.ensureApiKey();
     const response = await this.axiosInstance.post<JulesSession>("/sessions", data);
     return response.data;
@@ -113,57 +196,57 @@ export class JulesApiClient {
 
   async getSession(sessionId: string): Promise<JulesSession> {
     this.ensureApiKey();
-    const name = this.normalizeName("sessions", sessionId);
+    const name = this.toSessionName(sessionId);
     const response = await this.axiosInstance.get<JulesSession>(`/${name}`);
     return response.data;
   }
 
-  async listSessions(args: { page_size?: number; page_token?: string } = {}): Promise<{ sessions?: JulesSession[]; nextPageToken?: string }> {
+  async listSessions(args: JulesListSessionsRequest = {}): Promise<JulesListSessionsResponse> {
     this.ensureApiKey();
-    const params: any = { pageSize: args.page_size, pageToken: args.page_token };
-    const response = await this.axiosInstance.get("/sessions", { params });
+    const params: JulesPageQuery = this.toPageQuery(args);
+    const response = await this.axiosInstance.get<JulesListSessionsResponse>("/sessions", { params });
     return response.data;
   }
 
-  async approveSessionPlan(sessionId: string): Promise<unknown> {
+  async approveSessionPlan(sessionId: string): Promise<JulesSessionActionResponse> {
     this.ensureApiKey();
-    const name = this.normalizeName("sessions", sessionId);
-    const response = await this.axiosInstance.post(`/${name}:approvePlan`);
+    const name = this.toSessionName(sessionId);
+    const response = await this.axiosInstance.post<JulesSessionActionResponse>(`/${name}:approvePlan`);
     return response.data;
   }
 
-  async sendSessionMessage(sessionId: string, prompt: string): Promise<unknown> {
+  async sendSessionMessage(sessionId: string, prompt: string): Promise<JulesSessionActionResponse> {
     this.ensureApiKey();
-    const name = this.normalizeName("sessions", sessionId);
-    const response = await this.axiosInstance.post(`/${name}:sendMessage`, { prompt });
+    const name = this.toSessionName(sessionId);
+    const response = await this.axiosInstance.post<JulesSessionActionResponse>(`/${name}:sendMessage`, { prompt });
     return response.data;
   }
 
-  async getActivity(sessionId: string, activityId: string): Promise<unknown> {
+  async getActivity(sessionId: string, activityId: string): Promise<JulesActivity> {
     this.ensureApiKey();
-    const sessionName = this.normalizeName("sessions", sessionId);
+    const sessionName = this.toSessionName(sessionId);
     const activityName = this.normalizeName("activities", activityId);
-    const response = await this.axiosInstance.get(`/${sessionName}/${activityName}`);
+    const response = await this.axiosInstance.get<JulesActivity>(`/${sessionName}/${activityName}`);
     return response.data;
   }
 
-  async listActivities(args: { session_id: string; page_size?: number; page_token?: string }): Promise<{ activities?: JulesActivity[]; nextPageToken?: string }> {
+  async listActivities(args: JulesListActivitiesRequest): Promise<JulesListActivitiesResponse> {
     this.ensureApiKey();
-    const sessionName = this.normalizeName("sessions", args.session_id);
-    const params: any = { pageSize: args.page_size, pageToken: args.page_token };
-    const response = await this.axiosInstance.get<{ activities?: JulesActivity[]; nextPageToken?: string }>(`/${sessionName}/activities`, { params });
+    const sessionName = this.toSessionName(args.session_id);
+    const params: JulesPageQuery = this.toPageQuery(args);
+    const response = await this.axiosInstance.get<JulesListActivitiesResponse>(`/${sessionName}/activities`, { params });
     return response.data;
   }
 
   async listAllActivities(sessionId: string): Promise<JulesActivity[]> {
     this.ensureApiKey();
-    const sessionName = this.normalizeName("sessions", sessionId);
+    const sessionName = this.toSessionName(sessionId);
     let allActivities: JulesActivity[] = [];
     let pageToken: string | undefined = undefined;
 
     do {
-      const params: any = { pageToken };
-      const response = await this.axiosInstance.get<{ activities?: JulesActivity[]; nextPageToken?: string }>(`/${sessionName}/activities`, { params });
+      const params: JulesPageQuery = { pageToken };
+      const response = await this.axiosInstance.get<JulesListActivitiesResponse>(`/${sessionName}/activities`, { params });
       allActivities = allActivities.concat(response.data.activities || []);
       pageToken = response.data.nextPageToken;
     } while (pageToken);
@@ -173,7 +256,8 @@ export class JulesApiClient {
 
   async fetchRecentActivities(sessionName: string, pageSize: number): Promise<JulesActivity[]> {
     this.ensureApiKey();
-    const response = await this.axiosInstance.get<{ activities?: JulesActivity[] }>(`/${sessionName}/activities`, {
+    const normalizedSessionName = this.toSessionName(sessionName);
+    const response = await this.axiosInstance.get<JulesListActivitiesResponse>(`/${normalizedSessionName}/activities`, {
       params: { pageSize },
     });
     const activities = response.data.activities || [];

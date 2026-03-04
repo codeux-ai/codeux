@@ -11,6 +11,7 @@
 - [Dashboard Guide](./dashboard/dashboard-guide.md)
 - [Configuration and Storage](./settings/configuration-and-storage.md)
 - [Operations Runbook](./operations/runbook.md)
+- [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 - [Testing and Quality](./development/testing-and-quality.md)
 - [Documentation Standards](./development/documentation-standards.md)
 - [Glossary](./reference/glossary.md)

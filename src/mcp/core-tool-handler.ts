@@ -1,8 +1,13 @@
-import type { JulesApiClient } from "../integrations/jules-api-client.js";
+import { waitUntil } from "../shared/polling/wait-until.js";
+import type { CreateSessionArgs } from "../api/mcp/tool-registry.js";
+import type { JulesApiClient, JulesCreateSessionRequest } from "../integrations/jules-api-client.js";
 import type { JulesActivity, JulesSession, JulesSource } from "../contracts/app-types.js";
+import type { Logger } from "../shared/logging/logger.js";
+import type { ActivitySummaryService } from "../domain/sessions/activity-summary.js";
 
 interface CoreToolHandlerDependencies {
   julesApi: JulesApiClient;
+  activitySummary: ActivitySummaryService;
   normalizeName: (type: string, id: string) => string;
   resolveSessionName: (session: Partial<JulesSession>) => string | undefined;
   fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
@@ -17,12 +22,10 @@ interface CoreToolHandlerDependencies {
   listTrackedSessions: (limit?: number) => { sessions: JulesSession[] };
   listTrackedActivities: (args: { session_id: string; page_size?: number; page_token?: string }) => { activities: JulesActivity[]; nextPageToken?: string };
   listAllTrackedActivities: (sessionId: string) => JulesActivity[];
+  logger?: Logger;
 }
 
 export class CoreToolHandler {
-  private static readonly ACTIVITY_PREVIEW_CHAR_LIMIT = 180;
-  private static readonly ACTIVITY_RECENT_LIMIT = 10;
-
   constructor(private readonly deps: CoreToolHandlerDependencies) {}
 
   private ensureJulesApiConfigured(): void {
@@ -31,223 +34,20 @@ export class CoreToolHandler {
     }
   }
 
-  private truncate(text: string | undefined, maxLength: number): string | undefined {
-    if (!text) return undefined;
-    if (text.length <= maxLength) return text;
-    return `${text.slice(0, maxLength - 1)}…`;
-  }
-
-  private getActivityKind(activity: JulesActivity): string {
-    if (activity.sessionCompleted) return "session_completed";
-    if (activity.sessionFailed) return "session_failed";
-    if (activity.planApproved) return "plan_approved";
-    if (activity.planGenerated) return "plan_generated";
-    if (activity.progressUpdated) return "progress_updated";
-    if (activity.agentMessaged) return "agent_message";
-    if (activity.userMessaged) return "user_message";
-    return "activity";
-  }
-
-  private getActivityPreview(activity: JulesActivity): string | undefined {
-    const progress = activity.progressUpdated;
-    if (progress?.title || progress?.description) {
-      return this.truncate(
-        [progress.title, progress.description].filter((value) => typeof value === "string" && value.length > 0).join(" - "),
-        CoreToolHandler.ACTIVITY_PREVIEW_CHAR_LIMIT
-      );
-    }
-
-    const agentMessage = activity.agentMessaged?.agentMessage;
-    if (typeof agentMessage === "string" && agentMessage.trim().length > 0) {
-      return this.truncate(agentMessage.trim(), CoreToolHandler.ACTIVITY_PREVIEW_CHAR_LIMIT);
-    }
-
-    const userMessage = activity.userMessaged?.userMessage;
-    if (typeof userMessage === "string" && userMessage.trim().length > 0) {
-      return this.truncate(userMessage.trim(), CoreToolHandler.ACTIVITY_PREVIEW_CHAR_LIMIT);
-    }
-
-    if (typeof activity.description === "string" && activity.description.trim().length > 0) {
-      return this.truncate(activity.description.trim(), CoreToolHandler.ACTIVITY_PREVIEW_CHAR_LIMIT);
-    }
-
-    return undefined;
-  }
-
-  private toActivitySummary(activity: JulesActivity): Record<string, unknown> {
-    const summary: Record<string, unknown> = {
-      id: activity.id,
-      name: activity.name,
-      createTime: activity.createTime,
-      originator: activity.originator ?? "system",
-      kind: this.getActivityKind(activity),
-    };
-
-    const preview = this.getActivityPreview(activity);
-    if (preview) {
-      summary.preview = preview;
-    }
-
-    return summary;
-  }
-
-  private toSessionSummary(session: JulesSession, lastActivity?: JulesActivity): Record<string, unknown> {
-    const pullRequests = (session.outputs || [])
-      .map((output: any) => output?.pullRequest)
-      .filter((pullRequest: unknown): pullRequest is Record<string, unknown> => !!pullRequest)
-      .map((pullRequest) => ({
-        url: typeof pullRequest.url === "string" ? pullRequest.url : undefined,
-      }))
-      .filter((pullRequest) => typeof pullRequest.url === "string");
-
-    const summary: Record<string, unknown> = {
-      id: session.id,
-      name: session.name,
-      title: session.title,
-      state: session.state,
-      provider: session.provider,
-      createTime: session.createTime,
-      hasPullRequest: pullRequests.length > 0,
-      pullRequests,
-    };
-
-    if (lastActivity) {
-      summary.lastActivity = this.toActivitySummary(lastActivity);
-    }
-
-    return summary;
-  }
-
-  private toActivityCollectionSummary(sessionId: string, activities: JulesActivity[]): Record<string, unknown> {
-    const activityTypeCounts = activities.reduce<Record<string, number>>((counts, activity) => {
-      const kind = this.getActivityKind(activity);
-      counts[kind] = (counts[kind] || 0) + 1;
-      return counts;
-    }, {});
-
-    const recentActivities = activities
-      .slice(-CoreToolHandler.ACTIVITY_RECENT_LIMIT)
-      .map((activity) => this.toActivitySummary(activity));
-
-    return {
-      sessionId: sessionId.replace(/^sessions\//, ""),
-      totalActivities: activities.length,
-      firstActivityTime: activities[0]?.createTime ?? null,
-      lastActivityTime: activities[activities.length - 1]?.createTime ?? null,
-      activityTypeCounts,
-      recentActivities,
-    };
-  }
-
-  private toActivityPageSummary(args: {
-    sessionId: string;
-    activities: JulesActivity[];
-    nextPageToken?: string;
-    pageSize?: number;
-    pageToken?: string;
-  }): Record<string, unknown> {
-    const activityTypeCounts = args.activities.reduce<Record<string, number>>((counts, activity) => {
-      const kind = this.getActivityKind(activity);
-      counts[kind] = (counts[kind] || 0) + 1;
-      return counts;
-    }, {});
-
-    return {
-      sessionId: args.sessionId.replace(/^sessions\//, ""),
-      returnedCount: args.activities.length,
-      pageSize: args.pageSize ?? null,
-      pageToken: args.pageToken ?? null,
-      nextPageToken: args.nextPageToken ?? null,
-      activityTypeCounts,
-      activities: args.activities.map((activity) => this.toActivitySummary(activity)),
-    };
-  }
-
-  private toSourceSummary(source: JulesSource): Record<string, unknown> {
-    return {
-      id: source.id,
-      name: source.name,
-    };
-  }
-
-  private toSingleSourceSummary(payload: unknown, sourceIdFallback: string): Record<string, unknown> {
-    if (!payload || typeof payload !== "object") {
-      const normalizedId = sourceIdFallback.startsWith("sources/") ? sourceIdFallback : `sources/${sourceIdFallback}`;
-      return { id: normalizedId, name: normalizedId };
-    }
-    const record = payload as Partial<JulesSource>;
-    const id = typeof record.id === "string"
-      ? record.id
-      : (typeof record.name === "string" && record.name.startsWith("sources/")
-        ? record.name
-        : (sourceIdFallback.startsWith("sources/") ? sourceIdFallback : `sources/${sourceIdFallback}`));
-    const name = typeof record.name === "string" ? record.name : id;
-    return this.toSourceSummary({ id, name });
-  }
-
-  private toSourcePageSummary(args: {
-    sources: JulesSource[];
-    nextPageToken?: string;
-    pageSize?: number;
-    pageToken?: string;
-    filter?: string;
-  }): Record<string, unknown> {
-    return {
-      returnedCount: args.sources.length,
-      filter: args.filter ?? null,
-      pageSize: args.pageSize ?? null,
-      pageToken: args.pageToken ?? null,
-      nextPageToken: args.nextPageToken ?? null,
-      sources: args.sources.map((source) => this.toSourceSummary(source)),
-    };
-  }
-
-  private extractSourceListResponse(payload: unknown): { sources: JulesSource[]; nextPageToken?: string } {
-    if (!payload || typeof payload !== "object") {
-      return { sources: [] };
-    }
-    const record = payload as { sources?: unknown; nextPageToken?: unknown };
-    const sources = Array.isArray(record.sources) ? (record.sources as JulesSource[]) : [];
-    const nextPageToken = typeof record.nextPageToken === "string" ? record.nextPageToken : undefined;
-    return { sources, nextPageToken };
-  }
-
-  private toActionResponseSummary(payload: unknown, action: string): Record<string, unknown> {
-    const summary: Record<string, unknown> = { action };
-    if (!payload || typeof payload !== "object") {
-      return summary;
-    }
-    const record = payload as Record<string, unknown>;
-    const copyIfPresent = (from: string, to: string = from): void => {
-      if (record[from] !== undefined) {
-        summary[to] = record[from];
-      }
-    };
-    copyIfPresent("id");
-    copyIfPresent("name");
-    copyIfPresent("state");
-    copyIfPresent("title");
-    copyIfPresent("createTime");
-    copyIfPresent("updateTime");
-    copyIfPresent("done");
-    copyIfPresent("message");
-    return summary;
-  }
-
   async handleGetSource({ source_id }: { source_id: string }) {
     this.ensureJulesApiConfigured();
     const source = await this.deps.julesApi.getSource(source_id);
-    return { content: [{ type: "text", text: JSON.stringify(this.toSingleSourceSummary(source, source_id), null, 2) }] };
+    return { content: [{ type: "text", text: JSON.stringify(this.deps.activitySummary.toSingleSourceSummary(source, source_id), null, 2) }] };
   }
 
   async handleListSources({ filter, page_size, page_token }: { filter?: string; page_size?: number; page_token?: string }) {
     this.ensureJulesApiConfigured();
     const response = await this.deps.julesApi.listSources({ filter, page_size, page_token });
-    const { sources, nextPageToken } = this.extractSourceListResponse(response);
+    const { sources, nextPageToken } = this.deps.activitySummary.extractSourceListResponse(response);
     return {
       content: [{
         type: "text",
-        text: JSON.stringify(this.toSourcePageSummary({
+        text: JSON.stringify(this.deps.activitySummary.toSourcePageSummary({
           sources,
           nextPageToken,
           pageSize: page_size,
@@ -267,13 +67,13 @@ export class CoreToolHandler {
         text: JSON.stringify({
           returnedCount: allSources.length,
           filter: filter ?? null,
-          sources: allSources.map((source) => this.toSourceSummary(source)),
+          sources: allSources.map((source) => this.deps.activitySummary.toSourceSummary(source)),
         }, null, 2)
       }]
     };
   }
 
-  async handleCreateSession(args: any) {
+  async handleCreateSession(args: CreateSessionArgs) {
     this.ensureJulesApiConfigured();
     const maxFails = this.deps.getMaxFailures();
     if (this.deps.getConsecutiveFailures() >= maxFails) {
@@ -282,7 +82,7 @@ export class CoreToolHandler {
       );
     }
 
-    const data: any = {
+    const data: JulesCreateSessionRequest = {
       prompt: args.prompt,
       sourceContext: { source: this.deps.normalizeName("sources", args.source) },
     };
@@ -294,8 +94,8 @@ export class CoreToolHandler {
     try {
       const response = await this.deps.julesApi.createSession(data);
       this.deps.setConsecutiveFailures(0);
-      return { content: [{ type: "text", text: JSON.stringify(this.toSessionSummary(response), null, 2) }] };
-    } catch (error: any) {
+      return { content: [{ type: "text", text: JSON.stringify(this.deps.activitySummary.toSessionSummary(response), null, 2) }] };
+    } catch (error: unknown) {
       this.deps.setConsecutiveFailures(this.deps.getConsecutiveFailures() + 1);
       throw error;
     }
@@ -307,7 +107,7 @@ export class CoreToolHandler {
       if (!session) {
         throw new Error(`Session not found: ${session_id}`);
       }
-      return { content: [{ type: "text", text: JSON.stringify(this.toSessionSummary(session), null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(this.deps.activitySummary.toSessionSummary(session), null, 2) }] };
     }
 
     this.ensureJulesApiConfigured();
@@ -316,21 +116,21 @@ export class CoreToolHandler {
 
     try {
       const sessionName = this.deps.resolveSessionName(session) || this.deps.normalizeName("sessions", session_id);
-      const activities = await this.deps.fetchRecentActivities(sessionName, CoreToolHandler.ACTIVITY_RECENT_LIMIT);
+      const activities = await this.deps.fetchRecentActivities(sessionName, this.deps.activitySummary.getActivityRecentLimit());
       if (activities.length > 0) {
         lastActivity = activities[activities.length - 1];
       }
     } catch {
-      console.error(`Warning: Could not fetch activities for session ${session_id}`);
+      this.deps.logger?.warn("Could not fetch activities for session", { sessionId: session_id });
     }
 
-    return { content: [{ type: "text", text: JSON.stringify(this.toSessionSummary(session, lastActivity), null, 2) }] };
+    return { content: [{ type: "text", text: JSON.stringify(this.deps.activitySummary.toSessionSummary(session, lastActivity), null, 2) }] };
   }
 
   async handleListSessions({ page_size, page_token }: { page_size?: number; page_token?: string }) {
     const trackedSessions = this.deps.listTrackedSessions(page_size || 100).sessions;
     if (!this.deps.isJulesApiConfigured()) {
-      const compactTracked = trackedSessions.map((session) => this.toSessionSummary(session));
+      const compactTracked = trackedSessions.map((session) => this.deps.activitySummary.toSessionSummary(session));
       return {
         content: [{
           type: "text",
@@ -348,7 +148,7 @@ export class CoreToolHandler {
     this.ensureJulesApiConfigured();
     const sessions = await this.deps.julesApi.listSessions({ page_size, page_token });
     const merged = [...trackedSessions, ...(sessions.sessions || [])];
-    const compactSessions = merged.map((session) => this.toSessionSummary(session));
+    const compactSessions = merged.map((session) => this.deps.activitySummary.toSessionSummary(session));
     return {
       content: [{
         type: "text",
@@ -366,13 +166,13 @@ export class CoreToolHandler {
   async handleApproveSessionPlan({ session_id }: { session_id: string }) {
     this.ensureJulesApiConfigured();
     const response = await this.deps.julesApi.approveSessionPlan(session_id);
-    return { content: [{ type: "text", text: JSON.stringify(this.toActionResponseSummary(response, "approve_session_plan"), null, 2) }] };
+    return { content: [{ type: "text", text: JSON.stringify(this.deps.activitySummary.toActionResponseSummary(response, "approve_session_plan"), null, 2) }] };
   }
 
   async handleSendSessionMessage({ session_id, prompt }: { session_id: string; prompt: string }) {
     this.ensureJulesApiConfigured();
     const response = await this.deps.julesApi.sendSessionMessage(session_id, prompt);
-    return { content: [{ type: "text", text: JSON.stringify(this.toActionResponseSummary(response, "send_session_message"), null, 2) }] };
+    return { content: [{ type: "text", text: JSON.stringify(this.deps.activitySummary.toActionResponseSummary(response, "send_session_message"), null, 2) }] };
   }
 
   async handleWaitForSessionCompletion({
@@ -384,41 +184,43 @@ export class CoreToolHandler {
     poll_interval?: number;
     timeout?: number;
   }) {
-    if (this.deps.isTrackedCliSession(session_id)) {
-      const startTime = Date.now();
-      while (Date.now() - startTime < timeout * 1000) {
-        const session = this.deps.getTrackedSession(session_id);
-        if (!session) {
-          throw new Error(`Session not found: ${session_id}`);
-        }
-        if (
-          session.state === "COMPLETED" ||
-          session.state === "FAILED" ||
-          this.deps.isActionRequiredState(session.state) ||
-          session.outputs?.some((output: any) => output.pullRequest)
-        ) {
-          return { content: [{ type: "text", text: JSON.stringify(this.toSessionSummary(session), null, 2) }] };
-        }
-        await new Promise((resolve) => setTimeout(resolve, poll_interval * 1000));
-      }
-      throw new Error(`Timeout waiting for session ${session_id}`);
+    const isTracked = this.deps.isTrackedCliSession(session_id);
+    if (!isTracked) {
+      this.ensureJulesApiConfigured();
     }
 
-    this.ensureJulesApiConfigured();
-    const startTime = Date.now();
-    while (Date.now() - startTime < timeout * 1000) {
-      const session = await this.deps.julesApi.getSession(session_id);
-      if (
-        session.state === "COMPLETED" ||
-        session.state === "FAILED" ||
-        this.deps.isActionRequiredState(session.state) ||
-        session.outputs?.some((output: any) => output.pullRequest)
-      ) {
-        return { content: [{ type: "text", text: JSON.stringify(this.toSessionSummary(session), null, 2) }] };
+    try {
+      const session = await waitUntil({
+        description: `session ${session_id}`,
+        intervalMs: poll_interval * 1000,
+        timeoutMs: timeout * 1000,
+        action: async () => {
+          if (isTracked) {
+            const s = this.deps.getTrackedSession(session_id);
+            if (!s) {
+              throw new Error(`Session not found: ${session_id}`);
+            }
+            return s;
+          }
+          return await this.deps.julesApi.getSession(session_id);
+        },
+        predicate: (session) => {
+          return (
+            session.state === "COMPLETED" ||
+            session.state === "FAILED" ||
+            this.deps.isActionRequiredState(session.state) ||
+            !!session.outputs?.some((output: any) => output.pullRequest)
+          );
+        },
+      });
+
+      return { content: [{ type: "text", text: JSON.stringify(this.deps.activitySummary.toSessionSummary(session), null, 2) }] };
+    } catch (error: any) {
+      if (error.message?.includes("Timeout waiting for")) {
+        throw new Error(`Timeout waiting for session ${session_id}`);
       }
-      await new Promise((resolve) => setTimeout(resolve, poll_interval * 1000));
+      throw error;
     }
-    throw new Error(`Timeout waiting for session ${session_id}`);
   }
 
   async handleGetActivity({ session_id, activity_id }: { session_id: string; activity_id: string }) {
@@ -430,12 +232,12 @@ export class CoreToolHandler {
       if (!activity) {
         throw new Error(`Activity not found: ${activity_id}`);
       }
-      return { content: [{ type: "text", text: JSON.stringify(this.toActivitySummary(activity), null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(this.deps.activitySummary.toActivitySummary(activity), null, 2) }] };
     }
 
     this.ensureJulesApiConfigured();
     const activity = await this.deps.julesApi.getActivity(session_id, activity_id);
-    return { content: [{ type: "text", text: JSON.stringify(this.toActivitySummary(activity as JulesActivity), null, 2) }] };
+    return { content: [{ type: "text", text: JSON.stringify(this.deps.activitySummary.toActivitySummary(activity as JulesActivity), null, 2) }] };
   }
 
   async handleListActivities({ session_id, page_size, page_token }: { session_id: string; page_size?: number; page_token?: string }) {
@@ -444,7 +246,7 @@ export class CoreToolHandler {
       return {
         content: [{
           type: "text",
-          text: JSON.stringify(this.toActivityPageSummary({
+          text: JSON.stringify(this.deps.activitySummary.toActivityPageSummary({
             sessionId: session_id,
             activities: activities.activities || [],
             nextPageToken: activities.nextPageToken,
@@ -460,7 +262,7 @@ export class CoreToolHandler {
     return {
       content: [{
         type: "text",
-        text: JSON.stringify(this.toActivityPageSummary({
+        text: JSON.stringify(this.deps.activitySummary.toActivityPageSummary({
           sessionId: session_id,
           activities: activities.activities || [],
           nextPageToken: activities.nextPageToken,
@@ -474,11 +276,11 @@ export class CoreToolHandler {
   async handleListAllActivities({ session_id }: { session_id: string }) {
     if (this.deps.isTrackedCliSession(session_id)) {
       const allActivities = this.deps.listAllTrackedActivities(session_id);
-      return { content: [{ type: "text", text: JSON.stringify(this.toActivityCollectionSummary(session_id, allActivities), null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(this.deps.activitySummary.toActivityCollectionSummary(session_id, allActivities), null, 2) }] };
     }
 
     this.ensureJulesApiConfigured();
     const allActivities = await this.deps.julesApi.listAllActivities(session_id);
-    return { content: [{ type: "text", text: JSON.stringify(this.toActivityCollectionSummary(session_id, allActivities), null, 2) }] };
+    return { content: [{ type: "text", text: JSON.stringify(this.deps.activitySummary.toActivityCollectionSummary(session_id, allActivities), null, 2) }] };
   }
 }

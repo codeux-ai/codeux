@@ -23,6 +23,7 @@ Use this page as the main entrypoint.
 2. [MCP Tools and Contracts](./mcp/tools-and-contracts.md)
 3. [MCP Runtime and Dispatch](./mcp/runtime-and-dispatch.md)
 4. [Operations Runbook](./operations/runbook.md)
+5. [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 
 ## Full Table of Contents
 
@@ -36,6 +37,7 @@ Use this page as the main entrypoint.
 - [Dashboard Guide](./dashboard/dashboard-guide.md)
 - [Configuration and Storage](./settings/configuration-and-storage.md)
 - [Operations Runbook](./operations/runbook.md)
+- [Logging and Correlation IDs](./operations/logging-and-correlation.md)
 - [Testing and Quality](./development/testing-and-quality.md)
 - [Documentation Standards](./development/documentation-standards.md)
 - [Glossary](./reference/glossary.md)

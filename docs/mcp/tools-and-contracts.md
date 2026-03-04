@@ -26,6 +26,8 @@ These cover:
 
 Defined in `src/contracts/mcp-tool-definitions.ts`.
 
+Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/tool-registry.ts`.
+
 ### Sources
 - `get_source`
 - `list_sources`
@@ -124,6 +126,16 @@ When modifying tool contracts:
 2. Update both backend and dashboard types if shared payloads change.
 3. Add or update tests in `tests/backend/**/*.test.ts` or `tests/dashboard/**/*.test.ts`.
 4. Document changes in `docs/` and `README.md`.
+
+## Jules API Client Typing Boundary
+
+`src/integrations/jules-api-client.ts` is the typed transport boundary for Jules REST calls.
+
+Current expectations:
+- Request/response interfaces are explicit for all list and session APIs (for example `JulesListSourcesRequest`, `JulesListSessionsResponse`, `JulesCreateSessionRequest`).
+- Pagination inputs remain MCP-friendly (`page_size`, `page_token`) and are translated to Jules REST query keys (`pageSize`, `pageToken`) inside the client.
+- Session route normalization is centralized so all session-aware methods consistently accept either `123` or `sessions/123`.
+- Client-level behavior is covered by `tests/backend/services/jules-api-client.test.ts` (query mapping, pagination, session normalization, API key handling).
 
 ## Runtime Tool Enablement
 
