@@ -70,6 +70,7 @@ export class ActivitySummaryService {
       .filter((pullRequest: unknown): pullRequest is Record<string, unknown> => !!pullRequest)
       .map((pullRequest) => ({
         url: typeof pullRequest.url === "string" ? pullRequest.url : undefined,
+        workerBranch: typeof pullRequest.workerBranch === "string" ? pullRequest.workerBranch : undefined,
       }))
       .filter((pullRequest) => typeof pullRequest.url === "string");
 
