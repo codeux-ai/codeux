@@ -1,17 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import type { JulesActivity, JulesSession } from "../../../src/contracts/app-types.js";
 import { CoreToolHandler } from "../../../src/mcp/core-tool-handler.js";
+import { ActivitySummaryService } from "../../../src/domain/sessions/activity-summary.js";
 
 const buildDeps = () => {
   const getSession = vi.fn();
   const listAllActivities = vi.fn();
   const fetchRecentActivities = vi.fn();
+  const activitySummary = new ActivitySummaryService();
 
   const deps = {
     julesApi: {
       getSession,
       listAllActivities,
     } as any,
+    activitySummary,
     normalizeName: (type: string, id: string) => `${type}/${id.replace(`${type}/`, "")}`,
     resolveSessionName: (session: Partial<JulesSession>) => session.name,
     fetchRecentActivities,
