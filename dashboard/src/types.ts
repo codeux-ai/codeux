@@ -1,253 +1,63 @@
-export interface JulesActivity {
-  name: string;
-  id: string;
-  createTime: string;
-  originator?: "agent" | "user" | "system" | string;
-  agentMessaged?: { agentMessage?: string };
-  userMessaged?: { userMessage?: string };
-  progressUpdated?: { title?: string; description?: string };
-  planGenerated?: { plan?: { steps?: Array<{ title?: string }> } };
-  planApproved?: { planId?: string };
-  sessionFailed?: { reason?: string };
-  sessionCompleted?: unknown;
-  description?: string;
-  [key: string]: unknown;
-}
+import type {
+  JulesActivity,
+  SubtaskStatus,
+  SubtaskMergeIndicator,
+  ProviderId,
+  ProviderStrategy,
+  ThinkingMode,
+  CliExecutionMode,
+  FeaturePrAutoMergeMode,
+  Subtask,
+  DashboardStatus,
+  LiveActivitiesResponse,
+  DashboardStats,
+  AutomationLevel,
+  AutomationInterventionsSettings,
+  ProviderSettings,
+  SkillToggle,
+  McpToolToggle,
+  DashboardSettings,
+  GitStatusCheck,
+  GitPullRequestStatus,
+  GitCiRunStatus,
+  GitMergeStatus,
+  GitTrackingScope,
+  GitTrackingTarget,
+  GitTrackingStatus,
+  ExternalSettingsHints
+} from "../../src/contracts/app-types.js";
 
-export type TaskStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED";
-export type SubtaskMergeIndicator = "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCKED";
-export type ProviderId = "jules" | "gemini" | "codex" | "claude-code";
-export type ProviderStrategy = "MANUAL" | "WEIGHTED" | "ORCHESTRATOR";
-export type ThinkingMode = "SMALL" | "MEDIUM" | "HIGH";
-export type CliExecutionMode = "HOST" | "DOCKER";
-export type FeaturePrAutoMergeMode = "OFF" | "WHEN_GREEN" | "ALWAYS";
+export type {
+  JulesActivity,
+  SubtaskStatus,
+  SubtaskMergeIndicator,
+  ProviderId,
+  ProviderStrategy,
+  ThinkingMode,
+  CliExecutionMode,
+  FeaturePrAutoMergeMode,
+  Subtask,
+  DashboardStatus,
+  LiveActivitiesResponse,
+  DashboardStats,
+  AutomationLevel,
+  AutomationInterventionsSettings,
+  ProviderSettings,
+  SkillToggle,
+  McpToolToggle,
+  DashboardSettings,
+  GitStatusCheck,
+  GitPullRequestStatus,
+  GitCiRunStatus,
+  GitMergeStatus,
+  GitTrackingScope,
+  GitTrackingTarget,
+  GitTrackingStatus,
+  ExternalSettingsHints
+};
 
-export interface Subtask {
-  id: string;
-  title: string;
-  prompt: string;
-  depends_on: string[];
-  status?: TaskStatus;
-  session_id?: string;
-  session_name?: string;
-  session_state?: string;
-  provider?: ProviderId;
-  worker_branch?: string;
-  pr_url?: string;
-  activities?: JulesActivity[];
-  is_independent: boolean;
-  is_merged?: boolean;
-  merge_indicator?: SubtaskMergeIndicator;
-}
-
-export interface DashboardStatus {
-  sprint_number?: number;
-  source_id?: string;
-  repo_path?: string;
-  feature_branch?: string;
-  subtasks: Subtask[];
-  reportText?: string;
-  statusTable?: string;
-  instructions?: string;
-  timestamp: string | null;
-}
-
-export interface LiveActivitiesResponse {
-  activitiesBySession: Record<string, JulesActivity[]>;
-  polledAt: string;
-  cacheTtlMs: number;
-}
-
-export interface DashboardStats {
-  total: number;
-  running: number;
-  completed: number;
-  failed: number;
-  ci: number;
-  automerge: number;
-  merged: number;
-  mergeBlocked: number;
-}
-
-export type AutomationLevel = "FULL" | "SEMI_AUTO" | "ALWAYS_ASK";
-export interface AutomationInterventionsSettings {
-  autoApprovePlan: boolean;
-  autoAnswerClarification: boolean;
-  autoResumePaused: boolean;
-  clarificationAnswerTemplate: string;
-}
-export interface ProviderSettings {
-  enabled: boolean;
-  model: string;
-  weight: number;
-  thinkingMode: ThinkingMode;
-  apiKey: string;
-}
-
-export interface SkillToggle {
-  name: string;
-  enabled: boolean;
-  isInternal: boolean;
-}
-
-export interface McpToolToggle {
-  name: string;
-  enabled: boolean;
-  isInternal: boolean;
-}
-
-export interface DashboardSettings {
-  dashboardPort: number;
-  automationLevel: AutomationLevel;
-  automationInterventions: AutomationInterventionsSettings;
-  aiProvider: {
-    provider: ProviderId;
-    strategy: ProviderStrategy;
-    providers: Record<ProviderId, ProviderSettings>;
-    julesApiKey: string;
-  };
-  git: {
-    githubMode: "REMOTE" | "LOCAL";
-    githubToken: string;
-    defaultBranch: string;
-    autoCreatePr: boolean;
-    featureBranchPrefix: string;
-    sprintBranchScheme: string;
-  };
-  ciIntelligence: {
-    enabled: boolean;
-    enableLivePrMonitoring: boolean;
-    waitForCiBeforeMainMerge: boolean;
-    resolveAllCommentsBeforeMainMerge: boolean;
-    waitForCiBeforeFeatureMerge: boolean;
-    resolveAllCommentsBeforeFeatureMerge: boolean;
-    waitForJulesCiAutofix: boolean;
-    julesCiAutofixMaxRetries: number;
-    featurePrAutoMergeMode: FeaturePrAutoMergeMode;
-  };
-  sprintLoopSteps: {
-    branchPreflight: boolean;
-    planningPreflight: boolean;
-    loadSubtasks: boolean;
-    sessionSync: boolean;
-    statusDerivation: boolean;
-    startReadyTasks: boolean;
-    mergeProtocol: boolean;
-    actionRequiredProtocol: boolean;
-    statusTable: boolean;
-    watchLoop: boolean;
-    watchLoopIntervalSeconds: number;
-    watchLoopOutputIntervalSeconds: number;
-  };
-  cliWorkflow: {
-    cleanupWorktreeOnSuccess: boolean;
-    cleanupWorktreeOnFailure: boolean;
-    retryOnReadFileNotFound: boolean;
-    resumeFailedTaskInSameWorkspace: boolean;
-    executionMode: CliExecutionMode;
-    containerImage: string;
-    containerSetupScriptPath: string;
-    containerMountCredentials: boolean;
-    containerMountGitConfig: boolean;
-    containerMountGithubAuth: boolean;
-    containerMountGeminiAuth: boolean;
-    containerMountCodexAuth: boolean;
-    containerMountClaudeCodeAuth: boolean;
-    containerGithubAuthPath: string;
-    containerGeminiAuthPath: string;
-    containerCodexAuthPath: string;
-    containerClaudeCodeAuthPath: string;
-  };
-  skills: SkillToggle[];
-  mcpTools: McpToolToggle[];
-}
-
-export interface GitStatusCheck {
-  name: string;
-  status: string;
-  conclusion: string | null;
-}
-
-export interface GitPullRequestStatus {
-  number: number;
-  title: string;
-  url: string;
-  state: string;
-  isDraft: boolean;
-  headRefName: string | null;
-  baseRefName: string | null;
-  mergeStateStatus: string | null;
-  reviewDecision: string | null;
-  updatedAt: string | null;
-  comments: number;
-  checks: GitStatusCheck[];
-}
-
-export interface GitCiRunStatus {
-  id: number | null;
-  name: string;
-  workflowName: string | null;
-  status: string;
-  conclusion: string | null;
-  event: string | null;
-  headBranch: string | null;
-  url: string;
-  updatedAt: string | null;
-}
-
-export interface GitMergeStatus {
-  number: number;
-  title: string;
-  url: string;
-  headRefName: string | null;
-  baseRefName: string | null;
-  mergedAt: string | null;
-  mergedBy: string | null;
-}
-
-export type GitTrackingScope = "FEATURE_PR_CI" | "MAIN_MERGE_PR_CI" | "MAIN_BRANCH_CI" | "REPOSITORY";
-
-export interface GitTrackingTarget {
-  scope: GitTrackingScope;
-  label: string;
-  branch: string | null;
-}
-
-export interface GitTrackingStatus {
-  mode: "REMOTE" | "LOCAL";
-  available: boolean;
-  repositoryRoot: string | null;
-  branch: string | null;
-  hasRemote: boolean;
-  dirty: boolean;
-  openPullRequests: GitPullRequestStatus[];
-  ciRuns: GitCiRunStatus[];
-  mergedPullRequests: GitMergeStatus[];
-  tracking: GitTrackingTarget;
-  warnings: string[];
-  lastUpdated: string;
-}
-
-export interface ExternalSettingsHints {
-  env: {
-    julesApiKey: string;
-    geminiApiKey: string;
-    codexApiKey: string;
-    claudeCodeApiKey: string;
-    githubToken: string;
-  };
-  settingsJson: {
-    julesApiKey: string;
-    geminiApiKey: string;
-    codexApiKey: string;
-    claudeCodeApiKey: string;
-    githubToken: string;
-  };
-  resolved: {
-    julesApiKey: string;
-    geminiApiKey: string;
-    codexApiKey: string;
-    claudeCodeApiKey: string;
-    githubToken: string;
-  };
-}
+/**
+ * Compatibility alias for TaskStatus.
+ * In the backend we use SubtaskStatus, but the dashboard originally used TaskStatus.
+ */
+export type TaskStatus = SubtaskStatus;

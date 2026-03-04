@@ -20,6 +20,14 @@ export interface JulesActivity {
   id: string;
   createTime: string;
   originator?: "agent" | "user" | "system" | string;
+  agentMessaged?: { agentMessage?: string };
+  userMessaged?: { userMessage?: string };
+  progressUpdated?: { title?: string; description?: string };
+  planGenerated?: { plan?: { steps?: Array<{ title?: string }> } };
+  planApproved?: { planId?: string };
+  sessionFailed?: { reason?: string };
+  sessionCompleted?: unknown;
+  description?: string;
   [key: string]: any;
 }
 
@@ -49,6 +57,35 @@ export interface Subtask {
   merge_indicator?: SubtaskMergeIndicator;
   intervention_owner?: InterventionOwner;
   intervention_hint?: string;
+}
+
+export interface DashboardStatus {
+  sprint_number?: number;
+  source_id?: string;
+  repo_path?: string;
+  feature_branch?: string;
+  subtasks: Subtask[];
+  reportText?: string;
+  statusTable?: string;
+  instructions?: string;
+  timestamp: string | null;
+}
+
+export interface LiveActivitiesResponse {
+  activitiesBySession: Record<string, JulesActivity[]>;
+  polledAt: string;
+  cacheTtlMs: number;
+}
+
+export interface DashboardStats {
+  total: number;
+  running: number;
+  completed: number;
+  failed: number;
+  ci: number;
+  automerge: number;
+  merged: number;
+  mergeBlocked: number;
 }
 
 export interface Settings {
