@@ -127,6 +127,7 @@ export class JulesAgentServer {
       getAppConfig: () => this.appConfig,
       getSettings: () => this.settings,
       getDashboardSettings: () => this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
+      setDashboardSettings: (settings) => { this.dashboardSettings = settings; },
       getEffectiveJulesApiKey: () => this.getEffectiveJulesApiKey(),
       getEffectiveGithubToken: () => this.getEffectiveGithubToken(),
       getDashboardPort: () => this.getDashboardPort(),

@@ -56,6 +56,7 @@ export interface ServerContext {
   getAppConfig: () => AppConfig;
   getSettings: () => Settings;
   getDashboardSettings: () => DashboardSettings;
+  setDashboardSettings: (settings: DashboardSettings) => void;
   getEffectiveJulesApiKey: () => string | undefined;
   getEffectiveGithubToken: () => string | undefined;
   getDashboardPort: () => number;
@@ -89,6 +90,7 @@ export function createRuntimeDependencies(
   const externalSettingsHints = loadExternalSettingsHints(options.projectRoot);
   const settingsRepository = new SettingsRepository(undefined, externalSettingsHints);
   const dashboardSettings = settingsRepository.getSettings();
+  context.setDashboardSettings(dashboardSettings);
 
   const server = new Server(
     {
