@@ -37,7 +37,7 @@ import { TaskRerunService } from "../services/task-rerun-service.js";
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import { createRuntimeDependencies, ServerContext } from "../app/dependency-factory.js";
 import { generateCorrelationId, runWithCorrelationId } from "../shared/logging/correlation-id.js";
-import type { Logger } from "../shared/logging/logger.js";
+import { createLogger, type Logger } from "../shared/logging/logger.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../repositories/settings-defaults.js";
 
 export interface JulesAgentServerOptions {
@@ -346,6 +346,7 @@ export class JulesAgentServer {
         this.dashboardSettings = this.settingsRepository.saveSettings(settings);
         this.syncGitSettingsFromDashboard();
         this.refreshJulesApiKey();
+        this.reinitializeLogger();
         this.activityCacheService.invalidateGitStatusCache();
         return this.dashboardSettings;
       },
@@ -358,6 +359,17 @@ export class JulesAgentServer {
       isReady: () => this.isReady(),
     });
     this.dashboardRuntimePort = handle.port;
+  }
+
+  private reinitializeLogger(): void {
+    const logFilePath = this.dashboardSettings?.enableDebugLogFile
+      ? path.join(this.projectRoot, ".jules-subagents", "debug.log")
+      : undefined;
+
+    this.logger = createLogger({
+      bindings: { service: "jules-subagents" },
+      logFilePath,
+    });
   }
 
   private async persistTaskMergedFlag(args: {

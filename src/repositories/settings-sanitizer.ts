@@ -89,6 +89,7 @@ const sanitizeMcpTools = (value: unknown): McpToolToggle[] => {
 
 export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardSettings => ({
   dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
+  enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
   automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
   automationInterventions: {
     ...DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
@@ -178,6 +179,7 @@ const normalizeProviderSettings = (
 export const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints): DashboardSettings => {
   const input = (value && typeof value === "object" ? value : {}) as Partial<DashboardSettings>;
   const dashboardPort = readPort(input.dashboardPort, DEFAULT_DASHBOARD_SETTINGS.dashboardPort);
+  const enableDebugLogFile = readBoolean(input.enableDebugLogFile, DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile);
   const automationLevel = input.automationLevel;
   const validAutomationLevel = automationLevel === "FULL" || automationLevel === "SEMI_AUTO" || automationLevel === "ALWAYS_ASK"
     ? automationLevel
@@ -407,6 +409,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
 
   return {
     dashboardPort,
+    enableDebugLogFile,
     automationLevel: validAutomationLevel,
     automationInterventions,
     aiProvider,
