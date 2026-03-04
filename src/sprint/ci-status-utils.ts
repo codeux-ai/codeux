@@ -9,6 +9,8 @@ export const isCiFailure = (status: string, conclusion: string | null): boolean 
   return normalizedConclusion.length > 0 && normalizedConclusion !== "success" && normalizedConclusion !== "neutral" && normalizedConclusion !== "skipped";
 };
 
+export const isCiCheckFailed = isCiFailure;
+
 export const isCiPending = (status: string, conclusion: string | null): boolean => {
   const normalizedStatus = status.toLowerCase();
   if (normalizedStatus !== "completed") {
@@ -16,6 +18,8 @@ export const isCiPending = (status: string, conclusion: string | null): boolean 
   }
   return conclusion === null;
 };
+
+export const isCiCheckPending = isCiPending;
 
 export const selectFailedCiRuns = (gitStatus: GitTrackingStatus, branchName: string): GitCiRunStatus[] => {
   const runs = Array.isArray(gitStatus.ciRuns) ? gitStatus.ciRuns : [];
