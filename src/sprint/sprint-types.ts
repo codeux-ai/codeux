@@ -1,4 +1,5 @@
 import type { JulesActivity, JulesSession, Subtask } from "../contracts/app-types.js";
+import type { Logger } from "../shared/logging/logger.js";
 
 export interface SprintAgentArgs {
   sprint_number: number;
@@ -23,4 +24,5 @@ export interface SessionSyncDependencies {
   extractSessionId: (session: Partial<JulesSession>) => string | undefined;
   fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
   isActionRequiredState: (state?: string) => boolean;
+  logger: Logger;
 }

@@ -23,6 +23,13 @@ describe("runStartReadyTasksStep", () => {
       startTask: vi.fn().mockResolvedValue({ id: "sessions/abc", name: "sessions/abc", provider: "jules" }),
       resolveSessionName: (session) => session.name,
       extractSessionId: (session) => session.id,
+      logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+      },
     });
 
     expect(result.subtasks[0].status).toBe("RUNNING");

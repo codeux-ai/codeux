@@ -37,6 +37,7 @@ import type {
   SprintLoopStepSettings,
   Subtask,
 } from "../contracts/app-types.js";
+import type { Logger } from "../shared/logging/logger.js";
 
 export interface SprintOrchestratorDependencies {
   settings: Settings;
@@ -67,6 +68,7 @@ export interface SprintOrchestratorDependencies {
   }) => Promise<GitTrackingStatus | null>;
   autoMergeFeaturePr?: (args: { repoPath: string; prNumber: number }) => Promise<{ ok: boolean; message?: string }>;
   renderInstruction: (templateId: InstructionTemplateId, variables: Record<string, unknown>, repoPath?: string) => Promise<string>;
+  logger: Logger;
 }
 
 export class SprintOrchestrator {
@@ -207,6 +209,7 @@ export class SprintOrchestrator {
           extractSessionId: this.deps.extractSessionId,
           fetchRecentActivities: this.deps.fetchRecentActivities,
           isActionRequiredState: this.deps.isActionRequiredState,
+          logger: this.deps.logger.child({ component: "session-sync-step" }),
         },
         args.retryFailed,
         {
@@ -235,6 +238,7 @@ export class SprintOrchestrator {
           this.deps.startTask(task, args.sourceId, args.defaultFeatureBranch, args.repoPath, args.sprintNumber),
         resolveSessionName: this.deps.resolveSessionName,
         extractSessionId: this.deps.extractSessionId,
+        logger: this.deps.logger.child({ component: "start-ready-tasks-step" }),
       });
       subtasks = startResult.subtasks;
       reportText += startResult.reportText;
@@ -697,8 +701,11 @@ export class SprintOrchestrator {
       );
       fullReport += "\n";
 
-      console.error(`Starting watch loop for Sprint ${args.sprint_number}...`);
-      console.error(`Live dashboard available at http://localhost:${dashboardPort}`);
+      this.deps.logger.info("Starting watch loop", {
+        sprintNumber: args.sprint_number,
+        featureBranch: defaultFeatureBranch,
+      });
+      this.deps.logger.info(`Live dashboard available at http://localhost:${dashboardPort}`);
 
       while (!allFinished) {
         const { subtasks, reportText, statusTable, instructions, awaitingMerge } = await this.runOrchestrationCycle({
@@ -784,7 +791,10 @@ export class SprintOrchestrator {
                 githubMode,
               });
             } catch (cleanupError) {
-              console.error(`Warning: Failed to cleanup subtasks: ${cleanupError}`);
+              this.deps.logger.warn("Failed to cleanup subtasks", {
+                subtasksDir,
+                error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+              });
             }
           } else if (subtasks.some((task) => task.status === "FAILED")) {
             fullReport += await this.renderInstruction("cleanupFailed", { subtasks_dir: subtasksDir }, repoPath);

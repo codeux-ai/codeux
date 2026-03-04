@@ -38,6 +38,13 @@ describe("runSessionSyncStep", () => {
       extractSessionId: (session: { id?: string }) => session.id,
       fetchRecentActivities: vi.fn().mockResolvedValue([]),
       isActionRequiredState: vi.fn().mockReturnValue(false),
+      logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+      },
     };
 
     const result = await runSessionSyncStep(

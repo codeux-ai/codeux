@@ -54,7 +54,7 @@ export const runSessionSyncStep = async (
       try {
         task.activities = await deps.fetchRecentActivities(sessionName, 5);
       } catch {
-        console.error(`Warning: Could not fetch activities for task ${task.id}`);
+        deps.logger.warn("Could not fetch activities for task", { taskId: task.id });
       }
     }
 

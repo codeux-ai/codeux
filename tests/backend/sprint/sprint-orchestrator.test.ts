@@ -54,6 +54,13 @@ const buildDeps = () => {
       }
       return "";
     }),
+    logger: {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn().mockReturnThis(),
+    },
   };
 
   return { deps, listSessions, loadSubtasks, getGuideContent };
