@@ -1,3 +1,4 @@
+import { waitUntil } from "../shared/polling/wait-until.js";
 import type { JulesApiClient } from "../integrations/jules-api-client.js";
 import type { JulesActivity, JulesSession, JulesSource } from "../contracts/app-types.js";
 
@@ -384,41 +385,43 @@ export class CoreToolHandler {
     poll_interval?: number;
     timeout?: number;
   }) {
-    if (this.deps.isTrackedCliSession(session_id)) {
-      const startTime = Date.now();
-      while (Date.now() - startTime < timeout * 1000) {
-        const session = this.deps.getTrackedSession(session_id);
-        if (!session) {
-          throw new Error(`Session not found: ${session_id}`);
-        }
-        if (
-          session.state === "COMPLETED" ||
-          session.state === "FAILED" ||
-          this.deps.isActionRequiredState(session.state) ||
-          session.outputs?.some((output: any) => output.pullRequest)
-        ) {
-          return { content: [{ type: "text", text: JSON.stringify(this.toSessionSummary(session), null, 2) }] };
-        }
-        await new Promise((resolve) => setTimeout(resolve, poll_interval * 1000));
-      }
-      throw new Error(`Timeout waiting for session ${session_id}`);
+    const isTracked = this.deps.isTrackedCliSession(session_id);
+    if (!isTracked) {
+      this.ensureJulesApiConfigured();
     }
 
-    this.ensureJulesApiConfigured();
-    const startTime = Date.now();
-    while (Date.now() - startTime < timeout * 1000) {
-      const session = await this.deps.julesApi.getSession(session_id);
-      if (
-        session.state === "COMPLETED" ||
-        session.state === "FAILED" ||
-        this.deps.isActionRequiredState(session.state) ||
-        session.outputs?.some((output: any) => output.pullRequest)
-      ) {
-        return { content: [{ type: "text", text: JSON.stringify(this.toSessionSummary(session), null, 2) }] };
+    try {
+      const session = await waitUntil({
+        description: `session ${session_id}`,
+        intervalMs: poll_interval * 1000,
+        timeoutMs: timeout * 1000,
+        action: async () => {
+          if (isTracked) {
+            const s = this.deps.getTrackedSession(session_id);
+            if (!s) {
+              throw new Error(`Session not found: ${session_id}`);
+            }
+            return s;
+          }
+          return await this.deps.julesApi.getSession(session_id);
+        },
+        predicate: (session) => {
+          return (
+            session.state === "COMPLETED" ||
+            session.state === "FAILED" ||
+            this.deps.isActionRequiredState(session.state) ||
+            !!session.outputs?.some((output: any) => output.pullRequest)
+          );
+        },
+      });
+
+      return { content: [{ type: "text", text: JSON.stringify(this.toSessionSummary(session), null, 2) }] };
+    } catch (error: any) {
+      if (error.message?.includes("Timeout waiting for")) {
+        throw new Error(`Timeout waiting for session ${session_id}`);
       }
-      await new Promise((resolve) => setTimeout(resolve, poll_interval * 1000));
+      throw error;
     }
-    throw new Error(`Timeout waiting for session ${session_id}`);
   }
 
   async handleGetActivity({ session_id, activity_id }: { session_id: string; activity_id: string }) {
