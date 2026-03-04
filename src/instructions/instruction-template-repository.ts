@@ -1,43 +1,23 @@
-import * as fs from "fs/promises";
-import os from "os";
 import * as path from "path";
+import { FileTemplateRepository } from "../infrastructure/repositories/file-template-repository.js";
 
 const INSTRUCTION_DIR_CANDIDATES = ["instructions", "intructions"];
+const INSTRUCTION_SEARCH_DIRS = INSTRUCTION_DIR_CANDIDATES.map((dirName) =>
+  path.join(".jules-subagents", dirName)
+);
 
 export class InstructionRepository {
-  constructor(private readonly projectRoot: string) {}
+  private readonly fileTemplateRepository: FileTemplateRepository;
 
-  private buildBaseSearchRoots(repoPath?: string): string[] {
-    const roots = [process.cwd(), this.projectRoot, os.homedir()];
-    if (repoPath && repoPath.trim().length > 0) {
-      roots.unshift(repoPath);
-    }
-    return [...new Set(roots)];
-  }
-
-  private buildCandidatePaths(relativeInstructionPath: string, repoPath?: string): string[] {
-    const roots = this.buildBaseSearchRoots(repoPath);
-    const paths: string[] = [];
-
-    for (const root of roots) {
-      for (const dirName of INSTRUCTION_DIR_CANDIDATES) {
-        paths.push(path.join(root, ".jules-subagents", dirName, relativeInstructionPath));
-      }
-    }
-
-    return paths;
+  constructor(projectRoot: string) {
+    this.fileTemplateRepository = new FileTemplateRepository(projectRoot, INSTRUCTION_SEARCH_DIRS);
   }
 
   async loadInstruction(relativeInstructionPath: string, repoPath?: string): Promise<string> {
-    for (const candidatePath of this.buildCandidatePaths(relativeInstructionPath, repoPath)) {
-      try {
-        await fs.access(candidatePath);
-        return await fs.readFile(candidatePath, "utf-8");
-      } catch {
-        continue;
-      }
+    try {
+      return await this.fileTemplateRepository.loadFile(relativeInstructionPath, repoPath);
+    } catch {
+      throw new Error(`Instruction template not found: ${relativeInstructionPath}`);
     }
-
-    throw new Error(`Instruction template not found: ${relativeInstructionPath}`);
   }
 }

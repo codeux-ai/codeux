@@ -42,6 +42,7 @@ This project is a Model Context Protocol (MCP) server for Jules APIs with an int
 - `src/instructions/instruction-template-service.ts`
 - `src/instructions/instruction-template-repository.ts`
 - `src/instructions/instruction-template-renderer.ts`
+- `src/infrastructure/repositories/file-template-repository.ts`
 - Template catalog defaults in `src/instructions/instruction-template-catalog.ts`
 
 ### 5. Dashboard server and frontend
@@ -53,6 +54,7 @@ This project is a Model Context Protocol (MCP) server for Jules APIs with an int
 - Subtasks: `src/repositories/subtask-repository.ts`
 - Settings DB: `src/repositories/settings-repository.ts`
 - Settings defaults/sanitization/storage: `src/repositories/settings-defaults.ts`, `src/repositories/settings-sanitizer.ts`, `src/repositories/settings-db-storage.ts`
+- Shared file lookup: `src/infrastructure/repositories/file-template-repository.ts` (used by guide and instruction repositories)
 
 ### 7. CLI workflow execution helpers
 - `src/services/cli-workflow-service.ts`
@@ -93,7 +95,7 @@ flowchart TD
 
 ## Configuration Priority Model
 
-For `.jules-subagents/settings.json` and guides, priority is resolved by search order in repositories and config loader.
+For `.jules-subagents/settings.json`, guides, and instruction templates, priority is resolved by shared search-root ordering logic in repositories and config loader.
 
 Typical priority order (highest first):
 1. Repo-scoped path (when `repo_path` provided)

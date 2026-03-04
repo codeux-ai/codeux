@@ -28,6 +28,9 @@ This map explains where major responsibilities live.
 - `integrations/`
   - `jules-api-client.ts`
   - Jules API HTTP client.
+- `infrastructure/`
+  - `repositories/file-template-repository.ts`
+  - Shared file lookup primitive used by repositories that load markdown templates and guides from `.jules-subagents/*`.
 - `server/`
   - `jules-agent-server.ts`
   - Main runtime composition and MCP server class.
@@ -42,7 +45,7 @@ This map explains where major responsibilities live.
   - `settings-defaults.ts`
   - `settings-sanitizer.ts`
   - `settings-db-storage.ts`
-  - `guide-repository.ts`
+  - `guide-repository.ts` (uses shared file-template lookup for `.jules-subagents/agents`)
   - `subtask-repository.ts`
   - `session-tracking-repository.ts`
 - `mcp/`
@@ -70,7 +73,7 @@ This map explains where major responsibilities live.
 - `sprint/steps/`
   - Atomic step modules used by orchestrator.
 - `instructions/`
-  - Template loading, fallback, and placeholder rendering.
+  - Template loading, fallback, and placeholder rendering (`instruction-template-repository.ts` delegates filesystem lookup to the shared infrastructure repository).
 
 ## Dashboard (`dashboard/src/`)
 
