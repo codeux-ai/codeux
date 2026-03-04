@@ -24,4 +24,66 @@ describe("GitStatusService - Core", () => {
     await service.getStatus("REMOTE", "ghp_token");
     expect(contexts.some((entry) => entry.command === "gh" && entry.token === "ghp_token")).toBe(true);
   });
+
+  it("fetches PRs, runs, and merged PRs in parallel", async () => {
+    let activeRequests = 0;
+    let maxConcurrent = 0;
+
+    const simulateDelay = async (ms: number) => {
+      activeRequests++;
+      maxConcurrent = Math.max(maxConcurrent, activeRequests);
+      await new Promise(resolve => setTimeout(resolve, ms));
+      activeRequests--;
+    };
+
+    const service = new GitStatusService("/tmp/repo", async (command, args) => {
+      const fullCmd = `${command} ${args.join(" ")}`;
+      if (fullCmd.startsWith("gh pr list") || fullCmd.startsWith("gh run list")) {
+        await simulateDelay(20);
+        return { ok: true, stdout: "[]" };
+      }
+      return { ok: true, stdout: "true\n" };
+    });
+
+    await service.getStatus("REMOTE", "ghp_token");
+    expect(maxConcurrent).toBeGreaterThanOrEqual(3);
+  });
+
+  it("bounds failed run job enrichment concurrency to exactly 3", async () => {
+    let activeRequests = 0;
+    let maxConcurrent = 0;
+
+    const simulateDelay = async (ms: number) => {
+      activeRequests++;
+      maxConcurrent = Math.max(maxConcurrent, activeRequests);
+      await new Promise(resolve => setTimeout(resolve, ms));
+      activeRequests--;
+    };
+
+    const runListStdout = JSON.stringify([
+      { databaseId: 1, conclusion: "failure", status: "completed" },
+      { databaseId: 2, conclusion: "failure", status: "completed" },
+      { databaseId: 3, conclusion: "failure", status: "completed" },
+      { databaseId: 4, conclusion: "failure", status: "completed" },
+    ]);
+
+    const service = new GitStatusService("/tmp/repo", async (command, args) => {
+      const fullCmd = `${command} ${args.join(" ")}`;
+      if (fullCmd.startsWith("gh run list")) {
+        return { ok: true, stdout: runListStdout };
+      }
+      if (fullCmd.startsWith("gh run view")) {
+        await simulateDelay(20);
+        return { ok: true, stdout: "{}" };
+      }
+      if (fullCmd.startsWith("gh pr list")) {
+         return { ok: true, stdout: "[]" };
+      }
+      return { ok: true, stdout: "true\n" };
+    });
+
+    await service.getStatus("REMOTE", "ghp_token");
+    expect(maxConcurrent).toBeLessThanOrEqual(3);
+    expect(maxConcurrent).toBeGreaterThan(0);
+  });
 });

@@ -87,7 +87,31 @@ const buildDeps = () => {
   return { deps, listSessions, subtaskRepository, getGuideContent };
 };
 
+import { SprintActionRunner } from "../../../src/domain/sprint/orchestrator/sprint-action-runner.js";
+
 describe("SprintOrchestrator", () => {
+  it("routes actions via SprintActionRunner correctly", async () => {
+    const { deps } = buildDeps();
+    const orchestrator = new SprintOrchestrator(deps as any);
+
+    // Using any to spy on private instance property
+    const actionRunnerSpy = vi.spyOn((orchestrator as any).actionRunner as SprintActionRunner, "runPlan");
+
+    // Bypass preflight failures
+    deps.getDashboardSettings = () => ({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      sprintLoopSteps: { branchPreflight: false, planningPreflight: false }
+    });
+
+    await orchestrator.execute({
+      sprint_number: 1,
+      repo_path: "/tmp/repo",
+      action: "plan",
+    });
+
+    expect(actionRunnerSpy).toHaveBeenCalled();
+  });
+
   it("returns setup guidance when all providers are disabled", async () => {
     const { deps } = buildDeps();
     deps.getDashboardSettings = () => ({

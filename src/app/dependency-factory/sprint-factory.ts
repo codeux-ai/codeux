@@ -4,6 +4,7 @@ import { CoreDependencies } from "./core-factory.js";
 import { CliWorkflowService } from "../../services/cli-workflow-service.js";
 import { TaskService } from "../../services/task-service.js";
 import { SprintOrchestrator } from "../../sprint/sprint-orchestrator.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 
 export interface SprintDependencies {
   cliWorkflowService: CliWorkflowService;
@@ -27,7 +28,7 @@ export function createSprintDependencies(
 
   const cliWorkflowService = new CliWorkflowService({
     sessionTracking,
-    getDashboardSettings: () => context.getDashboardSettings(),
+    getDashboardSettings: () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
     getGuideContent: (guideName: string, repoPath?: string) => context.getGuideContentIfEnabled(guideName, repoPath),
     getGithubToken: () => context.getEffectiveGithubToken(),
     logger: logger.child({ component: "cli-workflow-service" }),
@@ -43,19 +44,19 @@ export function createSprintDependencies(
         repoPath: args.repoPath,
         requestedSourceId: args.sourceId,
       }),
-    getDashboardSettings: () => context.getDashboardSettings(),
+    getDashboardSettings: () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
     isJulesApiConfigured: () => context.isJulesApiConfigured(),
     cliWorkflowService,
     logger: logger.child({ component: "task-service" }),
   });
 
   const sprintOrchestrator = new SprintOrchestrator({
-    settings: context.getSettings(),
+    settings: context.runtimeContext.settings,
     dashboardPort: options.appConfig.dashboardPort,
     getDashboardPort: () => context.getDashboardPort(),
     completedSprints: new Set(),
-    getConsecutiveFailures: () => context.getConsecutiveFailures(),
-    setConsecutiveFailures: (value) => context.setConsecutiveFailures(value),
+    getConsecutiveFailures: () => context.runtimeContext.consecutiveFailures,
+    setConsecutiveFailures: (value) => { context.runtimeContext.consecutiveFailures = value; },
     isActionRequiredState: (state) => context.isActionRequiredState(state),
     resolveSessionName: (session) => context.resolveSessionName(session),
     extractSessionId: (session) => context.extractSessionId(session),
@@ -65,8 +66,8 @@ export function createSprintDependencies(
     startTask: (task, sourceId, baseBranch, repoPath, sprintNumber) =>
       taskService.startSprintTask(task, sourceId, baseBranch, repoPath, sprintNumber),
     getGuideContent: (guideName, repoPath) => context.getGuideContentIfEnabled(guideName, repoPath),
-    updateLastStatus: (status) => context.updateLastStatus(status),
-    getDashboardSettings: () => context.getDashboardSettings(),
+    updateLastStatus: (status) => { context.runtimeContext.lastStatus = status; },
+    getDashboardSettings: () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
     isJulesApiConfigured: () => context.isJulesApiConfigured(),
     approveSessionPlan: (sessionId) => julesApi.approveSessionPlan(sessionId),
     sendSessionMessage: (sessionId, prompt) => julesApi.sendSessionMessage(sessionId, prompt),

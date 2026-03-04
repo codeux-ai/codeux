@@ -1,6 +1,7 @@
 import * as fs from "fs/promises";
 import { runCompletionStep } from "../../../sprint/steps/completion-step.js";
 import type { SprintAgentArgs } from "../../../sprint/sprint-types.js";
+import { determineNextState, WatchLoopState } from "./watch-loop-state-machine.js";
 import type {
   AutomationInterventionsSettings,
   AutomationLevel,
@@ -114,82 +115,96 @@ export class WatchLoopRunner {
       const elapsedMs = Date.now() - watchStartedAt;
       const outputIntervalReached = elapsedMs >= watchLoopOutputIntervalMs;
 
-      if (allFinished) {
-        fullReport += reportText;
-        fullReport += statusTable;
-        fullReport += instructions;
+      const nextState = determineNextState({
+        allFinished,
+        outputIntervalReached,
+      });
 
-        if (needsManualMerge) {
-          fullReport += await this.deps.renderInstruction("watchMergeRequired", {}, repoPath);
-        } else if (subtasks.length > 0 && !allTerminal && noMoreActionPossible) {
-          fullReport += await this.deps.renderInstruction("watchNoMoreActions", {}, repoPath);
-        }
+      switch (nextState) {
+        case WatchLoopState.FINISHED: {
+          fullReport += reportText;
+          fullReport += statusTable;
+          fullReport += instructions;
 
-        try {
-          const watchGuide = await this.deps.getGuideContent("watch.md", repoPath);
-          fullReport += `\n---\n\n### Watch Loop Operating Standard\n\n${watchGuide}`;
-        } catch {
-          // Guide is optional.
-        }
+          if (needsManualMerge) {
+            fullReport += await this.deps.renderInstruction("watchMergeRequired", {}, repoPath);
+          } else if (subtasks.length > 0 && !allTerminal && noMoreActionPossible) {
+            fullReport += await this.deps.renderInstruction("watchNoMoreActions", {}, repoPath);
+          }
 
-        if (subtasks.length > 0 && subtasks.every((task) => task.status === "COMPLETED" && task.is_merged)) {
           try {
-            this.deps.completedSprints.add(args.sprint_number);
-            await fs.rm(subtasksDir, { recursive: true, force: true });
-            fullReport += await this.deps.renderInstruction("cleanupAllMerged", { subtasks_dir: subtasksDir }, repoPath);
-            fullReport += await runCompletionStep({
-              defaultBranch,
-              featureBranch: defaultFeatureBranch,
-              sprintNumber: args.sprint_number,
-              githubMode,
-              ciIntelligence,
-              renderInstruction: (templateId, variables) => this.deps.renderInstruction(templateId, variables, repoPath),
-            });
-            fullReport += await this.renderMainMergeCiFeedback({
-              repoPath,
-              featureBranch: defaultFeatureBranch,
-              defaultBranch,
-              featureBranchPrefix: this.deps.getDashboardSettings().git.featureBranchPrefix,
-              ciIntelligence,
-              githubMode,
-            });
-          } catch (cleanupError) {
-            this.deps.logger.warn("Failed to cleanup subtasks", {
-              subtasksDir,
-              error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
-            });
-          }        } else if (subtasks.some((task) => task.status === "FAILED")) {
-          fullReport += await this.deps.renderInstruction("cleanupFailed", { subtasks_dir: subtasksDir }, repoPath);
-        } else if (subtasks.some((task) => task.status === "COMPLETED" && !task.is_merged)) {
-          fullReport += await this.deps.renderInstruction("cleanupDeferred", {}, repoPath);
-        } else if (subtasks.length === 0) {
-          fullReport += await this.renderInstruction("cleanupEmpty", {}, repoPath);
+            const watchGuide = await this.deps.getGuideContent("watch.md", repoPath);
+            fullReport += `\n---\n\n### Watch Loop Operating Standard\n\n${watchGuide}`;
+          } catch {
+            // Guide is optional.
+          }
+
+          if (subtasks.length > 0 && subtasks.every((task) => task.status === "COMPLETED" && task.is_merged)) {
+            try {
+              this.deps.completedSprints.add(args.sprint_number);
+              await fs.rm(subtasksDir, { recursive: true, force: true });
+              fullReport += await this.deps.renderInstruction("cleanupAllMerged", { subtasks_dir: subtasksDir }, repoPath);
+              fullReport += await runCompletionStep({
+                defaultBranch,
+                featureBranch: defaultFeatureBranch,
+                sprintNumber: args.sprint_number,
+                githubMode,
+                ciIntelligence,
+                renderInstruction: (templateId, variables) => this.deps.renderInstruction(templateId, variables, repoPath),
+              });
+              fullReport += await this.renderMainMergeCiFeedback({
+                repoPath,
+                featureBranch: defaultFeatureBranch,
+                defaultBranch,
+                featureBranchPrefix: this.deps.getDashboardSettings().git.featureBranchPrefix,
+                ciIntelligence,
+                githubMode,
+              });
+            } catch (cleanupError) {
+              this.deps.logger.warn("Failed to cleanup subtasks", {
+                subtasksDir,
+                error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+              });
+            }
+          } else if (subtasks.some((task) => task.status === "FAILED")) {
+            fullReport += await this.deps.renderInstruction("cleanupFailed", { subtasks_dir: subtasksDir }, repoPath);
+          } else if (subtasks.some((task) => task.status === "COMPLETED" && !task.is_merged)) {
+            fullReport += await this.deps.renderInstruction("cleanupDeferred", {}, repoPath);
+          } else if (subtasks.length === 0) {
+            fullReport += await this.renderInstruction("cleanupEmpty", {}, repoPath);
+          }
+
+          fullReport += "\n✅ **Sprint Execution Finished.**\n";
+          return fullReport;
         }
 
-        fullReport += "\n✅ **Sprint Execution Finished.**\n";
-      } else if (outputIntervalReached) {
-        const pendingTasks = subtasks.filter((task) => task.status === "PENDING");
-        const completedTasks = subtasks.filter((task) => task.status === "COMPLETED");
-        const failedTasks = subtasks.filter((task) => task.status === "FAILED");
+        case WatchLoopState.CHECKPOINT: {
+          const pendingTasks = subtasks.filter((task) => task.status === "PENDING");
+          const completedTasks = subtasks.filter((task) => task.status === "COMPLETED");
+          const failedTasks = subtasks.filter((task) => task.status === "FAILED");
 
-        fullReport += reportText;
-        fullReport += statusTable;
-        fullReport += instructions;
-        fullReport += await this.deps.renderInstruction(
-          "watchContinue",
-          {
-            elapsed_seconds: Math.floor(elapsedMs / 1000),
-            action: args.action,
-            running_tasks: runningTasks.length,
-            pending_tasks: pendingTasks.length,
-            completed_tasks: completedTasks.length,
-            failed_tasks: failedTasks.length,
-          },
-          repoPath
-        );
-        return fullReport;
-      } else {
-        await new Promise((resolve) => setTimeout(resolve, watchLoopIntervalMs));
+          fullReport += reportText;
+          fullReport += statusTable;
+          fullReport += instructions;
+          fullReport += await this.deps.renderInstruction(
+            "watchContinue",
+            {
+              elapsed_seconds: Math.floor(elapsedMs / 1000),
+              action: args.action,
+              running_tasks: runningTasks.length,
+              pending_tasks: pendingTasks.length,
+              completed_tasks: completedTasks.length,
+              failed_tasks: failedTasks.length,
+            },
+            repoPath
+          );
+          return fullReport;
+        }
+
+        case WatchLoopState.RUNNING: {
+          await new Promise((resolve) => setTimeout(resolve, watchLoopIntervalMs));
+          break;
+        }
       }
     }
 

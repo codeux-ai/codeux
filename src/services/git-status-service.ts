@@ -140,14 +140,23 @@ export class GitStatusService {
     }
 
     const failedJobsByRunId = new Map<number, GitCiFailedJob[]>();
-    for (const run of failedCandidates) {
-      const runId = run.id as number;
-      const details = await this.fetchFailedRunJobs(runId, ghToken);
-      if (details.warnings.length > 0) {
-        warnings.push(...details.warnings);
+
+    // Process up to FAILED_RUN_DETAILS_LIMIT concurrently
+    const CONCURRENCY_LIMIT = FAILED_RUN_DETAILS_LIMIT;
+    let i = 0;
+    const executeNext = async (): Promise<void> => {
+      while (i < failedCandidates.length) {
+        const runId = failedCandidates[i++].id as number;
+        const details = await this.fetchFailedRunJobs(runId, ghToken);
+        if (details.warnings.length > 0) {
+          warnings.push(...details.warnings);
+        }
+        failedJobsByRunId.set(runId, details.failedJobs);
       }
-      failedJobsByRunId.set(runId, details.failedJobs);
-    }
+    };
+
+    const workers = Array.from({ length: Math.min(CONCURRENCY_LIMIT, failedCandidates.length) }, () => executeNext());
+    await Promise.all(workers);
 
     const enrichedRuns = runs.map((run) => {
       if (run.id === null) {
@@ -246,11 +255,13 @@ export class GitStatusService {
       warnings.push("GitHub CLI is not authenticated. Remote tracking may be unavailable.");
     }
 
-    const prs = await this.fetchOpenPrs(effectiveToken);
+    const [prs, ciRuns, merged] = await Promise.all([
+      this.fetchOpenPrs(effectiveToken),
+      this.fetchCiRuns(effectiveToken),
+      this.fetchMergedPrs(effectiveToken)
+    ]);
     if (prs.warning) warnings.push(prs.warning);
-    const ciRuns = await this.fetchCiRuns(effectiveToken);
     if (ciRuns.warning) warnings.push(ciRuns.warning);
-    const merged = await this.fetchMergedPrs(effectiveToken);
     if (merged.warning) warnings.push(merged.warning);
 
     const trackedPrs = filterOpenPrs(prs.data, trackingRequest);

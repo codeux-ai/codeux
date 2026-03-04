@@ -4,6 +4,7 @@ import { SprintDependencies } from "./sprint-factory.js";
 import { CoreToolHandler } from "../../mcp/core-tool-handler.js";
 import { AgentToolHandler } from "../../mcp/agent-tool-handler.js";
 import { formatSprintBranch } from "../../git/sprint-branch-scheme.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 
 export interface McpDependencies {
   coreToolHandler: CoreToolHandler;
@@ -30,9 +31,9 @@ export function createMcpDependencies(
     resolveSessionName: (session) => context.resolveSessionName(session),
     fetchRecentActivities: (sessionName, pageSize) => context.fetchRecentActivities(sessionName, pageSize),
     isActionRequiredState: (state) => context.isActionRequiredState(state),
-    getConsecutiveFailures: () => context.getConsecutiveFailures(),
-    setConsecutiveFailures: (value) => context.setConsecutiveFailures(value),
-    getMaxFailures: () => context.getSettings().maxFailures || 5,
+    getConsecutiveFailures: () => context.runtimeContext.consecutiveFailures,
+    setConsecutiveFailures: (value) => { context.runtimeContext.consecutiveFailures = value; },
+    getMaxFailures: () => context.runtimeContext.settings.maxFailures || 5,
     isJulesApiConfigured: () => context.isJulesApiConfigured(),
     getMissingJulesApiKeyInstruction: () => context.getMissingJulesApiKeyInstruction(),
     isTrackedCliSession: (sessionId) => {
@@ -49,11 +50,11 @@ export function createMcpDependencies(
   const agentToolHandler = new AgentToolHandler({
     sprintOrchestrator,
     taskService,
-    getDashboardSettings: () => context.getDashboardSettings(),
+    getDashboardSettings: () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
     formatSprintBranch,
-    getConsecutiveFailures: () => context.getConsecutiveFailures(),
-    setConsecutiveFailures: (value) => context.setConsecutiveFailures(value),
-    getMaxFailures: () => context.getSettings().maxFailures || 5,
+    getConsecutiveFailures: () => context.runtimeContext.consecutiveFailures,
+    setConsecutiveFailures: (value) => { context.runtimeContext.consecutiveFailures = value; },
+    getMaxFailures: () => context.runtimeContext.settings.maxFailures || 5,
     waitForSessionCompletion: (args) => coreToolHandler.handleWaitForSessionCompletion(args),
   });
 
