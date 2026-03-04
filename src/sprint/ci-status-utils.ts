@@ -1,6 +1,6 @@
 import type { GitCiRunStatus, GitTrackingStatus } from "../contracts/app-types.js";
 
-export const isCiCheckFailed = (status: string, conclusion: string | null): boolean => {
+export const isCiFailure = (status: string, conclusion: string | null): boolean => {
   const normalizedStatus = status.toLowerCase();
   const normalizedConclusion = (conclusion || "").toLowerCase();
   if (normalizedStatus !== "completed") {
@@ -9,7 +9,7 @@ export const isCiCheckFailed = (status: string, conclusion: string | null): bool
   return normalizedConclusion.length > 0 && normalizedConclusion !== "success" && normalizedConclusion !== "neutral" && normalizedConclusion !== "skipped";
 };
 
-export const isCiCheckPending = (status: string, conclusion: string | null): boolean => {
+export const isCiPending = (status: string, conclusion: string | null): boolean => {
   const normalizedStatus = status.toLowerCase();
   if (normalizedStatus !== "completed") {
     return true;
@@ -17,18 +17,9 @@ export const isCiCheckPending = (status: string, conclusion: string | null): boo
   return conclusion === null;
 };
 
-export const isCiRunFailed = (status: string, conclusion: string | null): boolean => {
-  const normalizedStatus = status.toLowerCase();
-  const normalizedConclusion = (conclusion || "").toLowerCase();
-  if (normalizedStatus !== "completed") {
-    return false;
-  }
-  return normalizedConclusion.length > 0 && normalizedConclusion !== "success" && normalizedConclusion !== "neutral" && normalizedConclusion !== "skipped";
-};
-
 export const selectFailedCiRuns = (gitStatus: GitTrackingStatus, branchName: string): GitCiRunStatus[] => {
   const runs = Array.isArray(gitStatus.ciRuns) ? gitStatus.ciRuns : [];
-  const failedRuns = runs.filter((run) => isCiRunFailed(run.status, run.conclusion));
+  const failedRuns = runs.filter((run) => isCiFailure(run.status, run.conclusion));
   const branchMatched = failedRuns.filter((run) => run.headBranch === branchName);
   if (branchMatched.length > 0) {
     return branchMatched.slice(0, 2);

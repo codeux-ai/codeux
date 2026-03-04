@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { getFailedJobLabels, isCiCheckFailed, isCiCheckPending, selectFailedCiRuns, summarizeFailedRuns } from "../../../src/sprint/ci-status-utils.js";
+import { getFailedJobLabels, isCiFailure, isCiPending, selectFailedCiRuns, summarizeFailedRuns } from "../../../src/sprint/ci-status-utils.js";
 import type { GitTrackingStatus } from "../../../src/contracts/app-types.js";
 
 describe("ci-status-utils", () => {
   it("classifies check states", () => {
-    expect(isCiCheckFailed("completed", "failure")).toBe(true);
-    expect(isCiCheckFailed("completed", "success")).toBe(false);
-    expect(isCiCheckPending("queued", null)).toBe(true);
-    expect(isCiCheckPending("completed", null)).toBe(true);
-    expect(isCiCheckPending("completed", "success")).toBe(false);
+    expect(isCiFailure("completed", "failure")).toBe(true);
+    expect(isCiFailure("completed", "success")).toBe(false);
+    expect(isCiFailure("completed", "neutral")).toBe(false);
+    expect(isCiFailure("completed", "skipped")).toBe(false);
+    expect(isCiPending("queued", null)).toBe(true);
+    expect(isCiPending("completed", null)).toBe(true);
+    expect(isCiPending("completed", "success")).toBe(false);
   });
 
   it("selects branch-matched failed runs", () => {

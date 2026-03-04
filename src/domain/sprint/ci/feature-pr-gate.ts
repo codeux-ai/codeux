@@ -1,8 +1,8 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import {
-  isCiCheckFailed,
-  isCiCheckPending,
+  isCiFailure,
+  isCiPending,
   selectFailedCiRuns,
   getFailedJobLabels,
   summarizeFailedRuns,
@@ -101,10 +101,10 @@ export class FeaturePrGateService {
       const checks = Array.isArray(pr.checks) ? pr.checks : [];
       const waitForFeatureCi = context.ciIntelligence.waitForCiBeforeFeatureMerge;
       const hasFailedChecks = waitForFeatureCi
-        ? checks.some((check) => isCiCheckFailed(check.status, check.conclusion))
+        ? checks.some((check) => isCiFailure(check.status, check.conclusion))
         : false;
       const hasPendingChecks = waitForFeatureCi
-        ? checks.length === 0 || checks.some((check) => isCiCheckPending(check.status, check.conclusion))
+        ? checks.length === 0 || checks.some((check) => isCiPending(check.status, check.conclusion))
         : false;
       const hasReviewBlockers = context.ciIntelligence.resolveAllCommentsBeforeFeatureMerge
         ? pr.reviewDecision === "CHANGES_REQUESTED" || pr.comments > 0
@@ -171,7 +171,7 @@ export class FeaturePrGateService {
 
       if (hasFailedChecks) {
         const failedChecks = checks
-          .filter((check) => isCiCheckFailed(check.status, check.conclusion))
+          .filter((check) => isCiFailure(check.status, check.conclusion))
           .map((check) => check.name);
         const branchName = workerBranch || context.featureBranch;
         const failedRuns = selectFailedCiRuns(context.gitStatus, branchName);

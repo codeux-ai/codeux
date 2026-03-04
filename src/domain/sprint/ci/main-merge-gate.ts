@@ -1,6 +1,6 @@
 import {
-  isCiCheckFailed,
-  isCiCheckPending,
+  isCiFailure,
+  isCiPending,
 } from "../../../sprint/ci-status-utils.js";
 import type {
   CiIntelligenceSettings,
@@ -56,8 +56,8 @@ export class MainMergeGateService {
     }
 
     const checks = Array.isArray(mainMergePr.checks) ? mainMergePr.checks : [];
-    const hasFailedChecks = checks.some((check) => isCiCheckFailed(check.status, check.conclusion));
-    const hasPendingChecks = checks.length === 0 || checks.some((check) => isCiCheckPending(check.status, check.conclusion));
+    const hasFailedChecks = checks.some((check) => isCiFailure(check.status, check.conclusion));
+    const hasPendingChecks = checks.length === 0 || checks.some((check) => isCiPending(check.status, check.conclusion));
     const hasReviewBlockers = mainMergePr.reviewDecision === "CHANGES_REQUESTED" || mainMergePr.comments > 0;
 
     let text = `\n### Main Merge CI Gate\n`;
@@ -68,7 +68,7 @@ export class MainMergeGateService {
 
     if (hasFailedChecks) {
       const failedChecks = checks
-        .filter((check) => isCiCheckFailed(check.status, check.conclusion))
+        .filter((check) => isCiFailure(check.status, check.conclusion))
         .map((check) => check.name);
       text += `- Failed checks: ${failedChecks.join(", ")}\n`;
       text += `- Logs: \`gh run list --branch ${featureBranch} --event pull_request --limit 5\` and \`gh run view <run-id> --log-failed\`\n`;
