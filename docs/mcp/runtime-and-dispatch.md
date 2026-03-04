@@ -25,7 +25,7 @@ Returns enabled tool definitions from `src/contracts/mcp-tool-definitions.ts`, f
 ### Tool call handler
 - Resolves tool name.
 - Verifies tool is enabled in `mcpTools`.
-- Dispatches through handler map.
+- Dispatches through typed `ToolRegistry` registration in `src/api/mcp/tool-registry.ts`.
 - Wraps unknown tool as MCP `MethodNotFound`.
 - Normalizes runtime/API errors into `isError` response.
 
@@ -42,6 +42,9 @@ This allows all log lines emitted during a tool call to share a single `correlat
 
 ## Dispatch Layers
 
+- Typed registry layer: `src/api/mcp/tool-registry.ts`
+  - Defines strict argument interfaces for every MCP tool.
+  - Provides `register` and `dispatch` APIs with compile-time tool/argument matching.
 - Core dispatch target: `CoreToolHandler`
 - Agent dispatch target: `AgentToolHandler`
 

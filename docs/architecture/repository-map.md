@@ -22,6 +22,9 @@ This map explains where major responsibilities live.
 - `config/`
   - `app-config.ts`, `external-settings.ts`
   - Startup/env config loading and external settings hints.
+- `api/mcp/`
+  - `tool-registry.ts`
+  - Typed MCP tool argument contracts and register/dispatch registry.
 - `contracts/`
   - `app-types.ts`, `mcp-tool-definitions.ts`
   - Shared backend contracts and MCP tool definitions.

@@ -26,6 +26,8 @@ These cover:
 
 Defined in `src/contracts/mcp-tool-definitions.ts`.
 
+Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/tool-registry.ts`.
+
 ### Sources
 - `get_source`
 - `list_sources`
