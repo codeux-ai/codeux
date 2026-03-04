@@ -77,7 +77,8 @@ export class OrchestratedRoutingStrategy implements ProviderRoutingStrategy {
 
     // Fallback to weighted if no orchestration rule matches but we have enabled providers
     const legacySeed = `${task.id}:${task.title}:${task.prompt}`;
-    return this.weightedFallback.choose(settings, { ...task, prompt: legacySeed } as any, enabledProviders);
+    const legacyTask: Subtask = { ...task, prompt: legacySeed };
+    return this.weightedFallback.choose(settings, legacyTask, enabledProviders);
   }
 }
 
@@ -97,8 +98,8 @@ export const chooseProviderForTask = (settings: DashboardSettings, task: Subtask
       {
         strategy = new WeightedRoutingStrategy();
         // Ensure we use the correct seed format for WEIGHTED strategy
-        const weightedTask = { ...task, prompt: `${task.id}:${task.prompt}` };
-        return strategy.choose(settings, weightedTask as any, enabledProviders);
+        const weightedTask: Subtask = { ...task, prompt: `${task.id}:${task.prompt}` };
+        return strategy.choose(settings, weightedTask, enabledProviders);
       }
     case "ORCHESTRATOR":
       strategy = new OrchestratedRoutingStrategy();

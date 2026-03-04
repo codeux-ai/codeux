@@ -4,6 +4,27 @@ import { IDockerRunner } from "./docker-runner.js";
 import { isDockerWorkspaceMountError } from "../../../services/cli-docker-utils.js";
 import * as fs from "fs/promises";
 
+export type ProviderCommandSpec = (model: string, prompt: string) => { command: string; args: string[] };
+
+export const providerSpecs: Record<Extract<ProviderId, "gemini" | "codex" | "claude-code">, ProviderCommandSpec> = {
+  "gemini": (model: string, prompt: string) => ({
+    command: "gemini",
+    args: ["--yolo", "--p", prompt]
+  }),
+  "claude-code": (model: string, prompt: string) => {
+    const args = ["--dangerously-skip-permissions"];
+    if (model && model !== "default") args.push("--model", model);
+    args.push("-p", prompt);
+    return { command: "claude", args };
+  },
+  "codex": (model: string, prompt: string) => {
+    const args = ["exec", "--yolo", "--output-last-message", "/tmp/codex-last-message.txt"];
+    if (model && model !== "default") args.push("--model", model);
+    args.push(prompt);
+    return { command: "codex", args };
+  }
+};
+
 export interface IProviderRunner {
   runProvider(input: {
     provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
@@ -37,29 +58,14 @@ export class ProviderRunner implements IProviderRunner {
     const { provider, prompt, cwd, model, apiKey, sessionId, workflowSettings, repoPath, githubToken, onActivity } = input;
     const providerEnv = this.withProviderEnv(provider, model, apiKey, githubToken);
 
-    let command: string;
-    let args: string[];
-
-    if (provider === "gemini") {
-      command = "gemini";
-      args = ["--yolo", "--p", prompt];
-    } else if (provider === "claude-code") {
-      command = "claude";
-      args = ["--dangerously-skip-permissions"];
-      if (model && model !== "default") args.push("--model", model);
-      args.push("-p", prompt);
-    } else {
-      command = "codex";
-      args = ["exec", "--yolo", "--output-last-message", "/tmp/codex-last-message.txt"];
-      if (model && model !== "default") args.push("--model", model);
-      args.push(prompt);
-    }
+    const spec = providerSpecs[provider](model, prompt);
+    const { command, args } = spec;
 
     const runCmd = async () => {
       if (workflowSettings.executionMode === "DOCKER") {
         const result = await this.dockerRunner.runProviderInDocker({
           command, args, cwd, providerEnv, sessionId,
-          providerLabel: provider as any, workflowSettings, repoPath, onActivity
+          providerLabel: provider, workflowSettings, repoPath, onActivity
         });
         if (!result.ok && isDockerWorkspaceMountError(result)) {
           try { await fs.access(cwd); onActivity(`Docker could not mount workspace path (${cwd}) even though it exists locally. Path visibility mismatch.`); } catch { /* ignore */ }

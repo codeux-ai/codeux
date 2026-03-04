@@ -18,7 +18,7 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
       onActivity: (desc, originator) =>
         ctx.deps.sessionTracking.appendActivity(ctx.sessionId, {
           description: desc,
-          originator: originator as any || "system",
+          originator: originator || "system",
         }),
     });
 
