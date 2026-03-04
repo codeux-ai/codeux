@@ -8,6 +8,13 @@ const buildDeps = () => ({
   updateLastStatus: vi.fn(),
   getDashboardSettings: () => buildMockSettings(),
   getGuideContent: vi.fn().mockResolvedValue("guide"),
+  logger: {
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    child: vi.fn().mockReturnThis(),
+  },
 });
 
 const buildCycleRunner = () => ({

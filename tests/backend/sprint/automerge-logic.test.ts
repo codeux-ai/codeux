@@ -15,7 +15,27 @@ const buildDeps = () => {
     renderInstruction: vi.fn().mockResolvedValue(""),
     isJulesApiConfigured: () => true,
     isActionRequiredState: (state?: string) => state === "AWAITING_PLAN_APPROVAL" || state === "AWAITING_USER_FEEDBACK" || state === "PAUSED",
-    loadSubtasks: vi.fn(),
+    subtaskRepository: {
+      loadSubtasks: vi.fn(),
+      setMerged: vi.fn(async (dir: string, taskId: string, merged: boolean) => {
+        const filePath = path.join(dir, `${taskId}.md`);
+        try {
+          const content = await fs.readFile(filePath, "utf-8");
+          const mergedValue = merged ? "true" : "false";
+          let updated = content;
+          if (/^\s*merged:\s*(true|false)\s*$/m.test(content)) {
+            updated = content.replace(/^\s*merged:\s*(true|false)\s*$/m, `merged: ${mergedValue}`);
+          } else if (/^\s*prompt:\s*/m.test(content)) {
+            updated = content.replace(/^\s*prompt:\s*/m, `merged: ${mergedValue}\nprompt:`);
+          } else {
+            updated = `${content.trimEnd()}\nmerged: ${mergedValue}\n`;
+          }
+          await fs.writeFile(filePath, updated, "utf-8");
+        } catch {
+          // Mock ignore
+        }
+      }),
+    },
     listSessions: vi.fn(),
     updateLastStatus: vi.fn(),
     getCiStatusForScope: vi.fn(),
@@ -23,6 +43,13 @@ const buildDeps = () => {
     resolveSessionName: (s: any) => s.name,
     extractSessionId: (s: any) => s.id,
     completedSprints: new Set<number>(),
+    logger: {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn().mockReturnThis(),
+    },
   };
 };
 
@@ -57,7 +84,7 @@ describe("SprintOrchestrator - Automerge Logic", () => {
     await fs.mkdir(subtasksDir, { recursive: true });
     await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\ndepends_on: []\nis_independent: true\nmerged: false\nprompt:\nDo it\n", "utf-8");
 
-    deps.loadSubtasks.mockResolvedValue([buildMockSubtask({ id: "01-task" })]);
+    deps.subtaskRepository.loadSubtasks.mockResolvedValue([buildMockSubtask({ id: "01-task" })]);
     deps.listSessions.mockResolvedValue({
       sessions: [
         buildMockSession({

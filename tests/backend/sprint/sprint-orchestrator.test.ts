@@ -5,12 +5,15 @@ import * as os from "os";
 import { SprintOrchestrator } from "../../../src/sprint/sprint-orchestrator.js";
 import { buildMockSettings } from "../../builders/settings-builder.js";
 import { buildMockSubtask } from "../../builders/subtask-builder.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
+import { buildTaskRunTag } from "../../../src/services/task-run-key.js";
+import type { Subtask } from "../../../src/contracts/app-types.js";
 
 const buildDeps = () => {
-  const listSessions = vi.fn();
+  const listSessions = vi.fn().mockResolvedValue({ sessions: [] });
   const getGuideContent = vi.fn().mockResolvedValue("guide");
   const subtaskRepository = {
-    loadSubtasks: vi.fn<() => Promise<Subtask[]>>(),
+    loadSubtasks: vi.fn<() => Promise<Subtask[]>>().mockResolvedValue([]),
     setMerged: vi.fn(async (dir: string, taskId: string, merged: boolean) => {
       const filePath = path.join(dir, `${taskId}.md`);
       try {
@@ -32,31 +35,9 @@ const buildDeps = () => {
     loadSubtask: vi.fn(),
   };
 
-  const deps = {
+  const deps: any = {
     settings: { maxFailures: 5 },
-    getDashboardSettings: () => buildMockSettings(),
-    renderInstruction: vi.fn().mockResolvedValue(""),
-    isJulesApiConfigured: () => true,
-    loadSubtasks: vi.fn().mockResolvedValue([]),
-    listSessions: vi.fn().mockResolvedValue({ sessions: [] }),
-    updateLastStatus: vi.fn(),
-    completedSprints: new Set<number>(),
-    getCiStatusForScope: vi.fn().mockResolvedValue(null),
-    isActionRequiredState: (state?: string) => state === "AWAITING_PLAN_APPROVAL" || state === "AWAITING_USER_FEEDBACK" || state === "PAUSED",
-    resolveSessionName: (s: any) => s.name,
-    extractSessionId: (s: any) => s.id,
-    fetchRecentActivities: vi.fn().mockResolvedValue([]),
-    listSessions,
-    subtaskRepository,
-    startTask: vi.fn(),
-    getGuideContent,
-    updateLastStatus: vi.fn(),
-    getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
-    isJulesApiConfigured: () => true,
-    approveSessionPlan: vi.fn().mockResolvedValue({}),
-    sendSessionMessage: vi.fn().mockResolvedValue({}),
-    getCiStatusForScope: vi.fn().mockResolvedValue(null),
-    autoMergeFeaturePr: vi.fn().mockResolvedValue({ ok: true }),
+    getDashboardSettings: () => ({ ...DEFAULT_DASHBOARD_SETTINGS }),
     renderInstruction: vi.fn(async (templateId: string, variables: Record<string, unknown>) => {
       if (templateId === "planningMissing" && typeof variables.subtasks_dir === "string") {
         return `### 🛑 ACTION REQUIRED: Sprint Planning Missing\n\nNo subtasks found in \`${variables.subtasks_dir}\`.`;
@@ -78,6 +59,22 @@ const buildDeps = () => {
       }
       return "";
     }),
+    isJulesApiConfigured: () => true,
+    loadSubtasks: vi.fn().mockResolvedValue([]),
+    updateLastStatus: vi.fn(),
+    completedSprints: new Set<number>(),
+    getCiStatusForScope: vi.fn().mockResolvedValue(null),
+    isActionRequiredState: (state?: string) => state === "AWAITING_PLAN_APPROVAL" || state === "AWAITING_USER_FEEDBACK" || state === "PAUSED",
+    resolveSessionName: (s: any) => s.name,
+    extractSessionId: (s: any) => s.id,
+    fetchRecentActivities: vi.fn().mockResolvedValue([]),
+    listSessions,
+    subtaskRepository,
+    startTask: vi.fn(),
+    getGuideContent,
+    approveSessionPlan: vi.fn().mockResolvedValue({}),
+    sendSessionMessage: vi.fn().mockResolvedValue({}),
+    autoMergeFeaturePr: vi.fn().mockResolvedValue({ ok: true }),
     logger: {
       debug: vi.fn(),
       info: vi.fn(),

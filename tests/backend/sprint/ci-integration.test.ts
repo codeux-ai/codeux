@@ -15,7 +15,10 @@ const buildDeps = () => {
     renderInstruction: vi.fn().mockResolvedValue(""),
     isJulesApiConfigured: () => true,
     isActionRequiredState: (state?: string) => state === "AWAITING_PLAN_APPROVAL" || state === "AWAITING_USER_FEEDBACK" || state === "PAUSED",
-    loadSubtasks: vi.fn(),
+    subtaskRepository: {
+      loadSubtasks: vi.fn(),
+      setMerged: vi.fn().mockResolvedValue(undefined),
+    },
     listSessions: vi.fn(),
     sendSessionMessage: vi.fn().mockResolvedValue({}),
     updateLastStatus: vi.fn(),
@@ -23,6 +26,13 @@ const buildDeps = () => {
     resolveSessionName: (s: any) => s.name,
     extractSessionId: (s: any) => s.id,
     completedSprints: new Set<number>(),
+    logger: {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn().mockReturnThis(),
+    },
   };
 };
 
@@ -74,7 +84,7 @@ describe("SprintOrchestrator - CI & Merge Gates", () => {
     await fs.mkdir(subtasksDir, { recursive: true });
     await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
 
-    deps.loadSubtasks.mockResolvedValue([buildMockSubtask({ id: "01-task" })]);
+    deps.subtaskRepository.loadSubtasks.mockResolvedValue([buildMockSubtask({ id: "01-task" })]);
     deps.listSessions.mockResolvedValue({
       sessions: [
         buildMockSession({
@@ -144,7 +154,7 @@ describe("SprintOrchestrator - CI & Merge Gates", () => {
     await fs.mkdir(subtasksDir, { recursive: true });
     await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
 
-    deps.loadSubtasks.mockResolvedValue([buildMockSubtask({ id: "01-task" })]);
+    deps.subtaskRepository.loadSubtasks.mockResolvedValue([buildMockSubtask({ id: "01-task" })]);
     deps.listSessions.mockResolvedValue({
       sessions: [
         buildMockSession({

@@ -1,11 +1,12 @@
 import type { InstructionTemplateId } from "../../../instructions/instruction-template-catalog.js";
-import { applyActionRequiredAutomation } from "../../../sprint/action-required-automation.js";
+import { applyActionRequiredAutomation, isJulesManagedTask, resolveTaskSessionId } from "../../../sprint/action-required-automation.js";
 import { runLoadSubtasksStep } from "../../../sprint/steps/load-subtasks-step.js";
 import { runSessionSyncStep } from "../../../sprint/steps/session-sync-step.js";
 import { runStatusDerivationStep } from "../../../sprint/steps/status-derivation-step.js";
 import { runStartReadyTasksStep } from "../../../sprint/steps/start-ready-tasks-step.js";
 import { runStatusTableStep } from "../../../sprint/steps/status-table-step.js";
 import { runProtocolStep } from "../../../sprint/steps/protocol-step.js";
+import { isCiCheckFailed, isCiCheckPending, selectFailedCiRuns, getFailedJobLabels, summarizeFailedRuns, getFailedLogSnippets } from "../../../sprint/ci-status-utils.js";
 import type { SprintCycleResult } from "../../../sprint/sprint-types.js";
 import type {
   AutomationInterventionsSettings,
@@ -184,6 +185,8 @@ export class CycleRunner {
         prByUrl.set(pr.url.trim(), pr);
       }
     }
+
+    const completedAwaitingMerge = subtasks.filter((task) => task.status === "COMPLETED" && !task.is_merged);
 
     let reportText = "";
     for (const task of completedAwaitingMerge) {
