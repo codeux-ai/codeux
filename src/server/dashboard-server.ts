@@ -20,6 +20,7 @@ export interface DashboardServerOptions {
   saveSettings: (settings: DashboardSettings) => DashboardSettings;
   rerunTask: (taskId: string) => Promise<unknown>;
   logger?: Logger;
+  isReady?: () => boolean;
 }
 
 export interface DashboardServerHandle {
@@ -72,6 +73,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     saveSettings,
     rerunTask,
     logger,
+    isReady,
   } = options;
 
   const dashboardLogger = logger ?? createLogger({ bindings: { component: "dashboard-server" } });
@@ -91,6 +93,19 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   });
 
   app.use(express.json({ limit: "1mb" }));
+
+  app.get("/health", (req, res) => {
+    res.json({ status: "UP" });
+  });
+
+  app.get("/ready", (req, res) => {
+    const ready = isReady ? isReady() : true;
+    if (ready) {
+      res.json({ status: "READY" });
+    } else {
+      res.status(503).json({ status: "NOT_READY" });
+    }
+  });
 
   app.get("/api/status", (req, res) => {
     res.json(getStatus());

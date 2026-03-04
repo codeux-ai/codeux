@@ -313,6 +313,10 @@ export class JulesAgentServer {
     return statusRepoPath.length > 0 ? statusRepoPath : this.projectRoot;
   }
 
+  private isReady(): boolean {
+    return !!this.lastStatus?.timestamp;
+  }
+
   private async setupDashboard() {
     const dashboardDir = path.join(this.projectRoot, "dashboard");
     const port = this.getDashboardPort();
@@ -340,6 +344,7 @@ export class JulesAgentServer {
         return task;
       },
       logger: this.logger.child({ component: "dashboard-server" }),
+      isReady: () => this.isReady(),
     });
     this.dashboardRuntimePort = handle.port;
   }

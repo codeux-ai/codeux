@@ -141,4 +141,54 @@ describe("setupDashboardServer", () => {
     serversToClose.push(handle.server);
     expect(handle.port).toBe(blockedPort + 1);
   });
+
+  it("serves /health and /ready endpoints", async () => {
+    const app = express();
+    const handle = await setupDashboardServer({
+      app,
+      dashboardDir: "dashboard",
+      port: 3001,
+      liveActivityCacheMs: 1000,
+      getStatus: () => ({ ok: true }),
+      getLiveActivities: async () => ({}),
+      getGitStatus: async () => ({} as any),
+      getExternalSettingsHints: () => ({} as any),
+      getSettings: () => ({} as any),
+      saveSettings: (settings) => settings,
+      rerunTask: async () => ({ ok: true }),
+      isReady: () => true,
+    });
+    serversToClose.push(handle.server);
+
+    const healthResponse = await fetch(`http://127.0.0.1:${handle.port}/health`);
+    expect(healthResponse.status).toBe(200);
+    expect(await healthResponse.json()).toEqual({ status: "UP" });
+
+    const readyResponse = await fetch(`http://127.0.0.1:${handle.port}/ready`);
+    expect(readyResponse.status).toBe(200);
+    expect(await readyResponse.json()).toEqual({ status: "READY" });
+  });
+
+  it("returns 503 for /ready when server is not ready", async () => {
+    const app = express();
+    const handle = await setupDashboardServer({
+      app,
+      dashboardDir: "dashboard",
+      port: 4000,
+      liveActivityCacheMs: 1000,
+      getStatus: () => ({ ok: true }),
+      getLiveActivities: async () => ({}),
+      getGitStatus: async () => ({} as any),
+      getExternalSettingsHints: () => ({} as any),
+      getSettings: () => ({} as any),
+      saveSettings: (settings) => settings,
+      rerunTask: async () => ({ ok: true }),
+      isReady: () => false,
+    });
+    serversToClose.push(handle.server);
+
+    const readyResponse = await fetch(`http://127.0.0.1:${handle.port}/ready`);
+    expect(readyResponse.status).toBe(503);
+    expect(await readyResponse.json()).toEqual({ status: "NOT_READY" });
+  });
 });
