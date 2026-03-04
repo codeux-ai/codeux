@@ -1,8 +1,9 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
+import * as path from "path";
 import { AppConfig } from "../config/app-config.js";
 import { JulesApiClient } from "../integrations/jules-api-client.js";
 import { GuideRepository } from "../repositories/guide-repository.js";
-import { SubtaskRepository } from "../repositories/subtask-repository.js";
+import { SubtaskFileRepository } from "../infrastructure/repositories/subtask-file-repository.js";
 import { TaskService } from "../services/task-service.js";
 import { SettingsRepository } from "../repositories/settings-repository.js";
 import { InstructionService } from "../instructions/instruction-template-service.js";
@@ -32,7 +33,7 @@ export interface RuntimeDependencies {
   logger: Logger;
   julesApi: JulesApiClient;
   guideRepository: GuideRepository;
-  subtaskRepository: SubtaskRepository;
+  subtaskRepository: SubtaskFileRepository;
   taskService: TaskService;
   julesSourceResolver: JulesSourceResolver;
   sprintOrchestrator: SprintOrchestrator;
@@ -105,7 +106,7 @@ export function createRuntimeDependencies(
   });
 
   const guideRepository = new GuideRepository(options.projectRoot);
-  const subtaskRepository = new SubtaskRepository();
+  const subtaskRepository = new SubtaskFileRepository();
   const instructionService = new InstructionService(options.projectRoot);
   const sessionTracking = new SessionTrackingRepository();
   const julesSourceResolver = new JulesSourceResolver(julesApi);
@@ -148,7 +149,7 @@ export function createRuntimeDependencies(
     extractSessionId: (session) => context.extractSessionId(session),
     fetchRecentActivities: (sessionName, pageSize) => context.fetchRecentActivities(sessionName, pageSize),
     listSessions: () => context.listSessionsForSync(),
-    loadSubtasks: (dir) => subtaskRepository.loadSubtasks(dir),
+    subtaskRepository,
     startTask: (task, sourceId, baseBranch, repoPath, sprintNumber) =>
       taskService.startSprintTask(task, sourceId, baseBranch, repoPath, sprintNumber),
     getGuideContent: (guideName, repoPath) => context.getGuideContentIfEnabled(guideName, repoPath),
@@ -223,7 +224,11 @@ export function createRuntimeDependencies(
       taskService.startSprintTask(task, sourceId, featureBranch, repoPath, sprintNumber),
     resolveSessionName: (session) => context.resolveSessionName(session),
     extractSessionId: (session) => context.extractSessionId(session),
-    persistMergedFlag: (args) => context.persistTaskMergedFlag(args),
+    persistMergedFlag: (args) => subtaskRepository.setMerged(
+      path.join(args.repoPath, ".jules-subagents", "sprints", `sprint${args.sprintNumber}-subtasks`),
+      args.taskId,
+      args.merged
+    ),
     logger: logger.child({ component: "task-rerun-service" }),
   });
 

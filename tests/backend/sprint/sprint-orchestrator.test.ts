@@ -9,8 +9,29 @@ import { buildTaskRunTag } from "../../../src/services/task-run-key.js";
 
 const buildDeps = () => {
   const listSessions = vi.fn();
-  const loadSubtasks = vi.fn<() => Promise<Subtask[]>>();
   const getGuideContent = vi.fn().mockResolvedValue("guide");
+  const subtaskRepository = {
+    loadSubtasks: vi.fn<() => Promise<Subtask[]>>(),
+    setMerged: vi.fn(async (dir: string, taskId: string, merged: boolean) => {
+      const filePath = path.join(dir, `${taskId}.md`);
+      try {
+        const content = await fs.readFile(filePath, "utf-8");
+        const mergedValue = merged ? "true" : "false";
+        let updated = content;
+        if (/^\s*merged:\s*(true|false)\s*$/m.test(content)) {
+          updated = content.replace(/^\s*merged:\s*(true|false)\s*$/m, `merged: ${mergedValue}`);
+        } else if (/^\s*prompt:\s*/m.test(content)) {
+          updated = content.replace(/^\s*prompt:\s*/m, `merged: ${mergedValue}\nprompt:`);
+        } else {
+          updated = `${content.trimEnd()}\nmerged: ${mergedValue}\n`;
+        }
+        await fs.writeFile(filePath, updated, "utf-8");
+      } catch {
+        // Mock ignore
+      }
+    }),
+    loadSubtask: vi.fn(),
+  };
 
   const deps = {
     settings: { maxFailures: 5 },
@@ -23,7 +44,7 @@ const buildDeps = () => {
     extractSessionId: (s: any) => s.id,
     fetchRecentActivities: vi.fn().mockResolvedValue([]),
     listSessions,
-    loadSubtasks,
+    subtaskRepository,
     startTask: vi.fn(),
     getGuideContent,
     updateLastStatus: vi.fn(),
@@ -56,7 +77,7 @@ const buildDeps = () => {
     }),
   };
 
-  return { deps, listSessions, loadSubtasks, getGuideContent };
+  return { deps, listSessions, subtaskRepository, getGuideContent };
 };
 
 describe("SprintOrchestrator", () => {
@@ -105,7 +126,7 @@ describe("SprintOrchestrator", () => {
   });
 
   it("marks actionable session states as blocked and emits instructions", async () => {
-    const { deps, listSessions, loadSubtasks } = buildDeps();
+    const { deps, listSessions, subtaskRepository } = buildDeps();
     const orchestrator = new SprintOrchestrator(deps as any);
 
     const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-orch-test-"));
@@ -113,7 +134,7 @@ describe("SprintOrchestrator", () => {
     await fs.mkdir(subtasksDir, { recursive: true });
     await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
 
-    loadSubtasks.mockResolvedValue([
+    subtaskRepository.loadSubtasks.mockResolvedValue([
       {
         id: "01-task",
         title: "Test task",
@@ -152,7 +173,7 @@ describe("SprintOrchestrator", () => {
   });
 
   it("auto-answers clarification in FULL automation mode", async () => {
-    const { deps, listSessions, loadSubtasks } = buildDeps();
+    const { deps, listSessions, subtaskRepository } = buildDeps();
     deps.getDashboardSettings = () => ({
       ...DEFAULT_DASHBOARD_SETTINGS,
       automationLevel: "FULL",
@@ -164,7 +185,7 @@ describe("SprintOrchestrator", () => {
     await fs.mkdir(subtasksDir, { recursive: true });
     await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
 
-    loadSubtasks.mockResolvedValue([
+    subtaskRepository.loadSubtasks.mockResolvedValue([
       { id: "01-task", title: "Test task", prompt: "Do it", depends_on: [], is_independent: true },
     ]);
     listSessions.mockResolvedValue({
@@ -199,7 +220,7 @@ describe("SprintOrchestrator", () => {
   });
 
   it("routes blocked tasks to agent intervention when auto-intervention fails", async () => {
-    const { deps, listSessions, loadSubtasks } = buildDeps();
+    const { deps, listSessions, subtaskRepository } = buildDeps();
     deps.getDashboardSettings = () => ({
       ...DEFAULT_DASHBOARD_SETTINGS,
       automationLevel: "FULL",
@@ -212,7 +233,7 @@ describe("SprintOrchestrator", () => {
     await fs.mkdir(subtasksDir, { recursive: true });
     await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
 
-    loadSubtasks.mockResolvedValue([
+    subtaskRepository.loadSubtasks.mockResolvedValue([
       { id: "01-task", title: "Test task", prompt: "Do it", depends_on: [], is_independent: true },
     ]);
     listSessions.mockResolvedValue({
@@ -244,7 +265,7 @@ describe("SprintOrchestrator", () => {
   });
 
   it("keeps completed tasks in work state while feature PR CI is failing when autofix wait is enabled", async () => {
-    const { deps, listSessions, loadSubtasks } = buildDeps();
+    const { deps, listSessions, subtaskRepository } = buildDeps();
     deps.getDashboardSettings = () => ({
       ...DEFAULT_DASHBOARD_SETTINGS,
       ciIntelligence: {
@@ -311,7 +332,7 @@ describe("SprintOrchestrator", () => {
     await fs.mkdir(subtasksDir, { recursive: true });
     await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
 
-    loadSubtasks.mockResolvedValue([
+    subtaskRepository.loadSubtasks.mockResolvedValue([
       {
         id: "01-task",
         title: "Test task",
@@ -362,7 +383,7 @@ describe("SprintOrchestrator", () => {
   });
 
   it("escalates CI autofix after max retries with task id and PR link context", async () => {
-    const { deps, listSessions, loadSubtasks } = buildDeps();
+    const { deps, listSessions, subtaskRepository } = buildDeps();
     deps.getDashboardSettings = () => ({
       ...DEFAULT_DASHBOARD_SETTINGS,
       automationLevel: "FULL",
@@ -409,7 +430,7 @@ describe("SprintOrchestrator", () => {
     await fs.mkdir(subtasksDir, { recursive: true });
     await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
 
-    loadSubtasks.mockResolvedValue([
+    subtaskRepository.loadSubtasks.mockResolvedValue([
       { id: "01-task", title: "Test task", prompt: "Do it", depends_on: [], is_independent: true },
     ]);
     listSessions.mockResolvedValue({
@@ -445,7 +466,7 @@ describe("SprintOrchestrator", () => {
   });
 
   it("auto merges feature PR when checks are green and review blockers are clear", async () => {
-    const { deps, listSessions, loadSubtasks } = buildDeps();
+    const { deps, listSessions, subtaskRepository } = buildDeps();
     deps.getDashboardSettings = () => ({
       ...DEFAULT_DASHBOARD_SETTINGS,
       ciIntelligence: {
@@ -491,7 +512,7 @@ describe("SprintOrchestrator", () => {
     await fs.mkdir(subtasksDir, { recursive: true });
     await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\ndepends_on: []\nis_independent: true\nmerged: false\nprompt:\nDo it\n", "utf-8");
 
-    loadSubtasks.mockResolvedValue([
+    subtaskRepository.loadSubtasks.mockResolvedValue([
       {
         id: "01-task",
         title: "Test task",
@@ -531,7 +552,7 @@ describe("SprintOrchestrator", () => {
   });
 
   it("auto merges feature PR in always mode even when checks are pending", async () => {
-    const { deps, listSessions, loadSubtasks } = buildDeps();
+    const { deps, listSessions, subtaskRepository } = buildDeps();
     deps.getDashboardSettings = () => ({
       ...DEFAULT_DASHBOARD_SETTINGS,
       ciIntelligence: {
@@ -577,7 +598,7 @@ describe("SprintOrchestrator", () => {
     await fs.mkdir(subtasksDir, { recursive: true });
     await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\ndepends_on: []\nis_independent: true\nmerged: false\nprompt:\nDo it\n", "utf-8");
 
-    loadSubtasks.mockResolvedValue([
+    subtaskRepository.loadSubtasks.mockResolvedValue([
       {
         id: "01-task",
         title: "Test task",
@@ -618,7 +639,7 @@ describe("SprintOrchestrator", () => {
   });
 
   it("auto merges feature PR without waiting for CI when feature CI wait is disabled", async () => {
-    const { deps, listSessions, loadSubtasks } = buildDeps();
+    const { deps, listSessions, subtaskRepository } = buildDeps();
     deps.getDashboardSettings = () => ({
       ...DEFAULT_DASHBOARD_SETTINGS,
       ciIntelligence: {
@@ -664,7 +685,7 @@ describe("SprintOrchestrator", () => {
     await fs.mkdir(subtasksDir, { recursive: true });
     await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\ndepends_on: []\nis_independent: true\nmerged: false\nprompt:\nDo it\n", "utf-8");
 
-    loadSubtasks.mockResolvedValue([
+    subtaskRepository.loadSubtasks.mockResolvedValue([
       {
         id: "01-task",
         title: "Test task",
@@ -701,7 +722,7 @@ describe("SprintOrchestrator", () => {
   });
 
   it("keeps task running when worker branch is missing but PR is matched by pr_url and checks are pending", async () => {
-    const { deps, listSessions, loadSubtasks } = buildDeps();
+    const { deps, listSessions, subtaskRepository } = buildDeps();
     deps.getDashboardSettings = () => ({
       ...DEFAULT_DASHBOARD_SETTINGS,
       ciIntelligence: {
@@ -745,7 +766,7 @@ describe("SprintOrchestrator", () => {
     await fs.mkdir(subtasksDir, { recursive: true });
     await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
 
-    loadSubtasks.mockResolvedValue([
+    subtaskRepository.loadSubtasks.mockResolvedValue([
       {
         id: "01-task",
         title: "Test task",
@@ -788,7 +809,7 @@ describe("SprintOrchestrator", () => {
     const nowSpy = vi.spyOn(Date, "now");
     try {
       nowSpy.mockReturnValueOnce(0).mockReturnValue(61_000);
-      const { deps, loadSubtasks } = buildDeps();
+      const { deps, subtaskRepository } = buildDeps();
       deps.getDashboardSettings = () => ({
         ...DEFAULT_DASHBOARD_SETTINGS,
         sprintLoopSteps: {
@@ -815,7 +836,7 @@ describe("SprintOrchestrator", () => {
       await fs.mkdir(subtasksDir, { recursive: true });
       await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
 
-      loadSubtasks.mockResolvedValue([
+      subtaskRepository.loadSubtasks.mockResolvedValue([
         {
           id: "01-task",
           title: "Test task",
@@ -854,7 +875,7 @@ describe("SprintOrchestrator", () => {
   });
 
   it("forces single-cycle execution for status even when wait=true", async () => {
-    const { deps, loadSubtasks } = buildDeps();
+    const { deps, subtaskRepository } = buildDeps();
     deps.getDashboardSettings = () => ({
       ...DEFAULT_DASHBOARD_SETTINGS,
       sprintLoopSteps: {
@@ -871,7 +892,7 @@ describe("SprintOrchestrator", () => {
     await fs.mkdir(subtasksDir, { recursive: true });
     await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
 
-    loadSubtasks.mockResolvedValue([
+    subtaskRepository.loadSubtasks.mockResolvedValue([
       {
         id: "01-task",
         title: "Test task",

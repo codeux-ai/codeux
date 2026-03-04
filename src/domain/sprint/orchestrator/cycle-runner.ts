@@ -54,7 +54,7 @@ export class CycleRunner {
 
     if (args.loopSteps.loadSubtasks) {
       try {
-        subtasks = await runLoadSubtasksStep(this.deps.loadSubtasks, args.subtasksDir);
+        subtasks = await runLoadSubtasksStep((dir) => this.deps.subtaskRepository.loadSubtasks(dir), args.subtasksDir);
       } catch {
         throw new Error(`Error loading subtasks from ${args.subtasksDir}.`);
       }
@@ -245,7 +245,7 @@ export class CycleRunner {
         if (mergeResult.ok) {
           task.is_merged = true;
           task.merge_indicator = "AUTOMERGE";
-          await this.persistTaskMergedFlag(args.subtasksDir, task.id);
+          await this.deps.subtaskRepository.setMerged(args.subtasksDir, task.id, true);
           reportText += `🤖 **Auto-Merged:** Task \`${task.id}\` was merged automatically (PR #${pr.number}, mode: always).\n`;
           continue;
         }
@@ -260,7 +260,7 @@ export class CycleRunner {
           if (mergeResult.ok) {
             task.is_merged = true;
             task.merge_indicator = "AUTOMERGE";
-            await this.persistTaskMergedFlag(args.subtasksDir, task.id);
+            await this.deps.subtaskRepository.setMerged(args.subtasksDir, task.id, true);
             reportText += `🤖 **Auto-Merged:** Task \`${task.id}\` was merged automatically (PR #${pr.number}).\n`;
           } else {
             reportText += `⚠️ **Auto-Merge Failed:** Task \`${task.id}\` (PR #${pr.number}) - ${mergeResult.message || "unknown error"}\n`;
@@ -390,25 +390,5 @@ export class CycleRunner {
 
     await this.deps.sendSessionMessage(sessionId, prompt);
     return { sent: true };
-  }
-
-  private async persistTaskMergedFlag(subtasksDir: string, taskId: string): Promise<void> {
-    const filePath = path.join(subtasksDir, `${taskId}.md`);
-    try {
-      const content = await fs.readFile(filePath, "utf-8");
-      let updated = content;
-      if (/^\s*merged:\s*(true|false)\s*$/m.test(content)) {
-        updated = content.replace(/^\s*merged:\s*(true|false)\s*$/m, "merged: true");
-      } else if (/^\s*prompt:\s*/m.test(content)) {
-        updated = content.replace(/^\s*prompt:\s*/m, "merged: true\nprompt:");
-      } else {
-        updated = `${content.trimEnd()}\nmerged: true\n`;
-      }
-      if (updated !== content) {
-        await fs.writeFile(filePath, updated, "utf-8");
-      }
-    } catch {
-      // Keep runtime status update even if file persistence fails.
-    }
   }
 }
