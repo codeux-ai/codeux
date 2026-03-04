@@ -24,6 +24,36 @@ export const runSessionSyncStep = async (
     }
   }
 
+  const uniqueSessionNames = new Set<string>();
+  for (const task of subtasks) {
+    const expectedRunKey = buildTaskRunKey(context.repoPath, context.sprintNumber, task.id);
+    const match = sessionMap.get(expectedRunKey);
+    if (match) {
+      const sessionName = deps.resolveSessionName(match);
+      if (sessionName) {
+        uniqueSessionNames.add(sessionName);
+      }
+    }
+  }
+
+  const activitiesMap = new Map<string, any[]>();
+  const sessionNameArray = Array.from(uniqueSessionNames);
+  const chunkSize = 5;
+
+  for (let i = 0; i < sessionNameArray.length; i += chunkSize) {
+    const chunk = sessionNameArray.slice(i, i + chunkSize);
+    await Promise.all(
+      chunk.map(async (sessionName) => {
+        try {
+          const activities = await deps.fetchRecentActivities(sessionName, 5);
+          activitiesMap.set(sessionName, activities);
+        } catch {
+          deps.logger.warn("Could not fetch activities for session", { sessionName });
+        }
+      })
+    );
+  }
+
   for (const task of subtasks) {
     const expectedRunKey = buildTaskRunKey(context.repoPath, context.sprintNumber, task.id);
     const match = sessionMap.get(expectedRunKey);
@@ -55,12 +85,8 @@ export const runSessionSyncStep = async (
       }
     }
 
-    if (sessionName) {
-      try {
-        task.activities = await deps.fetchRecentActivities(sessionName, 5);
-      } catch {
-        deps.logger.warn("Could not fetch activities for task", { taskId: task.id });
-      }
+    if (sessionName && activitiesMap.has(sessionName)) {
+      task.activities = activitiesMap.get(sessionName);
     }
 
     if (match.state === "COMPLETED") {
