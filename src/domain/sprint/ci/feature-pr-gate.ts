@@ -29,7 +29,7 @@ export interface CiGateContext {
   featureBranchPrefix: string;
   ciIntelligence: CiIntelligenceSettings;
   githubMode: "REMOTE" | "LOCAL";
-  gitStatus: GitTrackingStatus;
+  gitStatus: GitTrackingStatus | null;
   ciAutofixRetryCounts: Map<string, number>;
   isJulesApiConfigured: () => boolean;
   sendSessionMessage: (sessionId: string, message: string) => Promise<void>;
