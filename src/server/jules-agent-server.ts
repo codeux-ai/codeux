@@ -294,6 +294,17 @@ export class JulesAgentServer {
         this.activityCacheService.invalidateGitStatusCache();
         return task;
       },
+      isReady: async () => {
+        if (!this.isJulesApiConfigured()) {
+          return false;
+        }
+        try {
+          await this.julesApi.listSessions({ page_size: 1 });
+          return true;
+        } catch {
+          return false;
+        }
+      },
     });
     this.dashboardRuntimePort = handle.port;
   }

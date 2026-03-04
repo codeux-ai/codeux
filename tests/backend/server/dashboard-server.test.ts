@@ -2,6 +2,7 @@ import express from "express";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AddressInfo } from "net";
 import type { Server } from "http";
+import axios from "axios";
 import { setupDashboardServer } from "../../../src/server/dashboard-server.js";
 
 const serversToClose: Server[] = [];
@@ -140,5 +141,67 @@ describe("setupDashboardServer", () => {
 
     serversToClose.push(handle.server);
     expect(handle.port).toBe(blockedPort + 1);
+  });
+
+  it("provides /health and /ready endpoints", async () => {
+    const app = express();
+    const handle = await setupDashboardServer({
+      app,
+      dashboardDir: "dashboard",
+      port: 10000 + Math.floor(Math.random() * 10000),
+      liveActivityCacheMs: 1000,
+      getStatus: () => ({ ok: true }),
+      getLiveActivities: async () => ({}),
+      getGitStatus: async () => ({} as any),
+      getExternalSettingsHints: () => ({} as any),
+      getSettings: () => ({} as any),
+      saveSettings: (settings) => settings,
+      rerunTask: async () => ({ ok: true }),
+      isReady: async () => true,
+    });
+    serversToClose.push(handle.server);
+
+    const baseUrl = `http://127.0.0.1:${handle.port}`;
+    
+    const healthResponse = await axios.get(`${baseUrl}/health`);
+    expect(healthResponse.status).toBe(200);
+    expect(healthResponse.data).toEqual({ status: "UP" });
+
+    const readyResponse = await axios.get(`${baseUrl}/ready`);
+    expect(readyResponse.status).toBe(200);
+    expect(readyResponse.data).toEqual({ status: "READY" });
+  });
+
+  it("returns 503 for /ready when not ready", async () => {
+    const app = express();
+    const handle = await setupDashboardServer({
+      app,
+      dashboardDir: "dashboard",
+      port: 10000 + Math.floor(Math.random() * 10000),
+      liveActivityCacheMs: 1000,
+      getStatus: () => ({ ok: true }),
+      getLiveActivities: async () => ({}),
+      getGitStatus: async () => ({} as any),
+      getExternalSettingsHints: () => ({} as any),
+      getSettings: () => ({} as any),
+      saveSettings: (settings) => settings,
+      rerunTask: async () => ({ ok: true }),
+      isReady: async () => false,
+    });
+    serversToClose.push(handle.server);
+
+    const baseUrl = `http://127.0.0.1:${handle.port}`;
+    
+    try {
+      await axios.get(`${baseUrl}/ready`);
+      expect.fail("Should have thrown 503");
+    } catch (error: any) {
+      if (!error.response) {
+        console.error("Axios error without response:", error.message, error.code);
+        throw error;
+      }
+      expect(error.response.status).toBe(503);
+      expect(error.response.data).toEqual({ status: "NOT_READY" });
+    }
   });
 });
