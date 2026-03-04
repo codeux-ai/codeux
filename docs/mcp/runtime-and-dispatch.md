@@ -26,6 +26,7 @@ Returns enabled tool definitions from `src/contracts/mcp-tool-definitions.ts`, f
 - Resolves tool name.
 - Verifies tool is enabled in `mcpTools`.
 - Dispatches through handler map.
+- Executes tool handling inside request-scoped correlation ID context.
 - Wraps unknown tool as MCP `MethodNotFound`.
 - Normalizes runtime/API errors into `isError` response.
 
@@ -41,6 +42,7 @@ This split keeps tool contracts stable while allowing orchestration internals to
 - Axios errors are unwrapped for user-friendly API messages.
 - Generic errors are returned as text with `isError: true`.
 - Server-level uncaught MCP errors are logged via `server.onerror`.
+- Request-path MCP logs include correlation IDs (`mcp-<request-id>` when available).
 
 ## Shutdown Behavior
 

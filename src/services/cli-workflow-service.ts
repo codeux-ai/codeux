@@ -24,6 +24,7 @@ import {
   sanitizeToken,
 } from "./cli-workflow-utils.js";
 import { buildTaskRunKey, buildTaskRunTag } from "./task-run-key.js";
+import { createNoopLogger, type Logger } from "../shared/logging/logger.js";
 
 const CODEX_CREDENTIALS_MOUNT = "/opt/credentials/codex";
 const GITHUB_CREDENTIALS_MOUNT = "/opt/credentials/gh";
@@ -37,6 +38,7 @@ interface CliWorkflowServiceDependencies {
   getDashboardSettings: () => DashboardSettings;
   getGuideContent: (guideName: string, repoPath?: string) => Promise<string>;
   getGithubToken: () => string | undefined;
+  logger?: Logger;
 }
 
 interface StartCliTaskInput {
@@ -50,8 +52,11 @@ interface StartCliTaskInput {
 export class CliWorkflowService {
   private readonly repoLocks = new Map<string, Promise<void>>();
   private readonly dockerHintLoggedSessions = new Set<string>();
+  private readonly logger: Logger;
 
-  constructor(private readonly deps: CliWorkflowServiceDependencies) { }
+  constructor(private readonly deps: CliWorkflowServiceDependencies) {
+    this.logger = deps.logger ?? createNoopLogger();
+  }
 
   async startTask(input: StartCliTaskInput): Promise<JulesSession> {
     const settings = this.deps.getDashboardSettings();
@@ -320,7 +325,11 @@ export class CliWorkflowService {
         originator: "system",
         description: `Workflow failed: ${message}`,
       });
-      console.error(`[CLI Workflow] ${args.sessionId} failed: ${message}`);
+      this.logger.error("CLI workflow failed", {
+        sessionId: args.sessionId,
+        provider: args.provider,
+        error: message,
+      });
     } finally {
       const shouldCleanupWorktree = workflowSucceeded ? cleanupWorktreeOnSuccess : cleanupWorktreeOnFailure;
       if (shouldCleanupWorktree) {

@@ -1,8 +1,10 @@
 import type { JulesApiClient } from "../integrations/jules-api-client.js";
 import type { JulesActivity, JulesSession, JulesSource } from "../contracts/app-types.js";
+import { createNoopLogger, type Logger } from "../shared/logging/logger.js";
 
 interface CoreToolHandlerDependencies {
   julesApi: JulesApiClient;
+  logger?: Logger;
   normalizeName: (type: string, id: string) => string;
   resolveSessionName: (session: Partial<JulesSession>) => string | undefined;
   fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
@@ -22,8 +24,11 @@ interface CoreToolHandlerDependencies {
 export class CoreToolHandler {
   private static readonly ACTIVITY_PREVIEW_CHAR_LIMIT = 180;
   private static readonly ACTIVITY_RECENT_LIMIT = 10;
+  private readonly logger: Logger;
 
-  constructor(private readonly deps: CoreToolHandlerDependencies) {}
+  constructor(private readonly deps: CoreToolHandlerDependencies) {
+    this.logger = deps.logger ?? createNoopLogger();
+  }
 
   private ensureJulesApiConfigured(): void {
     if (!this.deps.isJulesApiConfigured()) {
@@ -320,8 +325,11 @@ export class CoreToolHandler {
       if (activities.length > 0) {
         lastActivity = activities[activities.length - 1];
       }
-    } catch {
-      console.error(`Warning: Could not fetch activities for session ${session_id}`);
+    } catch (error) {
+      this.logger.warn("Could not fetch recent activities for session", {
+        sessionId: session_id,
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
 
     return { content: [{ type: "text", text: JSON.stringify(this.toSessionSummary(session, lastActivity), null, 2) }] };

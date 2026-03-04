@@ -25,8 +25,10 @@ import {
 } from "../contracts/app-types.js";
 import { loadExternalSettingsHints } from "../config/external-settings.js";
 import { formatSprintBranch } from "../git/sprint-branch-scheme.js";
+import { createLogger, type Logger } from "../shared/logging/logger.js";
 
 export interface RuntimeDependencies {
+  logger: Logger;
   server: Server;
   julesApi: JulesApiClient;
   guideRepository: GuideRepository;
@@ -80,6 +82,9 @@ export function createRuntimeDependencies(
   options: { projectRoot: string; appConfig: AppConfig },
   context: ServerContext
 ): RuntimeDependencies {
+  const logger = createLogger({
+    bindings: { service: "jules-subagents" },
+  });
   const externalSettingsHints = loadExternalSettingsHints(options.projectRoot);
   const settingsRepository = new SettingsRepository(undefined, externalSettingsHints);
   const dashboardSettings = settingsRepository.getSettings();
@@ -112,6 +117,7 @@ export function createRuntimeDependencies(
     getDashboardSettings: () => context.getDashboardSettings(),
     getGuideContent: (guideName: string, repoPath?: string) => context.getGuideContentIfEnabled(guideName, repoPath),
     getGithubToken: () => context.getEffectiveGithubToken(),
+    logger: logger.child({ component: "cli-workflow-service" }),
   });
 
   const taskService = new TaskService({
@@ -160,6 +166,7 @@ export function createRuntimeDependencies(
 
   const coreToolHandler = new CoreToolHandler({
     julesApi,
+    logger: logger.child({ component: "core-tool-handler" }),
     normalizeName: (type, id) => context.normalizeName(type, id),
     resolveSessionName: (session) => context.resolveSessionName(session),
     fetchRecentActivities: (sessionName, pageSize) => context.fetchRecentActivities(sessionName, pageSize),
@@ -192,6 +199,7 @@ export function createRuntimeDependencies(
 
   const activityCacheService = new ActivityCacheService(
     {
+      logger: logger.child({ component: "activity-cache-service" }),
       getSubtasks: () => {
         const lastStatus = context.getLastStatus();
         return Array.isArray(lastStatus?.subtasks) ? lastStatus.subtasks : [];
@@ -207,6 +215,7 @@ export function createRuntimeDependencies(
   );
 
   const taskRerunService = new TaskRerunService({
+    logger: logger.child({ component: "task-rerun-service" }),
     getStatus: () => context.getLastStatus(),
     updateStatus: (status) => {
       context.updateLastStatus(status);
@@ -220,6 +229,7 @@ export function createRuntimeDependencies(
   });
 
   return {
+    logger,
     server,
     julesApi,
     guideRepository,

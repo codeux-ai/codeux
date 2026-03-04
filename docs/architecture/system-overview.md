@@ -8,6 +8,7 @@ This project is a Model Context Protocol (MCP) server for Jules APIs with an int
 - Orchestrate sprint subtasks with dependency-aware scheduling.
 - Inject engineering guides into Jules task prompts.
 - Provide an operational dashboard for status, activity, git, CI, and settings.
+- Emit structured logs with request correlation IDs across MCP and dashboard API paths.
 - Support editable markdown instruction templates for sprint loop messaging.
 
 ## Runtime Components

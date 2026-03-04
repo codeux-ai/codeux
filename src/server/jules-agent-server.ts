@@ -35,7 +35,9 @@ import { ActivityCacheService } from "./activity-cache-service.js";
 import { registerMcpRequestHandlers } from "./mcp-request-router.js";
 import { TaskRerunService } from "../services/task-rerun-service.js";
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
-import { createRuntimeDependencies, ServerContext } from "../app/dependency-factory.js";
+import { createRuntimeDependencies, type ServerContext } from "../app/dependency-factory.js";
+import { generateCorrelationId, runWithCorrelationId } from "../shared/logging/correlation-id.js";
+import type { Logger } from "../shared/logging/logger.js";
 
 export interface JulesAgentServerOptions {
   projectRoot: string;
@@ -48,6 +50,7 @@ export class JulesAgentServer {
   private static readonly GIT_STATUS_CACHE_MS = 10_000;
   private readonly projectRoot: string;
   private readonly appConfig: AppConfig;
+  private readonly logger: Logger;
   private server: Server;
   private julesApi: JulesApiClient;
   private completedSprints: Set<number> = new Set();
@@ -78,6 +81,7 @@ export class JulesAgentServer {
 
     const deps = createRuntimeDependencies(options, this.createContext());
 
+    this.logger = deps.logger.child({ component: "jules-agent-server" });
     this.server = deps.server;
     this.julesApi = deps.julesApi;
     this.guideRepository = deps.guideRepository;
@@ -102,13 +106,16 @@ export class JulesAgentServer {
       agentToolHandler: this.agentToolHandler,
       getDashboardSettings: () => this.dashboardSettings,
       formatError: (error: unknown) => this.formatError(error),
+      logger: this.logger.child({ component: "mcp-request-router" }),
+      withCorrelationContext: (request, operation) => this.runWithMcpCorrelationContext(request, operation),
     });
 
     this.server.onerror = (error) => {
-      console.error("[MCP Server Error]", JSON.stringify(error, null, 2));
+      this.logger.error("MCP server error", { error });
     };
 
     process.on("SIGINT", async () => {
+      this.logger.info("Received SIGINT; shutting down MCP server");
       await this.server.close();
       process.exit(0);
     });
@@ -147,6 +154,22 @@ export class JulesAgentServer {
   }
 
 
+  private runWithMcpCorrelationContext<T>(request: unknown, operation: () => Promise<T>): Promise<T> {
+    const correlationId = this.buildMcpCorrelationId(request);
+    return runWithCorrelationId(correlationId, operation);
+  }
+
+  private buildMcpCorrelationId(request: unknown): string {
+    const requestRecord = request as { id?: unknown };
+    const requestId = requestRecord?.id;
+
+    if (typeof requestId === "string" || typeof requestId === "number") {
+      return "mcp-" + String(requestId);
+    }
+
+    return "mcp-" + generateCorrelationId();
+  }
+
   private async loadSettings() {
     // 1. Lowest priority: Environment variable
     if (process.env.JULES_API_MAX_FAILS) {
@@ -168,7 +191,7 @@ export class JulesAgentServer {
         }
 
         Object.assign(this.settings, loadedSettings);
-        console.error(`Loaded settings from: ${settingsPath}`);
+        this.logger.info("Loaded settings", { settingsPath });
       } catch (error) {
         // Skip if not found or invalid
       }
@@ -276,6 +299,7 @@ export class JulesAgentServer {
       app: this.app,
       dashboardDir,
       port,
+      logger: this.logger.child({ component: "dashboard-server" }),
       liveActivityCacheMs: JulesAgentServer.LIVE_ACTIVITY_CACHE_MS,
       getStatus: () => this.lastStatus,
       getLiveActivities: () => this.getLiveActivitiesForActiveTasks(),
@@ -478,19 +502,22 @@ export class JulesAgentServer {
     if (recovery.recoveredCount > 0) {
       const sample = recovery.sessionIds.slice(0, 5).join(", ");
       const remainder = recovery.recoveredCount > 5 ? ` (+${recovery.recoveredCount - 5} more)` : "";
-      console.error(
-        `[Recovery] Marked ${recovery.recoveredCount} interrupted CLI session(s) as FAILED: ${sample}${remainder}`
-      );
+      this.logger.warn("Recovered interrupted CLI sessions", {
+        recoveredCount: recovery.recoveredCount,
+        sampleSessionIds: sample,
+        remainder,
+      });
     }
     await this.setupDashboard();
 
     if (!this.isJulesApiConfigured()) {
-      console.error("Warning: Jules API key is not set. Jules-native tools are disabled; Gemini/Codex CLI providers can still run.");
-      console.error(this.getMissingJulesApiKeyInstruction());
+      this.logger.warn("Jules API key is not set; Jules-native tools are disabled", {
+        guidance: this.getMissingJulesApiKeyInstruction(),
+      });
     }
 
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error("Jules Subagents MCP server (v1.2.0) running on stdio");
+    this.logger.info("Jules Subagents MCP server running on stdio", { version: "1.2.0" });
   }
 }

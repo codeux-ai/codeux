@@ -4,11 +4,14 @@ import * as path from "path";
 import type { Server } from "http";
 import { createServer } from "http";
 import type { DashboardSettings, ExternalSettingsHints, GitTrackingStatus, JulesActivity } from "../contracts/app-types.js";
+import { correlationIdMiddleware } from "../shared/logging/correlation-id.js";
+import { createLogger, type Logger } from "../shared/logging/logger.js";
 
 export interface DashboardServerOptions {
   app: Express;
   dashboardDir: string;
   port: number;
+  logger?: Logger;
   liveActivityCacheMs: number;
   getStatus: () => unknown;
   getLiveActivities: () => Promise<Record<string, JulesActivity[]>>;
@@ -24,7 +27,11 @@ export interface DashboardServerHandle {
   server: Server;
 }
 
-const bindDashboardServer = async (app: Express, startPort: number): Promise<DashboardServerHandle> => {
+const bindDashboardServer = async (
+  app: Express,
+  startPort: number,
+  logger: Logger
+): Promise<DashboardServerHandle> => {
   let port = Math.max(1, Math.min(65535, Math.round(startPort)));
 
   while (port <= 65535) {
@@ -40,7 +47,10 @@ const bindDashboardServer = async (app: Express, startPort: number): Promise<Das
       if (message.code !== "EADDRINUSE") {
         throw error;
       }
-      console.error(`Warning: Dashboard port ${port} is already in use. Trying ${port + 1}...`);
+      logger.warn("Dashboard port already in use; trying next port", {
+        currentPort: port,
+        nextPort: port + 1,
+      });
       port += 1;
     }
   }
@@ -49,6 +59,8 @@ const bindDashboardServer = async (app: Express, startPort: number): Promise<Das
 };
 
 export const setupDashboardServer = async (options: DashboardServerOptions): Promise<DashboardServerHandle> => {
+  const logger = options.logger ?? createLogger({ bindings: { component: "dashboard-server" } });
+  const apiLogger = logger.child({ component: "dashboard-api" });
   const {
     app,
     dashboardDir,
@@ -62,7 +74,32 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     saveSettings,
     rerunTask,
   } = options;
+
+  app.use(correlationIdMiddleware);
   app.use(express.json({ limit: "1mb" }));
+  app.use((req, res, next) => {
+    if (!req.path.startsWith("/api/")) {
+      next();
+      return;
+    }
+
+    const startedAt = Date.now();
+    apiLogger.info("Dashboard API request started", {
+      method: req.method,
+      path: req.originalUrl,
+    });
+
+    res.on("finish", () => {
+      apiLogger.info("Dashboard API request completed", {
+        method: req.method,
+        path: req.originalUrl,
+        statusCode: res.statusCode,
+        durationMs: Date.now() - startedAt,
+      });
+    });
+
+    next();
+  });
 
   app.get("/api/status", (req, res) => {
     res.json(getStatus());
@@ -78,6 +115,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      apiLogger.error("Failed to fetch live activities", { error: message });
       res.status(500).json({ error: `Failed to fetch live activities: ${message}` });
     }
   });
@@ -96,6 +134,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       res.json(status);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      apiLogger.error("Failed to fetch git status", { error: message });
       res.status(500).json({ error: `Failed to fetch git status: ${message}` });
     }
   });
@@ -106,6 +145,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       res.json(saved);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      apiLogger.warn("Failed to save dashboard settings", { error: message });
       res.status(400).json({ error: `Failed to save settings: ${message}` });
     }
   });
@@ -121,6 +161,10 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       res.json({ ok: true, task });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      apiLogger.warn("Failed to rerun task", {
+        taskId: req.params.taskId,
+        error: message,
+      });
       res.status(400).json({ error: `Failed to rerun task: ${message}` });
     }
   });
@@ -131,11 +175,11 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   const staticDir = fs.existsSync(builtDashboardDir) ? builtDashboardDir : path.resolve(dashboardDir);
   app.use(express.static(staticDir));
 
-  const handle = await bindDashboardServer(app, port);
-
-  console.error(`\n🚀 [DASHBOARD] Live status available at:`);
-  console.error(`   - http://localhost:${handle.port}`);
-  console.error(`   - http://127.0.0.1:${handle.port}\n`);
+  const handle = await bindDashboardServer(app, port, logger);
+  logger.info("Dashboard started", {
+    localhostUrl: `http://localhost:${handle.port}`,
+    loopbackUrl: `http://127.0.0.1:${handle.port}`,
+  });
 
   return handle;
 };

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { AddressInfo } from "net";
 import type { Server } from "http";
 import { setupDashboardServer } from "../../../src/server/dashboard-server.js";
+import { createNoopLogger } from "../../../src/shared/logging/logger.js";
 
 const serversToClose: Server[] = [];
 
@@ -37,6 +38,7 @@ describe("setupDashboardServer", () => {
       app,
       dashboardDir: "dashboard",
       port: blockedPort,
+      logger: createNoopLogger(),
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
       getLiveActivities: async () => ({}),

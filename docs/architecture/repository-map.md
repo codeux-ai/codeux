@@ -25,6 +25,9 @@ This map explains where major responsibilities live.
 - `contracts/`
   - `app-types.ts`, `mcp-tool-definitions.ts`
   - Shared backend contracts and MCP tool definitions.
+- `shared/logging/`
+  - `logger.ts`, `correlation-id.ts`
+  - Structured logging utilities and AsyncLocalStorage-based request correlation IDs.
 - `integrations/`
   - `jules-api-client.ts`
   - Jules API HTTP client.

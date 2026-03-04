@@ -1,6 +1,8 @@
 import type { GitTrackingStatus, JulesActivity, Subtask } from "../contracts/app-types.js";
+import { createNoopLogger, type Logger } from "../shared/logging/logger.js";
 
 export interface ActivityCacheServiceDependencies {
+  logger?: Logger;
   getSubtasks: () => Subtask[];
   resolveSessionNameFromTask: (task: Subtask) => string | undefined;
   fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
@@ -17,13 +19,16 @@ export class ActivityCacheService {
     repoPath: null,
   };
   private gitStatusFetchPromise: Promise<GitTrackingStatus> | null = null;
+  private readonly logger: Logger;
 
   constructor(
     private readonly deps: ActivityCacheServiceDependencies,
     private readonly liveActivityCacheMs: number,
     private readonly gitStatusCacheMs: number,
     private readonly activityPageSize: number
-  ) {}
+  ) {
+    this.logger = deps.logger ?? createNoopLogger();
+  }
 
   invalidateGitStatusCache(): void {
     this.gitStatusCache = { timestamp: 0, data: null, repoPath: null };
@@ -93,8 +98,11 @@ export class ActivityCacheService {
           try {
             const activities = await this.deps.fetchRecentActivities(sessionName, this.activityPageSize);
             return [sessionName, activities] as const;
-          } catch {
-            console.error(`Warning: Could not fetch live activities for ${sessionName}`);
+          } catch (error) {
+            this.logger.warn("Could not fetch live activities for session", {
+              sessionName,
+              error: error instanceof Error ? error.message : String(error),
+            });
             return [sessionName, []] as const;
           }
         })

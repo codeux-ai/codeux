@@ -1,4 +1,5 @@
 import type { JulesSession, Subtask } from "../contracts/app-types.js";
+import { createNoopLogger, type Logger } from "../shared/logging/logger.js";
 
 export interface TaskRerunContext {
   sprint_number?: number;
@@ -14,6 +15,7 @@ export interface TaskRerunContext {
 }
 
 export interface TaskRerunServiceDependencies {
+  logger?: Logger;
   getStatus: () => TaskRerunContext;
   updateStatus: (status: TaskRerunContext) => void;
   startTask: (args: {
@@ -44,7 +46,11 @@ const resetTaskState = (task: Subtask): Subtask => ({
 });
 
 export class TaskRerunService {
-  constructor(private readonly deps: TaskRerunServiceDependencies) {}
+  private readonly logger: Logger;
+
+  constructor(private readonly deps: TaskRerunServiceDependencies) {
+    this.logger = deps.logger ?? createNoopLogger();
+  }
 
   async rerunTask(taskId: string): Promise<Subtask> {
     const status = this.deps.getStatus();
@@ -81,7 +87,10 @@ export class TaskRerunService {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[TaskRerunService] Warning: failed to persist merged=false for task '${taskId}': ${message}`);
+      this.logger.warn("Failed to persist merged=false while rerunning task", {
+        taskId,
+        error: message,
+      });
     }
 
     try {

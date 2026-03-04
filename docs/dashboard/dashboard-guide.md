@@ -19,6 +19,12 @@ If the requested port is busy, startup automatically retries the next port (`+1`
 
 Implemented in `src/server/dashboard-server.ts`.
 
+All `/api/*` requests are wrapped with correlation ID middleware:
+- Incoming `x-correlation-id` is reused when valid.
+- Otherwise a new correlation ID is generated.
+- Response always includes `x-correlation-id`.
+- API logs include the active correlation ID automatically.
+
 - `GET /api/status`
   - Current orchestrator status payload (`sprint_number`, `subtasks`, `instructions`, etc.)
 - `GET /api/live-activities`
