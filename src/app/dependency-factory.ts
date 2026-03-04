@@ -24,6 +24,10 @@ import {
   Subtask,
   Settings,
   GitTrackingStatus,
+  DashboardStatus,
+  GetCiStatusForScopeArgs,
+  AutoMergeFeaturePrArgs,
+  PersistTaskMergedFlagArgs,
 } from "../contracts/app-types.js";
 import { loadExternalSettingsHints } from "../config/external-settings.js";
 import { formatSprintBranch } from "../git/sprint-branch-scheme.js";
@@ -70,14 +74,14 @@ export interface ServerContext {
   extractSessionId: (session: Partial<JulesSession>) => string | undefined;
   fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
   listSessionsForSync: () => Promise<{ sessions?: JulesSession[] }>;
-  updateLastStatus: (status: any) => void;
-  getLastStatus: () => any;
-  getCiStatusForScope: (args: any) => Promise<GitTrackingStatus | null>;
-  autoMergeFeaturePr: (args: any) => Promise<{ ok: boolean; message?: string }>;
+  updateLastStatus: (status: Partial<DashboardStatus> | null) => void;
+  getLastStatus: () => Partial<DashboardStatus> | null;
+  getCiStatusForScope: (args: GetCiStatusForScopeArgs) => Promise<GitTrackingStatus | null>;
+  autoMergeFeaturePr: (args: AutoMergeFeaturePrArgs) => Promise<{ ok: boolean; message?: string }>;
   resolveSessionNameFromTask: (task: Subtask) => string | undefined;
   resolveGitStatusRepoPath: () => string;
   fetchGitStatusForRepo: (repoPath: string) => Promise<GitTrackingStatus>;
-  persistTaskMergedFlag: (args: any) => Promise<void>;
+  persistTaskMergedFlag: (args: PersistTaskMergedFlagArgs) => Promise<void>;
   normalizeName: (type: string, id: string) => string;
   isTrackedCliSession: (sessionId: string) => boolean;
 }
@@ -232,7 +236,7 @@ export function createRuntimeDependencies(
   );
 
   const taskRerunService = new TaskRerunService({
-    getStatus: () => context.getLastStatus(),
+    getStatus: () => context.getLastStatus() || {},
     updateStatus: (status) => {
       context.updateLastStatus(status);
       activityCacheService.invalidateLiveActivitiesCache();
