@@ -1,3 +1,4 @@
+import * as fs from "fs";
 import { inspect } from "util";
 import { getCorrelationId } from "./correlation-id.js";
 
@@ -19,6 +20,7 @@ interface StructuredLoggerOptions {
   level?: LogLevel;
   environment?: "development" | "production";
   bindings?: LogMetadata;
+  logFilePath?: string;
 }
 
 interface StructuredLogRecord {
@@ -103,6 +105,7 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
   const minLevel = options.level ?? normalizeLevel(process.env.LOG_LEVEL);
   const environment = options.environment ?? (process.env.NODE_ENV === "production" ? "production" : "development");
   const bindings = { ...(options.bindings || {}) };
+  const logFilePath = options.logFilePath;
 
   const shouldLog = (level: LogLevel): boolean => LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[minLevel];
 
@@ -111,6 +114,14 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
     // MCP uses stdout for its protocol.
     // We must redirect ALL logs to stderr.
     process.stderr.write(text + "\n");
+
+    if (logFilePath) {
+      try {
+        fs.appendFileSync(logFilePath, text + "\n");
+      } catch {
+        // Silently ignore log file write errors to avoid crashing
+      }
+    }
   };
 
   const log = (level: LogLevel, message: string, metadata?: LogMetadata): void => {
@@ -156,6 +167,7 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
       createLogger({
         level: minLevel,
         environment,
+        logFilePath,
         bindings: {
           ...bindings,
           ...childBindings,

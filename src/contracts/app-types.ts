@@ -188,6 +188,7 @@ export interface McpToolToggle {
 
 export interface DashboardSettings {
   dashboardPort: number;
+  enableDebugLogFile: boolean;
   automationLevel: AutomationLevel;
   automationInterventions: AutomationInterventionsSettings;
   aiProvider: AiProviderSettings;

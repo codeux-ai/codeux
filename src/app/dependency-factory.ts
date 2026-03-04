@@ -86,11 +86,19 @@ export function createRuntimeDependencies(
   options: { projectRoot: string; appConfig: AppConfig },
   context: ServerContext
 ): RuntimeDependencies {
-  const logger = createLogger({ bindings: { service: "jules-subagents" } });
   const externalSettingsHints = loadExternalSettingsHints(options.projectRoot);
   const settingsRepository = new SettingsRepository(undefined, externalSettingsHints);
   const dashboardSettings = settingsRepository.getSettings();
   context.setDashboardSettings(dashboardSettings);
+
+  const logFilePath = dashboardSettings.enableDebugLogFile
+    ? path.join(options.projectRoot, ".jules-subagents", "debug.log")
+    : undefined;
+
+  const logger = createLogger({
+    bindings: { service: "jules-subagents" },
+    logFilePath,
+  });
 
   const server = new Server(
     {

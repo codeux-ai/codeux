@@ -76,6 +76,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
 
 export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   dashboardPort: 4444,
+  enableDebugLogFile: false,
   automationLevel: "SEMI_AUTO",
   automationInterventions: {
     autoApprovePlan: true,
