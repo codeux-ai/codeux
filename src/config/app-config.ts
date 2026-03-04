@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import os from "os";
 import { buildCandidatePaths } from "../shared/config/search-paths.js";
+import { readPort } from "../shared/config/value-readers.js";
 
 export interface AppConfig {
   apiKey: string | null;
@@ -46,14 +47,6 @@ const loadApiKeyFromSettings = (projectRoot: string): string | null => {
   return null;
 };
 
-const readPortValue = (value: unknown): number | null => {
-  const parsed = typeof value === "string" ? Number.parseInt(value, 10) : value;
-  if (typeof parsed !== "number" || !Number.isFinite(parsed)) return null;
-  const rounded = Math.round(parsed);
-  if (rounded < 1 || rounded > 65535) return null;
-  return rounded;
-};
-
 const loadDashboardPortFromConfigJson = (projectRoot: string): number | null => {
   const homedir = os.homedir();
   const searchPaths = buildCandidatePaths("config.json", projectRoot).filter(
@@ -72,8 +65,8 @@ const loadDashboardPortFromConfigJson = (projectRoot: string): number | null => 
         (parsed.dashboard as Record<string, unknown> | undefined)?.dashboardPort,
       ];
       for (const candidate of candidates) {
-        const port = readPortValue(candidate);
-        if (port !== null) return port;
+        const port = readPort(candidate, -1);
+        if (port !== -1) return port;
       }
     } catch {
       // Ignore invalid config file while loading startup config.
@@ -87,12 +80,13 @@ export const loadAppConfig = (argv: string[], projectRoot: string): AppConfig =>
   const apiKeyArg = parseApiKeyArg(argv);
   const apiKey = apiKeyArg || process.env.JULES_API_KEY || process.env.JULES_KEY || loadApiKeyFromSettings(projectRoot);
   const baseUrl = process.env.JULES_API_BASE_URL || "https://jules.googleapis.com/v1alpha";
-  const dashboardPort = readPortValue(process.env.DASHBOARD_PORT) || loadDashboardPortFromConfigJson(projectRoot) || 4444;
+  const dashboardPort = readPort(process.env.DASHBOARD_PORT, -1);
+  const finalDashboardPort = dashboardPort !== -1 ? dashboardPort : (loadDashboardPortFromConfigJson(projectRoot) || 4444);
 
   return {
     apiKey,
     baseUrl,
-    dashboardPort,
+    dashboardPort: finalDashboardPort,
     apiKeyArg,
   };
 };
