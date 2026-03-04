@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import * as fs from "fs/promises";
 import { FeaturePrGateService, CiGateContext } from "../../../../../src/domain/sprint/ci/feature-pr-gate.js";
 import type { Subtask, GitTrackingStatus } from "../../../../../src/contracts/app-types.js";
-
-vi.mock("fs/promises");
+import type { SubtaskFileRepository } from "../../../../../src/infrastructure/repositories/subtask-file-repository.js";
 
 describe("FeaturePrGateService", () => {
   let service: FeaturePrGateService;
@@ -70,19 +68,21 @@ describe("FeaturePrGateService", () => {
       isJulesApiConfigured: vi.fn().mockReturnValue(true),
       sendSessionMessage: vi.fn().mockResolvedValue(undefined),
       autoMergeFeaturePr: vi.fn().mockResolvedValue({ ok: true }),
+      subtaskFileRepository: {
+        setMerged: vi.fn().mockResolvedValue(undefined),
+      } as unknown as SubtaskFileRepository,
     };
   });
 
   it("updates task to MERGED when green and auto-merge is ON", async () => {
     context.ciIntelligence.featurePrAutoMergeMode = "WHEN_GREEN";
-    vi.mocked(fs.readFile).mockResolvedValue("merged: false\nprompt: test");
 
     const result = await service.evaluateCiGate(subtasks, context);
 
     expect(result.subtasks[0].is_merged).toBe(true);
     expect(result.subtasks[0].merge_indicator).toBe("AUTOMERGE");
     expect(context.autoMergeFeaturePr).toHaveBeenCalledWith({ repoPath: "/repo", prNumber: 101 });
-    expect(fs.writeFile).toHaveBeenCalled();
+    expect(context.subtaskFileRepository.setMerged).toHaveBeenCalledWith("/repo/subtasks", "T1", true);
   });
 
   it("keeps task in RUNNING with CI indicator if checks are pending", async () => {
