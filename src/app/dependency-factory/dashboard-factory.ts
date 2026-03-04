@@ -21,7 +21,7 @@ export function createDashboardDependencies(
   const activityCacheService = new ActivityCacheService(
     {
       getSubtasks: () => {
-        const lastStatus = context.getLastStatus();
+        const lastStatus = context.runtimeContext.lastStatus;
         return Array.isArray(lastStatus?.subtasks) ? lastStatus.subtasks : [];
       },
       resolveSessionNameFromTask: (task) => context.resolveSessionNameFromTask(task),
@@ -36,9 +36,9 @@ export function createDashboardDependencies(
   );
 
   const taskRerunService = new TaskRerunService({
-    getStatus: () => context.getLastStatus() || {},
+    getStatus: () => context.runtimeContext.lastStatus || {},
     updateStatus: (status) => {
-      context.updateLastStatus(status);
+      context.runtimeContext.lastStatus = status;
       activityCacheService.invalidateLiveActivitiesCache();
     },
     startTask: ({ task, sourceId, featureBranch, repoPath, sprintNumber }) =>

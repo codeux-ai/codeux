@@ -15,30 +15,25 @@ import { createCoreDependencies, type CoreDependencies } from "./dependency-fact
 import { createSprintDependencies, type SprintDependencies } from "./dependency-factory/sprint-factory.js";
 import { createMcpDependencies, type McpDependencies } from "./dependency-factory/mcp-factory.js";
 import { createDashboardDependencies, type DashboardDependencies } from "./dependency-factory/dashboard-factory.js";
+import type { RuntimeContext } from "./runtime-context.js";
 
 export interface RuntimeDependencies extends CoreDependencies, SprintDependencies, McpDependencies, DashboardDependencies {}
 
 export interface ServerContext {
+  runtimeContext: RuntimeContext;
   getProjectRoot: () => string;
   getAppConfig: () => AppConfig;
-  getSettings: () => Settings;
-  getDashboardSettings: () => DashboardSettings;
-  setDashboardSettings: (settings: DashboardSettings) => void;
   getEffectiveJulesApiKey: () => string | undefined;
   getEffectiveGithubToken: () => string | undefined;
   getDashboardPort: () => number;
   isJulesApiConfigured: () => boolean;
   getMissingJulesApiKeyInstruction: () => string;
   getGuideContentIfEnabled: (guideName: string, repoPath?: string) => Promise<string>;
-  getConsecutiveFailures: () => number;
-  setConsecutiveFailures: (value: number) => void;
   isActionRequiredState: (state?: string) => boolean;
   resolveSessionName: (session: Partial<JulesSession>) => string | undefined;
   extractSessionId: (session: Partial<JulesSession>) => string | undefined;
   fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
   listSessionsForSync: () => Promise<{ sessions?: JulesSession[] }>;
-  updateLastStatus: (status: Partial<DashboardStatus> | null) => void;
-  getLastStatus: () => Partial<DashboardStatus> | null;
   getCiStatusForScope: (args: GetCiStatusForScopeArgs) => Promise<GitTrackingStatus | null>;
   autoMergeFeaturePr: (args: AutoMergeFeaturePrArgs) => Promise<{ ok: boolean; message?: string }>;
   resolveSessionNameFromTask: (task: Subtask) => string | undefined;

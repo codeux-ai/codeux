@@ -36,7 +36,7 @@ export function createCoreDependencies(
   const externalSettingsHints = loadExternalSettingsHints(options.projectRoot);
   const settingsRepository = new SettingsRepository(undefined, externalSettingsHints);
   const dashboardSettings = settingsRepository.getSettings();
-  context.setDashboardSettings(dashboardSettings);
+  context.runtimeContext.dashboardSettings = dashboardSettings;
 
   const logFilePath = dashboardSettings.enableDebugLogFile
     ? path.join(options.projectRoot, ".jules-subagents", "debug.log")

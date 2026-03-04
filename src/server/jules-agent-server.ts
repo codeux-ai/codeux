@@ -43,6 +43,7 @@ import { createRuntimeDependencies, ServerContext } from "../app/dependency-fact
 import { generateCorrelationId, runWithCorrelationId } from "../shared/logging/correlation-id.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../repositories/settings-defaults.js";
+import { DefaultRuntimeContext, RuntimeContext } from "../app/runtime-context.js";
 
 export interface JulesAgentServerOptions {
   projectRoot: string;
@@ -59,17 +60,14 @@ export class JulesAgentServer {
   private logger: Logger;
   private julesApi: JulesApiClient;
   private completedSprints: Set<number> = new Set();
-  private lastStatus: Partial<DashboardStatus> | null = { subtasks: [], timestamp: null };
+  private runtimeContext: RuntimeContext = new DefaultRuntimeContext();
   private app = express();
-  private settings: Settings = { maxFailures: 5 };
-  private consecutiveFailures: number = 0;
   private guideRepository: GuideRepository;
   private subtaskRepository: SubtaskFileRepository;
   private taskService: TaskService;
   private julesSourceResolver: JulesSourceResolver;
   private sprintOrchestrator: SprintOrchestrator;
   private settingsRepository: SettingsRepository;
-  private dashboardSettings: DashboardSettings;
   private externalSettingsHints: ExternalSettingsHints;
   private instructionService: InstructionService;
   private sessionTracking: SessionTrackingRepository;
@@ -78,7 +76,6 @@ export class JulesAgentServer {
   private agentToolHandler: AgentToolHandler;
   private activityCacheService: ActivityCacheService;
   private taskRerunService: TaskRerunService;
-  private dashboardRuntimePort: number | null = null;
 
   constructor(options: JulesAgentServerOptions) {
     this.projectRoot = options.projectRoot;
@@ -95,7 +92,6 @@ export class JulesAgentServer {
     this.julesSourceResolver = deps.julesSourceResolver;
     this.sprintOrchestrator = deps.sprintOrchestrator;
     this.settingsRepository = deps.settingsRepository;
-    this.dashboardSettings = deps.dashboardSettings;
     this.externalSettingsHints = deps.externalSettingsHints;
     this.instructionService = deps.instructionService;
     this.sessionTracking = deps.sessionTracking;
@@ -109,7 +105,7 @@ export class JulesAgentServer {
       server: this.server,
       coreToolHandler: this.coreToolHandler,
       agentToolHandler: this.agentToolHandler,
-      getDashboardSettings: () => this.dashboardSettings,
+      getDashboardSettings: () => this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
       formatError: (error: unknown) => this.formatError(error),
       logger: this.logger.child({ component: "mcp-request-router" }),
       withCorrelationContext: (request, operation) => this.runWithMcpCorrelationContext(request, operation),
@@ -127,26 +123,20 @@ export class JulesAgentServer {
 
   private createContext(): ServerContext {
     return {
+      runtimeContext: this.runtimeContext,
       getProjectRoot: () => this.projectRoot,
       getAppConfig: () => this.appConfig,
-      getSettings: () => this.settings,
-      getDashboardSettings: () => this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
-      setDashboardSettings: (settings) => { this.dashboardSettings = settings; },
       getEffectiveJulesApiKey: () => this.getEffectiveJulesApiKey(),
       getEffectiveGithubToken: () => this.getEffectiveGithubToken(),
       getDashboardPort: () => this.getDashboardPort(),
       isJulesApiConfigured: () => this.isJulesApiConfigured(),
       getMissingJulesApiKeyInstruction: () => this.getMissingJulesApiKeyInstruction(),
       getGuideContentIfEnabled: (guideName, repoPath) => this.getGuideContentIfEnabled(guideName, repoPath),
-      getConsecutiveFailures: () => this.consecutiveFailures,
-      setConsecutiveFailures: (value) => { this.consecutiveFailures = value; },
       isActionRequiredState: (state) => this.isActionRequiredState(state),
       resolveSessionName: (session) => this.resolveSessionName(session),
       extractSessionId: (session) => this.extractSessionId(session),
       fetchRecentActivities: (sessionName, pageSize) => this.fetchRecentActivities(sessionName, pageSize),
       listSessionsForSync: () => this.listSessionsForSync(),
-      updateLastStatus: (status) => { this.lastStatus = status; },
-      getLastStatus: () => this.lastStatus,
       getCiStatusForScope: (args) => this.getCiStatusForScope(args),
       autoMergeFeaturePr: (args) => this.autoMergeFeaturePr(args),
       resolveSessionNameFromTask: (task) => this.resolveSessionNameFromTask(task),
@@ -201,7 +191,7 @@ export class JulesAgentServer {
   private async loadSettings() {
     // 1. Lowest priority: Environment variable
     if (process.env.JULES_API_MAX_FAILS) {
-      this.settings.maxFailures = parseInt(process.env.JULES_API_MAX_FAILS);
+      this.runtimeContext.settings.maxFailures = parseInt(process.env.JULES_API_MAX_FAILS);
     }
 
     // 2. Higher priorities: settings.json files (Reverse order for correct override: HOME -> PROJECT -> CWD)
@@ -218,7 +208,7 @@ export class JulesAgentServer {
           loadedSettings.maxFailures = parseInt(loadedSettings.JULES_API_MAX_FAILS as string);
         }
 
-        Object.assign(this.settings, loadedSettings);
+        Object.assign(this.runtimeContext.settings, loadedSettings);
         this.logger.info("Loaded settings", { settingsPath });
       } catch (error) {
         // Skip if not found or invalid
@@ -236,13 +226,13 @@ export class JulesAgentServer {
   }
 
   private syncGitSettingsFromDashboard(): void {
-    const git = (this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS).git;
-    this.settings.defaultBranch = git.defaultBranch;
-    this.settings.githubMode = git.githubMode;
+    const git = (this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS).git;
+    this.runtimeContext.settings.defaultBranch = git.defaultBranch;
+    this.runtimeContext.settings.githubMode = git.githubMode;
   }
 
   private getEffectiveJulesApiKey(): string | undefined {
-    const settings = this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
+    const settings = this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
     const uiProviderKey = settings.aiProvider?.providers?.jules?.apiKey?.trim();
     if (uiProviderKey && uiProviderKey.length > 0) {
       return uiProviderKey;
@@ -272,9 +262,9 @@ export class JulesAgentServer {
   }
 
   private getDashboardPort(): number {
-    if (this.dashboardRuntimePort !== null) return this.dashboardRuntimePort;
-    const settings = this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
-    return settings.dashboardPort || (this.settings.dashboardPort as number) || this.appConfig.dashboardPort;
+    if (this.runtimeContext.dashboardRuntimePort !== null) return this.runtimeContext.dashboardRuntimePort;
+    const settings = this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
+    return settings.dashboardPort || (this.runtimeContext.settings.dashboardPort as number) || this.appConfig.dashboardPort;
   }
 
   private getMissingJulesApiKeyInstruction(): string {
@@ -282,7 +272,7 @@ export class JulesAgentServer {
   }
 
   private getEffectiveGithubToken(): string | undefined {
-    const settings = this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
+    const settings = this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
     const uiToken = settings.git?.githubToken?.trim();
     if (uiToken && uiToken.length > 0) {
       return uiToken;
@@ -296,11 +286,11 @@ export class JulesAgentServer {
   }
 
   private resolveGitTrackingRequest(): GitTrackingRequest {
-    const settings = this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
+    const settings = this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
     const ci = settings.ciIntelligence;
-    const subtasks: Subtask[] = Array.isArray(this.lastStatus?.subtasks) ? this.lastStatus.subtasks : [];
-    const featureBranch = typeof this.lastStatus?.feature_branch === "string" && this.lastStatus.feature_branch.trim().length > 0
-      ? this.lastStatus.feature_branch.trim()
+    const subtasks: Subtask[] = Array.isArray(this.runtimeContext.lastStatus?.subtasks) ? this.runtimeContext.lastStatus.subtasks : [];
+    const featureBranch = typeof this.runtimeContext.lastStatus?.feature_branch === "string" && this.runtimeContext.lastStatus.feature_branch.trim().length > 0
+      ? this.runtimeContext.lastStatus.feature_branch.trim()
       : null;
     const defaultBranch = settings.git.defaultBranch?.trim() || "main";
     const featureBranchPrefix = settings.git.featureBranchPrefix?.trim() || "feature/";
@@ -324,12 +314,12 @@ export class JulesAgentServer {
   }
 
   private resolveGitStatusRepoPath(): string {
-    const statusRepoPath = typeof this.lastStatus?.repo_path === "string" ? this.lastStatus.repo_path.trim() : "";
+    const statusRepoPath = typeof this.runtimeContext.lastStatus?.repo_path === "string" ? this.runtimeContext.lastStatus.repo_path.trim() : "";
     return statusRepoPath.length > 0 ? statusRepoPath : this.projectRoot;
   }
 
   private isReady(): boolean {
-    return !!this.lastStatus?.timestamp;
+    return !!this.runtimeContext.lastStatus?.timestamp;
   }
 
   private async setupDashboard() {
@@ -341,18 +331,18 @@ export class JulesAgentServer {
       dashboardDir,
       port,
       liveActivityCacheMs: JulesAgentServer.LIVE_ACTIVITY_CACHE_MS,
-      getStatus: () => this.lastStatus,
+      getStatus: () => this.runtimeContext.lastStatus,
       getLiveActivities: () => this.getLiveActivitiesForActiveTasks(),
       getGitStatus: () => this.getGitStatus(),
       getExternalSettingsHints: () => this.externalSettingsHints,
-      getSettings: () => this.dashboardSettings,
+      getSettings: () => this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
       saveSettings: (settings: DashboardSettings) => {
-        this.dashboardSettings = this.settingsRepository.saveSettings(settings);
+        this.runtimeContext.dashboardSettings = this.settingsRepository.saveSettings(settings);
         this.syncGitSettingsFromDashboard();
         this.refreshJulesApiKey();
         this.reinitializeLogger();
         this.activityCacheService.invalidateGitStatusCache();
-        return this.dashboardSettings;
+        return this.runtimeContext.dashboardSettings;
       },
       rerunTask: async (taskId: string) => {
         const task = await this.taskRerunService.rerunTask(taskId);
@@ -362,11 +352,11 @@ export class JulesAgentServer {
       logger: this.logger.child({ component: "dashboard-server" }),
       isReady: () => this.isReady(),
     });
-    this.dashboardRuntimePort = handle.port;
+    this.runtimeContext.dashboardRuntimePort = handle.port;
   }
 
   private reinitializeLogger(): void {
-    const logFilePath = this.dashboardSettings?.enableDebugLogFile
+    const logFilePath = this.runtimeContext.dashboardSettings?.enableDebugLogFile
       ? path.join(this.projectRoot, ".jules-subagents", "debug.log")
       : undefined;
 
@@ -425,7 +415,7 @@ export class JulesAgentServer {
   }
 
   private isSkillEnabled(skillName: string): boolean {
-    const settings = this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
+    const settings = this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
     const skill = settings.skills.find((entry) => entry.name === skillName);
     return skill ? skill.enabled : true;
   }
@@ -482,7 +472,7 @@ export class JulesAgentServer {
 
   private async fetchGitStatusForRepo(repoPath: string): Promise<GitTrackingStatus> {
     const gitStatusService = new GitStatusService(repoPath);
-    const settings = this.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
+    const settings = this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
     return await gitStatusService.getStatus(
       settings.git.githubMode,
       this.getEffectiveGithubToken(),
