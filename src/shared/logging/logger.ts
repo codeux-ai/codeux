@@ -107,19 +107,10 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
   const shouldLog = (level: LogLevel): boolean => LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[minLevel];
 
   const write = (level: LogLevel, text: string): void => {
-    if (level === "error") {
-      console.error(text);
-      return;
-    }
-    if (level === "warn") {
-      console.warn(text);
-      return;
-    }
-    if (level === "debug") {
-      console.debug(text);
-      return;
-    }
-    console.info(text);
+    // In Node.js, console.info/log goes to stdout.
+    // MCP uses stdout for its protocol.
+    // We must redirect ALL logs to stderr.
+    process.stderr.write(text + "\n");
   };
 
   const log = (level: LogLevel, message: string, metadata?: LogMetadata): void => {
