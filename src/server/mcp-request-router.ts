@@ -4,6 +4,7 @@ import type { McpToolArgsByName, McpToolResponse } from "../api/mcp/tool-registr
 import { ToolRegistry } from "../api/mcp/tool-registry.js";
 import type { DashboardSettings } from "../contracts/app-types.js";
 import type { AgentToolHandler } from "../mcp/agent-tool-handler.js";
+import { validateToolArguments } from "../api/mcp/validators/tool-validators.js";
 import type { CoreToolHandler } from "../mcp/core-tool-handler.js";
 import { getEnabledToolDefinitions, isToolEnabled } from "../mcp/mcp-tool-availability.js";
 import type { SprintAgentArgs } from "../sprint/sprint-orchestrator.js";
@@ -63,6 +64,8 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
       }
 
       try {
+        validateToolArguments(name, toolArgs);
+
         const response = await toolRegistry.dispatch(name, toolArgs);
         logger?.info("MCP tool request succeeded", { toolName: name });
         return response;
