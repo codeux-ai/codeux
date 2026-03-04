@@ -37,6 +37,7 @@
     "@tailwindcss/vite": "^4.2.1",
     "@types/express": "^5.0.6",
     "@types/node": "^25.3.2",
+    "@vitest/coverage-v8": "^4.0.18",
     "tailwindcss": "^4.2.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",

@@ -72,10 +72,10 @@ This map explains where major responsibilities live.
   - Main sprint orchestration coordinator.
 - `sprint/sprint-types.ts`
   - Shared sprint orchestration argument/result contracts.
-- `sprint/action-required-automation.ts`
-  - Action-required session automation policy and intervention handlers.
-- `sprint/ci-status-utils.ts`
-  - Shared CI status/failure summarization helpers used by sprint logic.
+- `domain/sprint/orchestrator/`
+  - Action runners, loop runners, and state machines.
+- `domain/sprint/ci/`
+  - CI merge gates, automerge policy, and failure summarization.
 - `sprint/steps/`
   - Atomic step modules used by orchestrator.
 - `instructions/`
