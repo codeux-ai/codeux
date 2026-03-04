@@ -24,6 +24,14 @@ export const BasicSettingsSection: FunctionComponent<SettingsSectionProps> = ({ 
       />
       <p className="text-[11px] text-slate-500">Default `4444`. If the port is occupied, server startup automatically tries the next port.</p>
     </label>
+    <div className="space-y-1">
+      <ToggleRow
+        label="Enable Internal Debug Log File"
+        checked={settings.enableDebugLogFile}
+        onToggle={(checked) => onChange({ ...settings, enableDebugLogFile: checked })}
+      />
+      <p className="text-[11px] text-slate-500 px-1">When enabled, internal server errors are logged to `.jules-subagents/debug.log` without polluting MCP stdout.</p>
+    </div>
     <label className="block space-y-2">
       <FieldLabel>Automation Level</FieldLabel>
       <select
