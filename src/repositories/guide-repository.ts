@@ -1,23 +1,18 @@
-import * as fs from "fs/promises";
 import * as path from "path";
-import { buildCandidatePaths } from "../shared/config/search-paths.js";
+import { FileTemplateRepository } from "../infrastructure/repositories/file-template-repository.js";
 
 export class GuideRepository {
-  constructor(private readonly projectRoot: string) {}
+  private readonly repository: FileTemplateRepository;
+
+  constructor(projectRoot: string) {
+    this.repository = new FileTemplateRepository(projectRoot, [path.join(".jules-subagents", "agents")]);
+  }
 
   async getGuideContent(guideName: string, repoPath?: string): Promise<string> {
-    const relativePath = path.join(".jules-subagents", "agents", guideName);
-    const searchPaths = buildCandidatePaths(relativePath, this.projectRoot, repoPath);
-
-    for (const searchPath of searchPaths) {
-      try {
-        await fs.access(searchPath);
-        return await fs.readFile(searchPath, "utf-8");
-      } catch {
-        continue;
-      }
+    try {
+      return await this.repository.loadFile(guideName, repoPath);
+    } catch {
+      throw new Error(`Guide not found: ${guideName}`);
     }
-
-    throw new Error(`Guide not found: ${guideName}`);
   }
 }

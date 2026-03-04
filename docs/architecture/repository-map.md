@@ -45,6 +45,9 @@ This map explains where major responsibilities live.
   - `guide-repository.ts`
   - `subtask-repository.ts`
   - `session-tracking-repository.ts`
+- `infrastructure/repositories/`
+  - `file-template-repository.ts`
+  - Shared file lookup implementation used by guide and instruction template repositories.
 - `mcp/`
   - `core-tool-handler.ts`
   - `agent-tool-handler.ts`
