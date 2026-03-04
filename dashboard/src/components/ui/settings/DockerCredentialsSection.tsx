@@ -1,171 +1,155 @@
 import type { FunctionComponent } from "preact";
 import type { DashboardSettings } from "../../../types.js";
-import { FieldLabel, ToggleRow } from "../../settings/primitives.js";
+import type { FieldDescriptor } from "../../settings/field-descriptors.js";
+import { SettingsFieldRenderer } from "../../settings/SettingsFieldRenderer.js";
 
 interface DockerCredentialsSectionProps {
   workflow: DashboardSettings["cliWorkflow"];
   onChange: (next: Partial<DashboardSettings["cliWorkflow"]>) => void;
 }
 
+const topDescriptors: FieldDescriptor<DashboardSettings["cliWorkflow"]>[] = [
+  {
+    id: "containerImage",
+    type: "input",
+    label: "Container Image",
+    placeholder: "node:24-bookworm",
+    getValue: (workflow) => workflow.containerImage,
+    onInput: (workflow, value) => ({ ...workflow, containerImage: value }),
+  },
+  {
+    id: "containerSetupScriptPath",
+    type: "input",
+    label: "Setup Script Path (optional)",
+    placeholder: ".jules-subagents/container/setup.sh",
+    description: "If empty, runtime checks repo/home defaults under `.jules-subagents/container/setup.sh`.",
+    getValue: (workflow) => workflow.containerSetupScriptPath,
+    onInput: (workflow, value) => ({ ...workflow, containerSetupScriptPath: value }),
+  },
+];
+
+const toggleDescriptors: FieldDescriptor<DashboardSettings["cliWorkflow"]>[] = [
+  {
+    id: "containerMountCredentials",
+    type: "toggle",
+    label: "Mount user credentials into container",
+    getValue: (workflow) => workflow.containerMountCredentials,
+    onToggle: (workflow, checked) => ({ ...workflow, containerMountCredentials: checked }),
+  },
+  {
+    id: "containerMountGitConfig",
+    type: "toggle",
+    label: "Mount ~/.gitconfig",
+    disabled: (workflow) => !workflow.containerMountCredentials,
+    getValue: (workflow) => workflow.containerMountGitConfig,
+    onToggle: (workflow, checked) => ({ ...workflow, containerMountGitConfig: checked }),
+  },
+  {
+    id: "containerMountGithubAuth",
+    type: "toggle",
+    label: "Mount GitHub CLI auth",
+    disabled: (workflow) => !workflow.containerMountCredentials,
+    getValue: (workflow) => workflow.containerMountGithubAuth,
+    onToggle: (workflow, checked) => ({ ...workflow, containerMountGithubAuth: checked }),
+  },
+  {
+    id: "containerMountGeminiAuth",
+    type: "toggle",
+    label: "Mount Gemini auth",
+    disabled: (workflow) => !workflow.containerMountCredentials,
+    getValue: (workflow) => workflow.containerMountGeminiAuth,
+    onToggle: (workflow, checked) => ({ ...workflow, containerMountGeminiAuth: checked }),
+  },
+  {
+    id: "containerMountCodexAuth",
+    type: "toggle",
+    label: "Mount Codex auth",
+    disabled: (workflow) => !workflow.containerMountCredentials,
+    getValue: (workflow) => workflow.containerMountCodexAuth,
+    onToggle: (workflow, checked) => ({ ...workflow, containerMountCodexAuth: checked }),
+  },
+  {
+    id: "containerMountClaudeCodeAuth",
+    type: "toggle",
+    label: "Mount Claude Code auth",
+    disabled: (workflow) => !workflow.containerMountCredentials,
+    getValue: (workflow) => workflow.containerMountClaudeCodeAuth,
+    onToggle: (workflow, checked) => ({ ...workflow, containerMountClaudeCodeAuth: checked }),
+  },
+];
+
+const pathInputDescriptors: FieldDescriptor<DashboardSettings["cliWorkflow"]>[] = [
+  {
+    id: "containerGithubAuthPath",
+    type: "input",
+    label: "GitHub auth path",
+    placeholder: "~/.config/gh",
+    disabled: (workflow) => !workflow.containerMountCredentials || !workflow.containerMountGithubAuth,
+    getValue: (workflow) => workflow.containerGithubAuthPath,
+    onInput: (workflow, value) => ({ ...workflow, containerGithubAuthPath: value }),
+  },
+  {
+    id: "containerGeminiAuthPath",
+    type: "input",
+    label: "Gemini auth path",
+    placeholder: "~/.gemini",
+    disabled: (workflow) => !workflow.containerMountCredentials || !workflow.containerMountGeminiAuth,
+    getValue: (workflow) => workflow.containerGeminiAuthPath,
+    onInput: (workflow, value) => ({ ...workflow, containerGeminiAuthPath: value }),
+  },
+  {
+    id: "containerCodexAuthPath",
+    type: "input",
+    label: "Codex auth path",
+    placeholder: "~/.codex",
+    disabled: (workflow) => !workflow.containerMountCredentials || !workflow.containerMountCodexAuth,
+    getValue: (workflow) => workflow.containerCodexAuthPath,
+    onInput: (workflow, value) => ({ ...workflow, containerCodexAuthPath: value }),
+  },
+  {
+    id: "containerClaudeCodeAuthPath",
+    type: "input",
+    label: "Claude Code auth path",
+    placeholder: "~/.claude",
+    disabled: (workflow) => !workflow.containerMountCredentials || !workflow.containerMountClaudeCodeAuth,
+    getValue: (workflow) => workflow.containerClaudeCodeAuthPath,
+    onInput: (workflow, value) => ({ ...workflow, containerClaudeCodeAuthPath: value }),
+  },
+];
+
 export const DockerCredentialsSection: FunctionComponent<DockerCredentialsSectionProps> = ({
   workflow,
   onChange,
 }) => (
   <div className="space-y-3 rounded-lg border border-slate-700/70 bg-slate-950/40 p-3">
-    <label className="block space-y-2">
-      <FieldLabel>Container Image</FieldLabel>
-      <input
-        type="text"
-        value={workflow.containerImage}
-        onInput={(event) =>
-          onChange({
-            containerImage: event.currentTarget.value,
-          })
-        }
-        placeholder="node:24-bookworm"
-        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+    {topDescriptors.map((descriptor) => (
+      <SettingsFieldRenderer
+        key={descriptor.id}
+        descriptor={descriptor}
+        context={workflow}
+        onChange={onChange}
       />
-    </label>
+    ))}
 
-    <label className="block space-y-2">
-      <FieldLabel>Setup Script Path (optional)</FieldLabel>
-      <input
-        type="text"
-        value={workflow.containerSetupScriptPath}
-        onInput={(event) =>
-          onChange({
-            containerSetupScriptPath: event.currentTarget.value,
-          })
-        }
-        placeholder=".jules-subagents/container/setup.sh"
-        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+    {toggleDescriptors.map((descriptor) => (
+      <SettingsFieldRenderer
+        key={descriptor.id}
+        descriptor={descriptor}
+        context={workflow}
+        onChange={onChange}
       />
-      <p className="text-[11px] text-slate-500">
-        If empty, runtime checks repo/home defaults under <code>.jules-subagents/container/setup.sh</code>.
-      </p>
-    </label>
-
-    <ToggleRow
-      label="Mount user credentials into container"
-      checked={workflow.containerMountCredentials}
-      onToggle={(checked) =>
-        onChange({
-          containerMountCredentials: checked,
-        })
-      }
-    />
-    <ToggleRow
-      label="Mount ~/.gitconfig"
-      checked={workflow.containerMountGitConfig}
-      disabled={!workflow.containerMountCredentials}
-      onToggle={(checked) =>
-        onChange({
-          containerMountGitConfig: checked,
-        })
-      }
-    />
-    <ToggleRow
-      label="Mount GitHub CLI auth"
-      checked={workflow.containerMountGithubAuth}
-      disabled={!workflow.containerMountCredentials}
-      onToggle={(checked) =>
-        onChange({
-          containerMountGithubAuth: checked,
-        })
-      }
-    />
-    <ToggleRow
-      label="Mount Gemini auth"
-      checked={workflow.containerMountGeminiAuth}
-      disabled={!workflow.containerMountCredentials}
-      onToggle={(checked) =>
-        onChange({
-          containerMountGeminiAuth: checked,
-        })
-      }
-    />
-    <ToggleRow
-      label="Mount Codex auth"
-      checked={workflow.containerMountCodexAuth}
-      disabled={!workflow.containerMountCredentials}
-      onToggle={(checked) =>
-        onChange({
-          containerMountCodexAuth: checked,
-        })
-      }
-    />
-    <ToggleRow
-      label="Mount Claude Code auth"
-      checked={workflow.containerMountClaudeCodeAuth}
-      disabled={!workflow.containerMountCredentials}
-      onToggle={(checked) =>
-        onChange({
-          containerMountClaudeCodeAuth: checked,
-        })
-      }
-    />
+    ))}
 
     <div className="grid grid-cols-1 gap-2">
-      <label className="block space-y-1">
-        <span className="text-[11px] text-slate-500">GitHub auth path</span>
-        <input
-          type="text"
-          value={workflow.containerGithubAuthPath}
-          disabled={!workflow.containerMountCredentials || !workflow.containerMountGithubAuth}
-          onInput={(event) =>
-            onChange({
-              containerGithubAuthPath: event.currentTarget.value,
-            })
-          }
-          placeholder="~/.config/gh"
-          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
+      {pathInputDescriptors.map((descriptor) => (
+        <SettingsFieldRenderer
+          key={descriptor.id}
+          descriptor={descriptor}
+          context={workflow}
+          onChange={onChange}
+          className="block space-y-1 [&_span]:text-[11px] [&_span]:text-slate-500 [&_input]:px-2 [&_input]:py-1.5 [&_input]:text-xs"
         />
-      </label>
-      <label className="block space-y-1">
-        <span className="text-[11px] text-slate-500">Gemini auth path</span>
-        <input
-          type="text"
-          value={workflow.containerGeminiAuthPath}
-          disabled={!workflow.containerMountCredentials || !workflow.containerMountGeminiAuth}
-          onInput={(event) =>
-            onChange({
-              containerGeminiAuthPath: event.currentTarget.value,
-            })
-          }
-          placeholder="~/.gemini"
-          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
-        />
-      </label>
-      <label className="block space-y-1">
-        <span className="text-[11px] text-slate-500">Codex auth path</span>
-        <input
-          type="text"
-          value={workflow.containerCodexAuthPath}
-          disabled={!workflow.containerMountCredentials || !workflow.containerMountCodexAuth}
-          onInput={(event) =>
-            onChange({
-              containerCodexAuthPath: event.currentTarget.value,
-            })
-          }
-          placeholder="~/.codex"
-          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
-        />
-      </label>
-      <label className="block space-y-1">
-        <span className="text-[11px] text-slate-500">Claude Code auth path</span>
-        <input
-          type="text"
-          value={workflow.containerClaudeCodeAuthPath}
-          disabled={!workflow.containerMountCredentials || !workflow.containerMountClaudeCodeAuth}
-          onInput={(event) =>
-            onChange({
-              containerClaudeCodeAuthPath: event.currentTarget.value,
-            })
-          }
-          placeholder="~/.claude"
-          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
-        />
-      </label>
+      ))}
     </div>
 
     <p className="text-[11px] text-slate-500">

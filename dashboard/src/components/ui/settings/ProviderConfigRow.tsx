@@ -6,6 +6,8 @@ import {
   geminiModelOptions,
   thinkingModeOptions,
 } from "../../settings/settings-options.js";
+import type { FieldDescriptor } from "../../settings/field-descriptors.js";
+import { SettingsFieldRenderer } from "../../settings/SettingsFieldRenderer.js";
 
 interface ProviderConfigRowProps {
   provider: { value: DashboardSettings["aiProvider"]["provider"]; label: string };
@@ -13,10 +15,78 @@ interface ProviderConfigRowProps {
   onChange: (next: DashboardSettings) => void;
 }
 
+const getModelDescriptor = (providerValue: DashboardSettings["aiProvider"]["provider"]): FieldDescriptor<DashboardSettings> => {
+  const isGemini = providerValue === "gemini";
+  const isClaudeCode = providerValue === "claude-code";
+
+  if (isGemini) {
+    return {
+      id: "model",
+      type: "select",
+      label: "Model",
+      options: geminiModelOptions.map(m => ({ value: m, label: m })),
+      getValue: (settings) => settings.aiProvider.providers[providerValue].model,
+      onChange: (settings, value) => updateProviderConfig(settings, providerValue, { model: value }),
+    };
+  }
+
+  if (isClaudeCode) {
+    return {
+      id: "model",
+      type: "select",
+      label: "Model",
+      options: claudeCodeModelOptions.map(m => ({ value: m, label: m })),
+      getValue: (settings) => settings.aiProvider.providers[providerValue].model,
+      onChange: (settings, value) => updateProviderConfig(settings, providerValue, { model: value }),
+    };
+  }
+
+  return {
+    id: "model",
+    type: "input",
+    label: "Model",
+    placeholder: providerValue === "codex" ? "gpt-5.3-codex" : "default",
+    getValue: (settings) => settings.aiProvider.providers[providerValue].model,
+    onInput: (settings, value) => updateProviderConfig(settings, providerValue, { model: value }),
+  };
+};
+
+const getProviderDescriptors = (providerValue: DashboardSettings["aiProvider"]["provider"]): FieldDescriptor<DashboardSettings>[] => [
+  getModelDescriptor(providerValue),
+  {
+    id: "thinkingMode",
+    type: "select",
+    label: "Thinking",
+    options: thinkingModeOptions,
+    getValue: (settings) => settings.aiProvider.providers[providerValue].thinkingMode,
+    onChange: (settings, value) => updateProviderConfig(settings, providerValue, { thinkingMode: value as any }),
+  },
+  {
+    id: "weight",
+    type: "range",
+    label: "Weight",
+    min: 0,
+    max: 100,
+    getLabelSuffix: (value) => `${value}%`,
+    getValue: (settings) => settings.aiProvider.providers[providerValue].weight,
+    onInput: (settings, value) => updateProviderConfig(settings, providerValue, { weight: value }),
+  },
+];
+
+const getApiKeyDescriptor = (providerValue: DashboardSettings["aiProvider"]["provider"]): FieldDescriptor<DashboardSettings> => ({
+  id: "apiKey",
+  type: "input",
+  inputType: "password",
+  label: "API Key (optional)",
+  placeholder: providerValue === "gemini" ? "GEMINI_API_KEY" : providerValue === "codex" ? "OPENAI_API_KEY" : providerValue === "claude-code" ? "ANTHROPIC_API_KEY" : "JULES_API_KEY",
+  getValue: (settings) => settings.aiProvider.providers[providerValue].apiKey,
+  onInput: (settings, value) => updateProviderConfig(settings, providerValue, { apiKey: value }),
+});
+
 export const ProviderConfigRow: FunctionComponent<ProviderConfigRowProps> = ({ provider, settings, onChange }) => {
   const providerConfig = settings.aiProvider.providers[provider.value];
-  const isGemini = provider.value === "gemini";
-  const isClaudeCode = provider.value === "claude-code";
+  const gridDescriptors = getProviderDescriptors(provider.value);
+  const apiKeyDescriptor = getApiKeyDescriptor(provider.value);
 
   return (
     <div className="rounded-lg border border-slate-700/70 bg-slate-950/50 p-3 space-y-2">
@@ -36,97 +106,25 @@ export const ProviderConfigRow: FunctionComponent<ProviderConfigRowProps> = ({ p
           Enabled
         </label>
       </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-        <label className="block space-y-1">
-          <span className="text-[11px] text-slate-500">Model</span>
-          {isGemini ? (
-            <select
-              value={providerConfig.model}
-              onChange={(event) =>
-                onChange(updateProviderConfig(settings, provider.value, {
-                  model: event.currentTarget.value,
-                }))
-              }
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
-            >
-              {geminiModelOptions.map((model) => (
-                <option key={model} value={model}>{model}</option>
-              ))}
-            </select>
-          ) : isClaudeCode ? (
-            <select
-              value={providerConfig.model}
-              onChange={(event) =>
-                onChange(updateProviderConfig(settings, provider.value, {
-                  model: event.currentTarget.value,
-                }))
-              }
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
-            >
-              {claudeCodeModelOptions.map((model) => (
-                <option key={model} value={model}>{model}</option>
-              ))}
-            </select>
-          ) : (
-            <input
-              type="text"
-              value={providerConfig.model}
-              onInput={(event) =>
-                onChange(updateProviderConfig(settings, provider.value, {
-                  model: event.currentTarget.value,
-                }))
-              }
-              placeholder={provider.value === "codex" ? "gpt-5.3-codex" : "default"}
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
-            />
-          )}
-        </label>
-        <label className="block space-y-1">
-          <span className="text-[11px] text-slate-500">Thinking</span>
-          <select
-            value={providerConfig.thinkingMode}
-            onChange={(event) =>
-              onChange(updateProviderConfig(settings, provider.value, {
-                thinkingMode: event.currentTarget.value as DashboardSettings["aiProvider"]["providers"]["jules"]["thinkingMode"],
-              }))
-            }
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
-          >
-            {thinkingModeOptions.map((mode) => (
-              <option key={mode.value} value={mode.value}>{mode.label}</option>
-            ))}
-          </select>
-        </label>
-        <label className="block space-y-1">
-          <span className="text-[11px] text-slate-500">Weight ({providerConfig.weight}%)</span>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={providerConfig.weight}
-            onInput={(event) =>
-              onChange(updateProviderConfig(settings, provider.value, {
-                weight: Number(event.currentTarget.value),
-              }))
-            }
-            className="w-full"
+        {gridDescriptors.map((descriptor) => (
+          <SettingsFieldRenderer
+            key={descriptor.id}
+            descriptor={descriptor}
+            context={settings}
+            onChange={onChange}
+            className="block space-y-1 [&_span]:text-[11px] [&_span]:text-slate-500 [&_input]:px-2 [&_input]:py-1.5 [&_input]:text-xs [&_select]:px-2 [&_select]:py-1.5 [&_select]:text-xs"
           />
-        </label>
+        ))}
       </div>
-      <label className="block space-y-1">
-        <span className="text-[11px] text-slate-500">API Key (optional)</span>
-        <input
-          type="password"
-          value={providerConfig.apiKey}
-          onInput={(event) =>
-            onChange(updateProviderConfig(settings, provider.value, {
-              apiKey: event.currentTarget.value,
-            }))
-          }
-          placeholder={provider.value === "gemini" ? "GEMINI_API_KEY" : provider.value === "codex" ? "OPENAI_API_KEY" : provider.value === "claude-code" ? "ANTHROPIC_API_KEY" : "JULES_API_KEY"}
-          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
-        />
-      </label>
+
+      <SettingsFieldRenderer
+        descriptor={apiKeyDescriptor}
+        context={settings}
+        onChange={onChange}
+        className="block space-y-1 [&_span]:text-[11px] [&_span]:text-slate-500 [&_input]:px-2 [&_input]:py-1.5 [&_input]:text-xs"
+      />
     </div>
   );
 };
