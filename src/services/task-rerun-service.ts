@@ -1,4 +1,4 @@
-import type { JulesSession, Subtask } from "../contracts/app-types.js";
+import { TaskStatus, type  JulesSession, Subtask } from "../contracts/app-types.js";
 import type { Logger } from "../shared/logging/logger.js";
 
 export interface TaskRerunContext {
@@ -32,7 +32,7 @@ export interface TaskRerunServiceDependencies {
 
 const resetTaskState = (task: Subtask): Subtask => ({
   ...task,
-  status: "PENDING",
+  status: TaskStatus.PENDING,
   session_id: undefined,
   session_name: undefined,
   session_state: undefined,
@@ -99,7 +99,7 @@ export class TaskRerunService {
       });
       const restartedTask: Subtask = {
         ...resetTask,
-        status: "RUNNING",
+        status: TaskStatus.RUNNING,
         session_name: this.deps.resolveSessionName(session),
         session_id: this.deps.extractSessionId(session),
         provider: session.provider,
@@ -114,7 +114,7 @@ export class TaskRerunService {
     } catch (error) {
       const failedTask: Subtask = {
         ...resetTask,
-        status: "FAILED",
+        status: TaskStatus.FAILED,
       };
       const failedSubtasks = resetSubtasks.map((task, index) => (index === taskIndex ? failedTask : task));
       this.deps.updateStatus({

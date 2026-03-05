@@ -91,7 +91,7 @@ describe("SprintOrchestrator CI logic", () => {
         {
           id: "abc123",
           name: "sessions/abc123",
-          title: `Sprint 1: ${buildTaskRunTag(tmpRoot, 1, "01-task")} [01-task] Test task`,
+          title: `Sprint 1: ${buildTaskRunTag(path.basename(path.resolve(tmpRoot)), "1", "01-task")} [01-task] Test task`,
           state: "COMPLETED",
           prompt: "x",
           outputs: [{ pullRequest: { url: "https://example.com/pr/10", workerBranch: "worker/task-01" } }],
@@ -182,7 +182,7 @@ describe("SprintOrchestrator CI logic", () => {
         {
           id: "abc123",
           name: "sessions/abc123",
-          title: `Sprint 1: ${buildTaskRunTag(tmpRoot, 1, "01-task")} [01-task] Test task`,
+          title: `Sprint 1: ${buildTaskRunTag(path.basename(path.resolve(tmpRoot)), "1", "01-task")} [01-task] Test task`,
           state: "COMPLETED",
           provider: "jules",
           prompt: "x",
@@ -270,7 +270,7 @@ describe("SprintOrchestrator CI logic", () => {
         {
           id: "abc123",
           name: "sessions/abc123",
-          title: `Sprint 1: ${buildTaskRunTag(tmpRoot, 1, "01-task")} [01-task] Test task`,
+          title: `Sprint 1: ${buildTaskRunTag(path.basename(path.resolve(tmpRoot)), "1", "01-task")} [01-task] Test task`,
           state: "COMPLETED",
           prompt: "x",
           outputs: [{ pullRequest: { url: "https://example.com/pr/12", workerBranch: "worker/task-01" } }],
@@ -356,7 +356,7 @@ describe("SprintOrchestrator CI logic", () => {
         {
           id: "abc123",
           name: "sessions/abc123",
-          title: `Sprint 1: ${buildTaskRunTag(tmpRoot, 1, "01-task")} [01-task] Test task`,
+          title: `Sprint 1: ${buildTaskRunTag(path.basename(path.resolve(tmpRoot)), "1", "01-task")} [01-task] Test task`,
           state: "COMPLETED",
           prompt: "x",
           outputs: [{ pullRequest: { url: "https://example.com/pr/22", workerBranch: "worker/task-22" } }],
@@ -443,7 +443,7 @@ describe("SprintOrchestrator CI logic", () => {
         {
           id: "abc123",
           name: "sessions/abc123",
-          title: `Sprint 1: ${buildTaskRunTag(tmpRoot, 1, "01-task")} [01-task] Test task`,
+          title: `Sprint 1: ${buildTaskRunTag(path.basename(path.resolve(tmpRoot)), "1", "01-task")} [01-task] Test task`,
           state: "COMPLETED",
           prompt: "x",
           outputs: [{ pullRequest: { url: "https://example.com/pr/24", workerBranch: "worker/task-24" } }],
@@ -525,7 +525,7 @@ describe("SprintOrchestrator CI logic", () => {
         {
           id: "abc123",
           name: "sessions/abc123",
-          title: `Sprint 1: ${buildTaskRunTag(tmpRoot, 1, "01-task")} [01-task] Test task`,
+          title: `Sprint 1: ${buildTaskRunTag(path.basename(path.resolve(tmpRoot)), "1", "01-task")} [01-task] Test task`,
           state: "COMPLETED",
           prompt: "x",
           outputs: [{ pullRequest: { url: "https://example.com/pr/20" } }],

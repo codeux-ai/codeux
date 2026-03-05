@@ -53,7 +53,7 @@ describe("runSessionSyncStep", () => {
       true,
       {
         repoPath: "/tmp/my-repo",
-        sprintNumber: 6,
+        projectId: "my-repo", sprintId: "6",
       }
     );
 
@@ -105,7 +105,7 @@ describe("runSessionSyncStep", () => {
       subtasks,
       deps as any,
       false,
-      { repoPath, sprintNumber }
+      { projectId: "my-repo", sprintId: String(sprintNumber) }
     );
 
     expect(result.subtasks[0].session_id).toBe("new-session");
@@ -142,7 +142,7 @@ describe("runSessionSyncStep", () => {
       logger: { warn: vi.fn() },
     };
 
-    const result = await runSessionSyncStep(subtasks, deps as any, false, { repoPath, sprintNumber });
+    const result = await runSessionSyncStep(subtasks, deps as any, false, { projectId: "my-repo", sprintId: String(sprintNumber) });
 
     expect(fetchRecentActivities).toHaveBeenCalledTimes(1);
     expect(fetchRecentActivities).toHaveBeenCalledWith("sessions/session-1", 5);
@@ -190,7 +190,7 @@ describe("runSessionSyncStep", () => {
       logger: { warn: vi.fn() },
     };
 
-    await runSessionSyncStep(subtasks, deps as any, false, { repoPath, sprintNumber });
+    await runSessionSyncStep(subtasks, deps as any, false, { projectId: "my-repo", sprintId: String(sprintNumber) });
 
     expect(fetchRecentActivities).toHaveBeenCalledTimes(6);
     expect(maxConcurrentFetches).toBeLessThanOrEqual(5);

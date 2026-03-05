@@ -1,4 +1,4 @@
-import type { Subtask } from "../../contracts/app-types.js";
+import { TaskStatus, type  Subtask } from "../../contracts/app-types.js";
 import type { Logger } from "../../shared/logging/logger.js";
 
 interface StartReadyTasksOptions {
@@ -32,7 +32,7 @@ export const runStartReadyTasksStep = async (
   for (const task of readyTasks) {
     try {
       const session = await options.startTask(task);
-      task.status = "RUNNING";
+      task.status = TaskStatus.RUNNING;
       task.session_name = options.resolveSessionName(session);
       task.session_id = options.extractSessionId(session);
       task.provider = session.provider as Subtask["provider"];

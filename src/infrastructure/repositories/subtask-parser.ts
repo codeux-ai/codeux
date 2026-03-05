@@ -1,4 +1,4 @@
-import type { Subtask } from "../../contracts/app-types.js";
+import { TaskStatus, type  Subtask } from "../../contracts/app-types.js";
 
 export class SubtaskParser {
   /**
@@ -53,7 +53,7 @@ export class SubtaskParser {
       depends_on: this.parseDependsOn(metadata["depends_on"] || ""),
       is_independent: metadata["is_independent"] !== "false", // Default to true
       is_merged: metadata["merged"] === "true",
-      status: "PENDING",
+      status: TaskStatus.PENDING,
     };
   }
 

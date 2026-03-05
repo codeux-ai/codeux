@@ -89,7 +89,7 @@ describe("SprintOrchestrator - Automerge Logic", () => {
       sessions: [
         buildMockSession({
           id: "abc123",
-          title: `Sprint 1: ${buildTaskRunTag(tmpRoot, 1, "01-task")} [01-task] Test task`,
+          title: `Sprint 1: ${buildTaskRunTag(path.basename(path.resolve(tmpRoot)), "1", "01-task")} [01-task] Test task`,
           state: "COMPLETED",
           outputs: [{ pullRequest: { url: "https://example.com/pr/12", workerBranch: "worker/task-01" } }],
         }),

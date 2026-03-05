@@ -56,7 +56,7 @@ describe("SprintOrchestrator - Action Required Protocol", () => {
       sessions: [
         buildMockSession({
           id: "abc123",
-          title: `Sprint 1: ${buildTaskRunTag(tmpRoot, 1, "01-task")} [01-task] Test task`,
+          title: `Sprint 1: ${buildTaskRunTag(path.basename(path.resolve(tmpRoot)), "1", "01-task")} [01-task] Test task`,
           state: "AWAITING_USER_FEEDBACK",
         }),
       ],
@@ -92,7 +92,7 @@ describe("SprintOrchestrator - Action Required Protocol", () => {
       sessions: [
         buildMockSession({
           id: "abc123",
-          title: `Sprint 1: ${buildTaskRunTag(tmpRoot, 1, "01-task")} [01-task] Test task`,
+          title: `Sprint 1: ${buildTaskRunTag(path.basename(path.resolve(tmpRoot)), "1", "01-task")} [01-task] Test task`,
           state: "AWAITING_USER_FEEDBACK",
         }),
       ],
@@ -131,7 +131,7 @@ describe("SprintOrchestrator - Action Required Protocol", () => {
       sessions: [
         buildMockSession({
           id: "abc123",
-          title: `Sprint 1: ${buildTaskRunTag(tmpRoot, 1, "01-task")} [01-task] Test task`,
+          title: `Sprint 1: ${buildTaskRunTag(path.basename(path.resolve(tmpRoot)), "1", "01-task")} [01-task] Test task`,
           state: "AWAITING_USER_FEEDBACK",
         }),
       ],

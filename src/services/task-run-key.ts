@@ -1,5 +1,3 @@
-import * as path from "path";
-
 const sanitizeSegment = (value: string): string =>
   value
     .trim()
@@ -8,15 +6,15 @@ const sanitizeSegment = (value: string): string =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 64);
 
-export const buildTaskRunKey = (repoPath: string, sprintNumber: number, taskName: string): string => {
-  const repoSegment = sanitizeSegment(path.basename(path.resolve(repoPath))) || "repo";
-  const sprintSegment = Number.isFinite(sprintNumber) ? String(sprintNumber) : "0";
-  const taskSegment = sanitizeSegment(taskName) || "task";
-  return `${repoSegment}/s${sprintSegment}/${taskSegment}`;
+export const buildTaskRunKey = (projectId: string, sprintId: string, taskId: string): string => {
+  const projectSegment = sanitizeSegment(projectId) || "project";
+  const sprintSegment = sanitizeSegment(sprintId) || "0";
+  const taskSegment = sanitizeSegment(taskId) || "task";
+  return `${projectSegment}/s${sprintSegment}/${taskSegment}`;
 };
 
-export const buildTaskRunTag = (repoPath: string, sprintNumber: number, taskName: string): string => {
-  return `[run:${buildTaskRunKey(repoPath, sprintNumber, taskName)}]`;
+export const buildTaskRunTag = (projectId: string, sprintId: string, taskId: string): string => {
+  return `[run:${buildTaskRunKey(projectId, sprintId, taskId)}]`;
 };
 
 export const extractTaskRunKeyFromTitle = (title: string | undefined): string | null => {

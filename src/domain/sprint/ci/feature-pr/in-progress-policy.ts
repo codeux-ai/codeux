@@ -1,4 +1,4 @@
-import type { GitTrackingStatus, Subtask, CiIntelligenceSettings, AutomationLevel } from "../../../../contracts/app-types.js";
+import { TaskStatus, type  GitTrackingStatus, Subtask, CiIntelligenceSettings, AutomationLevel } from "../../../../contracts/app-types.js";
 import { isCiFailure, selectFailedCiRuns, getFailedJobLabels } from "../../../../sprint/ci-status-utils.js";
 import { handleCiAutofixEscalation } from "./ci-autofix-policy.js";
 import { buildInProgressText, buildFailedChecksText, buildReviewBlockersText } from "./ci-notification-builder.js";
@@ -19,7 +19,7 @@ export async function evaluateInProgressState(args: {
   isJulesApiConfigured: () => boolean;
   sendSessionMessage: (sessionId: string, message: string) => Promise<void>;
 }): Promise<string> {
-  args.task.status = "RUNNING";
+  args.task.status = TaskStatus.RUNNING;
   args.task.merge_indicator = args.hasReviewBlockers && !args.hasFailedChecks && !args.hasPendingChecks ? "MERGE_BLOCKED" : "CI";
   const ciStateLabel = args.hasFailedChecks ? "failed" : args.hasPendingChecks ? "pending" : "green";
   const header = args.ciIntelligence.waitForJulesCiAutofix ? "CI/Review Autofix Wait" : "CI/Review Merge Gate";
