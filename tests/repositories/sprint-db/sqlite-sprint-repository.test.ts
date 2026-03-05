@@ -21,8 +21,8 @@ describe("SqliteSprintRepository", () => {
     db.exec(bootstrapDb);
 
     // Insert a dummy project to satisfy foreign key constraints
-    const stmt = db.prepare("INSERT INTO pm_projects (id, name, description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)");
-    stmt.run(projectId, "Test Project", "Desc", "ACTIVE", new Date().toISOString(), new Date().toISOString());
+    const stmt = db.prepare("INSERT INTO pm_projects (id, source_id, normalized_base_dir, name, description, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    stmt.run(projectId, "src-test", "/test", "Test Project", "Desc", "ACTIVE", new Date().toISOString(), new Date().toISOString());
 
     repo = new SqliteSprintRepository(db);
   });

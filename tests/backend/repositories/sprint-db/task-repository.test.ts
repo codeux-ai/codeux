@@ -20,11 +20,11 @@ describe("TaskRepository", () => {
 
     // Setup initial project and sprint needed for foreign key constraints
     db.db.exec(`
-      INSERT INTO pm_projects (id, name, status, created_at, updated_at)
-      VALUES ('proj-1', 'Test Project', 'ACTIVE', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+      INSERT INTO pm_projects (id, source_id, normalized_base_dir, name, status, created_at, updated_at)
+      VALUES ('proj-1', 'src-1', '/dir', 'Test Project', 'ACTIVE', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
 
-      INSERT INTO pm_sprints (id, project_id, name, status, created_at, updated_at)
-      VALUES ('sprint-1', 'proj-1', 'Sprint 1', 'ACTIVE', '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
+      INSERT INTO pm_sprints (id, project_id, name, status, order_index, created_at, updated_at)
+      VALUES ('sprint-1', 'proj-1', 'Sprint 1', 'ACTIVE', 0, '2025-01-01T00:00:00.000Z', '2025-01-01T00:00:00.000Z');
     `);
   });
 
@@ -117,5 +117,28 @@ describe("TaskRepository", () => {
     taskRepo.deleteTask("t1");
     task = taskRepo.getTask("t1");
     expect(task).toBeNull();
+  });
+
+  it("should detect invalid dependency graph on create", () => {
+    taskRepo.createTask({
+      id: "task-1", sprintId: "sprint-1", title: "Task 1", status: "PENDING", type: "FEATURE"
+    });
+
+    expect(() => {
+      taskRepo.createTask({
+        id: "task-2", sprintId: "sprint-1", title: "Task 2", status: "PENDING", type: "FEATURE",
+        dependencies: ["task-invalid"]
+      });
+    }).toThrow("Invalid dependency: Task 'task-invalid' does not exist in sprint 'sprint-1'.");
+  });
+
+  it("should detect dependency cycles on update", () => {
+    taskRepo.createTask({ id: "t1", sprintId: "sprint-1", title: "T1", status: "PENDING", type: "FEATURE" });
+    taskRepo.createTask({ id: "t2", sprintId: "sprint-1", title: "T2", status: "PENDING", type: "FEATURE", dependencies: ["t1"] });
+    taskRepo.createTask({ id: "t3", sprintId: "sprint-1", title: "T3", status: "PENDING", type: "FEATURE", dependencies: ["t2"] });
+
+    expect(() => {
+      taskRepo.updateTask("t1", { dependencies: ["t3"] });
+    }).toThrow("Dependency cycle detected involving tasks: t1 -> t3 -> t2 -> t1");
   });
 });
