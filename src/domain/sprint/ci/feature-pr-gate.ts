@@ -6,7 +6,7 @@ import { matchPrForTask } from "./feature-pr/pr-matcher.js";
 import { attemptAutoMerge } from "./feature-pr/automerge-policy.js";
 import { evaluateInProgressState } from "./feature-pr/in-progress-policy.js";
 import { buildNoPrFoundText, buildMergeReadyText } from "./feature-pr/ci-notification-builder.js";
-import type {
+import { TaskStatus, type
   AutomationLevel,
   CiIntelligenceSettings,
   GitCiRunStatus,
@@ -73,7 +73,7 @@ export class FeaturePrGateService {
       const pr = matchPrForTask(task, context.gitStatus);
 
       if (!pr) {
-        task.status = "RUNNING";
+        task.status = TaskStatus.RUNNING;
         task.merge_indicator = "CI";
         reportText += buildNoPrFoundText(task.id, context.featureBranch);
         continue;

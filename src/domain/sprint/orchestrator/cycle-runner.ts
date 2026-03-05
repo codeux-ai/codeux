@@ -1,3 +1,4 @@
+import * as path from "path";
 import type { InstructionTemplateId } from "../../../instructions/instruction-template-catalog.js";
 import { applyActionRequiredAutomation, isJulesManagedTask, resolveTaskSessionId } from "../../../sprint/action-required-automation.js";
 import { runLoadSubtasksStep } from "../../../sprint/steps/load-subtasks-step.js";
@@ -67,8 +68,8 @@ export class CycleRunner {
         },
         args.retryFailed,
         {
-          repoPath: args.repoPath,
-          sprintNumber: args.sprintNumber,
+          projectId: path.basename(path.resolve(args.repoPath)),
+          sprintId: String(args.sprintNumber),
         }
       );
       subtasks = syncResult.subtasks;

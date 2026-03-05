@@ -1,4 +1,4 @@
-import type { JulesSession, Subtask } from "../../contracts/app-types.js";
+import { TaskStatus, type  JulesSession, Subtask } from "../../contracts/app-types.js";
 import type { SessionSyncDependencies } from "../sprint-types.js";
 import { buildTaskRunKey, extractTaskRunKeyFromTitle } from "../../services/task-run-key.js";
 
@@ -6,7 +6,7 @@ export const runSessionSyncStep = async (
   subtasks: Subtask[],
   deps: SessionSyncDependencies,
   retryFailed: boolean,
-  context: { repoPath: string; sprintNumber: number }
+  context: { projectId: string; sprintId: string }
 ): Promise<{ subtasks: Subtask[]; sessions: JulesSession[] }> => {
   const sessionsResponse = await deps.listSessions();
   const sessions = sessionsResponse.sessions || [];
@@ -26,7 +26,7 @@ export const runSessionSyncStep = async (
 
   const uniqueSessionNames = new Set<string>();
   for (const task of subtasks) {
-    const expectedRunKey = buildTaskRunKey(context.repoPath, context.sprintNumber, task.id);
+    const expectedRunKey = buildTaskRunKey(context.projectId, context.sprintId, task.id);
     const match = sessionMap.get(expectedRunKey);
     if (match) {
       const sessionName = deps.resolveSessionName(match);
@@ -55,7 +55,7 @@ export const runSessionSyncStep = async (
   }
 
   for (const task of subtasks) {
-    const expectedRunKey = buildTaskRunKey(context.repoPath, context.sprintNumber, task.id);
+    const expectedRunKey = buildTaskRunKey(context.projectId, context.sprintId, task.id);
     const match = sessionMap.get(expectedRunKey);
     if (!match) {
       continue;
@@ -90,25 +90,25 @@ export const runSessionSyncStep = async (
     }
 
     if (match.state === "COMPLETED") {
-      task.status = "COMPLETED";
+      task.status = TaskStatus.COMPLETED;
       continue;
     }
 
     if (match.state === "FAILED") {
       if (retryFailed) {
-        task.status = "PENDING";
+        task.status = TaskStatus.PENDING;
       } else {
-        task.status = "FAILED";
+        task.status = TaskStatus.FAILED;
       }
       continue;
     }
 
     if (deps.isActionRequiredState(match.state)) {
-      task.status = "BLOCKED";
+      task.status = TaskStatus.BLOCKED;
       continue;
     }
 
-    task.status = "RUNNING";
+    task.status = TaskStatus.RUNNING;
   }
 
   return { subtasks, sessions };

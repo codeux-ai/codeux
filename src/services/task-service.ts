@@ -1,6 +1,7 @@
+import * as path from "path";
 import type { JulesApiClient, JulesCreateSessionRequest } from "../integrations/jules-api-client.js";
 import { chooseProviderForTask } from "./provider-routing.js";
-import type { DashboardSettings, JulesSession, ProviderId, Subtask } from "../contracts/app-types.js";
+import { TaskStatus, type  DashboardSettings, JulesSession, ProviderId, Subtask } from "../contracts/app-types.js";
 import type { CliWorkflowService } from "./cli-workflow-service.js";
 import { buildTaskRunTag } from "./task-run-key.js";
 import type { Logger } from "../shared/logging/logger.js";
@@ -60,7 +61,7 @@ export class TaskService {
       prompt: args.prompt,
       depends_on: [],
       is_independent: true,
-      status: "PENDING",
+      status: TaskStatus.PENDING,
     };
     const provider = this.resolveProvider(pseudoTask);
 
@@ -73,7 +74,7 @@ export class TaskService {
         },
         repoPath: args.repo_path,
         featureBranch: args.branch || this.deps.getDashboardSettings().git.defaultBranch,
-        sprintNumber: 0,
+        projectId: path.basename(path.resolve(args.repo_path)), sprintId: "0",
       });
     }
     const sourceId = await this.deps.resolveJulesSourceId({
@@ -111,7 +112,7 @@ export class TaskService {
         task,
         repoPath,
         featureBranch: baseBranch,
-        sprintNumber,
+        projectId: path.basename(path.resolve(repoPath)), sprintId: String(sprintNumber),
       });
       session.provider = provider;
       return session;
@@ -124,7 +125,7 @@ export class TaskService {
 
     const data: JulesCreateSessionRequest = {
       prompt: fullPrompt,
-      title: `Sprint ${sprintNumber}: ${buildTaskRunTag(repoPath, sprintNumber, task.id)} [${task.id}] ${task.title}`,
+      title: `Sprint ${sprintNumber}: ${buildTaskRunTag(path.basename(path.resolve(repoPath)), String(sprintNumber), task.id)} [${task.id}] ${task.title}`,
       sourceContext: {
         source: resolvedSourceId,
         githubRepoContext: { startingBranch: baseBranch },

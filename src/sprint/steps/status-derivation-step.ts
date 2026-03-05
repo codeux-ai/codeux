@@ -1,4 +1,4 @@
-import type { Subtask } from "../../contracts/app-types.js";
+import { TaskStatus, type  Subtask } from "../../contracts/app-types.js";
 
 interface DeriveStatusOptions {
   retryFailed: boolean;
@@ -15,12 +15,12 @@ const areDependenciesMet = (subtasks: Subtask[], task: Subtask): boolean => {
 export const runStatusDerivationStep = (subtasks: Subtask[], options: DeriveStatusOptions): Subtask[] => {
   for (const task of subtasks) {
     if (task.session_state === "FAILED" && options.retryFailed) {
-      task.status = areDependenciesMet(subtasks, task) ? "PENDING" : "BLOCKED";
+      task.status = areDependenciesMet(subtasks, task) ? TaskStatus.PENDING : TaskStatus.BLOCKED;
       continue;
     }
 
     if (task.session_state && options.isActionRequiredState(task.session_state)) {
-      task.status = "BLOCKED";
+      task.status = TaskStatus.BLOCKED;
       continue;
     }
 
@@ -29,11 +29,11 @@ export const runStatusDerivationStep = (subtasks: Subtask[], options: DeriveStat
     }
 
     if (!task.is_independent && task.depends_on.length === 0) {
-      task.status = "BLOCKED";
+      task.status = TaskStatus.BLOCKED;
       continue;
     }
 
-    task.status = areDependenciesMet(subtasks, task) ? "PENDING" : "BLOCKED";
+    task.status = areDependenciesMet(subtasks, task) ? TaskStatus.PENDING : TaskStatus.BLOCKED;
   }
 
   return subtasks;

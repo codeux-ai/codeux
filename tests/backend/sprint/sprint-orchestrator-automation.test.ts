@@ -32,7 +32,7 @@ describe("SprintOrchestrator automation blocks", () => {
         {
           id: "abc123",
           name: "sessions/abc123",
-          title: `Sprint 1: ${buildTaskRunTag(tmpRoot, 1, "01-task")} [01-task] Test task`,
+          title: `Sprint 1: ${buildTaskRunTag(path.basename(path.resolve(tmpRoot)), "1", "01-task")} [01-task] Test task`,
           state: "AWAITING_USER_FEEDBACK",
           prompt: "x",
         },
@@ -76,7 +76,7 @@ describe("SprintOrchestrator automation blocks", () => {
         {
           id: "abc123",
           name: "sessions/abc123",
-          title: `Sprint 1: ${buildTaskRunTag(tmpRoot, 1, "01-task")} [01-task] Test task`,
+          title: `Sprint 1: ${buildTaskRunTag(path.basename(path.resolve(tmpRoot)), "1", "01-task")} [01-task] Test task`,
           state: "AWAITING_USER_FEEDBACK",
           provider: "jules",
           prompt: "x",
@@ -124,7 +124,7 @@ describe("SprintOrchestrator automation blocks", () => {
         {
           id: "abc123",
           name: "sessions/abc123",
-          title: `Sprint 1: ${buildTaskRunTag(tmpRoot, 1, "01-task")} [01-task] Test task`,
+          title: `Sprint 1: ${buildTaskRunTag(path.basename(path.resolve(tmpRoot)), "1", "01-task")} [01-task] Test task`,
           state: "AWAITING_USER_FEEDBACK",
           provider: "jules",
           prompt: "x",

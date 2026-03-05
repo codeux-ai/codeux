@@ -1,3 +1,4 @@
+import { TaskStatus } from "../contracts/app-types.js";
 import type {
   AutomationInterventionsSettings,
   AutomationLevel,
@@ -146,7 +147,7 @@ export const applyActionRequiredAutomation = async (
     try {
       if (task.session_state === "AWAITING_PLAN_APPROVAL") {
         await args.approveSessionPlan(sessionId);
-        task.status = "RUNNING";
+        task.status = TaskStatus.RUNNING;
         reportText += `🤖 **Auto-Approved Plan:** Task \`${task.id}\` session \`${sessionId}\` moved back to in-progress.\n`;
         continue;
       }
@@ -154,7 +155,7 @@ export const applyActionRequiredAutomation = async (
       if (task.session_state === "AWAITING_USER_FEEDBACK") {
         const reply = buildClarificationAutoReply(task, args.settings.clarificationAnswerTemplate);
         await args.sendSessionMessage(sessionId, reply);
-        task.status = "RUNNING";
+        task.status = TaskStatus.RUNNING;
         reportText += `🤖 **Auto-Answered Clarification:** Task \`${task.id}\` session \`${sessionId}\` received an automated response and stays in progress.\n`;
         continue;
       }
@@ -164,7 +165,7 @@ export const applyActionRequiredAutomation = async (
           sessionId,
           "Continue execution using the current plan and repository conventions. Resume work and report progress."
         );
-        task.status = "RUNNING";
+        task.status = TaskStatus.RUNNING;
         reportText += `🤖 **Auto-Resumed Session:** Task \`${task.id}\` session \`${sessionId}\` was nudged to continue.\n`;
         continue;
       }

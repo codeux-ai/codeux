@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import * as fs from "fs/promises";
 import * as path from "path";
-import type { CliWorkflowSettings, DashboardSettings, JulesSession, ProviderId, Subtask } from "../contracts/app-types.js";
+import { TaskStatus, type  CliWorkflowSettings, DashboardSettings, JulesSession, ProviderId, Subtask } from "../contracts/app-types.js";
 import { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
 import { runCommandStrict, type CommandResult } from "./cli-process-runner.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
@@ -39,7 +39,8 @@ interface StartCliTaskInput {
   task: Subtask;
   repoPath: string;
   featureBranch: string;
-  sprintNumber: number;
+  projectId: string;
+  sprintId: string;
 }
 
 export class CliWorkflowService {
@@ -58,7 +59,7 @@ export class CliWorkflowService {
     const workflowSettings = this.resolveWorkflowSettings(settings);
 
     const sessionId = `cli-${input.provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
-    const taskRunKey = buildTaskRunKey(input.repoPath, input.sprintNumber, input.task.id);
+    const taskRunKey = buildTaskRunKey(input.projectId, input.sprintId, input.task.id);
     
     const resumeTarget = workflowSettings.resumeFailedTaskInSameWorkspace
       ? this.deps.sessionTracking.findLatestFailedCliSessionForTask({
@@ -74,7 +75,7 @@ export class CliWorkflowService {
       ? await this.workspaceManager.resolveResumeWorktreePath(input.repoPath, resumeTarget.sessionId, workflowSettings.executionMode)
       : undefined;
     
-    const title = `Sprint ${input.sprintNumber}: ${buildTaskRunTag(input.repoPath, input.sprintNumber, input.task.id)} [${input.task.id}] ${input.task.title}`;
+    const title = `Sprint ${input.sprintId}: ${buildTaskRunTag(input.projectId, input.sprintId, input.task.id)} [${input.task.id}] ${input.task.title}`;
 
     const session = this.deps.sessionTracking.createSession({
       id: sessionId,

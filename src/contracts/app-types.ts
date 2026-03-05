@@ -42,7 +42,39 @@ export interface JulesActivity {
   [key: string]: unknown;
 }
 
-export type SubtaskStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED";
+export type ProjectId = string;
+export type SprintId = string;
+export type TaskId = string;
+export type RunId = string;
+
+export enum ProjectStatus {
+  ACTIVE = "ACTIVE",
+  ARCHIVED = "ARCHIVED",
+}
+
+export enum SprintStatus {
+  PLANNED = "PLANNED",
+  ACTIVE = "ACTIVE",
+  COMPLETED = "COMPLETED",
+  FAILED = "FAILED",
+}
+
+export enum TaskStatus {
+  PENDING = "PENDING",
+  RUNNING = "RUNNING",
+  COMPLETED = "COMPLETED",
+  FAILED = "FAILED",
+  BLOCKED = "BLOCKED",
+}
+
+export enum RunStatus {
+  PENDING = "PENDING",
+  RUNNING = "RUNNING",
+  SUCCESS = "SUCCESS",
+  FAILURE = "FAILURE",
+}
+
+export type SubtaskStatus = TaskStatus;
 export type SubtaskMergeIndicator = "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCKED";
 export type ProviderId = "jules" | "gemini" | "codex" | "claude-code";
 export type ProviderStrategy = "MANUAL" | "WEIGHTED" | "ORCHESTRATOR";

@@ -51,7 +51,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
       task: { id: "T1", prompt: "prompt", title: "title" },
       repoPath: "/repo",
       featureBranch: "main",
-      sprintNumber: 1,
+      projectId: "repo", sprintId: "1",
       sessionId: "sess-1",
       workerBranch: "worker-1",
       title: "Title",
@@ -99,7 +99,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
       task: { id: "T1", prompt: "prompt", title: "title" },
       repoPath: "/repo",
       featureBranch: "main",
-      sprintNumber: 1,
+      projectId: "repo", sprintId: "1",
       sessionId: "sess-1",
       workerBranch: "worker-1",
       title: "Title",
@@ -140,7 +140,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
       task: { id: "T1", prompt: "prompt", title: "title" },
       repoPath: "/repo",
       featureBranch: "main",
-      sprintNumber: 1,
+      projectId: "repo", sprintId: "1",
       sessionId: "sess-1",
       workerBranch: "worker-1",
       title: "Title",
@@ -177,7 +177,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
       task: { id: "T1", prompt: "prompt", title: "title" } as any,
       repoPath: "/repo",
       featureBranch: "main",
-      sprintNumber: 1,
+      projectId: "repo", sprintId: "1",
     };
 
     const session = await service.startTask(input);
@@ -207,7 +207,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
       task: { id: "T1", prompt: "prompt", title: "title" } as any,
       repoPath: "/repo",
       featureBranch: "main",
-      sprintNumber: 1,
+      projectId: "repo", sprintId: "1",
     };
 
     const session = await service.startTask(input);
