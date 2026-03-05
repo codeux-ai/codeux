@@ -1,11 +1,14 @@
 export const bootstrapDb = `
 CREATE TABLE IF NOT EXISTS pm_projects (
   id TEXT PRIMARY KEY,
+  source_id TEXT NOT NULL,
+  normalized_base_dir TEXT NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
   status TEXT NOT NULL,
   created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
+  updated_at TEXT NOT NULL,
+  UNIQUE(source_id, normalized_base_dir)
 );
 
 CREATE TABLE IF NOT EXISTS pm_sprints (
