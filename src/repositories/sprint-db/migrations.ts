@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS pm_tasks (
   description TEXT,
   status TEXT NOT NULL,
   type TEXT NOT NULL,
+  sort_index INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   FOREIGN KEY(sprint_id) REFERENCES pm_sprints(id)
