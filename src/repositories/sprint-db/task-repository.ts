@@ -8,6 +8,7 @@ export interface TaskRecord {
   status: string;
   type: string;
   sort_index: number;
+  is_merged: number;
   created_at: string;
   updated_at: string;
 }
@@ -21,6 +22,7 @@ export interface CreateTaskInput {
   type: string;
   sortIndex?: number;
   dependencies?: string[];
+  isMerged?: boolean;
 }
 
 export interface UpdateTaskInput {
@@ -30,6 +32,7 @@ export interface UpdateTaskInput {
   type?: string;
   sortIndex?: number;
   dependencies?: string[];
+  isMerged?: boolean;
 }
 
 export class TaskRepository {
@@ -118,8 +121,8 @@ export class TaskRepository {
     this.db.db.exec("BEGIN TRANSACTION;");
     try {
       const insertStmt = this.db.db.prepare(`
-        INSERT INTO pm_tasks (id, sprint_id, title, description, status, type, sort_index, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO pm_tasks (id, sprint_id, title, description, status, type, sort_index, is_merged, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       insertStmt.run(
@@ -130,6 +133,7 @@ export class TaskRepository {
         input.status,
         input.type,
         input.sortIndex ?? 0,
+        input.isMerged ? 1 : 0,
         now,
         now
       );
@@ -185,6 +189,10 @@ export class TaskRepository {
     if (input.sortIndex !== undefined) {
       updates.push("sort_index = ?");
       values.push(input.sortIndex);
+    }
+    if (input.isMerged !== undefined) {
+      updates.push("is_merged = ?");
+      values.push(input.isMerged ? 1 : 0);
     }
 
     if (updates.length === 0 && input.dependencies === undefined) {

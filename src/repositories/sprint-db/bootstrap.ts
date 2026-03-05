@@ -28,6 +28,10 @@ export class SprintDatabase {
       if (!hasSortIndex) {
         this.db.exec("ALTER TABLE pm_tasks ADD COLUMN sort_index INTEGER NOT NULL DEFAULT 0;");
       }
+      const hasIsMerged = tableInfo.some(col => col.name === "is_merged");
+      if (!hasIsMerged) {
+        this.db.exec("ALTER TABLE pm_tasks ADD COLUMN is_merged INTEGER NOT NULL DEFAULT 0;");
+      }
     } catch (err) {
       // Ignore migration errors if table doesn't exist yet (handled by bootstrapDb above anyway)
     }
