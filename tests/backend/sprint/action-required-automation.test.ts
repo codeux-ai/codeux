@@ -62,4 +62,226 @@ describe("action-required-automation", () => {
     expect(result.subtasks[0].status).toBe("RUNNING");
     expect(result.reportText).toContain("Auto-Approved Plan");
   });
+
+
+  it("does not intervene if not an action required state", async () => {
+    const task = createTask({ session_state: "RUNNING" });
+    const result = await applyActionRequiredAutomation([task], {
+      automationLevel: "FULL",
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+      },
+      isActionRequiredState: () => false,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: vi.fn(),
+    });
+
+    expect(result.subtasks[0].intervention_owner).toBeUndefined();
+  });
+
+  it("marks for human intervention if JULES API is not configured", async () => {
+    const task = createTask();
+    const result = await applyActionRequiredAutomation([task], {
+      automationLevel: "FULL",
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => false,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: vi.fn(),
+    });
+
+    expect(result.subtasks[0].intervention_owner).toBe("HUMAN");
+    expect(result.subtasks[0].intervention_hint).toContain("Jules API key is not configured");
+  });
+
+  it("marks for human intervention if automationLevel is ALWAYS_ASK", async () => {
+    const task = createTask();
+    const result = await applyActionRequiredAutomation([task], {
+      automationLevel: "ALWAYS_ASK",
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: vi.fn(),
+    });
+
+    expect(result.subtasks[0].intervention_owner).toBe("HUMAN");
+    expect(result.subtasks[0].intervention_hint).toBe("Automation level is ALWAYS_ASK.");
+  });
+
+  it("marks for human intervention if SEMI_AUTO autoApprovePlan is false", async () => {
+    const task = createTask({ session_state: "AWAITING_PLAN_APPROVAL" });
+    const result = await applyActionRequiredAutomation([task], {
+      automationLevel: "SEMI_AUTO",
+      settings: {
+        autoApprovePlan: false,
+        autoAnswerClarification: true,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: vi.fn(),
+    });
+
+    expect(result.subtasks[0].intervention_owner).toBe("HUMAN");
+    expect(result.subtasks[0].intervention_hint).toBe("SEMI_AUTO policy disabled auto-approval for session plans.");
+  });
+
+  it("marks for human intervention if SEMI_AUTO autoAnswerClarification is false", async () => {
+    const task = createTask({ session_state: "AWAITING_USER_FEEDBACK" });
+    const result = await applyActionRequiredAutomation([task], {
+      automationLevel: "SEMI_AUTO",
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: false,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: vi.fn(),
+    });
+
+    expect(result.subtasks[0].intervention_owner).toBe("HUMAN");
+    expect(result.subtasks[0].intervention_hint).toBe("SEMI_AUTO policy disabled auto-answer for clarification requests.");
+  });
+
+  it("marks for human intervention if SEMI_AUTO autoResumePaused is false", async () => {
+    const task = createTask({ session_state: "PAUSED" });
+    const result = await applyActionRequiredAutomation([task], {
+      automationLevel: "SEMI_AUTO",
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoResumePaused: false,
+        clarificationAnswerTemplate: "template",
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: vi.fn(),
+    });
+
+    expect(result.subtasks[0].intervention_owner).toBe("HUMAN");
+    expect(result.subtasks[0].intervention_hint).toBe("SEMI_AUTO policy disabled auto-resume for paused sessions.");
+  });
+
+  it("auto-answers clarification when allowed", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({});
+    const task = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+      activities: [
+        {
+          agentMessaged: { agentMessage: "What should I do?" },
+        }
+      ]
+    });
+    const result = await applyActionRequiredAutomation([task], {
+      automationLevel: "FULL",
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "Here is your answer",
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: sendMessage,
+    });
+
+    expect(sendMessage).toHaveBeenCalledWith("abc123", expect.stringContaining("Here is your answer"));
+    expect(sendMessage.mock.calls[0][1]).toContain("What should I do?");
+    expect(result.subtasks[0].status).toBe("RUNNING");
+    expect(result.reportText).toContain("Auto-Answered Clarification");
+  });
+
+  it("auto-answers clarification fallback to description", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({});
+    const task = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+      activities: [
+        {
+          description: "Agent needs help",
+        }
+      ]
+    });
+    const result = await applyActionRequiredAutomation([task], {
+      automationLevel: "FULL",
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "Here is your answer",
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: sendMessage,
+    });
+
+    expect(sendMessage).toHaveBeenCalledWith("abc123", expect.stringContaining("Agent needs help"));
+    expect(result.subtasks[0].status).toBe("RUNNING");
+  });
+
+  it("auto-resumes paused sessions when allowed", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({});
+    const task = createTask({ session_state: "PAUSED" });
+    const result = await applyActionRequiredAutomation([task], {
+      automationLevel: "FULL",
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: sendMessage,
+    });
+
+    expect(sendMessage).toHaveBeenCalledWith("abc123", expect.stringContaining("Continue execution"));
+    expect(result.subtasks[0].status).toBe("RUNNING");
+    expect(result.reportText).toContain("Auto-Resumed Session");
+  });
+
+  it("handles errors during auto-intervention", async () => {
+    const approve = vi.fn().mockRejectedValue(new Error("API Error"));
+    const task = createTask({ session_state: "AWAITING_PLAN_APPROVAL" });
+    const result = await applyActionRequiredAutomation([task], {
+      automationLevel: "FULL",
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: approve,
+      sendSessionMessage: vi.fn(),
+    });
+
+    expect(result.subtasks[0].intervention_owner).toBe("AGENT");
+    expect(result.subtasks[0].intervention_hint).toContain("API Error");
+    expect(result.reportText).toContain("Auto-Intervention Failed");
+  });
 });

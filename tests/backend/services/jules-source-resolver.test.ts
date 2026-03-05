@@ -1,81 +1,81 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { execFileSync } from "child_process";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { JulesSourceResolver } from "../../../src/services/jules-source-resolver.js";
+import { commandRunner } from "../../../src/shared/subprocess/command-runner.js";
 
-vi.mock("child_process", () => ({
-  execFileSync: vi.fn(),
-}));
+vi.mock("../../../src/shared/subprocess/command-runner.js", () => {
+    return {
+        commandRunner: {
+            runStrict: vi.fn()
+        }
+    };
+});
 
 describe("JulesSourceResolver", () => {
-  const execFileSyncMock = vi.mocked(execFileSync);
-  const listAllSources = vi.fn();
-  const getSource = vi.fn();
-  let resolver: JulesSourceResolver;
+    let mockApi: any;
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    execFileSyncMock.mockReturnValue("git@github.com:acme/example-repo.git\n" as any);
-    resolver = new JulesSourceResolver({
-      listAllSources,
-      getSource,
-    } as any);
-  });
-
-  it("auto-resolves source from repository remote", async () => {
-    listAllSources.mockResolvedValue([
-      {
-        id: "github/acme/example-repo",
-        name: "sources/github/acme/example-repo",
-        githubRepo: {
-          owner: "acme",
-          repo: "example-repo",
-        },
-      },
-    ]);
-
-    const sourceId = await resolver.resolveSourceId({ repoPath: "/tmp/repo" });
-    expect(sourceId).toBe("sources/github/acme/example-repo");
-    expect(getSource).not.toHaveBeenCalled();
-  });
-
-  it("validates explicit source_id against repository remote", async () => {
-    getSource.mockResolvedValue({
-      id: "sources/77",
-      name: "sources/77",
-      githubRepo: {
-        owner: "acme",
-        repo: "example-repo",
-      },
+    beforeEach(() => {
+        mockApi = {
+            getSource: vi.fn(),
+            listAllSources: vi.fn(),
+        };
+        vi.clearAllMocks();
     });
 
-    const sourceId = await resolver.resolveSourceId({ repoPath: "/tmp/repo", requestedSourceId: "77" });
-    expect(sourceId).toBe("sources/77");
-  });
+    it("parses valid github URLs", async () => {
+        vi.mocked(commandRunner.runStrict).mockResolvedValue({ stdout: "git@github.com:owner/repo.git", stderr: "", exitCode: 0 } as any);
+        mockApi.listAllSources.mockResolvedValue([{ id: "sources/github/owner/repo" }]);
 
-  it("fails when explicit source_id points to another repository", async () => {
-    getSource.mockResolvedValue({
-      id: "sources/88",
-      name: "sources/88",
-      githubRepo: {
-        owner: "acme",
-        repo: "other-repo",
-      },
+        const resolver = new JulesSourceResolver(mockApi);
+        const res = await resolver.resolveSourceId({ repoPath: "/repo" });
+        expect(res).toBe("sources/github/owner/repo");
     });
 
-    await expect(resolver.resolveSourceId({ repoPath: "/tmp/repo", requestedSourceId: "88" })).rejects.toThrow(
-      "does not match repository"
-    );
-  });
+    it("handles cached values", async () => {
+        vi.mocked(commandRunner.runStrict).mockResolvedValue({ stdout: "git@github.com:owner/repo.git", stderr: "", exitCode: 0 } as any);
+        mockApi.listAllSources.mockResolvedValue([{ id: "sources/github/owner/repo" }]);
 
-  it("matches github owner/repo encoded in source name", async () => {
-    listAllSources.mockResolvedValue([
-      {
-        id: "github/acme/example-repo",
-        name: "sources/github/acme/example-repo",
-      },
-    ]);
+        const resolver = new JulesSourceResolver(mockApi);
+        await resolver.resolveSourceId({ repoPath: "/repo" });
+        const res2 = await resolver.resolveSourceId({ repoPath: "/repo" });
+        expect(mockApi.listAllSources).toHaveBeenCalledTimes(1); // Cached
+        expect(res2).toBe("sources/github/owner/repo");
+    });
 
-    const sourceId = await resolver.resolveSourceId({ repoPath: "/tmp/repo" });
-    expect(sourceId).toBe("sources/github/acme/example-repo");
-  });
+    it("throws if requested source doesn't match", async () => {
+        vi.mocked(commandRunner.runStrict).mockResolvedValue({ stdout: "https://github.com/owner/repo.git", stderr: "", exitCode: 0 } as any);
+        mockApi.getSource.mockResolvedValue({ id: "sources/github/other/repo" });
+
+        const resolver = new JulesSourceResolver(mockApi);
+        await expect(resolver.resolveSourceId({ repoPath: "/repo", requestedSourceId: "sources/other/repo" })).rejects.toThrow("Provided source_id");
+    });
+
+    it("returns requested source if matches by object", async () => {
+        vi.mocked(commandRunner.runStrict).mockResolvedValue({ stdout: "https://github.com/owner/repo.git", stderr: "", exitCode: 0 } as any);
+        mockApi.getSource.mockResolvedValue({ githubRepo: { owner: "owner", repo: "repo" }, id: "custom" });
+
+        const resolver = new JulesSourceResolver(mockApi);
+        const res = await resolver.resolveSourceId({ repoPath: "/repo", requestedSourceId: "custom" });
+        expect(res).toBe("sources/custom");
+    });
+
+    it("throws on invalid url", async () => {
+        vi.mocked(commandRunner.runStrict).mockResolvedValue({ stdout: "invalid", stderr: "", exitCode: 0 } as any);
+        const resolver = new JulesSourceResolver(mockApi);
+        await expect(resolver.resolveSourceId({ repoPath: "/repo" })).rejects.toThrow("Unable to parse repository");
+    });
+
+    it("throws on missing source id/name after matching", async () => {
+        vi.mocked(commandRunner.runStrict).mockResolvedValue({ stdout: "https://github.com/owner/repo.git", stderr: "", exitCode: 0 } as any);
+        mockApi.listAllSources.mockResolvedValue([{ githubRepo: { owner: "owner", repo: "repo" } }]);
+
+        const resolver = new JulesSourceResolver(mockApi);
+        await expect(resolver.resolveSourceId({ repoPath: "/repo" })).rejects.toThrow("has no usable id/name");
+    });
+
+    it("handles invalid url throw", async () => {
+        vi.mocked(commandRunner.runStrict).mockResolvedValue({ stdout: "http://[invalid]", stderr: "", exitCode: 0 } as any);
+        const resolver = new JulesSourceResolver(mockApi);
+        await expect(resolver.resolveSourceId({ repoPath: "/repo" })).rejects.toThrow("Unable to parse repository");
+    });
+
 });

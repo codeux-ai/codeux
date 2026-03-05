@@ -9,6 +9,8 @@ export class SubtaskParser {
     const metadata: Record<string, string> = {};
     let promptStartIndex = -1;
 
+    let currentKey: string | null = null;
+
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       
@@ -26,6 +28,10 @@ export class SubtaskParser {
         const key = kvMatch[1].toLowerCase();
         const value = kvMatch[2].trim();
         metadata[key] = value;
+        currentKey = key;
+      } else if (currentKey && line.trim() !== "") {
+        // Handle multiline properties by appending
+        metadata[currentKey] += " " + line.trim();
       }
     }
 
@@ -65,11 +71,39 @@ export class SubtaskParser {
     const content = match[1];
     if (!content.trim()) return [];
 
-    return content
-      .split(",")
-      .map(item => item.trim())
-      .map(item => item.replace(/^["'](.*)["']$/, "$1"))
-      .filter(item => item.length > 0);
+    // Robust parsing of comma-separated items that might be quoted
+    const items: string[] = [];
+    let currentItem = "";
+    let inQuotes: string | null = null;
+
+    for (let i = 0; i < content.length; i++) {
+      const char = content[i];
+
+      if (inQuotes) {
+        if (char === inQuotes) {
+          inQuotes = null;
+        } else {
+          currentItem += char;
+        }
+      } else {
+        if (char === '"' || char === "'") {
+          inQuotes = char;
+        } else if (char === ',') {
+          if (currentItem.trim().length > 0) {
+            items.push(currentItem.trim());
+          }
+          currentItem = "";
+        } else {
+          currentItem += char;
+        }
+      }
+    }
+
+    if (currentItem.trim().length > 0) {
+      items.push(currentItem.trim());
+    }
+
+    return items;
   }
 
   /**
@@ -80,7 +114,11 @@ export class SubtaskParser {
     lines.push(`title: ${subtask.title}`);
     
     if (subtask.depends_on && subtask.depends_on.length > 0) {
-      lines.push(`depends_on: [${subtask.depends_on.join(", ")}]`);
+      // Always quote dependencies for robustness and format with spaces
+      // Sort dependencies alphabetically for deterministic output
+      const sortedDeps = [...subtask.depends_on].sort();
+      const formattedDeps = sortedDeps.map(dep => `"${dep}"`).join(", ");
+      lines.push(`depends_on: [${formattedDeps}]`);
     } else {
       lines.push(`depends_on: []`);
     }

@@ -348,7 +348,7 @@ export class SessionTrackingRepository {
       provider: row.provider,
       prompt: row.prompt ?? "",
       createTime: row.create_time,
-      outputs: row.pr_url ? [{ pullRequest: { url: row.pr_url, workerBranch: row.worker_branch } }] : [],
+      outputs: row.pr_url ? [{ pullRequest: { url: row.pr_url, workerBranch: row.worker_branch ?? undefined } }] : [],
     };
   }
 

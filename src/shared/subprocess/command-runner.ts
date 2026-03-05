@@ -45,6 +45,8 @@ export class CommandRunner {
 
       let stdout = "";
       let stderr = "";
+      let stdoutBuffer = "";
+      let stderrBuffer = "";
       let timedOut = false;
       let resolved = false;
 
@@ -81,16 +83,28 @@ export class CommandRunner {
         const text = data.toString();
         if (isStderr) {
           stderr += text;
+          if (callback) {
+            stderrBuffer += text;
+            const lines = stderrBuffer.split("\n");
+            stderrBuffer = lines.pop() ?? "";
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (trimmed.length > 0) {
+                callback(trimmed);
+              }
+            }
+          }
         } else {
           stdout += text;
-        }
-
-        if (callback) {
-          const lines = text.split("\n");
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed.length > 0) {
-              callback(trimmed);
+          if (callback) {
+            stdoutBuffer += text;
+            const lines = stdoutBuffer.split("\n");
+            stdoutBuffer = lines.pop() ?? "";
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (trimmed.length > 0) {
+                callback(trimmed);
+              }
             }
           }
         }
@@ -105,6 +119,13 @@ export class CommandRunner {
       });
 
       child.on("close", (code) => {
+        if (onStdoutLine && stdoutBuffer.trim().length > 0) {
+          onStdoutLine(stdoutBuffer.trim());
+        }
+        if (onStderrLine && stderrBuffer.trim().length > 0) {
+          onStderrLine(stderrBuffer.trim());
+        }
+
         const ok = code === 0 && !timedOut;
         const extra = timedOut ? `Command timed out after ${timeout}ms` : undefined;
         finish(ok, code, extra);

@@ -1,11 +1,282 @@
-import { describe, expect, it } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GitStatusService } from "../../../src/services/git-status-service.js";
 
-describe("GitStatusService - Core", () => {
-  it("passes token to gh commands only", async () => {
-    const contexts: Array<{ command: string; token?: string }> = [];
-    const service = new GitStatusService("/tmp/repo", async (command, args, context) => {
-      contexts.push({ command, token: context.ghToken });
+describe("GitStatusService", () => {
+
+  it("adds warnings when API fetch fails for PRs, CI Runs, and Merged PRs", async () => {
+    runner.mockImplementation(async (cmd: string, args: string[]) => {
+      if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n" };
+      if (args.includes("--show-toplevel")) return { ok: true, stdout: "/repo\n" };
+      if (args.includes("--show-current")) return { ok: true, stdout: "main\n" };
+      if (cmd === "git" && args[0] === "remote") return { ok: true, stdout: "origin\n" };
+      if (args.includes("--porcelain")) return { ok: true, stdout: "" };
+      if (cmd === "gh" && args[0] === "--version") return { ok: true, stdout: "gh version 2.0.0\n" };
+      if (cmd === "gh" && args[0] === "auth") return { ok: true, stdout: "logged in\n" };
+
+      if (cmd === "gh" && args[0] === "pr" && args[1] === "list" && args[3] === "open") return { ok: false, stdout: "", stderr: "failed to fetch prs" };
+      if (cmd === "gh" && args[0] === "run" && args[1] === "list") return { ok: false, stdout: "", stderr: "failed to fetch runs" };
+      if (cmd === "gh" && args[0] === "pr" && args[1] === "list" && args[3] === "merged") return { ok: false, stdout: "", stderr: "failed to fetch merged prs" };
+
+      return { ok: true, stdout: "[]" };
+    });
+
+    const status = await service.getStatus("REMOTE", "token", undefined);
+    expect(status.warnings).toContain("Failed to fetch open pull requests via gh CLI.");
+    expect(status.warnings).toContain("Failed to fetch GitHub Actions runs via gh CLI.");
+    expect(status.warnings).toContain("Failed to fetch recently merged pull requests via gh CLI.");
+  });
+
+
+  it("adds warning when no PRs target active feature branch in FEATURE_PR_CI scope", async () => {
+    runner.mockImplementation(async (cmd: string, args: string[]) => {
+      if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n" };
+      if (args.includes("--show-toplevel")) return { ok: true, stdout: "/repo\n" };
+      if (args.includes("--show-current")) return { ok: true, stdout: "main\n" };
+      if (cmd === "git" && args[0] === "remote") return { ok: true, stdout: "origin\n" };
+      if (args.includes("--porcelain")) return { ok: true, stdout: "" };
+      if (cmd === "gh" && args[0] === "--version") return { ok: true, stdout: "gh version 2.0.0\n" };
+      if (cmd === "gh" && args[0] === "auth") return { ok: true, stdout: "logged in\n" };
+
+      return { ok: true, stdout: "[]" };
+    });
+
+    const status = await service.getStatus("REMOTE", "token", { scope: "FEATURE_PR_CI", featureBranch: "feat" });
+    expect(status.warnings).toContain("No open PRs are currently targeting the active feature branch.");
+  });
+
+  it("adds warning when no PRs target main in MAIN_MERGE_PR_CI scope", async () => {
+    runner.mockImplementation(async (cmd: string, args: string[]) => {
+      if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n" };
+      if (args.includes("--show-toplevel")) return { ok: true, stdout: "/repo\n" };
+      if (args.includes("--show-current")) return { ok: true, stdout: "main\n" };
+      if (cmd === "git" && args[0] === "remote") return { ok: true, stdout: "origin\n" };
+      if (args.includes("--porcelain")) return { ok: true, stdout: "" };
+      if (cmd === "gh" && args[0] === "--version") return { ok: true, stdout: "gh version 2.0.0\n" };
+      if (cmd === "gh" && args[0] === "auth") return { ok: true, stdout: "logged in\n" };
+
+      return { ok: true, stdout: "[]" };
+    });
+
+    const status = await service.getStatus("REMOTE", "token", { scope: "MAIN_MERGE_PR_CI", featureBranch: "feat", defaultBranch: "main" });
+    expect(status.warnings).toContain("No open PR found for merging the feature branch into main.");
+  });
+
+
+  it("adds warning for DIRTY PR status", async () => {
+    runner.mockImplementation(async (cmd: string, args: string[]) => {
+      if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n" };
+      if (args.includes("--show-toplevel")) return { ok: true, stdout: "/repo\n" };
+      if (args.includes("--show-current")) return { ok: true, stdout: "main\n" };
+      if (cmd === "git" && args[0] === "remote") return { ok: true, stdout: "origin\n" };
+      if (args.includes("--porcelain")) return { ok: true, stdout: "" };
+      if (cmd === "gh" && args[0] === "--version") return { ok: true, stdout: "gh version 2.0.0\n" };
+      if (cmd === "gh" && args[0] === "auth") return { ok: true, stdout: "logged in\n" };
+
+      if (cmd === "gh" && args[0] === "pr" && args[1] === "list") {
+          return { ok: true, stdout: JSON.stringify([{ number: 1, title: "PR1", state: "OPEN", headRefName: "feat", baseRefName: "main", mergeStateStatus: "DIRTY" }]) };
+      }
+      return { ok: true, stdout: "[]" };
+    });
+
+    const status = await service.getStatus("REMOTE", "token", undefined);
+    expect(status.warnings).toContain("One or more PRs have merge conflicts (DIRTY). If CI checks do not start on main, inspect merge conflicts.");
+  });
+
+
+  it("enriches failed run details correctly", async () => {
+    runner.mockImplementation(async (cmd: string, args: string[]) => {
+      if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n" };
+      if (args.includes("--show-toplevel")) return { ok: true, stdout: "/repo\n" };
+      if (args.includes("--show-current")) return { ok: true, stdout: "main\n" };
+      if (cmd === "git" && args[0] === "remote") return { ok: true, stdout: "origin\n" };
+      if (args.includes("--porcelain")) return { ok: true, stdout: "" };
+      if (cmd === "gh" && args[0] === "--version") return { ok: true, stdout: "gh version 2.0.0\n" };
+      if (cmd === "gh" && args[0] === "auth") return { ok: true, stdout: "logged in\n" };
+
+      if (cmd === "gh" && args[0] === "pr" && args[1] === "list") {
+          return { ok: true, stdout: JSON.stringify([{ number: 1, title: "PR1", state: "OPEN", headRefName: "feat", baseRefName: "main" }]) };
+      }
+      if (cmd === "gh" && args[0] === "run" && args[1] === "list") {
+          return { ok: true, stdout: JSON.stringify([{ databaseId: 101, name: "run1", workflowName: "wf1", status: "completed", conclusion: "failure", event: "push", headBranch: "feat", url: "http://test", updatedAt: "2023-01-01T00:00:00Z" }]) };
+      }
+
+      if (cmd === "gh" && args[0] === "run" && args[1] === "view" && args[4] === "jobs") {
+          return { ok: true, stdout: JSON.stringify({
+            jobs: [
+              { databaseId: 201, conclusion: "failure", name: "Job1", steps: [{ conclusion: "failure", name: "Step1" }] },
+              { databaseId: 202, conclusion: "success", name: "Job2" },
+              { conclusion: "failure", name: "Job3", id: 203 } // missing databaseId fallback to id
+            ]
+          })};
+      }
+      if (cmd === "gh" && args[0] === "run" && args[1] === "view" && args[5] === "--log-failed") {
+          return { ok: true, stdout: "Error in Step1\n" };
+      }
+
+      return { ok: true, stdout: "[]" };
+    });
+
+
+    const status = await service.getStatus("REMOTE", "token", undefined);
+
+
+    expect(status.mode).toBe("REMOTE");
+    expect(status.ciRuns[0].conclusion).toBe("failure");
+    expect(status.ciRuns[0].failedJobs?.length).toBe(2);
+    expect(status.ciRuns[0].failedJobs?.[0].id).toBe(201);
+    expect(status.ciRuns[0].failedJobs?.[0].failedSteps).toEqual(["Step1"]);
+    expect(status.ciRuns[0].failedJobs?.[0].logExcerpt).toContain("Error in Step1");
+  });
+
+  it("handles failed run details edge cases (warnings and limit limits)", async () => {
+    runner.mockImplementation(async (cmd: string, args: string[]) => {
+      if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n" };
+      if (args.includes("--show-toplevel")) return { ok: true, stdout: "/repo\n" };
+      if (args.includes("--show-current")) return { ok: true, stdout: "main\n" };
+      if (cmd === "git" && args[0] === "remote") return { ok: true, stdout: "origin\n" };
+      if (args.includes("--porcelain")) return { ok: true, stdout: "" };
+      if (cmd === "gh" && args[0] === "--version") return { ok: true, stdout: "gh version 2.0.0\n" };
+      if (cmd === "gh" && args[0] === "auth") return { ok: true, stdout: "logged in\n" };
+
+      if (cmd === "gh" && args[0] === "pr" && args[1] === "list") {
+          return { ok: true, stdout: JSON.stringify([{ number: 1, title: "PR1", state: "OPEN", headRefName: "feat", baseRefName: "main" }]) };
+      }
+      if (cmd === "gh" && args[0] === "run" && args[1] === "list") {
+          return { ok: true, stdout: JSON.stringify([{ databaseId: 101, name: "run1", workflowName: "wf1", status: "completed", conclusion: "failure", event: "push", headBranch: "feat", url: "http://test", updatedAt: "2023-01-01T00:00:00Z" }]) };
+      }
+
+      if (cmd === "gh" && args[0] === "run" && args[1] === "view" && args[4] === "jobs") {
+          return { ok: false, stdout: "", stderr: "failed to fetch jobs" };
+      }
+      if (cmd === "gh" && args[0] === "run" && args[1] === "view" && args[5] === "--log-failed") {
+          return { ok: false, stdout: "", stderr: "failed to fetch log" };
+      }
+
+      return { ok: true, stdout: "[]" };
+    });
+
+
+    const status = await service.getStatus("REMOTE", "token", undefined);
+
+    expect(status.warnings).toContain("Failed to fetch failed jobs for run 101.");
+  });
+
+  it("handles empty failed log excerpt gracefully", async () => {
+    runner.mockImplementation(async (cmd: string, args: string[]) => {
+      if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n" };
+      if (args.includes("--show-toplevel")) return { ok: true, stdout: "/repo\n" };
+      if (args.includes("--show-current")) return { ok: true, stdout: "main\n" };
+      if (cmd === "git" && args[0] === "remote") return { ok: true, stdout: "origin\n" };
+      if (args.includes("--porcelain")) return { ok: true, stdout: "" };
+      if (cmd === "gh" && args[0] === "--version") return { ok: true, stdout: "gh version 2.0.0\n" };
+      if (cmd === "gh" && args[0] === "auth") return { ok: true, stdout: "logged in\n" };
+
+      if (cmd === "gh" && args[0] === "pr" && args[1] === "list") {
+          return { ok: true, stdout: JSON.stringify([{ number: 1, title: "PR1", state: "OPEN", headRefName: "feat", baseRefName: "main" }]) };
+      }
+      if (cmd === "gh" && args[0] === "run" && args[1] === "list") {
+          return { ok: true, stdout: JSON.stringify([{ databaseId: 101, name: "run1", workflowName: "wf1", status: "completed", conclusion: "failure", event: "push", headBranch: "feat", url: "http://test", updatedAt: "2023-01-01T00:00:00Z" }]) };
+      }
+
+      if (cmd === "gh" && args[0] === "run" && args[1] === "view" && args[4] === "jobs") {
+          return { ok: true, stdout: JSON.stringify({
+            jobs: [
+              { databaseId: 201, conclusion: "failure", name: "Job1", steps: [] }
+            ]
+          })};
+      }
+      if (cmd === "gh" && args[0] === "run" && args[1] === "view" && args[5] === "--log-failed") {
+          return { ok: true, stdout: "   \n" };
+      }
+
+      return { ok: true, stdout: "[]" };
+    });
+
+
+    const status = await service.getStatus("REMOTE", "token", undefined);
+
+    expect(status.ciRuns[0].failedJobs?.[0].logExcerpt).toBeNull();
+  });
+
+  let runner: any;
+  let service: GitStatusService;
+
+  beforeEach(() => {
+    runner = vi.fn().mockResolvedValue({ ok: true, stdout: "", stderr: "" });
+    service = new GitStatusService("/repo", runner);
+  });
+
+  it("returns LOCAL status when mode is LOCAL", async () => {
+    runner.mockImplementation(async (cmd: string, args: string[]) => {
+      if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n" };
+      if (args.includes("--show-toplevel")) return { ok: true, stdout: "/repo\n" };
+      if (args.includes("--show-current")) return { ok: true, stdout: "main\n" };
+      if (cmd === "git" && args[0] === "remote") return { ok: true, stdout: "origin\n" };
+      if (args.includes("--porcelain")) return { ok: true, stdout: "" };
+      return { ok: true, stdout: "" };
+    });
+
+    const status = await service.getStatus("LOCAL");
+    expect(status.mode).toBe("LOCAL");
+    expect(status.available).toBe(true);
+    expect(status.branch).toBe("main");
+  });
+
+  it("returns unavailable if not inside git worktree", async () => {
+    runner.mockResolvedValue({ ok: false, stdout: "false\n", stderr: "not a git repo" });
+    const status = await service.getStatus("REMOTE");
+    expect(status.available).toBe(false);
+    expect(status.warnings[0]).toContain("not a git repository");
+  });
+
+  it("handles REMOTE status with PRs and CI runs", async () => {
+    runner.mockImplementation(async (cmd: string, args: string[]) => {
+      if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n" };
+      if (args.includes("--show-toplevel")) return { ok: true, stdout: "/repo\n" };
+      if (args.includes("--show-current")) return { ok: true, stdout: "main\n" };
+      if (cmd === "git" && args[0] === "remote") return { ok: true, stdout: "origin\n" };
+      if (args.includes("--porcelain")) return { ok: true, stdout: "" };
+      if (cmd === "gh" && args[0] === "--version") return { ok: true, stdout: "gh version 2.0.0\n" };
+      if (cmd === "gh" && args[0] === "auth") return { ok: true, stdout: "logged in\n" };
+      if (cmd === "gh" && args[0] === "pr" && args[1] === "list") {
+          return { ok: true, stdout: JSON.stringify([{ number: 1, title: "PR1", state: "OPEN", headRefName: "feat", baseRefName: "main" }]) };
+      }
+      if (cmd === "gh" && args[0] === "run" && args[1] === "list") {
+          return { ok: true, stdout: JSON.stringify([{ databaseId: 101, status: "completed", conclusion: "success", headBranch: "feat" }]) };
+      }
+      return { ok: true, stdout: "" };
+    });
+
+    const status = await service.getStatus("REMOTE", undefined, undefined);
+    expect(status.mode).toBe("REMOTE");
+    expect(status.available).toBe(true);
+  });
+
+  it("merges a pull request", async () => {
+    runner.mockResolvedValue({ ok: true, stdout: "merged", stderr: "" });
+    const result = await service.mergePullRequest(123);
+    expect(result.ok).toBe(true);
+    expect(runner).toHaveBeenCalledWith(
+      "gh",
+      ["pr", "merge", "123", "--merge", "--delete-branch"],
+      { cwd: "/repo", ghToken: undefined }
+    );
+  });
+
+  it("returns error message if merge fails", async () => {
+    runner.mockResolvedValue({ ok: false, stdout: "", stderr: "conflict" });
+    const result = await service.mergePullRequest(123);
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("conflict");
+  });
+
+  it("memoizes getStatus within cache TTL window", async () => {
+    let executionCount = 0;
+    const service = new GitStatusService("/tmp/repo", async (command, args) => {
+      const fullCmd = `${command} ${args.join(" ")}`;
+      if (fullCmd.startsWith("gh --version")) {
+        executionCount++;
+      }
       const responses: Record<string, any> = {
         "git rev-parse --is-inside-work-tree": { ok: true, stdout: "true\n" },
         "git rev-parse --show-toplevel": { ok: true, stdout: "/tmp/repo\n" },
@@ -18,10 +289,44 @@ describe("GitStatusService - Core", () => {
         "gh run list --limit 50 --json databaseId,name,workflowName,status,conclusion,event,headBranch,url,updatedAt": { ok: true, stdout: "[]" },
         "gh pr list --state merged --limit 100 --json number,title,url,headRefName,baseRefName,mergedAt,mergedBy": { ok: true, stdout: "[]" },
       };
-      return responses[`${command} ${args.join(" ")}`] || { ok: false };
+      return responses[fullCmd] || { ok: false };
     });
 
-    await service.getStatus("REMOTE", "ghp_token");
-    expect(contexts.some((entry) => entry.command === "gh" && entry.token === "ghp_token")).toBe(true);
+    GitStatusService.invalidateCache();
+    await service.getStatus("REMOTE", "ghp_token", undefined, 10000);
+    await service.getStatus("REMOTE", "ghp_token", undefined, 10000);
+
+    expect(executionCount).toBe(1);
+  });
+
+  it("invalidates cache on mergePullRequest", async () => {
+    let executionCount = 0;
+    const service = new GitStatusService("/tmp/repo", async (command, args) => {
+      const fullCmd = `${command} ${args.join(" ")}`;
+      if (fullCmd.startsWith("gh --version")) {
+        executionCount++;
+      }
+      const responses: Record<string, any> = {
+        "git rev-parse --is-inside-work-tree": { ok: true, stdout: "true\n" },
+        "git rev-parse --show-toplevel": { ok: true, stdout: "/tmp/repo\n" },
+        "git branch --show-current": { ok: true, stdout: "main\n" },
+        "git remote": { ok: true, stdout: "origin\n" },
+        "git status --porcelain": { ok: true, stdout: "" },
+        "gh --version": { ok: true, stdout: "gh version" },
+        "gh auth status": { ok: true, stdout: "ok" },
+        "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup": { ok: true, stdout: "[]" },
+        "gh run list --limit 50 --json databaseId,name,workflowName,status,conclusion,event,headBranch,url,updatedAt": { ok: true, stdout: "[]" },
+        "gh pr list --state merged --limit 100 --json number,title,url,headRefName,baseRefName,mergedAt,mergedBy": { ok: true, stdout: "[]" },
+        "gh pr merge 1 --merge": { ok: true, stdout: "merged" }
+      };
+      return responses[fullCmd] || { ok: true, stdout: "" };
+    });
+
+    GitStatusService.invalidateCache();
+    await service.getStatus("REMOTE", "ghp_token", undefined, 10000);
+    await service.mergePullRequest(1, "ghp_token");
+    await service.getStatus("REMOTE", "ghp_token", undefined, 10000);
+
+    expect(executionCount).toBe(2);
   });
 });

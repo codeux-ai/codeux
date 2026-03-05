@@ -11,7 +11,7 @@ interface AgentToolHandlerDependencies {
   getConsecutiveFailures: () => number;
   setConsecutiveFailures: (value: number) => void;
   getMaxFailures: () => number;
-  waitForSessionCompletion: (args: { session_id: string; poll_interval?: number; timeout?: number }) => Promise<any>;
+  waitForSessionCompletion: (args: { session_id: string; poll_interval?: number; timeout?: number }) => Promise<unknown>;
 }
 
 export class AgentToolHandler {
@@ -79,7 +79,7 @@ export class AgentToolHandler {
       }
 
       return { content: [{ type: "text", text: JSON.stringify(this.toSessionSummary(session), null, 2) }] };
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.deps.setConsecutiveFailures(this.deps.getConsecutiveFailures() + 1);
       throw error;
     }

@@ -99,6 +99,8 @@ type _RegistryMatchesContractTools = Assert<
     : false
 >;
 
+import { type ToolHandlerMap, dispatchTool } from "../../contracts/mcp-tool-definitions.js";
+
 export type ToolHandler<TArgs, TResult = unknown> = (args: TArgs) => Promise<TResult> | TResult;
 
 type ToolKey<T> = Extract<keyof T, string>;
@@ -110,27 +112,27 @@ export interface McpToolResponse {
 }
 
 export class ToolRegistry<ToolArgsByName extends object, TResult = unknown> {
-  private readonly handlers = new Map<ToolKey<ToolArgsByName>, ToolHandler<unknown, TResult>>();
+  private readonly handlers: ToolHandlerMap<ToolArgsByName> = {};
 
   register<K extends ToolKey<ToolArgsByName>>(
     name: K,
     handler: ToolHandler<ToolArgsByName[K], TResult>,
   ): this {
-    this.handlers.set(name, handler as ToolHandler<unknown, TResult>);
+    this.handlers[name] = handler as ToolHandlerMap<ToolArgsByName>[K];
     return this;
   }
 
   has(name: string): name is ToolKey<ToolArgsByName> {
-    return this.handlers.has(name as ToolKey<ToolArgsByName>);
+    return name in this.handlers;
   }
 
   async dispatch<K extends ToolKey<ToolArgsByName>>(name: K, args: ToolArgsByName[K]): Promise<TResult>;
   async dispatch(name: string, args: unknown): Promise<TResult>;
   async dispatch(name: string, args: unknown): Promise<TResult> {
-    const handler = this.handlers.get(name as ToolKey<ToolArgsByName>);
-    if (!handler) {
-      throw new Error(`Tool not found: ${name}`);
-    }
-    return await handler(args);
+    return await dispatchTool<ToolArgsByName, Extract<keyof ToolArgsByName, string>>(
+      name,
+      args,
+      this.handlers
+    ) as TResult;
   }
 }

@@ -181,12 +181,18 @@ export const TOOL_DEFINITIONS = [
 
 export type ToolName = (typeof TOOL_DEFINITIONS)[number]["name"];
 
-export type ToolHandlerMap = Record<string, (args: any) => Promise<any>>;
+export type ToolHandlerMap<TMap extends object> = {
+  [K in keyof TMap]?: (args: TMap[K]) => Promise<unknown> | unknown;
+};
 
-export const dispatchTool = async (name: string, args: any, handlers: ToolHandlerMap): Promise<any> => {
-  const handler = handlers[name];
+export const dispatchTool = async <TMap extends object, K extends Extract<keyof TMap, string>>(
+  name: string,
+  args: unknown,
+  handlers: ToolHandlerMap<TMap>
+): Promise<unknown> => {
+  const handler = handlers[name as keyof TMap];
   if (!handler) {
     throw new Error(`Tool not found: ${name}`);
   }
-  return await handler(args);
+  return await handler(args as TMap[keyof TMap]);
 };

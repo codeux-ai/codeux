@@ -47,6 +47,31 @@ describe("CommandRunner", () => {
     expect(stdoutLines).toContain("line2");
   });
 
+  it("should buffer and emit correct line boundaries for partial chunks", async () => {
+    const stdoutLines: string[] = [];
+    const script = `
+      process.stdout.write('hel');
+      setTimeout(() => {
+        process.stdout.write('lo\\nwo');
+        setTimeout(() => {
+          process.stdout.write('rld\\n');
+        }, 10);
+      }, 10);
+    `;
+    await runner.run("node", ["-e", script], {
+      onStdoutLine: (line) => stdoutLines.push(line),
+    });
+    expect(stdoutLines).toEqual(["hello", "world"]);
+  });
+
+  it("should flush remaining string in buffer on close", async () => {
+    const stdoutLines: string[] = [];
+    await runner.run("node", ["-e", "process.stdout.write('no_newline_at_end')"], {
+      onStdoutLine: (line) => stdoutLines.push(line),
+    });
+    expect(stdoutLines).toEqual(["no_newline_at_end"]);
+  });
+
   it("should clip stderr if too long", async () => {
     // Generate 100 'a's on stderr
     const result = await runner.run("sh", ["-c", "for i in $(seq 1 100); do printf 'a' >&2; done"], {

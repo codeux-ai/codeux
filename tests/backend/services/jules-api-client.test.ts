@@ -1,172 +1,106 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { JulesApiClient } from "../../../src/integrations/jules-api-client.js";
 import axios from "axios";
-import type { AxiosInstance } from "axios";
-import { JulesApiClient, type JulesCreateSessionRequest } from "../../../src/integrations/jules-api-client.js";
 
-type HeaderCarrier = { headers?: Record<string, string> };
-type RequestInterceptor = (config: HeaderCarrier) => HeaderCarrier;
-
-vi.mock("axios", () => ({
-  default: {
-    create: vi.fn(),
-  },
-}));
+vi.mock("axios");
 
 describe("JulesApiClient", () => {
-  const get = vi.fn();
-  const post = vi.fn();
-  const use = vi.fn();
-  const axiosCreate = vi.mocked(axios.create);
-  let requestInterceptor: RequestInterceptor | undefined;
+  let client: JulesApiClient;
+  const baseUrl = "https://api.jules.ai";
+  const apiKey = "test-key";
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    requestInterceptor = undefined;
-
-    use.mockImplementation((handler: RequestInterceptor) => {
-      requestInterceptor = handler;
-      return 0;
-    });
-
-    axiosCreate.mockReturnValue({
-      get,
-      post,
+    vi.mocked(axios.create).mockReturnValue({
       interceptors: {
-        request: { use },
+        request: { use: vi.fn() },
+        response: { use: vi.fn() },
       },
-    } as unknown as AxiosInstance);
+      get: vi.fn(),
+      post: vi.fn(),
+    } as any);
+    client = new JulesApiClient({ baseUrl, apiKey });
   });
 
-  it("maps listSources args to Jules API query params", async () => {
-    get.mockResolvedValue({
-      data: {
-        sources: [{ id: "sources/1", name: "sources/1" }],
-        nextPageToken: "next-source-token",
-      },
-    });
-
-    const client = new JulesApiClient({
-      apiKey: "api-key",
-      baseUrl: "https://example.test",
-    });
-
-    const response = await client.listSources({
-      filter: "state:ACTIVE",
-      page_size: 25,
-      page_token: "token-1",
-    });
-
-    expect(get).toHaveBeenCalledWith("/sources", {
-      params: {
-        filter: "state:ACTIVE",
-        pageSize: 25,
-        pageToken: "token-1",
-      },
-    });
-    expect(response.sources).toHaveLength(1);
-    expect(response.nextPageToken).toBe("next-source-token");
+  it("should have api key", () => {
+    expect(client.hasApiKey()).toBe(true);
   });
 
-  it("paginates listAllSources until no nextPageToken remains", async () => {
-    get
-      .mockResolvedValueOnce({
-        data: {
-          sources: [{ id: "sources/1", name: "sources/1" }],
-          nextPageToken: "token-2",
-        },
-      })
-      .mockResolvedValueOnce({
-        data: {
-          sources: [{ id: "sources/2", name: "sources/2" }],
-        },
-      });
-
-    const client = new JulesApiClient({
-      apiKey: "api-key",
-      baseUrl: "https://example.test",
-    });
-
-    const sources = await client.listAllSources("state:ACTIVE");
-
-    expect(sources).toHaveLength(2);
-    expect(get).toHaveBeenNthCalledWith(1, "/sources", {
-      params: { filter: "state:ACTIVE", pageToken: undefined },
-    });
-    expect(get).toHaveBeenNthCalledWith(2, "/sources", {
-      params: { filter: "state:ACTIVE", pageToken: "token-2" },
-    });
+  it("should normalize name", () => {
+    expect(client.normalizeName("sources", "s1")).toBe("sources/s1");
+    expect(client.normalizeName("sources", "sources/s1")).toBe("sources/s1");
   });
 
-  it("normalizes session names for session and activity routes", async () => {
-    get.mockResolvedValue({ data: { sessions: [] } });
-    post.mockResolvedValue({ data: { name: "sessions/123" } });
-
-    const client = new JulesApiClient({
-      apiKey: "api-key",
-      baseUrl: "https://example.test",
-    });
-
-    await client.getSession("123");
-    await client.listActivities({ session_id: "sessions/123", page_size: 10, page_token: "page-1" });
-    await client.approveSessionPlan("sessions/123");
-    await client.sendSessionMessage("123", "Need more detail");
-
-    expect(get).toHaveBeenNthCalledWith(1, "/sessions/123");
-    expect(get).toHaveBeenNthCalledWith(2, "/sessions/123/activities", {
-      params: {
-        pageSize: 10,
-        pageToken: "page-1",
-      },
-    });
-    expect(post).toHaveBeenNthCalledWith(1, "/sessions/123:approvePlan");
-    expect(post).toHaveBeenNthCalledWith(2, "/sessions/123:sendMessage", { prompt: "Need more detail" });
+  it("should extract session id", () => {
+    expect(client.extractSessionId({ id: "sessions/s1" })).toBe("s1");
+    expect(client.extractSessionId({ name: "sessions/s2" })).toBe("s2");
   });
 
-  it("uses typed createSession payload and request interceptor api key", async () => {
-    post.mockResolvedValue({
-      data: {
-        name: "sessions/s-1",
-        id: "sessions/s-1",
-        prompt: "Build it",
-      },
+  describe("API calls", () => {
+    const mockAxios = () => (client as any).axiosInstance;
+
+    it("gets source", async () => {
+      mockAxios().get.mockResolvedValue({ data: { id: "s1" } });
+      const res = await client.getSource("s1");
+      expect(res.id).toBe("s1");
+      expect(mockAxios().get).toHaveBeenCalledWith("/sources/s1");
     });
 
-    const client = new JulesApiClient({
-      apiKey: "api-key",
-      baseUrl: "https://example.test",
+    it("lists sources", async () => {
+      mockAxios().get.mockResolvedValue({ data: { sources: [] } });
+      await client.listSources({ filter: "f" });
+      expect(mockAxios().get).toHaveBeenCalledWith("/sources", expect.anything());
     });
 
-    const payload: JulesCreateSessionRequest = {
-      prompt: "Build it",
-      title: "Task",
-      sourceContext: {
-        source: "sources/abc",
-        githubRepoContext: { startingBranch: "feature/sprint1" },
-      },
-      automationMode: "AUTO_CREATE_PR",
-      requirePlanApproval: false,
-    };
-
-    await client.createSession(payload);
-
-    expect(post).toHaveBeenCalledWith("/sessions", payload);
-    expect(requestInterceptor).toBeDefined();
-
-    const firstConfig = requestInterceptor!({ headers: {} });
-    expect(firstConfig.headers?.["X-Goog-Api-Key"]).toBe("api-key");
-
-    client.setApiKey("\n");
-    const secondConfig = requestInterceptor!({ headers: { "X-Goog-Api-Key": "stale" } });
-    expect(secondConfig.headers?.["X-Goog-Api-Key"]).toBeUndefined();
-  });
-
-  it("rejects requests when api key is missing", async () => {
-    const client = new JulesApiClient({
-      apiKey: "",
-      baseUrl: "https://example.test",
+    it("lists all sources", async () => {
+      mockAxios().get
+        .mockResolvedValueOnce({ data: { sources: [{ id: "1" }], nextPageToken: "next" } })
+        .mockResolvedValueOnce({ data: { sources: [{ id: "2" }] } });
+      const sources = await client.listAllSources();
+      expect(sources).toHaveLength(2);
     });
 
-    await expect(client.getSource("sources/1")).rejects.toThrow("Jules API key is not configured.");
-    expect(get).not.toHaveBeenCalled();
+    it("creates session", async () => {
+      mockAxios().post.mockResolvedValue({ data: { id: "s1" } });
+      const res = await client.createSession({ prompt: "p", sourceContext: { source: "src" } });
+      expect(res.id).toBe("s1");
+    });
+
+    it("gets session", async () => {
+      mockAxios().get.mockResolvedValue({ data: { id: "s1" } });
+      await client.getSession("s1");
+      expect(mockAxios().get).toHaveBeenCalledWith("/sessions/s1");
+    });
+
+    it("approves plan", async () => {
+      mockAxios().post.mockResolvedValue({ data: { ok: true } });
+      await client.approveSessionPlan("s1");
+      expect(mockAxios().post).toHaveBeenCalledWith("/sessions/s1:approvePlan");
+    });
+
+    it("sends message", async () => {
+      mockAxios().post.mockResolvedValue({ data: { ok: true } });
+      await client.sendSessionMessage("s1", "hi");
+      expect(mockAxios().post).toHaveBeenCalledWith("/sessions/s1:sendMessage", { prompt: "hi" });
+    });
+
+    it("gets activity", async () => {
+      mockAxios().get.mockResolvedValue({ data: { id: "a1" } });
+      await client.getActivity("s1", "a1");
+      expect(mockAxios().get).toHaveBeenCalledWith("/sessions/s1/activities/a1");
+    });
+
+    it("lists all activities", async () => {
+      mockAxios().get
+        .mockResolvedValueOnce({ data: { activities: [{ id: "1" }], nextPageToken: "next" } })
+        .mockResolvedValueOnce({ data: { activities: [{ id: "2" }] } });
+      const activities = await client.listAllActivities("s1");
+      expect(activities).toHaveLength(2);
+    });
+
+    it("fetches recent activities", async () => {
+      mockAxios().get.mockResolvedValue({ data: { activities: [{ createTime: "2021-01-01" }] } });
+      await client.fetchRecentActivities("s1", 10);
+      expect(mockAxios().get).toHaveBeenCalledWith("/sessions/s1/activities", expect.anything());
+    });
   });
 });

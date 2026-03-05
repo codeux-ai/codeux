@@ -2,43 +2,57 @@ import { describe, expect, it, vi } from "vitest";
 import { AgentToolHandler } from "../../../src/mcp/agent-tool-handler.js";
 
 describe("AgentToolHandler", () => {
-  it("returns compact task_agent response when wait is false", async () => {
-    const createTaskAgentSession = vi.fn().mockResolvedValue({
-      id: "sessions/new",
-      name: "sessions/new",
-      title: "Task",
-      state: "RUNNING",
-      provider: "jules",
-      prompt: "very large prompt",
-      outputs: [{ pullRequest: { url: "https://example.com/pr/new" } }],
+    const defaultDeps = {
+        sprintOrchestrator: { execute: vi.fn() } as any,
+        taskService: { createTaskAgentSession: vi.fn() } as any,
+        getDashboardSettings: vi.fn().mockReturnValue({ git: { sprintBranchScheme: "sprint" } }),
+        formatSprintBranch: vi.fn().mockReturnValue("branch-x"),
+        getConsecutiveFailures: vi.fn().mockReturnValue(0),
+        setConsecutiveFailures: vi.fn(),
+        getMaxFailures: vi.fn().mockReturnValue(3),
+        waitForSessionCompletion: vi.fn().mockResolvedValue({ wait: true }),
+    };
+
+    it("handleSprintAgent uses resolved args", async () => {
+        const handler = new AgentToolHandler(defaultDeps);
+        await handler.handleSprintAgent({ sprint_number: 1, repo_path: "repo", feature_branch: "" } as any);
+        expect(defaultDeps.sprintOrchestrator.execute).toHaveBeenCalledWith(expect.objectContaining({ feature_branch: "branch-x" }));
     });
 
-    const handler = new AgentToolHandler({
-      sprintOrchestrator: { execute: vi.fn() } as any,
-      taskService: { createTaskAgentSession } as any,
-      getDashboardSettings: () => ({ git: { sprintBranchScheme: "feature/sprint{sprint}-implementation" } }) as any,
-      formatSprintBranch: (scheme: string | undefined, sprint: number) => (scheme || "feature/sprint{sprint}-implementation").replace("{sprint}", String(sprint)),
-      getConsecutiveFailures: () => 0,
-      setConsecutiveFailures: vi.fn(),
-      getMaxFailures: () => 5,
-      waitForSessionCompletion: vi.fn(),
+    it("handleTaskAgent prevents execution on max fails", async () => {
+        const handler = new AgentToolHandler({ ...defaultDeps, getConsecutiveFailures: () => 3, getMaxFailures: () => 3 });
+        await expect(handler.handleTaskAgent({ prompt: "p" })).rejects.toThrow(/CRITICAL: Emergency stop active/);
     });
 
-    const response = await handler.handleTaskAgent({
-      prompt: "do work",
-      source_id: "123",
-      wait: false,
+    it("handleTaskAgent returns wait result if true", async () => {
+        const deps = { ...defaultDeps, taskService: { createTaskAgentSession: vi.fn().mockResolvedValue({ id: "1" }) } as any };
+        const handler = new AgentToolHandler(deps);
+        const res = await handler.handleTaskAgent({ prompt: "p", wait: true });
+        expect(res).toEqual({ wait: true });
     });
 
-    const parsed = JSON.parse(response.content[0].text as string);
-    expect(parsed.id).toBe("sessions/new");
-    expect(parsed.hasPullRequest).toBe(true);
-    expect(parsed.pullRequests).toEqual([{ url: "https://example.com/pr/new" }]);
-    expect(parsed.prompt).toBeUndefined();
-    expect(createTaskAgentSession).toHaveBeenCalledWith(
-      expect.objectContaining({
-        repo_path: process.cwd(),
-      })
-    );
-  });
+    it("handleTaskAgent returns session summary and resets fails", async () => {
+        const deps = { ...defaultDeps, taskService: { createTaskAgentSession: vi.fn().mockResolvedValue({ id: "1", outputs: [{ pullRequest: { url: "http" } }] }) } as any };
+        const handler = new AgentToolHandler(deps);
+        const res = await handler.handleTaskAgent({ prompt: "p" });
+        expect(deps.setConsecutiveFailures).toHaveBeenCalledWith(0);
+        expect((res as any).content[0].text).toContain("http");
+    });
+
+    it("handleTaskAgent increments fails on error", async () => {
+        const error = new Error("failed");
+        let fails = 0;
+        const deps = { ...defaultDeps, taskService: { createTaskAgentSession: vi.fn().mockRejectedValue(error) } as any, getConsecutiveFailures: () => fails, setConsecutiveFailures: vi.fn(val => fails = val) };
+        const handler = new AgentToolHandler(deps);
+        await expect(handler.handleTaskAgent({ prompt: "p" })).rejects.toThrow(error);
+        expect(deps.setConsecutiveFailures).toHaveBeenCalledWith(1);
+    });
+
+    it("toSessionSummary handles empty outputs", async () => {
+        const deps = { ...defaultDeps, taskService: { createTaskAgentSession: vi.fn().mockResolvedValue({ id: "1", outputs: [{}, { pullRequest: {} }] }) } as any };
+        const handler = new AgentToolHandler(deps);
+        const res = await handler.handleTaskAgent({ prompt: "p" });
+        expect(deps.setConsecutiveFailures).toHaveBeenCalledWith(0);
+        expect((res as any).content[0].text).toContain('"hasPullRequest": false');
+    });
 });

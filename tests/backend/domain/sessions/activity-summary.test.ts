@@ -74,7 +74,7 @@ describe("ActivitySummaryService", () => {
         provider: "jules",
         prompt: "original prompt",
         createTime: "2026-02-26T21:00:00.000Z",
-        outputs: [{ pullRequest: { url: "https://github.com/example/repo/pull/1" } }],
+        outputs: [{ pullRequest: { url: "https://github.com/example/repo/pull/1", workerBranch: "feature/test" } }],
       };
 
       const summary = service.toSessionSummary(session);
@@ -87,7 +87,33 @@ describe("ActivitySummaryService", () => {
         provider: "jules",
         createTime: "2026-02-26T21:00:00.000Z",
         hasPullRequest: true,
-        pullRequests: [{ url: "https://github.com/example/repo/pull/1" }],
+        pullRequests: [{ url: "https://github.com/example/repo/pull/1", workerBranch: "feature/test" }],
+      });
+    });
+
+    it("should correctly summarize a session with empty outputs", () => {
+      const session: JulesSession = {
+        id: "sessions/abc",
+        name: "sessions/abc",
+        title: "Test Session",
+        state: "RUNNING",
+        provider: "jules",
+        prompt: "original prompt",
+        createTime: "2026-02-26T21:00:00.000Z",
+        outputs: [],
+      };
+
+      const summary = service.toSessionSummary(session);
+
+      expect(summary).toEqual({
+        id: "sessions/abc",
+        name: "sessions/abc",
+        title: "Test Session",
+        state: "RUNNING",
+        provider: "jules",
+        createTime: "2026-02-26T21:00:00.000Z",
+        hasPullRequest: false,
+        pullRequests: [],
       });
     });
 

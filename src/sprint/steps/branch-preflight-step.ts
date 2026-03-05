@@ -1,53 +1,54 @@
-import { execFileSync } from "child_process";
-import * as fs from "fs";
+import { commandRunner } from "../../shared/subprocess/command-runner.js";
+import * as fs from "fs/promises";
 
 export interface BranchAvailability {
   existsLocal: boolean;
   existsRemote: boolean;
 }
 
-const isGitRepository = (repoPath: string): boolean => {
+const isGitRepository = async (repoPath: string): Promise<boolean> => {
   try {
-    execFileSync("git", ["rev-parse", "--is-inside-work-tree"], { cwd: repoPath, stdio: "ignore" });
-    return true;
+    const result = await commandRunner.run("git", ["rev-parse", "--is-inside-work-tree"], { cwd: repoPath });
+    return result.ok;
   } catch {
     return false;
   }
 };
 
-const hasLocalBranch = (repoPath: string, branch: string): boolean => {
+const hasLocalBranch = async (repoPath: string, branch: string): Promise<boolean> => {
   try {
-    execFileSync("git", ["show-ref", "--verify", `refs/heads/${branch}`], { cwd: repoPath, stdio: "ignore" });
-    return true;
+    const result = await commandRunner.run("git", ["show-ref", "--verify", `refs/heads/${branch}`], { cwd: repoPath });
+    return result.ok;
   } catch {
     return false;
   }
 };
 
-const hasRemoteBranch = (repoPath: string, branch: string): boolean => {
+const hasRemoteBranch = async (repoPath: string, branch: string): Promise<boolean> => {
   try {
-    const output = execFileSync("git", ["ls-remote", "--heads", "origin", branch], {
-      cwd: repoPath,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
-    return output.trim().length > 0;
+    const result = await commandRunner.run("git", ["ls-remote", "--heads", "origin", branch], { cwd: repoPath });
+    return result.ok && result.stdout.trim().length > 0;
   } catch {
     return false;
   }
 };
 
-export const runBranchPreflightStep = (repoPath: string, branch: string): BranchAvailability => {
-  if (!fs.existsSync(repoPath) || !fs.statSync(repoPath).isDirectory()) {
+export const runBranchPreflightStep = async (repoPath: string, branch: string): Promise<BranchAvailability> => {
+  try {
+    const stats = await fs.stat(repoPath);
+    if (!stats.isDirectory()) {
+      return { existsLocal: false, existsRemote: false };
+    }
+  } catch {
     return { existsLocal: false, existsRemote: false };
   }
 
-  if (!isGitRepository(repoPath)) {
+  if (!(await isGitRepository(repoPath))) {
     return { existsLocal: false, existsRemote: false };
   }
 
   return {
-    existsLocal: hasLocalBranch(repoPath, branch),
-    existsRemote: hasRemoteBranch(repoPath, branch),
+    existsLocal: await hasLocalBranch(repoPath, branch),
+    existsRemote: await hasRemoteBranch(repoPath, branch),
   };
 };

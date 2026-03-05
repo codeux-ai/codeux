@@ -22,6 +22,7 @@ import type {
 } from "../contracts/app-types.js";
 import { CycleRunner } from "../domain/sprint/orchestrator/cycle-runner.js";
 import { WatchLoopRunner } from "../domain/sprint/orchestrator/watch-loop-runner.js";
+import { SprintActionRunner } from "../domain/sprint/orchestrator/sprint-action-runner.js";
 import { SubtaskFileRepository } from "../infrastructure/repositories/subtask-file-repository.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { MainMergeGateService } from "../domain/sprint/ci/main-merge-gate.js";
@@ -61,6 +62,7 @@ export interface SprintOrchestratorDependencies {
 export class SprintOrchestrator {
   private readonly cycleRunner: CycleRunner;
   private readonly watchLoopRunner: WatchLoopRunner;
+  private readonly actionRunner: SprintActionRunner;
 
   constructor(private readonly deps: SprintOrchestratorDependencies) {
     this.cycleRunner = new CycleRunner(deps);
@@ -69,10 +71,16 @@ export class SprintOrchestrator {
       this.cycleRunner,
       this.renderMainMergeCiFeedback.bind(this)
     );
+    this.actionRunner = new SprintActionRunner(
+      deps,
+      this.cycleRunner,
+      this.watchLoopRunner,
+      this.runPlanningAction.bind(this)
+    );
   }
 
   private getDashboardPort(): number {
-    return this.deps.getDashboardPort?.() || this.deps.settings.dashboardPort || this.deps.dashboardPort;
+    return this.deps.getDashboardPort?.() || (this.deps.settings.dashboardPort as number) || this.deps.dashboardPort;
   }
 
   private getLoopStepSettings(): SprintLoopStepSettings {
@@ -226,7 +234,7 @@ export class SprintOrchestrator {
     }
 
     if (loopSteps.branchPreflight && (args.action === "plan" || args.action === "orchestrate")) {
-      const { existsLocal, existsRemote } = runBranchPreflightStep(repoPath, defaultFeatureBranch);
+      const { existsLocal, existsRemote } = await runBranchPreflightStep(repoPath, defaultFeatureBranch);
       if (!existsLocal || !existsRemote) {
         const branchBlocker = await this.renderBranchBlocker(args, repoPath, defaultFeatureBranch, existsLocal, existsRemote);
         return { content: [{ type: "text", text: branchBlocker }] };
@@ -245,85 +253,51 @@ export class SprintOrchestrator {
       return { content: [{ type: "text", text: `Sprint ${args.sprint_number} has already been finished in this session.` }] };
     }
 
-    if (args.action === "plan") {
-      return await this.runPlanningAction(args, subtasksDir, repoPath);
-    }
-
+    const dashboardPort = this.getDashboardPort();
     const supportsWatchMode = args.action === "orchestrate";
     const requestedWait = args.wait !== undefined ? args.wait : supportsWatchMode;
     const shouldWait = supportsWatchMode && requestedWait;
-    const watchEnabled = shouldWait && loopSteps.watchLoop;
-    const dashboardPort = this.getDashboardPort();
+    const watchLoopEnabled = shouldWait && loopSteps.watchLoop;
 
-    if (watchEnabled) {
-      const fullReport = await this.watchLoopRunner.run({
-        args,
-        repoPath,
-        subtasksDir,
-        defaultFeatureBranch,
-        defaultBranch,
-        githubMode,
-        retryFailed,
-        loopSteps,
-        ciIntelligence,
-        automationLevel,
-        automationInterventions,
-        dashboardPort,
-      });
-      return { content: [{ type: "text", text: fullReport }] };
+    switch (args.action) {
+      case "plan":
+        return await this.actionRunner.runPlan(args, subtasksDir, repoPath);
+      case "status":
+        return await this.actionRunner.runStatus({
+          args,
+          repoPath,
+          subtasksDir,
+          defaultFeatureBranch,
+          defaultBranch,
+          githubMode,
+          retryFailed,
+          loopSteps,
+          ciIntelligence,
+          automationLevel,
+          automationInterventions,
+          dashboardPort,
+          shouldWait,
+          watchLoopEnabled,
+        });
+      case "orchestrate":
+      default:
+        return await this.actionRunner.runOrchestrate({
+          args,
+          repoPath,
+          subtasksDir,
+          defaultFeatureBranch,
+          defaultBranch,
+          githubMode,
+          retryFailed,
+          loopSteps,
+          ciIntelligence,
+          automationLevel,
+          automationInterventions,
+          dashboardPort,
+          shouldWait,
+          watchLoopEnabled,
+        });
     }
-
-    const { subtasks, reportText, statusTable, instructions } = await this.cycleRunner.run({
-      action: args.action as "status" | "orchestrate",
-      automationLevel,
-      automationInterventions,
-      sprintNumber: args.sprint_number,
-      repoPath,
-      sourceId: args.source_id,
-      defaultFeatureBranch,
-      subtasksDir,
-      retryFailed,
-      loopSteps,
-      ciIntelligence,
-      githubMode,
-      defaultBranch,
-      featureBranchPrefix: this.deps.getDashboardSettings().git.featureBranchPrefix,
-    });
-
-    let report = `### Sprint ${args.sprint_number} Orchestration Report\n\n`;
-    report += `**Feature Branch:** \`${defaultFeatureBranch}\`\n`;
-    report += `**Dashboard:** [http://localhost:${dashboardPort}](http://localhost:${dashboardPort})\n\n`;
-
-    if (args.action === "status" && args.wait) {
-      report += "ℹ️ **Status Action is Instant:** Ignoring `wait: true` and returning a single-cycle status report.\n\n";
-    } else if (shouldWait && !loopSteps.watchLoop) {
-      report += "⚙️ **Watch Loop Disabled:** Running a single orchestration cycle because watch mode is disabled in settings.\n\n";
-    }
-
-    report += reportText;
-    report += statusTable;
-    report += instructions;
-
-    try {
-      const orchGuide = await this.deps.getGuideContent("orchestrator.md", repoPath);
-      report += `\n---\n\n### Orchestration Guidance\n\n${orchGuide}`;
-    } catch {
-      // Guide is optional.
-    }
-
-    this.deps.updateLastStatus({
-      sprint_number: args.sprint_number,
-      source_id: args.source_id,
-      repo_path: repoPath,
-      feature_branch: defaultFeatureBranch,
-      subtasks,
-      reportText,
-      statusTable,
-      instructions,
-      timestamp: new Date().toLocaleTimeString(),
-    });
-
-    return { content: [{ type: "text", text: report }] };
   }
 }
 

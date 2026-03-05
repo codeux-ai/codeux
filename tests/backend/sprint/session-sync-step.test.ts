@@ -111,4 +111,88 @@ describe("runSessionSyncStep", () => {
     expect(result.subtasks[0].session_id).toBe("new-session");
     expect(result.subtasks[0].status).toBe("COMPLETED");
   });
+
+  it("deduplicates activity fetches when multiple tasks map to the same session", async () => {
+    const subtasks: Subtask[] = [
+      { id: "task-1", title: "Task One", prompt: "", depends_on: [], is_independent: true, status: "PENDING" },
+      { id: "task-1", title: "Task One (Duplicate)", prompt: "", depends_on: [], is_independent: true, status: "PENDING" },
+    ];
+
+    const repoPath = "/tmp/my-repo";
+    const sprintNumber = 2;
+
+    const mockActivities = [{ name: "activity-1" }];
+    const fetchRecentActivities = vi.fn().mockResolvedValue(mockActivities);
+
+    const deps = {
+      listSessions: vi.fn().mockResolvedValue({
+        sessions: [
+          {
+            id: "session-1",
+            name: "sessions/session-1",
+            title: "Sprint 2: [run:my-repo/s2/task-1] [task-1] Task One",
+            state: "RUNNING",
+          },
+        ],
+      }),
+      resolveSessionName: (session: any) => session.name,
+      extractSessionId: (session: any) => session.id,
+      fetchRecentActivities,
+      isActionRequiredState: vi.fn().mockReturnValue(false),
+      logger: { warn: vi.fn() },
+    };
+
+    const result = await runSessionSyncStep(subtasks, deps as any, false, { repoPath, sprintNumber });
+
+    expect(fetchRecentActivities).toHaveBeenCalledTimes(1);
+    expect(fetchRecentActivities).toHaveBeenCalledWith("sessions/session-1", 5);
+    expect(result.subtasks[0].activities).toBe(mockActivities);
+    expect(result.subtasks[1].activities).toBe(mockActivities);
+  });
+
+  it("fetches activities using bounded parallelism for multiple unique sessions", async () => {
+    const subtasks: Subtask[] = Array.from({ length: 6 }).map((_, i) => ({
+      id: `task-${i}`,
+      title: `Task ${i}`,
+      prompt: "",
+      depends_on: [],
+      is_independent: true,
+      status: "PENDING",
+    }));
+
+    const repoPath = "/tmp/my-repo";
+    const sprintNumber = 3;
+
+    const sessions = Array.from({ length: 6 }).map((_, i) => ({
+      id: `session-${i}`,
+      name: `sessions/session-${i}`,
+      title: `Sprint 3: [run:my-repo/s3/task-${i}] [task-${i}] Task ${i}`,
+      state: "RUNNING",
+    }));
+
+    let concurrentFetches = 0;
+    let maxConcurrentFetches = 0;
+
+    const fetchRecentActivities = vi.fn().mockImplementation(async () => {
+      concurrentFetches++;
+      maxConcurrentFetches = Math.max(maxConcurrentFetches, concurrentFetches);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      concurrentFetches--;
+      return [{ info: "activity" }];
+    });
+
+    const deps = {
+      listSessions: vi.fn().mockResolvedValue({ sessions }),
+      resolveSessionName: (session: any) => session.name,
+      extractSessionId: (session: any) => session.id,
+      fetchRecentActivities,
+      isActionRequiredState: vi.fn().mockReturnValue(false),
+      logger: { warn: vi.fn() },
+    };
+
+    await runSessionSyncStep(subtasks, deps as any, false, { repoPath, sprintNumber });
+
+    expect(fetchRecentActivities).toHaveBeenCalledTimes(6);
+    expect(maxConcurrentFetches).toBeLessThanOrEqual(5);
+  });
 });

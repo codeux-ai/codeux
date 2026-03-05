@@ -60,6 +60,7 @@ describe("SettingsRepository", () => {
     const { repo, dbPath } = await createRepo();
     const saved = repo.saveSettings({
       dashboardPort: 4450,
+      enableDebugLogFile: false,
       automationLevel: "ALWAYS_ASK",
       automationInterventions: {
         autoApprovePlan: false,
@@ -190,5 +191,51 @@ describe("SettingsRepository", () => {
     expect(settings.aiProvider.providers.gemini.apiKey).toBe("env-gem");
     expect(settings.aiProvider.providers.codex.apiKey).toBe("env-cdx");
     expect(settings.git.githubToken).toBe("env-gh");
+  });
+
+  it("throws validation error when saving invalid settings payload", async () => {
+    const { repo } = await createRepo();
+    const settings = repo.getSettings();
+
+    // Create an invalid settings object
+    const invalidSettings = {
+      ...settings,
+      automationLevel: "INVALID_LEVEL", // should be "FULL" | "SEMI_AUTO" | "ALWAYS_ASK"
+      dashboardPort: "Not a number", // should be a number
+    };
+
+    let caughtError: any;
+    try {
+      // @ts-ignore - testing runtime validation
+      repo.saveSettings(invalidSettings);
+    } catch (e) {
+      caughtError = e;
+    }
+
+    expect(caughtError).toBeDefined();
+    expect(caughtError.name).toBe("SettingsValidationError");
+    expect(caughtError.issues).toBeDefined();
+    expect(Array.isArray(caughtError.issues)).toBe(true);
+
+    // Check that we got the expected structured issues
+    const paths = caughtError.issues.map((i: any) => i.path);
+    expect(paths).toContain("dashboardPort");
+    expect(paths).toContain("automationLevel");
+  });
+
+  it("handles empty objects safely and throws validation errors", async () => {
+    const { repo } = await createRepo();
+
+    let caughtError: any;
+    try {
+      // @ts-ignore - testing runtime validation
+      repo.saveSettings({});
+    } catch (e) {
+      caughtError = e;
+    }
+
+    expect(caughtError).toBeDefined();
+    expect(caughtError.name).toBe("SettingsValidationError");
+    expect(caughtError.issues.length).toBeGreaterThan(0);
   });
 });

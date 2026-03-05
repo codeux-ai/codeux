@@ -1,6 +1,6 @@
-import { commandRunner, CommandResult } from "../shared/subprocess/command-runner.js";
+import { commandRunner, CommandResult, CommandOptions } from "../shared/subprocess/command-runner.js";
 
-export { CommandResult };
+export { commandRunner, CommandResult, CommandOptions };
 
 export interface StreamingCommandOptions {
   onStdoutLine?: (line: string) => void;

@@ -1,0 +1,152 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { bootDashboard, reinitializeLogger, type BootDashboardDeps } from "../../../../src/app/lifecycle/dashboard-lifecycle-service.js";
+import { setupDashboardServer } from "../../../../src/server/dashboard-server.js";
+import { createLogger } from "../../../../src/shared/logging/logger.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../src/repositories/settings-defaults.js";
+import * as path from "path";
+
+vi.mock("../../../../src/server/dashboard-server.js");
+vi.mock("../../../../src/shared/logging/logger.js");
+
+describe("dashboard-lifecycle-service", () => {
+  let mockDeps: BootDashboardDeps;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockDeps = {
+      app: {} as any,
+      projectRoot: "/project-root",
+      getDashboardPort: vi.fn().mockReturnValue(3000),
+      runtimeContext: {
+        lastStatus: "idle",
+        dashboardSettings: { ...DEFAULT_DASHBOARD_SETTINGS },
+        dashboardRuntimePort: undefined,
+      } as any,
+      externalSettingsHints: {} as any,
+      settingsRepository: {
+        saveSettings: vi.fn().mockImplementation((s) => s),
+      } as any,
+      activityCacheService: {
+        invalidateGitStatusCache: vi.fn(),
+      } as any,
+      taskRerunService: {
+        rerunTask: vi.fn().mockResolvedValue({ id: "123" }),
+      } as any,
+      logger: {
+        child: vi.fn().mockReturnValue({}),
+      } as any,
+      getLiveActivitiesForActiveTasks: vi.fn(),
+      getGitStatus: vi.fn(),
+      isReady: vi.fn(),
+      isHealthy: vi.fn(),
+      syncGitSettingsFromDashboard: vi.fn(),
+      refreshJulesApiKey: vi.fn(),
+      setLogger: vi.fn(),
+      LIVE_ACTIVITY_CACHE_MS: 500,
+    };
+
+    vi.mocked(setupDashboardServer).mockResolvedValue({ port: 3000 } as any);
+  });
+
+  describe("reinitializeLogger", () => {
+    it("creates logger without logFilePath when enableDebugLogFile is false or undefined", () => {
+      mockDeps.runtimeContext.dashboardSettings!.enableDebugLogFile = false;
+
+      reinitializeLogger({
+        projectRoot: mockDeps.projectRoot,
+        runtimeContext: mockDeps.runtimeContext,
+      });
+
+      expect(createLogger).toHaveBeenCalledWith({
+        bindings: { service: "jules-subagents" },
+        logFilePath: undefined,
+      });
+    });
+
+    it("creates logger with logFilePath when enableDebugLogFile is true", () => {
+      mockDeps.runtimeContext.dashboardSettings!.enableDebugLogFile = true;
+
+      reinitializeLogger({
+        projectRoot: mockDeps.projectRoot,
+        runtimeContext: mockDeps.runtimeContext,
+      });
+
+      expect(createLogger).toHaveBeenCalledWith({
+        bindings: { service: "jules-subagents" },
+        logFilePath: path.join("/project-root", ".jules-subagents", "debug.log"),
+      });
+    });
+  });
+
+  describe("bootDashboard", () => {
+    it("sets dashboardRuntimePort and calls setupDashboardServer with correct arguments", async () => {
+      await bootDashboard(mockDeps);
+
+      expect(mockDeps.getDashboardPort).toHaveBeenCalled();
+      expect(setupDashboardServer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          app: mockDeps.app,
+          dashboardDir: path.join("/project-root", "dashboard"),
+          port: 3000,
+          liveActivityCacheMs: 500,
+        })
+      );
+      expect(mockDeps.runtimeContext.dashboardRuntimePort).toBe(3000);
+    });
+
+    it("handles saveSettings callback correctly", async () => {
+      const mockLogger = {};
+      vi.mocked(createLogger).mockReturnValue(mockLogger as any);
+
+      await bootDashboard(mockDeps);
+
+      const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+      const newSettings = { ...DEFAULT_DASHBOARD_SETTINGS, enableDebugLogFile: true };
+
+      const result = setupArgs.saveSettings(newSettings);
+
+      expect(mockDeps.settingsRepository.saveSettings).toHaveBeenCalledWith(newSettings);
+      expect(mockDeps.syncGitSettingsFromDashboard).toHaveBeenCalled();
+      expect(mockDeps.refreshJulesApiKey).toHaveBeenCalled();
+      expect(createLogger).toHaveBeenCalled(); // via reinitializeLogger
+      expect(mockDeps.setLogger).toHaveBeenCalledWith(mockLogger);
+      expect(mockDeps.activityCacheService.invalidateGitStatusCache).toHaveBeenCalled();
+      expect(result).toEqual(newSettings);
+    });
+
+    it("handles rerunTask callback correctly", async () => {
+      await bootDashboard(mockDeps);
+
+      const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+
+      const result = await setupArgs.rerunTask!("task-1");
+
+      expect(mockDeps.taskRerunService.rerunTask).toHaveBeenCalledWith("task-1");
+      expect(mockDeps.activityCacheService.invalidateGitStatusCache).toHaveBeenCalled();
+      expect(result).toEqual({ id: "123" });
+    });
+
+    it("handles other callbacks correctly", async () => {
+      await bootDashboard(mockDeps);
+      const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+
+      setupArgs.getStatus();
+      expect(mockDeps.runtimeContext.lastStatus).toBe("idle");
+
+      expect(setupArgs.getLiveActivities).toBe(mockDeps.getLiveActivitiesForActiveTasks);
+      expect(setupArgs.getGitStatus).toBe(mockDeps.getGitStatus);
+
+      expect(setupArgs.getExternalSettingsHints()).toBe(mockDeps.externalSettingsHints);
+
+      mockDeps.runtimeContext.dashboardSettings = undefined;
+      expect(setupArgs.getSettings()).toEqual(DEFAULT_DASHBOARD_SETTINGS);
+
+      mockDeps.runtimeContext.dashboardSettings = { someSetting: "value" } as any;
+      expect(setupArgs.getSettings()).toEqual({ someSetting: "value" });
+
+      expect(setupArgs.isReady).toBe(mockDeps.isReady);
+      expect(setupArgs.isHealthy).toBe(mockDeps.isHealthy);
+    });
+  });
+});

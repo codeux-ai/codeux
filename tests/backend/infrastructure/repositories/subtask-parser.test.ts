@@ -67,6 +67,37 @@ is_independent: true
     expect(SubtaskParser.parse("T1", "merged: true").is_merged).toBe(true);
   });
 
+  it("handles multiline metadata", () => {
+    const content = `
+title: Multi Line
+ Task Title
+depends_on: [T01]
+is_independent: true
+prompt:
+The prompt.
+`.trim();
+    const result = SubtaskParser.parse("T1", content);
+    expect(result.title).toBe("Multi Line Task Title");
+  });
+
+  it("parses depends_on correctly with complex spacing and quotes", () => {
+    expect(SubtaskParser.parseDependsOn('[  "T01, T02" , T03 , \'T04\'  ]')).toEqual(["T01, T02", "T03", "T04"]);
+  });
+
+  it("sorts depends_on in stringify for deterministic output", () => {
+    const original: any = {
+      id: "T01",
+      title: "Round Trip",
+      depends_on: ["T03", "T02"],
+      is_independent: false,
+      is_merged: true,
+      prompt: "Original prompt content",
+    };
+
+    const stringified = SubtaskParser.stringify(original);
+    expect(stringified).toContain('depends_on: ["T02", "T03"]');
+  });
+
   it("is case-insensitive for metadata keys", () => {
     const content = `
 TITLE: Case Task
@@ -94,7 +125,7 @@ Another key: value inside prompt.
     const original: any = {
       id: "T01",
       title: "Round Trip",
-      depends_on: ["T02", "T03"],
+      depends_on: ["T03", "T02"], // Unordered to test deterministic sorting
       is_independent: false,
       is_merged: true,
       prompt: "Original prompt content",
@@ -105,7 +136,7 @@ Another key: value inside prompt.
 
     expect(parsed.id).toBe(original.id);
     expect(parsed.title).toBe(original.title);
-    expect(parsed.depends_on).toEqual(original.depends_on);
+    expect(parsed.depends_on).toEqual(["T02", "T03"]); // Should be parsed back sorted
     expect(parsed.is_independent).toBe(original.is_independent);
     expect(parsed.is_merged).toBe(original.is_merged);
     expect(parsed.prompt).toBe(original.prompt);

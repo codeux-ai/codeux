@@ -142,8 +142,25 @@ describe("setupDashboardServer", () => {
     expect(handle.port).toBe(blockedPort + 1);
   });
 
-  it("serves /health and /ready endpoints", async () => {
+  it("serves /health and /ready endpoints with detailed probe payload", async () => {
     const app = express();
+    const probeResponse = {
+      status: "READY" as const,
+      components: {
+        settingsDb: "UP" as const,
+        dashboardBind: "UP" as const,
+        mcpService: "UP" as const,
+      }
+    };
+    const healthResponseData = {
+      status: "UP" as const,
+      components: {
+        settingsDb: "UP" as const,
+        dashboardBind: "UP" as const,
+        mcpService: "UP" as const,
+      }
+    };
+
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
@@ -156,21 +173,31 @@ describe("setupDashboardServer", () => {
       getSettings: () => ({} as any),
       saveSettings: (settings) => settings,
       rerunTask: async () => ({ ok: true }),
-      isReady: () => true,
+      isReady: () => probeResponse,
+      isHealthy: () => healthResponseData,
     });
     serversToClose.push(handle.server);
 
     const healthResponse = await fetch(`http://127.0.0.1:${handle.port}/health`);
     expect(healthResponse.status).toBe(200);
-    expect(await healthResponse.json()).toEqual({ status: "UP" });
+    expect(await healthResponse.json()).toEqual(healthResponseData);
 
     const readyResponse = await fetch(`http://127.0.0.1:${handle.port}/ready`);
     expect(readyResponse.status).toBe(200);
-    expect(await readyResponse.json()).toEqual({ status: "READY" });
+    expect(await readyResponse.json()).toEqual(probeResponse);
   });
 
   it("returns 503 for /ready when server is not ready", async () => {
     const app = express();
+    const probeResponse = {
+      status: "NOT_READY" as const,
+      components: {
+        settingsDb: "UP" as const,
+        dashboardBind: "UP" as const,
+        mcpService: "DOWN" as const,
+      }
+    };
+
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
@@ -183,12 +210,12 @@ describe("setupDashboardServer", () => {
       getSettings: () => ({} as any),
       saveSettings: (settings) => settings,
       rerunTask: async () => ({ ok: true }),
-      isReady: () => false,
+      isReady: () => probeResponse,
     });
     serversToClose.push(handle.server);
 
     const readyResponse = await fetch(`http://127.0.0.1:${handle.port}/ready`);
     expect(readyResponse.status).toBe(503);
-    expect(await readyResponse.json()).toEqual({ status: "NOT_READY" });
+    expect(await readyResponse.json()).toEqual(probeResponse);
   });
 });

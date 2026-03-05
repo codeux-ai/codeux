@@ -3,7 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import type { Server } from "http";
 import { createServer } from "http";
-import type { DashboardSettings, ExternalSettingsHints, GitTrackingStatus, JulesActivity } from "../contracts/app-types.js";
+import type { DashboardSettings, ExternalSettingsHints, GitTrackingStatus, JulesActivity, ReadinessProbeStatus } from "../contracts/app-types.js";
 import { correlationIdMiddleware } from "../shared/logging/correlation-id.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
 
@@ -20,7 +20,8 @@ export interface DashboardServerOptions {
   saveSettings: (settings: DashboardSettings) => DashboardSettings;
   rerunTask: (taskId: string) => Promise<unknown>;
   logger?: Logger;
-  isReady?: () => boolean;
+  isReady?: () => ReadinessProbeStatus;
+  isHealthy?: () => ReadinessProbeStatus;
 }
 
 export interface DashboardServerHandle {
@@ -95,15 +96,20 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   app.use(express.json({ limit: "1mb" }));
 
   app.get("/health", (req, res) => {
-    res.json({ status: "UP" });
+    const healthy = options.isHealthy ? options.isHealthy() : { status: "UP" as const };
+    if (healthy.status === "UP") {
+      res.json(healthy);
+    } else {
+      res.status(503).json(healthy);
+    }
   });
 
   app.get("/ready", (req, res) => {
-    const ready = isReady ? isReady() : true;
-    if (ready) {
-      res.json({ status: "READY" });
+    const ready = isReady ? isReady() : { status: "READY" as const };
+    if (ready.status === "READY" || ready.status === "UP") {
+      res.json(ready);
     } else {
-      res.status(503).json({ status: "NOT_READY" });
+      res.status(503).json(ready);
     }
   });
 

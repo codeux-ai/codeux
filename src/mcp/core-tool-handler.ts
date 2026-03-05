@@ -209,14 +209,14 @@ export class CoreToolHandler {
             session.state === "COMPLETED" ||
             session.state === "FAILED" ||
             this.deps.isActionRequiredState(session.state) ||
-            !!session.outputs?.some((output: any) => output.pullRequest)
+            !!session.outputs?.some((output: unknown) => (output as { pullRequest?: unknown })?.pullRequest)
           );
         },
       });
 
       return { content: [{ type: "text", text: JSON.stringify(this.deps.activitySummary.toSessionSummary(session), null, 2) }] };
-    } catch (error: any) {
-      if (error.message?.includes("Timeout waiting for")) {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message?.includes("Timeout waiting for")) {
         throw new Error(`Timeout waiting for session ${session_id}`);
       }
       throw error;

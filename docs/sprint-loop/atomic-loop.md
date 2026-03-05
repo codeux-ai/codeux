@@ -8,8 +8,8 @@ This document explains the sprint orchestrator control flow and each atomic step
 - Public method: `execute(args: SprintAgentArgs)`
 - Shared args type: `src/sprint/sprint-types.ts`
 - Supporting modules:
-  - `src/sprint/action-required-automation.ts`
-  - `src/sprint/ci-status-utils.ts`
+  - `src/domain/sprint/orchestrator/*`
+  - `src/domain/sprint/ci/*`
 
 ## Actions
 

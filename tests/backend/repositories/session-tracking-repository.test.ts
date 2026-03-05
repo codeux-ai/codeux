@@ -127,4 +127,56 @@ describe("SessionTrackingRepository", () => {
       workerBranch: "task/feature-sprint1-task-1-gemini-new",
     });
   });
+
+  it("updates an existing session", async () => {
+    const repo = await createRepo();
+    repo.createSession({ id: "s1", provider: "jules", state: "RUNNING" });
+    
+    const updated = repo.updateSession("s1", { state: "COMPLETED", prUrl: "https://github.com/pr/1" });
+    
+    expect(updated?.state).toBe("COMPLETED");
+    expect(updated?.outputs?.[0]?.pullRequest?.url).toBe("https://github.com/pr/1");
+  });
+
+  it("appends and lists activities", async () => {
+    const repo = await createRepo();
+    repo.createSession({ id: "s1", provider: "jules" });
+    
+    repo.appendActivity("s1", { description: "act 1", payload: { x: 1 } });
+    repo.appendActivity("s1", { description: "act 2" });
+    
+    const activities = repo.listAllActivities("s1");
+    expect(activities).toHaveLength(2);
+    // In some runs the timestamps might identical, let us be safer
+    expect(activities.some(a => a.description === "act 1")).toBe(true);
+    expect(activities.some(a => (a as any).x === 1)).toBe(true);
+    
+    const paged = repo.listActivities({ session_id: "s1", page_size: 1 });
+    expect(paged.activities).toHaveLength(1);
+    expect(paged.nextPageToken).toBe("1");
+  });
+
+  it("lists sessions", async () => {
+    const repo = await createRepo();
+    repo.createSession({ id: "s1", provider: "jules", title: "T1" });
+    repo.createSession({ id: "s2", provider: "gemini", title: "T2" });
+    
+    const list = repo.listSessions(10);
+    expect(list.sessions).toHaveLength(2);
+    expect(list.sessions.map(s => s.id)).toContain("s1");
+    expect(list.sessions.map(s => s.id)).toContain("s2");
+  });
+
+  it("fetches recent activities", async () => {
+    const repo = await createRepo();
+    repo.createSession({ id: "s1", provider: "jules" });
+    repo.appendActivity("s1", { description: "1" });
+    repo.appendActivity("s1", { description: "2" });
+    repo.appendActivity("s1", { description: "3" });
+    
+    const recent = repo.fetchRecentActivities("s1", 2);
+    expect(recent).toHaveLength(2);
+    expect(recent[0].description).toBe("2");
+    expect(recent[1].description).toBe("3");
+  });
 });

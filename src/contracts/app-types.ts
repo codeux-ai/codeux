@@ -4,6 +4,17 @@ export interface JulesSource {
   [key: string]: unknown;
 }
 
+export interface PullRequestOutput {
+  url?: string;
+  workerBranch?: string;
+  [key: string]: unknown;
+}
+
+export interface SessionOutput {
+  pullRequest?: PullRequestOutput;
+  [key: string]: unknown;
+}
+
 export interface JulesSession {
   name: string;
   id: string;
@@ -12,7 +23,7 @@ export interface JulesSession {
   provider?: ProviderId;
   prompt: string;
   createTime?: string;
-  outputs?: Array<{ pullRequest?: any; [key: string]: any }>;
+  outputs?: SessionOutput[];
 }
 
 export interface JulesActivity {
@@ -28,7 +39,7 @@ export interface JulesActivity {
   sessionFailed?: { reason?: string };
   sessionCompleted?: unknown;
   description?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export type SubtaskStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED";
@@ -90,7 +101,7 @@ export interface DashboardStats {
 
 export interface Settings {
   maxFailures?: number;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export type AutomationLevel = "FULL" | "SEMI_AUTO" | "ALWAYS_ASK";
@@ -297,5 +308,34 @@ export interface ExternalSettingsHints {
     codexApiKey: string;
     claudeCodeApiKey: string;
     githubToken: string;
+  };
+}
+
+export interface GetCiStatusForScopeArgs {
+  repoPath: string;
+  scope: "FEATURE_PR_CI" | "MAIN_MERGE_PR_CI";
+  featureBranch: string;
+  defaultBranch: string;
+  featureBranchPrefix: string;
+}
+
+export interface AutoMergeFeaturePrArgs {
+  repoPath: string;
+  prNumber: number;
+}
+
+export interface PersistTaskMergedFlagArgs {
+  repoPath: string;
+  sprintNumber: number;
+  taskId: string;
+  merged: boolean;
+}
+
+export interface ReadinessProbeStatus {
+  status: "UP" | "READY" | "NOT_READY" | "DOWN";
+  components?: {
+    settingsDb: "UP" | "DOWN";
+    dashboardBind: "UP" | "DOWN";
+    mcpService: "UP" | "DOWN";
   };
 }

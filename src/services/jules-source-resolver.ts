@@ -1,4 +1,4 @@
-import { execFileSync } from "child_process";
+import { commandRunner } from "../shared/subprocess/command-runner.js";
 import type { JulesApiClient } from "../integrations/jules-api-client.js";
 
 interface ResolveSourceIdArgs {
@@ -89,12 +89,11 @@ export class JulesSourceResolver {
 
   constructor(private readonly julesApi: JulesApiClient) {}
 
-  private getLocalRepoIdentity(repoPath: string): RepoIdentity {
-    const remoteUrl = execFileSync("git", ["config", "--get", "remote.origin.url"], {
+  private async getLocalRepoIdentity(repoPath: string): Promise<RepoIdentity> {
+    const remoteUrlCmd = await commandRunner.runStrict("git", ["config", "--get", "remote.origin.url"], {
       cwd: repoPath,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
+    });
+    const remoteUrl = remoteUrlCmd.stdout.trim();
 
     const parsed = parseRepoIdentity(remoteUrl);
     if (!parsed) {
@@ -104,7 +103,7 @@ export class JulesSourceResolver {
   }
 
   async resolveSourceId(args: ResolveSourceIdArgs): Promise<string> {
-    const repo = this.getLocalRepoIdentity(args.repoPath);
+    const repo = await this.getLocalRepoIdentity(args.repoPath);
     const cacheKey = `${repo.owner}/${repo.repo}`;
 
     if (!args.requestedSourceId) {
