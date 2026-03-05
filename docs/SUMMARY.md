@@ -5,6 +5,7 @@
 - [System Overview](./architecture/system-overview.md)
 - [Repository Map](./architecture/repository-map.md)
 - [Sprint 2 Gap Closure and Migration Contract](./architecture/sprint-2-gap-closure.md)
+- [Sprint 4 Project Management Foundation and Tool Surface Migration](./architecture/sprint-4-project-management-foundation.md)
 - [MCP Tools and Contracts](./mcp/tools-and-contracts.md)
 - [MCP Runtime and Dispatch](./mcp/runtime-and-dispatch.md)
 - [Atomic Sprint Loop](./sprint-loop/atomic-loop.md)
