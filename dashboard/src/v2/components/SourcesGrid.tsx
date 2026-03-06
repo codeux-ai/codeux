@@ -55,9 +55,9 @@ export const SourcesGrid: FunctionComponent = () => {
     return (
         <div className="w-full relative z-10">
             {/* Section Header */}
-            <div className="flex items-end justify-between mb-16 px-2">
+            <div className="flex items-end justify-between mb-16 px-2 overflow-hidden">
                 <div className="relative">
-                    <h2 className="text-[6rem] font-black tracking-tighter text-black/[0.04] dark:text-white/[0.04] absolute -top-8 -left-3 pointer-events-none select-none font-display leading-none">DATA</h2>
+                    <h2 className="text-[6rem] font-black tracking-tighter text-black/[0.04] dark:text-white/[0.04] absolute -top-8 -left-3 pointer-events-none select-none font-display leading-none overflow-hidden">DATA</h2>
                     <h3 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white relative z-10 flex items-center gap-2.5">
                         <Activity className="w-5 h-5 text-signal-500" strokeWidth={2.5} />
                         Projects &amp; Sources

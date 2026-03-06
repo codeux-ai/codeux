@@ -61,9 +61,9 @@ export const TasksList: FunctionComponent = () => {
                         key={task.id}
                         className="group relative flex items-center justify-between py-5 cursor-pointer border-b border-black/[0.05] dark:border-white/[0.04] last:border-0"
                     >
-                        {/* Hover backdrop */}
-                        <div className="absolute inset-y-0 -inset-x-4 bg-gradient-to-r from-signal-500/0 via-signal-500/[0.03] to-signal-500/0 dark:via-signal-500/[0.05] opacity-0 group-hover:opacity-100 transition-opacity duration-400 -z-10 rounded-2xl" />
-                        <div className="absolute inset-y-1 -inset-x-3 bg-white/50 dark:bg-void-700/40 opacity-0 group-hover:opacity-100 transition-all duration-300 -z-10 rounded-2xl" />
+                        {/* Hover backdrop — no negative x overflow */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-signal-500/0 via-signal-500/[0.03] to-signal-500/0 dark:via-signal-500/[0.05] opacity-0 group-hover:opacity-100 transition-opacity duration-400 -z-10 rounded-xl" />
+                        <div className="absolute inset-y-1 inset-x-0 bg-white/50 dark:bg-void-700/40 opacity-0 group-hover:opacity-100 transition-all duration-300 -z-10 rounded-xl" />
 
                         <div className="flex-1 grid grid-cols-12 gap-5 items-center">
                             {/* ID */}

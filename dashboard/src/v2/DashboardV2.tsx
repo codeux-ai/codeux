@@ -46,8 +46,8 @@ export const DashboardV2: FunctionComponent = () => {
             </section>
 
             {/* Section Divider */}
-            <div className="w-full flex items-center justify-center py-4 relative z-10">
-                <div className="absolute w-[200vw] h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.06] to-transparent left-1/2 -translate-x-1/2" />
+            <div className="w-full flex items-center justify-center py-4 relative z-10 overflow-hidden">
+                <div className="absolute inset-y-1/2 inset-x-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.06] to-transparent" />
                 <div className="bg-[#F9F8F4] dark:bg-void-900 px-6 py-1.5 border border-black/[0.06] dark:border-white/[0.06] rounded-full shadow-sm relative z-10 text-[9px] font-bold uppercase tracking-[0.25em] text-slate-400 dark:text-slate-600">
                     Data Streams
                 </div>
@@ -81,20 +81,22 @@ export const DashboardV2: FunctionComponent = () => {
                         </h3>
 
                         {/* Holographic Radar */}
-                        <div className="flex-grow flex items-center justify-center relative overflow-hidden bg-transparent">
+                        <div className="flex-grow flex items-center justify-center relative overflow-hidden">
+                            {/* Radar rings */}
                             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                <div className="w-48 h-48 rounded-full border border-black/[0.06] dark:border-white/[0.08] animate-[ping_4s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
+                                <div className="w-48 h-48 rounded-full border border-black/[0.07] dark:border-white/[0.08] animate-[ping_4s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
                                 <div className="w-72 h-72 rounded-full border border-black/[0.04] dark:border-white/[0.05] absolute animate-[ping_7s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
-                                <div className="w-full h-full absolute bg-[radial-gradient(circle_at_center,_transparent_35%,_rgba(249,248,244,0.6)_100%)] dark:bg-[radial-gradient(circle_at_center,_transparent_35%,_rgba(14,12,10,0.8)_100%)]" />
+                                <div className="w-[22rem] h-[22rem] rounded-full border border-black/[0.02] dark:border-white/[0.03] absolute animate-[ping_10s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
                             </div>
-                            <div className="text-center relative z-10 backdrop-blur-xl p-10 rounded-[2.5rem] border border-black/[0.06] dark:border-white/[0.08] shadow-[0_8px_40px_rgba(0,0,0,0.05)] dark:shadow-[0_8px_40px_rgba(0,0,0,0.3)]">
-                                <div className="w-16 h-16 rounded-[1.5rem] bg-black/[0.04] dark:bg-white/[0.05] border border-black/[0.06] dark:border-white/[0.08] shadow-[0_0_30px_rgba(227,0,15,0.15)] mx-auto mb-6 flex items-center justify-center group-hover:rotate-[180deg] group-hover:scale-110 transition-all duration-1000 ease-out">
-                                    <svg className="w-8 h-8 text-status-red" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            {/* Floating content — no box, no background */}
+                            <div className="text-center relative z-10">
+                                <div className="w-14 h-14 rounded-[1.25rem] border border-black/[0.07] dark:border-white/[0.07] shadow-[0_0_28px_rgba(227,0,15,0.12)] mx-auto mb-5 flex items-center justify-center group-hover:rotate-[180deg] group-hover:scale-110 transition-all duration-1000 ease-out">
+                                    <svg className="w-7 h-7 text-status-red opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M13 10V3L4 14h7v7l9-11h-7z" />
                                     </svg>
                                 </div>
-                                <span className="text-slate-900 dark:text-white font-bold text-base tracking-widest block uppercase font-display">Awaiting Stream</span>
-                                <span className="text-sm text-status-red font-mono mt-3 block animate-pulse">Socket offline</span>
+                                <span className="text-slate-500 dark:text-slate-500 font-semibold text-sm tracking-widest block uppercase font-display">Awaiting Stream</span>
+                                <span className="text-xs text-status-red/60 font-mono mt-2 block animate-pulse">Socket offline</span>
                             </div>
                         </div>
                     </aside>
