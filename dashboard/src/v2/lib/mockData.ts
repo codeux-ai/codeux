@@ -3,7 +3,11 @@ export const mockStats = {
     weeklyTokens: 8200000,
     successRate: 98.4,
     failedJobs: 12,
+    dailyFailed: 3,
+    weeklyFailed: 9,
     completedJobs: 738,
+    dailySuccess: 245,
+    weeklySuccess: 493,
     modelDist: {
         gemini: 65,
         claude: 25,

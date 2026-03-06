@@ -132,13 +132,25 @@ export const HeaderStats: FunctionComponent = () => {
                     <h3 className="text-slate-500 dark:text-slate-400 font-medium text-sm tracking-wide group-hover:text-pantone-green transition-colors">Succeeded Jobs</h3>
                     <div className="w-2 h-2 rounded-full bg-[#00AB84] shadow-[0_0_12px_#00AB84] animate-pulse" />
                 </div>
-                <div className="flex items-end justify-between relative z-10">
-                    <span className="text-4xl font-semibold font-mono text-slate-900 dark:text-white tracking-tighter group-hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.2)] transition-all">
-                        6,842
-                    </span>
-                    <span className="text-[#00AB84] text-sm font-bold flex items-center gap-1 group-hover:drop-shadow-[0_0_8px_rgba(0,171,132,0.5)] transition-all font-mono">
-                        {mockStats.successRate}% <span className="text-[10px] text-slate-400 uppercase ml-1">Success</span>
-                    </span>
+                <div className="relative z-10 flex flex-col w-full">
+                    <div className="flex items-end justify-between mb-1">
+                        <span className="text-4xl font-semibold font-mono text-slate-900 dark:text-white tracking-tighter group-hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.2)] transition-all">
+                            6,842
+                        </span>
+                        <span className="text-[#00AB84] text-sm font-bold flex items-center gap-1 group-hover:drop-shadow-[0_0_8px_rgba(0,171,132,0.5)] transition-all font-mono">
+                            {mockStats.successRate}% <span className="text-[10px] text-slate-400 uppercase ml-1">Success</span>
+                        </span>
+                    </div>
+                    <div className="flex flex-col gap-1 mt-4 border-t border-slate-200 dark:border-white/10 pt-4 w-full">
+                        <div className="flex justify-between items-center text-xs font-mono font-medium">
+                            <span className="text-slate-400">DAILY</span>
+                            <span className="text-slate-900 dark:text-white">{mockStats.dailySuccess.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs font-mono font-medium">
+                            <span className="text-slate-400">WEEKLY</span>
+                            <span className="text-slate-900 dark:text-white">{mockStats.weeklySuccess.toLocaleString()}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -153,13 +165,25 @@ export const HeaderStats: FunctionComponent = () => {
                         <div className="absolute inset-0 bg-[#E3000F] rounded-full animate-ping opacity-75" />
                     </div>
                 </div>
-                <div className="flex items-end justify-between relative z-10">
-                    <span className="text-4xl font-semibold font-mono text-slate-900 dark:text-white tracking-tighter group-hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.2)] transition-all">
-                        {mockStats.failedJobs}
-                    </span>
-                    <span className="text-[#E3000F] text-sm font-bold flex items-center gap-1 group-hover:drop-shadow-[0_0_8px_rgba(227,0,15,0.5)] transition-all font-mono">
-                        {(100 - mockStats.successRate).toFixed(1)}% <span className="text-[10px] text-slate-400 uppercase ml-1">Fail</span>
-                    </span>
+                <div className="relative z-10 flex flex-col w-full">
+                    <div className="flex items-end justify-between mb-1">
+                        <span className="text-4xl font-semibold font-mono text-slate-900 dark:text-white tracking-tighter group-hover:drop-shadow-[0_0_8px_rgba(255,255,255,0.2)] transition-all">
+                            {mockStats.failedJobs}
+                        </span>
+                        <span className="text-[#E3000F] text-sm font-bold flex items-center gap-1 group-hover:drop-shadow-[0_0_8px_rgba(227,0,15,0.5)] transition-all font-mono">
+                            {(100 - mockStats.successRate).toFixed(1)}% <span className="text-[10px] text-slate-400 uppercase ml-1">Fail</span>
+                        </span>
+                    </div>
+                    <div className="flex flex-col gap-1 mt-4 border-t border-[#E3000F]/10 dark:border-[#E3000F]/20 pt-4 w-full">
+                        <div className="flex justify-between items-center text-xs font-mono font-medium">
+                            <span className="text-slate-400">DAILY</span>
+                            <span className="text-slate-900 dark:text-white">{mockStats.dailyFailed}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs font-mono font-medium">
+                            <span className="text-slate-400">WEEKLY</span>
+                            <span className="text-slate-900 dark:text-white">{mockStats.weeklyFailed}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

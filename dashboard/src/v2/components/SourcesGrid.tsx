@@ -97,8 +97,14 @@ export const SourcesGrid: FunctionComponent = () => {
 
                                 return (
                                     <>
+                                        {/* Shadow Underlay (Unmasked) */}
+                                        <div className={`absolute inset-0 shadow-[0_30px_60px_rgba(0,0,0,0.1)] dark:shadow-[0_30px_60px_rgba(0,0,0,0.6)] transition-all duration-700 pointer-events-none ${isEven ? 'animate-organic' : 'animate-organic-reverse'}`} />
+
                                         {/* The Liquid Droplet / Cell Body */}
-                                        <div className={`absolute inset-0 bg-white/50 dark:bg-obsidian-900/60 backdrop-blur-3xl border border-white/60 dark:border-white/5 shadow-[0_30px_60px_rgba(0,0,0,0.1)] dark:shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden transition-all duration-700 ${isEven ? 'animate-organic' : 'animate-organic-reverse'}`}>
+                                        <div
+                                            className={`absolute inset-0 bg-white/50 dark:bg-obsidian-900/60 backdrop-blur-3xl border border-white/60 dark:border-white/5 overflow-hidden transition-all duration-700 transform-gpu ${isEven ? 'animate-organic' : 'animate-organic-reverse'}`}
+                                            style={{ WebkitMaskImage: '-webkit-radial-gradient(white, black)', backfaceVisibility: 'hidden' }}
+                                        >
 
                                             {/* Inner stroke to highlight liquid shape */}
                                             <div className={`absolute inset-0 pointer-events-none shadow-[inset_0_0_0_1px_rgba(255,255,255,0.4)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)] ${isEven ? 'animate-organic' : 'animate-organic-reverse'}`} />

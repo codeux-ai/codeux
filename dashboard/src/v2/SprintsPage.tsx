@@ -70,8 +70,14 @@ export const SprintsPage: FunctionComponent = () => {
                             className="relative group cursor-pointer perspective-1000 flex items-center justify-center shrink-0 w-80 h-80 lg:w-96 lg:h-96"
                             style={{ animationDelay: `${index * 0.3}s` }}
                         >
+                            {/* Shadow Underlay (Unmasked) */}
+                            <div className={`absolute inset-0 shadow-[0_30px_80px_rgba(0,0,0,0.08)] dark:shadow-[0_30px_80px_rgba(0,0,0,0.4)] transition-all duration-700 pointer-events-none ${isEven ? 'animate-organic' : 'animate-organic-reverse'}`} />
+
                             {/* The Liquid Container */}
-                            <div className={`absolute inset-0 bg-white/40 dark:bg-black/40 backdrop-blur-3xl shadow-[0_30px_80px_rgba(0,0,0,0.08)] dark:shadow-[0_30px_80px_rgba(0,0,0,0.4)] transition-all duration-700 overflow-hidden ${isEven ? 'animate-organic' : 'animate-organic-reverse'}`}>
+                            <div
+                                className={`absolute inset-0 bg-white/40 dark:bg-black/40 backdrop-blur-3xl transition-all duration-700 overflow-hidden transform-gpu ${isEven ? 'animate-organic' : 'animate-organic-reverse'}`}
+                                style={{ WebkitMaskImage: '-webkit-radial-gradient(white, black)', backfaceVisibility: 'hidden' }}
+                            >
                                 <div className={`absolute inset-0 pointer-events-none shadow-[inset_0_0_0_1px_rgba(255,255,255,0.4)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)] ${isEven ? 'animate-organic' : 'animate-organic-reverse'}`} />
                             </div>
 
