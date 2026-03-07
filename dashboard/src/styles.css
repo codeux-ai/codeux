@@ -116,4 +116,22 @@
     0%, 60%, 100% { transform: translateY(0);    opacity: 0.35; }
     30%            { transform: translateY(-4px); opacity: 1;    }
   }
+
+  /* Memory page — neural pulse traveling along SVG connection lines */
+  @keyframes dash-travel {
+    from { stroke-dashoffset: 24; }
+    to   { stroke-dashoffset: 0;  }
+  }
+
+  /* Memory page — slow radial breathe on brain core */
+  @keyframes brain-breathe {
+    0%, 100% { transform: scale(1)    rotate(0deg);   opacity: 0.7; }
+    50%       { transform: scale(1.06) rotate(180deg); opacity: 1;   }
+  }
+
+  /* Memory page — lobotomize mode red pulse on canvas */
+  @keyframes lobotomize-pulse {
+    0%, 100% { opacity: 0.04; }
+    50%       { opacity: 0.1;  }
+  }
 }
