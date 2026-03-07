@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { X, Plus, Target, CalendarDays, Hash } from "lucide-preact";
+import { X, Plus, Target, CalendarDays, Sparkles, Loader2, FileText } from "lucide-preact";
 import type { Sprint } from "../../types.js";
 
 interface AddSprintModalProps {
@@ -18,10 +18,11 @@ export const AddSprintModal: FunctionComponent<AddSprintModalProps> = ({ nextId,
     const cardRef     = useRef<HTMLDivElement>(null);
     const fieldsRef   = useRef<HTMLDivElement>(null);
 
-    const [name, setName]             = useState('');
-    const [startDate, setStartDate]   = useState('');
-    const [endDate, setEndDate]       = useState('');
-    const [targetTasks, setTargetTasks] = useState('');
+    const [name, setName]               = useState('');
+    const [startDate, setStartDate]     = useState('');
+    const [endDate, setEndDate]         = useState('');
+    const [description, setDescription] = useState('');
+    const [isGenerating, setIsGenerating] = useState(false);
 
     // Entrance
     useEffect(() => {
@@ -43,7 +44,6 @@ export const AddSprintModal: FunctionComponent<AddSprintModalProps> = ({ nextId,
         gsap.to(backdropRef.current, { opacity: 0, duration: 0.28, delay: 0.05, onComplete: onClose });
     };
 
-    // Escape key
     useEffect(() => {
         const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose(); };
         document.addEventListener('keydown', handler);
@@ -61,7 +61,7 @@ export const AddSprintModal: FunctionComponent<AddSprintModalProps> = ({ nextId,
             id: nextId.toLowerCase(),
             name: name.trim(),
             date: `${formatDateLabel(startDate)} - ${formatDateLabel(endDate)}`,
-            tasksCount: parseInt(targetTasks) || 0,
+            tasksCount: 0,
             completion: 0,
             status: 'idle',
         });
@@ -77,28 +77,22 @@ export const AddSprintModal: FunctionComponent<AddSprintModalProps> = ({ nextId,
             <div
                 ref={cardRef}
                 className="relative w-full max-w-2xl overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)] flex"
+                style={{ minHeight: '540px' }}
             >
                 {/* ── Left decorative panel ── */}
                 <div className="relative w-52 shrink-0 bg-void-900 dark:bg-void-950 flex flex-col justify-between p-8 overflow-hidden">
-                    {/* Ghost watermark */}
                     <span className="absolute -top-2 -left-4 text-[7.5rem] font-black text-white/[0.035] font-display leading-none pointer-events-none select-none tracking-tighter">
                         NEW
                     </span>
-
-                    {/* Layered blobs */}
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="w-44 h-44 bg-signal-500/[0.08] animate-organic" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%' }} />
                         <div className="absolute w-32 h-32 bg-signal-500/[0.12] animate-organic-reverse" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%' }} />
                         <div className="absolute w-20 h-20 bg-signal-500/[0.18] animate-organic" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%' }} />
                     </div>
-
-                    {/* Top label */}
                     <div className="relative z-10 flex items-center gap-2 text-signal-500 font-mono font-bold text-[10px] tracking-[0.2em] uppercase">
                         <Target className="w-3.5 h-3.5" strokeWidth={2.5} />
                         New Sprint
                     </div>
-
-                    {/* Bottom: Sprint ID */}
                     <div className="relative z-10">
                         <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 font-mono mb-1.5">Sprint ID</div>
                         <div className="text-4xl font-black text-white font-mono tracking-tighter leading-none">
@@ -130,7 +124,7 @@ export const AddSprintModal: FunctionComponent<AddSprintModalProps> = ({ nextId,
 
                     {/* Form */}
                     <form onSubmit={handleSubmit} className="flex flex-col flex-1">
-                        <div ref={fieldsRef} className="flex flex-col gap-7 flex-1">
+                        <div ref={fieldsRef} className="flex flex-col gap-6 flex-1">
 
                             {/* Sprint Name */}
                             <div className="group/field">
@@ -176,23 +170,65 @@ export const AddSprintModal: FunctionComponent<AddSprintModalProps> = ({ nextId,
                                 </div>
                             </div>
 
-                            {/* Target Tasks */}
-                            <div className="group/field">
-                                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 group-focus-within/field:text-signal-600 dark:group-focus-within/field:text-signal-400 transition-colors flex items-center gap-1.5">
-                                    <Hash className="w-3 h-3" /> Target Tasks
-                                </label>
-                                <input
-                                    type="number"
-                                    value={targetTasks}
-                                    onInput={(e) => setTargetTasks((e.target as HTMLInputElement).value)}
-                                    placeholder="24"
-                                    min="1"
-                                    className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-signal-500 dark:focus:border-signal-500 pb-2.5 text-2xl font-mono font-black text-slate-900 dark:text-white placeholder-slate-200 dark:placeholder-slate-700 focus:outline-none transition-colors"
-                                />
+                            {/* Description + AI — fills remaining space */}
+                            <div className="flex flex-col flex-1 min-h-0">
+                                {/* Label row with AI button */}
+                                <div className="flex items-center justify-between mb-2.5">
+                                    <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 flex items-center gap-1.5">
+                                        <FileText className="w-3 h-3" /> Description
+                                    </label>
+
+                                    {/* AI generate button */}
+                                    <button
+                                        type="button"
+                                        disabled={isGenerating}
+                                        onClick={() => setIsGenerating(g => !g)}
+                                        className={`group/ai flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-bold uppercase tracking-[0.15em] border transition-all duration-300 ${
+                                            isGenerating
+                                                ? 'bg-signal-500/[0.06] border-signal-500/30 text-signal-500/60 cursor-not-allowed'
+                                                : 'bg-signal-500/[0.07] border-signal-500/25 text-signal-600 dark:text-signal-400 hover:bg-signal-500/[0.14] hover:border-signal-500/55 hover:shadow-[0_0_14px_rgba(0,224,160,0.2)] hover:-translate-y-px'
+                                        }`}
+                                    >
+                                        {isGenerating
+                                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                                            : <Sparkles className="w-3 h-3 group-hover/ai:scale-110 transition-transform duration-200" />
+                                        }
+                                        {isGenerating ? 'Generating...' : 'Generate with AI'}
+                                    </button>
+                                </div>
+
+                                {/* Textarea with generating overlay */}
+                                <div className={`relative flex-1 transition-all duration-500 rounded-2xl ${
+                                    isGenerating
+                                        ? 'shadow-[0_0_0_1.5px_rgba(0,224,160,0.45),0_0_24px_rgba(0,224,160,0.12)]'
+                                        : ''
+                                }`}>
+                                    <textarea
+                                        value={description}
+                                        onInput={(e) => setDescription((e.target as HTMLTextAreaElement).value)}
+                                        placeholder={isGenerating ? '' : "Describe your sprint goals, paste a brief idea, or write a rough scope — AI will shape it into a full sprint description."}
+                                        className={`w-full h-full min-h-[128px] bg-black/[0.025] dark:bg-white/[0.03] border rounded-2xl p-4 text-sm text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none resize-none leading-relaxed transition-all duration-300 ${
+                                            isGenerating
+                                                ? 'border-signal-500/40 dark:border-signal-500/30'
+                                                : 'border-black/[0.07] dark:border-white/[0.07] focus:border-signal-500/50 dark:focus:border-signal-500/40'
+                                        }`}
+                                    />
+
+                                    {/* Generating shimmer — three scanning lines */}
+                                    {isGenerating && (
+                                        <div className="absolute inset-0 rounded-2xl pointer-events-none overflow-hidden">
+                                            <div className="absolute inset-x-4 h-px bg-gradient-to-r from-transparent via-signal-500/70 to-transparent animate-pulse" style={{ top: '28%' }} />
+                                            <div className="absolute inset-x-4 h-px bg-gradient-to-r from-transparent via-signal-500/50 to-transparent animate-pulse" style={{ top: '52%', animationDelay: '0.35s' }} />
+                                            <div className="absolute inset-x-4 h-px bg-gradient-to-r from-transparent via-signal-500/30 to-transparent animate-pulse" style={{ top: '76%', animationDelay: '0.7s' }} />
+                                            {/* Corner cursor blink */}
+                                            <div className="absolute top-4 left-4 w-[2px] h-4 bg-signal-500 animate-[blink_1s_step-end_infinite] rounded-full" />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Actions */}
-                            <div className="flex items-center justify-between pt-1 mt-auto">
+                            <div className="flex items-center justify-between pt-1">
                                 <button
                                     type="button"
                                     onClick={handleClose}
