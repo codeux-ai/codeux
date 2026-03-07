@@ -13,9 +13,10 @@ import { TopNav } from "./v2/components/TopNav.js";
 import "./styles.css";
 
 // Route components — each dynamic import becomes its own chunk in the build
-const DashboardV2 = lazy(() => import("./v2/DashboardV2.js").then(m => ({ default: m.DashboardV2 })));
-const SprintsPage  = lazy(() => import("./v2/SprintsPage.js").then(m => ({ default: m.SprintsPage })));
-const LegacyApp    = lazy(() => import("./legacy-app.js").then(m => ({ default: m.App })));
+const DashboardV2   = lazy(() => import("./v2/DashboardV2.js").then(m => ({ default: m.DashboardV2 })));
+const SprintsPage   = lazy(() => import("./v2/SprintsPage.js").then(m => ({ default: m.SprintsPage })));
+const ProjectsPage  = lazy(() => import("./v2/ProjectsPage.js").then(m => ({ default: m.ProjectsPage })));
+const LegacyApp     = lazy(() => import("./legacy-app.js").then(m => ({ default: m.App })));
 
 // 1. Root layout route
 const rootRoute = createRootRoute({
@@ -68,6 +69,12 @@ const sprintsRoute = createRoute({
   component: SprintsPage,
 });
 
+const projectsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/projects",
+  component: ProjectsPage,
+});
+
 const liveRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/live",
@@ -75,7 +82,7 @@ const liveRoute = createRoute({
 });
 
 // 3. Router
-const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, liveRoute]);
+const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, projectsRoute, liveRoute]);
 const router = createRouter({ routeTree });
 
 // 4. Entry — legacy hash fallback preserved
