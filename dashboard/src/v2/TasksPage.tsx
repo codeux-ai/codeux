@@ -27,7 +27,7 @@ const STATUS_CFG: Record<TaskStatus, { label: string; color: string; hex: string
     completed:   { label: 'Completed',   color: 'text-status-green',                  hex: '#00AB84', icon: CheckCircle2 },
 };
 
-const STATUS_ORDER: TaskStatus[] = ['in_progress', 'pending', 'completed'];
+const STATUS_ORDER: TaskStatus[] = ['pending', 'in_progress', 'completed'];
 
 type StatusFilter = 'all' | TaskStatus;
 type PriorityFilter = 'all' | TaskPriority;
@@ -433,13 +433,15 @@ export const TasksPage: FunctionComponent = () => {
         });
     }, [selectedSprint, statusFilter, priorityFilter]);
 
-    /* Group by status for kanban columns */
+    /* Group by status for kanban columns — hide empty columns when a status filter is active */
     const columns = useMemo(() => {
-        return STATUS_ORDER.map(status => ({
+        const all = STATUS_ORDER.map(status => ({
             status,
             tasks: filtered.filter(t => t.status === status),
         }));
-    }, [filtered]);
+        if (statusFilter !== 'all') return all.filter(col => col.tasks.length > 0);
+        return all;
+    }, [filtered, statusFilter]);
 
     /* Stats */
     const stats = useMemo(() => ({
@@ -573,7 +575,11 @@ export const TasksPage: FunctionComponent = () => {
             )}
 
             {/* ── Kanban board ────────────────────────────────────────── */}
-            <div ref={boardRef} className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div ref={boardRef} className={`grid gap-6 ${
+                columns.length === 1 ? 'grid-cols-1' :
+                columns.length === 2 ? 'grid-cols-1 lg:grid-cols-2' :
+                'grid-cols-1 lg:grid-cols-3'
+            }`}>
                 {columns.map(({ status, tasks: colTasks }) => (
                     <div key={status} className="flex flex-col">
                         <ColumnHeader status={status} count={colTasks.length} />
