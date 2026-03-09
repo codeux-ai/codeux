@@ -54,6 +54,12 @@ describe("MCP Factory", () => {
       },
       julesApi: {},
       activitySummary: {},
+      connectionChatRepository: {
+        getConnectionByKey: vi.fn(),
+        touchConnectionHeartbeat: vi.fn(),
+      },
+      executionRepository: {},
+      projectManagementRepository: {},
       sessionTracking: {
         getSession: vi.fn(),
         listSessions: vi.fn(),

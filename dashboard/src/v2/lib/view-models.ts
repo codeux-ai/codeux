@@ -22,6 +22,7 @@ export function toTaskViewModel(task: TaskRecord, sourcesById: Map<string, Sourc
     title: task.title,
     status: task.status,
     priority: task.priority,
+    executorType: task.executorType,
     assignee: inferAssignee(task),
     time: inferTime(task),
     createdAt: task.createdAt,
@@ -46,6 +47,15 @@ export function formatSprintDateRange(startDate: string | null, endDate: string 
 }
 
 function inferAssignee(task: TaskRecord): string {
+  if (task.executorType === "mcp_worker") {
+    return "Worker";
+  }
+  if (task.executorType === "jules") {
+    return "Jules";
+  }
+  if (task.executorType === "docker_cli") {
+    return "CLI";
+  }
   if (task.status === "completed") {
     return "Finisher";
   }
@@ -59,6 +69,9 @@ function inferAssignee(task: TaskRecord): string {
 }
 
 function inferTime(task: TaskRecord): string {
+  if (task.executorType === "mcp_worker" && task.status !== "completed") {
+    return "Queued";
+  }
   if (task.status === "completed") {
     return "Done";
   }

@@ -26,6 +26,7 @@ import type {
   SprintMarkdownImportTask,
   SprintRecord,
   SprintStatus,
+  TaskExecutorType,
   TaskPriority,
   TaskRecord,
   TaskStatus,
@@ -53,6 +54,7 @@ export interface Task {
   title: string;
   status: TaskStatus;
   priority: TaskPriority;
+  executorType: TaskExecutorType;
   assignee: string;
   time: string;
   createdAt: string;
@@ -89,6 +91,7 @@ export type {
   SprintStatus,
   StartListenInput,
   StartListenResponse,
+  TaskExecutorType,
   TaskPriority,
   TaskRecord,
   TaskStatus,

@@ -14,6 +14,7 @@ These cover:
 - Activity APIs
 - Session wait/polling logic
 - listen-mode connection registration and inbox/reply flow
+- worker dispatch claim and completion flow
 
 ### Agent tools
 Implemented in:
@@ -51,6 +52,10 @@ Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/
 - `start_listen`
 - `pull_inbox`
 - `post_listen_reply`
+
+### Worker execution
+- `pull_task_dispatch`
+- `update_task_dispatch`
 
 ### Output minimization
 - `get_source` returns a compact source summary (`id`, `name`).
@@ -133,6 +138,13 @@ Unknown tool names raise MCP `MethodNotFound`.
 - `pull_inbox` is the pull-based inbox endpoint for listening MCPs.
 - `post_listen_reply` writes a connection reply back into the project conversation thread and marks the handled dashboard message as processed.
 - The listen loop is intentionally pull-based because current MCP transport is stdio, not server-push.
+
+### Worker-dispatch behavior
+- Worker MCPs register through `start_listen` with `role = worker`.
+- `pull_task_dispatch` claims the next queued `mcp_worker` dispatch for one of the worker's active projects.
+- Claiming a dispatch acquires a DB-backed lease on that dispatch and returns the full task payload plus project/sprint branch context.
+- `update_task_dispatch` is used for heartbeats and terminal worker outcomes (`RUNNING`, `COMPLETED`, `FAILED`, `BLOCKED`).
+- Worker execution writes back into the same `task_dispatches`, `task_runs`, and `task_run_events` records used by the rest of Sprint OS.
 
 ## Stability Expectations
 

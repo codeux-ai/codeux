@@ -5,6 +5,7 @@ import { CoreToolHandler } from "../../mcp/core-tool-handler.js";
 import { AgentToolHandler } from "../../mcp/agent-tool-handler.js";
 import { formatSprintBranch } from "../../git/sprint-branch-scheme.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
+import { WorkerTaskDispatchService } from "../../services/worker-task-dispatch-service.js";
 
 export interface McpDependencies {
   coreToolHandler: CoreToolHandler;
@@ -22,8 +23,17 @@ export function createMcpDependencies(
     activitySummary,
     connectionChatRepository,
     sessionTracking,
+    executionRepository,
+    projectManagementRepository,
   } = coreDeps;
   const { sprintOrchestrator, taskService } = sprintDeps;
+  const workerTaskDispatchService = new WorkerTaskDispatchService(
+    executionRepository,
+    projectManagementRepository,
+    connectionChatRepository,
+    () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
+    logger.child({ component: "worker-task-dispatch-service" }),
+  );
 
   const coreToolHandler = new CoreToolHandler({
     julesApi,
@@ -46,6 +56,7 @@ export function createMcpDependencies(
     listTrackedActivities: (args) => sessionTracking.listActivities(args),
     listAllTrackedActivities: (sessionId) => sessionTracking.listAllActivities(sessionId),
     connectionChatRepository,
+    workerTaskDispatchService,
     logger: logger.child({ component: "core-tool-handler" }),
   });
 

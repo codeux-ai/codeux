@@ -3,6 +3,7 @@ export type ProjectSourceType = "local" | "git";
 export type SprintStatus = "running" | "completed" | "failed" | "idle";
 export type TaskStatus = "pending" | "in_progress" | "completed";
 export type TaskPriority = "critical" | "high" | "medium" | "low";
+export type TaskExecutorType = "auto" | "docker_cli" | "jules" | "mcp_worker";
 
 export interface ProjectSummary {
   id: string;
@@ -50,6 +51,7 @@ export interface TaskRecord {
   description: string;
   status: TaskStatus;
   priority: TaskPriority;
+  executorType: TaskExecutorType;
   sortOrder: number;
   dependsOnTaskIds: string[];
   isIndependent: boolean;
@@ -114,6 +116,7 @@ export interface CreateTaskInput {
   description?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
+  executorType?: TaskExecutorType;
   sortOrder?: number;
   dependsOnTaskIds?: string[];
   isIndependent?: boolean;
@@ -129,6 +132,7 @@ export interface UpdateTaskInput {
   description?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
+  executorType?: TaskExecutorType;
   sortOrder?: number;
   dependsOnTaskIds?: string[];
   isIndependent?: boolean;

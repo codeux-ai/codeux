@@ -223,6 +223,40 @@ export const TOOL_DEFINITIONS = [
       required: ["connection_key", "thread_id", "body_markdown"],
     },
   },
+  {
+    name: "pull_task_dispatch",
+    description: "Claim the next queued worker task dispatch for a registered MCP worker connection.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        connection_key: { type: "string" },
+        project_id: { type: "string" },
+        sprint_id: { type: "string" },
+      },
+      required: ["connection_key"],
+    },
+  },
+  {
+    name: "update_task_dispatch",
+    description: "Heartbeat, complete, fail, or block a claimed worker task dispatch and persist the result back into Sprint OS.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        connection_key: { type: "string" },
+        dispatch_id: { type: "string" },
+        lease_token: { type: "string" },
+        state: { type: "string", enum: ["RUNNING", "COMPLETED", "FAILED", "BLOCKED"] },
+        provider: { type: "string" },
+        session_id: { type: "string" },
+        session_name: { type: "string" },
+        worker_branch: { type: "string" },
+        pr_url: { type: "string" },
+        summary_markdown: { type: "string" },
+        error_message: { type: "string" },
+      },
+      required: ["connection_key", "dispatch_id", "lease_token", "state"],
+    },
+  },
 ] as const;
 
 export type ToolName = (typeof TOOL_DEFINITIONS)[number]["name"];

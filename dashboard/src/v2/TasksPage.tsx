@@ -40,6 +40,12 @@ const STATUS_CFG: Record<TaskStatus, { label: string; color: string; hex: string
 };
 
 const STATUS_ORDER: TaskStatus[] = ["pending", "in_progress", "completed"];
+const EXECUTOR_LABEL: Record<Task["executorType"], string> = {
+  auto: "Auto",
+  docker_cli: "CLI",
+  jules: "Jules",
+  mcp_worker: "Worker",
+};
 
 type StatusFilter = "all" | TaskStatus;
 type PriorityFilter = "all" | TaskPriority;
@@ -117,6 +123,12 @@ const TaskCard: FunctionComponent<{
       }`}>
         {task.title}
       </h4>
+
+      <div className="relative z-10 mb-4 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">
+        <span className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] px-2.5 py-1">
+          {EXECUTOR_LABEL[task.executorType]}
+        </span>
+      </div>
 
       <div className="flex items-center gap-3 mt-auto relative z-10">
         <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 dark:text-slate-500">
@@ -403,6 +415,7 @@ export const TasksPage: FunctionComponent = () => {
     promptMarkdown: string;
     status: TaskStatus;
     priority: TaskPriority;
+    executorType: Task["executorType"];
     dependsOnTaskIds: string[];
   }) => {
     if (!selectedProject) return;

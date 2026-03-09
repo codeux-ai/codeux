@@ -90,6 +90,7 @@ export class AppDbStorage {
         description TEXT,
         status TEXT NOT NULL DEFAULT 'pending',
         priority TEXT NOT NULL DEFAULT 'medium',
+        executor_type TEXT NOT NULL DEFAULT 'auto',
         sort_order INTEGER NOT NULL DEFAULT 0,
         is_independent INTEGER NOT NULL DEFAULT 0,
         is_merged INTEGER NOT NULL DEFAULT 0,
@@ -250,6 +251,7 @@ export class AppDbStorage {
 
     this.ensureColumn("task_runs", "sprint_run_id", "TEXT");
     this.ensureColumn("task_runs", "dispatch_id", "TEXT");
+    this.ensureColumn("tasks", "executor_type", "TEXT NOT NULL DEFAULT 'auto'");
     this.ensureIndex("idx_sprint_runs_project_sprint", "sprint_runs", "project_id, sprint_id, created_at DESC");
     this.ensureIndex("idx_task_dispatches_sprint_run", "task_dispatches", "sprint_run_id, status, queued_at ASC");
     this.ensureIndex("idx_task_dispatches_task", "task_dispatches", "task_id, created_at DESC");

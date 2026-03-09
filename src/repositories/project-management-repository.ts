@@ -65,6 +65,7 @@ interface TaskRow {
   description: string | null;
   status: TaskRecord["status"];
   priority: TaskRecord["priority"];
+  executor_type: TaskRecord["executorType"];
   sort_order: number | string;
   is_independent: number | string;
   is_merged: number | string;
@@ -390,9 +391,9 @@ export class ProjectManagementRepository {
 
     const insertTask = this.db.prepare(`
       INSERT INTO tasks (
-        id, project_id, sprint_id, task_key, title, prompt_markdown, description, status, priority,
+        id, project_id, sprint_id, task_key, title, prompt_markdown, description, status, priority, executor_type,
         sort_order, is_independent, is_merged, merge_indicator, source_type, source_path, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const insertDependency = this.db.prepare(`
       INSERT INTO task_dependencies (task_id, depends_on_task_id)
@@ -410,6 +411,7 @@ export class ProjectManagementRepository {
         input.description?.trim() || "",
         input.status || "pending",
         input.priority || "medium",
+        input.executorType || "auto",
         sortOrder,
         input.isIndependent === undefined ? 1 : Number(input.isIndependent),
         Number(!!input.isMerged),
@@ -434,7 +436,7 @@ export class ProjectManagementRepository {
     const now = new Date().toISOString();
     const updateTask = this.db.prepare(`
       UPDATE tasks
-      SET title = ?, prompt_markdown = ?, description = ?, status = ?, priority = ?, sort_order = ?,
+      SET title = ?, prompt_markdown = ?, description = ?, status = ?, priority = ?, executor_type = ?, sort_order = ?,
           is_independent = ?, is_merged = ?, merge_indicator = ?, source_type = ?, source_path = ?, updated_at = ?
       WHERE id = ?
     `);
@@ -451,6 +453,7 @@ export class ProjectManagementRepository {
         input.description === undefined ? current.description : input.description,
         input.status || current.status,
         input.priority || current.priority,
+        input.executorType || current.executorType,
         input.sortOrder === undefined ? current.sortOrder : input.sortOrder,
         input.isIndependent === undefined ? Number(current.isIndependent) : Number(input.isIndependent),
         input.isMerged === undefined ? Number(current.isMerged) : Number(input.isMerged),
@@ -642,6 +645,7 @@ export class ProjectManagementRepository {
       description: row.description || "",
       status: row.status,
       priority: row.priority,
+      executorType: row.executor_type || "auto",
       sortOrder: toNumber(row.sort_order),
       dependsOnTaskIds: dependencyMap.get(row.id) || [],
       isIndependent: toBoolean(row.is_independent),

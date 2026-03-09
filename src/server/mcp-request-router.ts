@@ -38,6 +38,8 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
     .register("start_listen", (input) => args.coreToolHandler.handleStartListen(input))
     .register("pull_inbox", (input) => args.coreToolHandler.handlePullInbox(input))
     .register("post_listen_reply", (input) => args.coreToolHandler.handlePostListenReply(input))
+    .register("pull_task_dispatch", (input) => args.coreToolHandler.handlePullTaskDispatch(input))
+    .register("update_task_dispatch", (input) => args.coreToolHandler.handleUpdateTaskDispatch(input))
     .register("sprint_agent", async (input) => (await args.agentToolHandler.handleSprintAgent(input)) as McpToolResponse)
     .register("task_agent", async (input) => (await args.agentToolHandler.handleTaskAgent(input)) as McpToolResponse);
 

@@ -1,8 +1,8 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { X, Plus, ListChecks, Target } from "lucide-preact";
-import type { Sprint, Task, TaskPriority, TaskStatus } from "../../types.js";
+import { X, ListChecks, Target, Bot, Plus } from "lucide-preact";
+import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
 
 interface TaskDraft {
   sprintId: string;
@@ -11,6 +11,7 @@ interface TaskDraft {
   promptMarkdown: string;
   status: TaskStatus;
   priority: TaskPriority;
+  executorType: TaskExecutorType;
   dependsOnTaskIds: string[];
 }
 
@@ -25,6 +26,12 @@ interface AddTaskModalProps {
 
 const PRIORITY_OPTIONS: TaskPriority[] = ["critical", "high", "medium", "low"];
 const STATUS_OPTIONS: TaskStatus[] = ["pending", "in_progress", "completed"];
+const EXECUTOR_OPTIONS: Array<{ value: TaskExecutorType; label: string; description: string }> = [
+  { value: "auto", label: "Auto", description: "Use the default Sprint OS routing." },
+  { value: "docker_cli", label: "CLI", description: "Run through Docker or local CLI worktrees." },
+  { value: "jules", label: "Jules", description: "Force remote Jules execution." },
+  { value: "mcp_worker", label: "Worker", description: "Queue this task for a connected MCP worker." },
+];
 
 export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   sprints,
@@ -42,6 +49,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   const [promptMarkdown, setPromptMarkdown] = useState(initialTask?.promptMarkdown || "");
   const [status, setStatus] = useState<TaskStatus>(initialTask?.status || "pending");
   const [priority, setPriority] = useState<TaskPriority>(initialTask?.priority || "medium");
+  const [executorType, setExecutorType] = useState<TaskExecutorType>(initialTask?.executorType || "auto");
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(initialTask?.dependsOnTaskIds || []);
 
   useLayoutEffect(() => {
@@ -82,6 +90,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
       promptMarkdown: promptMarkdown.trim(),
       status,
       priority,
+      executorType,
       dependsOnTaskIds,
     });
 
@@ -214,6 +223,30 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     </button>
                   ))}
                 </div>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center gap-2 mb-2.5">
+                <Bot className="w-3.5 h-3.5 text-signal-500" strokeWidth={2.3} />
+                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Executor</label>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {EXECUTOR_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setExecutorType(option.value)}
+                    className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+                      executorType === option.value
+                        ? "border-signal-500/45 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300"
+                        : "border-black/[0.08] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] text-slate-500 dark:text-slate-400"
+                    }`}
+                  >
+                    <div className="text-[10px] font-bold uppercase tracking-[0.14em]">{option.label}</div>
+                    <div className="mt-1 text-xs leading-relaxed">{option.description}</div>
+                  </button>
+                ))}
               </div>
             </div>
 

@@ -1,5 +1,6 @@
 import type { ToolName as ContractToolName } from "../../contracts/mcp-tool-definitions.js";
 import type { McpConnectionCapabilities, McpConnectionRole } from "../../contracts/connection-chat-types.js";
+import type { TaskRunState } from "../../contracts/execution-types.js";
 import type { SprintAgentArgs } from "../../sprint/sprint-types.js";
 
 export interface GetSourceArgs {
@@ -95,6 +96,26 @@ export interface PostListenReplyArgs {
   reply_to_message_id?: string;
 }
 
+export interface PullTaskDispatchArgs {
+  connection_key: string;
+  project_id?: string;
+  sprint_id?: string;
+}
+
+export interface UpdateTaskDispatchArgs {
+  connection_key: string;
+  dispatch_id: string;
+  lease_token: string;
+  state: Extract<TaskRunState, "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED">;
+  provider?: string;
+  session_id?: string;
+  session_name?: string;
+  worker_branch?: string;
+  pr_url?: string;
+  summary_markdown?: string;
+  error_message?: string;
+}
+
 export interface McpToolArgsByName {
   get_source: GetSourceArgs;
   list_sources: ListSourcesArgs;
@@ -113,6 +134,8 @@ export interface McpToolArgsByName {
   start_listen: StartListenArgs;
   pull_inbox: PullInboxArgs;
   post_listen_reply: PostListenReplyArgs;
+  pull_task_dispatch: PullTaskDispatchArgs;
+  update_task_dispatch: UpdateTaskDispatchArgs;
 }
 
 export type McpToolName = keyof McpToolArgsByName;

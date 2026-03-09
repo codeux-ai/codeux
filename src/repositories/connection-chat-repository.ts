@@ -162,6 +162,25 @@ export class ConnectionChatRepository {
     return this.inflateConnections([row])[0] || null;
   }
 
+  getConnectionByKey(connectionKey: string): McpConnectionRecord | null {
+    const row = this.db.prepare(`
+      SELECT
+        c.*,
+        0 AS tasks_run_count,
+        0 AS thread_count,
+        0 AS message_count,
+        0 AS pending_inbox_count
+      FROM mcp_connections c
+      WHERE c.connection_key = ?
+    `).get(connectionKey.trim()) as ConnectionRow | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    return this.inflateConnections([row])[0] || null;
+  }
+
   upsertConnection(input: UpsertMcpConnectionInput): McpConnectionRecord {
     const now = new Date().toISOString();
     const existing = this.db.prepare(`
@@ -520,6 +539,12 @@ export class ConnectionChatRepository {
     return this.requireMessage(messageId);
   }
 
+  touchConnectionHeartbeat(connectionId: string, status?: McpConnectionRecord["status"]): McpConnectionRecord {
+    this.requireConnection(connectionId);
+    this.touchConnection(connectionId, status);
+    return this.requireConnection(connectionId);
+  }
+
   private inflateConnections(rows: ConnectionRow[]): McpConnectionRecord[] {
     if (rows.length === 0) {
       return [];
@@ -604,22 +629,11 @@ export class ConnectionChatRepository {
   }
 
   private requireConnectionByKey(connectionKey: string): McpConnectionRecord {
-    const row = this.db.prepare(`
-      SELECT
-        c.*,
-        0 AS tasks_run_count,
-        0 AS thread_count,
-        0 AS message_count,
-        0 AS pending_inbox_count
-      FROM mcp_connections c
-      WHERE c.connection_key = ?
-    `).get(connectionKey.trim()) as ConnectionRow | undefined;
-
-    if (!row) {
+    const connection = this.getConnectionByKey(connectionKey);
+    if (!connection) {
       throw new Error(`Connection not found for key: ${connectionKey}`);
     }
-
-    return this.inflateConnections([row])[0];
+    return connection;
   }
 
   private requireThread(threadId: string): ConversationThreadRecord {

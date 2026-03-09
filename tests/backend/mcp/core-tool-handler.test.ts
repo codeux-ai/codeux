@@ -45,6 +45,10 @@ describe("CoreToolHandler coverage", () => {
                 pullInbox: vi.fn().mockReturnValue([{ id: "msg-1" }]),
                 postListenReply: vi.fn().mockReturnValue({ id: "reply-1" }),
             },
+            workerTaskDispatchService: {
+                pullNextDispatch: vi.fn().mockReturnValue({ dispatch: { id: "dispatch-1" }, leaseToken: "lease-1" }),
+                updateDispatch: vi.fn().mockReturnValue({ id: "dispatch-1", status: "completed" }),
+            },
             resolveSessionName: vi.fn(),
             fetchRecentActivities: vi.fn().mockResolvedValue([]),
             isActionRequiredState: vi.fn().mockReturnValue(false),
@@ -231,6 +235,44 @@ describe("CoreToolHandler coverage", () => {
             threadId: "thread-1",
             bodyMarkdown: "reply",
             replyToMessageId: "message-1",
+        });
+    });
+
+    it("handlePullTaskDispatch", async () => {
+        const handler = new CoreToolHandler(defaultDeps);
+        await handler.handlePullTaskDispatch({
+            connection_key: "worker-1",
+            project_id: "project-1",
+            sprint_id: "sprint-1",
+        });
+        expect(defaultDeps.workerTaskDispatchService.pullNextDispatch).toHaveBeenCalledWith({
+            connectionKey: "worker-1",
+            projectId: "project-1",
+            sprintId: "sprint-1",
+        });
+    });
+
+    it("handleUpdateTaskDispatch", async () => {
+        const handler = new CoreToolHandler(defaultDeps);
+        await handler.handleUpdateTaskDispatch({
+            connection_key: "worker-1",
+            dispatch_id: "dispatch-1",
+            lease_token: "lease-1",
+            state: "COMPLETED",
+            summary_markdown: "done",
+        });
+        expect(defaultDeps.workerTaskDispatchService.updateDispatch).toHaveBeenCalledWith({
+            connectionKey: "worker-1",
+            dispatchId: "dispatch-1",
+            leaseToken: "lease-1",
+            state: "COMPLETED",
+            provider: undefined,
+            sessionId: undefined,
+            sessionName: undefined,
+            workerBranch: undefined,
+            prUrl: undefined,
+            summaryMarkdown: "done",
+            errorMessage: undefined,
         });
     });
 });

@@ -324,6 +324,26 @@ export class ExecutionRepository {
     return row ? this.mapTaskRunRow(row) : null;
   }
 
+  getTaskDispatch(dispatchId: string): TaskDispatchRecord | null {
+    const row = this.db.prepare(`
+      SELECT *
+      FROM task_dispatches
+      WHERE id = ?
+    `).get(dispatchId) as TaskDispatchRow | undefined;
+    return row ? this.mapTaskDispatchRow(row) : null;
+  }
+
+  getTaskRunByDispatchId(dispatchId: string): TaskRunRecord | null {
+    const row = this.db.prepare(`
+      SELECT *
+      FROM task_runs
+      WHERE dispatch_id = ?
+      ORDER BY rowid DESC
+      LIMIT 1
+    `).get(dispatchId) as TaskRunRow | undefined;
+    return row ? this.mapTaskRunRow(row) : null;
+  }
+
   updateTaskRun(taskRunId: string, input: UpdateTaskRunInput): TaskRunRecord {
     const current = this.requireTaskRun(taskRunId);
     this.db.prepare(`
@@ -508,15 +528,11 @@ export class ExecutionRepository {
   }
 
   private requireTaskDispatch(dispatchId: string): TaskDispatchRecord {
-    const row = this.db.prepare(`
-      SELECT *
-      FROM task_dispatches
-      WHERE id = ?
-    `).get(dispatchId) as TaskDispatchRow | undefined;
-    if (!row) {
+    const dispatch = this.getTaskDispatch(dispatchId);
+    if (!dispatch) {
       throw new Error(`Task dispatch not found: ${dispatchId}`);
     }
-    return this.mapTaskDispatchRow(row);
+    return dispatch;
   }
 
   private requireTaskRun(taskRunId: string): TaskRunRecord {

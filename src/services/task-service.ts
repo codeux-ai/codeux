@@ -40,6 +40,17 @@ export class TaskService {
     return chosen;
   }
 
+  selectCliProviderForTask(task: Subtask): Exclude<ProviderId, "jules"> {
+    const selected = this.selectProviderForTask(task);
+    if (selected !== "jules") {
+      return selected;
+    }
+
+    const settings = this.deps.getDashboardSettings();
+    const fallback = (["gemini", "codex", "claude-code"] as const).find((provider) => settings.aiProvider.providers[provider].enabled);
+    return fallback || "codex";
+  }
+
   private async buildPrompt(repoPath: string, sectionTitle: string, taskPrompt: string): Promise<string> {
     let workerGuide = "";
     try {

@@ -2,12 +2,15 @@ import { waitUntil } from "../shared/polling/wait-until.js";
 import type {
   CreateSessionArgs,
   PostListenReplyArgs,
+  PullTaskDispatchArgs,
   PullInboxArgs,
   StartListenArgs,
+  UpdateTaskDispatchArgs,
 } from "../api/mcp/tool-registry.js";
 import type { JulesApiClient, JulesCreateSessionRequest } from "../integrations/jules-api-client.js";
 import type { JulesActivity, JulesSession, JulesSource } from "../contracts/app-types.js";
 import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
+import type { WorkerTaskDispatchService } from "../services/worker-task-dispatch-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { ActivitySummaryService } from "../domain/sessions/activity-summary.js";
 
@@ -29,6 +32,7 @@ interface CoreToolHandlerDependencies {
   listTrackedActivities: (args: { session_id: string; page_size?: number; page_token?: string }) => { activities: JulesActivity[]; nextPageToken?: string };
   listAllTrackedActivities: (sessionId: string) => JulesActivity[];
   connectionChatRepository: ConnectionChatRepository;
+  workerTaskDispatchService: WorkerTaskDispatchService;
   logger?: Logger;
 }
 
@@ -337,6 +341,44 @@ export class CoreToolHandler {
       content: [{
         type: "text",
         text: JSON.stringify(message, null, 2),
+      }],
+    };
+  }
+
+  async handlePullTaskDispatch(args: PullTaskDispatchArgs) {
+    const claim = this.deps.workerTaskDispatchService.pullNextDispatch({
+      connectionKey: args.connection_key,
+      projectId: args.project_id,
+      sprintId: args.sprint_id,
+    });
+
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify(claim ? { claimed: true, dispatch: claim } : { claimed: false, dispatch: null }, null, 2),
+      }],
+    };
+  }
+
+  async handleUpdateTaskDispatch(args: UpdateTaskDispatchArgs) {
+    const dispatch = this.deps.workerTaskDispatchService.updateDispatch({
+      connectionKey: args.connection_key,
+      dispatchId: args.dispatch_id,
+      leaseToken: args.lease_token,
+      state: args.state,
+      provider: args.provider,
+      sessionId: args.session_id,
+      sessionName: args.session_name,
+      workerBranch: args.worker_branch,
+      prUrl: args.pr_url,
+      summaryMarkdown: args.summary_markdown,
+      errorMessage: args.error_message,
+    });
+
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify(dispatch, null, 2),
       }],
     };
   }

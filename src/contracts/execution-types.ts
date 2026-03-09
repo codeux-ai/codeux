@@ -146,6 +146,42 @@ export interface UpdateTaskRunInput {
   durationMs?: number | null;
 }
 
+export interface WorkerTaskDispatchClaim {
+  dispatch: TaskDispatchRecord;
+  leaseToken: string;
+  project: {
+    id: string;
+    name: string;
+    baseDir: string;
+    sourceType: string;
+    sourceRef: string;
+    defaultBranch: string | null;
+    featureBranchPrefix: string | null;
+  };
+  sprint: {
+    id: string;
+    name: string;
+    number: number | null;
+    goal: string;
+    featureBranch: string | null;
+  };
+  task: {
+    id: string;
+    taskKey: string;
+    title: string;
+    promptMarkdown: string;
+    description: string;
+    priority: string;
+    dependsOnTaskIds: string[];
+    executorType: "auto" | TaskDispatchExecutorType;
+  };
+  executionContext: {
+    repoPath: string;
+    defaultBranch: string;
+    featureBranch: string;
+  };
+}
+
 export interface AcquireExecutionLeaseInput {
   scopeType: ExecutionLeaseScopeType;
   scopeId: string;

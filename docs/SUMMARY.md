@@ -13,6 +13,7 @@
 - [Project Management Implementation](./architecture/project-management-implementation.md)
 - [Project Runtime Integration](./architecture/project-runtime-integration.md)
 - [MCP Connections And Listen Mode](./architecture/mcp-connections-and-listen-mode.md)
+- [MCP Worker Dispatch Executor](./architecture/mcp-worker-dispatch-executor.md)
 - [MCP Tools and Contracts](./mcp/tools-and-contracts.md)
 - [MCP Runtime and Dispatch](./mcp/runtime-and-dispatch.md)
 - [Atomic Sprint Loop](./sprint-loop/atomic-loop.md)

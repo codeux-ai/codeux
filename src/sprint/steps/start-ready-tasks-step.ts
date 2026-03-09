@@ -6,7 +6,7 @@ interface StartReadyTasksOptions {
   maxFailures: number;
   getConsecutiveFailures: () => number;
   setConsecutiveFailures: (value: number) => void;
-  startTask: (task: Subtask) => Promise<{ id?: string; name?: string; provider?: string }>;
+  startTask: (task: Subtask) => Promise<{ id?: string; name?: string; provider?: string; runtimeLabel?: string }>;
   resolveSessionName: (session: { id?: string; name?: string }) => string | undefined;
   extractSessionId: (session: { id?: string; name?: string }) => string | undefined;
   logger: Logger;
@@ -35,8 +35,10 @@ export const runStartReadyTasksStep = async (
       task.status = "RUNNING";
       task.session_name = options.resolveSessionName(session);
       task.session_id = options.extractSessionId(session);
-      task.provider = session.provider as Subtask["provider"];
-      const providerLabel = session.provider ? String(session.provider).toUpperCase() : "JULES";
+      if (session.provider === "jules" || session.provider === "gemini" || session.provider === "codex" || session.provider === "claude-code") {
+        task.provider = session.provider;
+      }
+      const providerLabel = session.runtimeLabel || (session.provider ? String(session.provider).toUpperCase() : "JULES");
       reportText += `🚀 **Started ${providerLabel} Session** for task \`${task.id}\`: [${session.id}](${session.id})\n`;
       options.setConsecutiveFailures(0);
     } catch (error: unknown) {

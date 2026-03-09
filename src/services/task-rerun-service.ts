@@ -1,4 +1,5 @@
-import type { JulesSession, Subtask } from "../contracts/app-types.js";
+import type { Subtask } from "../contracts/app-types.js";
+import type { StartSprintDispatchResult } from "./sprint-task-dispatch-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 
 export interface TaskRerunContext {
@@ -33,9 +34,9 @@ export interface TaskRerunServiceDependencies {
     featureBranch: string;
     repoPath: string;
     sprintNumber: number;
-  }) => Promise<JulesSession>;
-  resolveSessionName: (session: Partial<JulesSession>) => string | undefined;
-  extractSessionId: (session: Partial<JulesSession>) => string | undefined;
+  }) => Promise<StartSprintDispatchResult>;
+  resolveSessionName: (session: { id?: string; name?: string }) => string | undefined;
+  extractSessionId: (session: { id?: string; name?: string }) => string | undefined;
   persistMergedFlag: (args: { taskId: string; merged: boolean }) => Promise<void>;
   logger?: Logger;
 }
@@ -121,7 +122,10 @@ export class TaskRerunService {
         status: "RUNNING",
         session_name: this.deps.resolveSessionName(session),
         session_id: this.deps.extractSessionId(session),
-        provider: session.provider,
+        provider:
+          session.provider === "jules" || session.provider === "gemini" || session.provider === "codex" || session.provider === "claude-code"
+            ? session.provider
+            : undefined,
       };
       const restartedSubtasks = resetSubtasks.map((task, index) => (index === taskIndex ? restartedTask : task));
       this.deps.updateStatus({

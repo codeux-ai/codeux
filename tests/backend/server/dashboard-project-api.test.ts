@@ -150,6 +150,7 @@ describe("dashboard project management API", () => {
         title: "Wire selected project state",
         promptMarkdown: "Connect the top nav to the DB-backed project selector.",
         priority: "high",
+        executorType: "mcp_worker",
         status: "in_progress",
       }),
     });
@@ -165,6 +166,10 @@ describe("dashboard project management API", () => {
       sprintsCount: 1,
       openTasks: 1,
     });
+
+    const taskRecords = await fetch(`${baseUrl}/api/projects/${project.id}/tasks`)
+      .then(async (response) => response.json()) as Array<{ executorType: string }>;
+    expect(taskRecords[0]?.executorType).toBe("mcp_worker");
 
     runtimeRepository.syncDashboardStatus({
       sprint_number: 1,

@@ -20,6 +20,7 @@ import type {
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { SprintExecutionStateService } from "../services/sprint-execution-state-service.js";
+import type { StartSprintDispatchResult } from "../services/sprint-task-dispatch-service.js";
 import { CycleRunner } from "../domain/sprint/orchestrator/cycle-runner.js";
 import { WatchLoopRunner } from "../domain/sprint/orchestrator/watch-loop-runner.js";
 import { SprintActionRunner } from "../domain/sprint/orchestrator/sprint-action-runner.js";
@@ -52,7 +53,7 @@ export interface SprintOrchestratorDependencies {
       repoPath: string;
       sprintNumber: number;
     },
-  ) => Promise<JulesSession>;
+  ) => Promise<StartSprintDispatchResult>;
   getGuideContent: (guideName: string, repoPath?: string) => Promise<string>;
   updateLastStatus: (status: any) => void;
   getDashboardSettings: () => DashboardSettings;

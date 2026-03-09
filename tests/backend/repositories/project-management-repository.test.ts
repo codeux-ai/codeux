@@ -56,6 +56,7 @@ describe("ProjectManagementRepository", () => {
       title: "Wire dashboard",
       promptMarkdown: "Replace mocks",
       priority: "high",
+      executorType: "mcp_worker",
       status: "in_progress",
       dependsOnTaskIds: [taskA.id],
     });
@@ -84,6 +85,7 @@ describe("ProjectManagementRepository", () => {
     expect(tasks[1]).toMatchObject({
       taskKey: "T02",
       dependsOnTaskIds: [taskA.id],
+      executorType: "mcp_worker",
       status: "in_progress",
     });
   });
