@@ -95,7 +95,10 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
                 </div>
 
                 {/* Actions */}
-                <CellActions isRunning={source.isRunning} />
+                <CellActions 
+                    isRunning={source.status === 'running'} 
+                    to={`/projects?id=${source.id}`}
+                />
             </div>
         </div>
     );

@@ -178,7 +178,22 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
 
   const builtDashboardDir = path.join(path.resolve(dashboardDir), "dist");
   const staticDir = fs.existsSync(builtDashboardDir) ? builtDashboardDir : path.resolve(dashboardDir);
+  
+  // 1. Serve static files (JS, CSS, etc.) first
   app.use(express.static(staticDir));
+
+  // 2. SPA Fallback: For any GET request that isn't for an API and doesn't have an extension,
+  // serve the index.html to allow client-side routing (TanStack Router) to take over.
+  app.use((req, res, next) => {
+    if (req.method === "GET" && !req.path.startsWith("/api/") && !req.path.startsWith("/health") && !req.path.startsWith("/ready")) {
+      const indexPath = path.join(staticDir, "index.html");
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+        return;
+      }
+    }
+    next();
+  });
 
   const handle = await bindDashboardServer(app, port, dashboardLogger);
 

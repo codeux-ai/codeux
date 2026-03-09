@@ -115,22 +115,11 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
                     </div>
                 </div>
 
-                <CellActions isRunning={sprint.status === 'running'} />
-
-                {/* View Tasks link — appears on hover */}
-                <Link
-                    to={`/tasks?sprint=${sprint.id}`}
-                    className="absolute bottom-5 flex items-center gap-1.5
-                               opacity-0 group-hover:opacity-100
-                               translate-y-2 group-hover:translate-y-0
-                               transition-all duration-300 ease-out
-                               text-[10px] font-bold uppercase tracking-[0.12em]
-                               text-slate-400 hover:text-signal-500 group/tasks"
-                    onClick={(e: Event) => e.stopPropagation()}
-                >
-                    <ArrowUpRight className="w-3 h-3" strokeWidth={2.5} />
-                    View Tasks
-                </Link>
+                <CellActions 
+                    isRunning={sprint.status === 'running'} 
+                    label="View Tasks" 
+                    to={`/tasks?sprint=${sprint.id}`} 
+                />
             </div>
         </div>
     );
