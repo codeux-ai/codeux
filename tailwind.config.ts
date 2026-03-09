@@ -2,15 +2,57 @@ import type { Config } from "tailwindcss";
 import typography from "@tailwindcss/typography";
 
 export default {
+  darkMode: "class",
   content: ["./dashboard/index.html", "./dashboard/src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      colors: {
+        // Warm Void — replaces cold obsidian, warm undertones
+        void: {
+          950: "#080605",
+          900: "#0E0C0A",
+          800: "#181411",
+          700: "#231F1B",
+          600: "#2D2822",
+          500: "#3D3730",
+        },
+        // Signal — single precision accent, luminous jade (replaces dual aura)
+        signal: {
+          300: "#80FFD6",
+          400: "#33FFB8",
+          500: "#00E0A0",
+          600: "#00B882",
+          700: "#008F65",
+        },
+        // Warm Amber — secondary signal, replaces generic indigo as secondary accent
+        ember: {
+          400: "#FFD080",
+          500: "#FFB800",
+          600: "#E0A000",
+        },
+        // Semantic status colors
+        status: {
+          green: "#00AB84",  // Running
+          red: "#E3000F",    // Failed
+          amber: "#F59E0B",  // Intervention
+          violet: "#A300D6", // Legacy
+        },
+        // Backwards compat alias for any remaining obsidian refs
+        obsidian: {
+          900: "#0E0C0A",
+          800: "#181411",
+          700: "#231F1B",
+        },
+      },
       fontFamily: {
-        sans: ["Inter", "sans-serif"],
-        mono: ["JetBrains Mono", "monospace"],
+        sans: ['"Plus Jakarta Sans"', "Inter", "sans-serif"],
+        mono: ['"JetBrains Mono"', "monospace"],
+        outfit: ["Outfit", "sans-serif"],
+        display: ["Outfit", '"Plus Jakarta Sans"', "sans-serif"],
       },
       animation: {
         "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+        "signal-ping": "ping 2.5s cubic-bezier(0, 0, 0.2, 1) infinite",
       },
     },
   },

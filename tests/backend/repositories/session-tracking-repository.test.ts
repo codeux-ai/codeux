@@ -91,6 +91,8 @@ describe("SessionTrackingRepository", () => {
       repoPath: "/tmp/repo-a",
     });
 
+    await new Promise(resolve => setTimeout(resolve, 10));
+
     repo.createSession({
       id: "cli-gemini-new",
       provider: "gemini",
@@ -171,7 +173,9 @@ describe("SessionTrackingRepository", () => {
     const repo = await createRepo();
     repo.createSession({ id: "s1", provider: "jules" });
     repo.appendActivity("s1", { description: "1" });
+    await new Promise(resolve => setTimeout(resolve, 5));
     repo.appendActivity("s1", { description: "2" });
+    await new Promise(resolve => setTimeout(resolve, 5));
     repo.appendActivity("s1", { description: "3" });
     
     const recent = repo.fetchRecentActivities("s1", 2);

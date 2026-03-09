@@ -8,5 +8,15 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-preact":  ["preact", "preact/hooks", "preact/compat"],
+          "vendor-router":  ["@tanstack/react-router"],
+          "vendor-gsap":    ["gsap"],
+          "vendor-lucide":  ["lucide-preact"],
+        },
+      },
+    },
   },
 });

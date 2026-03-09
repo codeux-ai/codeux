@@ -28,28 +28,115 @@
     transition-delay: 50ms;
   }
 
+  /* Signal-tinted scrollbar — jade on warm void */
   .dashboard-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: rgb(56 189 248 / 0.45) rgb(15 23 42 / 0.3);
+    scrollbar-color: rgba(0, 224, 160, 0.35) rgba(14, 12, 10, 0.3);
   }
 
   .dashboard-scrollbar::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
   }
 
   .dashboard-scrollbar::-webkit-scrollbar-track {
-    background: linear-gradient(180deg, rgb(15 23 42 / 0.2), rgb(15 23 42 / 0.55));
+    background: linear-gradient(180deg, rgba(14, 12, 10, 0.15), rgba(14, 12, 10, 0.4));
     border-radius: 9999px;
   }
 
   .dashboard-scrollbar::-webkit-scrollbar-thumb {
-    background: linear-gradient(180deg, rgb(56 189 248 / 0.6), rgb(59 130 246 / 0.55));
-    border: 2px solid rgb(15 23 42 / 0.65);
+    background: linear-gradient(180deg, rgba(0, 224, 160, 0.5), rgba(0, 184, 130, 0.4));
+    border: 2px solid rgba(14, 12, 10, 0.5);
     border-radius: 9999px;
   }
 
   .dashboard-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(180deg, rgb(56 189 248 / 0.85), rgb(59 130 246 / 0.8));
+    background: linear-gradient(180deg, rgba(0, 224, 160, 0.8), rgba(0, 184, 130, 0.7));
+  }
+
+  @keyframes organic-morph {
+    0% {
+      border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+    }
+
+    34% {
+      border-radius: 70% 30% 50% 50% / 30% 30% 70% 70%;
+    }
+
+    67% {
+      border-radius: 30% 70% 60% 40% / 60% 50% 50% 40%;
+    }
+
+    100% {
+      border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+    }
+  }
+
+  @keyframes organic-morph-reverse {
+    0% {
+      border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+    }
+
+    34% {
+      border-radius: 30% 70% 60% 40% / 60% 50% 50% 40%;
+    }
+
+    67% {
+      border-radius: 70% 30% 50% 50% / 30% 30% 70% 70%;
+    }
+
+    100% {
+      border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+    }
+  }
+
+  .animate-organic {
+    animation: organic-morph 12s ease-in-out infinite;
+  }
+
+  .animate-organic-reverse {
+    animation: organic-morph-reverse 15s ease-in-out infinite;
+  }
+
+  /* Wave fluid — stat card hover
+     Uses a 2-cycle SVG at 200% container width.
+     translateX(-50%) = exactly one cycle width → mathematically seamless loop. */
+  @keyframes wave-drift {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  @keyframes shimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+  }
+
+  /* Chat page — typing indicator dots */
+  @keyframes typing-dot {
+    0%, 60%, 100% { transform: translateY(0);    opacity: 0.35; }
+    30%            { transform: translateY(-4px); opacity: 1;    }
+  }
+
+  /* Memory page — neural pulse traveling along SVG connection lines */
+  @keyframes dash-travel {
+    from { stroke-dashoffset: 24; }
+    to   { stroke-dashoffset: 0;  }
+  }
+
+  /* Memory page — slow radial breathe on brain core */
+  @keyframes brain-breathe {
+    0%, 100% { transform: scale(1)    rotate(0deg);   opacity: 0.7; }
+    50%       { transform: scale(1.06) rotate(180deg); opacity: 1;   }
+  }
+
+  /* Memory page — lobotomize mode red pulse on canvas */
+  @keyframes lobotomize-pulse {
+    0%, 100% { opacity: 0.04; }
+    50%       { opacity: 0.1;  }
   }
 }

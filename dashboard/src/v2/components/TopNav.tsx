@@ -1,0 +1,173 @@
+import type { FunctionComponent } from "preact";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import gsap from "gsap";
+import { Bell, Command, Search, Moon, Sun, ChevronDown, Activity, FolderOpen, ArrowRight } from "lucide-preact";
+import { Link } from "@tanstack/react-router";
+import { mockSources } from "../lib/mockData.js";
+import { StatusDot } from "./ui/StatusDot.js";
+import { AddProjectModal } from "./ui/AddProjectModal.js";
+
+interface TopNavProps {
+    isDark: boolean;
+    toggleTheme: () => void;
+}
+
+export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) => {
+    const navRef = useRef<HTMLElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [selectedSource, setSelectedSource] = useState(mockSources[3]); // jules-cli as default
+    const [showAddProject, setShowAddProject] = useState(false);
+
+    useLayoutEffect(() => {
+        if (navRef.current) {
+            gsap.fromTo(navRef.current, { y: -20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.9, ease: "power3.out" });
+        }
+    }, []);
+
+    // Close dropdown on outside click
+    useEffect(() => {
+        const handler = (e: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+                setDropdownOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, []);
+
+    return (
+        <>
+        <header
+            ref={navRef}
+            className="sticky top-0 z-50 flex items-center justify-between w-full h-[60px] px-8 md:px-12 bg-[#F9F8F4]/70 dark:bg-void-900/70 backdrop-blur-3xl border-b border-black/[0.05] dark:border-white/[0.04]"
+        >
+            <div className="flex items-center gap-10 flex-1">
+                {/* Logo */}
+                <div className="flex items-center gap-3 cursor-pointer group shrink-0">
+                    <div className="relative w-8 h-8 flex items-center justify-center bg-void-900 dark:bg-white rounded-xl overflow-hidden shadow-[0_0_20px_rgba(0,224,160,0.25)]">
+                        <div className="absolute inset-0 bg-signal-500 opacity-0 group-hover:opacity-20 transition-opacity duration-500" />
+                        <Activity className="w-4 h-4 text-signal-500 dark:text-void-900 relative z-10 group-hover:scale-110 transition-transform duration-500" strokeWidth={2.5} />
+                    </div>
+                    <span className="font-display font-bold text-base tracking-tight text-slate-900 dark:text-white flex items-center gap-0.5">
+                        Jules<span className="text-signal-500">OS</span>
+                    </span>
+                </div>
+
+                {/* Search Bar */}
+                <div className="relative group w-full max-w-xs">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <Search className="w-3.5 h-3.5 text-slate-400 group-focus-within:text-signal-500 transition-colors" strokeWidth={2} />
+                    </div>
+                    <input
+                        type="text"
+                        placeholder="Search projects, sprints, tasks..."
+                        className="w-full h-9 pl-10 pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] focus:border-signal-500/40 dark:focus:border-signal-500/40 rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-signal-500/10 transition-all"
+                    />
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                        <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-mono font-medium text-slate-400 border border-black/10 dark:border-white/10 rounded-md">
+                            <Command className="w-2.5 h-2.5" /> K
+                        </kbd>
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+                {/* Project Selector */}
+                <div className="relative hidden md:block" ref={dropdownRef}>
+                    <button
+                        onClick={() => setDropdownOpen(!dropdownOpen)}
+                        className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group"
+                    >
+                        <StatusDot status={selectedSource.status} />
+                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">{selectedSource.name}</span>
+                        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${dropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {/* Dropdown */}
+                    {dropdownOpen && (
+                        <div className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
+                            <div className="px-3 pt-3 pb-1.5">
+                                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Projects</span>
+                            </div>
+                            {mockSources.map((source) => (
+                                <button
+                                    key={source.id}
+                                    onClick={() => { setSelectedSource(source); setDropdownOpen(false); }}
+                                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-signal-500/5 transition-colors group ${selectedSource.id === source.id ? 'bg-signal-500/8' : ''}`}
+                                >
+                                    <StatusDot status={source.status} />
+                                    <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedSource.id === source.id ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
+                                        {source.name}
+                                    </span>
+                                    {selectedSource.id === source.id && (
+                                        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-signal-500" />
+                                    )}
+                                </button>
+                            ))}
+                            <div className="p-2 border-t border-black/[0.04] dark:border-white/[0.04] mt-1 flex flex-col gap-1">
+                                <button
+                                    onClick={() => { setDropdownOpen(false); setShowAddProject(true); }}
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-ember-600 dark:text-ember-400 hover:bg-ember-500/[0.06] rounded-xl transition-colors"
+                                >
+                                    <FolderOpen className="w-3.5 h-3.5" strokeWidth={2} />
+                                    Add Project
+                                </button>
+                                <Link
+                                    to="/projects"
+                                    onClick={() => setDropdownOpen(false)}
+                                    className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-xl transition-colors"
+                                >
+                                    <span>Manage Projects</span>
+                                    <ArrowRight className="w-3 h-3" strokeWidth={2} />
+                                </Link>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="w-px h-5 bg-black/10 dark:bg-white/10 hidden md:block" />
+
+                {/* Notifications */}
+                <button className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group">
+                    <Bell className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" strokeWidth={1.5} />
+                    <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-signal-500 shadow-[0_0_6px_rgba(0,224,160,0.8)] ring-1 ring-[#F9F8F4] dark:ring-void-900" />
+                </button>
+
+                {/* Theme Toggle */}
+                <button
+                    onClick={toggleTheme}
+                    className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors"
+                >
+                    {isDark
+                        ? <Sun className="w-4 h-4 text-slate-400 hover:text-white transition-colors" strokeWidth={1.5} />
+                        : <Moon className="w-4 h-4 text-slate-500 hover:text-slate-900 transition-colors" strokeWidth={1.5} />
+                    }
+                </button>
+
+                <div className="w-px h-5 bg-black/10 dark:bg-white/10" />
+
+                {/* Avatar */}
+                <div className="flex items-center gap-2.5 cursor-pointer group">
+                    <div className="w-8 h-8 rounded-full bg-signal-500/20 dark:bg-signal-500/15 p-[1.5px] shadow-[0_0_12px_rgba(0,224,160,0.15)] group-hover:shadow-[0_0_16px_rgba(0,224,160,0.25)] transition-shadow">
+                        <div className="w-full h-full rounded-full bg-white dark:bg-void-800 flex items-center justify-center overflow-hidden">
+                            <img
+                                src="https://api.dicebear.com/7.x/notionists/svg?seed=Felix&backgroundColor=transparent"
+                                alt="Avatar"
+                                className="w-full h-full object-cover opacity-90 group-hover:scale-110 transition-transform duration-500"
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+            {showAddProject && (
+                <AddProjectModal
+                    onClose={() => setShowAddProject(false)}
+                    onAdd={() => {/* projects managed in ProjectsPage */}}
+                />
+            )}
+        </>
+    );
+};
