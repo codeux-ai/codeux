@@ -31,8 +31,11 @@ describe("AppDbStorage", () => {
     expect(storage.hasTable("task_dependencies")).toBe(true);
     expect(storage.hasTable("mcp_connections")).toBe(true);
     expect(storage.hasTable("connection_project_bindings")).toBe(true);
+    expect(storage.hasTable("sprint_runs")).toBe(true);
+    expect(storage.hasTable("task_dispatches")).toBe(true);
     expect(storage.hasTable("task_runs")).toBe(true);
     expect(storage.hasTable("task_run_events")).toBe(true);
+    expect(storage.hasTable("execution_leases")).toBe(true);
     expect(storage.hasTable("conversation_threads")).toBe(true);
     expect(storage.hasTable("conversation_messages")).toBe(true);
   });

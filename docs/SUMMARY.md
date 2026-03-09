@@ -8,6 +8,7 @@
 - [Sprint 4 Project Management Foundation and Tool Surface Migration](./architecture/sprint-4-project-management-foundation.md)
 - [Sprint OS Phase 1 Implementation Plan](./architecture/sprint-os-phase-1-implementation-plan.md)
 - [DB-Native Orchestration Foundation](./architecture/db-native-orchestration-foundation.md)
+- [Execution Schema Foundation](./architecture/execution-schema-foundation.md)
 - [Project Management Implementation](./architecture/project-management-implementation.md)
 - [Project Runtime Integration](./architecture/project-runtime-integration.md)
 - [MCP Connections And Listen Mode](./architecture/mcp-connections-and-listen-mode.md)

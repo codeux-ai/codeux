@@ -138,6 +138,8 @@ export class AppDbStorage {
         project_id TEXT NOT NULL,
         sprint_id TEXT NOT NULL,
         task_id TEXT NOT NULL,
+        sprint_run_id TEXT,
+        dispatch_id TEXT,
         connection_id TEXT,
         provider TEXT,
         mode TEXT,
@@ -190,7 +192,68 @@ export class AppDbStorage {
         FOREIGN KEY (thread_id) REFERENCES conversation_threads(id) ON DELETE CASCADE,
         FOREIGN KEY (author_connection_id) REFERENCES mcp_connections(id) ON DELETE SET NULL
       );
+
+      CREATE TABLE IF NOT EXISTS sprint_runs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        trigger_type TEXT NOT NULL,
+        triggered_by TEXT,
+        executor_mode TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT,
+        last_heartbeat_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS task_dispatches (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id TEXT NOT NULL,
+        task_id TEXT NOT NULL,
+        sprint_run_id TEXT NOT NULL,
+        connection_id TEXT,
+        executor_type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        priority INTEGER NOT NULL DEFAULT 0,
+        queued_at TEXT NOT NULL,
+        claimed_at TEXT,
+        started_at TEXT,
+        finished_at TEXT,
+        last_heartbeat_at TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_run_id) REFERENCES sprint_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY (connection_id) REFERENCES mcp_connections(id) ON DELETE SET NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS execution_leases (
+        id TEXT PRIMARY KEY,
+        scope_type TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        owner_key TEXT NOT NULL,
+        lease_token TEXT NOT NULL,
+        acquired_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        last_heartbeat_at TEXT,
+        UNIQUE(scope_type, scope_id)
+      );
     `);
+
+    this.ensureColumn("task_runs", "sprint_run_id", "TEXT");
+    this.ensureColumn("task_runs", "dispatch_id", "TEXT");
+    this.ensureIndex("idx_sprint_runs_project_sprint", "sprint_runs", "project_id, sprint_id, created_at DESC");
+    this.ensureIndex("idx_task_dispatches_sprint_run", "task_dispatches", "sprint_run_id, status, queued_at ASC");
+    this.ensureIndex("idx_task_dispatches_task", "task_dispatches", "task_id, created_at DESC");
+    this.ensureIndex("idx_execution_leases_scope", "execution_leases", "scope_type, scope_id");
   }
 
   getPath(): string {
@@ -209,5 +272,17 @@ export class AppDbStorage {
     `).get(name) as TableRow | undefined;
 
     return row?.name === name;
+  }
+
+  private ensureColumn(tableName: string, columnName: string, columnDefinition: string): void {
+    const rows = this.db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name?: string }>;
+    if (rows.some((row) => row.name === columnName)) {
+      return;
+    }
+    this.db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
+  }
+
+  private ensureIndex(indexName: string, tableName: string, columns: string): void {
+    this.db.exec(`CREATE INDEX IF NOT EXISTS ${indexName} ON ${tableName} (${columns})`);
   }
 }

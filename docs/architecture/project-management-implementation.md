@@ -54,6 +54,9 @@ Phase-1 tables used by the new flow:
 Future-facing tables already exist in the same DB for follow-up work:
 - `mcp_connections`
 - `connection_project_bindings`
+- `sprint_runs`
+- `task_dispatches`
+- `execution_leases`
 - `task_runs`
 - `task_run_events`
 - `conversation_threads`
