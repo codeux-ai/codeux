@@ -91,9 +91,10 @@ Current behavior:
 - Top navigation project selector reads/writes the selected project in sqlite
 - Projects page creates, lists, selects, and deletes projects
 - Sprints page creates and lists sprints for the selected project
+- Sprints page can import markdown bundles and export DB-backed sprint/task markdown bundles
 - Tasks page creates, edits, deletes, filters, and groups tasks for the selected project
 - Task dependencies are edited in the task modal and stored in `task_dependencies`
-- Dashboard overview project/task widgets read from the same DB-backed state
+- Dashboard overview project/task widgets and header stats read from the same DB-backed state
 
 ## Markdown Round-Trip
 

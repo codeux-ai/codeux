@@ -72,9 +72,9 @@ Legacy runtime:
 ### V2 project management
 - Top-nav project selector persists the active project in sqlite
 - Projects page is DB-backed and can create/select/delete projects
-- Sprints page is project-scoped and creates sprint records in sqlite
+- Sprints page is project-scoped, creates sprint records in sqlite, and exposes markdown import/export controls
 - Tasks page is project-scoped and supports create/edit/delete plus dependency metadata
-- Overview widgets now read project/task data from the same project-management API surface
+- Overview widgets and headline stat cards now read project/task data from the same project-management API surface
 
 ### Dashboard view
 - Task statistics
