@@ -15,9 +15,10 @@ Use this page as the main entrypoint.
 ### Path 2: Building or modifying orchestration behavior
 1. [System Overview](./architecture/system-overview.md)
 2. [Sprint 4 Project Management Foundation and Tool Surface Migration](./architecture/sprint-4-project-management-foundation.md)
-3. [Atomic Sprint Loop](./sprint-loop/atomic-loop.md)
-4. [Instruction Template System](./instructions/markdown-template-system.md)
-5. [Configuration and Storage](./settings/configuration-and-storage.md)
+3. [Sprint OS Phase 1 Implementation Plan](./architecture/sprint-os-phase-1-implementation-plan.md)
+4. [Atomic Sprint Loop](./sprint-loop/atomic-loop.md)
+5. [Instruction Template System](./instructions/markdown-template-system.md)
+6. [Configuration and Storage](./settings/configuration-and-storage.md)
 
 ### Path 3: MCP integrator (tool contracts and runtime expectations)
 1. [Quickstart](./getting-started/quickstart.md)
@@ -33,6 +34,7 @@ Use this page as the main entrypoint.
 - [Repository Map](./architecture/repository-map.md)
 - [Sprint 2 Gap Closure and Migration Contract](./architecture/sprint-2-gap-closure.md)
 - [Sprint 4 Project Management Foundation and Tool Surface Migration](./architecture/sprint-4-project-management-foundation.md)
+- [Sprint OS Phase 1 Implementation Plan](./architecture/sprint-os-phase-1-implementation-plan.md)
 - [MCP Tools and Contracts](./mcp/tools-and-contracts.md)
 - [MCP Runtime and Dispatch](./mcp/runtime-and-dispatch.md)
 - [Atomic Sprint Loop](./sprint-loop/atomic-loop.md)
