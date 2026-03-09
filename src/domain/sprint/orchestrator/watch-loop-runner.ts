@@ -141,10 +141,7 @@ export class WatchLoopRunner {
 
           if (subtasks.length > 0 && subtasks.every((task) => task.status === "COMPLETED" && task.is_merged)) {
             try {
-              const completedKey = args.project_id && args.sprint_id
-                ? `${args.project_id}:${args.sprint_id}`
-                : args.sprint_number;
-              this.deps.completedSprints.add(completedKey);
+              this.deps.completedSprints.add(args.sprint_number);
               await fs.rm(subtasksDir, { recursive: true, force: true });
               fullReport += await this.deps.renderInstruction("cleanupAllMerged", { subtasks_dir: subtasksDir }, repoPath);
               fullReport += await runCompletionStep({

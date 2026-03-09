@@ -64,7 +64,7 @@ export class JulesAgentServer {
   private server: Server;
   private logger: Logger;
   private julesApi: JulesApiClient;
-  private completedSprints: Set<string | number> = new Set();
+  private completedSprints: Set<number> = new Set();
   private runtimeContext: RuntimeContext = new DefaultRuntimeContext();
   private app = express();
   private guideRepository: GuideRepository;
@@ -326,35 +326,7 @@ export class JulesAgentServer {
 
   private async persistTaskMergedFlag(args: PersistTaskMergedFlagArgs): Promise<void> {
     const subtasksDir = getSprintSubtasksDir(args.repoPath, args.sprintNumber);
-    try {
-      await this.subtaskRepository.setMerged(subtasksDir, args.taskId, args.merged);
-    } catch {
-      // Compatibility markdown may be absent when execution is sourced from sqlite.
-    }
-
-    const selectedProjectId = this.projectRuntimeRepository.getSelectedProjectId();
-    if (!selectedProjectId) {
-      return;
-    }
-
-    const sprint = this.projectManagementRepository
-      .listSprints(selectedProjectId)
-      .find((candidate) => candidate.number === args.sprintNumber);
-    if (!sprint) {
-      return;
-    }
-
-    const task = this.projectManagementRepository
-      .listTasks(selectedProjectId, sprint.id)
-      .find((candidate) => candidate.taskKey === args.taskId);
-    if (!task) {
-      return;
-    }
-
-    this.projectManagementRepository.updateTask(task.id, {
-      isMerged: args.merged,
-      mergeIndicator: args.merged ? "MERGED" : null,
-    });
+    await this.subtaskRepository.setMerged(subtasksDir, args.taskId, args.merged);
   }
 
   private formatError(error: unknown): { content: Array<{ type: string; text: string }>; isError: true } {

@@ -69,7 +69,6 @@ describe("Sprint Factory", () => {
       instructionService: {
         render: vi.fn(),
       },
-      projectManagementRepository: {},
       projectRuntimeRepository: {
         syncDashboardStatus: vi.fn(),
       },
@@ -86,7 +85,6 @@ describe("Sprint Factory", () => {
 
     expect(result.cliWorkflowService).toBeDefined();
     expect(result.taskService).toBeDefined();
-    expect(result.sprintExecutionBridgeService).toBeDefined();
     expect(result.sprintOrchestrator).toBeDefined();
 
     expect(CliWorkflowService).toHaveBeenCalledTimes(1);
@@ -175,8 +173,6 @@ describe("Sprint Factory", () => {
 
     sprintArgs.renderInstruction("template1", { var: 1 }, "repo1");
     expect(mockCoreDeps.instructionService.render).toHaveBeenCalledWith("template1", { var: 1 }, "repo1");
-
-    expect(sprintArgs.sprintExecutionBridgeService).toBeDefined();
   });
 
   it("handles missing dashboardSettings", () => {
