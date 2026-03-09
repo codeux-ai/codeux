@@ -13,12 +13,14 @@ It now:
 - creates `task_dispatches` and `task_runs` when ready tasks start
 - acquires a sprint-scoped execution lease while the orchestrator owns the loop
 - keeps Docker or CLI-backed execution and Jules execution under the same dispatch flow
+- queues explicit `mcp_worker` tasks into the same dispatch model
 - persists auto-merge updates back into DB task records instead of markdown
 - routes dashboard task reruns through the same dispatch service
+- exposes execution control-plane state through a dedicated dashboard projection
 
 It does not yet:
 - remove all legacy wording from every instruction template
-- route connected MCP workers through the dispatch queue
+- attach richer provider transcripts directly to `task_run_events`
 
 ## Primary Files
 
@@ -95,8 +97,9 @@ Executor mapping in this slice:
 
 - `jules` provider -> `jules` dispatch executor
 - CLI providers (`gemini`, `codex`, `claude-code`) -> `docker_cli` dispatch executor
+- explicit task `executorType = mcp_worker` -> queued `mcp_worker` dispatch
 
-That keeps the old Docker/worktree flow alive, but under DB-native dispatch records.
+That keeps the old Docker/worktree flow alive, but under DB-native dispatch records, and adds worker routing without introducing a second runtime.
 
 ## Watch Loop
 
@@ -150,4 +153,3 @@ The execution model is now DB-native at the entry, load, dispatch, and merge-per
 Still pending:
 - CI/protocol wording should stop referencing any subtask-file semantics
 - live provider activity should be attached more directly to `task_runs` / `task_run_events`
-- `mcp_worker` should claim from `task_dispatches`

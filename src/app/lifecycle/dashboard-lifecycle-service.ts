@@ -17,6 +17,7 @@ import type { SettingsRepository } from "../../repositories/settings-repository.
 import type { ProjectManagementRepository } from "../../repositories/project-management-repository.js";
 import type { ProjectRuntimeRepository } from "../../repositories/project-runtime-repository.js";
 import type { ConnectionChatRepository } from "../../repositories/connection-chat-repository.js";
+import type { ExecutionRepository } from "../../repositories/execution-repository.js";
 import type { SprintMarkdownService } from "../../services/sprint-markdown-service.js";
 import type { ActivityCacheService } from "../../server/activity-cache-service.js";
 import type { TaskRerunService } from "../../services/task-rerun-service.js";
@@ -31,6 +32,7 @@ export interface BootDashboardDeps {
   settingsRepository: SettingsRepository;
   projectManagementRepository: ProjectManagementRepository;
   projectRuntimeRepository: ProjectRuntimeRepository;
+  executionRepository: ExecutionRepository;
   connectionChatRepository: ConnectionChatRepository;
   sprintMarkdownService: SprintMarkdownService;
   activityCacheService: ActivityCacheService;
@@ -67,6 +69,13 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     port,
     liveActivityCacheMs: deps.LIVE_ACTIVITY_CACHE_MS,
     getStatus: () => deps.projectRuntimeRepository.getSelectedProjectStatus(),
+    getExecutionSnapshot: () => {
+      const projectId = deps.projectManagementRepository.getSelectedProjectId();
+      return projectId
+        ? deps.executionRepository.getProjectExecutionSnapshot(projectId)
+        : { projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], updatedAt: null };
+    },
+    getProjectExecutionSnapshot: (projectId) => deps.executionRepository.getProjectExecutionSnapshot(projectId),
     getLiveActivities: deps.getLiveActivitiesForActiveTasks,
     getGitStatus: deps.getGitStatus,
     getExternalSettingsHints: () => deps.externalSettingsHints,

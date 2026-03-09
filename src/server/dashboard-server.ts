@@ -3,7 +3,14 @@ import * as fs from "fs";
 import * as path from "path";
 import type { Server } from "http";
 import { createServer } from "http";
-import type { DashboardSettings, ExternalSettingsHints, GitTrackingStatus, JulesActivity, ReadinessProbeStatus } from "../contracts/app-types.js";
+import type {
+  DashboardSettings,
+  ExecutionDashboardSnapshot,
+  ExternalSettingsHints,
+  GitTrackingStatus,
+  JulesActivity,
+  ReadinessProbeStatus,
+} from "../contracts/app-types.js";
 import type {
   ConversationMessageRecord,
   ConversationThreadRecord,
@@ -35,6 +42,8 @@ export interface DashboardServerOptions {
   port: number;
   liveActivityCacheMs: number;
   getStatus: () => unknown;
+  getExecutionSnapshot: () => ExecutionDashboardSnapshot;
+  getProjectExecutionSnapshot: (projectId: string) => ExecutionDashboardSnapshot;
   getLiveActivities: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
   getExternalSettingsHints: () => ExternalSettingsHints;
@@ -159,6 +168,18 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
 
   app.get("/api/status", (req, res) => {
     res.json(getStatus());
+  });
+
+  app.get("/api/execution", (req, res) => {
+    res.json(options.getExecutionSnapshot());
+  });
+
+  app.get("/api/projects/:projectId/execution", (req, res) => {
+    try {
+      res.json(options.getProjectExecutionSnapshot(String(req.params.projectId || "").trim()));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to load execution snapshot") });
+    }
   });
 
   app.get("/api/live-activities", async (req, res) => {

@@ -66,6 +66,10 @@ Project management:
 Legacy runtime:
 - `GET /api/status`
   - Selected-project runtime payload (`sprint_number`, `subtasks`, `instructions`, etc.) projected from sqlite
+- `GET /api/execution`
+  - Selected-project execution control-plane snapshot (`sprintRuns`, `taskDispatches`, lease ownership)
+- `GET /api/projects/:projectId/execution`
+  - Project-scoped execution control-plane snapshot for the v2 runtime
 - `GET /api/live-activities`
   - Session activity stream for running tasks in the selected project
 - `GET /api/settings`
@@ -94,6 +98,7 @@ Legacy runtime:
 
 ### Dashboard view
 - Task statistics
+- Execution runtime panel for sprint runs, dispatch queue state, worker assignment, and lease ownership
 - Task pipeline cards
 - Task cards include a `Rerun` action with confirmation prompt; rerun clears session/PR/merge state for that task and starts it again
 - Reruns now reuse the same dispatch model as `sprint_agent` instead of bypassing execution state

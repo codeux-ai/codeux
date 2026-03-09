@@ -27,8 +27,20 @@ describe("dashboard-lifecycle-service", () => {
       settingsRepository: {
         saveSettings: vi.fn().mockImplementation((s) => s),
       } as any,
+      projectManagementRepository: {
+        getSelectedProjectId: vi.fn().mockReturnValue("project-1"),
+      } as any,
       projectRuntimeRepository: {
         getSelectedProjectStatus: vi.fn().mockReturnValue("runtime-status"),
+      } as any,
+      executionRepository: {
+        getProjectExecutionSnapshot: vi.fn().mockReturnValue({
+          projectId: "project-1",
+          projectName: "Project 1",
+          sprintRuns: [],
+          taskDispatches: [],
+          updatedAt: "2026-03-09T00:00:00.000Z",
+        }),
       } as any,
       activityCacheService: {
         invalidateGitStatusCache: vi.fn(),
@@ -136,6 +148,8 @@ describe("dashboard-lifecycle-service", () => {
 
       setupArgs.getStatus();
       expect(mockDeps.projectRuntimeRepository.getSelectedProjectStatus).toHaveBeenCalled();
+      expect(setupArgs.getExecutionSnapshot()).toMatchObject({ projectId: "project-1" });
+      expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenCalledWith("project-1");
 
       expect(setupArgs.getLiveActivities).toBe(mockDeps.getLiveActivitiesForActiveTasks);
       expect(setupArgs.getGitStatus).toBe(mockDeps.getGitStatus);

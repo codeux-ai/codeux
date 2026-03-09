@@ -190,4 +190,99 @@ describe("ExecutionRepository", () => {
       connectionId: worker.id,
     });
   });
+
+  it("projects sprint runs and dispatches into an execution snapshot", async () => {
+    const { projectRepository, connectionRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Snapshot Project",
+      sourceType: "local",
+      sourceRef: "/workspace/snapshot-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Snapshot Sprint",
+      number: 9,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Expose runtime panel",
+      executorType: "mcp_worker",
+    });
+    const worker = connectionRepository.upsertConnection({
+      connectionKey: "worker-snapshot-1",
+      displayName: "Worker Snapshot 1",
+      role: "worker",
+      transport: "stdio",
+      status: "connected",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "mixed",
+      triggerType: "dashboard",
+    });
+    executionRepository.acquireLease({
+      scopeType: "sprint",
+      scopeId: sprint.id,
+      ownerKey: "sprint_agent",
+      leaseToken: "lease-sprint-1",
+      expiresAt: "2030-03-09T12:00:00.000Z",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "mcp_worker",
+      connectionId: worker.id,
+      status: "running",
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      connectionId: worker.id,
+      mode: "mcp_worker",
+      provider: "codex",
+      sessionId: "session-snapshot-1",
+      state: "RUNNING",
+      startedAt: "2026-03-09T10:00:00.000Z",
+    });
+    executionRepository.acquireLease({
+      scopeType: "task_dispatch",
+      scopeId: dispatch.id,
+      ownerKey: "worker-snapshot-1",
+      leaseToken: "lease-dispatch-1",
+      expiresAt: "2030-03-09T12:05:00.000Z",
+    });
+
+    const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
+
+    expect(snapshot).toMatchObject({
+      projectId: project.id,
+      projectName: "Snapshot Project",
+    });
+    expect(snapshot.sprintRuns[0]).toMatchObject({
+      id: sprintRun.id,
+      sprintId: sprint.id,
+      sprintName: "Snapshot Sprint",
+      status: "running",
+      activeLeaseOwnerKey: "sprint_agent",
+    });
+    expect(snapshot.taskDispatches[0]).toMatchObject({
+      id: dispatch.id,
+      taskId: task.id,
+      taskKey: "T01",
+      taskTitle: "Expose runtime panel",
+      executorType: "mcp_worker",
+      connectionDisplayName: "Worker Snapshot 1",
+      taskRunState: "RUNNING",
+      sessionId: "session-snapshot-1",
+      activeLeaseOwnerKey: "worker-snapshot-1",
+    });
+  });
 });

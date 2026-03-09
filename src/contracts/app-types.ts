@@ -93,6 +93,65 @@ export interface LiveActivitiesResponse {
   cacheTtlMs: number;
 }
 
+export interface ExecutionSprintRunSummary {
+  id: string;
+  projectId: string;
+  sprintId: string;
+  sprintName: string;
+  sprintNumber: number | null;
+  status: string;
+  triggerType: string;
+  triggeredBy: string | null;
+  executorMode: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  lastHeartbeatAt: string | null;
+  createdAt: string;
+  activeLeaseOwnerKey: string | null;
+  activeLeaseExpiresAt: string | null;
+}
+
+export interface ExecutionTaskDispatchSummary {
+  id: string;
+  projectId: string;
+  sprintId: string;
+  sprintRunId: string;
+  sprintName: string;
+  sprintNumber: number | null;
+  taskId: string;
+  taskKey: string;
+  taskTitle: string;
+  status: string;
+  executorType: string;
+  priority: number;
+  connectionId: string | null;
+  connectionDisplayName: string | null;
+  connectionRole: string | null;
+  taskRunId: string | null;
+  taskRunState: string | null;
+  provider: string | null;
+  sessionId: string | null;
+  sessionName: string | null;
+  workerBranch: string | null;
+  prUrl: string | null;
+  queuedAt: string;
+  claimedAt: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  lastHeartbeatAt: string | null;
+  errorMessage: string | null;
+  activeLeaseOwnerKey: string | null;
+  activeLeaseExpiresAt: string | null;
+}
+
+export interface ExecutionDashboardSnapshot {
+  projectId: string | null;
+  projectName: string | null;
+  sprintRuns: ExecutionSprintRunSummary[];
+  taskDispatches: ExecutionTaskDispatchSummary[];
+  updatedAt: string | null;
+}
+
 export interface DashboardStats {
   total: number;
   running: number;

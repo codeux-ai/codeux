@@ -10,6 +10,7 @@ import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { ProjectRuntimeRepository } from "../../../src/repositories/project-runtime-repository.js";
 import { ConnectionChatRepository } from "../../../src/repositories/connection-chat-repository.js";
+import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import { SprintMarkdownService } from "../../../src/services/sprint-markdown-service.js";
 
 const serversToClose: Server[] = [];
@@ -46,6 +47,7 @@ async function createServerHandle(): Promise<{
   const repository = new ProjectManagementRepository(storage);
   const runtimeRepository = new ProjectRuntimeRepository(storage);
   const connectionRepository = new ConnectionChatRepository(storage);
+  const executionRepository = new ExecutionRepository(storage);
   const markdownService = new SprintMarkdownService(repository);
 
   const app = express();
@@ -55,6 +57,13 @@ async function createServerHandle(): Promise<{
     port: 39100,
     liveActivityCacheMs: 1000,
     getStatus: () => runtimeRepository.getSelectedProjectStatus(),
+    getExecutionSnapshot: () => {
+      const selectedProjectId = repository.getSelectedProjectId();
+      return selectedProjectId
+        ? executionRepository.getProjectExecutionSnapshot(selectedProjectId)
+        : { projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], updatedAt: null };
+    },
+    getProjectExecutionSnapshot: (projectId) => executionRepository.getProjectExecutionSnapshot(projectId),
     getLiveActivities: async () => ({}),
     getGitStatus: async () => ({
       mode: "LOCAL",
@@ -207,6 +216,15 @@ describe("dashboard project management API", () => {
       status: "RUNNING",
       session_id: "session-api",
     });
+
+    const executionSnapshot = await fetch(`${baseUrl}/api/execution`).then(async (response) => response.json()) as {
+      projectId: string | null;
+      sprintRuns: Array<{ sprintId: string; status: string }>;
+      taskDispatches: Array<{ taskId: string; executorType: string }>;
+    };
+    expect(executionSnapshot.projectId).toBe(project.id);
+    expect(executionSnapshot.sprintRuns).toEqual([]);
+    expect(executionSnapshot.taskDispatches).toEqual([]);
 
     const startListenResponse = await fetch(`${baseUrl}/api/projects/${project.id}/conversations/threads`, {
       method: "POST",

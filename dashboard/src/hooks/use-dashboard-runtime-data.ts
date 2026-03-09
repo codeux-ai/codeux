@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "preact/hooks";
 import { computeStats, mergeLiveActivities } from "../lib/status.js";
 import { fetchGitTrackingStatus, fetchRuntimeDashboardPayload } from "../lib/api/dashboard-api.js";
-import type { DashboardStatus, GitTrackingStatus, LiveActivitiesResponse } from "../types.js";
+import type { DashboardStatus, ExecutionDashboardSnapshot, GitTrackingStatus, LiveActivitiesResponse } from "../types.js";
 import { useDashboardPollManager } from "./use-dashboard-poll-manager.js";
 
 const DEFAULT_POLL_INTERVAL_MS = 10000;
@@ -13,12 +13,20 @@ interface UseDashboardRuntimeDataResult {
   refreshGitStatus: () => Promise<void>;
   refreshRuntimeStatus: () => Promise<void>;
   status: DashboardStatus;
+  execution: ExecutionDashboardSnapshot;
   stats: ReturnType<typeof computeStats>;
   tasksWithLiveActivities: DashboardStatus["subtasks"];
 }
 
 export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
   const [status, setStatus] = useState<DashboardStatus>({ subtasks: [], timestamp: null });
+  const [execution, setExecution] = useState<ExecutionDashboardSnapshot>({
+    projectId: null,
+    projectName: null,
+    sprintRuns: [],
+    taskDispatches: [],
+    updatedAt: null,
+  });
   const [error, setError] = useState<string | null>(null);
   const [liveActivities, setLiveActivities] = useState<Record<string, LiveActivitiesResponse["activitiesBySession"][string]>>({});
   const [gitStatus, setGitStatus] = useState<GitTrackingStatus | null>(null);
@@ -28,6 +36,7 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
     try {
       const data = await fetchRuntimeDashboardPayload();
       setStatus(data.status);
+      setExecution(data.execution);
       setLiveActivities((prev) => ({ ...prev, ...data.liveActivities }));
       setError(null);
     } catch (err) {
@@ -65,6 +74,7 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
     refreshGitStatus: refreshGitStatusAction,
     refreshRuntimeStatus: refreshRuntimeStatusAction,
     status,
+    execution,
     stats,
     tasksWithLiveActivities,
   };

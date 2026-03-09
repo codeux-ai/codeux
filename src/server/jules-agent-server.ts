@@ -27,6 +27,7 @@ import { SettingsRepository } from "../repositories/settings-repository.js";
 import { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { ProjectRuntimeRepository } from "../repositories/project-runtime-repository.js";
 import { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
+import { ExecutionRepository } from "../repositories/execution-repository.js";
 import { GitStatusService, type GitTrackingRequest } from "../services/git-status-service.js";
 import { loadExternalSettingsHints } from "../config/external-settings.js";
 import { InstructionService } from "../instructions/instruction-template-service.js";
@@ -76,6 +77,7 @@ export class JulesAgentServer {
   private projectManagementRepository: ProjectManagementRepository;
   private projectRuntimeRepository: ProjectRuntimeRepository;
   private connectionChatRepository: ConnectionChatRepository;
+  private executionRepository: ExecutionRepository;
   private sprintMarkdownService: SprintMarkdownService;
   private externalSettingsHints: ExternalSettingsHints;
   private instructionService: InstructionService;
@@ -105,6 +107,7 @@ export class JulesAgentServer {
     this.projectManagementRepository = deps.projectManagementRepository;
     this.projectRuntimeRepository = deps.projectRuntimeRepository;
     this.connectionChatRepository = deps.connectionChatRepository;
+    this.executionRepository = deps.executionRepository;
     this.sprintMarkdownService = deps.sprintMarkdownService;
     this.externalSettingsHints = deps.externalSettingsHints;
     this.instructionService = deps.instructionService;
@@ -525,6 +528,7 @@ export class JulesAgentServer {
       settingsRepository: this.settingsRepository,
       projectManagementRepository: this.projectManagementRepository,
       projectRuntimeRepository: this.projectRuntimeRepository,
+      executionRepository: this.executionRepository,
       connectionChatRepository: this.connectionChatRepository,
       sprintMarkdownService: this.sprintMarkdownService,
       activityCacheService: this.activityCacheService,

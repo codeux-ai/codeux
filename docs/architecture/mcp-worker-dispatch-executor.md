@@ -101,3 +101,9 @@ This keeps worker execution aligned with the v2 architecture:
 - live dashboard state can project from one runtime model
 
 There is no worker-only control plane and no compatibility file bridge.
+
+## Dashboard Visibility
+
+Worker dispatches are now visible in the v2 live page through the execution snapshot API.
+
+That means queued, running, blocked, and failed worker dispatches can be inspected in the same dashboard used for sprint orchestration, instead of requiring log inspection or direct database queries.

@@ -5,7 +5,7 @@ import {
     Zap, GitBranch, Clock, CheckCircle2, XCircle, AlertTriangle,
     Activity, ChevronDown, ChevronRight, Radio, Terminal, RefreshCw,
     GitPullRequest, GitMerge, CircleDot, ExternalLink, Eye, EyeOff,
-    Play, FileText, RotateCcw, Layers,
+    Play, FileText, RotateCcw, Layers, Bot, Workflow,
 } from "lucide-preact";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
@@ -14,7 +14,7 @@ import { rerunTask } from "../lib/api/dashboard-api.js";
 import { getActivityText } from "../lib/activity.js";
 import { formatTime } from "../lib/time.js";
 import { renderMarkdown } from "../lib/markdown.js";
-import type { Subtask, JulesActivity, GitTrackingStatus, DashboardStats } from "../types.js";
+import type { Subtask, JulesActivity, GitTrackingStatus, DashboardStats, ExecutionDashboardSnapshot } from "../types.js";
 
 /* ─── Status Maps ────────────────────────────────────────────────────────── */
 
@@ -369,6 +369,144 @@ const statusTone = (value: string | null): string => {
     return "text-slate-400";
 };
 
+const EXECUTOR_LABELS: Record<string, string> = {
+    docker_cli: "CLI",
+    jules: "Jules",
+    mcp_worker: "Worker",
+    mixed: "Mixed",
+};
+
+const ExecutionRuntimePanel: FunctionComponent<{ snapshot: ExecutionDashboardSnapshot }> = ({ snapshot }) => {
+    const activeSprintRuns = snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued" || run.status === "paused");
+    const activeDispatches = snapshot.taskDispatches.filter((dispatch) => (
+        dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running" || dispatch.status === "blocked"
+    ));
+    const workerDispatches = activeDispatches.filter((dispatch) => dispatch.executorType === "mcp_worker");
+    const queuedWorkers = workerDispatches.filter((dispatch) => dispatch.status === "queued").length;
+    const runningWorkers = workerDispatches.filter((dispatch) => dispatch.status === "claimed" || dispatch.status === "running").length;
+
+    return (
+        <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+            <WaveFluid accentHex="#00E0A0" />
+            <BorderTrace accentHex="#00E0A0" />
+
+            <div className="relative z-10 space-y-6">
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-2.5">
+                        <Workflow className="w-4 h-4 text-signal-500" strokeWidth={1.5} />
+                        <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Execution Runtime</span>
+                    </div>
+                    <span className="text-[9px] font-mono text-slate-400">
+                        {snapshot.updatedAt ? `Updated ${formatTime(snapshot.updatedAt)}` : "No active project"}
+                    </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                    {[
+                        { label: "Active Runs", value: activeSprintRuns.length, accent: "text-signal-500" },
+                        { label: "Active Dispatches", value: activeDispatches.length, accent: "text-slate-700 dark:text-slate-200" },
+                        { label: "Worker Queued", value: queuedWorkers, accent: "text-ember-500" },
+                        { label: "Worker Running", value: runningWorkers, accent: "text-status-green" },
+                    ].map(({ label, value, accent }) => (
+                        <div key={label} className="rounded-xl bg-black/[0.02] dark:bg-white/[0.02] p-3">
+                            <div className={`text-xl font-black font-mono leading-none ${accent}`}>{value}</div>
+                            <div className="mt-1 text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400">{label}</div>
+                        </div>
+                    ))}
+                </div>
+
+                <div>
+                    <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 block mb-3">Sprint Runs</span>
+                    {snapshot.sprintRuns.length === 0 ? (
+                        <p className="text-[11px] text-slate-400 dark:text-slate-600 font-mono">No sprint runs recorded for the selected project.</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {snapshot.sprintRuns.slice(0, 4).map((run) => (
+                                <div key={run.id} className="rounded-xl border border-black/[0.04] dark:border-white/[0.04] bg-black/[0.015] dark:bg-white/[0.015] p-3">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate">
+                                                {run.sprintName}{run.sprintNumber != null ? ` · Sprint ${run.sprintNumber}` : ""}
+                                            </div>
+                                            <div className="mt-1 text-[10px] font-mono text-slate-400">
+                                                {EXECUTOR_LABELS[run.executorMode] || run.executorMode} · {run.triggerType}
+                                                {run.triggeredBy ? ` · ${run.triggeredBy}` : ""}
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className={`text-[10px] font-bold uppercase tracking-[0.12em] ${statusTone(run.status)}`}>
+                                                {run.status}
+                                            </div>
+                                            {run.activeLeaseOwnerKey && (
+                                                <div className="mt-1 text-[10px] font-mono text-slate-400">
+                                                    lease {run.activeLeaseOwnerKey}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <div>
+                    <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 block mb-3">Dispatch Queue</span>
+                    {snapshot.taskDispatches.length === 0 ? (
+                        <p className="text-[11px] text-slate-400 dark:text-slate-600 font-mono">No task dispatches yet.</p>
+                    ) : (
+                        <div className="space-y-2 max-h-72 overflow-y-auto dashboard-scrollbar pr-1">
+                            {snapshot.taskDispatches.slice(0, 8).map((dispatch) => (
+                                <div key={dispatch.id} className="rounded-xl border border-black/[0.04] dark:border-white/[0.04] bg-black/[0.015] dark:bg-white/[0.015] p-3">
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate">
+                                                {dispatch.taskKey} · {dispatch.taskTitle}
+                                            </div>
+                                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
+                                                <span>{dispatch.sprintName}</span>
+                                                <span>·</span>
+                                                <span>{EXECUTOR_LABELS[dispatch.executorType] || dispatch.executorType}</span>
+                                                {dispatch.connectionDisplayName && (
+                                                    <>
+                                                        <span>·</span>
+                                                        <span className="inline-flex items-center gap-1">
+                                                            <Bot className="w-3 h-3" strokeWidth={2} />
+                                                            {dispatch.connectionDisplayName}
+                                                        </span>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className={`text-[10px] font-bold uppercase tracking-[0.12em] ${statusTone(dispatch.status)}`}>
+                                                {dispatch.status}
+                                            </div>
+                                            {dispatch.taskRunState && (
+                                                <div className={`mt-1 text-[10px] font-mono ${statusTone(dispatch.taskRunState)}`}>
+                                                    {dispatch.taskRunState}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {(dispatch.sessionId || dispatch.workerBranch || dispatch.errorMessage || dispatch.activeLeaseOwnerKey) && (
+                                        <div className="mt-2 border-t border-black/[0.04] dark:border-white/[0.04] pt-2 text-[10px] font-mono text-slate-400 space-y-1">
+                                            {dispatch.sessionId && <div>session {dispatch.sessionId}</div>}
+                                            {dispatch.workerBranch && <div>branch {dispatch.workerBranch}</div>}
+                                            {dispatch.activeLeaseOwnerKey && <div>lease {dispatch.activeLeaseOwnerKey}</div>}
+                                            {dispatch.errorMessage && <div className="text-status-red">{dispatch.errorMessage}</div>}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const GitCiPanel: FunctionComponent<{ status: GitTrackingStatus | null; error: string | null }> = ({ status, error }) => {
     if (error) {
         return (
@@ -575,7 +713,7 @@ const FILTER_STATUS_MAP: Record<TaskFilter, string | null> = {
 export const LiveSessionPage: FunctionComponent = () => {
     const headerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
-    const { error, gitStatus, gitStatusError, refreshRuntimeStatus, refreshGitStatus, status, stats, tasksWithLiveActivities } = useDashboardRuntimeData();
+    const { error, execution, gitStatus, gitStatusError, refreshRuntimeStatus, refreshGitStatus, status, stats, tasksWithLiveActivities } = useDashboardRuntimeData();
     const [rerunningIds, setRerunningIds] = useState<Set<string>>(new Set());
     const [activeFilter, setFilter] = useState<TaskFilter>("All");
 
@@ -791,6 +929,7 @@ export const LiveSessionPage: FunctionComponent = () => {
 
                 {/* Sidebar — Intelligence + Git */}
                 <div className="xl:col-span-4 flex flex-col gap-6">
+                    <ExecutionRuntimePanel snapshot={execution} />
                     <IntelPanel
                         title="Latest Activity"
                         icon={Activity}

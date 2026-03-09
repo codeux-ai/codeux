@@ -15,6 +15,11 @@ import type {
   UpdateSprintRunInput,
   UpdateTaskDispatchInput,
 } from "../contracts/execution-types.js";
+import type {
+  ExecutionDashboardSnapshot,
+  ExecutionSprintRunSummary,
+  ExecutionTaskDispatchSummary,
+} from "../contracts/app-types.js";
 
 interface SprintRunRow {
   id: string;
@@ -80,6 +85,57 @@ interface TaskRunRow {
   started_at: string | null;
   finished_at: string | null;
   duration_ms: number | string | null;
+}
+
+interface ExecutionSprintRunSummaryRow {
+  id: string;
+  project_id: string;
+  sprint_id: string;
+  sprint_name: string;
+  sprint_number: number | string | null;
+  status: string;
+  trigger_type: string;
+  triggered_by: string | null;
+  executor_mode: string;
+  started_at: string | null;
+  finished_at: string | null;
+  last_heartbeat_at: string | null;
+  created_at: string;
+  active_lease_owner_key: string | null;
+  active_lease_expires_at: string | null;
+}
+
+interface ExecutionTaskDispatchSummaryRow {
+  id: string;
+  project_id: string;
+  sprint_id: string;
+  sprint_run_id: string;
+  sprint_name: string;
+  sprint_number: number | string | null;
+  task_id: string;
+  task_key: string;
+  task_title: string;
+  status: string;
+  executor_type: string;
+  priority: number | string;
+  connection_id: string | null;
+  connection_display_name: string | null;
+  connection_role: string | null;
+  task_run_id: string | null;
+  task_run_state: string | null;
+  provider: string | null;
+  session_id: string | null;
+  session_name: string | null;
+  worker_branch: string | null;
+  pr_url: string | null;
+  queued_at: string;
+  claimed_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  last_heartbeat_at: string | null;
+  error_message: string | null;
+  active_lease_owner_key: string | null;
+  active_lease_expires_at: string | null;
 }
 
 function toNumber(value: number | string): number {
@@ -342,6 +398,107 @@ export class ExecutionRepository {
       LIMIT 1
     `).get(dispatchId) as TaskRunRow | undefined;
     return row ? this.mapTaskRunRow(row) : null;
+  }
+
+  getProjectExecutionSnapshot(projectId: string): ExecutionDashboardSnapshot {
+    this.requireProject(projectId);
+    const projectRow = this.db.prepare(`
+      SELECT id, name
+      FROM projects
+      WHERE id = ?
+    `).get(projectId) as { id: string; name: string } | undefined;
+
+    const sprintRuns = this.db.prepare(`
+      SELECT
+        sr.id,
+        sr.project_id,
+        sr.sprint_id,
+        s.name AS sprint_name,
+        s.number AS sprint_number,
+        sr.status,
+        sr.trigger_type,
+        sr.triggered_by,
+        sr.executor_mode,
+        sr.started_at,
+        sr.finished_at,
+        sr.last_heartbeat_at,
+        sr.created_at,
+        el.owner_key AS active_lease_owner_key,
+        el.expires_at AS active_lease_expires_at
+      FROM sprint_runs sr
+      INNER JOIN sprints s ON s.id = sr.sprint_id
+      LEFT JOIN execution_leases el
+        ON el.scope_type = 'sprint'
+       AND el.scope_id = sr.sprint_id
+      WHERE sr.project_id = ?
+      ORDER BY
+        CASE sr.status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 WHEN 'failed' THEN 3 WHEN 'completed' THEN 4 ELSE 5 END,
+        COALESCE(sr.last_heartbeat_at, sr.updated_at, sr.created_at) DESC
+      LIMIT 12
+    `).all(projectId) as unknown as ExecutionSprintRunSummaryRow[];
+
+    const taskDispatches = this.db.prepare(`
+      SELECT
+        td.id,
+        td.project_id,
+        td.sprint_id,
+        td.sprint_run_id,
+        s.name AS sprint_name,
+        s.number AS sprint_number,
+        td.task_id,
+        t.task_key,
+        t.title AS task_title,
+        td.status,
+        td.executor_type,
+        td.priority,
+        td.connection_id,
+        c.display_name AS connection_display_name,
+        c.role AS connection_role,
+        tr.id AS task_run_id,
+        tr.state AS task_run_state,
+        tr.provider,
+        tr.session_id,
+        tr.session_name,
+        tr.worker_branch,
+        tr.pr_url,
+        td.queued_at,
+        td.claimed_at,
+        td.started_at,
+        td.finished_at,
+        td.last_heartbeat_at,
+        td.error_message,
+        el.owner_key AS active_lease_owner_key,
+        el.expires_at AS active_lease_expires_at
+      FROM task_dispatches td
+      INNER JOIN sprints s ON s.id = td.sprint_id
+      INNER JOIN tasks t ON t.id = td.task_id
+      LEFT JOIN mcp_connections c ON c.id = td.connection_id
+      LEFT JOIN task_runs tr
+        ON tr.id = (
+          SELECT tr2.id
+          FROM task_runs tr2
+          WHERE tr2.dispatch_id = td.id
+          ORDER BY tr2.rowid DESC
+          LIMIT 1
+        )
+      LEFT JOIN execution_leases el
+        ON el.scope_type = 'task_dispatch'
+       AND el.scope_id = td.id
+      WHERE td.project_id = ?
+      ORDER BY
+        CASE td.status WHEN 'running' THEN 0 WHEN 'claimed' THEN 1 WHEN 'queued' THEN 2 WHEN 'blocked' THEN 3 WHEN 'failed' THEN 4 WHEN 'completed' THEN 5 ELSE 6 END,
+        td.priority DESC,
+        COALESCE(td.last_heartbeat_at, td.started_at, td.claimed_at, td.queued_at) DESC
+      LIMIT 24
+    `).all(projectId) as unknown as ExecutionTaskDispatchSummaryRow[];
+
+    return {
+      projectId: projectRow?.id || null,
+      projectName: projectRow?.name || null,
+      sprintRuns: sprintRuns.map((row) => this.mapExecutionSprintRunSummaryRow(row)),
+      taskDispatches: taskDispatches.map((row) => this.mapExecutionTaskDispatchSummaryRow(row)),
+      updatedAt: new Date().toISOString(),
+    };
   }
 
   updateTaskRun(taskRunId: string, input: UpdateTaskRunInput): TaskRunRecord {
@@ -674,6 +831,61 @@ export class ExecutionRepository {
       startedAt: row.started_at,
       finishedAt: row.finished_at,
       durationMs: row.duration_ms === null ? null : toNumber(row.duration_ms),
+    };
+  }
+
+  private mapExecutionSprintRunSummaryRow(row: ExecutionSprintRunSummaryRow): ExecutionSprintRunSummary {
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      sprintId: row.sprint_id,
+      sprintName: row.sprint_name,
+      sprintNumber: row.sprint_number === null ? null : toNumber(row.sprint_number),
+      status: row.status,
+      triggerType: row.trigger_type,
+      triggeredBy: row.triggered_by,
+      executorMode: row.executor_mode,
+      startedAt: row.started_at,
+      finishedAt: row.finished_at,
+      lastHeartbeatAt: row.last_heartbeat_at,
+      createdAt: row.created_at,
+      activeLeaseOwnerKey: row.active_lease_owner_key,
+      activeLeaseExpiresAt: row.active_lease_expires_at,
+    };
+  }
+
+  private mapExecutionTaskDispatchSummaryRow(row: ExecutionTaskDispatchSummaryRow): ExecutionTaskDispatchSummary {
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      sprintId: row.sprint_id,
+      sprintRunId: row.sprint_run_id,
+      sprintName: row.sprint_name,
+      sprintNumber: row.sprint_number === null ? null : toNumber(row.sprint_number),
+      taskId: row.task_id,
+      taskKey: row.task_key,
+      taskTitle: row.task_title,
+      status: row.status,
+      executorType: row.executor_type,
+      priority: toNumber(row.priority),
+      connectionId: row.connection_id,
+      connectionDisplayName: row.connection_display_name,
+      connectionRole: row.connection_role,
+      taskRunId: row.task_run_id,
+      taskRunState: row.task_run_state,
+      provider: row.provider,
+      sessionId: row.session_id,
+      sessionName: row.session_name,
+      workerBranch: row.worker_branch,
+      prUrl: row.pr_url,
+      queuedAt: row.queued_at,
+      claimedAt: row.claimed_at,
+      startedAt: row.started_at,
+      finishedAt: row.finished_at,
+      lastHeartbeatAt: row.last_heartbeat_at,
+      errorMessage: row.error_message,
+      activeLeaseOwnerKey: row.active_lease_owner_key,
+      activeLeaseExpiresAt: row.active_lease_expires_at,
     };
   }
 }
