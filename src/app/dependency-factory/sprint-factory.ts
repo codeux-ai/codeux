@@ -2,6 +2,7 @@ import { AppConfig } from "../../config/app-config.js";
 import { ServerContext } from "../dependency-factory.js";
 import { CoreDependencies } from "./core-factory.js";
 import { CliWorkflowService } from "../../services/cli-workflow-service.js";
+import { SprintExecutionBridgeService } from "../../services/sprint-execution-bridge-service.js";
 import { TaskService } from "../../services/task-service.js";
 import { SprintOrchestrator } from "../../sprint/sprint-orchestrator.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
@@ -9,6 +10,7 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults
 export interface SprintDependencies {
   cliWorkflowService: CliWorkflowService;
   taskService: TaskService;
+  sprintExecutionBridgeService: SprintExecutionBridgeService;
   sprintOrchestrator: SprintOrchestrator;
 }
 
@@ -23,6 +25,7 @@ export function createSprintDependencies(
     sessionTracking,
     julesSourceResolver,
     instructionService,
+    projectManagementRepository,
     projectRuntimeRepository,
     subtaskRepository,
   } = coreDeps;
@@ -50,6 +53,12 @@ export function createSprintDependencies(
     cliWorkflowService,
     logger: logger.child({ component: "task-service" }),
   });
+
+  const sprintExecutionBridgeService = new SprintExecutionBridgeService(
+    projectManagementRepository,
+    projectRuntimeRepository,
+    logger.child({ component: "sprint-execution-bridge-service" })
+  );
 
   const sprintOrchestrator = new SprintOrchestrator({
     settings: context.runtimeContext.settings,
@@ -79,12 +88,14 @@ export function createSprintDependencies(
     autoMergeFeaturePr: (args) => context.autoMergeFeaturePr(args),
     renderInstruction: (templateId, variables, repoPath) =>
       instructionService.render(templateId, variables, repoPath),
+    sprintExecutionBridgeService,
     logger: logger.child({ component: "sprint-orchestrator" }),
   });
 
   return {
     cliWorkflowService,
     taskService,
+    sprintExecutionBridgeService,
     sprintOrchestrator,
   };
 }

@@ -55,10 +55,13 @@ describe("Dashboard Factory", () => {
       taskService: {
         startSprintTask: vi.fn(),
       },
+      sprintExecutionBridgeService: {
+        setTaskMergedFlag: vi.fn().mockResolvedValue(true),
+      },
     };
   });
 
-  it("should create dashboard dependencies and wire them correctly", () => {
+  it("should create dashboard dependencies and wire them correctly", async () => {
     const result = createDashboardDependencies(
       mockContext as unknown as ServerContext,
       mockCoreDeps as unknown as CoreDependencies,
@@ -123,12 +126,18 @@ describe("Dashboard Factory", () => {
     expect(mockContext.extractSessionId).toHaveBeenCalledWith("s2");
 
     // Test persistMergedFlag
-    taskRerunArgs.persistMergedFlag({ repoPath: "/repo", sprintNumber: 1, taskId: "task1", merged: true });
+    await taskRerunArgs.persistMergedFlag({ repoPath: "/repo", sprintNumber: 1, taskId: "task1", merged: true });
     expect(mockCoreDeps.subtaskRepository.setMerged).toHaveBeenCalledWith(
       expect.stringContaining("sprint1-subtasks"),
       "task1",
       true
     );
+    expect(mockSprintDeps.sprintExecutionBridgeService.setTaskMergedFlag).toHaveBeenCalledWith({
+      repoPath: "/repo",
+      sprintNumber: 1,
+      taskId: "task1",
+      merged: true,
+    });
   });
 
   it("getSubtasks handles missing lastStatus", () => {

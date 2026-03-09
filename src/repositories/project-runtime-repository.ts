@@ -19,6 +19,7 @@ interface ProjectRow {
 interface SprintRow {
   id: string;
   number: number | string | null;
+  feature_branch?: string | null;
 }
 
 interface TaskRow {
@@ -266,9 +267,15 @@ export class ProjectRuntimeRepository {
     return this.getProjectStatus(projectId);
   }
 
-  getProjectStatus(projectId: string): DashboardStatus {
+  getSprintStatus(projectId: string, sprintId: string): DashboardStatus {
+    return this.getProjectStatus(projectId, sprintId);
+  }
+
+  getProjectStatus(projectId: string, sprintId?: string): DashboardStatus {
     const context = this.getRuntimeContext(projectId);
-    const tasks = this.getMappedTasks(projectId, context?.sprintId ?? null);
+    const effectiveSprintId = sprintId || context?.sprintId || null;
+    const effectiveSprint = effectiveSprintId ? this.getSprintRow(effectiveSprintId) : null;
+    const tasks = this.getMappedTasks(projectId, effectiveSprintId);
     const latestRuns = this.getLatestRuns(tasks.map((task) => task.row.id));
     const taskKeyByRecordId = new Map(tasks.map((task) => [task.row.id, task.row.task_key]));
 
@@ -295,10 +302,12 @@ export class ProjectRuntimeRepository {
     });
 
     return {
-      sprint_number: context?.sprintNumber ?? undefined,
+      sprint_number: effectiveSprint?.number === undefined || effectiveSprint?.number === null
+        ? context?.sprintNumber ?? undefined
+        : toNumber(effectiveSprint.number),
       source_id: context?.sourceId ?? undefined,
       repo_path: context?.repoPath ?? undefined,
-      feature_branch: context?.featureBranch ?? undefined,
+      feature_branch: effectiveSprint?.feature_branch || context?.featureBranch || undefined,
       subtasks,
       reportText: context?.reportText || undefined,
       statusTable: context?.statusTable || undefined,
@@ -390,13 +399,23 @@ export class ProjectRuntimeRepository {
     const existing = this.getRuntimeContext(projectId);
     if (existing?.sprintId) {
       return this.db.prepare(`
-        SELECT id, number
+        SELECT id, number, feature_branch
         FROM sprints
         WHERE id = ?
       `).get(existing.sprintId) as SprintRow | undefined || null;
     }
 
     return null;
+  }
+
+  private getSprintRow(sprintId: string): SprintRow | null {
+    const row = this.db.prepare(`
+      SELECT id, number, feature_branch
+      FROM sprints
+      WHERE id = ?
+    `).get(sprintId) as SprintRow | undefined;
+
+    return row || null;
   }
 
   private getRuntimeContext(projectId: string): RuntimeContextPayload | null {

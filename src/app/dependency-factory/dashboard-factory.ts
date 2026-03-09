@@ -16,7 +16,7 @@ export function createDashboardDependencies(
   sprintDeps: SprintDependencies
 ): DashboardDependencies {
   const { logger, projectRuntimeRepository, subtaskRepository } = coreDeps;
-  const { taskService } = sprintDeps;
+  const { taskService, sprintExecutionBridgeService } = sprintDeps;
 
   const activityCacheService = new ActivityCacheService(
     {
@@ -44,11 +44,23 @@ export function createDashboardDependencies(
       taskService.startSprintTask(task, sourceId, featureBranch, repoPath, sprintNumber),
     resolveSessionName: (session) => context.resolveSessionName(session),
     extractSessionId: (session) => context.extractSessionId(session),
-    persistMergedFlag: (args) => subtaskRepository.setMerged(
-      getSprintSubtasksDir(args.repoPath, args.sprintNumber),
-      args.taskId,
-      args.merged
-    ),
+    persistMergedFlag: async (args) => {
+      try {
+        await subtaskRepository.setMerged(
+          getSprintSubtasksDir(args.repoPath, args.sprintNumber),
+          args.taskId,
+          args.merged
+        );
+      } catch {
+        // Compatibility markdown may not exist yet; DB remains the source of truth.
+      }
+      await sprintExecutionBridgeService.setTaskMergedFlag({
+        repoPath: args.repoPath,
+        sprintNumber: args.sprintNumber,
+        taskId: args.taskId,
+        merged: args.merged,
+      });
+    },
     logger: logger.child({ component: "task-rerun-service" }),
   });
 

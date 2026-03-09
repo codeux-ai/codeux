@@ -3,17 +3,28 @@ import type { CycleRunner } from "./cycle-runner.js";
 import type { WatchLoopRunner } from "./watch-loop-runner.js";
 import type { AutomationInterventionsSettings, AutomationLevel, CiIntelligenceSettings, SprintLoopStepSettings, Subtask } from "../../../contracts/app-types.js";
 import type { SprintAgentArgs } from "../../../sprint/sprint-types.js";
+import type { ResolvedSprintExecutionContext } from "../../../services/sprint-execution-bridge-service.js";
 
 export class SprintActionRunner {
   constructor(
     private readonly deps: SprintOrchestratorDependencies,
     private readonly cycleRunner: CycleRunner,
     private readonly watchLoopRunner: WatchLoopRunner,
-    private readonly runPlanningAction: (args: SprintAgentArgs, subtasksDir: string, repoPath: string) => Promise<any>
+    private readonly runPlanningAction: (
+      args: SprintAgentArgs,
+      subtasksDir: string,
+      repoPath: string,
+      context?: ResolvedSprintExecutionContext | null
+    ) => Promise<any>
   ) {}
 
-  async runPlan(args: SprintAgentArgs, subtasksDir: string, repoPath: string): Promise<any> {
-    return await this.runPlanningAction(args, subtasksDir, repoPath);
+  async runPlan(
+    args: SprintAgentArgs,
+    subtasksDir: string,
+    repoPath: string,
+    context?: ResolvedSprintExecutionContext | null
+  ): Promise<any> {
+    return await this.runPlanningAction(args, subtasksDir, repoPath, context);
   }
 
   async runOrchestrate(options: {

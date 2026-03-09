@@ -14,6 +14,7 @@ It includes:
 - v2 dashboard wiring for Projects, Sprints, Tasks, top-nav selection, and overview widgets
 - markdown import/export for sprints and tasks
 - selected-project runtime projection for live dashboard status
+- project-scoped orchestration context resolution for `sprint_agent`
 - DB-backed project-scoped Agents and Chat pages
 - first listen-loop MCP connection and conversation contracts
 
@@ -31,6 +32,7 @@ Primary implementation files:
 - `src/repositories/app-db-storage.ts`
 - `src/repositories/project-management-repository.ts`
 - `src/services/sprint-markdown-service.ts`
+- `src/services/sprint-execution-bridge-service.ts`
 - `src/server/dashboard-server.ts`
 - `dashboard/src/v2/context/project-data.tsx`
 - `dashboard/src/v2/lib/project-api.ts`
@@ -129,5 +131,6 @@ Current task records are management records, not yet full execution records.
 That means:
 - task status is managed in the DB for CRUD and planning workflows
 - live execution state is mirrored from the legacy orchestrator into `task_runs` and project runtime context
+- `sprint_agent` can now resolve project/sprint scope from sqlite and materialize a compatibility execution workspace from that DB state
 - live activity messages are still fetched directly from provider sessions at request time
 - future work should attach MCP connection roles and chat/listen workflows to these same runtime entities instead of creating a second model

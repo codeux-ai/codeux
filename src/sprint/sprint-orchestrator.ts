@@ -1,4 +1,3 @@
-import * as fs from "fs/promises";
 import * as path from "path";
 import type { InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
 import {
@@ -26,13 +25,13 @@ import { SprintActionRunner } from "../domain/sprint/orchestrator/sprint-action-
 import { SubtaskFileRepository } from "../infrastructure/repositories/subtask-file-repository.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { MainMergeGateService } from "../domain/sprint/ci/main-merge-gate.js";
-import { getRepoSprintOsPath } from "../shared/config/sprint-os-paths.js";
+import type { ResolvedSprintExecutionContext, SprintExecutionBridgeService } from "../services/sprint-execution-bridge-service.js";
 
 export interface SprintOrchestratorDependencies {
   settings: Settings;
   dashboardPort: number;
   getDashboardPort?: () => number;
-  completedSprints: Set<number>;
+  completedSprints: Set<string | number>;
   getConsecutiveFailures: () => number;
   setConsecutiveFailures: (value: number) => void;
   isActionRequiredState: (state?: string) => boolean;
@@ -57,6 +56,7 @@ export interface SprintOrchestratorDependencies {
   }) => Promise<GitTrackingStatus | null>;
   autoMergeFeaturePr?: (args: { repoPath: string; prNumber: number }) => Promise<{ ok: boolean; message?: string }>;
   renderInstruction: (templateId: InstructionTemplateId, variables: Record<string, unknown>, repoPath?: string) => Promise<string>;
+  sprintExecutionBridgeService?: SprintExecutionBridgeService;
   logger: Logger;
 }
 
@@ -139,7 +139,19 @@ export class SprintOrchestrator {
     );
   }
 
-  private async renderPlanningBlocker(subtasksDir: string, repoPath: string): Promise<string> {
+  private buildCompletedSprintKey(args: SprintAgentArgs, context?: ResolvedSprintExecutionContext | null): string | number {
+    if (context) {
+      return `${context.project.id}:${context.sprint.id}`;
+    }
+    return args.sprint_number;
+  }
+
+  private async renderPlanningBlocker(subtasksDir: string, repoPath: string, context?: ResolvedSprintExecutionContext | null): Promise<string> {
+    if (context) {
+      return this.deps.sprintExecutionBridgeService?.buildPlanningBlockerText(context)
+        || `Sprint ${context.sprint.name} has no tasks in Sprint OS yet.`;
+    }
+
     return await this.renderInstruction(
       "planningMissing",
       {
@@ -149,33 +161,36 @@ export class SprintOrchestrator {
     );
   }
 
-  private async runPlanningAction(args: SprintAgentArgs, subtasksDir: string, repoPath: string): Promise<any> {
+  private async runPlanningAction(
+    args: SprintAgentArgs,
+    subtasksDir: string,
+    repoPath: string,
+    context?: ResolvedSprintExecutionContext | null
+  ): Promise<any> {
+    let planningGuideBlock = "";
     try {
-      await fs.access(subtasksDir);
-      return { content: [{ type: "text", text: `Subtasks directory already exists: ${subtasksDir}.` }] };
+      const planningGuide = await this.deps.getGuideContent("sprint_agent_guide.md", repoPath);
+      planningGuideBlock = `\n\n### Technical Operating Standard\n\n${planningGuide}\n`;
     } catch {
-      await fs.mkdir(subtasksDir, { recursive: true });
-
-      let planningGuideBlock = "";
-      try {
-        const planningGuide = await this.deps.getGuideContent("sprint_agent_guide.md", repoPath);
-        planningGuideBlock = `\n\n### Technical Operating Standard\n\n${planningGuide}\n`;
-      } catch {
-        // Guide is optional.
-      }
-
-      const text = await this.renderInstruction(
-        "planningCreated",
-        {
-          sprint_number: args.sprint_number,
-          subtasks_dir: subtasksDir,
-          planning_guide_block: planningGuideBlock,
-        },
-        repoPath
-      );
-
-      return { content: [{ type: "text", text }] };
+      // Guide is optional.
     }
+
+    if (context) {
+      const text = await this.deps.sprintExecutionBridgeService?.buildPlanningActionText(context, planningGuideBlock);
+      return { content: [{ type: "text", text: text || `Sprint ${context.sprint.name} is ready for planning in Sprint OS.` }] };
+    }
+
+    const text = await this.renderInstruction(
+      "planningCreated",
+      {
+        sprint_number: args.sprint_number,
+        subtasks_dir: subtasksDir,
+        planning_guide_block: planningGuideBlock,
+      },
+      repoPath
+    );
+
+    return { content: [{ type: "text", text }] };
   }
 
   private async renderMainMergeCiFeedback(args: {
@@ -205,13 +220,17 @@ export class SprintOrchestrator {
   }
 
   async execute(args: SprintAgentArgs): Promise<any> {
-    const repoPath = typeof args.repo_path === "string" && args.repo_path.trim().length > 0 ? args.repo_path : process.cwd();
-    const sprintsDir = getRepoSprintOsPath(repoPath, "sprints");
-    const subtasksDir = path.join(sprintsDir, `sprint${args.sprint_number}-subtasks`);
-    const defaultFeatureBranch = args.feature_branch || `feature/sprint${args.sprint_number}-implementation`;
-    const defaultBranch = typeof this.deps.settings.defaultBranch === "string" && this.deps.settings.defaultBranch.trim().length > 0
-      ? this.deps.settings.defaultBranch
-      : "main";
+    const executionContext = this.deps.sprintExecutionBridgeService
+      ? await this.deps.sprintExecutionBridgeService.resolveContext(args)
+      : null;
+    const repoPath = executionContext?.repoPath
+      || (typeof args.repo_path === "string" && args.repo_path.trim().length > 0 ? args.repo_path : process.cwd());
+    const subtasksDir = executionContext?.subtasksDir || path.join(repoPath, ".sprint-os", "sprints", `sprint${args.sprint_number}-subtasks`);
+    const defaultFeatureBranch = executionContext?.featureBranch || args.feature_branch || `feature/sprint${args.sprint_number}-implementation`;
+    const defaultBranch = executionContext?.defaultBranch
+      || (typeof this.deps.settings.defaultBranch === "string" && this.deps.settings.defaultBranch.trim().length > 0
+        ? this.deps.settings.defaultBranch
+        : "main");
     const githubMode = this.deps.settings.githubMode === "LOCAL" ? "LOCAL" : "REMOTE";
     const retryFailed = args.retry_failed !== false;
     const loopSteps = this.getLoopStepSettings();
@@ -243,15 +262,22 @@ export class SprintOrchestrator {
     }
 
     if (loopSteps.planningPreflight && (args.action === "orchestrate" || args.action === "status")) {
-      const hasSubtasks = await runPlanningPreflightStep(subtasksDir);
+      const hasSubtasks = executionContext
+        ? executionContext.taskCount > 0
+        : await runPlanningPreflightStep(subtasksDir);
       if (!hasSubtasks) {
-        const planningBlocker = await this.renderPlanningBlocker(subtasksDir, repoPath);
+        const planningBlocker = await this.renderPlanningBlocker(subtasksDir, repoPath, executionContext);
         return { content: [{ type: "text", text: planningBlocker }] };
       }
     }
 
-    if (this.deps.completedSprints.has(args.sprint_number)) {
+    const completedKey = this.buildCompletedSprintKey(args, executionContext);
+    if (this.deps.completedSprints.has(completedKey)) {
       return { content: [{ type: "text", text: `Sprint ${args.sprint_number} has already been finished in this session.` }] };
+    }
+
+    if (executionContext && (args.action === "status" || args.action === "orchestrate")) {
+      await this.deps.sprintExecutionBridgeService?.materializeSubtasks(executionContext);
     }
 
     const dashboardPort = this.getDashboardPort();
@@ -262,7 +288,7 @@ export class SprintOrchestrator {
 
     switch (args.action) {
       case "plan":
-        return await this.actionRunner.runPlan(args, subtasksDir, repoPath);
+        return await this.actionRunner.runPlan(args, subtasksDir, repoPath, executionContext);
       case "status":
         return await this.actionRunner.runStatus({
           args,

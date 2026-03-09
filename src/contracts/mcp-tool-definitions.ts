@@ -149,6 +149,8 @@ export const TOOL_DEFINITIONS = [
       type: "object",
       properties: {
         sprint_number: { type: "number", description: "The sprint number (e.g., 34)." },
+        project_id: { type: "string", description: "Optional Sprint OS project id. If omitted, the selected dashboard project is used when available." },
+        sprint_id: { type: "string", description: "Optional Sprint OS sprint id. Overrides sprint_number lookup when provided." },
         source_id: { type: "string", description: "Optional Jules source ID override. If omitted, it is auto-resolved from repo git remote when Jules is used." },
         feature_branch: { type: "string", description: "The main feature branch for this sprint." },
         action: {
