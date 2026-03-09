@@ -91,6 +91,8 @@ describe("SessionTrackingRepository", () => {
       repoPath: "/tmp/repo-a",
     });
 
+    await new Promise(resolve => setTimeout(resolve, 10));
+
     repo.createSession({
       id: "cli-gemini-new",
       provider: "gemini",
