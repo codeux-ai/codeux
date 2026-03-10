@@ -9,7 +9,7 @@ import type { SprintStatus } from "./types.js";
 import { useProjectData } from "./context/project-data.js";
 import { useProjectSprints } from "./hooks/use-project-sprints.js";
 import { useProjectExecution } from "./hooks/use-project-execution.js";
-import { createSprint, deleteSprint, exportSprintMarkdown, importSprintMarkdown } from "./lib/project-api.js";
+import { createSprint, deleteSprint, exportSprintMarkdown, fetchProjectExecution, importSprintMarkdown } from "./lib/project-api.js";
 import { buildTaskBundle, parseTaskBundle } from "./lib/markdown-transfer.js";
 import { cancelSprintRun, orchestrateSprint } from "../lib/api/dashboard-api.js";
 
@@ -70,29 +70,51 @@ export const SprintsPage: FunctionComponent = () => {
 
         if (activeRun) {
             const stopActionId = `sprint-stop:${activeRun.id}`;
-            void runSprintAction(stopActionId, sprintId, "cancelled", async () => {
+            void runSprintAction(stopActionId, sprintId, async () => {
                 await cancelSprintRun(activeRun.id);
-            });
+            }, { optimisticStatus: "cancelled" });
             return;
         }
 
         const startActionId = `sprint-start:${sprintId}`;
-        void runSprintAction(startActionId, sprintId, "running", async () => {
+        if (pendingActionIds.has(startActionId)) {
+            return;
+        }
+        void runSprintAction(startActionId, sprintId, async () => {
             await orchestrateSprint(selectedProject.id, sprintId);
-        });
+        }, { waitForActiveRun: true });
     };
 
     const runSprintAction = async (
         actionId: string,
         sprintId: string,
-        nextStatus: SprintStatus,
         operation: () => Promise<void>,
+        options: {
+            optimisticStatus?: SprintStatus;
+            waitForActiveRun?: boolean;
+        } = {},
     ) => {
         setPendingActionIds((current) => new Set(current).add(actionId));
-        setOptimisticStatuses((current) => ({ ...current, [sprintId]: nextStatus }));
+        if (options.optimisticStatus) {
+            setOptimisticStatuses((current) => ({ ...current, [sprintId]: options.optimisticStatus! }));
+        }
         try {
             await operation();
+            if (options.waitForActiveRun && selectedProject) {
+                for (let attempt = 0; attempt < 8; attempt += 1) {
+                    const snapshot = await fetchProjectExecution(selectedProject.id);
+                    if (snapshot.sprintRuns.some((run) => run.sprintId === sprintId && (run.status === "running" || run.status === "queued"))) {
+                        break;
+                    }
+                    await new Promise((resolve) => window.setTimeout(resolve, 250));
+                }
+            }
             await Promise.all([refresh(), refreshExecution()]);
+            setOptimisticStatuses((current) => {
+                const next = { ...current };
+                delete next[sprintId];
+                return next;
+            });
         } catch (error) {
             setOptimisticStatuses((current) => {
                 const next = { ...current };
