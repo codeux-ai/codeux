@@ -9,6 +9,7 @@ import type {
   ExternalSettingsHints,
   GitTrackingStatus,
   JulesActivity,
+  OverviewTelemetrySnapshot,
   ReadinessProbeStatus,
 } from "../contracts/app-types.js";
 import type {
@@ -50,6 +51,7 @@ export interface DashboardServerOptions {
   getStatus: () => unknown;
   getExecutionSnapshot: () => ExecutionDashboardSnapshot;
   getProjectExecutionSnapshot: (projectId: string) => ExecutionDashboardSnapshot;
+  getOverviewTelemetrySnapshot: () => OverviewTelemetrySnapshot;
   getLiveActivities: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
   getExternalSettingsHints: () => ExternalSettingsHints;
@@ -197,6 +199,10 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
 
   app.get("/api/execution", (req, res) => {
     res.json(options.getExecutionSnapshot());
+  });
+
+  app.get("/api/telemetry/overview", (req, res) => {
+    res.json(options.getOverviewTelemetrySnapshot());
   });
 
   app.get("/api/projects/:projectId/execution", (req, res) => {

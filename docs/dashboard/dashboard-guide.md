@@ -72,6 +72,8 @@ Legacy runtime:
   - Selected-project runtime payload (`sprint_number`, `subtasks`, `instructions`, etc.) projected from sqlite
 - `GET /api/execution`
   - Selected-project execution control-plane snapshot (`sprintRuns`, `taskDispatches`, `recentEvents`, lease ownership)
+- `GET /api/telemetry/overview`
+  - Cross-project overview telemetry snapshot for all currently active project runs
 - `GET /api/projects/:projectId/execution`
   - Project-scoped execution control-plane snapshot for the v2 runtime
 - `GET /api/live-activities`
@@ -93,6 +95,7 @@ Legacy runtime:
 - Top-nav project selector persists the active project in sqlite
 - Projects page is DB-backed and can create/select/delete projects
 - Sprints page is project-scoped, creates sprint records in sqlite, and exposes markdown import/export controls
+- Sprints page now also starts and stops sprint orchestration directly from sprint cards, with optimistic visual state updates tied to project-scoped execution data
 - Tasks page is project-scoped and supports create/edit/delete plus dependency metadata
 - Tasks page also stores explicit task executor preference (`auto`, `docker_cli`, `jules`, `mcp_worker`)
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface
@@ -103,6 +106,7 @@ Legacy runtime:
 ### Dashboard view
 - Task statistics
 - Execution runtime panel for sprint runs, dispatch queue state, live project connections, worker assignment, lease ownership, and recent runtime events
+- Live runtime visuals are only considered active when the selected project has a `running` or `queued` sprint run; cancelled, paused, and completed runs fall back to a waiting state
 - Task pipeline cards
 - Task cards include a `Rerun` action with confirmation prompt; rerun clears session/PR/merge state for that task and starts it again
 - Reruns now reuse the same dispatch model as `sprint_agent` instead of bypassing execution state
@@ -111,6 +115,7 @@ Legacy runtime:
 - `recentEvents` is now a unified runtime timeline spanning both `task_run_events` and `sprint_run_events`
 - The execution runtime panel can now start or resume sprint orchestration, pause or cancel sprint runs, cancel queued dispatches, and retry terminal dispatches
 - The execution runtime panel now also shows live project connections with transport, role, listening metadata, inbox load, dispatch load, and heartbeat-derived status
+- The Overview page telemetry now renders a consolidated runtime timeline across all currently active projects instead of a static placeholder
 - Running dispatch cancel is now request-based instead of instant-terminal:
   - local CLI runs move to `cancel_requested` and abort through the process runner
   - worker runs move to `cancel_requested` and surface a stop request through the worker heartbeat response

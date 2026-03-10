@@ -35,7 +35,7 @@ interface ProjectRow {
   sprints_count: number | string | null;
   open_tasks: number | string | null;
   completed_tasks: number | string | null;
-  has_running_tasks: number | string | null;
+  has_active_runs: number | string | null;
 }
 
 interface SprintRow {
@@ -107,7 +107,7 @@ export class ProjectManagementRepository {
         (SELECT COUNT(*) FROM sprints s WHERE s.project_id = p.id) AS sprints_count,
         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'completed') AS completed_tasks,
         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status != 'completed') AS open_tasks,
-        (SELECT MAX(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) FROM tasks t WHERE t.project_id = p.id) AS has_running_tasks
+        (SELECT MAX(CASE WHEN sr.status IN ('running', 'queued') THEN 1 ELSE 0 END) FROM sprint_runs sr WHERE sr.project_id = p.id) AS has_active_runs
       FROM projects p
       LEFT JOIN project_sources ps ON ps.project_id = p.id
       ORDER BY p.updated_at DESC, p.name ASC
@@ -137,7 +137,7 @@ export class ProjectManagementRepository {
         (SELECT COUNT(*) FROM sprints s WHERE s.project_id = p.id) AS sprints_count,
         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'completed') AS completed_tasks,
         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status != 'completed') AS open_tasks,
-        (SELECT MAX(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) FROM tasks t WHERE t.project_id = p.id) AS has_running_tasks
+        (SELECT MAX(CASE WHEN sr.status IN ('running', 'queued') THEN 1 ELSE 0 END) FROM sprint_runs sr WHERE sr.project_id = p.id) AS has_active_runs
       FROM projects p
       LEFT JOIN project_sources ps ON ps.project_id = p.id
       WHERE p.id = ?
@@ -165,7 +165,7 @@ export class ProjectManagementRepository {
         (SELECT COUNT(*) FROM sprints s WHERE s.project_id = p.id) AS sprints_count,
         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'completed') AS completed_tasks,
         (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status != 'completed') AS open_tasks,
-        (SELECT MAX(CASE WHEN t.status = 'in_progress' THEN 1 ELSE 0 END) FROM tasks t WHERE t.project_id = p.id) AS has_running_tasks
+        (SELECT MAX(CASE WHEN sr.status IN ('running', 'queued') THEN 1 ELSE 0 END) FROM sprint_runs sr WHERE sr.project_id = p.id) AS has_active_runs
       FROM projects p
       LEFT JOIN project_sources ps ON ps.project_id = p.id
       WHERE p.base_dir = ?
@@ -695,7 +695,7 @@ export class ProjectManagementRepository {
       sprintsCount: toNumber(row.sprints_count),
       openTasks: toNumber(row.open_tasks),
       completedTasks: toNumber(row.completed_tasks),
-      isRunning: toBoolean(row.has_running_tasks),
+      isRunning: toBoolean(row.has_active_runs),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

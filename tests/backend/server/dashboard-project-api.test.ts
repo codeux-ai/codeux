@@ -65,6 +65,7 @@ afterEach(async () => {
 async function createServerHandle(): Promise<{
   port: number;
   repository: ProjectManagementRepository;
+  executionRepository: ExecutionRepository;
   runtimeRepository: ProjectRuntimeRepository;
   connectionRepository: ConnectionChatRepository;
   markdownService: SprintMarkdownService;
@@ -109,6 +110,7 @@ async function createServerHandle(): Promise<{
         }
         : { projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null };
     },
+    getOverviewTelemetrySnapshot: () => executionRepository.getOverviewTelemetrySnapshot(),
     getProjectExecutionSnapshot: (projectId) => ({
       ...executionRepository.getProjectExecutionSnapshot(projectId),
       connections: mapExecutionConnections(connectionRepository.listConnections(projectId)),
@@ -189,6 +191,7 @@ async function createServerHandle(): Promise<{
   return {
     port: handle.port,
     repository,
+    executionRepository,
     runtimeRepository,
     connectionRepository,
     markdownService,
@@ -198,7 +201,7 @@ async function createServerHandle(): Promise<{
 
 describe("dashboard project management API", () => {
   it("creates and queries DB-backed projects, sprints, tasks, and markdown export", async () => {
-    const { port, runtimeRepository, controlCalls, connectionRepository } = await createServerHandle();
+    const { port, runtimeRepository, controlCalls, connectionRepository, executionRepository, repository } = await createServerHandle();
     const baseUrl = `http://127.0.0.1:${port}`;
 
     const projectResponse = await fetch(`${baseUrl}/api/projects`, {
@@ -342,6 +345,31 @@ describe("dashboard project management API", () => {
       taskKey: "T01",
       taskTitle: "Wire selected project state",
       sessionId: "session-api",
+    });
+
+    const telemetryRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const firstTask = repository.listTasks(project.id, sprint.id)[0];
+    executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: firstTask.id,
+      sprintRunId: telemetryRun.id,
+      executorType: "mcp_worker",
+      status: "running",
+    });
+
+    const overviewTelemetry = await fetch(`${baseUrl}/api/telemetry/overview`)
+      .then(async (response) => response.json()) as {
+        activeProjects: Array<{ projectId: string; sprintRunId: string; runningDispatchCount: number }>;
+      };
+    expect(overviewTelemetry.activeProjects[0]).toMatchObject({
+      projectId: project.id,
+      sprintRunId: telemetryRun.id,
+      runningDispatchCount: 1,
     });
 
     const startListenResponse = await fetch(`${baseUrl}/api/projects/${project.id}/conversations/threads`, {

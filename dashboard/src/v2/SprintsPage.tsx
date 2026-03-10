@@ -1,14 +1,17 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Target, Plus, Upload, Download, Trash2, CalendarDays, Layers3 } from "lucide-preact";
+import { Target, Plus, Upload, Download, Trash2, CalendarDays, Layers3, Play, Square } from "lucide-preact";
 import { SprintBubble } from "./components/ui/SprintBubble.js";
 import { AddSprintModal } from "./components/ui/AddSprintModal.js";
 import { SprintMarkdownModal } from "./components/ui/SprintMarkdownModal.js";
+import type { SprintStatus } from "./types.js";
 import { useProjectData } from "./context/project-data.js";
 import { useProjectSprints } from "./hooks/use-project-sprints.js";
+import { useProjectExecution } from "./hooks/use-project-execution.js";
 import { createSprint, deleteSprint, exportSprintMarkdown, importSprintMarkdown } from "./lib/project-api.js";
 import { buildTaskBundle, parseTaskBundle } from "./lib/markdown-transfer.js";
+import { cancelSprintRun, orchestrateSprint } from "../lib/api/dashboard-api.js";
 
 const ACCENT_CYCLE = ['text-signal-500', 'text-ember-500', 'text-status-green'] as const;
 
@@ -17,6 +20,8 @@ export const SprintsPage: FunctionComponent = () => {
     const bubblesRef   = useRef<HTMLDivElement>(null);
     const [showModal, setShowModal] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
+    const [pendingActionIds, setPendingActionIds] = useState<Set<string>>(new Set());
+    const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, SprintStatus>>({});
     const [exportState, setExportState] = useState<{
         sprintLabel: string;
         sprintMarkdown: string;
@@ -24,6 +29,7 @@ export const SprintsPage: FunctionComponent = () => {
     } | null>(null);
     const { selectedProject } = useProjectData();
     const { sprints, refresh } = useProjectSprints(selectedProject?.id || null);
+    const { execution, refresh: refreshExecution } = useProjectExecution(selectedProject?.id || null);
 
     useLayoutEffect(() => {
         if (mainRef.current) {
@@ -35,6 +41,53 @@ export const SprintsPage: FunctionComponent = () => {
     }, []);
 
     const nextId = `SPR-${String((sprints.at(-1)?.number ?? sprints.length) + 1).padStart(2, '0')}`;
+
+    const activeRunsBySprintId = useMemo(() => {
+        const map = new Map<string, { id: string; status: string }>();
+        for (const run of execution.sprintRuns) {
+            if (run.status !== "running" && run.status !== "queued") {
+                continue;
+            }
+            if (!map.has(run.sprintId)) {
+                map.set(run.sprintId, { id: run.id, status: run.status });
+            }
+        }
+        return map;
+    }, [execution.sprintRuns]);
+
+    const displaySprints = useMemo(() => (
+        sprints.map((sprint) => ({
+            ...sprint,
+            status: optimisticStatuses[sprint.id] || sprint.status,
+        }))
+    ), [optimisticStatuses, sprints]);
+
+    const runSprintAction = async (
+        actionId: string,
+        sprintId: string,
+        nextStatus: SprintStatus,
+        operation: () => Promise<void>,
+    ) => {
+        setPendingActionIds((current) => new Set(current).add(actionId));
+        setOptimisticStatuses((current) => ({ ...current, [sprintId]: nextStatus }));
+        try {
+            await operation();
+            await Promise.all([refresh(), refreshExecution()]);
+        } catch (error) {
+            setOptimisticStatuses((current) => {
+                const next = { ...current };
+                delete next[sprintId];
+                return next;
+            });
+            window.alert(error instanceof Error ? error.message : String(error));
+        } finally {
+            setPendingActionIds((current) => {
+                const next = new Set(current);
+                next.delete(actionId);
+                return next;
+            });
+        }
+    };
 
     const handleAddSprint = async (sprint: {
         name: string;
@@ -137,8 +190,8 @@ export const SprintsPage: FunctionComponent = () => {
                 <div ref={bubblesRef} className="flex flex-wrap gap-14 justify-center lg:justify-start">
                     {sprints.map((sprint, index) => (
                         <SprintBubble
-                            key={sprint.id}
-                            sprint={sprint}
+                            key={displaySprints[index].id}
+                            sprint={displaySprints[index]}
                             isEven={index % 2 === 0}
                             accentColor={ACCENT_CYCLE[index % 3]}
                         />
@@ -207,7 +260,15 @@ export const SprintsPage: FunctionComponent = () => {
                                 <div className="px-5 py-6 rounded-2xl border border-dashed border-black/[0.08] dark:border-white/[0.08] text-sm text-slate-400">
                                     No sprints yet. Create one or import markdown to seed this project.
                                 </div>
-                            ) : sprints.map((sprint) => (
+                            ) : displaySprints.map((sprint) => {
+                                const activeRun = activeRunsBySprintId.get(sprint.id);
+                                const startActionId = `sprint-start:${sprint.id}`;
+                                const stopActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-stop:${sprint.id}`;
+                                const startPending = pendingActionIds.has(startActionId);
+                                const stopPending = pendingActionIds.has(stopActionId);
+                                const isRunning = sprint.status === "running";
+
+                                return (
                                 <div
                                     key={sprint.id}
                                     className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 px-5 py-4 rounded-[1.4rem] border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02]"
@@ -241,6 +302,44 @@ export const SprintsPage: FunctionComponent = () => {
 
                                     <div className="flex items-center gap-2 self-start lg:self-auto">
                                         <button
+                                            onClick={() => {
+                                                if (!selectedProject) return;
+                                                if (activeRun) {
+                                                    void runSprintAction(stopActionId, sprint.id, "cancelled", async () => {
+                                                        await cancelSprintRun(activeRun.id);
+                                                    });
+                                                    return;
+                                                }
+                                                void runSprintAction(startActionId, sprint.id, "running", async () => {
+                                                    await orchestrateSprint(selectedProject.id, sprint.id);
+                                                });
+                                            }}
+                                            disabled={!selectedProject || startPending || stopPending}
+                                            className={`group relative inline-flex items-center gap-2 overflow-hidden px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-[0.12em] transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed ${
+                                                isRunning
+                                                    ? "bg-status-red/[0.10] hover:bg-status-red/[0.16] text-status-red border border-status-red/20 shadow-[0_8px_24px_rgba(227,0,15,0.12)]"
+                                                    : "bg-signal-500/[0.10] hover:bg-signal-500/[0.16] text-signal-600 dark:text-signal-400 border border-signal-500/20 shadow-[0_8px_24px_rgba(0,224,160,0.16)]"
+                                            }`}
+                                        >
+                                            <span className={`absolute inset-0 opacity-0 transition-opacity duration-300 ${isRunning ? "group-hover:opacity-100 bg-[radial-gradient(circle_at_center,rgba(227,0,15,0.18),transparent_70%)]" : "group-hover:opacity-100 bg-[radial-gradient(circle_at_center,rgba(0,224,160,0.16),transparent_70%)]"}`} />
+                                            <span className={`relative flex items-center justify-center w-6 h-6 rounded-full ${isRunning ? "bg-status-red/15" : "bg-signal-500/15"}`}>
+                                                {isRunning ? (
+                                                    <Square className={`w-3.5 h-3.5 ${stopPending ? "animate-pulse" : "group-hover:scale-110"} transition-transform duration-300`} strokeWidth={2.4} />
+                                                ) : (
+                                                    <Play className={`w-3.5 h-3.5 ${startPending ? "animate-pulse" : "group-hover:translate-x-0.5 group-hover:scale-110"} transition-transform duration-300`} strokeWidth={2.4} />
+                                                )}
+                                            </span>
+                                            <span className="relative">
+                                                {startPending
+                                                    ? "Igniting"
+                                                    : stopPending
+                                                        ? "Stopping"
+                                                        : isRunning
+                                                            ? "Stop"
+                                                            : "Start"}
+                                            </span>
+                                        </button>
+                                        <button
                                             onClick={() => { void handleOpenExport(sprint.id, sprint.name); }}
                                             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-ember-500/[0.08] hover:bg-ember-500/[0.14] text-ember-600 dark:text-ember-400 text-xs font-bold uppercase tracking-[0.12em] transition-colors"
                                         >
@@ -256,7 +355,7 @@ export const SprintsPage: FunctionComponent = () => {
                                         </button>
                                     </div>
                                 </div>
-                            ))}
+                            )})}
                         </div>
                     </div>
                 )}

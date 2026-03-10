@@ -19,6 +19,8 @@ import type {
 } from "../contracts/execution-types.js";
 import type {
   ExecutionDashboardSnapshot,
+  OverviewTelemetryProjectSummary,
+  OverviewTelemetrySnapshot,
   ExecutionRuntimeEventSummary,
   ExecutionSprintRunSummary,
   ExecutionTaskDispatchSummary,
@@ -189,6 +191,19 @@ interface ExecutionRuntimeEventSummaryRow {
   connection_role: string | null;
   created_at: string;
   payload_json: string | null;
+}
+
+interface OverviewTelemetryProjectSummaryRow {
+  project_id: string;
+  project_name: string;
+  sprint_id: string;
+  sprint_name: string;
+  sprint_number: number | string | null;
+  sprint_run_id: string;
+  sprint_run_status: string;
+  active_dispatch_count: number | string;
+  running_dispatch_count: number | string;
+  updated_at: string | null;
 }
 
 function toNumber(value: number | string): number {
@@ -683,6 +698,125 @@ export class ExecutionRepository {
       sprintRuns: sprintRuns.map((row) => this.mapExecutionSprintRunSummaryRow(row)),
       taskDispatches: taskDispatches.map((row) => this.mapExecutionTaskDispatchSummaryRow(row)),
       connections: [],
+      recentEvents: recentEvents.map((row) => this.mapExecutionRuntimeEventSummaryRow(row)),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  getOverviewTelemetrySnapshot(): OverviewTelemetrySnapshot {
+    const activeProjects = this.db.prepare(`
+      SELECT
+        sr.project_id,
+        p.name AS project_name,
+        sr.sprint_id,
+        s.name AS sprint_name,
+        s.number AS sprint_number,
+        sr.id AS sprint_run_id,
+        sr.status AS sprint_run_status,
+        (
+          SELECT COUNT(*)
+          FROM task_dispatches td
+          WHERE td.sprint_run_id = sr.id
+            AND td.status IN ('queued', 'claimed', 'running', 'cancel_requested', 'blocked')
+        ) AS active_dispatch_count,
+        (
+          SELECT COUNT(*)
+          FROM task_dispatches td
+          WHERE td.sprint_run_id = sr.id
+            AND td.status IN ('claimed', 'running')
+        ) AS running_dispatch_count,
+        COALESCE(sr.last_heartbeat_at, sr.updated_at, sr.started_at, sr.created_at) AS updated_at
+      FROM sprint_runs sr
+      INNER JOIN projects p ON p.id = sr.project_id
+      INNER JOIN sprints s ON s.id = sr.sprint_id
+      WHERE sr.status IN ('running', 'queued')
+      ORDER BY updated_at DESC, p.name ASC, s.name ASC
+      LIMIT 24
+    `).all() as unknown as OverviewTelemetryProjectSummaryRow[];
+
+    const activeSprintRunIds = activeProjects.map((row) => row.sprint_run_id);
+    const recentEvents = activeSprintRunIds.length === 0
+      ? []
+      : this.db.prepare(`
+        SELECT *
+        FROM (
+          SELECT
+            tre.id,
+            'task_run' AS scope_type,
+            tre.task_run_id,
+            tr.sprint_run_id,
+            tr.dispatch_id,
+            tr.project_id,
+            tr.sprint_id,
+            s.name AS sprint_name,
+            s.number AS sprint_number,
+            sr.status AS sprint_run_status,
+            tr.task_id,
+            t.task_key,
+            t.title AS task_title,
+            tr.state AS task_run_state,
+            tre.event_type,
+            tre.originator,
+            tre.source_event_key,
+            tr.provider,
+            tr.session_id,
+            tr.session_name,
+            tr.worker_branch,
+            tr.pr_url,
+            tr.connection_id,
+            c.display_name AS connection_display_name,
+            c.role AS connection_role,
+            tre.created_at,
+            tre.payload_json
+          FROM task_run_events tre
+          INNER JOIN task_runs tr ON tr.id = tre.task_run_id
+          INNER JOIN sprint_runs sr ON sr.id = tr.sprint_run_id
+          INNER JOIN sprints s ON s.id = tr.sprint_id
+          INNER JOIN tasks t ON t.id = tr.task_id
+          LEFT JOIN mcp_connections c ON c.id = tr.connection_id
+          WHERE tr.sprint_run_id IN (${activeSprintRunIds.map(() => "?").join(", ")})
+
+          UNION ALL
+
+          SELECT
+            sre.id,
+            'sprint_run' AS scope_type,
+            NULL AS task_run_id,
+            sre.sprint_run_id,
+            NULL AS dispatch_id,
+            sr.project_id,
+            sr.sprint_id,
+            s.name AS sprint_name,
+            s.number AS sprint_number,
+            sr.status AS sprint_run_status,
+            NULL AS task_id,
+            NULL AS task_key,
+            NULL AS task_title,
+            NULL AS task_run_state,
+            sre.event_type,
+            sre.originator,
+            sre.source_event_key,
+            NULL AS provider,
+            NULL AS session_id,
+            NULL AS session_name,
+            NULL AS worker_branch,
+            NULL AS pr_url,
+            NULL AS connection_id,
+            NULL AS connection_display_name,
+            NULL AS connection_role,
+            sre.created_at,
+            sre.payload_json
+          FROM sprint_run_events sre
+          INNER JOIN sprint_runs sr ON sr.id = sre.sprint_run_id
+          INNER JOIN sprints s ON s.id = sr.sprint_id
+          WHERE sre.sprint_run_id IN (${activeSprintRunIds.map(() => "?").join(", ")})
+        )
+        ORDER BY created_at DESC, id DESC
+        LIMIT 80
+      `).all(...activeSprintRunIds, ...activeSprintRunIds) as unknown as ExecutionRuntimeEventSummaryRow[];
+
+    return {
+      activeProjects: activeProjects.map((row) => this.mapOverviewTelemetryProjectSummaryRow(row)),
       recentEvents: recentEvents.map((row) => this.mapExecutionRuntimeEventSummaryRow(row)),
       updatedAt: new Date().toISOString(),
     };
@@ -1234,6 +1368,21 @@ export class ExecutionRepository {
       connectionRole: row.connection_role,
       createdAt: row.created_at,
       payload: parsePayloadJson(row.payload_json),
+    };
+  }
+
+  private mapOverviewTelemetryProjectSummaryRow(row: OverviewTelemetryProjectSummaryRow): OverviewTelemetryProjectSummary {
+    return {
+      projectId: row.project_id,
+      projectName: row.project_name,
+      sprintId: row.sprint_id,
+      sprintName: row.sprint_name,
+      sprintNumber: row.sprint_number === null ? null : toNumber(row.sprint_number),
+      sprintRunId: row.sprint_run_id,
+      sprintRunStatus: row.sprint_run_status,
+      activeDispatchCount: toNumber(row.active_dispatch_count),
+      runningDispatchCount: toNumber(row.running_dispatch_count),
+      updatedAt: row.updated_at,
     };
   }
 }

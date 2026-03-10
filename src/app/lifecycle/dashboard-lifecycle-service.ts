@@ -123,6 +123,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
           updatedAt: null,
         };
     },
+    getOverviewTelemetrySnapshot: () => deps.executionRepository.getOverviewTelemetrySnapshot(),
     getProjectExecutionSnapshot: (projectId) => ({
       ...deps.executionRepository.getProjectExecutionSnapshot(projectId),
       connections: mapExecutionConnections(deps.connectionChatRepository.listConnections(projectId)),

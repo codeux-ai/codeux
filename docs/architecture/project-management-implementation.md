@@ -109,6 +109,7 @@ Current behavior:
 - Projects page creates, lists, selects, and deletes projects
 - Sprints page creates and lists sprints for the selected project
 - Sprint list/status views derive their effective sprint state from the latest `sprint_run`, so paused or cancelled runs do not continue to render as running
+- Sprints page run controls now operate on project-scoped execution data and update sprint cards optimistically while the execution snapshot refreshes
 - Sprints page can import markdown bundles and export DB-backed sprint/task markdown bundles
 - Tasks page creates, edits, deletes, filters, and groups tasks for the selected project
 - Task dependencies are edited in the task modal and stored in `task_dependencies`

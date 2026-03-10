@@ -4,6 +4,7 @@ import type {
   ExecutionDashboardSnapshot,
   ExternalSettingsHints,
   GitTrackingStatus,
+  OverviewTelemetrySnapshot,
 } from "../../types.js";
 
 const fetchJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
@@ -31,6 +32,10 @@ export const fetchRuntimeDashboardPayload = async (): Promise<RuntimeDashboardPa
     status,
     execution,
   };
+};
+
+export const fetchOverviewTelemetry = async (): Promise<OverviewTelemetrySnapshot> => {
+  return fetchJson<OverviewTelemetrySnapshot>("/api/telemetry/overview");
 };
 
 export const fetchGitTrackingStatus = async (): Promise<GitTrackingStatus> => {

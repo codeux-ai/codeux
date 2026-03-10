@@ -40,6 +40,7 @@ describe("setupDashboardServer", () => {
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
       getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], recentEvents: [], updatedAt: null }),
       getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null }),
       getLiveActivities: async () => ({}),
       getGitStatus: async () => ({
@@ -179,6 +180,7 @@ describe("setupDashboardServer", () => {
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
       getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], recentEvents: [], updatedAt: null }),
       getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null }),
       getLiveActivities: async () => ({}),
       getGitStatus: async () => ({} as any),
@@ -227,6 +229,7 @@ describe("setupDashboardServer", () => {
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
       getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], recentEvents: [], updatedAt: null }),
       getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null }),
       getLiveActivities: async () => ({}),
       getGitStatus: async () => ({} as any),

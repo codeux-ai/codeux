@@ -57,6 +57,17 @@ const getOriginatorCfg = (originator?: string) => {
     return ORIGINATOR_CFG[key] ?? ORIGINATOR_CFG.system;
 };
 
+const EMPTY_RUNTIME_STATS = {
+    total: 0,
+    running: 0,
+    completed: 0,
+    failed: 0,
+    ci: 0,
+    automerge: 0,
+    merged: 0,
+    mergeBlocked: 0,
+};
+
 /* ─── Stat Metric ────────────────────────────────────────────────────────── */
 
 const StatMetric: FunctionComponent<{
@@ -274,6 +285,27 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
         </div>
     );
 };
+
+const IdleRuntimeState: FunctionComponent<{
+    title: string;
+    subtitle: string;
+}> = ({ title, subtitle }) => (
+    <div className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] dark:border-white/[0.06] bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl p-10 min-h-[18rem] flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="w-44 h-44 rounded-full border border-black/[0.06] dark:border-white/[0.07] animate-[ping_4s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
+            <div className="absolute w-64 h-64 rounded-full border border-black/[0.04] dark:border-white/[0.05] animate-[ping_7s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
+            <div className="absolute w-[22rem] h-[22rem] rounded-full border border-black/[0.02] dark:border-white/[0.03] animate-[ping_10s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
+        </div>
+        <div className="relative z-10 text-center">
+            <div className="relative flex items-center justify-center w-16 h-16 mx-auto mb-5">
+                <div className="absolute inset-0 rounded-full blur-[12px] bg-signal-500/30 animate-pulse" />
+                <div className="relative w-4 h-4 rounded-full bg-signal-500" />
+            </div>
+            <div className="text-xs font-bold uppercase tracking-[0.22em] text-signal-500">{title}</div>
+            <div className="mt-3 text-sm text-slate-500 dark:text-slate-500 font-medium">{subtitle}</div>
+        </div>
+    </div>
+);
 
 /* ─── Task Card (V2) ─────────────────────────────────────────────────────── */
 
@@ -663,14 +695,15 @@ const ExecutionRuntimePanel: FunctionComponent<{
     onRetryTaskDispatch,
     pendingActionIds,
 }) => {
-    const activeSprintRuns = snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued" || run.status === "paused" || run.status === "cancel_requested");
+    const activeSprintRuns = snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued");
     const activeDispatches = snapshot.taskDispatches.filter((dispatch) => (
-        dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running" || dispatch.status === "cancel_requested" || dispatch.status === "blocked"
+        dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running"
     ));
     const activeConnections = snapshot.connections.filter((connection) => connection.status !== "offline");
     const workerDispatches = activeDispatches.filter((dispatch) => dispatch.executorType === "mcp_worker");
     const queuedWorkers = workerDispatches.filter((dispatch) => dispatch.status === "queued").length;
     const runningWorkers = workerDispatches.filter((dispatch) => dispatch.status === "claimed" || dispatch.status === "running").length;
+    const timelineEvents = activeSprintRuns.length > 0 ? snapshot.recentEvents.slice(0, 24) : [];
 
     return (
         <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
@@ -889,11 +922,11 @@ const ExecutionRuntimePanel: FunctionComponent<{
 
                 <div>
                     <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 block mb-3">Runtime Timeline</span>
-                    {snapshot.recentEvents.length === 0 ? (
+                    {timelineEvents.length === 0 ? (
                         <p className="text-[11px] text-slate-400 dark:text-slate-600 font-mono">No task run events recorded yet.</p>
                     ) : (
                         <div className="max-h-72 overflow-y-auto dashboard-scrollbar pr-1">
-                            <RuntimeEventFeed events={snapshot.recentEvents.slice(0, 24)} />
+                            <RuntimeEventFeed events={timelineEvents} />
                         </div>
                     )}
                 </div>
@@ -1202,11 +1235,19 @@ export const LiveSessionPage: FunctionComponent = () => {
         });
     }, [runControlAction]);
 
+    const liveSprintRun = useMemo(
+        () => execution.sprintRuns.find((run) => run.status === "running" || run.status === "queued") || null,
+        [execution.sprintRuns],
+    );
+    const hasLiveSprint = Boolean(liveSprintRun);
+    const visibleTasksWithLiveActivities = hasLiveSprint ? tasksWithLiveActivities : [];
+    const visibleStats = hasLiveSprint ? stats : EMPTY_RUNTIME_STATS;
+
     const filtered = useMemo(() => {
-        if (activeFilter === "All") return tasksWithLiveActivities;
+        if (activeFilter === "All") return visibleTasksWithLiveActivities;
         const target = FILTER_STATUS_MAP[activeFilter];
-        return tasksWithLiveActivities.filter(t => t.status === target);
-    }, [tasksWithLiveActivities, activeFilter]);
+        return visibleTasksWithLiveActivities.filter(t => t.status === target);
+    }, [visibleTasksWithLiveActivities, activeFilter]);
 
     const taskEventsByRecordId = useMemo(() => {
         const byRecordId = new Map<string, ExecutionRuntimeEventSummary[]>();
@@ -1227,12 +1268,12 @@ export const LiveSessionPage: FunctionComponent = () => {
     }, [execution.recentEvents]);
 
     const counts: Record<TaskFilter, number> = useMemo(() => ({
-        All:       tasksWithLiveActivities.length,
-        Running:   stats.running,
-        Completed: stats.completed,
-        Failed:    stats.failed,
-        Pending:   tasksWithLiveActivities.filter(t => t.status === "PENDING" || t.status === "BLOCKED").length,
-    }), [tasksWithLiveActivities, stats]);
+        All:       visibleTasksWithLiveActivities.length,
+        Running:   visibleStats.running,
+        Completed: visibleStats.completed,
+        Failed:    visibleStats.failed,
+        Pending:   visibleTasksWithLiveActivities.filter(t => t.status === "PENDING" || t.status === "BLOCKED").length,
+    }), [visibleStats, visibleTasksWithLiveActivities]);
 
     /* Connection error */
     if (error) {
@@ -1262,8 +1303,8 @@ export const LiveSessionPage: FunctionComponent = () => {
                     <div className="flex items-center gap-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em]">
                         <Radio className="w-3.5 h-3.5 text-status-red" strokeWidth={2.5} />
                         <span className="text-status-red">Live Session</span>
-                        {status.sprint_number != null && (
-                            <span className="text-slate-400 ml-1">· Sprint {status.sprint_number}</span>
+                        {liveSprintRun?.sprintNumber != null && (
+                            <span className="text-slate-400 ml-1">· Sprint {liveSprintRun.sprintNumber}</span>
                         )}
                     </div>
 
@@ -1284,9 +1325,11 @@ export const LiveSessionPage: FunctionComponent = () => {
                     </div>
 
                     <p className="text-lg text-slate-500 dark:text-slate-500 font-medium max-w-xl mt-1 leading-relaxed">
-                        {status.feature_branch
-                            ? <>Monitoring <span className="font-mono text-signal-600 dark:text-signal-400">{status.feature_branch}</span> in real-time.</>
-                            : "Awaiting orchestration. Tasks will appear as the sprint begins."
+                        {hasLiveSprint
+                            ? status.feature_branch
+                                ? <>Monitoring <span className="font-mono text-signal-600 dark:text-signal-400">{status.feature_branch}</span> in real-time.</>
+                                : `Monitoring ${liveSprintRun?.sprintName || "the active sprint"} in real-time.`
+                            : "Waiting for sprint to start."
                         }
                     </p>
                 </div>
@@ -1294,29 +1337,28 @@ export const LiveSessionPage: FunctionComponent = () => {
                 {/* Right: pills + timestamp */}
                 <div className="flex flex-col items-start lg:items-end gap-4 shrink-0">
                     <div className="flex items-center gap-2.5 flex-wrap">
-                        <div className="px-4 py-2.5 text-xs font-bold uppercase tracking-widest rounded-full
-                                       bg-signal-500/8 dark:bg-signal-500/10
-                                       text-signal-600 dark:text-signal-400
-                                       border border-signal-500/15 dark:border-signal-500/20
-                                       flex items-center gap-2.5
-                                       shadow-[0_0_20px_rgba(0,224,160,0.08)] backdrop-blur-md">
-                            <span className="w-2 h-2 rounded-full bg-signal-500 relative">
-                                <span className="absolute inset-0 rounded-full animate-ping bg-signal-400 opacity-60" />
+                        <div className={`px-4 py-2.5 text-xs font-bold uppercase tracking-widest rounded-full border flex items-center gap-2.5 backdrop-blur-md ${
+                            hasLiveSprint
+                                ? "bg-signal-500/8 dark:bg-signal-500/10 text-signal-600 dark:text-signal-400 border-signal-500/15 dark:border-signal-500/20 shadow-[0_0_20px_rgba(0,224,160,0.08)]"
+                                : "bg-black/[0.04] dark:bg-white/[0.04] text-slate-500 border-black/[0.06] dark:border-white/[0.06]"
+                        }`}>
+                            <span className={`w-2 h-2 rounded-full relative ${hasLiveSprint ? "bg-signal-500" : "bg-slate-400"}`}>
+                                {hasLiveSprint && <span className="absolute inset-0 rounded-full animate-ping bg-signal-400 opacity-60" />}
                             </span>
-                            {stats.running} Running
+                            {hasLiveSprint ? `${visibleStats.running} Running` : "Waiting"}
                         </div>
-                        {stats.failed > 0 && (
+                        {visibleStats.failed > 0 && (
                             <div className="px-4 py-2.5 text-xs font-bold uppercase tracking-widest rounded-full
                                            bg-status-red/8 text-status-red border border-status-red/15
                                            flex items-center gap-2.5 backdrop-blur-md">
                                 <span className="w-2 h-2 rounded-full bg-status-red relative">
                                     <span className="absolute inset-0 rounded-full animate-ping bg-status-red opacity-50" />
                                 </span>
-                                {stats.failed} Failed
+                                {visibleStats.failed} Failed
                             </div>
                         )}
                     </div>
-                    {status.timestamp && (
+                    {status.timestamp && hasLiveSprint && (
                         <span className="text-[10px] font-mono text-slate-400">
                             Updated {formatTime(status.timestamp)}
                         </span>
@@ -1326,14 +1368,14 @@ export const LiveSessionPage: FunctionComponent = () => {
 
             {/* ── Stats Row ───────────────────────────────────────────── */}
             <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4">
-                <StatMetric label="Total"        value={stats.total}        accentHex="#00E0A0" icon={Layers}        delay={0.1} />
-                <StatMetric label="Running"      value={stats.running}      accentHex="#00E0A0" icon={Activity}      delay={0.15} />
-                <StatMetric label="Completed"    value={stats.completed}    accentHex="#00AB84" icon={CheckCircle2}  delay={0.2} />
-                <StatMetric label="Failed"       value={stats.failed}       accentHex="#E3000F" icon={XCircle}       delay={0.25} />
-                <StatMetric label="CI"           value={stats.ci}           accentHex="#00E0A0" icon={CircleDot}     delay={0.3} />
-                <StatMetric label="Automerge"    value={stats.automerge}    accentHex="#FFB800" icon={GitMerge}      delay={0.35} />
-                <StatMetric label="Merged"       value={stats.merged}       accentHex="#00AB84" icon={GitPullRequest} delay={0.4} />
-                <StatMetric label="Blocked"      value={stats.mergeBlocked} accentHex="#F59E0B" icon={AlertTriangle} delay={0.45} />
+                <StatMetric label="Total"        value={visibleStats.total}        accentHex="#00E0A0" icon={Layers}        delay={0.1} />
+                <StatMetric label="Running"      value={visibleStats.running}      accentHex="#00E0A0" icon={Activity}      delay={0.15} />
+                <StatMetric label="Completed"    value={visibleStats.completed}    accentHex="#00AB84" icon={CheckCircle2}  delay={0.2} />
+                <StatMetric label="Failed"       value={visibleStats.failed}       accentHex="#E3000F" icon={XCircle}       delay={0.25} />
+                <StatMetric label="CI"           value={visibleStats.ci}           accentHex="#00E0A0" icon={CircleDot}     delay={0.3} />
+                <StatMetric label="Automerge"    value={visibleStats.automerge}    accentHex="#FFB800" icon={GitMerge}      delay={0.35} />
+                <StatMetric label="Merged"       value={visibleStats.merged}       accentHex="#00AB84" icon={GitPullRequest} delay={0.4} />
+                <StatMetric label="Blocked"      value={visibleStats.mergeBlocked} accentHex="#F59E0B" icon={AlertTriangle} delay={0.45} />
             </div>
 
             {/* ── Section Divider ─────────────────────────────────────── */}
@@ -1374,7 +1416,12 @@ export const LiveSessionPage: FunctionComponent = () => {
 
                 {/* Task cards */}
                 <div className="xl:col-span-8 flex flex-col gap-5">
-                    {filtered.length === 0 ? (
+                    {!hasLiveSprint ? (
+                        <IdleRuntimeState
+                            title="Waiting for Sprint Start"
+                            subtitle="Launch a sprint to activate live task telemetry, protocol output, and runtime activity for this project."
+                        />
+                    ) : filtered.length === 0 ? (
                         <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border-2 border-dashed border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-16 text-center">
                             <div className="relative z-10">
                                 <Play className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-4" strokeWidth={1} />
@@ -1418,15 +1465,15 @@ export const LiveSessionPage: FunctionComponent = () => {
                         title="Latest Activity"
                         icon={Activity}
                         accentHex="#00E0A0"
-                        content={status.reportText}
-                        fallback="Waiting for activity..."
+                        content={hasLiveSprint ? status.reportText : undefined}
+                        fallback={hasLiveSprint ? "Waiting for activity..." : "Waiting for sprint to start."}
                     />
                     <IntelPanel
                         title="Protocol"
                         icon={AlertTriangle}
                         accentHex="#FFB800"
-                        content={status.instructions}
-                        fallback="Orchestration optimal. No manual intervention needed."
+                        content={hasLiveSprint ? status.instructions : undefined}
+                        fallback={hasLiveSprint ? "Orchestration optimal. No manual intervention needed." : "No active sprint protocol."}
                     />
                     <GitCiPanel status={gitStatus} error={gitStatusError} />
                 </div>

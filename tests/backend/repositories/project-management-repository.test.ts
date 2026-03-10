@@ -29,7 +29,7 @@ afterEach(async () => {
 
 describe("ProjectManagementRepository", () => {
   it("creates projects, sprints, tasks, and dependency summaries in sqlite", async () => {
-    const { repository } = await createRepository();
+    const { repository, executionRepository } = await createRepository();
 
     const project = repository.createProject({
       name: "Sprint OS",
@@ -62,6 +62,11 @@ describe("ProjectManagementRepository", () => {
       executorType: "mcp_worker",
       status: "in_progress",
       dependsOnTaskIds: [taskA.id],
+    });
+    executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
     });
 
     const projects = repository.listProjects().projects;

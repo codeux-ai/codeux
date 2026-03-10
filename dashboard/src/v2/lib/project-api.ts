@@ -12,6 +12,7 @@ import type {
   UpdateSprintInput,
   UpdateTaskInput,
 } from "../types.js";
+import type { ExecutionDashboardSnapshot } from "../../types.js";
 
 const fetchJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetch(path, init);
@@ -59,6 +60,10 @@ export const selectProject = async (projectId: string): Promise<string | null> =
 
 export const fetchSprints = async (projectId: string): Promise<SprintRecord[]> => {
   return fetchJson<SprintRecord[]>(`/api/projects/${encodeURIComponent(projectId)}/sprints`);
+};
+
+export const fetchProjectExecution = async (projectId: string): Promise<ExecutionDashboardSnapshot> => {
+  return fetchJson<ExecutionDashboardSnapshot>(`/api/projects/${encodeURIComponent(projectId)}/execution`);
 };
 
 export const createSprint = async (projectId: string, input: CreateSprintInput): Promise<SprintRecord> => {

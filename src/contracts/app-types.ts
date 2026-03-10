@@ -211,6 +211,25 @@ export interface ExecutionDashboardSnapshot {
   updatedAt: string | null;
 }
 
+export interface OverviewTelemetryProjectSummary {
+  projectId: string;
+  projectName: string;
+  sprintId: string;
+  sprintName: string;
+  sprintNumber: number | null;
+  sprintRunId: string;
+  sprintRunStatus: string;
+  activeDispatchCount: number;
+  runningDispatchCount: number;
+  updatedAt: string | null;
+}
+
+export interface OverviewTelemetrySnapshot {
+  activeProjects: OverviewTelemetryProjectSummary[];
+  recentEvents: ExecutionRuntimeEventSummary[];
+  updatedAt: string | null;
+}
+
 export interface DashboardStats {
   total: number;
   running: number;
