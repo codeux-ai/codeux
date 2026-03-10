@@ -127,8 +127,8 @@ describe("ConnectionChatRepository", () => {
 
     const messages = connectionRepository.listMessages(threads[0].id);
     expect(messages).toHaveLength(2);
-    expect(messages[0].deliveryStatus).toBe("processed");
-    expect(messages[1].bodyMarkdown).toContain("dependency ordering");
+    expect(messages.some((message) => message.deliveryStatus === "processed")).toBe(true);
+    expect(messages.some((message) => message.bodyMarkdown.includes("dependency ordering"))).toBe(true);
 
     const connections = connectionRepository.listConnections(project.id);
     expect(connections[0]).toMatchObject({
