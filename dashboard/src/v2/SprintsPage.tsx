@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { Target, Plus, Upload, Download, Trash2, CalendarDays, Layers3, Play, Square } from "lucide-preact";
 import { SprintBubble } from "./components/ui/SprintBubble.js";
@@ -22,6 +22,7 @@ export const SprintsPage: FunctionComponent = () => {
     const [showImportModal, setShowImportModal] = useState(false);
     const [pendingActionIds, setPendingActionIds] = useState<Set<string>>(new Set());
     const [optimisticStatuses, setOptimisticStatuses] = useState<Record<string, SprintStatus>>({});
+    const [suppressedRunningSprintIds, setSuppressedRunningSprintIds] = useState<Set<string>>(new Set());
     const [exportState, setExportState] = useState<{
         sprintLabel: string;
         sprintMarkdown: string;
@@ -42,7 +43,7 @@ export const SprintsPage: FunctionComponent = () => {
 
     const nextId = `SPR-${String((sprints.at(-1)?.number ?? sprints.length) + 1).padStart(2, '0')}`;
 
-    const activeRunsBySprintId = useMemo(() => {
+    const actualActiveRunsBySprintId = useMemo(() => {
         const map = new Map<string, { id: string; status: string }>();
         for (const run of execution.sprintRuns) {
             if (run.status !== "running" && run.status !== "queued") {
@@ -55,12 +56,39 @@ export const SprintsPage: FunctionComponent = () => {
         return map;
     }, [execution.sprintRuns]);
 
+    useEffect(() => {
+        setSuppressedRunningSprintIds((current) => {
+            let changed = false;
+            const next = new Set<string>();
+            for (const sprintId of current) {
+                if (actualActiveRunsBySprintId.has(sprintId)) {
+                    next.add(sprintId);
+                } else {
+                    changed = true;
+                }
+            }
+            return changed ? next : current;
+        });
+    }, [actualActiveRunsBySprintId]);
+
+    const activeRunsBySprintId = useMemo(() => {
+        const map = new Map<string, { id: string; status: string }>();
+        for (const [sprintId, run] of actualActiveRunsBySprintId.entries()) {
+            if (suppressedRunningSprintIds.has(sprintId)) {
+                continue;
+            }
+            map.set(sprintId, run);
+        }
+        return map;
+    }, [actualActiveRunsBySprintId, suppressedRunningSprintIds]);
+
     const displaySprints = useMemo(() => (
         sprints.map((sprint) => ({
             ...sprint,
-            status: optimisticStatuses[sprint.id] || sprint.status,
+            status: optimisticStatuses[sprint.id]
+                || (suppressedRunningSprintIds.has(sprint.id) && sprint.status === "running" ? "cancelled" : sprint.status),
         }))
-    ), [optimisticStatuses, sprints]);
+    ), [optimisticStatuses, sprints, suppressedRunningSprintIds]);
 
     const handleSprintToggle = (sprintId: string) => {
         if (!selectedProject) return;
@@ -80,6 +108,14 @@ export const SprintsPage: FunctionComponent = () => {
         if (pendingActionIds.has(startActionId)) {
             return;
         }
+        setSuppressedRunningSprintIds((current) => {
+            if (!current.has(sprintId)) {
+                return current;
+            }
+            const next = new Set(current);
+            next.delete(sprintId);
+            return next;
+        });
         void runSprintAction(startActionId, sprintId, async () => {
             await orchestrateSprint(selectedProject.id, sprintId);
         }, { waitForActiveRun: true });
@@ -100,6 +136,9 @@ export const SprintsPage: FunctionComponent = () => {
         }
         try {
             await operation();
+            if (options.optimisticStatus === "cancelled") {
+                setSuppressedRunningSprintIds((current) => new Set(current).add(sprintId));
+            }
             if (options.waitForActiveRun && selectedProject) {
                 for (let attempt = 0; attempt < 8; attempt += 1) {
                     const snapshot = await fetchProjectExecution(selectedProject.id);
@@ -121,6 +160,7 @@ export const SprintsPage: FunctionComponent = () => {
                 delete next[sprintId];
                 return next;
             });
+            await Promise.all([refresh(), refreshExecution()]);
             window.alert(error instanceof Error ? error.message : String(error));
         } finally {
             setPendingActionIds((current) => {
