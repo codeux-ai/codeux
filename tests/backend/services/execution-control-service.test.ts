@@ -83,6 +83,39 @@ describe("ExecutionControlService", () => {
     }));
   });
 
+  it("rejects orchestration while a sprint cancellation is still pending for active work", async () => {
+    const { projectRepository, executionRepository, service, executeOrchestrator } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Pending Cancel Project",
+      sourceType: "local",
+      sourceRef: "/workspace/pending-cancel-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Pending Cancel Sprint",
+      number: 1,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "cancel_requested",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Active cancel task",
+    });
+    executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "cancel_requested",
+    });
+
+    await expect(service.orchestrateSprint(project.id, sprint.id)).rejects.toThrow("cancellation is still pending");
+    expect(executeOrchestrator).not.toHaveBeenCalled();
+  });
+
   it("pauses sprint runs and records a sprint event", async () => {
     const { projectRepository, executionRepository, service } = await createFixture();
     const project = projectRepository.createProject({

@@ -11,6 +11,7 @@ const buildDeps = () => ({
   completedSprints: new Set<string>(),
   executionRepository: {
     appendSprintRunEvent: vi.fn(),
+    finalizeSprintRunCancellationIfIdle: vi.fn().mockReturnValue(null),
     getSprintRun: vi.fn().mockReturnValue({ status: "running" }),
     updateSprintRun: vi.fn(),
     renewLease: vi.fn(),
@@ -240,5 +241,77 @@ describe("WatchLoopRunner", () => {
     });
 
     expect(result).toContain("Sprint Paused");
+  });
+
+  it("finalizes cancellation when the sprint run is already idle", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    deps.executionRepository.getSprintRun = vi.fn().mockReturnValue({ status: "cancel_requested" });
+    deps.executionRepository.finalizeSprintRunCancellationIfIdle = vi.fn().mockReturnValue({ id: "run-1", status: "cancelled" });
+    deps.renderInstruction.mockImplementation(async (id) => id === "watchHeader" ? "HEADER" : "");
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn());
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 0.01 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(deps.executionRepository.finalizeSprintRunCancellationIfIdle).toHaveBeenCalledWith("run-1");
+    expect(result).toContain("Sprint Cancelled");
+    expect(cycleRunner.run).not.toHaveBeenCalled();
+  });
+
+  it("reports stop pending when active cancellation work is still running", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    deps.executionRepository.getSprintRun = vi.fn().mockReturnValue({ status: "cancel_requested" });
+    deps.executionRepository.finalizeSprintRunCancellationIfIdle = vi.fn().mockReturnValue(null);
+    deps.renderInstruction.mockImplementation(async (id) => id === "watchHeader" ? "HEADER" : "");
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn());
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 0.01 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(deps.executionRepository.finalizeSprintRunCancellationIfIdle).toHaveBeenCalledWith("run-1");
+    expect(result).toContain("Active work is still shutting down");
+    expect(cycleRunner.run).not.toHaveBeenCalled();
   });
 });

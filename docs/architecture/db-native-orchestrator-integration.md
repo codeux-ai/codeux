@@ -129,6 +129,11 @@ The lease is acquired before the sprint run starts, renewed while the watch loop
 
 If another orchestrator already owns the sprint lease, Sprint OS returns an active-run message instead of starting a duplicate loop.
 
+Additional start guard:
+
+- Sprint OS now also refuses to start a fresh sprint run when the latest run is still `running`, `queued`, or `cancel_requested`
+- if the latest `cancel_requested` run is already idle, Sprint OS finalizes it to `cancelled` and then allows the new start
+
 ## Merge Persistence
 
 Feature PR auto-merge no longer writes `merged: true` into task markdown.

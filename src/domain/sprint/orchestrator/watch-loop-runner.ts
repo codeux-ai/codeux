@@ -99,7 +99,10 @@ export class WatchLoopRunner {
         return fullReport;
       }
       if (controlledRun?.status === "cancel_requested") {
-        fullReport += "\n🛑 **Sprint Cancellation Requested:** Dashboard control requested cancellation for this sprint run.\n";
+        const finalized = this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(sprintRunId);
+        fullReport += finalized
+          ? "\n🛑 **Sprint Cancelled:** Dashboard control cancelled this sprint run.\n"
+          : "\n🛑 **Sprint Cancellation Requested:** Dashboard control requested cancellation for this sprint run. Active work is still shutting down.\n";
         return fullReport;
       }
       if (controlledRun?.status === "cancelled") {

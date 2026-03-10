@@ -352,6 +352,33 @@ export class SprintOrchestrator {
         });
       case "orchestrate":
       default: {
+        const blockingRun = this.deps.executionRepository.findActiveSprintRun(
+          executionContext.project.id,
+          executionContext.sprint.id,
+        );
+        if (blockingRun) {
+          const finalizedCancelledRun = blockingRun.status === "cancel_requested"
+            ? this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(blockingRun.id)
+            : null;
+          const effectiveBlockingRun = finalizedCancelledRun?.status === "cancelled"
+            ? null
+            : blockingRun.status === "running" || blockingRun.status === "queued" || blockingRun.status === "cancel_requested"
+              ? blockingRun
+              : null;
+
+          if (effectiveBlockingRun) {
+            const blockingReason = effectiveBlockingRun.status === "cancel_requested"
+              ? "cancellation is still pending"
+              : "another run is already active";
+            return {
+              content: [{
+                type: "text",
+                text: `Sprint ${executionContext.sprintNumber} cannot start because ${blockingReason}. Active sprint run: \`${effectiveBlockingRun.id}\` (${effectiveBlockingRun.status}).`,
+              }],
+            };
+          }
+        }
+
         const leaseToken = randomUUID();
         try {
           this.deps.executionRepository.acquireLease({

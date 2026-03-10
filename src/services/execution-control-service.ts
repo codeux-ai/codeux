@@ -31,6 +31,14 @@ export class ExecutionControlService {
       throw new Error(`Sprint not found in project: ${sprintId}`);
     }
 
+    const blockingRun = this.resolveBlockingSprintRun(projectId, sprintId);
+    if (blockingRun) {
+      const label = blockingRun.status === "cancel_requested" ? "cancellation is still pending" : "another run is already active";
+      throw new Error(
+        `Sprint ${sprint.number ?? sprint.name} cannot be started because ${label} (run ${blockingRun.id}, status ${blockingRun.status}).`,
+      );
+    }
+
     void this.deps.sprintOrchestrator.execute({
       action: "orchestrate",
       project_id: projectId,
@@ -258,5 +266,26 @@ export class ExecutionControlService {
       return null;
     }
     return Math.max(0, new Date(finishedAt).getTime() - new Date(taskRun.startedAt).getTime());
+  }
+
+  private resolveBlockingSprintRun(projectId: string, sprintId: string): SprintRunRecord | null {
+    const activeRun = this.deps.executionRepository.findActiveSprintRun(projectId, sprintId);
+    if (!activeRun) {
+      return null;
+    }
+
+    if (activeRun.status === "cancel_requested") {
+      const finalized = this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(activeRun.id);
+      if (finalized?.status === "cancelled") {
+        return null;
+      }
+      return activeRun;
+    }
+
+    if (activeRun.status === "running" || activeRun.status === "queued") {
+      return activeRun;
+    }
+
+    return null;
   }
 }
