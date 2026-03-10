@@ -30,6 +30,7 @@ To make that safe, the spawned server now supports:
 - `--runtime-role worker-host`
 - implicit dashboard disable in worker-host mode
 - no local `project_manager` connection registration in worker-host mode
+- worker-only MCP surface exposure in worker-host mode
 
 This avoids dashboard port conflicts while still letting every worker-host process share the same Sprint OS sqlite state.
 

@@ -9,12 +9,14 @@ import type { CoreToolHandler } from "../mcp/core-tool-handler.js";
 import { getEnabledToolDefinitions, isToolEnabled } from "../mcp/mcp-tool-availability.js";
 import type { SprintAgentArgs } from "../sprint/sprint-orchestrator.js";
 import type { Logger } from "../shared/logging/logger.js";
+import type { McpRuntimeRole } from "../contracts/mcp-tool-definitions.js";
 
 export interface McpRequestRouterArgs {
   server: Server;
   coreToolHandler: CoreToolHandler;
   agentToolHandler: AgentToolHandler;
   getDashboardSettings: () => DashboardSettings;
+  getRuntimeRole: () => McpRuntimeRole;
   formatError: (error: unknown) => { content: Array<{ type: string; text: string }>; isError: true };
   logger?: Logger;
   withCorrelationContext?: <T>(request: unknown, operation: () => Promise<T>) => Promise<T>;
@@ -49,7 +51,7 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
   args.server.setRequestHandler(ListToolsRequestSchema, async () => {
     logger?.debug("MCP list_tools request received");
     return {
-      tools: getEnabledToolDefinitions(args.getDashboardSettings()),
+      tools: getEnabledToolDefinitions(args.getDashboardSettings(), args.getRuntimeRole()),
     };
   });
 
@@ -66,7 +68,7 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
       const { name, arguments: toolArgs } = request.params;
       logger?.debug("MCP tool request received", { toolName: name });
 
-      if (!isToolEnabled(args.getDashboardSettings(), name)) {
+      if (!isToolEnabled(args.getDashboardSettings(), name, args.getRuntimeRole())) {
         logger?.warn("MCP tool request rejected because tool is disabled", { toolName: name });
         throw new McpError(ErrorCode.MethodNotFound, `Tool not found: ${name}`);
       }

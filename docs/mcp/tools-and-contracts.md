@@ -186,3 +186,20 @@ Behavior:
 - Disabled tools are omitted from `ListToolsRequestSchema` responses.
 - Calls to disabled tools return MCP `MethodNotFound`.
 - Toggle state is persisted in settings storage and applied without server restart.
+
+## Runtime Role Gating
+
+Sprint OS now also filters tools by runtime role before applying dashboard toggles.
+
+Current roles:
+
+- `project_manager`
+- `worker_host`
+
+Behavior:
+
+- normal Sprint OS server processes expose the project-manager/listener tool surface
+- headless worker-host processes expose only the worker-loop tool surface they actually need
+- worker-only tools such as `execute_worker_dispatch`, `cancel_local_dispatch`, `generate_dashboard_reply`, `pull_task_dispatch`, and `update_task_dispatch` are no longer visible on normal human-driven MCP connections
+
+This keeps Gemini CLI and other regular MCP clients compatible without cluttering them with worker-local controls.

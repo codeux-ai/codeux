@@ -1,6 +1,9 @@
+export type McpRuntimeRole = "project_manager" | "worker_host";
+
 export const TOOL_DEFINITIONS = [
   {
     name: "get_source",
+    runtimeRoles: ["project_manager"],
     description: "Retrieve comprehensive details for a specific code source (e.g., a GitHub repository).",
     inputSchema: {
       type: "object",
@@ -12,6 +15,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "list_sources",
+    runtimeRoles: ["project_manager"],
     description: "Enumerate available code sources with filtering and pagination capabilities.",
     inputSchema: {
       type: "object",
@@ -24,6 +28,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "list_all_sources",
+    runtimeRoles: ["project_manager"],
     description: "Retrieve the complete list of available sources by automatically handling multi-page results.",
     inputSchema: {
       type: "object",
@@ -34,6 +39,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "create_session",
+    runtimeRoles: ["project_manager"],
     description: "Initiate a new agent session to perform tasks on a specific codebase.",
     inputSchema: {
       type: "object",
@@ -50,6 +56,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "get_session",
+    runtimeRoles: ["project_manager", "worker_host"],
     description: "Get the current status, state, and outputs of an active or historical session.",
     inputSchema: {
       type: "object",
@@ -61,6 +68,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "list_sessions",
+    runtimeRoles: ["project_manager"],
     description: "List recent agent sessions with pagination.",
     inputSchema: {
       type: "object",
@@ -72,6 +80,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "approve_session_plan",
+    runtimeRoles: ["project_manager"],
     description: "Authorize the agent to proceed with the proposed plan.",
     inputSchema: {
       type: "object",
@@ -83,6 +92,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "send_session_message",
+    runtimeRoles: ["project_manager"],
     description: "Provide additional feedback, instructions, or corrections to the agent.",
     inputSchema: {
       type: "object",
@@ -95,6 +105,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "wait_for_session_completion",
+    runtimeRoles: ["project_manager"],
     description: "Monitor a session until it reaches a terminal state or a PR is generated.",
     inputSchema: {
       type: "object",
@@ -108,6 +119,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "get_activity",
+    runtimeRoles: ["project_manager"],
     description: "Retrieve detailed information about a specific interaction step.",
     inputSchema: {
       type: "object",
@@ -120,6 +132,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "list_activities",
+    runtimeRoles: ["project_manager"],
     description: "Fetch a chronologically ordered list of activities for a session.",
     inputSchema: {
       type: "object",
@@ -133,6 +146,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "list_all_activities",
+    runtimeRoles: ["project_manager"],
     description: "Retrieve all activities for a session automatically.",
     inputSchema: {
       type: "object",
@@ -144,6 +158,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "sprint_agent",
+    runtimeRoles: ["project_manager"],
     description: "Intelligent agent that orchestrates sprints by delegating subtasks to configured providers (Jules/Gemini/Codex).",
     inputSchema: {
       type: "object",
@@ -166,6 +181,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "task_agent",
+    runtimeRoles: ["project_manager"],
     description: "Executes a single specific task on a codebase via the configured provider workflow with injected engineering standards.",
     inputSchema: {
       type: "object",
@@ -182,6 +198,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "execute_worker_dispatch",
+    runtimeRoles: ["worker_host"],
     description: "Start local execution for a claimed worker dispatch on a Sprint OS worker host.",
     inputSchema: {
       type: "object",
@@ -193,6 +210,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "cancel_local_dispatch",
+    runtimeRoles: ["worker_host"],
     description: "Request cancellation for an active local worker dispatch on the current Sprint OS worker host.",
     inputSchema: {
       type: "object",
@@ -205,6 +223,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "generate_dashboard_reply",
+    runtimeRoles: ["worker_host"],
     description: "Generate a non-coding dashboard reply for a worker/listener connection using the local provider stack.",
     inputSchema: {
       type: "object",
@@ -219,6 +238,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "start_listen",
+    runtimeRoles: ["project_manager", "worker_host"],
     description: "Register an MCP connection as a dashboard listener for a project and return any pending dashboard messages.",
     inputSchema: {
       type: "object",
@@ -236,6 +256,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "pull_inbox",
+    runtimeRoles: ["project_manager", "worker_host"],
     description: "Poll the dashboard inbox for pending messages for a registered MCP connection.",
     inputSchema: {
       type: "object",
@@ -249,6 +270,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "post_listen_reply",
+    runtimeRoles: ["project_manager", "worker_host"],
     description: "Post a listener reply back to the dashboard conversation thread and mark the message as handled.",
     inputSchema: {
       type: "object",
@@ -263,6 +285,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "pull_task_dispatch",
+    runtimeRoles: ["worker_host"],
     description: "Claim the next queued worker task dispatch for a registered MCP worker connection.",
     inputSchema: {
       type: "object",
@@ -276,6 +299,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "update_task_dispatch",
+    runtimeRoles: ["worker_host"],
     description: "Heartbeat, complete, fail, or block a claimed worker task dispatch and persist the result back into Sprint OS.",
     inputSchema: {
       type: "object",

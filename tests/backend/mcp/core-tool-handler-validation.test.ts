@@ -25,6 +25,7 @@ describe("CoreToolHandler validation", () => {
       coreToolHandler: handler,
       agentToolHandler: {} as any,
       getDashboardSettings: () => ({ mcpTools: [{ name: "get_session", enabled: true }] }) as any,
+      getRuntimeRole: () => "project_manager",
       formatError: (e) => {
         if (e instanceof McpError) throw e;
         return { content: [{ type: "text", text: "err" }], isError: true };

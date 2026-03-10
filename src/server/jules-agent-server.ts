@@ -126,6 +126,7 @@ export class JulesAgentServer {
       coreToolHandler: this.coreToolHandler,
       agentToolHandler: this.agentToolHandler,
       getDashboardSettings: () => this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
+      getRuntimeRole: () => this.appConfig.runtimeRole,
       formatError: (error: unknown) => this.formatError(error),
       logger: this.logger.child({ component: "mcp-request-router" }),
       withCorrelationContext: (request, operation) => this.runWithMcpCorrelationContext(request, operation),
