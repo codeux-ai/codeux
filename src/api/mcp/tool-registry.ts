@@ -83,6 +83,13 @@ export interface CancelLocalDispatchArgs {
   reason?: string;
 }
 
+export interface GenerateDashboardReplyArgs {
+  project_id: string;
+  thread_id: string;
+  thread_title?: string;
+  body_markdown: string;
+}
+
 export interface StartListenArgs {
   connection_key: string;
   display_name?: string;
@@ -143,6 +150,7 @@ export interface McpToolArgsByName {
   task_agent: TaskAgentArgs;
   execute_worker_dispatch: ExecuteWorkerDispatchArgs;
   cancel_local_dispatch: CancelLocalDispatchArgs;
+  generate_dashboard_reply: GenerateDashboardReplyArgs;
   start_listen: StartListenArgs;
   pull_inbox: PullInboxArgs;
   post_listen_reply: PostListenReplyArgs;

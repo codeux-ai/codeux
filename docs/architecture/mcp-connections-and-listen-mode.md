@@ -16,6 +16,11 @@ It does not yet add:
 - persisted provider activity transcripts in `task_run_events`
 - autonomous looping inside the server process itself
 
+That limitation is now partly removed by the in-repo external worker client:
+
+- workers can consume inbox messages on the same connection record
+- workers can generate reply-only dashboard responses locally
+
 ## Primary Files
 
 - `src/repositories/connection-chat-repository.ts`
@@ -72,6 +77,8 @@ Expected loop:
 6. MCP re-enters the loop by calling `pull_inbox` again
 
 Because transport is stdio-based, this remains a pull loop by design.
+
+Workers now use the same listen loop in addition to dispatch polling, so a single connected worker can both answer chat and pick up `mcp_worker` tasks.
 
 ## Current Routing Rules
 

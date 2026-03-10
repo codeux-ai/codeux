@@ -10,6 +10,29 @@ interface PullTaskDispatchResponse {
   dispatch: WorkerTaskDispatchClaim | null;
 }
 
+interface StartListenResponse {
+  connection: {
+    id: string;
+    status: string;
+  };
+  inbox: ConnectionInboxMessage[];
+}
+
+interface PullInboxResponse {
+  returnedCount: number;
+  inbox: ConnectionInboxMessage[];
+}
+
+interface ConnectionInboxMessage {
+  id: string;
+  threadId: string;
+  threadTitle: string;
+  projectId: string;
+  bodyMarkdown: string;
+  createdAt: string;
+  deliveryStatus: string;
+}
+
 interface ExecuteWorkerDispatchResponse {
   dispatchId: string;
   taskRunId: string;
@@ -31,6 +54,12 @@ interface UpdateWorkerDispatchResponse {
     status: string;
   };
   controlAction: "cancel" | null;
+}
+
+interface GenerateDashboardReplyResponse {
+  bodyMarkdown: string;
+  provider: string;
+  model: string;
 }
 
 const ACTION_REQUIRED_STATES = new Set(["AWAITING_PLAN_APPROVAL", "AWAITING_USER_FEEDBACK", "PAUSED"]);
@@ -100,7 +129,7 @@ export class SprintOsWorker {
   }
 
   private async startListen(client: Client): Promise<void> {
-    await this.callJsonTool(client, "start_listen", {
+    const response = await this.callJsonTool<StartListenResponse>(client, "start_listen", {
       connection_key: this.config.connectionKey,
       display_name: this.config.displayName,
       role: "worker",
@@ -112,10 +141,12 @@ export class SprintOsWorker {
         labels: ["worker"],
       },
     });
+    await this.processInboxMessages(client, response.inbox);
   }
 
   private async runDispatchLoop(client: Client, signal?: AbortSignal): Promise<void> {
     while (!signal?.aborted) {
+      await this.pollInbox(client);
       const claim = await this.callJsonTool<PullTaskDispatchResponse>(client, "pull_task_dispatch", {
         connection_key: this.config.connectionKey,
         project_id: this.config.projectId,
@@ -146,6 +177,7 @@ export class SprintOsWorker {
 
       let session = await this.getSession(client, execution.session.id);
       while (!signal?.aborted) {
+        await this.pollInbox(client);
         const pullRequest = this.extractPullRequest(session);
         const terminalState = this.resolveTerminalTaskState(session);
         const update = await this.callJsonTool<UpdateWorkerDispatchResponse>(client, "update_task_dispatch", {
@@ -205,6 +237,40 @@ export class SprintOsWorker {
     }).catch((updateError) => {
       console.error("[sprint-os-worker] Failed to persist dispatch failure", updateError);
     });
+  }
+
+  private async pollInbox(client: Client): Promise<void> {
+    const response = await this.callJsonTool<PullInboxResponse>(client, "pull_inbox", {
+      connection_key: this.config.connectionKey,
+      project_id: this.config.projectId,
+      max_messages: 10,
+    });
+    await this.processInboxMessages(client, response.inbox);
+  }
+
+  private async processInboxMessages(client: Client, inbox: ConnectionInboxMessage[]): Promise<void> {
+    for (const message of inbox) {
+      try {
+        const reply = await this.callJsonTool<GenerateDashboardReplyResponse>(client, "generate_dashboard_reply", {
+          project_id: message.projectId,
+          thread_id: message.threadId,
+          thread_title: message.threadTitle,
+          body_markdown: message.bodyMarkdown,
+        });
+        await this.callJsonTool(client, "post_listen_reply", {
+          connection_key: this.config.connectionKey,
+          thread_id: message.threadId,
+          body_markdown: reply.bodyMarkdown,
+          reply_to_message_id: message.id,
+        });
+      } catch (error) {
+        console.error("[sprint-os-worker] Failed to process inbox message", {
+          threadId: message.threadId,
+          messageId: message.id,
+          error,
+        });
+      }
+    }
   }
 
   private resolveTerminalTaskState(session: JulesSession): "COMPLETED" | "FAILED" | "BLOCKED" | null {

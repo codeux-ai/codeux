@@ -3,11 +3,13 @@ import type { DashboardSettings } from "../contracts/app-types.js";
 import type { SprintOrchestrator } from "../sprint/sprint-orchestrator.js";
 import type { SprintAgentArgs } from "../sprint/sprint-types.js";
 import type { WorkerDispatchExecutionService } from "../services/worker-dispatch-execution-service.js";
+import type { WorkerInboxReplyService } from "../services/worker-inbox-reply-service.js";
 
 interface AgentToolHandlerDependencies {
   sprintOrchestrator: SprintOrchestrator;
   taskService: TaskService;
   workerDispatchExecutionService: WorkerDispatchExecutionService;
+  workerInboxReplyService: WorkerInboxReplyService;
   getDashboardSettings: () => DashboardSettings;
   formatSprintBranch: (scheme: string | undefined, sprintNumber: number) => string;
   getConsecutiveFailures: () => number;
@@ -98,6 +100,21 @@ export class AgentToolHandler {
 
   async handleCancelLocalDispatch(args: { dispatch_id: string; reason?: string }) {
     const result = await this.deps.workerDispatchExecutionService.cancelLocalDispatch(args.dispatch_id, args.reason);
+    return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+  }
+
+  async handleGenerateDashboardReply(args: {
+    project_id: string;
+    thread_id: string;
+    thread_title?: string;
+    body_markdown: string;
+  }) {
+    const result = await this.deps.workerInboxReplyService.generateReply({
+      projectId: args.project_id,
+      threadId: args.thread_id,
+      threadTitle: args.thread_title,
+      bodyMarkdown: args.body_markdown,
+    });
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   }
 }

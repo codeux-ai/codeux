@@ -13,7 +13,9 @@ It is a separate process:
 3. registers itself as `role = worker`
 4. claims queued `mcp_worker` dispatches from sqlite
 5. executes the claimed task through the existing provider stack
-6. heartbeats and finalizes the dispatch back into sqlite
+6. polls dashboard inbox threads on the same connection
+7. generates reply-only chat responses through the local provider stack
+8. heartbeats and finalizes dispatches back into sqlite
 
 That gives us a real external worker role without introducing a second execution model.
 
@@ -40,8 +42,11 @@ The new CLI is:
 Default behavior:
 
 - spawns `node dist/index.js --runtime-role worker-host`
+- polls `pull_inbox` for dashboard messages
 - polls for queued dispatches every few seconds
 - polls the claimed session for progress and terminal state
+- generates dashboard replies through `generate_dashboard_reply`
+- posts replies through `post_listen_reply`
 - calls `cancel_local_dispatch` when `update_task_dispatch` returns `controlAction = "cancel"`
 
 Useful flags:
@@ -71,6 +76,20 @@ For each claimed dispatch:
 7. the worker writes `RUNNING`, `COMPLETED`, `FAILED`, or `BLOCKED` through `update_task_dispatch`
 
 This means connected workers are now another executor lane on top of the same runtime records, not a side system.
+
+## Inbox Reply Path
+
+The same worker connection can also participate in project chat.
+
+For each inbox message:
+
+1. `pull_inbox` returns the pending dashboard message
+2. `generate_dashboard_reply` resolves the project repo and settings
+3. Sprint OS selects a CLI-capable provider and builds a reply-only prompt
+4. the worker-host process generates markdown text locally
+5. `post_listen_reply` stores the reply under the same connection record
+
+This keeps worker chat participation on the same DB-backed connection and thread model already used by the v2 dashboard.
 
 ## Cancellation Model
 

@@ -204,6 +204,20 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: "generate_dashboard_reply",
+    description: "Generate a non-coding dashboard reply for a worker/listener connection using the local provider stack.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        project_id: { type: "string", description: "Sprint OS project id for repo and settings context." },
+        thread_id: { type: "string", description: "Dashboard conversation thread id." },
+        thread_title: { type: "string", description: "Optional thread title for prompt context." },
+        body_markdown: { type: "string", description: "The dashboard-authored message to answer." },
+      },
+      required: ["project_id", "thread_id", "body_markdown"],
+    },
+  },
+  {
     name: "start_listen",
     description: "Register an MCP connection as a dashboard listener for a project and return any pending dashboard messages.",
     inputSchema: {
