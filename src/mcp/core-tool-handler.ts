@@ -361,7 +361,7 @@ export class CoreToolHandler {
   }
 
   async handleUpdateTaskDispatch(args: UpdateTaskDispatchArgs) {
-    const dispatch = this.deps.workerTaskDispatchService.updateDispatch({
+    const result = this.deps.workerTaskDispatchService.updateDispatch({
       connectionKey: args.connection_key,
       dispatchId: args.dispatch_id,
       leaseToken: args.lease_token,
@@ -378,7 +378,7 @@ export class CoreToolHandler {
     return {
       content: [{
         type: "text",
-        text: JSON.stringify(dispatch, null, 2),
+        text: JSON.stringify(result, null, 2),
       }],
     };
   }

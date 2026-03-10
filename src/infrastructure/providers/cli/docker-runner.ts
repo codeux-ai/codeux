@@ -27,6 +27,7 @@ export interface IDockerRunner {
     providerLabel: "gemini" | "codex" | "claude-code";
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
+    signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
   }): Promise<CommandResult>;
 }
@@ -43,9 +44,10 @@ export class DockerRunner implements IDockerRunner {
     providerLabel: "gemini" | "codex" | "claude-code";
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
+    signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
   }): Promise<CommandResult> {
-    const { command, args, cwd, providerEnv, sessionId, providerLabel, workflowSettings, repoPath, onActivity } = input;
+    const { command, args, cwd, providerEnv, sessionId, providerLabel, workflowSettings, repoPath, signal, onActivity } = input;
 
     await this.maybeLogDockerPathMappingHint(sessionId, repoPath, onActivity);
     const runtimeRoot = this.resolveDockerRuntimeRoot(repoPath);
@@ -101,6 +103,7 @@ export class DockerRunner implements IDockerRunner {
     onActivity(`Running ${providerLabel} in Docker image ${image} (credentials mounted: ${credentialMounts.length > 0 ? "yes" : "no"}).`);
 
     return await runStreamingCommand("docker", dockerArgs, cwd, process.env, {
+      signal,
       onStdoutLine: (line) => onActivity(line, "agent"),
       onStderrLine: (line) => onActivity(`[${providerLabel}] ${line}`, "provider"),
     });

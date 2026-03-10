@@ -26,6 +26,7 @@ export interface PipelineContext {
   title: string;
   repoPath: string;
   worktreePath: string;
+  abortSignal?: AbortSignal;
   workflowSettings: CliWorkflowSettings;
   settings: DashboardSettings;
   initialHead: string;

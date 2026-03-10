@@ -15,6 +15,7 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
       workflowSettings: ctx.workflowSettings,
       repoPath: ctx.repoPath,
       githubToken: ctx.deps.getGithubToken(),
+      signal: ctx.abortSignal,
       onActivity: (desc, originator) =>
         ctx.deps.sessionTracking.appendActivity(ctx.sessionId, {
           description: desc,

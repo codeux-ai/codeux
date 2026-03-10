@@ -158,4 +158,9 @@ The execution model is now DB-native at the entry, load, dispatch, and merge-per
 Still pending:
 - CI/protocol wording should stop referencing any subtask-file semantics
 - broader executor transcript coverage beyond current session-sync, CLI stage, worker lifecycle, and CI gate events
-- safe executor-specific force-stop behavior for already running provider work
+- deeper Jules stop semantics beyond the current soft-stop `send_session_message` fallback
+
+Recent runtime update:
+- running dispatch cancellation is now modeled as `cancel_requested` instead of immediately forcing terminal DB state
+- local CLI workflows abort through the process runner and settle the dispatch to `cancelled` on shutdown
+- connected workers receive `controlAction = "cancel"` on their normal heartbeat/update response path

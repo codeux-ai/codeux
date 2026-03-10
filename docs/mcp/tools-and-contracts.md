@@ -144,6 +144,9 @@ Unknown tool names raise MCP `MethodNotFound`.
 - `pull_task_dispatch` claims the next queued `mcp_worker` dispatch for one of the worker's active projects.
 - Claiming a dispatch acquires a DB-backed lease on that dispatch and returns the full task payload plus project/sprint branch context.
 - `update_task_dispatch` is used for heartbeats and terminal worker outcomes (`RUNNING`, `COMPLETED`, `FAILED`, `BLOCKED`).
+- `update_task_dispatch` now returns both the persisted dispatch state and an optional `controlAction`.
+- When the dashboard cancels a running worker dispatch, the next worker heartbeat receives `controlAction = "cancel"` while the dispatch remains `cancel_requested`.
+- Workers are expected to stop promptly and send a terminal `update_task_dispatch` result to close the dispatch cleanly.
 - Worker execution writes back into the same `task_dispatches`, `task_runs`, and `task_run_events` records used by the rest of Sprint OS.
 
 ## Stability Expectations

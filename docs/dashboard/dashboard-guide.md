@@ -106,7 +106,11 @@ Legacy runtime:
 - The runtime feed now includes direct CLI stage events, action-required and protocol events, sprint-run lifecycle events, and CI/merge-gate state changes in addition to provider session activity
 - `recentEvents` is now a unified runtime timeline spanning both `task_run_events` and `sprint_run_events`
 - The execution runtime panel can now start or resume sprint orchestration, pause or cancel sprint runs, cancel queued dispatches, and retry terminal dispatches
-- Dispatch cancel is intentionally limited to `queued` and `claimed` work; already running provider work is not force-killed yet
+- Running dispatch cancel is now request-based instead of instant-terminal:
+  - local CLI runs move to `cancel_requested` and abort through the process runner
+  - worker runs move to `cancel_requested` and surface a stop request through the worker heartbeat response
+  - Jules runs move to `cancel_requested` and get a best-effort in-session stop message
+- Sprint runs also use `cancel_requested` while active work is shutting down, then finalize to `cancelled` once no active dispatches remain
 - Live activity sidebar
 - Protocol instruction panel
 - Git/CI status panel

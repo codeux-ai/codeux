@@ -17,6 +17,8 @@ async function createFixture(): Promise<{
   service: ExecutionControlService;
   rerunTask: ReturnType<typeof vi.fn>;
   executeOrchestrator: ReturnType<typeof vi.fn>;
+  requestStop: ReturnType<typeof vi.fn>;
+  sendSessionMessage: ReturnType<typeof vi.fn>;
 }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-execution-control-"));
   tempDirs.push(dir);
@@ -26,6 +28,8 @@ async function createFixture(): Promise<{
   const executionRepository = new ExecutionRepository(storage);
   const rerunTask = vi.fn().mockResolvedValue({ id: "task-1" });
   const executeOrchestrator = vi.fn().mockResolvedValue({ content: [] });
+  const requestStop = vi.fn().mockResolvedValue({ accepted: true });
+  const sendSessionMessage = vi.fn().mockResolvedValue({ ok: true });
 
   const service = new ExecutionControlService({
     projectManagementRepository: projectRepository,
@@ -37,6 +41,12 @@ async function createFixture(): Promise<{
     sprintOrchestrator: {
       execute: executeOrchestrator,
     } as any,
+    julesApi: {
+      sendSessionMessage,
+    } as any,
+    activeDispatchRegistry: {
+      requestStop,
+    } as any,
   });
 
   return {
@@ -46,6 +56,8 @@ async function createFixture(): Promise<{
     service,
     rerunTask,
     executeOrchestrator,
+    requestStop,
+    sendSessionMessage,
   };
 }
 
@@ -183,5 +195,53 @@ describe("ExecutionControlService", () => {
     await service.retryTaskDispatch(dispatch.id);
 
     expect(rerunTask).toHaveBeenCalledWith(task.id);
+  });
+
+  it("marks running docker dispatches as cancel requested and asks the active executor to stop", async () => {
+    const { projectRepository, executionRepository, service, requestStop } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Running Cancel Project",
+      sourceType: "local",
+      sourceRef: "/workspace/running-cancel-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Running Cancel Sprint",
+      number: 4,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Cancel running docker dispatch",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      mode: "docker_cli",
+      state: "RUNNING",
+      startedAt: new Date().toISOString(),
+    });
+
+    const updated = await service.cancelTaskDispatch(dispatch.id);
+
+    expect(updated.status).toBe("cancel_requested");
+    expect(requestStop).toHaveBeenCalledWith(dispatch.id, "Dispatch was cancelled from the dashboard.");
+    expect(executionRepository.listTaskRunEvents(taskRun.id)[0]).toMatchObject({
+      eventType: "dispatch_cancel_requested",
+    });
   });
 });

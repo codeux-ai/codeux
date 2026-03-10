@@ -27,10 +27,12 @@ import { executeProviderStage } from "./cli-workflow/pipeline/execute-provider-s
 import { executeGitFinalizeStage } from "./cli-workflow/pipeline/git-finalize-stage.js";
 import { executePrFinalizeStage } from "./cli-workflow/pipeline/pr-finalize-stage.js";
 import { executeCleanupStage } from "./cli-workflow/pipeline/cleanup-stage.js";
+import type { ActiveDispatchRegistry } from "./active-dispatch-registry.js";
 
 interface CliWorkflowServiceDependencies {
   sessionTracking: SessionTrackingRepository;
   executionRepository?: ExecutionRepository;
+  activeDispatchRegistry?: ActiveDispatchRegistry;
   getDashboardSettings: () => DashboardSettings;
   getGuideContent: (guideName: string, repoPath?: string) => Promise<string>;
   getGithubToken: () => string | undefined;
@@ -43,6 +45,7 @@ interface StartCliTaskInput {
   repoPath: string;
   featureBranch: string;
   sprintNumber: number;
+  dispatchId?: string;
   taskRunId?: string;
 }
 
@@ -121,12 +124,14 @@ export class CliWorkflowService {
 
   private async runTaskWorkflow(args: StartCliTaskInput & {
     sessionId: string;
+    dispatchId?: string;
     taskRunId?: string;
     workerBranch: string;
     title: string;
     resumeFromFailedSessionId?: string;
     resumeWorktreePath?: string;
   }): Promise<void> {
+    const abortController = new AbortController();
     const workspaceSessionId = args.resumeFromFailedSessionId || args.sessionId;
     const settings = this.deps.getDashboardSettings();
     const workflowSettings = this.resolveWorkflowSettings(settings);
@@ -138,14 +143,34 @@ export class CliWorkflowService {
       settings,
       workflowSettings,
       worktreePath,
+      abortSignal: abortController.signal,
       initialHead: "",
       workflowSucceeded: false,
       workspaceManager: this.workspaceManager,
       prService: this.prService,
       providerRunner: this.providerRunner,
       deps: this.deps,
-      runCommand: this.runCommand.bind(this)
+      runCommand: (command, commandArgs, cwd, env = process.env) =>
+        this.runCommand(command, commandArgs, cwd, env, abortController.signal),
     };
+    const unregisterDispatch = args.dispatchId
+      ? this.deps.activeDispatchRegistry?.register({
+        dispatchId: args.dispatchId,
+        taskRunId: args.taskRunId,
+        sessionId: args.sessionId,
+        executorType: "docker_cli",
+        requestStop: async (reason: string) => {
+          if (!abortController.signal.aborted) {
+            this.deps.sessionTracking.appendActivity(args.sessionId, {
+              originator: "system",
+              description: `Dashboard requested workflow cancellation: ${reason}`,
+            });
+            abortController.abort(reason);
+          }
+          return { accepted: true };
+        },
+      })
+      : undefined;
 
     try {
       this.appendExecutionEvent(args, "cli_prepare_started", {
@@ -218,33 +243,63 @@ export class CliWorkflowService {
 
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
-      this.deps.sessionTracking.appendActivity(args.sessionId, {
-        originator: "system",
-        description: `Workflow failed: ${message}`,
-      });
       const finishedAt = new Date().toISOString();
-      this.updateExecutionState(args, {
-        state: "FAILED",
-        finishedAt,
-        dispatchStatus: "failed",
-        errorMessage: message,
-      });
-      this.appendExecutionEvent(args, "cli_workflow_failed", {
-        provider: args.provider,
-        errorMessage: message,
-      });
-      this.deps.logger?.error("CLI workflow failed", {
-        sessionId: args.sessionId,
-        provider: args.provider,
-        message,
-      });
+      if (abortController.signal.aborted || message.toLowerCase().includes("aborted")) {
+        this.deps.sessionTracking.updateSession(args.sessionId, { state: "CANCELLED" });
+        this.deps.sessionTracking.appendActivity(args.sessionId, {
+          originator: "system",
+          description: "Workflow cancelled by dashboard control.",
+        });
+        this.updateExecutionState(args, {
+          state: "FAILED",
+          finishedAt,
+          dispatchStatus: "cancelled",
+          errorMessage: "Workflow cancelled by dashboard control.",
+        });
+        this.appendExecutionEvent(args, "cli_workflow_cancel_requested", {
+          provider: args.provider,
+          sessionId: args.sessionId,
+        }, `cli:cancel-requested:${args.sessionId}`);
+        this.appendExecutionEvent(args, "cli_workflow_cancelled", {
+          provider: args.provider,
+          reason: abortController.signal.reason || "dashboard_cancel",
+        }, `cli:cancelled:${args.sessionId}`);
+      } else {
+        this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
+        this.deps.sessionTracking.appendActivity(args.sessionId, {
+          originator: "system",
+          description: `Workflow failed: ${message}`,
+        });
+        this.updateExecutionState(args, {
+          state: "FAILED",
+          finishedAt,
+          dispatchStatus: "failed",
+          errorMessage: message,
+        });
+        this.appendExecutionEvent(args, "cli_workflow_failed", {
+          provider: args.provider,
+          errorMessage: message,
+        });
+        this.deps.logger?.error("CLI workflow failed", {
+          sessionId: args.sessionId,
+          provider: args.provider,
+          message,
+        });
+      }
     } finally {
-      const cleanupResult = await executeCleanupStage(ctx);
-      this.appendExecutionEvent(args, cleanupResult.cleanedUp ? "cli_worktree_cleaned" : "cli_worktree_preserved", {
-        provider: args.provider,
-        worktreePath: ctx.worktreePath,
-      }, `cli:cleanup:${cleanupResult.cleanedUp ? "cleaned" : "preserved"}:${ctx.worktreePath}`);
+      try {
+        const cleanupResult = await executeCleanupStage(ctx);
+        this.appendExecutionEvent(args, cleanupResult.cleanedUp ? "cli_worktree_cleaned" : "cli_worktree_preserved", {
+          provider: args.provider,
+          worktreePath: ctx.worktreePath,
+        }, `cli:cleanup:${cleanupResult.cleanedUp ? "cleaned" : "preserved"}:${ctx.worktreePath}`);
+      } finally {
+        unregisterDispatch?.();
+        const taskRun = this.resolveTaskRun(args);
+        if (taskRun?.sprintRunId) {
+          this.deps.executionRepository?.finalizeSprintRunCancellationIfIdle(taskRun.sprintRunId);
+        }
+      }
     }
   }
 
@@ -254,8 +309,14 @@ export class CliWorkflowService {
     return merged;
   }
 
-  private async runCommand(command: string, args: string[], cwd: string, env: NodeJS.ProcessEnv = process.env): Promise<CommandResult> {
-    return await runCommandStrict(command, args, cwd, env);
+  private async runCommand(
+    command: string,
+    args: string[],
+    cwd: string,
+    env: NodeJS.ProcessEnv = process.env,
+    signal?: AbortSignal,
+  ): Promise<CommandResult> {
+    return await runCommandStrict(command, args, cwd, env, { signal });
   }
 
   private appendExecutionEvent(

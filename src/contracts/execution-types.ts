@@ -1,9 +1,9 @@
-export type SprintRunStatus = "queued" | "running" | "paused" | "completed" | "failed" | "cancelled";
+export type SprintRunStatus = "queued" | "running" | "paused" | "cancel_requested" | "completed" | "failed" | "cancelled";
 export type SprintRunTriggerType = "manual" | "dashboard" | "mcp" | "system";
 export type SprintRunExecutorMode = "mixed" | "docker_cli" | "jules" | "mcp_worker";
 
 export type TaskDispatchExecutorType = "docker_cli" | "jules" | "mcp_worker";
-export type TaskDispatchStatus = "queued" | "claimed" | "running" | "completed" | "failed" | "cancelled" | "blocked";
+export type TaskDispatchStatus = "queued" | "claimed" | "running" | "cancel_requested" | "completed" | "failed" | "cancelled" | "blocked";
 export type TaskRunState = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED";
 
 export type ExecutionLeaseScopeType = "project" | "sprint" | "sprint_run" | "task_dispatch";

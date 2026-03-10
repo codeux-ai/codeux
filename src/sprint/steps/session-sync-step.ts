@@ -34,6 +34,16 @@ const mapTaskRunStateToDispatchStatus = (state: TaskRunState): TaskDispatchStatu
   }
 };
 
+const mergeDispatchStatus = (
+  currentStatus: TaskDispatchStatus | null,
+  nextRunState: TaskRunState,
+): TaskDispatchStatus => {
+  if (currentStatus === "cancel_requested" && nextRunState === "RUNNING") {
+    return "cancel_requested";
+  }
+  return mapTaskRunStateToDispatchStatus(nextRunState);
+};
+
 const getActivityPreview = (activity: JulesActivity): string => {
   if (typeof activity.agentMessaged?.agentMessage === "string" && activity.agentMessaged.agentMessage.trim()) {
     return activity.agentMessaged.agentMessage.trim();
@@ -124,8 +134,9 @@ const syncExecutionRunState = (
   });
 
   if (taskRun.dispatchId) {
+    const currentDispatch = deps.executionRepository.getTaskDispatch(taskRun.dispatchId);
     deps.executionRepository.updateTaskDispatch(taskRun.dispatchId, {
-      status: mapTaskRunStateToDispatchStatus(nextRunState),
+      status: mergeDispatchStatus(currentDispatch?.status || null, nextRunState),
       startedAt: taskRun.startedAt || now,
       finishedAt: nextRunState === "RUNNING" ? null : now,
       lastHeartbeatAt: now,
@@ -135,6 +146,9 @@ const syncExecutionRunState = (
           ? `Provider session requires attention: ${session.state || "ACTION_REQUIRED"}`
           : null,
     });
+    if (nextRunState !== "RUNNING" && taskRun.sprintRunId) {
+      deps.executionRepository.finalizeSprintRunCancellationIfIdle(taskRun.sprintRunId);
+    }
   }
 
   const sessionSyncKey = [

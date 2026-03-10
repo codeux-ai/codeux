@@ -5,6 +5,8 @@ import type { ProjectRuntimeRepository } from "../repositories/project-runtime-r
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { TaskRerunService } from "./task-rerun-service.js";
 import type { SprintOrchestrator } from "../sprint/sprint-orchestrator.js";
+import type { JulesApiClient } from "../integrations/jules-api-client.js";
+import type { ActiveDispatchRegistry } from "./active-dispatch-registry.js";
 import type { Logger } from "../shared/logging/logger.js";
 
 interface ExecutionControlServiceDeps {
@@ -13,6 +15,8 @@ interface ExecutionControlServiceDeps {
   executionRepository: ExecutionRepository;
   taskRerunService: TaskRerunService;
   sprintOrchestrator: SprintOrchestrator;
+  julesApi: JulesApiClient;
+  activeDispatchRegistry: ActiveDispatchRegistry;
   logger?: Logger;
 }
 
@@ -47,7 +51,7 @@ export class ExecutionControlService {
 
   pauseSprintRun(sprintRunId: string): SprintRunRecord {
     const sprintRun = this.requireSprintRun(sprintRunId);
-    if (sprintRun.status === "completed" || sprintRun.status === "failed" || sprintRun.status === "cancelled") {
+    if (sprintRun.status === "completed" || sprintRun.status === "failed" || sprintRun.status === "cancelled" || sprintRun.status === "cancel_requested") {
       throw new Error(`Sprint run ${sprintRunId} is already terminal.`);
     }
     const now = new Date().toISOString();
@@ -68,11 +72,13 @@ export class ExecutionControlService {
     if (sprintRun.status === "completed" || sprintRun.status === "failed" || sprintRun.status === "cancelled") {
       throw new Error(`Sprint run ${sprintRunId} is already terminal.`);
     }
+    if (sprintRun.status === "cancel_requested") {
+      return sprintRun;
+    }
 
     const now = new Date().toISOString();
     const updated = this.deps.executionRepository.updateSprintRun(sprintRunId, {
-      status: "cancelled",
-      finishedAt: now,
+      status: "cancel_requested",
       lastHeartbeatAt: now,
     });
     this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_cancel_requested", "user", {
@@ -87,20 +93,28 @@ export class ExecutionControlService {
     })) {
       if (dispatch.status === "queued" || dispatch.status === "claimed") {
         this.cancelDispatchInternal(dispatch, now, "Sprint run was cancelled from the dashboard.");
+        continue;
+      }
+      if (dispatch.status === "running") {
+        void this.requestRunningDispatchStop(dispatch, "Sprint run was cancelled from the dashboard.");
       }
     }
 
-    return updated;
+    return this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(sprintRunId) || updated;
   }
 
-  cancelTaskDispatch(dispatchId: string): TaskDispatchRecord {
+  async cancelTaskDispatch(dispatchId: string): Promise<TaskDispatchRecord> {
     const dispatch = this.requireTaskDispatch(dispatchId);
-    if (dispatch.status !== "queued" && dispatch.status !== "claimed") {
-      throw new Error(`Only queued or claimed dispatches can be cancelled. Current status: ${dispatch.status}`);
+    if (dispatch.status === "queued" || dispatch.status === "claimed") {
+      const now = new Date().toISOString();
+      return this.cancelDispatchInternal(dispatch, now, "Dispatch was cancelled from the dashboard.");
     }
 
-    const now = new Date().toISOString();
-    return this.cancelDispatchInternal(dispatch, now, "Dispatch was cancelled from the dashboard.");
+    if (dispatch.status !== "running") {
+      throw new Error(`Only queued, claimed, or running dispatches can be cancelled. Current status: ${dispatch.status}`);
+    }
+
+    return await this.requestRunningDispatchStop(dispatch, "Dispatch was cancelled from the dashboard.");
   }
 
   async retryTaskDispatch(dispatchId: string): Promise<Subtask> {
@@ -159,6 +173,61 @@ export class ExecutionControlService {
       intervention_hint: message,
     });
     return updated;
+  }
+
+  private async requestRunningDispatchStop(dispatch: TaskDispatchRecord, message: string): Promise<TaskDispatchRecord> {
+    const now = new Date().toISOString();
+    const taskRun = this.requireTaskRunForDispatch(dispatch.id);
+    const updated = this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+      status: "cancel_requested",
+      lastHeartbeatAt: now,
+      errorMessage: message,
+    });
+    if (taskRun) {
+      this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "dispatch_cancel_requested", "user", {
+        dispatchId: dispatch.id,
+        requestedBy: "dashboard",
+        reason: message,
+      }, {
+        sourceEventKey: `dashboard-dispatch-cancel-request:${dispatch.id}`,
+      });
+    }
+    this.updateSelectedProjectStatus(dispatch.taskId, {
+      status: "RUNNING",
+      session_state: "CANCEL_REQUESTED",
+      intervention_owner: "HUMAN",
+      intervention_hint: message,
+    });
+
+    if (dispatch.executorType === "docker_cli") {
+      await this.deps.activeDispatchRegistry.requestStop(dispatch.id, message);
+      return this.deps.executionRepository.getTaskDispatch(dispatch.id) || updated;
+    }
+
+    if (dispatch.executorType === "jules" && taskRun?.sessionId) {
+      try {
+        await this.deps.julesApi.sendSessionMessage(
+          taskRun.sessionId,
+          "Stop work immediately. Do not continue implementation. Summarize current state briefly and await further instructions.",
+        );
+        this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "jules_stop_requested", "user", {
+          dispatchId: dispatch.id,
+          sessionId: taskRun.sessionId,
+        }, {
+          sourceEventKey: `dashboard-jules-stop-request:${dispatch.id}`,
+        });
+      } catch (error) {
+        this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "jules_stop_request_failed", "system", {
+          dispatchId: dispatch.id,
+          sessionId: taskRun?.sessionId || null,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        }, {
+          sourceEventKey: `dashboard-jules-stop-request-failed:${dispatch.id}`,
+        });
+      }
+    }
+
+    return this.deps.executionRepository.getTaskDispatch(dispatch.id) || updated;
   }
 
   private updateSelectedProjectStatus(taskId: string, patch: Partial<Subtask>): void {

@@ -30,11 +30,13 @@ export function createSprintDependencies(
     projectRuntimeRepository,
     projectManagementRepository,
     executionRepository,
+    activeDispatchRegistry,
   } = coreDeps;
 
   const cliWorkflowService = new CliWorkflowService({
     sessionTracking,
     executionRepository,
+    activeDispatchRegistry,
     getDashboardSettings: () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
     getGuideContent: (guideName: string, repoPath?: string) => context.getGuideContentIfEnabled(guideName, repoPath),
     getGithubToken: () => context.getEffectiveGithubToken(),

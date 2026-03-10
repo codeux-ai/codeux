@@ -277,7 +277,7 @@ export class ExecutionRepository {
     const row = this.db.prepare(`
       SELECT *
       FROM sprint_runs
-      WHERE project_id = ? AND sprint_id = ? AND status IN ('queued', 'running', 'paused')
+      WHERE project_id = ? AND sprint_id = ? AND status IN ('queued', 'running', 'paused', 'cancel_requested')
       ORDER BY created_at DESC
       LIMIT 1
     `).get(projectId, sprintId) as SprintRunRow | undefined;
@@ -527,7 +527,7 @@ export class ExecutionRepository {
        AND el.scope_id = sr.sprint_id
       WHERE sr.project_id = ?
       ORDER BY
-        CASE sr.status WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'paused' THEN 2 WHEN 'failed' THEN 3 WHEN 'completed' THEN 4 ELSE 5 END,
+        CASE sr.status WHEN 'running' THEN 0 WHEN 'cancel_requested' THEN 1 WHEN 'queued' THEN 2 WHEN 'paused' THEN 3 WHEN 'failed' THEN 4 WHEN 'completed' THEN 5 ELSE 6 END,
         COALESCE(sr.last_heartbeat_at, sr.updated_at, sr.created_at) DESC
       LIMIT 12
     `).all(projectId) as unknown as ExecutionSprintRunSummaryRow[];
@@ -581,7 +581,7 @@ export class ExecutionRepository {
        AND el.scope_id = td.id
       WHERE td.project_id = ?
       ORDER BY
-        CASE td.status WHEN 'running' THEN 0 WHEN 'claimed' THEN 1 WHEN 'queued' THEN 2 WHEN 'blocked' THEN 3 WHEN 'failed' THEN 4 WHEN 'completed' THEN 5 ELSE 6 END,
+        CASE td.status WHEN 'running' THEN 0 WHEN 'cancel_requested' THEN 1 WHEN 'claimed' THEN 2 WHEN 'queued' THEN 3 WHEN 'blocked' THEN 4 WHEN 'failed' THEN 5 WHEN 'completed' THEN 6 ELSE 7 END,
         td.priority DESC,
         COALESCE(td.last_heartbeat_at, td.started_at, td.claimed_at, td.queued_at) DESC
       LIMIT 24
@@ -903,6 +903,36 @@ export class ExecutionRepository {
       WHERE scope_type = ? AND scope_id = ?
     `).get(scopeType, scopeId) as ExecutionLeaseRow | undefined;
     return row ? this.mapExecutionLeaseRow(row) : null;
+  }
+
+  hasActiveTaskDispatches(sprintRunId: string): boolean {
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM task_dispatches
+      WHERE sprint_run_id = ?
+        AND status IN ('queued', 'claimed', 'running', 'cancel_requested')
+    `).get(sprintRunId) as { total: number | string } | undefined;
+    return toNumber(row?.total || 0) > 0;
+  }
+
+  finalizeSprintRunCancellationIfIdle(sprintRunId: string): SprintRunRecord | null {
+    const sprintRun = this.getSprintRun(sprintRunId);
+    if (!sprintRun || sprintRun.status !== "cancel_requested" || this.hasActiveTaskDispatches(sprintRunId)) {
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    const updated = this.updateSprintRun(sprintRunId, {
+      status: "cancelled",
+      finishedAt: now,
+      lastHeartbeatAt: now,
+    });
+    this.appendSprintRunEvent(sprintRunId, "sprint_cancelled", "system", {
+      reason: "cancel_request_completed",
+    }, {
+      sourceEventKey: `sprint-cancelled:${sprintRunId}:cancel-request-completed`,
+    });
+    return updated;
   }
 
   private requireSprintRun(runId: string): SprintRunRecord {

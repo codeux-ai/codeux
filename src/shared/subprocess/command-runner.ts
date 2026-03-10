@@ -11,6 +11,7 @@ export interface CommandOptions {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   timeout?: number;
+  signal?: AbortSignal;
   onStdoutLine?: (line: string) => void;
   onStderrLine?: (line: string) => void;
   maxStderrChars?: number;
@@ -31,6 +32,7 @@ export class CommandRunner {
       cwd,
       env = process.env,
       timeout,
+      signal,
       onStdoutLine,
       onStderrLine,
       maxStderrChars = CommandRunner.DEFAULT_MAX_STDERR_CHARS,
@@ -48,12 +50,25 @@ export class CommandRunner {
       let stdoutBuffer = "";
       let stderrBuffer = "";
       let timedOut = false;
+      let aborted = false;
       let resolved = false;
+      let killTimer: NodeJS.Timeout | null = null;
+
+      const clearKillTimer = () => {
+        if (killTimer) {
+          clearTimeout(killTimer);
+          killTimer = null;
+        }
+      };
 
       const finish = (ok: boolean, code: number | null, extraStderr?: string) => {
         if (resolved) return;
         resolved = true;
         if (timer) clearTimeout(timer);
+        clearKillTimer();
+        if (signal && abortHandler) {
+          signal.removeEventListener("abort", abortHandler);
+        }
 
         let finalStderr = stderr.trim();
         if (extraStderr) {
@@ -76,8 +91,35 @@ export class CommandRunner {
         ? setTimeout(() => {
             timedOut = true;
             child.kill("SIGTERM");
+            killTimer = setTimeout(() => {
+              if (!resolved) {
+                child.kill("SIGKILL");
+              }
+            }, 2_000);
           }, timeout)
         : null;
+
+      const abortHandler = signal
+        ? () => {
+            if (resolved || timedOut || aborted) {
+              return;
+            }
+            aborted = true;
+            child.kill("SIGTERM");
+            killTimer = setTimeout(() => {
+              if (!resolved) {
+                child.kill("SIGKILL");
+              }
+            }, 2_000);
+          }
+        : null;
+
+      if (signal?.aborted) {
+        aborted = true;
+        child.kill("SIGTERM");
+      } else if (signal && abortHandler) {
+        signal.addEventListener("abort", abortHandler, { once: true });
+      }
 
       const handleData = (data: Buffer, isStderr: boolean, callback?: (line: string) => void) => {
         const text = data.toString();
@@ -126,8 +168,12 @@ export class CommandRunner {
           onStderrLine(stderrBuffer.trim());
         }
 
-        const ok = code === 0 && !timedOut;
-        const extra = timedOut ? `Command timed out after ${timeout}ms` : undefined;
+        const ok = code === 0 && !timedOut && !aborted;
+        const extra = timedOut
+          ? `Command timed out after ${timeout}ms`
+          : aborted
+            ? "Command aborted"
+            : undefined;
         finish(ok, code, extra);
       });
     });

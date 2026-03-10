@@ -32,6 +32,18 @@ describe("CommandRunner", () => {
     expect(result.stderr).toContain("timed out");
   });
 
+  it("should abort a running command when the signal is cancelled", async () => {
+    const controller = new AbortController();
+    const runPromise = runner.run("node", ["-e", "setTimeout(() => {}, 10_000)"], {
+      signal: controller.signal,
+    });
+    setTimeout(() => controller.abort("test abort"), 50);
+
+    const result = await runPromise;
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toContain("aborted");
+  });
+
   it("should call streaming callbacks", async () => {
     const stdoutLines: string[] = [];
     await runner.run("echo", ["line1\nline2"], {

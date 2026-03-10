@@ -106,6 +106,7 @@ export class SprintTaskDispatchService {
         args.featureBranch,
         args.repoPath,
         args.sprintNumber,
+        dispatch.id,
         taskRun.id,
       );
       const sessionName = session.name || null;

@@ -127,8 +127,11 @@ describe("WorkerTaskDispatchService", () => {
     });
 
     expect(completed).toMatchObject({
-      id: dispatch.id,
-      status: "completed",
+      controlAction: null,
+      dispatch: {
+        id: dispatch.id,
+        status: "completed",
+      },
     });
 
     const updatedTask = projectRepository.getTask(task.id);

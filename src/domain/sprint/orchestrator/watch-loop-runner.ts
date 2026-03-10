@@ -98,6 +98,10 @@ export class WatchLoopRunner {
         fullReport += "\n⏸️ **Sprint Paused:** Dashboard control paused this sprint run.\n";
         return fullReport;
       }
+      if (controlledRun?.status === "cancel_requested") {
+        fullReport += "\n🛑 **Sprint Cancellation Requested:** Dashboard control requested cancellation for this sprint run.\n";
+        return fullReport;
+      }
       if (controlledRun?.status === "cancelled") {
         fullReport += "\n🛑 **Sprint Cancelled:** Dashboard control cancelled this sprint run.\n";
         return fullReport;
@@ -313,7 +317,7 @@ export class WatchLoopRunner {
         case WatchLoopState.RUNNING: {
           const now = new Date().toISOString();
           const latestRun = this.deps.executionRepository.getSprintRun(sprintRunId);
-          if (latestRun?.status === "paused" || latestRun?.status === "cancelled") {
+          if (latestRun?.status === "paused" || latestRun?.status === "cancelled" || latestRun?.status === "cancel_requested") {
             continue;
           }
           this.deps.executionRepository.updateSprintRun(sprintRunId, {

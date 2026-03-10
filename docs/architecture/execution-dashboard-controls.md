@@ -11,7 +11,7 @@ Shipped controls:
 - start or resume sprint orchestration for a sprint
 - pause an active sprint run
 - cancel an active sprint run
-- cancel queued or claimed task dispatches
+- cancel queued, claimed, or running task dispatches
 - retry terminal task dispatches through the existing task rerun path
 
 These actions operate on `sprint_runs`, `task_dispatches`, `task_runs`, and runtime events.
@@ -48,15 +48,26 @@ The watch loop now checks the stored sprint-run status on each iteration and exi
 
 ### Cancel Sprint Run
 
-Cancelling updates the `sprint_run` status to `cancelled` and writes a `sprint_cancel_requested` event.
+Cancelling is now request-based for active work.
 
-Queued and claimed dispatches under that run are cancelled immediately.
+The dashboard:
+
+- updates the `sprint_run` to `cancel_requested`
+- writes a `sprint_cancel_requested` event
+- cancels queued and claimed dispatches immediately
+- requests stop for any active running dispatches
+
+The watch loop exits as soon as it observes `cancel_requested`, so Sprint OS stops scheduling new work while active executors wind down.
+
+Once no active dispatches remain, Sprint OS finalizes the run to `cancelled` and writes `sprint_cancelled`.
 
 ## Dispatch Controls
 
 ### Cancel Dispatch
 
-Dispatch cancel is currently limited to `queued` and `claimed` dispatches.
+Dispatch cancel now has two paths.
+
+For `queued` and `claimed` dispatches:
 
 When cancelled:
 
@@ -65,23 +76,34 @@ When cancelled:
 - a `dispatch_cancelled` runtime event is written
 - selected-project dashboard status is updated so the task card reflects the cancellation
 
+For `running` dispatches:
+
+- the dispatch becomes `cancel_requested`
+- a `dispatch_cancel_requested` runtime event is written
+- the executor is asked to stop cooperatively
+
+Executor-specific behavior:
+
+- `docker_cli`: active local process receives an abort signal and transitions to `cancelled` when shutdown completes
+- `mcp_worker`: the next `update_task_dispatch` heartbeat returns `controlAction = "cancel"` so the worker can stop and report back through the same dispatch contract
+- `jules`: Sprint OS sends an in-session stop message with `send_session_message`, but this remains best-effort because the Jules API still has no hard cancel endpoint
+
 ### Retry Dispatch
 
 Retry is currently limited to terminal dispatches.
 
 Retry uses the existing task rerun flow instead of inventing a dispatch-only executor path. That keeps retry semantics aligned with normal task restarts.
 
-## Current Limitation
+## Remaining Limitation
 
-Sprint OS still does not have a safe force-stop path for already running provider work:
+Sprint OS now has cooperative stop behavior for local CLI work and connected workers, but Jules remains soft-stop only:
 
-- active Docker/CLI executions are not force-killed by dashboard cancel
-- active Jules sessions are not terminated by dashboard cancel
-- running worker executions are not revoked mid-flight
+- active Docker/CLI executions are aborted through the local process runner, not a kernel-level descendant tree manager
+- active Jules sessions still cannot be terminated through an official REST cancel API
+- worker cancellation depends on the worker honoring the returned `controlAction = "cancel"` contract
 
-For that reason, dashboard cancel is conservative:
+That limitation is explicit in the runtime model:
 
-- sprint cancel stops orchestration ownership and cancels not-yet-started dispatches
-- dispatch cancel is only allowed before the work is truly running
-
-This is intentional until executor-specific kill semantics are designed and tested.
+- Sprint OS records `cancel_requested` separately from final `cancelled`
+- live runtime panels show stop-pending state while work is still shutting down
+- terminal outcomes are only written once the executor path actually reports back or exits

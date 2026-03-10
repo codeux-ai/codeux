@@ -36,6 +36,7 @@ export interface IProviderRunner {
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
     githubToken?: string;
+    signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
   }): Promise<CommandResult>;
 }
@@ -53,9 +54,10 @@ export class ProviderRunner implements IProviderRunner {
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
     githubToken?: string;
+    signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
   }): Promise<CommandResult> {
-    const { provider, prompt, cwd, model, apiKey, sessionId, workflowSettings, repoPath, githubToken, onActivity } = input;
+    const { provider, prompt, cwd, model, apiKey, sessionId, workflowSettings, repoPath, githubToken, signal, onActivity } = input;
     const providerEnv = this.withProviderEnv(provider, model, apiKey, githubToken);
 
     const spec = providerSpecs[provider](model, prompt);
@@ -65,7 +67,7 @@ export class ProviderRunner implements IProviderRunner {
       if (workflowSettings.executionMode === "DOCKER") {
         const result = await this.dockerRunner.runProviderInDocker({
           command, args, cwd, providerEnv, sessionId,
-          providerLabel: provider, workflowSettings, repoPath, onActivity
+          providerLabel: provider, workflowSettings, repoPath, signal, onActivity
         });
         if (!result.ok && isDockerWorkspaceMountError(result)) {
           try { await fs.access(cwd); onActivity(`Docker could not mount workspace path (${cwd}) even though it exists locally. Path visibility mismatch.`); } catch { /* ignore */ }
@@ -73,6 +75,7 @@ export class ProviderRunner implements IProviderRunner {
         return result;
       }
       return await runStreamingCommand(command, args, cwd, providerEnv, {
+        signal,
         onStdoutLine: (line) => onActivity(line, "agent"),
         onStderrLine: (line) => onActivity(`[${provider}] ${line}`, "provider"),
       });

@@ -14,6 +14,7 @@ import { ExecutionRepository } from "../../repositories/execution-repository.js"
 import { ActivitySummaryService } from "../../domain/sessions/activity-summary.js";
 import { JulesSourceResolver } from "../../services/jules-source-resolver.js";
 import { SprintMarkdownService } from "../../services/sprint-markdown-service.js";
+import { ActiveDispatchRegistry } from "../../services/active-dispatch-registry.js";
 import { DashboardSettings, ExternalSettingsHints } from "../../contracts/app-types.js";
 import { loadExternalSettingsHints } from "../../config/external-settings.js";
 import { createLogger, type Logger } from "../../shared/logging/logger.js";
@@ -37,6 +38,7 @@ export interface CoreDependencies {
   connectionChatRepository: ConnectionChatRepository;
   executionRepository: ExecutionRepository;
   sprintMarkdownService: SprintMarkdownService;
+  activeDispatchRegistry: ActiveDispatchRegistry;
   externalSettingsHints: ExternalSettingsHints;
   dashboardSettings: DashboardSettings;
 }
@@ -88,6 +90,7 @@ export function createCoreDependencies(
   const connectionChatRepository = new ConnectionChatRepository(appDbStorage);
   const executionRepository = new ExecutionRepository(appDbStorage);
   const sprintMarkdownService = new SprintMarkdownService(projectManagementRepository);
+  const activeDispatchRegistry = new ActiveDispatchRegistry();
   const julesSourceResolver = new JulesSourceResolver(julesApi);
   const activitySummary = new ActivitySummaryService();
 
@@ -108,6 +111,7 @@ export function createCoreDependencies(
     connectionChatRepository,
     executionRepository,
     sprintMarkdownService,
+    activeDispatchRegistry,
     externalSettingsHints,
     dashboardSettings,
   };

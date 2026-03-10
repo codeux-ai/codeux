@@ -119,6 +119,7 @@ export class TaskService {
     baseBranch: string,
     repoPath: string,
     sprintNumber: number,
+    dispatchId?: string,
     taskRunId?: string,
   ): Promise<JulesSession> {
     const provider = this.selectProviderForTask(task);
@@ -130,6 +131,7 @@ export class TaskService {
         repoPath,
         featureBranch: baseBranch,
         sprintNumber,
+        dispatchId,
         taskRunId,
       });
       session.provider = provider;

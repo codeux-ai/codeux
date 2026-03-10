@@ -198,6 +198,20 @@ const getExecutionEventText = (event: ExecutionRuntimeEventSummary): string => {
             return "Dashboard requested a sprint pause";
         case "sprint_cancel_requested":
             return "Dashboard requested sprint cancellation";
+        case "dispatch_cancel_requested":
+            return String(payload.reason || "Dashboard requested dispatch cancellation");
+        case "cli_workflow_cancel_requested":
+            return "CLI workflow received a cancellation request";
+        case "cli_workflow_cancelled":
+            return "CLI workflow stopped due to dashboard cancellation";
+        case "jules_stop_requested":
+            return "Sent a stop request to the Jules session";
+        case "jules_stop_request_failed":
+            return String(payload.errorMessage || "Could not send stop request to Jules");
+        case "worker_cancel_pending":
+            return "Worker acknowledged cancellation request and is stopping";
+        case "worker_cancelled":
+            return "Worker dispatch cancelled";
         case "dispatch_cancelled":
             return String(payload.reason || "Dispatch cancelled from dashboard");
         case "dispatch_retry_requested":
@@ -471,8 +485,9 @@ const statusTone = (value: string | null): string => {
     if (!value) return "text-slate-400";
     const n = value.toUpperCase();
     if (n === "SUCCESS" || n === "COMPLETED" || n === "MERGED") return "text-status-green";
+    if (n === "CANCEL_REQUESTED") return "text-status-amber";
     if (n === "IN_PROGRESS" || n === "QUEUED" || n === "PENDING") return "text-status-amber";
-    if (n === "FAILURE" || n === "FAILED" || n === "ERROR") return "text-status-red";
+    if (n === "FAILURE" || n === "FAILED" || n === "ERROR" || n === "CANCELLED") return "text-status-red";
     return "text-slate-400";
 };
 
@@ -500,9 +515,9 @@ const ExecutionRuntimePanel: FunctionComponent<{
     onRetryTaskDispatch,
     pendingActionIds,
 }) => {
-    const activeSprintRuns = snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued" || run.status === "paused");
+    const activeSprintRuns = snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued" || run.status === "paused" || run.status === "cancel_requested");
     const activeDispatches = snapshot.taskDispatches.filter((dispatch) => (
-        dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running" || dispatch.status === "blocked"
+        dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running" || dispatch.status === "cancel_requested" || dispatch.status === "blocked"
     ));
     const workerDispatches = activeDispatches.filter((dispatch) => dispatch.executorType === "mcp_worker");
     const queuedWorkers = workerDispatches.filter((dispatch) => dispatch.status === "queued").length;
@@ -601,6 +616,12 @@ const ExecutionRuntimePanel: FunctionComponent<{
                                                 {pendingActionIds.has(`sprint-cancel:${run.id}`) ? "Cancelling" : "Cancel"}
                                             </button>
                                         )}
+                                        {run.status === "cancel_requested" && (
+                                            <div className="inline-flex items-center gap-1.5 rounded-full border border-status-amber/20 bg-status-amber/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-amber">
+                                                <Clock className="w-3 h-3" strokeWidth={2} />
+                                                Stop Pending
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -656,7 +677,7 @@ const ExecutionRuntimePanel: FunctionComponent<{
                                         </div>
                                     )}
                                     <div className="mt-3 flex flex-wrap gap-2">
-                                        {(dispatch.status === "queued" || dispatch.status === "claimed") && (
+                                        {(dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running") && (
                                             <button
                                                 type="button"
                                                 onClick={() => onCancelTaskDispatch(dispatch.id)}
@@ -666,6 +687,12 @@ const ExecutionRuntimePanel: FunctionComponent<{
                                                 <XCircle className="w-3 h-3" strokeWidth={2} />
                                                 {pendingActionIds.has(`dispatch-cancel:${dispatch.id}`) ? "Cancelling" : "Cancel"}
                                             </button>
+                                        )}
+                                        {dispatch.status === "cancel_requested" && (
+                                            <div className="inline-flex items-center gap-1.5 rounded-full border border-status-amber/20 bg-status-amber/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-amber">
+                                                <Clock className="w-3 h-3" strokeWidth={2} />
+                                                Stop Pending
+                                            </div>
                                         )}
                                         {(dispatch.status === "failed" || dispatch.status === "blocked" || dispatch.status === "cancelled") && (
                                             <button

@@ -28,6 +28,11 @@ export interface UpdateWorkerTaskDispatchArgs {
   errorMessage?: string;
 }
 
+export interface UpdateWorkerTaskDispatchResult {
+  dispatch: WorkerTaskDispatchClaim["dispatch"];
+  controlAction: "cancel" | null;
+}
+
 export class WorkerTaskDispatchService {
   constructor(
     private readonly executionRepository: ExecutionRepository,
@@ -144,7 +149,7 @@ export class WorkerTaskDispatchService {
     return null;
   }
 
-  updateDispatch(args: UpdateWorkerTaskDispatchArgs): WorkerTaskDispatchClaim["dispatch"] {
+  updateDispatch(args: UpdateWorkerTaskDispatchArgs): UpdateWorkerTaskDispatchResult {
     const connection = this.requireWorkerConnection(args.connectionKey);
     const dispatch = this.requireDispatch(args.dispatchId);
     const taskRun = this.requireTaskRun(dispatch.id);
@@ -158,7 +163,10 @@ export class WorkerTaskDispatchService {
     }
 
     const now = new Date().toISOString();
-    const taskUpdateStatus = args.state === "COMPLETED"
+    const cancelRequested = dispatch.status === "cancel_requested";
+    const taskUpdateStatus = cancelRequested
+      ? "pending"
+      : args.state === "COMPLETED"
       ? "completed"
       : args.state === "RUNNING"
         ? "in_progress"
@@ -166,9 +174,9 @@ export class WorkerTaskDispatchService {
 
     const nextDispatch = this.executionRepository.updateTaskDispatch(dispatch.id, {
       connectionId: connection.id,
-      status: this.mapTaskRunStateToDispatchStatus(args.state),
+      status: this.mapTaskRunStateToDispatchStatus(args.state, cancelRequested),
       startedAt: dispatch.startedAt || now,
-      finishedAt: args.state === "RUNNING" ? null : now,
+      finishedAt: args.state === "RUNNING" ? dispatch.finishedAt : now,
       lastHeartbeatAt: now,
       errorMessage: args.errorMessage === undefined ? dispatch.errorMessage : args.errorMessage,
     });
@@ -193,7 +201,7 @@ export class WorkerTaskDispatchService {
       status: taskUpdateStatus,
     });
 
-    this.executionRepository.appendTaskRunEvent(taskRun.id, this.mapTaskRunStateToEventType(args.state), "connection", {
+    this.executionRepository.appendTaskRunEvent(taskRun.id, this.mapTaskRunStateToEventType(args.state, cancelRequested), "connection", {
       dispatchId: dispatch.id,
       connectionId: connection.id,
       connectionKey: connection.connectionKey,
@@ -219,17 +227,26 @@ export class WorkerTaskDispatchService {
         dispatchId: dispatch.id,
         state: args.state,
       });
-      return nextDispatch;
+      return {
+        dispatch: nextDispatch,
+        controlAction: cancelRequested ? "cancel" : null,
+      };
     }
 
     this.executionRepository.releaseLease("task_dispatch", dispatch.id, args.leaseToken);
+    if (nextDispatch.sprintRunId) {
+      this.executionRepository.finalizeSprintRunCancellationIfIdle(nextDispatch.sprintRunId);
+    }
     this.connectionChatRepository.touchConnectionHeartbeat(connection.id, "listening");
     this.logger?.info("Worker finished task dispatch", {
       connectionKey: connection.connectionKey,
       dispatchId: dispatch.id,
       state: args.state,
     });
-    return nextDispatch;
+    return {
+      dispatch: nextDispatch,
+      controlAction: null,
+    };
   }
 
   private requireWorkerConnection(connectionKey: string): McpConnectionRecord {
@@ -308,7 +325,16 @@ export class WorkerTaskDispatchService {
     return taskRun;
   }
 
-  private mapTaskRunStateToDispatchStatus(state: UpdateWorkerTaskDispatchArgs["state"]) {
+  private mapTaskRunStateToDispatchStatus(
+    state: UpdateWorkerTaskDispatchArgs["state"],
+    cancelRequested: boolean,
+  ) {
+    if (cancelRequested) {
+      if (state === "RUNNING") {
+        return "cancel_requested";
+      }
+      return "cancelled";
+    }
     switch (state) {
       case "COMPLETED":
         return "completed";
@@ -322,7 +348,13 @@ export class WorkerTaskDispatchService {
     }
   }
 
-  private mapTaskRunStateToEventType(state: UpdateWorkerTaskDispatchArgs["state"]): string {
+  private mapTaskRunStateToEventType(
+    state: UpdateWorkerTaskDispatchArgs["state"],
+    cancelRequested: boolean,
+  ): string {
+    if (cancelRequested) {
+      return state === "RUNNING" ? "worker_cancel_pending" : "worker_cancelled";
+    }
     switch (state) {
       case "COMPLETED":
         return "worker_completed";
