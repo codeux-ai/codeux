@@ -7,7 +7,8 @@ vi.mock("../../../src/app/lifecycle/dashboard-lifecycle-service.js", () => ({
   bootDashboard: vi.fn().mockResolvedValue(undefined)
 }));
 vi.mock("../../../src/app/lifecycle/mcp-lifecycle-service.js", () => ({
-  bootMcpTransport: vi.fn().mockResolvedValue(undefined)
+  bootMcpTransport: vi.fn().mockResolvedValue(undefined),
+  bootMcpHttpTransport: vi.fn().mockResolvedValue(null)
 }));
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -560,7 +561,7 @@ describe("JulesAgentServer", () => {
     it("should initialize lifecycle services and perform recovery", async () => {
       const { bootSettings } = await import("../../../src/app/lifecycle/settings-lifecycle-service.js");
       const { bootDashboard } = await import("../../../src/app/lifecycle/dashboard-lifecycle-service.js");
-      const { bootMcpTransport } = await import("../../../src/app/lifecycle/mcp-lifecycle-service.js");
+      const { bootMcpTransport, bootMcpHttpTransport } = await import("../../../src/app/lifecycle/mcp-lifecycle-service.js");
 
       (server as any).sessionTracking = {
         recoverInterruptedCliSessions: vi.fn().mockReturnValue({ recoveredCount: 6, sessionIds: ["1", "2", "3", "4", "5", "6"] })
@@ -573,6 +574,7 @@ describe("JulesAgentServer", () => {
       expect(bootSettings).toHaveBeenCalled();
       expect(bootDashboard).toHaveBeenCalled();
       expect(bootMcpTransport).toHaveBeenCalled();
+      expect(bootMcpHttpTransport).toHaveBeenCalled();
       expect(refreshJulesApiKeySpy).toHaveBeenCalled();
       expect((server as any).sessionTracking.recoverInterruptedCliSessions).toHaveBeenCalled();
 
@@ -582,7 +584,7 @@ describe("JulesAgentServer", () => {
     it("should perform recovery with 0 sessions", async () => {
       const { bootSettings } = await import("../../../src/app/lifecycle/settings-lifecycle-service.js");
       const { bootDashboard } = await import("../../../src/app/lifecycle/dashboard-lifecycle-service.js");
-      const { bootMcpTransport } = await import("../../../src/app/lifecycle/mcp-lifecycle-service.js");
+      const { bootMcpTransport, bootMcpHttpTransport } = await import("../../../src/app/lifecycle/mcp-lifecycle-service.js");
 
       (server as any).sessionTracking = {
         recoverInterruptedCliSessions: vi.fn().mockReturnValue({ recoveredCount: 0, sessionIds: [] })
@@ -595,6 +597,7 @@ describe("JulesAgentServer", () => {
       expect(bootSettings).toHaveBeenCalled();
       expect(bootDashboard).toHaveBeenCalled();
       expect(bootMcpTransport).toHaveBeenCalled();
+      expect(bootMcpHttpTransport).toHaveBeenCalled();
       expect(refreshJulesApiKeySpy).toHaveBeenCalled();
       expect((server as any).sessionTracking.recoverInterruptedCliSessions).toHaveBeenCalled();
 
@@ -611,7 +614,7 @@ describe("JulesAgentServer", () => {
     it("should pass callbacks to bootDashboard correctly", async () => {
       const { bootSettings } = await import("../../../src/app/lifecycle/settings-lifecycle-service.js");
       const { bootDashboard } = await import("../../../src/app/lifecycle/dashboard-lifecycle-service.js");
-      const { bootMcpTransport } = await import("../../../src/app/lifecycle/mcp-lifecycle-service.js");
+      const { bootMcpTransport, bootMcpHttpTransport } = await import("../../../src/app/lifecycle/mcp-lifecycle-service.js");
 
       (server as any).sessionTracking = {
         recoverInterruptedCliSessions: vi.fn().mockReturnValue({ recoveredCount: 0, sessionIds: [] })
@@ -645,6 +648,7 @@ describe("JulesAgentServer", () => {
       // expect removed
 
       expect(bootMcpTransport).toHaveBeenCalled();
+      expect(bootMcpHttpTransport).toHaveBeenCalled();
       const bootMcpArgs = (bootMcpTransport as any).mock.calls[0][0];
       expect(bootMcpArgs.isJulesApiConfigured()).toBeDefined();
       expect(bootMcpArgs.getMissingJulesApiKeyInstruction()).toBeDefined();

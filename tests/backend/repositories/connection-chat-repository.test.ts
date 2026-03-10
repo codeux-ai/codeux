@@ -178,7 +178,7 @@ describe("ConnectionChatRepository", () => {
       projectId: project.id,
     });
 
-    const now = new Date("2026-03-10T12:00:00.000Z");
+    const now = new Date();
     storage.getDatabase().prepare(`
       UPDATE mcp_connections
       SET last_heartbeat_at = ?
