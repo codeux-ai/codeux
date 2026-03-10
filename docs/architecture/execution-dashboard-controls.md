@@ -93,7 +93,7 @@ Executor-specific behavior:
 
 - `docker_cli`: active local process receives an abort signal and transitions to `cancelled` when shutdown completes
 - `mcp_worker`: the next `update_task_dispatch` heartbeat returns `controlAction = "cancel"` so the worker can stop and report back through the same dispatch contract
-- `jules`: Sprint OS sends an in-session stop message with `send_session_message`, but this remains best-effort because the Jules API still has no hard cancel endpoint
+- `jules`: Sprint OS sends an in-session close message immediately and then finalizes the dispatch to `cancelled` without waiting for a separate Jules cancel API
 
 ### Retry Dispatch
 
@@ -103,14 +103,14 @@ Retry uses the existing task rerun flow instead of inventing a dispatch-only exe
 
 ## Remaining Limitation
 
-Sprint OS now has cooperative stop behavior for local CLI work and connected workers, but Jules remains soft-stop only:
+Sprint OS now has cooperative stop behavior for local CLI work and connected workers, while Jules uses an immediate close-message path:
 
 - active Docker/CLI executions are aborted through the local process runner, not a kernel-level descendant tree manager
-- active Jules sessions still cannot be terminated through an official REST cancel API
+- active Jules sessions still cannot be terminated through an official REST cancel API, so Sprint OS treats the close message as terminal and reconciles runtime state locally
 - worker cancellation depends on the worker honoring the returned `controlAction = "cancel"` contract
 
 That limitation is explicit in the runtime model:
 
 - Sprint OS records `cancel_requested` separately from final `cancelled`
 - live runtime panels show stop-pending state while work is still shutting down
-- terminal outcomes are only written once the executor path actually reports back or exits
+- terminal outcomes are only written once the executor path actually reports back or exits, except for Jules where Sprint OS finalizes immediately after sending the close message

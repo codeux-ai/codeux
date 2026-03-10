@@ -109,6 +109,39 @@ export class ExecutionControlService {
     return this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(sprintRunId) || updated;
   }
 
+  async forceCancelSprintRun(sprintRunId: string): Promise<SprintRunRecord> {
+    const sprintRun = this.requireSprintRun(sprintRunId);
+    if (sprintRun.status === "completed" || sprintRun.status === "failed" || sprintRun.status === "cancelled") {
+      return sprintRun;
+    }
+
+    const now = new Date().toISOString();
+    for (const dispatch of this.deps.executionRepository.listTaskDispatches({
+      projectId: sprintRun.projectId,
+      sprintRunId,
+    })) {
+      if (!["queued", "claimed", "running", "cancel_requested"].includes(dispatch.status)) {
+        continue;
+      }
+      await this.forceCancelDispatchInternal(dispatch, now, "Sprint run was force-cancelled from the dashboard.");
+    }
+
+    this.deps.executionRepository.releaseLease("sprint", sprintRun.sprintId);
+    const updated = this.deps.executionRepository.updateSprintRun(sprintRunId, {
+      status: "cancelled",
+      finishedAt: now,
+      lastHeartbeatAt: now,
+    });
+    this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_cancelled", "user", {
+      requestedBy: "dashboard",
+      reason: "force_cancelled",
+    }, {
+      sourceEventKey: `dashboard-force-cancel:${sprintRunId}`,
+    });
+
+    return updated;
+  }
+
   async cancelTaskDispatch(dispatchId: string): Promise<TaskDispatchRecord> {
     const dispatch = this.requireTaskDispatch(dispatchId);
     if (dispatch.status === "queued" || dispatch.status === "claimed") {
@@ -121,6 +154,16 @@ export class ExecutionControlService {
     }
 
     return await this.requestRunningDispatchStop(dispatch, "Dispatch was cancelled from the dashboard.");
+  }
+
+  async forceCancelTaskDispatch(dispatchId: string): Promise<TaskDispatchRecord> {
+    const dispatch = this.requireTaskDispatch(dispatchId);
+    if (dispatch.status === "completed" || dispatch.status === "failed" || dispatch.status === "cancelled" || dispatch.status === "blocked") {
+      return dispatch;
+    }
+
+    const now = new Date().toISOString();
+    return await this.forceCancelDispatchInternal(dispatch, now, "Dispatch was force-cancelled from the dashboard.");
   }
 
   async retryTaskDispatch(dispatchId: string): Promise<Subtask> {
@@ -181,6 +224,42 @@ export class ExecutionControlService {
   private async requestRunningDispatchStop(dispatch: TaskDispatchRecord, message: string): Promise<TaskDispatchRecord> {
     const now = new Date().toISOString();
     const taskRun = this.requireTaskRunForDispatch(dispatch.id);
+    if (dispatch.executorType === "jules") {
+      if (taskRun?.sessionId) {
+        try {
+          await this.deps.julesApi.sendSessionMessage(
+            taskRun.sessionId,
+            "Task cancelled, please close this task now. Do not continue implementation.",
+          );
+          this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "jules_stop_requested", "user", {
+            dispatchId: dispatch.id,
+            sessionId: taskRun.sessionId,
+          }, {
+            sourceEventKey: `dashboard-jules-stop-request:${dispatch.id}`,
+          });
+        } catch (error) {
+          this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "jules_stop_request_failed", "system", {
+            dispatchId: dispatch.id,
+            sessionId: taskRun.sessionId,
+            errorMessage: error instanceof Error ? error.message : String(error),
+          }, {
+            sourceEventKey: `dashboard-jules-stop-request-failed:${dispatch.id}`,
+          });
+        }
+      }
+
+      return await this.forceCancelDispatchInternal(
+        dispatch,
+        now,
+        "Jules dispatch was cancelled from the dashboard.",
+        {
+          force: false,
+          skipJulesStop: true,
+          sourceEventKey: `dashboard-dispatch-cancel:${dispatch.id}`,
+        },
+      );
+    }
+
     const updated = this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
       status: "cancel_requested",
       lastHeartbeatAt: now,
@@ -201,30 +280,68 @@ export class ExecutionControlService {
       return this.deps.executionRepository.getTaskDispatch(dispatch.id) || updated;
     }
 
-    if (dispatch.executorType === "jules" && taskRun?.sessionId) {
-      try {
-        await this.deps.julesApi.sendSessionMessage(
-          taskRun.sessionId,
-          "Stop work immediately. Do not continue implementation. Summarize current state briefly and await further instructions.",
-        );
-        this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "jules_stop_requested", "user", {
-          dispatchId: dispatch.id,
-          sessionId: taskRun.sessionId,
-        }, {
-          sourceEventKey: `dashboard-jules-stop-request:${dispatch.id}`,
-        });
-      } catch (error) {
-        this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "jules_stop_request_failed", "system", {
-          dispatchId: dispatch.id,
-          sessionId: taskRun?.sessionId || null,
-          errorMessage: error instanceof Error ? error.message : String(error),
-        }, {
-          sourceEventKey: `dashboard-jules-stop-request-failed:${dispatch.id}`,
-        });
-      }
+    return this.deps.executionRepository.getTaskDispatch(dispatch.id) || updated;
+  }
+
+  private async forceCancelDispatchInternal(
+    dispatch: TaskDispatchRecord,
+    now: string,
+    message: string,
+    options: {
+      force?: boolean;
+      skipJulesStop?: boolean;
+      sourceEventKey?: string;
+    } = {},
+  ): Promise<TaskDispatchRecord> {
+    const taskRun = this.requireTaskRunForDispatch(dispatch.id);
+    const force = options.force ?? true;
+
+    if (dispatch.executorType === "docker_cli") {
+      await this.deps.activeDispatchRegistry.requestStop(dispatch.id, message).catch(() => undefined);
     }
 
-    return this.deps.executionRepository.getTaskDispatch(dispatch.id) || updated;
+    if (dispatch.executorType === "jules" && taskRun?.sessionId && !options.skipJulesStop) {
+      await this.deps.julesApi.sendSessionMessage(
+        taskRun.sessionId,
+        "Task cancelled. Please close this task now.",
+      ).catch(() => undefined);
+    }
+
+    this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
+    const updated = this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+      connectionId: null,
+      status: "cancelled",
+      finishedAt: now,
+      lastHeartbeatAt: now,
+      errorMessage: message,
+    });
+
+    if (taskRun) {
+      this.deps.executionRepository.updateTaskRun(taskRun.id, {
+        connectionId: null,
+        state: "BLOCKED",
+        finishedAt: now,
+        durationMs: this.calculateDurationMs(taskRun, now),
+      });
+      this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "dispatch_cancelled", "user", {
+        dispatchId: dispatch.id,
+        requestedBy: "dashboard",
+        reason: message,
+        force,
+      }, {
+        sourceEventKey: options.sourceEventKey || `dashboard-force-dispatch-cancel:${dispatch.id}`,
+      });
+    }
+
+    this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
+      status: "pending",
+    });
+
+    if (dispatch.sprintRunId) {
+      this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(dispatch.sprintRunId);
+    }
+
+    return updated;
   }
 
   private ensureSyntheticTaskRun(dispatch: TaskDispatchRecord): string {

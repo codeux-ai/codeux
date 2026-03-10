@@ -80,8 +80,20 @@ export const cancelSprintRun = async (sprintRunId: string): Promise<void> => {
   });
 };
 
+export const forceCancelSprintRun = async (sprintRunId: string): Promise<void> => {
+  await fetchJson(`/api/sprint-runs/${encodeURIComponent(sprintRunId)}/force-cancel`, {
+    method: "POST",
+  });
+};
+
 export const cancelTaskDispatch = async (dispatchId: string): Promise<void> => {
   await fetchJson(`/api/task-dispatches/${encodeURIComponent(dispatchId)}/cancel`, {
+    method: "POST",
+  });
+};
+
+export const forceCancelTaskDispatch = async (dispatchId: string): Promise<void> => {
+  await fetchJson(`/api/task-dispatches/${encodeURIComponent(dispatchId)}/force-cancel`, {
     method: "POST",
   });
 };

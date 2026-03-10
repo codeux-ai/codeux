@@ -86,7 +86,9 @@ export interface DashboardServerOptions {
   orchestrateSprint: (projectId: string, sprintId: string) => Promise<unknown>;
   pauseSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
   cancelSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
+  forceCancelSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
   cancelTaskDispatch: (dispatchId: string) => Promise<unknown> | unknown;
+  forceCancelTaskDispatch: (dispatchId: string) => Promise<unknown> | unknown;
   retryTaskDispatch: (dispatchId: string) => Promise<unknown>;
   logger?: Logger;
   isReady?: () => ReadinessProbeStatus;
@@ -145,7 +147,9 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     orchestrateSprint,
     pauseSprintRun,
     cancelSprintRun,
+    forceCancelSprintRun,
     cancelTaskDispatch,
+    forceCancelTaskDispatch,
     retryTaskDispatch,
     logger,
     isReady,
@@ -516,11 +520,27 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     }
   });
 
+  app.post("/api/sprint-runs/:sprintRunId/force-cancel", async (req, res) => {
+    try {
+      res.json(await forceCancelSprintRun(String(req.params.sprintRunId || "").trim()));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to force-cancel sprint run") });
+    }
+  });
+
   app.post("/api/task-dispatches/:dispatchId/cancel", async (req, res) => {
     try {
       res.json(await cancelTaskDispatch(String(req.params.dispatchId || "").trim()));
     } catch (error) {
       res.status(400).json({ error: toErrorMessage(error, "Failed to cancel task dispatch") });
+    }
+  });
+
+  app.post("/api/task-dispatches/:dispatchId/force-cancel", async (req, res) => {
+    try {
+      res.json(await forceCancelTaskDispatch(String(req.params.dispatchId || "").trim()));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to force-cancel task dispatch") });
     }
   });
 

@@ -13,6 +13,8 @@ import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js"
 import {
     cancelSprintRun,
     cancelTaskDispatch,
+    forceCancelSprintRun,
+    forceCancelTaskDispatch,
     orchestrateSprint,
     pauseSprintRun,
     rerunTask,
@@ -645,7 +647,9 @@ const ExecutionRuntimePanel: FunctionComponent<{
     onOrchestrateSprint: (projectId: string, sprintId: string) => void;
     onPauseSprintRun: (sprintRunId: string) => void;
     onCancelSprintRun: (sprintRunId: string) => void;
+    onForceCancelSprintRun: (sprintRunId: string) => void;
     onCancelTaskDispatch: (dispatchId: string) => void;
+    onForceCancelTaskDispatch: (dispatchId: string) => void;
     onRetryTaskDispatch: (dispatchId: string) => void;
     pendingActionIds: Set<string>;
 }> = ({
@@ -653,7 +657,9 @@ const ExecutionRuntimePanel: FunctionComponent<{
     onOrchestrateSprint,
     onPauseSprintRun,
     onCancelSprintRun,
+    onForceCancelSprintRun,
     onCancelTaskDispatch,
+    onForceCancelTaskDispatch,
     onRetryTaskDispatch,
     pendingActionIds,
 }) => {
@@ -762,10 +768,21 @@ const ExecutionRuntimePanel: FunctionComponent<{
                                             </button>
                                         )}
                                         {run.status === "cancel_requested" && (
-                                            <div className="inline-flex items-center gap-1.5 rounded-full border border-status-amber/20 bg-status-amber/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-amber">
-                                                <Clock className="w-3 h-3" strokeWidth={2} />
-                                                Stop Pending
-                                            </div>
+                                            <>
+                                                <div className="inline-flex items-center gap-1.5 rounded-full border border-status-amber/20 bg-status-amber/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-amber">
+                                                    <Clock className="w-3 h-3" strokeWidth={2} />
+                                                    Stop Pending
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onForceCancelSprintRun(run.id)}
+                                                    disabled={pendingActionIds.has(`sprint-force-cancel:${run.id}`)}
+                                                    className="inline-flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 disabled:opacity-50"
+                                                >
+                                                    <XCircle className="w-3 h-3" strokeWidth={2} />
+                                                    {pendingActionIds.has(`sprint-force-cancel:${run.id}`) ? "Force Cancelling" : "Force Cancel"}
+                                                </button>
+                                            </>
                                         )}
                                     </div>
                                 </div>
@@ -834,10 +851,21 @@ const ExecutionRuntimePanel: FunctionComponent<{
                                             </button>
                                         )}
                                         {dispatch.status === "cancel_requested" && (
-                                            <div className="inline-flex items-center gap-1.5 rounded-full border border-status-amber/20 bg-status-amber/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-amber">
-                                                <Clock className="w-3 h-3" strokeWidth={2} />
-                                                Stop Pending
-                                            </div>
+                                            <>
+                                                <div className="inline-flex items-center gap-1.5 rounded-full border border-status-amber/20 bg-status-amber/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-amber">
+                                                    <Clock className="w-3 h-3" strokeWidth={2} />
+                                                    Stop Pending
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onForceCancelTaskDispatch(dispatch.id)}
+                                                    disabled={pendingActionIds.has(`dispatch-force-cancel:${dispatch.id}`)}
+                                                    className="inline-flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 disabled:opacity-50"
+                                                >
+                                                    <XCircle className="w-3 h-3" strokeWidth={2} />
+                                                    {pendingActionIds.has(`dispatch-force-cancel:${dispatch.id}`) ? "Force Cancelling" : "Force Cancel"}
+                                                </button>
+                                            </>
                                         )}
                                         {(dispatch.status === "failed" || dispatch.status === "blocked" || dispatch.status === "cancelled") && (
                                             <button
@@ -1156,6 +1184,18 @@ export const LiveSessionPage: FunctionComponent = () => {
         });
     }, [runControlAction]);
 
+    const handleForceCancelSprintRun = useCallback(async (sprintRunId: string) => {
+        await runControlAction(`sprint-force-cancel:${sprintRunId}`, async () => {
+            await forceCancelSprintRun(sprintRunId);
+        });
+    }, [runControlAction]);
+
+    const handleForceCancelTaskDispatch = useCallback(async (dispatchId: string) => {
+        await runControlAction(`dispatch-force-cancel:${dispatchId}`, async () => {
+            await forceCancelTaskDispatch(dispatchId);
+        });
+    }, [runControlAction]);
+
     const handleRetryTaskDispatch = useCallback(async (dispatchId: string) => {
         await runControlAction(`dispatch-retry:${dispatchId}`, async () => {
             await retryTaskDispatch(dispatchId);
@@ -1368,7 +1408,9 @@ export const LiveSessionPage: FunctionComponent = () => {
                         onOrchestrateSprint={handleOrchestrateSprint}
                         onPauseSprintRun={handlePauseSprintRun}
                         onCancelSprintRun={handleCancelSprintRun}
+                        onForceCancelSprintRun={handleForceCancelSprintRun}
                         onCancelTaskDispatch={handleCancelTaskDispatch}
+                        onForceCancelTaskDispatch={handleForceCancelTaskDispatch}
                         onRetryTaskDispatch={handleRetryTaskDispatch}
                         pendingActionIds={pendingActionIds}
                     />

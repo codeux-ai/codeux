@@ -184,7 +184,9 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     },
     pauseSprintRun: async (sprintRunId) => deps.executionControlService.pauseSprintRun(sprintRunId),
     cancelSprintRun: async (sprintRunId) => deps.executionControlService.cancelSprintRun(sprintRunId),
+    forceCancelSprintRun: async (sprintRunId) => deps.executionControlService.forceCancelSprintRun(sprintRunId),
     cancelTaskDispatch: async (dispatchId) => deps.executionControlService.cancelTaskDispatch(dispatchId),
+    forceCancelTaskDispatch: async (dispatchId) => deps.executionControlService.forceCancelTaskDispatch(dispatchId),
     retryTaskDispatch: async (dispatchId) => {
       const result = await deps.executionControlService.retryTaskDispatch(dispatchId);
       deps.activityCacheService.invalidateGitStatusCache();

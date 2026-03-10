@@ -370,6 +370,18 @@ export class ExecutionRepository {
     return rows.map((row) => this.mapTaskDispatchRow(row));
   }
 
+  listStaleCancelRequestedDispatches(cutoffIso: string): TaskDispatchRecord[] {
+    const rows = this.db.prepare(`
+      SELECT *
+      FROM task_dispatches
+      WHERE status = 'cancel_requested'
+        AND COALESCE(last_heartbeat_at, updated_at, started_at, queued_at) <= ?
+      ORDER BY COALESCE(last_heartbeat_at, updated_at, started_at, queued_at) ASC
+    `).all(cutoffIso) as unknown as TaskDispatchRow[];
+
+    return rows.map((row) => this.mapTaskDispatchRow(row));
+  }
+
   updateTaskDispatch(dispatchId: string, input: UpdateTaskDispatchInput): TaskDispatchRecord {
     const current = this.requireTaskDispatch(dispatchId);
     if (input.connectionId) {

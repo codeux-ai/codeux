@@ -272,4 +272,74 @@ describe("ExecutionControlService", () => {
       eventType: "dispatch_cancel_requested",
     });
   });
+
+  it("finalizes running jules dispatches immediately after sending the close message", async () => {
+    const { projectRepository, executionRepository, service, requestStop, sendSessionMessage } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Jules Cancel Project",
+      sourceType: "local",
+      sourceRef: "/workspace/jules-cancel-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Jules Cancel Sprint",
+      number: 5,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Cancel running jules dispatch",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      mode: "jules",
+      state: "RUNNING",
+      sessionId: "session-123",
+      startedAt: new Date().toISOString(),
+    });
+
+    const updated = await service.cancelTaskDispatch(dispatch.id);
+
+    expect(updated.status).toBe("cancelled");
+    expect(sendSessionMessage).toHaveBeenCalledWith(
+      "session-123",
+      "Task cancelled, please close this task now. Do not continue implementation.",
+    );
+    expect(requestStop).not.toHaveBeenCalled();
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      state: "BLOCKED",
+    });
+    expect(projectRepository.getTask(task.id)).toMatchObject({
+      status: "pending",
+    });
+    expect(executionRepository.listTaskRunEvents(taskRun.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: "jules_stop_requested",
+        }),
+        expect.objectContaining({
+          eventType: "dispatch_cancelled",
+          payload: expect.objectContaining({
+            force: false,
+          }),
+        }),
+      ]),
+    );
+  });
 });
