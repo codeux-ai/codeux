@@ -136,7 +136,6 @@ describe("loadAppConfig", () => {
     expect(config.dashboardPort).toBe(4444);
     expect(config.runtimeRole).toBe("project_manager");
     expect(config.dashboardEnabled).toBe(true);
-    expect(config.registerLocalConnection).toBe(true);
   });
 
   it("assembles full config from env when CLI arg is missing", () => {
@@ -151,13 +150,11 @@ describe("loadAppConfig", () => {
     const config = loadAppConfig(["node", "index.js", "--runtime-role", "worker-host"], tempDir);
     expect(config.runtimeRole).toBe("worker_host");
     expect(config.dashboardEnabled).toBe(false);
-    expect(config.registerLocalConnection).toBe(false);
   });
 
   it("supports explicit headless project-manager mode", () => {
     const config = loadAppConfig(["node", "index.js", "--headless"], tempDir);
     expect(config.runtimeRole).toBe("project_manager");
     expect(config.dashboardEnabled).toBe(false);
-    expect(config.registerLocalConnection).toBe(false);
   });
 });

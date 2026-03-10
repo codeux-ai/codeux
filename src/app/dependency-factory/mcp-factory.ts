@@ -58,6 +58,7 @@ export function createMcpDependencies(
     listTrackedSessions: (limit) => sessionTracking.listSessions(limit),
     listTrackedActivities: (args) => sessionTracking.listActivities(args),
     listAllTrackedActivities: (sessionId) => sessionTracking.listAllActivities(sessionId),
+    getDashboardSettings: () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
     connectionChatRepository,
     workerTaskDispatchService,
     logger: logger.child({ component: "core-tool-handler" }),

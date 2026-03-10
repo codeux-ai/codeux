@@ -17,6 +17,7 @@ import {
   fetchConversationThreads,
   fetchProjectConnections,
   postConversationMessage,
+  updateConversationThread,
 } from "./lib/connection-api.js";
 import { renderMarkdown } from "../lib/markdown.js";
 
@@ -207,9 +208,7 @@ export const ChatPage: FunctionComponent = () => {
 
   const activeConnection = useMemo(() => {
     if (!selectedThread?.connectionId) {
-      return connections.find((connection) => connection.status === "listening")
-        || connections.find((connection) => connection.status === "connected")
-        || null;
+      return null;
     }
     return connections.find((connection) => connection.id === selectedThread.connectionId) || null;
   }, [connections, selectedThread]);
@@ -220,11 +219,27 @@ export const ChatPage: FunctionComponent = () => {
     }
     const thread = await createConversationThread(selectedProject.id, {
       title: `Project Chat ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
-      connectionId: activeConnection?.id || undefined,
     });
     setThreads((current) => [thread, ...current]);
     setSelectedThreadId(thread.id);
     return thread;
+  };
+
+  const handleAssignThread = async (connectionId: string): Promise<void> => {
+    if (!selectedThread) {
+      return;
+    }
+
+    try {
+      const updated = await updateConversationThread(selectedThread.id, {
+        connectionId: connectionId || null,
+      });
+      setThreads((current) => current.map((thread) => thread.id === updated.id ? updated : thread));
+      await refreshMessages(updated.id);
+      setError(null);
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : String(updateError));
+    }
   };
 
   const handleSend = async (): Promise<void> => {
@@ -284,7 +299,7 @@ export const ChatPage: FunctionComponent = () => {
 
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
-            {activeConnection ? `${activeConnection.displayName} · ${activeConnection.status}` : "No listener"}
+            {activeConnection ? `${activeConnection.displayName} · ${activeConnection.status}` : "Unassigned"}
           </span>
           <span className={`rounded-full border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] ${
             pendingDashboardMessages > 0
@@ -353,8 +368,20 @@ export const ChatPage: FunctionComponent = () => {
                   </h2>
                 </div>
                 <div className="text-right text-[10px] font-mono text-slate-400">
-                  <div>{activeConnection ? activeConnection.displayName : "No assigned listener"}</div>
-                  <div className="mt-1">{selectedThread ? `${selectedThread.messageCount} messages` : "0 messages"}</div>
+                  <div className="mb-2">{selectedThread ? `${selectedThread.messageCount} messages` : "0 messages"}</div>
+                  <select
+                    value={selectedThread?.connectionId || ""}
+                    onChange={(event) => void handleAssignThread(event.currentTarget.value)}
+                    disabled={!selectedThread}
+                    className="rounded-full border border-black/[0.08] bg-white/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300"
+                  >
+                    <option value="">Unassigned</option>
+                    {connections.map((connection) => (
+                      <option key={connection.id} value={connection.id}>
+                        {connection.displayName} · {connection.status}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
@@ -392,7 +419,7 @@ export const ChatPage: FunctionComponent = () => {
                 />
                 <div className="mt-3 flex items-center justify-between">
                   <div className="text-[10px] font-mono text-slate-400">
-                    {activeConnection ? `${activeConnection.displayName} · ${activeConnection.status}` : "Messages will wait until a listener binds to this project"}
+                    {activeConnection ? `${activeConnection.displayName} · ${activeConnection.status}` : "Messages will stay queued until a listener claims or is assigned to this thread"}
                   </div>
                   <button
                     type="button"

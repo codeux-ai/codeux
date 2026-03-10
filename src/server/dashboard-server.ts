@@ -17,6 +17,7 @@ import type {
   CreateConversationThreadInput,
   CreateDashboardConversationMessageInput,
   McpConnectionRecord,
+  UpdateConversationThreadInput,
   UpdateMcpConnectionInput,
 } from "../contracts/connection-chat-types.js";
 import type {
@@ -68,6 +69,7 @@ export interface DashboardServerOptions {
   updateConnection: (connectionId: string, input: UpdateMcpConnectionInput) => McpConnectionRecord;
   listConversationThreads: (projectId: string) => ConversationThreadRecord[];
   createConversationThread: (projectId: string, input: CreateConversationThreadInput) => ConversationThreadRecord;
+  updateConversationThread: (threadId: string, input: UpdateConversationThreadInput) => ConversationThreadRecord;
   listConversationMessages: (threadId: string) => ConversationMessageRecord[];
   postConversationMessage: (projectId: string, input: CreateDashboardConversationMessageInput) => ConversationMessageRecord;
   saveSettings: (settings: DashboardSettings) => DashboardSettings;
@@ -377,6 +379,14 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       );
     } catch (error) {
       res.status(400).json({ error: toErrorMessage(error, "Failed to create conversation thread") });
+    }
+  });
+
+  app.patch("/api/conversations/threads/:threadId", (req, res) => {
+    try {
+      res.json(options.updateConversationThread(String(req.params.threadId || "").trim(), req.body as UpdateConversationThreadInput));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to update conversation thread") });
     }
   });
 

@@ -357,27 +357,6 @@ export class JulesAgentServer {
     return this.julesApi.normalizeName(type, id);
   }
 
-  private getLocalConnectionKey(): string {
-    return `local-project-manager:${this.projectRoot}`;
-  }
-
-  private registerLocalConnection(): void {
-    const selectedProjectId = this.projectRuntimeRepository.getSelectedProjectId();
-    this.connectionChatRepository.upsertConnection({
-      connectionKey: this.getLocalConnectionKey(),
-      displayName: "Sprint OS Project Manager",
-      role: "project_manager",
-      transport: "stdio",
-      status: "connected",
-      capabilities: {
-        instruction: "Coordinates the legacy orchestration lane and dashboard control plane.",
-        listenMode: false,
-      },
-      projectIds: selectedProjectId ? [selectedProjectId] : [],
-      activeProjectIds: selectedProjectId ? [selectedProjectId] : [],
-    });
-  }
-
   private isActionRequiredState(state?: string): boolean {
     return state === "AWAITING_PLAN_APPROVAL" || state === "AWAITING_USER_FEEDBACK" || state === "PAUSED";
   }
@@ -523,10 +502,6 @@ export class JulesAgentServer {
         sampleSessionIds: sample,
         additionalRecoveredCount: Math.max(recovery.recoveredCount - 5, 0),
       });
-    }
-
-    if (this.appConfig.registerLocalConnection) {
-      this.registerLocalConnection();
     }
 
     if (this.isDashboardEnabled()) {

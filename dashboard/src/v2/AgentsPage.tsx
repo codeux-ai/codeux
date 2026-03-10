@@ -23,6 +23,7 @@ const STATUS_UI: Record<McpConnectionStatus, { label: string; accent: string; ic
   listening: { label: "Listening", accent: "#00E0A0", icon: Sparkles, chip: "text-signal-500 bg-signal-500/10 border-signal-500/20" },
   idle: { label: "Idle", accent: "#FFB800", icon: Clock3, chip: "text-ember-500 bg-ember-500/10 border-ember-500/20" },
   paused: { label: "Paused", accent: "#64748b", icon: PauseCircle, chip: "text-slate-400 bg-slate-500/10 border-slate-500/20" },
+  stale: { label: "Stale", accent: "#F97316", icon: Clock3, chip: "text-orange-500 bg-orange-500/10 border-orange-500/20" },
   offline: { label: "Offline", accent: "#E3000F", icon: Bot, chip: "text-status-red bg-status-red/10 border-status-red/20" },
 };
 
@@ -52,7 +53,7 @@ const EmptyState: FunctionComponent<{ hasProject: boolean }> = ({ hasProject }) 
       <p className="max-w-xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
         {hasProject
           ? "Use the new `start_listen` MCP tool to register a listener, worker, or project-manager connection against this project. Registered connections will appear here automatically."
-          : "Choose a project from the top navigation to inspect its available connections and listening agents."}
+          : "Choose a project from the top navigation to inspect its available MCP connections and listener state."}
       </p>
     </div>
   </div>
@@ -219,6 +220,7 @@ export const AgentsPage: FunctionComponent = () => {
     connected: connections.filter((connection) => connection.status === "connected").length,
     idle: connections.filter((connection) => connection.status === "idle").length,
     paused: connections.filter((connection) => connection.status === "paused").length,
+    stale: connections.filter((connection) => connection.status === "stale").length,
     offline: connections.filter((connection) => connection.status === "offline").length,
   }), [connections]);
 
@@ -252,13 +254,13 @@ export const AgentsPage: FunctionComponent = () => {
               NODE
             </div>
             <h1 className="relative z-10 font-display text-5xl font-black tracking-tighter text-slate-900 dark:text-white md:text-7xl">
-              Project <span className="text-signal-500">Agents.</span>
+              Project <span className="text-signal-500">Connections.</span>
             </h1>
           </div>
           <p className="max-w-2xl text-lg leading-relaxed text-slate-500 dark:text-slate-400">
             {selectedProject
               ? `Connections registered for ${selectedProject.name}. Listener and worker MCP clients appear here as soon as they call the new listen tool surface.`
-              : "Select a project to inspect its connected MCP listeners, workers, and project-manager lane."}
+              : "Select a project to inspect its connected MCP listeners and workers."}
           </p>
         </div>
 
@@ -269,6 +271,7 @@ export const AgentsPage: FunctionComponent = () => {
             { key: "connected", label: "Connected", value: counts.connected },
             { key: "idle", label: "Idle", value: counts.idle },
             { key: "paused", label: "Paused", value: counts.paused },
+            { key: "stale", label: "Stale", value: counts.stale },
             { key: "offline", label: "Offline", value: counts.offline },
           ] as Array<{ key: Filter; label: string; value: number }>).map((chip) => (
             <button

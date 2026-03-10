@@ -4,6 +4,7 @@ import type {
   ChatThread,
   CreateConversationThreadInput,
   CreateDashboardConversationMessageInput,
+  UpdateConversationThreadInput,
   UpdateMcpConnectionInput,
 } from "../types.js";
 
@@ -49,6 +50,17 @@ export const createConversationThread = async (
 
 export const fetchConversationMessages = async (threadId: string): Promise<ChatMessageRecord[]> => {
   return fetchJson<ChatMessageRecord[]>(`/api/conversations/threads/${encodeURIComponent(threadId)}/messages`);
+};
+
+export const updateConversationThread = async (
+  threadId: string,
+  input: UpdateConversationThreadInput
+): Promise<ChatThread> => {
+  return fetchJson<ChatThread>(`/api/conversations/threads/${encodeURIComponent(threadId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
 };
 
 export const postConversationMessage = async (

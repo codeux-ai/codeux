@@ -237,9 +237,29 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: "start_listen",
+    name: "listen",
     runtimeRoles: ["project_manager", "worker_host"],
-    description: "Register an MCP connection as a dashboard listener for a project and return any pending dashboard messages.",
+    description: "Enter Sprint OS listening mode. This call blocks until one actionable dashboard message or worker dispatch is available, or until timeout expires.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        connection_key: { type: "string", description: "Stable unique key for the connected MCP client." },
+        display_name: { type: "string", description: "Human-readable name for the connected MCP client." },
+        role: { type: "string", enum: ["project_manager", "worker", "listener"] },
+        project_id: { type: "string", description: "Optional project id to bind as the active listening project." },
+        transport: { type: "string", description: "Transport type used by the MCP connection." },
+        capabilities: { type: "object", additionalProperties: true },
+        include_task_dispatch: { type: "boolean", description: "When true, worker-capable listeners may claim and receive the next queued worker dispatch during the same listen call." },
+        timeout_seconds: { type: "number", description: "Optional long-poll timeout. Defaults to the dashboard watch-loop output interval." },
+        poll_interval_ms: { type: "number", description: "Optional internal poll interval while waiting for the next actionable event.", default: 1000 },
+      },
+      required: ["connection_key"],
+    },
+  },
+  {
+    name: "start_listen",
+    runtimeRoles: ["worker_host"],
+    description: "Low-level compatibility tool that registers an MCP listener connection and returns pending dashboard messages immediately.",
     inputSchema: {
       type: "object",
       properties: {
@@ -256,8 +276,8 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "pull_inbox",
-    runtimeRoles: ["project_manager", "worker_host"],
-    description: "Poll the dashboard inbox for pending messages for a registered MCP connection.",
+    runtimeRoles: ["worker_host"],
+    description: "Low-level compatibility tool that polls the dashboard inbox for pending messages for a registered MCP connection.",
     inputSchema: {
       type: "object",
       properties: {

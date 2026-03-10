@@ -12,7 +12,6 @@ export interface AppConfig {
   apiKeyArg: string | null;
   runtimeRole: "project_manager" | "worker_host";
   dashboardEnabled: boolean;
-  registerLocalConnection: boolean;
 }
 
 /**
@@ -148,6 +147,5 @@ export const loadAppConfig = (argv: string[], projectRoot: string): AppConfig =>
     apiKeyArg,
     runtimeRole,
     dashboardEnabled,
-    registerLocalConnection: dashboardEnabled && runtimeRole === "project_manager",
   };
 };

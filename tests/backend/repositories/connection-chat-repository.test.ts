@@ -9,6 +9,7 @@ import { ProjectManagementRepository } from "../../../src/repositories/project-m
 const tempDirs: string[] = [];
 
 async function createRepositories(): Promise<{
+  storage: AppDbStorage;
   projectRepository: ProjectManagementRepository;
   connectionRepository: ConnectionChatRepository;
 }> {
@@ -16,6 +17,7 @@ async function createRepositories(): Promise<{
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   return {
+    storage,
     projectRepository: new ProjectManagementRepository(storage),
     connectionRepository: new ConnectionChatRepository(storage),
   };
@@ -62,6 +64,7 @@ describe("ConnectionChatRepository", () => {
     expect(threads).toHaveLength(1);
     expect(threads[0]).toMatchObject({
       title: "Triage blockers",
+      connectionId: null,
       pendingMessageCount: 1,
     });
 
@@ -75,6 +78,9 @@ describe("ConnectionChatRepository", () => {
       bodyMarkdown: "Please summarize the top blockers for this project.",
       deliveryStatus: "delivered",
     });
+
+    const claimedThread = connectionRepository.listThreads(project.id)[0];
+    expect(claimedThread.connectionId).toBe(startListen.connection.id);
 
     const reply = connectionRepository.postListenReply({
       connectionKey: "listener-alpha",
@@ -99,5 +105,98 @@ describe("ConnectionChatRepository", () => {
       threadCount: 1,
       messageCount: 2,
     });
+  });
+
+  it("derives stale and offline connection states from heartbeat age", async () => {
+    const { storage, projectRepository, connectionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Lifecycle Project",
+      sourceType: "local",
+      sourceRef: "/workspace/lifecycle-project",
+    });
+
+    const listening = connectionRepository.startListen({
+      connectionKey: "listener-fresh",
+      displayName: "Fresh Listener",
+      role: "listener",
+      projectId: project.id,
+    });
+    const stale = connectionRepository.startListen({
+      connectionKey: "listener-stale",
+      displayName: "Stale Listener",
+      role: "listener",
+      projectId: project.id,
+    });
+    const offline = connectionRepository.startListen({
+      connectionKey: "listener-offline",
+      displayName: "Offline Listener",
+      role: "listener",
+      projectId: project.id,
+    });
+
+    storage.getDatabase().prepare(`
+      UPDATE mcp_connections
+      SET last_heartbeat_at = ?
+      WHERE id = ?
+    `).run(new Date(Date.now() - 11 * 60 * 1000).toISOString(), stale.connection.id);
+    storage.getDatabase().prepare(`
+      UPDATE mcp_connections
+      SET last_heartbeat_at = ?
+      WHERE id = ?
+    `).run(new Date(Date.now() - 31 * 60 * 1000).toISOString(), offline.connection.id);
+
+    const connections = connectionRepository.listConnections(project.id);
+    expect(connections.find((connection) => connection.id === listening.connection.id)?.status).toBe("listening");
+    expect(connections.find((connection) => connection.id === stale.connection.id)?.status).toBe("stale");
+    expect(connections.find((connection) => connection.id === offline.connection.id)?.status).toBe("offline");
+  });
+
+  it("reassigns a thread and requeues pending dashboard messages", async () => {
+    const { projectRepository, connectionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Routing Project",
+      sourceType: "local",
+      sourceRef: "/workspace/routing-project",
+    });
+
+    const first = connectionRepository.startListen({
+      connectionKey: "listener-one",
+      displayName: "Listener One",
+      role: "listener",
+      projectId: project.id,
+    });
+    const second = connectionRepository.startListen({
+      connectionKey: "listener-two",
+      displayName: "Listener Two",
+      role: "listener",
+      projectId: project.id,
+    });
+
+    const message = connectionRepository.postDashboardMessage(project.id, {
+      title: "Reassign me",
+      bodyMarkdown: "Please pick this up after reassignment.",
+    });
+    const thread = connectionRepository.listThreads(project.id)[0];
+
+    const firstInbox = connectionRepository.pullInbox({
+      connectionKey: "listener-one",
+      projectId: project.id,
+    });
+    expect(firstInbox).toHaveLength(1);
+
+    const reassigned = connectionRepository.updateThread(thread.id, {
+      connectionId: second.connection.id,
+    });
+    expect(reassigned.connectionId).toBe(second.connection.id);
+
+    const pendingMessages = connectionRepository.listMessages(thread.id);
+    expect(pendingMessages[0]?.deliveryStatus).toBe("pending");
+
+    const secondInbox = connectionRepository.pullInbox({
+      connectionKey: "listener-two",
+      projectId: project.id,
+    });
+    expect(secondInbox).toHaveLength(1);
+    expect(secondInbox[0]?.id).toBe(message.id);
   });
 });

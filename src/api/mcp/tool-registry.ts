@@ -100,6 +100,18 @@ export interface StartListenArgs {
   max_messages?: number;
 }
 
+export interface ListenArgs {
+  connection_key: string;
+  display_name?: string;
+  role?: McpConnectionRole;
+  project_id?: string;
+  transport?: string;
+  capabilities?: McpConnectionCapabilities;
+  include_task_dispatch?: boolean;
+  timeout_seconds?: number;
+  poll_interval_ms?: number;
+}
+
 export interface PullInboxArgs {
   connection_key: string;
   project_id?: string;
@@ -151,6 +163,7 @@ export interface McpToolArgsByName {
   execute_worker_dispatch: ExecuteWorkerDispatchArgs;
   cancel_local_dispatch: CancelLocalDispatchArgs;
   generate_dashboard_reply: GenerateDashboardReplyArgs;
+  listen: ListenArgs;
   start_listen: StartListenArgs;
   pull_inbox: PullInboxArgs;
   post_listen_reply: PostListenReplyArgs;

@@ -12,6 +12,7 @@ import type {
   PullInboxInput,
   StartListenInput,
   StartListenResponse,
+  UpdateConversationThreadInput,
   UpdateMcpConnectionInput,
 } from "../../../src/contracts/connection-chat-types.js";
 import type {
@@ -91,6 +92,7 @@ export type {
   SprintStatus,
   StartListenInput,
   StartListenResponse,
+  UpdateConversationThreadInput,
   TaskExecutorType,
   TaskPriority,
   TaskRecord,

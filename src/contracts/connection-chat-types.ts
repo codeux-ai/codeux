@@ -1,5 +1,7 @@
+import type { WorkerTaskDispatchClaim } from "./execution-types.js";
+
 export type McpConnectionRole = "project_manager" | "worker" | "listener";
-export type McpConnectionStatus = "connected" | "listening" | "idle" | "paused" | "offline";
+export type McpConnectionStatus = "connected" | "listening" | "idle" | "paused" | "stale" | "offline";
 export type ConversationThreadScope = "project" | "connection";
 export type ConversationThreadStatus = "open" | "closed";
 export type ConversationMessageDirection = "dashboard_to_connection" | "connection_to_dashboard";
@@ -124,7 +126,60 @@ export interface CreateDashboardConversationMessageInput {
   bodyMarkdown: string;
 }
 
+export interface UpdateConversationThreadInput {
+  connectionId?: string | null;
+}
+
 export interface StartListenResponse {
   connection: McpConnectionRecord;
   inbox: ConnectionInboxMessage[];
 }
+
+export interface ListenInput {
+  connectionKey: string;
+  displayName?: string;
+  role?: McpConnectionRole;
+  projectId?: string;
+  transport?: string;
+  capabilities?: McpConnectionCapabilities;
+  includeTaskDispatch?: boolean;
+  timeoutSeconds?: number;
+  pollIntervalMs?: number;
+}
+
+export interface ListenContinuation {
+  nextTool: "listen";
+  connectionKey: string;
+  instruction: string;
+}
+
+export interface ListenTimeoutEvent {
+  kind: "noop_timeout";
+  connection: McpConnectionRecord;
+  timeoutSeconds: number;
+  pollIntervalMs: number;
+  continuation: ListenContinuation;
+}
+
+export interface ListenDashboardMessageEvent {
+  kind: "dashboard_message";
+  connection: McpConnectionRecord;
+  timeoutSeconds: number;
+  pollIntervalMs: number;
+  message: ConnectionInboxMessage;
+  continuation: ListenContinuation;
+}
+
+export interface ListenTaskDispatchEvent {
+  kind: "task_dispatch";
+  connection: McpConnectionRecord;
+  timeoutSeconds: number;
+  pollIntervalMs: number;
+  dispatch: WorkerTaskDispatchClaim;
+  continuation: ListenContinuation;
+}
+
+export type ListenResponse =
+  | ListenTimeoutEvent
+  | ListenDashboardMessageEvent
+  | ListenTaskDispatchEvent;

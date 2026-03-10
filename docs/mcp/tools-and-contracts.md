@@ -52,6 +52,7 @@ Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/
 - `list_all_activities`
 
 ### Listen mode
+- `listen`
 - `start_listen`
 - `pull_inbox`
 - `post_listen_reply`
@@ -141,10 +142,16 @@ Unknown tool names raise MCP `MethodNotFound`.
 - In automation modes, action-required Jules tasks can be auto-handled (plan approval, clarification replies, paused-session resume) or explicitly routed as `AGENT` vs `HUMAN` intervention in protocol output.
 
 ### Listen-mode behavior
+- `listen` is now the primary listening contract for both normal stdio MCP clients and workers.
+- `listen` registers or refreshes the connection, then blocks until one actionable event is available or timeout expires.
+- `listen` returns exactly one event at a time: a dashboard message, a worker dispatch, or a timeout result with explicit "call listen again" continuation guidance.
+- The default `listen` timeout is derived from dashboard settings `sprintLoopSteps.watchLoopOutputIntervalSeconds` and currently defaults to `300`.
+- Workers may set `include_task_dispatch = true` so the same blocking listener call can also claim and return the next queued worker dispatch.
 - `start_listen` registers or refreshes an MCP connection in sqlite and returns pending dashboard messages for the active project.
 - `pull_inbox` is the pull-based inbox endpoint for listening MCPs.
 - `post_listen_reply` writes a connection reply back into the project conversation thread and marks the handled dashboard message as processed.
-- The listen loop is intentionally pull-based because current MCP transport is stdio, not server-push.
+- `start_listen` and `pull_inbox` now remain as low-level compatibility primitives and should not be the first-choice listener workflow for normal human-driven MCP clients.
+- New dashboard threads should remain unassigned by default until explicitly targeted or claimed by a real listener.
 
 ### Worker-dispatch behavior
 - Worker MCPs register through `start_listen` with `role = worker`.

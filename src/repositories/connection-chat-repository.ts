@@ -13,6 +13,7 @@ import type {
   PullInboxInput,
   StartListenInput,
   StartListenResponse,
+  UpdateConversationThreadInput,
   UpdateMcpConnectionInput,
   UpsertMcpConnectionInput,
 } from "../contracts/connection-chat-types.js";
@@ -32,6 +33,7 @@ interface ConnectionRow {
   thread_count: number | string | null;
   message_count: number | string | null;
   pending_inbox_count: number | string | null;
+  active_dispatch_count: number | string | null;
 }
 
 interface BindingRow {
@@ -72,6 +74,8 @@ interface InboxRow extends MessageRow {
 }
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
+const STALE_CONNECTION_THRESHOLD_MS = 10 * 60 * 1000;
+const OFFLINE_CONNECTION_THRESHOLD_MS = 30 * 60 * 1000;
 
 function toNumber(value: number | string | null | undefined): number {
   if (typeof value === "number") {
@@ -126,6 +130,13 @@ export class ConnectionChatRepository {
             AND cm.direction = 'dashboard_to_connection'
             AND cm.delivery_status = 'pending'
         ) AS pending_inbox_count
+        ,
+        (
+          SELECT COUNT(*)
+          FROM task_dispatches td
+          WHERE td.connection_id = c.id
+            AND td.status IN ('claimed', 'running', 'cancel_requested')
+        ) AS active_dispatch_count
       FROM mcp_connections c
       WHERE EXISTS (
         SELECT 1
@@ -133,14 +144,10 @@ export class ConnectionChatRepository {
         WHERE b.connection_id = c.id
           AND b.project_id = ?
       )
-        OR c.role = 'project_manager'
-      ORDER BY
-        CASE c.status WHEN 'listening' THEN 0 WHEN 'connected' THEN 1 WHEN 'idle' THEN 2 WHEN 'paused' THEN 3 ELSE 4 END,
-        COALESCE(c.last_heartbeat_at, c.updated_at) DESC,
-        c.display_name ASC
+      ORDER BY COALESCE(c.last_heartbeat_at, c.updated_at) DESC, c.display_name ASC
     `).all(projectId, projectId, projectId, projectId, projectId) as unknown as ConnectionRow[];
 
-    return this.inflateConnections(rows);
+    return this.sortConnections(this.inflateConnections(rows));
   }
 
   getConnection(connectionId: string): McpConnectionRecord | null {
@@ -150,7 +157,13 @@ export class ConnectionChatRepository {
         0 AS tasks_run_count,
         0 AS thread_count,
         0 AS message_count,
-        0 AS pending_inbox_count
+        0 AS pending_inbox_count,
+        (
+          SELECT COUNT(*)
+          FROM task_dispatches td
+          WHERE td.connection_id = c.id
+            AND td.status IN ('claimed', 'running', 'cancel_requested')
+        ) AS active_dispatch_count
       FROM mcp_connections c
       WHERE c.id = ?
     `).get(connectionId) as ConnectionRow | undefined;
@@ -169,7 +182,13 @@ export class ConnectionChatRepository {
         0 AS tasks_run_count,
         0 AS thread_count,
         0 AS message_count,
-        0 AS pending_inbox_count
+        0 AS pending_inbox_count,
+        (
+          SELECT COUNT(*)
+          FROM task_dispatches td
+          WHERE td.connection_id = c.id
+            AND td.status IN ('claimed', 'running', 'cancel_requested')
+        ) AS active_dispatch_count
       FROM mcp_connections c
       WHERE c.connection_key = ?
     `).get(connectionKey.trim()) as ConnectionRow | undefined;
@@ -302,7 +321,7 @@ export class ConnectionChatRepository {
 
   createThread(projectId: string, input: CreateConversationThreadInput): ConversationThreadRecord {
     this.requireProject(projectId);
-    const connectionId = input.connectionId ?? this.findPreferredConnectionId(projectId);
+    const connectionId = input.connectionId ?? null;
     if (connectionId) {
       this.requireConnection(connectionId);
     }
@@ -338,6 +357,44 @@ export class ConnectionChatRepository {
     return rows.map((row) => this.mapMessageRow(row));
   }
 
+  updateThread(threadId: string, input: UpdateConversationThreadInput): ConversationThreadRecord {
+    const thread = this.requireThread(threadId);
+    const now = new Date().toISOString();
+    const normalizedConnectionId = input.connectionId === undefined
+      ? thread.connectionId
+      : input.connectionId === null
+        ? null
+        : input.connectionId.trim();
+
+    if (normalizedConnectionId) {
+      const connection = this.requireConnection(normalizedConnectionId);
+      const activeProjectIds = connection.activeProjectIds.length > 0 ? connection.activeProjectIds : connection.projectIds;
+      if (!activeProjectIds.includes(thread.projectId)) {
+        throw new Error(`Connection ${connection.connectionKey} is not bound to project ${thread.projectId}`);
+      }
+    }
+
+    this.runInTransaction(() => {
+      this.db.prepare(`
+        UPDATE conversation_threads
+        SET connection_id = ?, updated_at = ?
+        WHERE id = ?
+      `).run(normalizedConnectionId || null, now, thread.id);
+
+      if (normalizedConnectionId !== thread.connectionId) {
+        this.db.prepare(`
+          UPDATE conversation_messages
+          SET delivery_status = 'pending'
+          WHERE thread_id = ?
+            AND direction = 'dashboard_to_connection'
+            AND delivery_status IN ('pending', 'delivered')
+        `).run(thread.id);
+      }
+    });
+
+    return this.requireThread(threadId);
+  }
+
   postDashboardMessage(projectId: string, input: CreateDashboardConversationMessageInput): ConversationMessageRecord {
     this.requireProject(projectId);
     const thread = input.threadId
@@ -351,7 +408,7 @@ export class ConnectionChatRepository {
       throw new Error(`Thread ${thread.id} does not belong to project ${projectId}`);
     }
 
-    const preferredConnectionId = thread.connectionId || input.connectionId || this.findPreferredConnectionId(projectId);
+    const preferredConnectionId = thread.connectionId || input.connectionId || null;
     const now = new Date().toISOString();
 
     this.runInTransaction(() => {
@@ -576,7 +633,11 @@ export class ConnectionChatRepository {
       displayName: row.display_name,
       role: row.role as McpConnectionRecord["role"],
       transport: row.transport,
-      status: row.status as McpConnectionRecord["status"],
+      status: this.deriveConnectionStatus(
+        row.status as McpConnectionRecord["status"],
+        row.last_heartbeat_at,
+        toNumber(row.active_dispatch_count),
+      ),
       capabilities: parseCapabilities(row.capabilities_json),
       lastHeartbeatAt: row.last_heartbeat_at,
       createdAt: row.created_at,
@@ -588,6 +649,58 @@ export class ConnectionChatRepository {
       messageCount: toNumber(row.message_count),
       pendingInboxCount: toNumber(row.pending_inbox_count),
     }));
+  }
+
+  private deriveConnectionStatus(
+    storedStatus: McpConnectionRecord["status"],
+    lastHeartbeatAt: string | null,
+    activeDispatchCount: number,
+  ): McpConnectionRecord["status"] {
+    if (!lastHeartbeatAt) {
+      return storedStatus;
+    }
+
+    const ageMs = Date.now() - new Date(lastHeartbeatAt).getTime();
+    if (Number.isFinite(ageMs)) {
+      if (ageMs >= OFFLINE_CONNECTION_THRESHOLD_MS) {
+        return "offline";
+      }
+      if (ageMs >= STALE_CONNECTION_THRESHOLD_MS) {
+        return "stale";
+      }
+    }
+
+    if (activeDispatchCount > 0 && storedStatus !== "paused") {
+      return "connected";
+    }
+
+    return storedStatus;
+  }
+
+  private sortConnections(connections: McpConnectionRecord[]): McpConnectionRecord[] {
+    const priority: Record<McpConnectionRecord["status"], number> = {
+      listening: 0,
+      connected: 1,
+      idle: 2,
+      paused: 3,
+      stale: 4,
+      offline: 5,
+    };
+
+    return [...connections].sort((left, right) => {
+      const byStatus = priority[left.status] - priority[right.status];
+      if (byStatus !== 0) {
+        return byStatus;
+      }
+
+      const leftTime = left.lastHeartbeatAt ? new Date(left.lastHeartbeatAt).getTime() : 0;
+      const rightTime = right.lastHeartbeatAt ? new Date(right.lastHeartbeatAt).getTime() : 0;
+      if (leftTime !== rightTime) {
+        return rightTime - leftTime;
+      }
+
+      return left.displayName.localeCompare(right.displayName);
+    });
   }
 
   private mapThreadRow(row: ThreadRow): ConversationThreadRecord {
@@ -682,21 +795,6 @@ export class ConnectionChatRepository {
       SET status = COALESCE(?, status), last_heartbeat_at = ?, updated_at = ?
       WHERE id = ?
     `).run(status || null, now, now, connectionId);
-  }
-
-  private findPreferredConnectionId(projectId: string): string | null {
-    const row = this.db.prepare(`
-      SELECT c.id
-      FROM mcp_connections c
-      LEFT JOIN connection_project_bindings b ON b.connection_id = c.id
-      WHERE (b.project_id = ? AND b.is_active = 1) OR c.role = 'project_manager'
-      ORDER BY
-        CASE c.status WHEN 'listening' THEN 0 WHEN 'connected' THEN 1 ELSE 2 END,
-        COALESCE(c.last_heartbeat_at, c.updated_at) DESC
-      LIMIT 1
-    `).get(projectId) as { id: string } | undefined;
-
-    return row?.id || null;
   }
 
   private normalizeProjectIds(projectIds?: string[]): string[] {

@@ -1,6 +1,7 @@
 import { waitUntil } from "../shared/polling/wait-until.js";
 import type {
   CreateSessionArgs,
+  ListenArgs,
   PostListenReplyArgs,
   PullTaskDispatchArgs,
   PullInboxArgs,
@@ -8,8 +9,9 @@ import type {
   UpdateTaskDispatchArgs,
 } from "../api/mcp/tool-registry.js";
 import type { JulesApiClient, JulesCreateSessionRequest } from "../integrations/jules-api-client.js";
-import type { JulesActivity, JulesSession, JulesSource } from "../contracts/app-types.js";
+import type { DashboardSettings, JulesActivity, JulesSession, JulesSource } from "../contracts/app-types.js";
 import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
+import type { ListenResponse } from "../contracts/connection-chat-types.js";
 import type { WorkerTaskDispatchService } from "../services/worker-task-dispatch-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { ActivitySummaryService } from "../domain/sessions/activity-summary.js";
@@ -31,10 +33,24 @@ interface CoreToolHandlerDependencies {
   listTrackedSessions: (limit?: number) => { sessions: JulesSession[] };
   listTrackedActivities: (args: { session_id: string; page_size?: number; page_token?: string }) => { activities: JulesActivity[]; nextPageToken?: string };
   listAllTrackedActivities: (sessionId: string) => JulesActivity[];
+  getDashboardSettings: () => DashboardSettings;
   connectionChatRepository: ConnectionChatRepository;
   workerTaskDispatchService: WorkerTaskDispatchService;
   logger?: Logger;
 }
+
+const DEFAULT_LISTEN_POLL_INTERVAL_MS = 1000;
+const MIN_LISTEN_TIMEOUT_SECONDS = 1;
+const MAX_LISTEN_TIMEOUT_SECONDS = 3600;
+const MIN_LISTEN_POLL_INTERVAL_MS = 100;
+const MAX_LISTEN_POLL_INTERVAL_MS = 10000;
+
+const sleep = async (ms: number): Promise<void> => {
+  if (ms <= 0) {
+    return;
+  }
+  await new Promise((resolve) => setTimeout(resolve, ms));
+};
 
 export class CoreToolHandler {
   constructor(private readonly deps: CoreToolHandlerDependencies) {}
@@ -314,6 +330,103 @@ export class CoreToolHandler {
     };
   }
 
+  async handleListen(args: ListenArgs) {
+    const settings = this.deps.getDashboardSettings();
+    const timeoutSeconds = this.normalizeListenTimeoutSeconds(args.timeout_seconds, settings);
+    const pollIntervalMs = this.normalizeListenPollIntervalMs(args.poll_interval_ms);
+    const shouldIncludeTaskDispatch = Boolean(args.include_task_dispatch ?? (args.role === "worker"));
+
+    const startResponse = this.deps.connectionChatRepository.startListen({
+      connectionKey: args.connection_key,
+      displayName: args.display_name,
+      role: args.role,
+      projectId: args.project_id,
+      transport: args.transport,
+      capabilities: args.capabilities,
+      maxMessages: 1,
+    });
+
+    const immediateInboxMessage = startResponse.inbox[0];
+    if (immediateInboxMessage) {
+      return this.wrapListenResponse({
+        kind: "dashboard_message",
+        connection: startResponse.connection,
+        timeoutSeconds,
+        pollIntervalMs,
+        message: immediateInboxMessage,
+        continuation: {
+          nextTool: "listen",
+          connectionKey: startResponse.connection.connectionKey,
+          instruction: "Reply in the dashboard thread with post_listen_reply, then call listen again with the same connection_key to stay in listening mode.",
+        },
+      });
+    }
+
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeoutSeconds * 1000) {
+      const inbox = this.deps.connectionChatRepository.pullInbox({
+        connectionKey: args.connection_key,
+        projectId: args.project_id,
+        maxMessages: 1,
+      });
+      const message = inbox[0];
+      if (message) {
+        return this.wrapListenResponse({
+          kind: "dashboard_message",
+          connection: this.requireConnectionForListen(args.connection_key),
+          timeoutSeconds,
+          pollIntervalMs,
+          message,
+          continuation: {
+            nextTool: "listen",
+            connectionKey: args.connection_key,
+            instruction: "Reply in the dashboard thread with post_listen_reply, then call listen again with the same connection_key to stay in listening mode.",
+          },
+        });
+      }
+
+      if (shouldIncludeTaskDispatch) {
+        const claim = this.deps.workerTaskDispatchService.pullNextDispatch({
+          connectionKey: args.connection_key,
+          projectId: args.project_id,
+        });
+        if (claim) {
+          return this.wrapListenResponse({
+            kind: "task_dispatch",
+            connection: this.requireConnectionForListen(args.connection_key),
+            timeoutSeconds,
+            pollIntervalMs,
+            dispatch: claim,
+            continuation: {
+              nextTool: "listen",
+              connectionKey: args.connection_key,
+              instruction: "Handle the claimed task dispatch, close it with update_task_dispatch, then call listen again with the same connection_key to stay available.",
+            },
+          });
+        }
+      }
+
+      const remainingMs = timeoutSeconds * 1000 - (Date.now() - startTime);
+      if (remainingMs <= 0) {
+        break;
+      }
+      await sleep(Math.min(pollIntervalMs, remainingMs));
+    }
+
+    const connection = this.requireConnectionForListen(args.connection_key);
+    return this.wrapListenResponse({
+      kind: "noop_timeout",
+      connection,
+      timeoutSeconds,
+      pollIntervalMs,
+      continuation: {
+        nextTool: "listen",
+        connectionKey: connection.connectionKey,
+        instruction: "No new dashboard messages or task dispatches arrived before timeout. Call listen again immediately with the same connection_key if you should remain in listening mode.",
+      },
+    });
+  }
+
   async handlePullInbox(args: PullInboxArgs) {
     const inbox = this.deps.connectionChatRepository.pullInbox({
       connectionKey: args.connection_key,
@@ -379,6 +492,43 @@ export class CoreToolHandler {
       content: [{
         type: "text",
         text: JSON.stringify(result, null, 2),
+      }],
+    };
+  }
+
+  private normalizeListenTimeoutSeconds(
+    requestedTimeoutSeconds: number | undefined,
+    settings: DashboardSettings,
+  ): number {
+    const fallback = settings.sprintLoopSteps?.watchLoopOutputIntervalSeconds ?? 300;
+    const candidate = requestedTimeoutSeconds ?? fallback;
+    if (!Number.isFinite(candidate) || candidate <= 0) {
+      return fallback;
+    }
+    return Math.max(MIN_LISTEN_TIMEOUT_SECONDS, Math.min(MAX_LISTEN_TIMEOUT_SECONDS, candidate));
+  }
+
+  private normalizeListenPollIntervalMs(requestedPollIntervalMs: number | undefined): number {
+    const candidate = requestedPollIntervalMs ?? DEFAULT_LISTEN_POLL_INTERVAL_MS;
+    if (!Number.isFinite(candidate) || candidate <= 0) {
+      return DEFAULT_LISTEN_POLL_INTERVAL_MS;
+    }
+    return Math.max(MIN_LISTEN_POLL_INTERVAL_MS, Math.min(MAX_LISTEN_POLL_INTERVAL_MS, candidate));
+  }
+
+  private requireConnectionForListen(connectionKey: string) {
+    const connection = this.deps.connectionChatRepository.getConnectionByKey(connectionKey);
+    if (!connection) {
+      throw new Error(`Connection not found for key: ${connectionKey}`);
+    }
+    return connection;
+  }
+
+  private wrapListenResponse(response: ListenResponse) {
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify(response, null, 2),
       }],
     };
   }

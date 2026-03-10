@@ -102,6 +102,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     updateConnection: (connectionId, input) => deps.connectionChatRepository.updateConnection(connectionId, input),
     listConversationThreads: (projectId) => deps.connectionChatRepository.listThreads(projectId),
     createConversationThread: (projectId, input) => deps.connectionChatRepository.createThread(projectId, input),
+    updateConversationThread: (threadId, input) => deps.connectionChatRepository.updateThread(threadId, input),
     listConversationMessages: (threadId) => deps.connectionChatRepository.listMessages(threadId),
     postConversationMessage: (projectId, input) => deps.connectionChatRepository.postDashboardMessage(projectId, input),
     saveSettings: (settings: DashboardSettings) => {

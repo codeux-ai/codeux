@@ -1,6 +1,8 @@
 # External MCP Worker Client
 
-This page documents the first real external Sprint OS worker process shipped in-repo.
+This page documents the first real worker-contract prototype shipped in-repo.
+
+It is not the final remote-worker architecture. The corrected target is documented in [Connection And Listener Foundation Reset](./connection-and-listener-foundation-reset.md).
 
 ## Purpose
 
@@ -17,13 +19,15 @@ It is a separate process:
 7. generates reply-only chat responses through the local provider stack
 8. heartbeats and finalizes dispatches back into sqlite
 
-That gives us a real external worker role without introducing a second execution model.
+That gives us a real worker contract without introducing a second execution model.
+
+However, this runtime is still local-machine oriented because it depends on the current stdio-only transport path.
 
 ## Why Worker-Host Mode Exists
 
 Sprint OS currently uses stdio MCP transport.
 
-That means a worker client cannot attach to the already-running dashboard process over MCP. Instead, each worker process spawns its own Sprint OS server process and talks to it over stdio.
+That means a worker client cannot attach to the already-running dashboard process over MCP from another machine. Instead, each worker process currently spawns its own Sprint OS server process and talks to it over stdio.
 
 To make that safe, the spawned server now supports:
 
@@ -34,6 +38,8 @@ To make that safe, the spawned server now supports:
 
 This avoids dashboard port conflicts while still letting every worker-host process share the same Sprint OS sqlite state.
 
+This is a transitional design, not the final remote-worker model.
+
 ## Worker Command
 
 The new CLI is:
@@ -43,8 +49,7 @@ The new CLI is:
 Default behavior:
 
 - spawns `node dist/index.js --runtime-role worker-host`
-- polls `pull_inbox` for dashboard messages
-- polls for queued dispatches every few seconds
+- enters the blocking `listen` loop for dashboard messages and queued dispatches
 - polls the claimed session for progress and terminal state
 - generates dashboard replies through `generate_dashboard_reply`
 - posts replies through `post_listen_reply`
@@ -84,13 +89,15 @@ The same worker connection can also participate in project chat.
 
 For each inbox message:
 
-1. `pull_inbox` returns the pending dashboard message
+1. `listen` returns the pending dashboard message
 2. `generate_dashboard_reply` resolves the project repo and settings
 3. Sprint OS selects a CLI-capable provider and builds a reply-only prompt
 4. the worker-host process generates markdown text locally
 5. `post_listen_reply` stores the reply under the same connection record
 
 This keeps worker chat participation on the same DB-backed connection and thread model already used by the v2 dashboard.
+
+The final architecture should move workers onto the same blocking long-poll listener model planned for all MCP connections.
 
 ## Cancellation Model
 

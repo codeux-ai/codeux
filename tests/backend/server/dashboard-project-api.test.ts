@@ -39,6 +39,7 @@ async function createServerHandle(): Promise<{
   port: number;
   repository: ProjectManagementRepository;
   runtimeRepository: ProjectRuntimeRepository;
+  connectionRepository: ConnectionChatRepository;
   markdownService: SprintMarkdownService;
   controlCalls: {
     orchestrate: Array<{ projectId: string; sprintId: string }>;
@@ -119,6 +120,7 @@ async function createServerHandle(): Promise<{
     updateConnection: (connectionId, input) => connectionRepository.updateConnection(connectionId, input),
     listConversationThreads: (projectId) => connectionRepository.listThreads(projectId),
     createConversationThread: (projectId, input) => connectionRepository.createThread(projectId, input),
+    updateConversationThread: (threadId, input) => connectionRepository.updateThread(threadId, input),
     listConversationMessages: (threadId) => connectionRepository.listMessages(threadId),
     postConversationMessage: (projectId, input) => connectionRepository.postDashboardMessage(projectId, input),
     saveSettings: (settings) => settings,
@@ -150,6 +152,7 @@ async function createServerHandle(): Promise<{
     port: handle.port,
     repository,
     runtimeRepository,
+    connectionRepository,
     markdownService,
     controlCalls,
   };
@@ -157,7 +160,7 @@ async function createServerHandle(): Promise<{
 
 describe("dashboard project management API", () => {
   it("creates and queries DB-backed projects, sprints, tasks, and markdown export", async () => {
-    const { port, runtimeRepository, controlCalls } = await createServerHandle();
+    const { port, runtimeRepository, controlCalls, connectionRepository } = await createServerHandle();
     const baseUrl = `http://127.0.0.1:${port}`;
 
     const projectResponse = await fetch(`${baseUrl}/api/projects`, {
@@ -295,6 +298,23 @@ describe("dashboard project management API", () => {
       pendingMessageCount: 1,
       messageCount: 1,
     });
+
+    const listener = connectionRepository.startListen({
+      connectionKey: "listener-api",
+      displayName: "Listener API",
+      role: "listener",
+      projectId: project.id,
+    });
+    const assignThreadResponse = await fetch(`${baseUrl}/api/conversations/threads/${thread.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        connectionId: listener.connection.id,
+      }),
+    });
+    expect(assignThreadResponse.status).toBe(200);
+    const updatedThread = await assignThreadResponse.json() as { connectionId: string | null };
+    expect(updatedThread.connectionId).toBe(listener.connection.id);
 
     const messages = await fetch(`${baseUrl}/api/conversations/threads/${thread.id}/messages`)
       .then(async (response) => response.json()) as Array<{ bodyMarkdown: string }>;

@@ -3,35 +3,8 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { CallToolResultSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { WorkerTaskDispatchClaim } from "../contracts/execution-types.js";
 import type { JulesSession } from "../contracts/app-types.js";
+import type { ListenDashboardMessageEvent, ListenResponse } from "../contracts/connection-chat-types.js";
 import type { WorkerConfig } from "./worker-config.js";
-
-interface PullTaskDispatchResponse {
-  claimed: boolean;
-  dispatch: WorkerTaskDispatchClaim | null;
-}
-
-interface StartListenResponse {
-  connection: {
-    id: string;
-    status: string;
-  };
-  inbox: ConnectionInboxMessage[];
-}
-
-interface PullInboxResponse {
-  returnedCount: number;
-  inbox: ConnectionInboxMessage[];
-}
-
-interface ConnectionInboxMessage {
-  id: string;
-  threadId: string;
-  threadTitle: string;
-  projectId: string;
-  bodyMarkdown: string;
-  createdAt: string;
-  deliveryStatus: string;
-}
 
 interface ExecuteWorkerDispatchResponse {
   dispatchId: string;
@@ -112,8 +85,7 @@ export class SprintOsWorker {
         };
 
         await client.connect(transport);
-        await this.startListen(client);
-        await this.runDispatchLoop(client, signal);
+        await this.runListenLoop(client, signal);
       } catch (error) {
         if (signal?.aborted) {
           break;
@@ -128,37 +100,36 @@ export class SprintOsWorker {
     }
   }
 
-  private async startListen(client: Client): Promise<void> {
-    const response = await this.callJsonTool<StartListenResponse>(client, "start_listen", {
-      connection_key: this.config.connectionKey,
-      display_name: this.config.displayName,
-      role: "worker",
-      project_id: this.config.projectId,
-      transport: "stdio",
-      capabilities: {
-        instruction: "Claims Sprint OS worker dispatches and executes them locally through the worker-host runtime.",
-        listenMode: true,
-        labels: ["worker"],
-      },
-    });
-    await this.processInboxMessages(client, response.inbox);
-  }
-
-  private async runDispatchLoop(client: Client, signal?: AbortSignal): Promise<void> {
+  private async runListenLoop(client: Client, signal?: AbortSignal): Promise<void> {
     while (!signal?.aborted) {
-      await this.pollInbox(client);
-      const claim = await this.callJsonTool<PullTaskDispatchResponse>(client, "pull_task_dispatch", {
+      const response = await this.callJsonTool<ListenResponse>(client, "listen", {
         connection_key: this.config.connectionKey,
+        display_name: this.config.displayName,
+        role: "worker",
         project_id: this.config.projectId,
-        sprint_id: this.config.sprintId,
+        transport: "stdio",
+        include_task_dispatch: true,
+        capabilities: {
+          instruction: "Claims Sprint OS worker dispatches and executes them locally through the worker-host runtime.",
+          listenMode: true,
+          labels: ["worker"],
+        },
       });
 
-      if (!claim.claimed || !claim.dispatch) {
-        await delay(this.config.dispatchPollIntervalMs, signal).catch(() => undefined);
+      if (response.kind === "dashboard_message") {
+        await this.processInboxMessage(client, response);
         continue;
       }
 
-      await this.processDispatch(client, claim.dispatch, signal);
+      if (response.kind === "task_dispatch") {
+        await this.processDispatch(client, response.dispatch, signal);
+        continue;
+      }
+
+      if (response.kind === "noop_timeout") {
+        await delay(this.config.dispatchPollIntervalMs, signal).catch(() => undefined);
+        continue;
+      }
     }
   }
 
@@ -177,7 +148,6 @@ export class SprintOsWorker {
 
       let session = await this.getSession(client, execution.session.id);
       while (!signal?.aborted) {
-        await this.pollInbox(client);
         const pullRequest = this.extractPullRequest(session);
         const terminalState = this.resolveTerminalTaskState(session);
         const update = await this.callJsonTool<UpdateWorkerDispatchResponse>(client, "update_task_dispatch", {
@@ -239,37 +209,26 @@ export class SprintOsWorker {
     });
   }
 
-  private async pollInbox(client: Client): Promise<void> {
-    const response = await this.callJsonTool<PullInboxResponse>(client, "pull_inbox", {
-      connection_key: this.config.connectionKey,
-      project_id: this.config.projectId,
-      max_messages: 10,
-    });
-    await this.processInboxMessages(client, response.inbox);
-  }
-
-  private async processInboxMessages(client: Client, inbox: ConnectionInboxMessage[]): Promise<void> {
-    for (const message of inbox) {
-      try {
-        const reply = await this.callJsonTool<GenerateDashboardReplyResponse>(client, "generate_dashboard_reply", {
-          project_id: message.projectId,
-          thread_id: message.threadId,
-          thread_title: message.threadTitle,
-          body_markdown: message.bodyMarkdown,
-        });
-        await this.callJsonTool(client, "post_listen_reply", {
-          connection_key: this.config.connectionKey,
-          thread_id: message.threadId,
-          body_markdown: reply.bodyMarkdown,
-          reply_to_message_id: message.id,
-        });
-      } catch (error) {
-        console.error("[sprint-os-worker] Failed to process inbox message", {
-          threadId: message.threadId,
-          messageId: message.id,
-          error,
-        });
-      }
+  private async processInboxMessage(client: Client, event: ListenDashboardMessageEvent): Promise<void> {
+    try {
+      const reply = await this.callJsonTool<GenerateDashboardReplyResponse>(client, "generate_dashboard_reply", {
+        project_id: event.message.projectId,
+        thread_id: event.message.threadId,
+        thread_title: event.message.threadTitle,
+        body_markdown: event.message.bodyMarkdown,
+      });
+      await this.callJsonTool(client, "post_listen_reply", {
+        connection_key: this.config.connectionKey,
+        thread_id: event.message.threadId,
+        body_markdown: reply.bodyMarkdown,
+        reply_to_message_id: event.message.id,
+      });
+    } catch (error) {
+      console.error("[sprint-os-worker] Failed to process inbox message", {
+        threadId: event.message.threadId,
+        messageId: event.message.id,
+        error,
+      });
     }
   }
 
