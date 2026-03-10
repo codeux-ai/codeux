@@ -44,6 +44,10 @@ Each connection summary includes:
 - `instruction`
 - `labels`
 - `listenMode`
+- `machineName`
+- `platform`
+- `arch`
+- `localExecutionRuntime`
 - `lastHeartbeatAt`
 - `projectIds`
 - `activeProjectIds`
@@ -68,6 +72,7 @@ It shows:
 - active vs offline connection state
 - listening vs worker role identity
 - transport and model metadata
+- worker machine metadata when available
 - pending inbox count
 - active dispatch count
 - thread history and task-run history

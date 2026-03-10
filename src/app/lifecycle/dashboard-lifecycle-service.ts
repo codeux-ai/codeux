@@ -79,6 +79,12 @@ function mapExecutionConnections(connections: McpConnectionRecord[]): ExecutionC
       ? connection.capabilities.labels.map((label) => String(label || "").trim()).filter(Boolean)
       : [],
     listenMode: connection.capabilities.listenMode === true,
+    machineName: typeof connection.capabilities.machineName === "string" ? connection.capabilities.machineName : null,
+    platform: typeof connection.capabilities.platform === "string" ? connection.capabilities.platform : null,
+    arch: typeof connection.capabilities.arch === "string" ? connection.capabilities.arch : null,
+    localExecutionRuntime: typeof connection.capabilities.localExecutionRuntime === "string"
+      ? connection.capabilities.localExecutionRuntime
+      : null,
     lastHeartbeatAt: connection.lastHeartbeatAt,
     projectIds: connection.projectIds,
     activeProjectIds: connection.activeProjectIds,

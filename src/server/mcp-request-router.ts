@@ -37,7 +37,7 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
     .register("get_activity", (input) => args.coreToolHandler.handleGetActivity(input))
     .register("list_activities", (input) => args.coreToolHandler.handleListActivities(input))
     .register("list_all_activities", (input) => args.coreToolHandler.handleListAllActivities(input))
-    .register("listen", (input) => args.coreToolHandler.handleListen(input))
+    .register("listen", (input) => args.coreToolHandler.handleListenForRuntime(input, args.getRuntimeRole()))
     .register("start_listen", (input) => args.coreToolHandler.handleStartListen(input))
     .register("pull_inbox", (input) => args.coreToolHandler.handlePullInbox(input))
     .register("post_listen_reply", (input) => args.coreToolHandler.handlePostListenReply(input))

@@ -187,6 +187,10 @@ export interface ExecutionConnectionSummary {
   instruction: string | null;
   labels: string[];
   listenMode: boolean;
+  machineName: string | null;
+  platform: string | null;
+  arch: string | null;
+  localExecutionRuntime: string | null;
   lastHeartbeatAt: string | null;
   projectIds: string[];
   activeProjectIds: string[];

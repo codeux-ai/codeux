@@ -13,6 +13,10 @@ export interface McpConnectionCapabilities {
   model?: string;
   labels?: string[];
   listenMode?: boolean;
+  machineName?: string;
+  platform?: string;
+  arch?: string;
+  localExecutionRuntime?: string;
   [key: string]: unknown;
 }
 

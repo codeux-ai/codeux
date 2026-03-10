@@ -1,3 +1,4 @@
+import os from "os";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -166,6 +167,10 @@ export class SprintOsWorker {
             : "Claims Sprint OS worker dispatches and executes them locally through the worker-host runtime.",
           listenMode: true,
           labels: ["worker"],
+          machineName: os.hostname(),
+          platform: os.platform(),
+          arch: os.arch(),
+          localExecutionRuntime: "worker_host",
         },
       });
 

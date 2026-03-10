@@ -289,6 +289,36 @@ describe("CoreToolHandler coverage", () => {
         });
     });
 
+    it("handleListenForRuntime forces worker identity on worker gateway", async () => {
+        defaultDeps.connectionChatRepository.startListen.mockReturnValue({
+            connection: {
+                id: "conn-1",
+                connectionKey: "worker-1",
+                activeProjectIds: ["project-1"],
+                projectIds: ["project-1"],
+            },
+            inbox: [],
+        });
+        defaultDeps.connectionChatRepository.pullInbox.mockReturnValue([]);
+        defaultDeps.workerTaskDispatchService.pullNextDispatch.mockReturnValue(null);
+
+        const handler = new CoreToolHandler(defaultDeps);
+        await handler.handleListenForRuntime({
+            connection_key: "worker-1",
+            project_id: "project-1",
+            role: "listener",
+            transport: "stdio",
+            timeout_seconds: 0.01,
+            poll_interval_ms: 1,
+        }, "worker_gateway");
+
+        expect(defaultDeps.connectionChatRepository.startListen).toHaveBeenCalledWith(expect.objectContaining({
+            connectionKey: "worker-1",
+            role: "worker",
+            transport: "streamable_http",
+        }));
+    });
+
     it("handlePostListenReply", async () => {
         const handler = new CoreToolHandler(defaultDeps);
         await handler.handlePostListenReply({

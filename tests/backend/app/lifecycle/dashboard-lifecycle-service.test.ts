@@ -173,6 +173,32 @@ describe("dashboard-lifecycle-service", () => {
     });
 
     it("handles other callbacks correctly", async () => {
+      mockDeps.connectionChatRepository.listConnections = vi.fn().mockReturnValue([{
+        id: "connection-1",
+        connectionKey: "worker-1",
+        displayName: "Worker 1",
+        role: "worker",
+        transport: "streamable_http",
+        status: "listening",
+        capabilities: {
+          listenMode: true,
+          machineName: "builder-01",
+          platform: "linux",
+          arch: "x64",
+          localExecutionRuntime: "worker_host",
+        },
+        lastHeartbeatAt: "2026-03-09T00:00:00.000Z",
+        createdAt: "2026-03-09T00:00:00.000Z",
+        updatedAt: "2026-03-09T00:00:00.000Z",
+        projectIds: ["project-1"],
+        activeProjectIds: ["project-1"],
+        tasksRunCount: 2,
+        threadCount: 1,
+        messageCount: 3,
+        pendingInboxCount: 0,
+        activeDispatchCount: 1,
+      }]);
+
       await bootDashboard(mockDeps);
       const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
 
@@ -180,6 +206,12 @@ describe("dashboard-lifecycle-service", () => {
       expect(mockDeps.projectRuntimeRepository.getSelectedProjectStatus).toHaveBeenCalled();
       expect(setupArgs.getExecutionSnapshot()).toMatchObject({ projectId: "project-1" });
       expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenCalledWith("project-1");
+      expect(setupArgs.getExecutionSnapshot().connections[0]).toMatchObject({
+        machineName: "builder-01",
+        platform: "linux",
+        arch: "x64",
+        localExecutionRuntime: "worker_host",
+      });
 
       expect(setupArgs.getLiveActivities).toBe(mockDeps.getLiveActivitiesForActiveTasks);
       expect(setupArgs.getGitStatus).toBe(mockDeps.getGitStatus);

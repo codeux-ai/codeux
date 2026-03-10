@@ -562,6 +562,29 @@ const ConnectionRuntimePanel: FunctionComponent<{
                                         <span>·</span>
                                         <span className="truncate">{connection.connectionKey}</span>
                                     </div>
+                                    {(connection.machineName || connection.platform || connection.arch || connection.localExecutionRuntime) && (
+                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
+                                            {connection.machineName && <span>{connection.machineName}</span>}
+                                            {connection.platform && (
+                                                <>
+                                                    <span>·</span>
+                                                    <span>{connection.platform}</span>
+                                                </>
+                                            )}
+                                            {connection.arch && (
+                                                <>
+                                                    <span>·</span>
+                                                    <span>{connection.arch}</span>
+                                                </>
+                                            )}
+                                            {connection.localExecutionRuntime && (
+                                                <>
+                                                    <span>·</span>
+                                                    <span>{connection.localExecutionRuntime}</span>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="text-right">
                                     <div className={`text-[10px] font-bold uppercase tracking-[0.12em] ${statusTone(connection.status)}`}>

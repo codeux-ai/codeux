@@ -59,6 +59,13 @@ It exposes only the remote worker control-plane tools needed to:
 
 It does not expose the full project-manager tool surface.
 
+The gateway now also enforces worker identity at the listener entrypoint:
+
+- `listen` on `worker_gateway` is always registered as `role = worker`
+- the stored connection transport is always `streamable_http`
+
+That prevents remote HTTP worker connections from masquerading as normal stdio listeners.
+
 ## Transport Model
 
 The current worker architecture is intentionally split into two channels.
@@ -87,6 +94,15 @@ That local connection is used for:
 - `get_session`
 
 This allows the worker machine to use its own local provider environment, CLI tools, Docker installation, auth state, and repo context while still reporting into the central Sprint OS control plane.
+
+Worker registrations now also include lightweight machine metadata in the connection record:
+
+- hostname
+- platform
+- architecture
+- local execution runtime
+
+That metadata is surfaced in the live runtime dashboard so operators can distinguish workers by machine, not just by connection key.
 
 ## Main Server Configuration
 

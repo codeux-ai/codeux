@@ -15,6 +15,7 @@ import type { ListenResponse } from "../contracts/connection-chat-types.js";
 import type { WorkerTaskDispatchService } from "../services/worker-task-dispatch-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { ActivitySummaryService } from "../domain/sessions/activity-summary.js";
+import type { McpRuntimeRole } from "../contracts/mcp-tool-definitions.js";
 
 interface CoreToolHandlerDependencies {
   julesApi: JulesApiClient;
@@ -331,18 +332,29 @@ export class CoreToolHandler {
   }
 
   async handleListen(args: ListenArgs) {
+    return this.handleListenForRuntime(args, "project_manager");
+  }
+
+  async handleListenForRuntime(args: ListenArgs, runtimeRole: McpRuntimeRole) {
+    const normalizedArgs = runtimeRole === "worker_gateway"
+      ? {
+        ...args,
+        role: "worker" as const,
+        transport: "streamable_http",
+      }
+      : args;
     const settings = this.deps.getDashboardSettings();
-    const timeoutSeconds = this.normalizeListenTimeoutSeconds(args.timeout_seconds, settings);
-    const pollIntervalMs = this.normalizeListenPollIntervalMs(args.poll_interval_ms);
-    const shouldIncludeTaskDispatch = Boolean(args.include_task_dispatch ?? (args.role === "worker"));
+    const timeoutSeconds = this.normalizeListenTimeoutSeconds(normalizedArgs.timeout_seconds, settings);
+    const pollIntervalMs = this.normalizeListenPollIntervalMs(normalizedArgs.poll_interval_ms);
+    const shouldIncludeTaskDispatch = Boolean(normalizedArgs.include_task_dispatch ?? (normalizedArgs.role === "worker"));
 
     const startResponse = this.deps.connectionChatRepository.startListen({
-      connectionKey: args.connection_key,
-      displayName: args.display_name,
-      role: args.role,
-      projectId: args.project_id,
-      transport: args.transport,
-      capabilities: args.capabilities,
+      connectionKey: normalizedArgs.connection_key,
+      displayName: normalizedArgs.display_name,
+      role: normalizedArgs.role,
+      projectId: normalizedArgs.project_id,
+      transport: normalizedArgs.transport,
+      capabilities: normalizedArgs.capabilities,
       maxMessages: 1,
     });
 
@@ -365,21 +377,21 @@ export class CoreToolHandler {
     const startTime = Date.now();
     while (Date.now() - startTime < timeoutSeconds * 1000) {
       const inbox = this.deps.connectionChatRepository.pullInbox({
-        connectionKey: args.connection_key,
-        projectId: args.project_id,
+        connectionKey: normalizedArgs.connection_key,
+        projectId: normalizedArgs.project_id,
         maxMessages: 1,
       });
       const message = inbox[0];
       if (message) {
         return this.wrapListenResponse({
           kind: "dashboard_message",
-          connection: this.requireConnectionForListen(args.connection_key),
+          connection: this.requireConnectionForListen(normalizedArgs.connection_key),
           timeoutSeconds,
           pollIntervalMs,
           message,
           continuation: {
             nextTool: "listen",
-            connectionKey: args.connection_key,
+            connectionKey: normalizedArgs.connection_key,
             instruction: "Reply in the dashboard thread with post_listen_reply, then call listen again with the same connection_key to stay in listening mode.",
           },
         });
@@ -387,19 +399,19 @@ export class CoreToolHandler {
 
       if (shouldIncludeTaskDispatch) {
         const claim = this.deps.workerTaskDispatchService.pullNextDispatch({
-          connectionKey: args.connection_key,
-          projectId: args.project_id,
+          connectionKey: normalizedArgs.connection_key,
+          projectId: normalizedArgs.project_id,
         });
         if (claim) {
           return this.wrapListenResponse({
             kind: "task_dispatch",
-            connection: this.requireConnectionForListen(args.connection_key),
+            connection: this.requireConnectionForListen(normalizedArgs.connection_key),
             timeoutSeconds,
             pollIntervalMs,
             dispatch: claim,
             continuation: {
               nextTool: "listen",
-              connectionKey: args.connection_key,
+              connectionKey: normalizedArgs.connection_key,
               instruction: "Handle the claimed task dispatch, close it with update_task_dispatch, then call listen again with the same connection_key to stay available.",
             },
           });
@@ -413,7 +425,7 @@ export class CoreToolHandler {
       await sleep(Math.min(pollIntervalMs, remainingMs));
     }
 
-    const connection = this.requireConnectionForListen(args.connection_key);
+    const connection = this.requireConnectionForListen(normalizedArgs.connection_key);
     return this.wrapListenResponse({
       kind: "noop_timeout",
       connection,
