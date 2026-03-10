@@ -1,10 +1,14 @@
-import { useCallback, useMemo, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import { computeStats } from "../lib/status.js";
 import { fetchGitTrackingStatus, fetchRuntimeDashboardPayload } from "../lib/api/dashboard-api.js";
-import type { DashboardStatus, ExecutionDashboardSnapshot, GitTrackingStatus } from "../types.js";
-import { useDashboardPollManager } from "./use-dashboard-poll-manager.js";
-
-const DEFAULT_POLL_INTERVAL_MS = 10000;
+import type {
+  DashboardStatus,
+  ExecutionDashboardSnapshot,
+  GitTrackingStatus,
+  DashboardRealtimeServerMessage,
+} from "../types.js";
+import { DEFAULT_POLL_INTERVAL_MS, useDashboardPollManager } from "./use-dashboard-poll-manager.js";
+import { subscribeToDashboardRealtime } from "../lib/realtime/dashboard-realtime-client.js";
 
 interface UseDashboardRuntimeDataResult {
   error: string | null;
@@ -60,6 +64,26 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
     intervalMs: DEFAULT_POLL_INTERVAL_MS,
     onPoll: [refreshRuntimeStatusAction, refreshGitStatusAction],
   });
+
+  const realtimeProjectId = execution.projectId || status.project_id || null;
+
+  useEffect(() => {
+    if (!realtimeProjectId) {
+      return;
+    }
+
+    return subscribeToDashboardRealtime([`project:${realtimeProjectId}`], (message: DashboardRealtimeServerMessage) => {
+      if (message.type === "event" && message.event.eventType === "project.execution.updated") {
+        setExecution(message.event.payload as ExecutionDashboardSnapshot);
+        setError(null);
+        return;
+      }
+
+      if (message.type === "snapshot_required") {
+        void refreshRuntimeStatusAction();
+      }
+    });
+  }, [realtimeProjectId, refreshRuntimeStatusAction]);
 
   const tasksWithLiveActivities = useMemo(() => status.subtasks || [], [status.subtasks]);
 

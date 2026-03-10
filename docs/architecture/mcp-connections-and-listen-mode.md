@@ -94,6 +94,12 @@ The blocking long-poll `listen` contract is now the preferred listener UX for bo
 
 Workers now use the same listen loop in addition to dispatch polling, so a single connected worker can both answer chat and pick up `mcp_worker` tasks.
 
+Operational behavior:
+
+- the blocking call still polls sqlite-backed inbox and dispatch state internally
+- the default internal poll cadence now targets `3000ms`, not `1000ms`
+- idle listener heartbeat writes are throttled, so a waiting listener does not churn connection state every second
+
 Transport notes:
 
 - normal human-driven MCP clients continue to use stdio

@@ -1,7 +1,8 @@
 import { createContext } from "preact";
-import { useContext, useEffect, useState } from "preact/hooks";
+import { useCallback, useContext, useEffect, useState } from "preact/hooks";
 import type { ComponentChildren, FunctionComponent } from "preact";
 import type { CreateProjectInput, Source, UpdateProjectInput } from "../types.js";
+import type { DashboardRealtimeServerMessage } from "../../types.js";
 import {
   createProject as createProjectRequest,
   deleteProject as deleteProjectRequest,
@@ -9,6 +10,7 @@ import {
   selectProject as selectProjectRequest,
   updateProject as updateProjectRequest,
 } from "../lib/project-api.js";
+import { subscribeToDashboardRealtime } from "../../lib/realtime/dashboard-realtime-client.js";
 
 interface ProjectDataContextValue {
   projects: Source[];
@@ -31,7 +33,7 @@ export const ProjectDataProvider: FunctionComponent<{ children: ComponentChildre
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshProjects = async (): Promise<void> => {
+  const refreshProjects = useCallback(async (): Promise<void> => {
     setLoading(true);
     try {
       const response = await fetchProjects();
@@ -43,11 +45,30 @@ export const ProjectDataProvider: FunctionComponent<{ children: ComponentChildre
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     void refreshProjects();
-  }, []);
+  }, [refreshProjects]);
+
+  useEffect(() => (
+    subscribeToDashboardRealtime(["projects"], (message: DashboardRealtimeServerMessage) => {
+      if (message.type === "snapshot_required") {
+        void refreshProjects();
+        return;
+      }
+
+      if (message.type !== "event" || message.event.eventType !== "projects.updated") {
+        return;
+      }
+
+      const payload = message.event.payload as Awaited<ReturnType<typeof fetchProjects>>;
+      setProjects(payload.projects);
+      setSelectedProjectId(payload.selectedProjectId ?? payload.projects[0]?.id ?? null);
+      setLoading(false);
+      setError(null);
+    })
+  ), [refreshProjects]);
 
   const selectProject = async (projectId: string): Promise<void> => {
     const nextProjectId = await selectProjectRequest(projectId);

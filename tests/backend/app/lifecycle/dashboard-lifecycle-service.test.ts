@@ -29,6 +29,8 @@ describe("dashboard-lifecycle-service", () => {
       } as any,
       projectManagementRepository: {
         getSelectedProjectId: vi.fn().mockReturnValue("project-1"),
+        listProjects: vi.fn().mockReturnValue({ projects: [], selectedProjectId: "project-1" }),
+        notifyProjectsUpdated: vi.fn(),
       } as any,
       projectRuntimeRepository: {
         getSelectedProjectStatus: vi.fn().mockReturnValue("runtime-status"),
@@ -46,6 +48,11 @@ describe("dashboard-lifecycle-service", () => {
           recentEvents: [],
           updatedAt: "2026-03-09T00:00:00.000Z",
         }),
+        getOverviewTelemetrySnapshot: vi.fn().mockReturnValue({
+          activeProjects: [],
+          recentEvents: [],
+          updatedAt: "2026-03-09T00:00:00.000Z",
+        }),
       } as any,
       activityCacheService: {
         invalidateGitStatusCache: vi.fn(),
@@ -59,6 +66,9 @@ describe("dashboard-lifecycle-service", () => {
         cancelSprintRun: vi.fn().mockResolvedValue({ id: "run-1" }),
         cancelTaskDispatch: vi.fn().mockResolvedValue({ id: "dispatch-1" }),
         retryTaskDispatch: vi.fn().mockResolvedValue({ id: "task-1" }),
+      } as any,
+      dashboardRealtimeService: {
+        setSnapshotLoaders: vi.fn(),
       } as any,
       logger: {
         child: vi.fn().mockReturnValue({}),
@@ -117,8 +127,10 @@ describe("dashboard-lifecycle-service", () => {
           dashboardDir: path.join("/project-root", "dashboard"),
           port: 3000,
           liveActivityCacheMs: 500,
+          realtimeService: mockDeps.dashboardRealtimeService,
         })
       );
+      expect(mockDeps.dashboardRealtimeService.setSnapshotLoaders).toHaveBeenCalled();
       expect(mockDeps.runtimeContext.dashboardRuntimePort).toBe(3000);
     });
 

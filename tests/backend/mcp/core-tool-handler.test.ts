@@ -279,6 +279,27 @@ describe("CoreToolHandler coverage", () => {
         expect(parsed.continuation.nextTool).toBe("listen");
     });
 
+    it("handleListen uses a slower default internal poll interval", async () => {
+        defaultDeps.connectionChatRepository.startListen.mockReturnValue({
+            connection: { id: "conn-1", connectionKey: "listener-1" },
+            inbox: [{
+                id: "message-1",
+                threadId: "thread-1",
+                threadTitle: "Inbox",
+                projectId: "project-1",
+                bodyMarkdown: "Hello from dashboard",
+                createdAt: "2026-03-10T00:00:00.000Z",
+                deliveryStatus: "delivered",
+            }],
+        });
+
+        const handler = new CoreToolHandler(defaultDeps);
+        const response = await handler.handleListen({ connection_key: "listener-1", project_id: "project-1" });
+        const parsed = JSON.parse(response.content[0].text as string);
+
+        expect(parsed.pollIntervalMs).toBe(3000);
+    });
+
     it("handlePullInbox", async () => {
         const handler = new CoreToolHandler(defaultDeps);
         await handler.handlePullInbox({ connection_key: "listener-1", max_messages: 5 });

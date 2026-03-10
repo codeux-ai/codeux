@@ -25,6 +25,7 @@ import type {
   ExecutionSprintRunSummary,
   ExecutionTaskDispatchSummary,
 } from "../contracts/app-types.js";
+import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
 
 interface SprintRunRow {
   id: string;
@@ -226,7 +227,10 @@ function parsePayloadJson(value: string | null): Record<string, unknown> | null 
 export class ExecutionRepository {
   private readonly db: DatabaseSync;
 
-  constructor(storage: AppDbStorage = new AppDbStorage()) {
+  constructor(
+    storage: AppDbStorage = new AppDbStorage(),
+    private readonly realtimeNotifier?: DashboardRealtimeMutationNotifier,
+  ) {
     this.db = storage.getDatabase();
   }
 
@@ -256,7 +260,9 @@ export class ExecutionRepository {
       now
     );
 
-    return this.requireSprintRun(id);
+    const created = this.requireSprintRun(id);
+    this.notifyRealtime(created.projectId, true);
+    return created;
   }
 
   listSprintRuns(projectId: string, sprintId?: string): SprintRunRecord[] {
@@ -315,7 +321,11 @@ export class ExecutionRepository {
       now,
       runId
     );
-    return this.requireSprintRun(runId);
+    const updated = this.requireSprintRun(runId);
+    if (this.shouldPublishSprintRunUpdate(input)) {
+      this.notifyRealtime(updated.projectId, true);
+    }
+    return updated;
   }
 
   createTaskDispatch(input: CreateTaskDispatchInput): TaskDispatchRecord {
@@ -355,7 +365,9 @@ export class ExecutionRepository {
       now
     );
 
-    return this.requireTaskDispatch(id);
+    const created = this.requireTaskDispatch(id);
+    this.notifyRealtime(created.projectId, true);
+    return created;
   }
 
   listTaskDispatches(args: { projectId: string; sprintId?: string; sprintRunId?: string; taskId?: string }): TaskDispatchRecord[] {
@@ -418,7 +430,11 @@ export class ExecutionRepository {
       now,
       dispatchId
     );
-    return this.requireTaskDispatch(dispatchId);
+    const updated = this.requireTaskDispatch(dispatchId);
+    if (this.shouldPublishTaskDispatchUpdate(input)) {
+      this.notifyRealtime(updated.projectId, true);
+    }
+    return updated;
   }
 
   createTaskRun(input: CreateTaskRunInput): TaskRunRecord {
@@ -461,7 +477,9 @@ export class ExecutionRepository {
       input.durationMs ?? null
     );
 
-    return this.requireTaskRun(id);
+    const created = this.requireTaskRun(id);
+    this.notifyRealtime(created.projectId, true);
+    return created;
   }
 
   getTaskRun(taskRunId: string): TaskRunRecord | null {
@@ -843,7 +861,9 @@ export class ExecutionRepository {
       input.durationMs === undefined ? current.durationMs : input.durationMs,
       taskRunId
     );
-    return this.requireTaskRun(taskRunId);
+    const updated = this.requireTaskRun(taskRunId);
+    this.notifyRealtime(updated.projectId, true);
+    return updated;
   }
 
   listLatestTaskRuns(taskIds: string[], sprintRunId?: string): Map<string, TaskRunRecord> {
@@ -895,7 +915,12 @@ export class ExecutionRepository {
       options?.sourceEventKey ?? null,
       options?.createdAt || new Date().toISOString()
     );
-    return Number((result as { changes?: number }).changes || 0) > 0;
+    const inserted = Number((result as { changes?: number }).changes || 0) > 0;
+    if (inserted) {
+      const taskRun = this.requireTaskRun(taskRunId);
+      this.notifyRealtime(taskRun.projectId, true);
+    }
+    return inserted;
   }
 
   appendSprintRunEvent(
@@ -918,7 +943,12 @@ export class ExecutionRepository {
       options?.sourceEventKey ?? null,
       options?.createdAt || new Date().toISOString(),
     );
-    return Number((result as { changes?: number }).changes || 0) > 0;
+    const inserted = Number((result as { changes?: number }).changes || 0) > 0;
+    if (inserted) {
+      const sprintRun = this.requireSprintRun(sprintRunId);
+      this.notifyRealtime(sprintRun.projectId, true);
+    }
+    return inserted;
   }
 
   listTaskRunEvents(taskRunId: string, limit: number = 50): TaskRunEventRecord[] {
@@ -994,7 +1024,9 @@ export class ExecutionRepository {
         input.scopeType,
         input.scopeId
       );
-      return this.requireLease(input.scopeType, input.scopeId);
+      const updated = this.requireLease(input.scopeType, input.scopeId);
+      this.notifyRealtimeForLease(input.scopeType, input.scopeId);
+      return updated;
     }
 
     const id = randomUUID();
@@ -1011,7 +1043,9 @@ export class ExecutionRepository {
       input.expiresAt,
       now
     );
-    return this.requireLease(input.scopeType, input.scopeId);
+    const created = this.requireLease(input.scopeType, input.scopeId);
+    this.notifyRealtimeForLease(input.scopeType, input.scopeId);
+    return created;
   }
 
   renewLease(input: RenewExecutionLeaseInput): ExecutionLeaseRecord {
@@ -1029,11 +1063,15 @@ export class ExecutionRepository {
   }
 
   releaseLease(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string, leaseToken?: string): void {
+    const projectId = this.resolveLeaseProjectId(scopeType, scopeId);
     if (leaseToken) {
       this.db.prepare(`
         DELETE FROM execution_leases
         WHERE scope_type = ? AND scope_id = ? AND lease_token = ?
       `).run(scopeType, scopeId, leaseToken);
+      if (projectId) {
+        this.notifyRealtime(projectId, true);
+      }
       return;
     }
 
@@ -1041,6 +1079,9 @@ export class ExecutionRepository {
       DELETE FROM execution_leases
       WHERE scope_type = ? AND scope_id = ?
     `).run(scopeType, scopeId);
+    if (projectId) {
+      this.notifyRealtime(projectId, true);
+    }
   }
 
   getLease(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string): ExecutionLeaseRecord | null {
@@ -1384,5 +1425,54 @@ export class ExecutionRepository {
       runningDispatchCount: toNumber(row.running_dispatch_count),
       updatedAt: row.updated_at,
     };
+  }
+
+  private notifyRealtime(projectId: string, includeOverview: boolean): void {
+    this.realtimeNotifier?.scheduleProjectExecutionRefresh(projectId, { includeOverview });
+  }
+
+  private shouldPublishSprintRunUpdate(input: UpdateSprintRunInput): boolean {
+    return input.status !== undefined
+      || input.executorMode !== undefined
+      || input.startedAt !== undefined
+      || input.finishedAt !== undefined;
+  }
+
+  private shouldPublishTaskDispatchUpdate(input: UpdateTaskDispatchInput): boolean {
+    return input.connectionId !== undefined
+      || input.status !== undefined
+      || input.claimedAt !== undefined
+      || input.startedAt !== undefined
+      || input.finishedAt !== undefined
+      || input.errorMessage !== undefined;
+  }
+
+  private notifyRealtimeForLease(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string): void {
+    const projectId = this.resolveLeaseProjectId(scopeType, scopeId);
+    if (projectId) {
+      this.notifyRealtime(projectId, true);
+    }
+  }
+
+  private resolveLeaseProjectId(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string): string | null {
+    if (scopeType === "sprint") {
+      const row = this.db.prepare(`
+        SELECT project_id
+        FROM sprints
+        WHERE id = ?
+      `).get(scopeId) as { project_id: string } | undefined;
+      return row?.project_id || null;
+    }
+
+    if (scopeType === "task_dispatch") {
+      const row = this.db.prepare(`
+        SELECT project_id
+        FROM task_dispatches
+        WHERE id = ?
+      `).get(scopeId) as { project_id: string } | undefined;
+      return row?.project_id || null;
+    }
+
+    return null;
   }
 }

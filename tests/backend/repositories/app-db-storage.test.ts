@@ -36,6 +36,7 @@ describe("AppDbStorage", () => {
     expect(storage.hasTable("task_runs")).toBe(true);
     expect(storage.hasTable("task_run_events")).toBe(true);
     expect(storage.hasTable("execution_leases")).toBe(true);
+    expect(storage.hasTable("dashboard_realtime_events")).toBe(true);
     expect(storage.hasTable("conversation_threads")).toBe(true);
     expect(storage.hasTable("conversation_messages")).toBe(true);
     expect(storage.hasTable("agent_presets")).toBe(true);

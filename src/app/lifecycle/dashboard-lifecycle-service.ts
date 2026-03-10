@@ -25,6 +25,7 @@ import type { SprintMarkdownService } from "../../services/sprint-markdown-servi
 import type { ActivityCacheService } from "../../server/activity-cache-service.js";
 import type { TaskRerunService } from "../../services/task-rerun-service.js";
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
+import type { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
 import { getRepoDebugLogPath, SPRINT_OS_SERVICE_NAME } from "../../shared/config/sprint-os-paths.js";
 
 export interface BootDashboardDeps {
@@ -43,6 +44,7 @@ export interface BootDashboardDeps {
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
   executionControlService: ExecutionControlService;
+  dashboardRealtimeService: DashboardRealtimeService;
   logger: Logger;
   getLiveActivitiesForActiveTasks: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
@@ -100,6 +102,19 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
   const dashboardDir = `${deps.projectRoot}/dashboard`;
   const port = deps.getDashboardPort();
 
+  const getOverviewTelemetrySnapshot = () => deps.executionRepository.getOverviewTelemetrySnapshot();
+  const getProjectsSnapshot = () => deps.projectManagementRepository.listProjects();
+  const getProjectExecutionSnapshot = (projectId: string) => ({
+    ...deps.executionRepository.getProjectExecutionSnapshot(projectId),
+    connections: mapExecutionConnections(deps.connectionChatRepository.listConnections(projectId)),
+  });
+
+  deps.dashboardRealtimeService.setSnapshotLoaders({
+    getProjectsSnapshot,
+    getProjectExecutionSnapshot,
+    getOverviewTelemetrySnapshot,
+  });
+
   const handle = await setupDashboardServer({
     app: deps.app,
     dashboardDir,
@@ -109,10 +124,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     getExecutionSnapshot: () => {
       const projectId = deps.projectManagementRepository.getSelectedProjectId();
       return projectId
-        ? {
-          ...deps.executionRepository.getProjectExecutionSnapshot(projectId),
-          connections: mapExecutionConnections(deps.connectionChatRepository.listConnections(projectId)),
-        }
+        ? getProjectExecutionSnapshot(projectId)
         : {
           projectId: null,
           projectName: null,
@@ -123,11 +135,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
           updatedAt: null,
         };
     },
-    getOverviewTelemetrySnapshot: () => deps.executionRepository.getOverviewTelemetrySnapshot(),
-    getProjectExecutionSnapshot: (projectId) => ({
-      ...deps.executionRepository.getProjectExecutionSnapshot(projectId),
-      connections: mapExecutionConnections(deps.connectionChatRepository.listConnections(projectId)),
-    }),
+    getOverviewTelemetrySnapshot,
+    getProjectExecutionSnapshot,
     getLiveActivities: deps.getLiveActivitiesForActiveTasks,
     getGitStatus: deps.getGitStatus,
     getExternalSettingsHints: () => deps.externalSettingsHints,
@@ -137,7 +146,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     getProject: (projectId) => deps.projectManagementRepository.getProject(projectId),
     updateProject: (projectId, input) => deps.projectManagementRepository.updateProject(projectId, input),
     deleteProject: (projectId) => deps.projectManagementRepository.deleteProject(projectId),
-    selectProject: (projectId) => deps.projectManagementRepository.setSelectedProjectId(projectId),
+    selectProject: (projectId) => {
+      const selectedProjectId = deps.projectManagementRepository.setSelectedProjectId(projectId);
+      deps.projectManagementRepository.notifyProjectsUpdated();
+      return selectedProjectId;
+    },
     listSprints: (projectId) => deps.projectManagementRepository.listSprints(projectId),
     createSprint: (projectId, input) => deps.projectManagementRepository.createSprint(projectId, input),
     updateSprint: (sprintId, input) => deps.projectManagementRepository.updateSprint(sprintId, input),
@@ -193,6 +206,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
       deps.activityCacheService.invalidateGitStatusCache();
       return result;
     },
+    realtimeService: deps.dashboardRealtimeService,
     logger: deps.logger.child({ component: "dashboard-server" }),
     isReady: deps.isReady,
     isHealthy: deps.isHealthy,

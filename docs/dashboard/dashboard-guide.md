@@ -74,6 +74,8 @@ Legacy runtime:
   - Selected-project execution control-plane snapshot (`sprintRuns`, `taskDispatches`, `recentEvents`, lease ownership)
 - `GET /api/telemetry/overview`
   - Cross-project overview telemetry snapshot for all currently active project runs
+- `GET /api/realtime`
+  - websocket upgrade endpoint for dashboard realtime subscriptions (`projects`, `overview`, `project:<projectId>`, `thread:<threadId>`)
 - `GET /api/projects/:projectId/execution`
   - Project-scoped execution control-plane snapshot for the v2 runtime
 - `GET /api/live-activities`
@@ -94,14 +96,18 @@ Legacy runtime:
 ### V2 project management
 - Top-nav project selector persists the active project in sqlite
 - Projects page is DB-backed and can create/select/delete projects
+- Project selector and project cards now refresh over websocket when the project collection or selected project changes
 - Sprints page is project-scoped, creates sprint records in sqlite, and exposes markdown import/export controls
+- Sprints page now also refreshes from project-structure realtime invalidation, so sprint CRUD and status-adjacent updates propagate across open dashboard tabs
 - Sprints page now also starts and stops sprint orchestration directly from sprint cards, with optimistic visual state updates tied to project-scoped execution data
 - The organic sprint bubble cells use the same live start/stop control path as the registry list, so the hover play/stop action is now functional instead of decorative
 - Tasks page is project-scoped and supports create/edit/delete plus dependency metadata
+- Tasks page now refreshes from the same project-structure realtime invalidation path as sprints
 - Tasks page also stores explicit task executor preference (`auto`, `docker_cli`, `jules`, `mcp_worker`)
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface
 - Agents page is DB-backed and manages project-scoped agent presets (`name`, `labels`, `instruction markdown`)
 - Chat page is DB-backed and stores project conversation threads/messages in sqlite
+- Chat page now receives websocket updates for thread assignment changes and incoming thread messages in the active thread
 - Worker-routed tasks are created from the same task modal and appear in the same board; the executor badge shows whether work is automatic, CLI-backed, Jules-backed, or queued for a connected worker
 
 ### Dashboard view
@@ -145,8 +151,33 @@ Runtime scoping:
 ## Polling Behavior
 
 From `dashboard/src/hooks/use-dashboard-runtime-data.ts`:
-- Status and execution snapshot poll every 10 seconds.
-- Git status polls every 10 seconds.
+- Status and execution snapshot poll every 30 seconds.
+- Git status polls every 30 seconds.
+
+From `dashboard/src/hooks/use-overview-telemetry.ts` and `dashboard/src/v2/hooks/use-project-execution.ts`:
+- Overview telemetry and project execution are now websocket-first through `/api/realtime`.
+- Both still keep slower polling fallback for reconnect recovery and degraded transport cases.
+- Websocket-backed fallback polling now defaults to `30s` instead of `10s`.
+- Current websocket scopes are:
+  - `projects`
+  - `overview`
+  - `project:<projectId>`
+  - `thread:<threadId>`
+
+Realtime consumers currently include:
+
+- `dashboard/src/v2/context/project-data.tsx`
+- `dashboard/src/v2/hooks/use-project-sprints.ts`
+- `dashboard/src/v2/hooks/use-project-tasks.ts`
+- `dashboard/src/v2/hooks/use-project-execution.ts`
+- `dashboard/src/hooks/use-dashboard-runtime-data.ts`
+- `dashboard/src/hooks/use-overview-telemetry.ts`
+- `dashboard/src/v2/ChatPage.tsx`
+
+Chat-specific behavior:
+
+- The Chat refresh button is now manual-only.
+- Background realtime sync and fallback refreshes no longer drive the refresh button spinner state.
 
 Settings are loaded from `dashboard/src/hooks/use-dashboard-settings.ts` and saved through
 `dashboard/src/lib/api/dashboard-api.ts` request helpers.

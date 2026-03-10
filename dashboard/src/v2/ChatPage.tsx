@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import {
   ArrowUp,
@@ -10,6 +10,11 @@ import {
   UserCircle2,
 } from "lucide-preact";
 import type { AgentConnection, ChatMessageRecord, ChatThread } from "./types.js";
+import type {
+  DashboardRealtimeServerMessage,
+  ExecutionDashboardSnapshot,
+  ExecutionConnectionSummary,
+} from "../types.js";
 import { useProjectData } from "./context/project-data.js";
 import {
   createConversationThread,
@@ -20,6 +25,7 @@ import {
   updateConversationThread,
 } from "./lib/connection-api.js";
 import { renderMarkdown } from "../lib/markdown.js";
+import { subscribeToDashboardRealtime } from "../lib/realtime/dashboard-realtime-client.js";
 
 const formatTime = (iso: string): string => (
   new Date(iso).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
@@ -38,6 +44,58 @@ const relativeTime = (iso: string | null): string => {
 const statusTone = (pendingCount: number): string => (
   pendingCount > 0 ? "text-status-amber" : "text-slate-400 dark:text-slate-500"
 );
+
+const upsertThread = (threads: ChatThread[], nextThread: ChatThread): ChatThread[] => {
+  const withoutCurrent = threads.filter((thread) => thread.id !== nextThread.id);
+  return [nextThread, ...withoutCurrent].sort((left, right) => {
+    const leftTime = left.lastMessageAt ? new Date(left.lastMessageAt).getTime() : new Date(left.updatedAt).getTime();
+    const rightTime = right.lastMessageAt ? new Date(right.lastMessageAt).getTime() : new Date(right.updatedAt).getTime();
+    return rightTime - leftTime;
+  });
+};
+
+const upsertMessage = (messages: ChatMessageRecord[], nextMessage: ChatMessageRecord): ChatMessageRecord[] => {
+  if (messages.some((message) => message.id === nextMessage.id)) {
+    return messages;
+  }
+
+  return [...messages, nextMessage].sort((left, right) => {
+    const byCreatedAt = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+    if (byCreatedAt !== 0) {
+      return byCreatedAt;
+    }
+    return left.id.localeCompare(right.id);
+  });
+};
+
+const toAgentConnection = (connection: ExecutionConnectionSummary): AgentConnection => ({
+  id: connection.id,
+  connectionKey: connection.connectionKey,
+  displayName: connection.displayName,
+  role: connection.role as AgentConnection["role"],
+  transport: connection.transport,
+  status: connection.status as AgentConnection["status"],
+  capabilities: {
+    instruction: connection.instruction || undefined,
+    model: connection.model || undefined,
+    labels: connection.labels,
+    listenMode: connection.listenMode,
+    machineName: connection.machineName || undefined,
+    platform: connection.platform || undefined,
+    arch: connection.arch || undefined,
+    localExecutionRuntime: connection.localExecutionRuntime || undefined,
+  },
+  lastHeartbeatAt: connection.lastHeartbeatAt,
+  createdAt: connection.lastHeartbeatAt || new Date().toISOString(),
+  updatedAt: connection.lastHeartbeatAt || new Date().toISOString(),
+  projectIds: connection.projectIds,
+  activeProjectIds: connection.activeProjectIds,
+  tasksRunCount: connection.tasksRunCount,
+  threadCount: connection.threadCount,
+  messageCount: connection.messageCount,
+  pendingInboxCount: connection.pendingInboxCount,
+  activeDispatchCount: connection.activeDispatchCount,
+});
 
 const EmptyChat: FunctionComponent<{ message: string }> = ({ message }) => (
   <div className="flex h-full min-h-[360px] items-center justify-center rounded-[1.9rem] border border-dashed border-signal-500/20 bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-signal-500/20 dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
@@ -132,6 +190,7 @@ export const ChatPage: FunctionComponent = () => {
   const [messages, setMessages] = useState<ChatMessageRecord[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -140,7 +199,7 @@ export const ChatPage: FunctionComponent = () => {
     [threads, selectedThreadId]
   );
 
-  const refreshThreads = async (): Promise<void> => {
+  const refreshThreads = useCallback(async (options?: { manual?: boolean }): Promise<void> => {
     if (!selectedProject) {
       setThreads([]);
       setConnections([]);
@@ -150,7 +209,11 @@ export const ChatPage: FunctionComponent = () => {
       return;
     }
 
-    setLoading(true);
+    if (options?.manual) {
+      setManualRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     try {
       const [nextThreads, nextConnections] = await Promise.all([
         fetchConversationThreads(selectedProject.id),
@@ -166,11 +229,15 @@ export const ChatPage: FunctionComponent = () => {
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
     } finally {
-      setLoading(false);
+      if (options?.manual) {
+        setManualRefreshing(false);
+      } else {
+        setLoading(false);
+      }
     }
-  };
+  }, [selectedProject, selectedThreadId]);
 
-  const refreshMessages = async (threadId: string | null): Promise<void> => {
+  const refreshMessages = useCallback(async (threadId: string | null): Promise<void> => {
     if (!threadId) {
       setMessages([]);
       return;
@@ -182,15 +249,66 @@ export const ChatPage: FunctionComponent = () => {
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
     }
-  };
+  }, []);
 
   useEffect(() => {
     void refreshThreads();
-  }, [selectedProject?.id]);
+  }, [refreshThreads]);
 
   useEffect(() => {
     void refreshMessages(selectedThreadId);
   }, [selectedThreadId]);
+
+  useEffect(() => {
+    if (!selectedProject) {
+      return;
+    }
+
+    const scopes = [`project:${selectedProject.id}`];
+    if (selectedThreadId) {
+      scopes.push(`thread:${selectedThreadId}`);
+    }
+
+    return subscribeToDashboardRealtime(scopes, (message: DashboardRealtimeServerMessage) => {
+      if (message.type === "snapshot_required") {
+        void refreshThreads();
+        if (selectedThreadId) {
+          void refreshMessages(selectedThreadId);
+        }
+        return;
+      }
+
+      if (message.type !== "event") {
+        return;
+      }
+
+      if (message.event.eventType === "project.execution.updated") {
+        const payload = message.event.payload as ExecutionDashboardSnapshot;
+        setConnections((payload.connections || []).map((connection) => toAgentConnection(connection)));
+        return;
+      }
+
+      if (message.event.eventType === "conversation.thread.updated") {
+        const thread = message.event.payload as ChatThread;
+        if (thread.projectId !== selectedProject.id) {
+          return;
+        }
+        setThreads((current) => upsertThread(current, thread));
+        if (!selectedThreadId) {
+          setSelectedThreadId(thread.id);
+        }
+        return;
+      }
+
+      if (message.event.eventType === "conversation.message.created") {
+        const realtimeMessage = message.event.payload as ChatMessageRecord;
+        if (realtimeMessage.threadId !== selectedThreadId) {
+          return;
+        }
+        setMessages((current) => upsertMessage(current, realtimeMessage));
+      }
+    });
+  }, [refreshMessages, selectedProject, selectedThreadId]);
 
   useEffect(() => {
     if (!messagesRef.current) return;
@@ -259,9 +377,8 @@ export const ChatPage: FunctionComponent = () => {
       if (composerRef.current) {
         composerRef.current.style.height = "auto";
       }
-      setMessages((current) => [...current, created]);
+      setMessages((current) => upsertMessage(current, created));
       await refreshThreads();
-      await refreshMessages(thread.id);
       setError(null);
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : String(sendError));
@@ -310,11 +427,11 @@ export const ChatPage: FunctionComponent = () => {
           </span>
           <button
             type="button"
-            onClick={() => void refreshThreads()}
-            disabled={loading}
+            onClick={() => void refreshThreads({ manual: true })}
+            disabled={manualRefreshing}
             className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} strokeWidth={2.1} />
+            <RefreshCw className={`h-3.5 w-3.5 ${manualRefreshing ? "animate-spin" : ""}`} strokeWidth={2.1} />
             Refresh
           </button>
           <button

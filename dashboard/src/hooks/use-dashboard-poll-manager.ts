@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 
-const DEFAULT_POLL_INTERVAL_MS = 10000;
+export const DEFAULT_POLL_INTERVAL_MS = 30000;
 const MAX_BACKOFF_MS = 60000; // 1 minute
 const BACKOFF_FACTOR = 1.5;
 

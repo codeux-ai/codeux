@@ -1,7 +1,9 @@
-import { useEffect, useState } from "preact/hooks";
+import { useCallback, useEffect, useState } from "preact/hooks";
 import type { Sprint } from "../types.js";
+import type { DashboardRealtimeServerMessage } from "../../types.js";
 import { fetchSprints } from "../lib/project-api.js";
 import { toSprintViewModel } from "../lib/view-models.js";
+import { subscribeToDashboardRealtime } from "../../lib/realtime/dashboard-realtime-client.js";
 
 interface UseProjectSprintsResult {
   sprints: Sprint[];
@@ -15,7 +17,7 @@ export function useProjectSprints(projectId: string | null): UseProjectSprintsRe
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = async (): Promise<void> => {
+  const refresh = useCallback(async (): Promise<void> => {
     if (!projectId) {
       setSprints([]);
       setError(null);
@@ -33,11 +35,28 @@ export function useProjectSprints(projectId: string | null): UseProjectSprintsRe
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId]);
 
   useEffect(() => {
     void refresh();
-  }, [projectId]);
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!projectId) {
+      return;
+    }
+
+    return subscribeToDashboardRealtime([`project:${projectId}`], (message: DashboardRealtimeServerMessage) => {
+      if (message.type === "snapshot_required") {
+        void refresh();
+        return;
+      }
+
+      if (message.type === "event" && message.event.eventType === "project.structure.updated") {
+        void refresh();
+      }
+    });
+  }, [projectId, refresh]);
 
   return { sprints, loading, error, refresh };
 }

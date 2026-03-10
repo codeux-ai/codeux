@@ -42,6 +42,8 @@ import type {
 } from "../contracts/project-management-types.js";
 import { correlationIdMiddleware } from "../shared/logging/correlation-id.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
+import { bootDashboardRealtimeWebSocketServer } from "./dashboard-realtime-websocket-server.js";
+import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 
 export interface DashboardServerOptions {
   app: Express;
@@ -92,6 +94,7 @@ export interface DashboardServerOptions {
   cancelTaskDispatch: (dispatchId: string) => Promise<unknown> | unknown;
   forceCancelTaskDispatch: (dispatchId: string) => Promise<unknown> | unknown;
   retryTaskDispatch: (dispatchId: string) => Promise<unknown>;
+  realtimeService?: DashboardRealtimeService;
   logger?: Logger;
   isReady?: () => ReadinessProbeStatus;
   isHealthy?: () => ReadinessProbeStatus;
@@ -580,6 +583,15 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   });
 
   const handle = await bindDashboardServer(app, port, dashboardLogger);
+
+  if (options.realtimeService) {
+    bootDashboardRealtimeWebSocketServer({
+      server: handle.server,
+      pathName: "/api/realtime",
+      realtimeService: options.realtimeService,
+      logger: dashboardLogger.child({ component: "dashboard-realtime-websocket" }),
+    });
+  }
 
   dashboardLogger.info("Dashboard server started", {
     port: handle.port,

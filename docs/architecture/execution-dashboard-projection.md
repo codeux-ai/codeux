@@ -120,3 +120,21 @@ The v2 live page now renders an execution runtime panel showing:
 - a DB-backed runtime timeline
 
 That makes multi-sprint and worker execution visible without reconstructing state from task markdown or process-local globals.
+
+## Realtime Delivery
+
+The execution snapshot is now also pushed to the dashboard over websocket through `/api/realtime`.
+
+Current realtime event used for execution consumers:
+
+- `project.execution.updated`
+
+The browser still loads its initial execution snapshot through REST, then applies websocket updates on top with polling fallback for recovery.
+
+Related realtime scopes now also exist for the surrounding v2 project-management surfaces:
+
+- `projects`
+- `project:<projectId>`
+- `thread:<threadId>`
+
+That lets Sprint OS keep project lists, sprint/task pages, and chat threads in sync without treating execution polling as the only freshness path.

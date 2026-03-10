@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -183,5 +183,40 @@ describe("ProjectManagementRepository", () => {
     expect(repository.listSprints(project.id)[0]).toMatchObject({
       status: "cancelled",
     });
+  });
+
+  it("publishes project collection and structure refreshes on project mutations", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-project-repo-realtime-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const notifier = {
+      scheduleProjectsRefresh: vi.fn(),
+      scheduleProjectExecutionRefresh: vi.fn(),
+      scheduleProjectStructureRefresh: vi.fn(),
+    };
+    const repository = new ProjectManagementRepository(storage, notifier);
+
+    const project = repository.createProject({
+      name: "Realtime Project",
+      sourceType: "local",
+      sourceRef: "/workspace/realtime-project",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Realtime Sprint",
+      status: "idle",
+    });
+    const task = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Realtime Task",
+      promptMarkdown: "Keep the dashboard fresh.",
+    });
+
+    repository.updateTask(task.id, {
+      status: "in_progress",
+    });
+    repository.deleteTask(task.id);
+
+    expect(notifier.scheduleProjectsRefresh).toHaveBeenCalled();
+    expect(notifier.scheduleProjectStructureRefresh).toHaveBeenCalledWith(project.id, { includeProjects: true });
   });
 });

@@ -270,6 +270,26 @@ export class AppDbStorage {
         last_heartbeat_at TEXT,
         UNIQUE(scope_type, scope_id)
       );
+
+      CREATE TABLE IF NOT EXISTS dashboard_realtime_events (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        scope_type TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        project_id TEXT,
+        sprint_id TEXT,
+        thread_id TEXT,
+        task_id TEXT,
+        dispatch_id TEXT,
+        sprint_run_id TEXT,
+        task_run_id TEXT,
+        connection_id TEXT,
+        correlation_id TEXT,
+        payload_json TEXT,
+        created_at TEXT NOT NULL
+      );
     `);
 
     this.ensureColumn("task_runs", "sprint_run_id", "TEXT");
@@ -284,6 +304,7 @@ export class AppDbStorage {
     this.ensureUniqueIndex("idx_task_run_events_source_event", "task_run_events", "task_run_id, source_event_key");
     this.ensureIndex("idx_sprint_run_events_sprint_run_created", "sprint_run_events", "sprint_run_id, created_at DESC");
     this.ensureUniqueIndex("idx_sprint_run_events_source_event", "sprint_run_events", "sprint_run_id, source_event_key");
+    this.ensureIndex("idx_dashboard_realtime_events_scope_sequence", "dashboard_realtime_events", "scope_type, scope_id, sequence DESC");
   }
 
   getPath(): string {

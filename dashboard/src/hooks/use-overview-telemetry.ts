@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
-import type { OverviewTelemetrySnapshot } from "../types.js";
+import type { OverviewTelemetrySnapshot, DashboardRealtimeServerMessage } from "../types.js";
 import { fetchOverviewTelemetry } from "../lib/api/dashboard-api.js";
+import { subscribeToDashboardRealtime } from "../lib/realtime/dashboard-realtime-client.js";
 
 const EMPTY_TELEMETRY: OverviewTelemetrySnapshot = {
   activeProjects: [],
@@ -8,7 +9,7 @@ const EMPTY_TELEMETRY: OverviewTelemetrySnapshot = {
   updatedAt: null,
 };
 
-export function useOverviewTelemetry(pollIntervalMs: number = 10000): {
+export function useOverviewTelemetry(pollIntervalMs: number = 30000): {
   telemetry: OverviewTelemetrySnapshot;
   error: string | null;
   refresh: () => Promise<void>;
@@ -27,6 +28,20 @@ export function useOverviewTelemetry(pollIntervalMs: number = 10000): {
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    return subscribeToDashboardRealtime(["overview"], (message: DashboardRealtimeServerMessage) => {
+      if (message.type === "event" && message.event.eventType === "overview.telemetry.updated") {
+        setTelemetry(message.event.payload as OverviewTelemetrySnapshot);
+        setError(null);
+        return;
+      }
+
+      if (message.type === "snapshot_required") {
+        void refresh();
+      }
+    });
   }, [refresh]);
 
   useEffect(() => {

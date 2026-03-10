@@ -17,6 +17,7 @@ import type {
   UpdateMcpConnectionInput,
   UpsertMcpConnectionInput,
 } from "../contracts/connection-chat-types.js";
+import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 
 interface ConnectionRow {
   id: string;
@@ -74,6 +75,7 @@ interface InboxRow extends MessageRow {
 }
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
+const HEARTBEAT_WRITE_INTERVAL_MS = 15 * 1000;
 const STALE_CONNECTION_THRESHOLD_MS = 10 * 60 * 1000;
 const OFFLINE_CONNECTION_THRESHOLD_MS = 30 * 60 * 1000;
 const PRUNE_CONNECTION_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
@@ -110,7 +112,10 @@ function parseCapabilities(value: string | null): McpConnectionCapabilities {
 export class ConnectionChatRepository {
   private readonly db: DatabaseSync;
 
-  constructor(storage: AppDbStorage = new AppDbStorage()) {
+  constructor(
+    storage: AppDbStorage = new AppDbStorage(),
+    private readonly realtimeService?: DashboardRealtimeService,
+  ) {
     this.db = storage.getDatabase();
   }
 
@@ -220,6 +225,8 @@ export class ConnectionChatRepository {
     const activeProjectIds = this.normalizeActiveProjectIds(normalizedProjectIds, input.activeProjectIds);
 
     this.runInTransaction(() => {
+      this.db.prepare(`DELETE FROM connection_project_bindings WHERE connection_id = ?`).run(connectionId);
+
       if (existing) {
         this.db.prepare(`
           UPDATE mcp_connections
@@ -255,7 +262,6 @@ export class ConnectionChatRepository {
       }
 
       if (normalizedProjectIds.length > 0) {
-        this.db.prepare(`DELETE FROM connection_project_bindings WHERE connection_id = ?`).run(connectionId);
         const insertBinding = this.db.prepare(`
           INSERT INTO connection_project_bindings (connection_id, project_id, is_active, created_at)
           VALUES (?, ?, ?, ?)
@@ -266,7 +272,9 @@ export class ConnectionChatRepository {
       }
     });
 
-    return this.requireConnection(connectionId);
+    const connection = this.requireConnection(connectionId);
+    this.notifyProjects([...connection.projectIds, ...connection.activeProjectIds]);
+    return connection;
   }
 
   updateConnection(connectionId: string, input: UpdateMcpConnectionInput): McpConnectionRecord {
@@ -300,7 +308,9 @@ export class ConnectionChatRepository {
       }
     });
 
-    return this.requireConnection(connectionId);
+    const connection = this.requireConnection(connectionId);
+    this.notifyProjects([...connection.projectIds, ...connection.activeProjectIds]);
+    return connection;
   }
 
   listThreads(projectId: string): ConversationThreadRecord[] {
@@ -349,7 +359,10 @@ export class ConnectionChatRepository {
       now
     );
 
-    return this.requireThread(threadId);
+    const thread = this.requireThread(threadId);
+    this.notifyProjects([thread.projectId]);
+    this.publishThreadUpdatedEvent(thread);
+    return thread;
   }
 
   listMessages(threadId: string): ConversationMessageRecord[] {
@@ -399,7 +412,10 @@ export class ConnectionChatRepository {
       }
     });
 
-    return this.requireThread(threadId);
+    const updated = this.requireThread(threadId);
+    this.notifyProjects([updated.projectId]);
+    this.publishThreadUpdatedEvent(updated);
+    return updated;
   }
 
   postDashboardMessage(projectId: string, input: CreateDashboardConversationMessageInput): ConversationMessageRecord {
@@ -450,7 +466,13 @@ export class ConnectionChatRepository {
     });
 
     const messages = this.listMessages(thread.id);
-    return messages[messages.length - 1];
+    this.notifyProjects([projectId]);
+    const created = messages[messages.length - 1];
+    if (created) {
+      this.publishThreadUpdatedEvent(this.requireThread(thread.id));
+      this.publishMessageCreatedEvent(projectId, thread.id, created);
+    }
+    return created;
   }
 
   startListen(input: StartListenInput): StartListenResponse {
@@ -488,7 +510,7 @@ export class ConnectionChatRepository {
       ? activeProjectIds.filter((projectId) => projectId === input.projectId)
       : activeProjectIds;
 
-    this.touchConnection(connection.id, "listening");
+    this.touchConnection(connection, "listening");
 
     if (scopedProjectIds.length === 0) {
       return [];
@@ -530,15 +552,20 @@ export class ConnectionChatRepository {
       }
     });
 
-    return rows.map((row) => ({
+    const inbox = rows.map((row) => ({
       id: row.id,
       threadId: row.thread_id,
       threadTitle: row.title,
       projectId: row.project_id,
       bodyMarkdown: row.body_markdown,
       createdAt: row.created_at,
-      deliveryStatus: "delivered",
+      deliveryStatus: "delivered" as const,
     }));
+    this.notifyProjects(scopedProjectIds);
+    for (const row of rows) {
+      this.publishThreadUpdatedEvent(this.requireThread(row.thread_id));
+    }
+    return inbox;
   }
 
   postListenReply(input: PostListenReplyInput): ConversationMessageRecord {
@@ -599,14 +626,22 @@ export class ConnectionChatRepository {
       }
     });
 
-    this.touchConnection(connection.id, "listening");
-    return this.requireMessage(messageId);
+    this.touchConnection(connection, "listening");
+    const message = this.requireMessage(messageId);
+    this.notifyProjects([thread.projectId]);
+    this.publishThreadUpdatedEvent(this.requireThread(thread.id));
+    this.publishMessageCreatedEvent(thread.projectId, thread.id, message);
+    return message;
   }
 
   touchConnectionHeartbeat(connectionId: string, status?: McpConnectionRecord["status"]): McpConnectionRecord {
-    this.requireConnection(connectionId);
-    this.touchConnection(connectionId, status);
-    return this.requireConnection(connectionId);
+    const current = this.requireConnection(connectionId);
+    const touched = this.touchConnection(current, status);
+    const connection = touched ? this.requireConnection(connectionId) : current;
+    if (touched) {
+      this.notifyProjects([...connection.projectIds, ...connection.activeProjectIds]);
+    }
+    return connection;
   }
 
   cleanupConnectionLifecycle(now = new Date()): ConnectionLifecycleCleanupResult {
@@ -645,6 +680,7 @@ export class ConnectionChatRepository {
             AND td.status IN ('claimed', 'running', 'cancel_requested')
         )
     `).all(pruneBeforeIso) as Array<{ id: string }>;
+    const prunedProjectIds = this.resolveProjectIdsForConnections(prunedRows.map((row) => row.id));
 
     this.runInTransaction(() => {
       if (staleRows.length > 0) {
@@ -680,11 +716,17 @@ export class ConnectionChatRepository {
       }
     });
 
-    return {
+    const result = {
       staleConnectionIds: staleRows.map((row) => row.id),
       offlineConnectionIds: offlineRows.map((row) => row.id),
       prunedConnectionIds: prunedRows.map((row) => row.id),
     };
+    this.notifyProjects([
+      ...this.resolveProjectIdsForConnections(result.staleConnectionIds),
+      ...this.resolveProjectIdsForConnections(result.offlineConnectionIds),
+      ...prunedProjectIds,
+    ]);
+    return result;
   }
 
   private inflateConnections(rows: ConnectionRow[]): McpConnectionRecord[] {
@@ -789,6 +831,86 @@ export class ConnectionChatRepository {
     });
   }
 
+  private notifyProjects(projectIds: string[]): void {
+    const uniqueProjectIds = [...new Set(projectIds.map((projectId) => String(projectId || "").trim()).filter(Boolean))];
+    for (const projectId of uniqueProjectIds) {
+      this.realtimeService?.scheduleProjectExecutionRefresh(projectId, { includeOverview: false });
+    }
+  }
+
+  private publishThreadUpdatedEvent(thread: ConversationThreadRecord): void {
+    if (!this.realtimeService) {
+      return;
+    }
+
+    this.realtimeService.publishRawEvent({
+      scopeType: "project",
+      scopeId: thread.projectId,
+      eventType: "conversation.thread.updated",
+      entityType: "conversation_thread",
+      entityId: thread.id,
+      projectId: thread.projectId,
+      threadId: thread.id,
+      payload: thread,
+    });
+    this.realtimeService.publishRawEvent({
+      scopeType: "thread",
+      scopeId: thread.id,
+      eventType: "conversation.thread.updated",
+      entityType: "conversation_thread",
+      entityId: thread.id,
+      projectId: thread.projectId,
+      threadId: thread.id,
+      payload: thread,
+    });
+  }
+
+  private publishMessageCreatedEvent(
+    projectId: string,
+    threadId: string,
+    message: ConversationMessageRecord,
+  ): void {
+    if (!this.realtimeService) {
+      return;
+    }
+
+    this.realtimeService.publishRawEvent({
+      scopeType: "project",
+      scopeId: projectId,
+      eventType: "conversation.message.created",
+      entityType: "conversation_message",
+      entityId: message.id,
+      projectId,
+      threadId,
+      payload: message,
+    });
+    this.realtimeService.publishRawEvent({
+      scopeType: "thread",
+      scopeId: threadId,
+      eventType: "conversation.message.created",
+      entityType: "conversation_message",
+      entityId: message.id,
+      projectId,
+      threadId,
+      payload: message,
+    });
+  }
+
+  private resolveProjectIdsForConnections(connectionIds: string[]): string[] {
+    const uniqueConnectionIds = [...new Set(connectionIds.map((connectionId) => String(connectionId || "").trim()).filter(Boolean))];
+    if (uniqueConnectionIds.length === 0) {
+      return [];
+    }
+
+    const rows = this.db.prepare(`
+      SELECT DISTINCT project_id
+      FROM connection_project_bindings
+      WHERE connection_id IN (${uniqueConnectionIds.map(() => "?").join(", ")})
+    `).all(...uniqueConnectionIds) as Array<{ project_id: string }>;
+
+    return rows.map((row) => row.project_id);
+  }
+
   private mapThreadRow(row: ThreadRow): ConversationThreadRecord {
     return {
       id: row.id,
@@ -874,13 +996,26 @@ export class ConnectionChatRepository {
     return this.mapMessageRow(row);
   }
 
-  private touchConnection(connectionId: string, status?: string): void {
-    const now = new Date().toISOString();
+  private touchConnection(connection: McpConnectionRecord, status?: string): boolean {
+    const requestedStatus = status?.trim() || connection.status;
+    const lastHeartbeatMs = connection.lastHeartbeatAt ? new Date(connection.lastHeartbeatAt).getTime() : null;
+    const nowMs = Date.now();
+    const shouldWrite = requestedStatus !== connection.status
+      || lastHeartbeatMs === null
+      || !Number.isFinite(lastHeartbeatMs)
+      || nowMs - lastHeartbeatMs >= HEARTBEAT_WRITE_INTERVAL_MS;
+
+    if (!shouldWrite) {
+      return false;
+    }
+
+    const now = new Date(nowMs).toISOString();
     this.db.prepare(`
       UPDATE mcp_connections
       SET status = COALESCE(?, status), last_heartbeat_at = ?, updated_at = ?
       WHERE id = ?
-    `).run(status || null, now, now, connectionId);
+    `).run(requestedStatus || null, now, now, connection.id);
+    return true;
   }
 
   private normalizeProjectIds(projectIds?: string[]): string[] {

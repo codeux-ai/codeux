@@ -12,6 +12,7 @@
 - [DB-Native Orchestrator Integration](./architecture/db-native-orchestrator-integration.md)
 - [Execution Dashboard Projection](./architecture/execution-dashboard-projection.md)
 - [Dashboard Realtime Transport Plan](./architecture/dashboard-realtime-transport-plan.md)
+- [Dashboard Realtime Foundation](./architecture/dashboard-realtime-foundation.md)
 - [Execution Runtime Event Timeline](./architecture/execution-runtime-event-timeline.md)
 - [Unified Runtime Event Stream](./architecture/unified-runtime-event-stream.md)
 - [Execution Dashboard Controls](./architecture/execution-dashboard-controls.md)

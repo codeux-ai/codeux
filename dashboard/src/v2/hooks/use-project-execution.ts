@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
-import type { ExecutionDashboardSnapshot } from "../../types.js";
+import type { ExecutionDashboardSnapshot, DashboardRealtimeServerMessage } from "../../types.js";
 import { fetchProjectExecution } from "../lib/project-api.js";
+import { subscribeToDashboardRealtime } from "../../lib/realtime/dashboard-realtime-client.js";
 
 const EMPTY_SNAPSHOT: ExecutionDashboardSnapshot = {
   projectId: null,
@@ -12,7 +13,7 @@ const EMPTY_SNAPSHOT: ExecutionDashboardSnapshot = {
   updatedAt: null,
 };
 
-export function useProjectExecution(projectId: string | null, pollIntervalMs: number = 5000): {
+export function useProjectExecution(projectId: string | null, pollIntervalMs: number = 30000): {
   execution: ExecutionDashboardSnapshot;
   loading: boolean;
   error: string | null;
@@ -44,6 +45,25 @@ export function useProjectExecution(projectId: string | null, pollIntervalMs: nu
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!projectId) {
+      return;
+    }
+
+    return subscribeToDashboardRealtime([`project:${projectId}`], (message: DashboardRealtimeServerMessage) => {
+      if (message.type === "event" && message.event.eventType === "project.execution.updated") {
+        setExecution(message.event.payload as ExecutionDashboardSnapshot);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+
+      if (message.type === "snapshot_required") {
+        void refresh();
+      }
+    });
+  }, [projectId, refresh]);
 
   useEffect(() => {
     if (!projectId || pollIntervalMs <= 0) {

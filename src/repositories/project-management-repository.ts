@@ -16,6 +16,7 @@ import type {
 } from "../contracts/project-management-types.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import { slugify } from "../shared/slug.js";
+import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
 
@@ -85,7 +86,10 @@ interface DependencyRow {
 export class ProjectManagementRepository {
   private readonly db: DatabaseSync;
 
-  constructor(storage: AppDbStorage = new AppDbStorage()) {
+  constructor(
+    storage: AppDbStorage = new AppDbStorage(),
+    private readonly realtimeNotifier?: DashboardRealtimeMutationNotifier,
+  ) {
     this.db = storage.getDatabase();
   }
 
@@ -217,7 +221,10 @@ export class ProjectManagementRepository {
       }
     });
 
-    return this.requireProject(id);
+    const created = this.requireProject(id);
+    this.publishProjectStructureRefresh(id);
+    this.publishProjectsRefresh();
+    return created;
   }
 
   updateProject(projectId: string, input: UpdateProjectInput): ProjectSummary {
@@ -256,7 +263,10 @@ export class ProjectManagementRepository {
       updateSource.run(nextSourceType, nextSourceRef, projectId);
     });
 
-    return this.requireProject(projectId);
+    const updated = this.requireProject(projectId);
+    this.publishProjectStructureRefresh(projectId);
+    this.publishProjectsRefresh();
+    return updated;
   }
 
   deleteProject(projectId: string): void {
@@ -265,6 +275,7 @@ export class ProjectManagementRepository {
       const nextProject = this.db.prepare(`SELECT id FROM projects ORDER BY updated_at DESC LIMIT 1`).get() as { id: string } | undefined;
       this.setSelectedProjectId(nextProject?.id ?? null);
     }
+    this.publishProjectsRefresh();
   }
 
   listSprints(projectId: string): SprintRecord[] {
@@ -330,7 +341,9 @@ export class ProjectManagementRepository {
     );
 
     this.touchProject(projectId, now);
-    return this.requireSprint(id);
+    const created = this.requireSprint(id);
+    this.publishProjectStructureRefresh(projectId);
+    return created;
   }
 
   updateSprint(sprintId: string, input: UpdateSprintInput): SprintRecord {
@@ -357,13 +370,16 @@ export class ProjectManagementRepository {
     );
 
     this.touchProject(current.projectId, now);
-    return this.requireSprint(sprintId);
+    const updated = this.requireSprint(sprintId);
+    this.publishProjectStructureRefresh(current.projectId);
+    return updated;
   }
 
   deleteSprint(sprintId: string): void {
     const sprint = this.requireSprint(sprintId);
     this.db.prepare(`DELETE FROM sprints WHERE id = ?`).run(sprintId);
     this.touchProject(sprint.projectId);
+    this.publishProjectStructureRefresh(sprint.projectId);
   }
 
   listTasks(projectId: string, sprintId?: string): TaskRecord[] {
@@ -436,7 +452,9 @@ export class ProjectManagementRepository {
     });
 
     this.touchProject(projectId, now);
-    return this.requireTask(id);
+    const created = this.requireTask(id);
+    this.publishProjectStructureRefresh(projectId);
+    return created;
   }
 
   updateTask(taskId: string, input: UpdateTaskInput): TaskRecord {
@@ -481,13 +499,16 @@ export class ProjectManagementRepository {
     });
 
     this.touchProject(current.projectId, now);
-    return this.requireTask(taskId);
+    const updated = this.requireTask(taskId);
+    this.publishProjectStructureRefresh(current.projectId);
+    return updated;
   }
 
   deleteTask(taskId: string): void {
     const task = this.requireTask(taskId);
     this.db.prepare(`DELETE FROM tasks WHERE id = ?`).run(taskId);
     this.touchProject(task.projectId);
+    this.publishProjectStructureRefresh(task.projectId);
   }
 
   getSelectedProjectId(): string | null {
@@ -525,6 +546,10 @@ export class ProjectManagementRepository {
     );
 
     return projectId;
+  }
+
+  notifyProjectsUpdated(): void {
+    this.publishProjectsRefresh();
   }
 
   getSprint(sprintId: string): SprintRecord | null {
@@ -852,6 +877,14 @@ export class ProjectManagementRepository {
       this.db.exec("ROLLBACK");
       throw error;
     }
+  }
+
+  private publishProjectStructureRefresh(projectId: string): void {
+    this.realtimeNotifier?.scheduleProjectStructureRefresh(projectId, { includeProjects: true });
+  }
+
+  private publishProjectsRefresh(): void {
+    this.realtimeNotifier?.scheduleProjectsRefresh();
   }
 }
 

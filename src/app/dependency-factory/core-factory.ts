@@ -12,11 +12,13 @@ import { ProjectRuntimeRepository } from "../../repositories/project-runtime-rep
 import { ConnectionChatRepository } from "../../repositories/connection-chat-repository.js";
 import { ExecutionRepository } from "../../repositories/execution-repository.js";
 import { AgentPresetRepository } from "../../repositories/agent-preset-repository.js";
+import { DashboardRealtimeEventRepository } from "../../repositories/dashboard-realtime-event-repository.js";
 import { ActivitySummaryService } from "../../domain/sessions/activity-summary.js";
 import { JulesSourceResolver } from "../../services/jules-source-resolver.js";
 import { SprintMarkdownService } from "../../services/sprint-markdown-service.js";
 import { ActiveDispatchRegistry } from "../../services/active-dispatch-registry.js";
 import { RuntimeCleanupService } from "../../services/runtime-cleanup-service.js";
+import { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
 import { DashboardSettings, ExternalSettingsHints } from "../../contracts/app-types.js";
 import { loadExternalSettingsHints } from "../../config/external-settings.js";
 import { createLogger, type Logger } from "../../shared/logging/logger.js";
@@ -40,6 +42,8 @@ export interface CoreDependencies {
   connectionChatRepository: ConnectionChatRepository;
   agentPresetRepository: AgentPresetRepository;
   executionRepository: ExecutionRepository;
+  dashboardRealtimeEventRepository: DashboardRealtimeEventRepository;
+  dashboardRealtimeService: DashboardRealtimeService;
   sprintMarkdownService: SprintMarkdownService;
   activeDispatchRegistry: ActiveDispatchRegistry;
   runtimeCleanupService: RuntimeCleanupService;
@@ -89,11 +93,16 @@ export function createCoreDependencies(
   const instructionService = new InstructionService(options.projectRoot);
   const sessionTracking = new SessionTrackingRepository();
   const appDbStorage = new AppDbStorage();
-  const projectManagementRepository = new ProjectManagementRepository(appDbStorage);
+  const dashboardRealtimeEventRepository = new DashboardRealtimeEventRepository(appDbStorage);
+  const dashboardRealtimeService = new DashboardRealtimeService(
+    dashboardRealtimeEventRepository,
+    logger.child({ component: "dashboard-realtime-service" }),
+  );
+  const projectManagementRepository = new ProjectManagementRepository(appDbStorage, dashboardRealtimeService);
   const projectRuntimeRepository = new ProjectRuntimeRepository(appDbStorage);
-  const connectionChatRepository = new ConnectionChatRepository(appDbStorage);
+  const connectionChatRepository = new ConnectionChatRepository(appDbStorage, dashboardRealtimeService);
   const agentPresetRepository = new AgentPresetRepository(appDbStorage);
-  const executionRepository = new ExecutionRepository(appDbStorage);
+  const executionRepository = new ExecutionRepository(appDbStorage, dashboardRealtimeService);
   const sprintMarkdownService = new SprintMarkdownService(projectManagementRepository);
   const activeDispatchRegistry = new ActiveDispatchRegistry();
   const runtimeCleanupService = new RuntimeCleanupService(
@@ -122,6 +131,8 @@ export function createCoreDependencies(
     connectionChatRepository,
     agentPresetRepository,
     executionRepository,
+    dashboardRealtimeEventRepository,
+    dashboardRealtimeService,
     sprintMarkdownService,
     activeDispatchRegistry,
     runtimeCleanupService,

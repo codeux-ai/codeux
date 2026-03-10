@@ -43,6 +43,7 @@ import { TaskRerunService } from "../services/task-rerun-service.js";
 import { ExecutionControlService } from "../services/execution-control-service.js";
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import { RuntimeCleanupService } from "../services/runtime-cleanup-service.js";
+import { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import { createRuntimeDependencies, ServerContext } from "../app/dependency-factory.js";
 import { generateCorrelationId, runWithCorrelationId } from "../shared/logging/correlation-id.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
@@ -94,6 +95,7 @@ export class JulesAgentServer {
   private taskRerunService: TaskRerunService;
   private executionControlService: ExecutionControlService;
   private runtimeCleanupService: RuntimeCleanupService;
+  private dashboardRealtimeService: DashboardRealtimeService;
   private runtimeCleanupInterval: ReturnType<typeof setInterval> | null = null;
   private mcpHttpHandle: McpHttpTransportHandle | null = null;
   private mcpServiceBound = false;
@@ -129,6 +131,7 @@ export class JulesAgentServer {
     this.taskRerunService = deps.taskRerunService;
     this.executionControlService = deps.executionControlService;
     this.runtimeCleanupService = deps.runtimeCleanupService;
+    this.dashboardRealtimeService = deps.dashboardRealtimeService;
 
     this.configureMcpServer(this.server, this.appConfig.runtimeRole);
 
@@ -578,6 +581,7 @@ export class JulesAgentServer {
         activityCacheService: this.activityCacheService,
         taskRerunService: this.taskRerunService,
         executionControlService: this.executionControlService,
+        dashboardRealtimeService: this.dashboardRealtimeService,
         logger: this.logger,
         getLiveActivitiesForActiveTasks: () => this.getLiveActivitiesForActiveTasks(),
         getGitStatus: () => this.getGitStatus(),

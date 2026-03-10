@@ -1,10 +1,13 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ConnectionChatRepository } from "../../../src/repositories/connection-chat-repository.js";
+import { DashboardRealtimeEventRepository } from "../../../src/repositories/dashboard-realtime-event-repository.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
+import { DashboardRealtimeService } from "../../../src/services/dashboard-realtime-service.js";
+import { createLogger } from "../../../src/shared/logging/logger.js";
 
 const tempDirs: string[] = [];
 
@@ -24,10 +27,38 @@ async function createRepositories(): Promise<{
 }
 
 afterEach(async () => {
+  vi.useRealTimers();
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
+async function createRepositoriesWithRealtime(): Promise<{
+  storage: AppDbStorage;
+  projectRepository: ProjectManagementRepository;
+  connectionRepository: ConnectionChatRepository;
+  realtimeEventRepository: DashboardRealtimeEventRepository;
+}> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-connection-repo-realtime-"));
+  tempDirs.push(dir);
+  const storage = new AppDbStorage(path.join(dir, "app.db"));
+  const realtimeEventRepository = new DashboardRealtimeEventRepository(storage);
+  const realtimeService = new DashboardRealtimeService(
+    realtimeEventRepository,
+    createLogger({ bindings: { component: "connection-chat-repository-test" } }),
+  );
+  return {
+    storage,
+    projectRepository: new ProjectManagementRepository(storage),
+    connectionRepository: new ConnectionChatRepository(storage, realtimeService),
+    realtimeEventRepository,
+  };
+}
+
 describe("ConnectionChatRepository", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-10T00:00:00.000Z"));
+  });
+
   it("registers listeners, queues dashboard messages, and stores replies", async () => {
     const { projectRepository, connectionRepository } = await createRepositories();
     const project = projectRepository.createProject({
@@ -151,6 +182,75 @@ describe("ConnectionChatRepository", () => {
     expect(connections.find((connection) => connection.id === offline.connection.id)?.status).toBe("offline");
   });
 
+  it("clears stale project bindings when a connection is re-registered without project scope", async () => {
+    const { projectRepository, connectionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Binding Reset Project",
+      sourceType: "local",
+      sourceRef: "/workspace/binding-reset-project",
+    });
+
+    connectionRepository.upsertConnection({
+      connectionKey: "listener-binding-reset",
+      displayName: "Binding Reset",
+      role: "listener",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+
+    connectionRepository.upsertConnection({
+      connectionKey: "listener-binding-reset",
+      displayName: "Binding Reset",
+      role: "listener",
+      transport: "stdio",
+      status: "idle",
+      projectIds: [],
+      activeProjectIds: [],
+    });
+
+    expect(connectionRepository.listConnections(project.id)).toEqual([]);
+    expect(connectionRepository.getConnectionByKey("listener-binding-reset")).toMatchObject({
+      projectIds: [],
+      activeProjectIds: [],
+    });
+  });
+
+  it("throttles connection heartbeat writes while a listener stays idle", async () => {
+    const { storage, projectRepository, connectionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Heartbeat Project",
+      sourceType: "local",
+      sourceRef: "/workspace/heartbeat-project",
+    });
+
+    const started = connectionRepository.startListen({
+      connectionKey: "listener-heartbeat",
+      displayName: "Heartbeat Listener",
+      role: "listener",
+      projectId: project.id,
+    });
+
+    const before = connectionRepository.getConnection(started.connection.id);
+    expect(before?.lastHeartbeatAt).toBe("2026-03-10T00:00:00.000Z");
+
+    vi.setSystemTime(new Date("2026-03-10T00:00:05.000Z"));
+    const throttled = connectionRepository.touchConnectionHeartbeat(started.connection.id, "listening");
+    expect(throttled.lastHeartbeatAt).toBe("2026-03-10T00:00:00.000Z");
+
+    vi.setSystemTime(new Date("2026-03-10T00:00:20.000Z"));
+    const refreshed = connectionRepository.touchConnectionHeartbeat(started.connection.id, "listening");
+    expect(refreshed.lastHeartbeatAt).toBe("2026-03-10T00:00:20.000Z");
+
+    const stored = storage.getDatabase().prepare(`
+      SELECT last_heartbeat_at
+      FROM mcp_connections
+      WHERE id = ?
+    `).get(started.connection.id) as { last_heartbeat_at: string };
+    expect(stored.last_heartbeat_at).toBe("2026-03-10T00:00:20.000Z");
+  });
+
   it("cleans up stale, offline, and long-dead connections", async () => {
     const { storage, projectRepository, connectionRepository } = await createRepositories();
     const project = projectRepository.createProject({
@@ -252,5 +352,30 @@ describe("ConnectionChatRepository", () => {
     });
     expect(secondInbox).toHaveLength(1);
     expect(secondInbox[0]?.id).toBe(message.id);
+  });
+
+  it("publishes realtime thread and message events", async () => {
+    const { projectRepository, connectionRepository, realtimeEventRepository } = await createRepositoriesWithRealtime();
+    const project = projectRepository.createProject({
+      name: "Realtime Chat Project",
+      sourceType: "local",
+      sourceRef: "/workspace/realtime-chat-project",
+    });
+
+    const thread = connectionRepository.createThread(project.id, {
+      title: "Realtime thread",
+    });
+    const message = connectionRepository.postDashboardMessage(project.id, {
+      threadId: thread.id,
+      bodyMarkdown: "Hello realtime",
+    });
+
+    const projectEvents = realtimeEventRepository.listEventsSince([`project:${project.id}`], 0, 20);
+    const threadEvents = realtimeEventRepository.listEventsSince([`thread:${thread.id}`], 0, 20);
+
+    expect(projectEvents.some((event) => event.eventType === "conversation.thread.updated")).toBe(true);
+    expect(projectEvents.some((event) => event.eventType === "conversation.message.created")).toBe(true);
+    expect(threadEvents.some((event) => event.entityId === thread.id)).toBe(true);
+    expect(threadEvents.some((event) => event.entityId === message.id)).toBe(true);
   });
 });

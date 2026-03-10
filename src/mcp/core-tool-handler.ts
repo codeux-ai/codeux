@@ -40,7 +40,7 @@ interface CoreToolHandlerDependencies {
   logger?: Logger;
 }
 
-const DEFAULT_LISTEN_POLL_INTERVAL_MS = 1000;
+const DEFAULT_LISTEN_POLL_INTERVAL_MS = 3000;
 const MIN_LISTEN_TIMEOUT_SECONDS = 1;
 const MAX_LISTEN_TIMEOUT_SECONDS = 3600;
 const MIN_LISTEN_POLL_INTERVAL_MS = 100;
