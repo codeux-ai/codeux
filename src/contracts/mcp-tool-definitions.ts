@@ -339,6 +339,23 @@ export const TOOL_DEFINITIONS = [
       required: ["connection_key", "dispatch_id", "lease_token", "state"],
     },
   },
+  {
+    name: "update_sprint_preflight_job",
+    runtimeRoles: ["worker_host", "worker_gateway"],
+    description: "Heartbeat, complete, fail, or block a claimed sprint preflight job and persist the result back into Sprint OS.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        connection_key: { type: "string" },
+        job_id: { type: "string" },
+        lease_token: { type: "string" },
+        state: { type: "string", enum: ["RUNNING", "COMPLETED", "FAILED", "BLOCKED"] },
+        summary_markdown: { type: "string" },
+        error_message: { type: "string" },
+      },
+      required: ["connection_key", "job_id", "lease_token", "state"],
+    },
+  },
 ] as const;
 
 export type ToolName = (typeof TOOL_DEFINITIONS)[number]["name"];

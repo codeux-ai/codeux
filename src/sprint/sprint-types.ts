@@ -13,6 +13,8 @@ export interface SprintAgentArgs {
   action: "status" | "orchestrate" | "plan";
   wait?: boolean;
   retry_failed?: boolean;
+  existing_sprint_run_id?: string;
+  skip_branch_preflight?: boolean;
 }
 
 export interface SprintCycleResult {

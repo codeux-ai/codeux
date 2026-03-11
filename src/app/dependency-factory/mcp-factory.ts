@@ -6,6 +6,7 @@ import { AgentToolHandler } from "../../mcp/agent-tool-handler.js";
 import { formatSprintBranch } from "../../git/sprint-branch-scheme.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 import { WorkerTaskDispatchService } from "../../services/worker-task-dispatch-service.js";
+import { WorkerSprintPreflightService } from "../../services/worker-sprint-preflight-service.js";
 import { WorkerDispatchExecutionService } from "../../services/worker-dispatch-execution-service.js";
 import { WorkerInboxReplyService } from "../../services/worker-inbox-reply-service.js";
 
@@ -37,6 +38,14 @@ export function createMcpDependencies(
     () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
     logger.child({ component: "worker-task-dispatch-service" }),
   );
+  const workerSprintPreflightService = new WorkerSprintPreflightService(
+    executionRepository,
+    projectManagementRepository,
+    connectionChatRepository,
+    sprintOrchestrator,
+    () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
+    logger.child({ component: "worker-sprint-preflight-service" }),
+  );
 
   const coreToolHandler = new CoreToolHandler({
     julesApi,
@@ -61,6 +70,7 @@ export function createMcpDependencies(
     getDashboardSettings: () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
     connectionChatRepository,
     workerTaskDispatchService,
+    workerSprintPreflightService,
     logger: logger.child({ component: "core-tool-handler" }),
   });
 

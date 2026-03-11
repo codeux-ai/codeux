@@ -224,11 +224,16 @@ export class SprintOrchestrator {
     sprintId: string;
     eventType: string;
     payload: Record<string, unknown>;
+    existingSprintRunId?: string;
   }): void {
     if (args.action !== "orchestrate") {
       return;
     }
-    const sprintRun = this.deps.executionRepository.createSprintRun({
+    const now = new Date().toISOString();
+    const sprintRun = args.existingSprintRunId
+      ? this.deps.executionRepository.getSprintRun(args.existingSprintRunId)
+      : null;
+    const targetSprintRun = sprintRun || this.deps.executionRepository.createSprintRun({
       projectId: args.projectId,
       sprintId: args.sprintId,
       triggerType: "mcp",
@@ -236,15 +241,14 @@ export class SprintOrchestrator {
       executorMode: "mixed",
       status: "paused",
     });
-    const now = new Date().toISOString();
-    this.deps.executionRepository.updateSprintRun(sprintRun.id, {
+    this.deps.executionRepository.updateSprintRun(targetSprintRun.id, {
       status: "paused",
-      startedAt: now,
+      startedAt: targetSprintRun.startedAt || now,
       finishedAt: now,
       lastHeartbeatAt: now,
     });
-    this.deps.executionRepository.appendSprintRunEvent(sprintRun.id, args.eventType, "system", args.payload, {
-      sourceEventKey: `${args.eventType}:${args.sprintId}:${JSON.stringify(args.payload)}`,
+    this.deps.executionRepository.appendSprintRunEvent(targetSprintRun.id, args.eventType, "system", args.payload, {
+      sourceEventKey: `${args.eventType}:${targetSprintRun.id}:${JSON.stringify(args.payload)}`,
     });
   }
 
@@ -278,7 +282,7 @@ export class SprintOrchestrator {
       return { content: [{ type: "text", text }] };
     }
 
-    if (loopSteps.branchPreflight && (args.action === "plan" || args.action === "orchestrate")) {
+    if (!args.skip_branch_preflight && loopSteps.branchPreflight && (args.action === "plan" || args.action === "orchestrate")) {
       const { existsLocal, existsRemote } = await runBranchPreflightStep(repoPath, defaultFeatureBranch);
       if (!existsLocal || !existsRemote) {
         const branchBlocker = await this.renderBranchBlocker(args, repoPath, defaultFeatureBranch, existsLocal, existsRemote);
@@ -292,6 +296,7 @@ export class SprintOrchestrator {
             existsLocal,
             existsRemote,
           },
+          existingSprintRunId: args.existing_sprint_run_id,
         });
         return { content: [{ type: "text", text: branchBlocker }] };
       }
@@ -312,6 +317,7 @@ export class SprintOrchestrator {
           payload: {
             planningTarget,
           },
+          existingSprintRunId: args.existing_sprint_run_id,
         });
         return { content: [{ type: "text", text: planningBlocker }] };
       }
@@ -352,6 +358,21 @@ export class SprintOrchestrator {
         });
       case "orchestrate":
       default: {
+        const requestedExistingRun = args.existing_sprint_run_id
+          ? this.deps.executionRepository.getSprintRun(args.existing_sprint_run_id)
+          : null;
+        if (requestedExistingRun) {
+          if (
+            requestedExistingRun.projectId !== executionContext.project.id
+            || requestedExistingRun.sprintId !== executionContext.sprint.id
+          ) {
+            throw new Error(`Sprint run ${requestedExistingRun.id} does not belong to ${executionContext.project.id}/${executionContext.sprint.id}.`);
+          }
+          if (!["queued", "paused"].includes(requestedExistingRun.status)) {
+            throw new Error(`Sprint run ${requestedExistingRun.id} cannot be resumed from status ${requestedExistingRun.status}.`);
+          }
+        }
+
         const blockingRun = this.deps.executionRepository.findActiveSprintRun(
           executionContext.project.id,
           executionContext.sprint.id,
@@ -362,7 +383,9 @@ export class SprintOrchestrator {
             : null;
           const effectiveBlockingRun = finalizedCancelledRun?.status === "cancelled"
             ? null
-            : blockingRun.status === "running" || blockingRun.status === "queued" || blockingRun.status === "cancel_requested"
+            : requestedExistingRun && blockingRun.id === requestedExistingRun.id
+              ? null
+              : blockingRun.status === "running" || blockingRun.status === "queued" || blockingRun.status === "cancel_requested"
               ? blockingRun
               : null;
 
@@ -409,17 +432,18 @@ export class SprintOrchestrator {
           };
         }
 
-        const sprintRun = this.deps.executionRepository.createSprintRun({
+        const sprintRun = requestedExistingRun || this.deps.executionRepository.createSprintRun({
           projectId: executionContext.project.id,
           sprintId: executionContext.sprint.id,
           triggerType: "mcp",
           triggeredBy: "sprint_agent",
           executorMode: "mixed",
-          status: "running",
+          status: "queued",
         });
         this.deps.executionRepository.updateSprintRun(sprintRun.id, {
           status: "running",
-          startedAt: new Date().toISOString(),
+          startedAt: sprintRun.startedAt || new Date().toISOString(),
+          finishedAt: null,
           lastHeartbeatAt: new Date().toISOString(),
         });
 

@@ -51,6 +51,10 @@ describe("CoreToolHandler coverage", () => {
                 pullNextDispatch: vi.fn().mockReturnValue({ dispatch: { id: "dispatch-1" }, leaseToken: "lease-1" }),
                 updateDispatch: vi.fn().mockReturnValue({ id: "dispatch-1", status: "completed" }),
             },
+            workerSprintPreflightService: {
+                pullNextJob: vi.fn().mockReturnValue(null),
+                updateJob: vi.fn().mockReturnValue({ job: { id: "job-1", status: "completed" }, controlAction: null }),
+            },
             resolveSessionName: vi.fn(),
             fetchRecentActivities: vi.fn().mockResolvedValue([]),
             isActionRequiredState: vi.fn().mockReturnValue(false),
@@ -243,6 +247,7 @@ describe("CoreToolHandler coverage", () => {
 
     it("handleListen returns a task dispatch event for worker listeners", async () => {
         defaultDeps.connectionChatRepository.pullInbox.mockReturnValue([]);
+        defaultDeps.workerSprintPreflightService.pullNextJob.mockReturnValue(null);
         defaultDeps.workerTaskDispatchService.pullNextDispatch.mockReturnValue({
             dispatch: { id: "dispatch-1" },
             leaseToken: "lease-1",
@@ -265,6 +270,30 @@ describe("CoreToolHandler coverage", () => {
         expect(parsed.dispatch.dispatch.id).toBe("dispatch-1");
         expect(parsed.connection).toBeUndefined();
         expect(parsed.continuation.nextTool).toBe("listen");
+    });
+
+    it("handleListen prioritizes sprint preflight jobs for worker listeners", async () => {
+        defaultDeps.connectionChatRepository.pullInbox.mockReturnValue([]);
+        defaultDeps.workerSprintPreflightService.pullNextJob.mockReturnValue({
+            job: { id: "job-1", status: "running" },
+            leaseToken: "lease-job-1",
+            project: { id: "project-1" },
+            sprint: { id: "sprint-1" },
+            executionContext: { repoPath: "/repo", defaultBranch: "main", featureBranch: "feature/sprint1" },
+        });
+
+        const handler = new CoreToolHandler(defaultDeps);
+        const response = await handler.handleListen({
+            connection_key: "worker-1",
+            project_id: "project-1",
+            role: "worker",
+            include_task_dispatch: true,
+        });
+        const parsed = JSON.parse(response.content[0].text as string);
+
+        expect(parsed.kind).toBe("sprint_preflight");
+        expect(parsed.job.job.id).toBe("job-1");
+        expect(defaultDeps.workerTaskDispatchService.pullNextDispatch).not.toHaveBeenCalled();
     });
 
     it("handleListen returns noop timeout when no work arrives", async () => {
@@ -402,6 +431,25 @@ describe("CoreToolHandler coverage", () => {
             workerBranch: undefined,
             prUrl: undefined,
             summaryMarkdown: "done",
+            errorMessage: undefined,
+        });
+    });
+
+    it("handleUpdateSprintPreflightJob", async () => {
+        const handler = new CoreToolHandler(defaultDeps);
+        await handler.handleUpdateSprintPreflightJob({
+            connection_key: "worker-1",
+            job_id: "job-1",
+            lease_token: "lease-job-1",
+            state: "COMPLETED",
+            summary_markdown: "branch ready",
+        });
+        expect(defaultDeps.workerSprintPreflightService.updateJob).toHaveBeenCalledWith({
+            connectionKey: "worker-1",
+            jobId: "job-1",
+            leaseToken: "lease-job-1",
+            state: "COMPLETED",
+            summaryMarkdown: "branch ready",
             errorMessage: undefined,
         });
     });

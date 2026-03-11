@@ -21,6 +21,7 @@ It now:
 - persists direct CLI pipeline stage events and CI-gate state changes into `task_run_events`
 - persists action-required automation and protocol state into `task_run_events`
 - persists branch/planning preflight blockers and watch-loop sprint lifecycle into `sprint_run_events`
+- lets worker-backed sprint starts queue a sprint-level preflight job before the orchestrator resumes the sprint run
 - exposes dashboard control actions for sprint orchestration and dispatch management on the same DB-native runtime
 
 It does not yet:
@@ -164,6 +165,12 @@ Still pending:
 - CI/protocol wording should stop referencing any subtask-file semantics
 - broader executor transcript coverage beyond current session-sync, CLI stage, worker lifecycle, and CI gate events
 - deeper Jules stop semantics beyond the current soft-stop `send_session_message` fallback
+
+Recent sprint-start update:
+- when a connected worker is available for the project, dashboard sprint start now creates a queued `sprint_run` plus a queued `sprint_preflight_job`
+- the worker claims that preflight job from the same `listen` loop used for inbox and task dispatch work
+- branch preparation now runs against the project's configured repo directory and automatically creates/checks out/pushes the sprint branch where safe
+- preflight completion resumes the same queued sprint run by re-entering `sprint_agent(orchestrate)` with `existing_sprint_run_id`
 
 Recent runtime update:
 - running dispatch cancellation is now modeled as `cancel_requested` instead of immediately forcing terminal DB state

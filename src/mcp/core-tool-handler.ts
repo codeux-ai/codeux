@@ -6,6 +6,7 @@ import type {
   PullTaskDispatchArgs,
   PullInboxArgs,
   StartListenArgs,
+  UpdateSprintPreflightJobArgs,
   UpdateTaskDispatchArgs,
 } from "../api/mcp/tool-registry.js";
 import type { JulesApiClient, JulesCreateSessionRequest } from "../integrations/jules-api-client.js";
@@ -13,6 +14,7 @@ import type { DashboardSettings, JulesActivity, JulesSession, JulesSource } from
 import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
 import type { ListenResponse } from "../contracts/connection-chat-types.js";
 import type { WorkerTaskDispatchService } from "../services/worker-task-dispatch-service.js";
+import type { WorkerSprintPreflightService } from "../services/worker-sprint-preflight-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { ActivitySummaryService } from "../domain/sessions/activity-summary.js";
 import type { McpRuntimeRole } from "../contracts/mcp-tool-definitions.js";
@@ -37,6 +39,7 @@ interface CoreToolHandlerDependencies {
   getDashboardSettings: () => DashboardSettings;
   connectionChatRepository: ConnectionChatRepository;
   workerTaskDispatchService: WorkerTaskDispatchService;
+  workerSprintPreflightService: WorkerSprintPreflightService;
   logger?: Logger;
 }
 
@@ -400,6 +403,21 @@ export class CoreToolHandler {
       }
 
       if (shouldIncludeTaskDispatch) {
+        const preflightJob = this.deps.workerSprintPreflightService.pullNextJob({
+          connectionKey: normalizedArgs.connection_key,
+          projectId: normalizedArgs.project_id,
+        });
+        if (preflightJob) {
+          return this.wrapListenResponse({
+            kind: "sprint_preflight",
+            job: preflightJob,
+            continuation: {
+              nextTool: "listen",
+              instruction: "Handle the claimed sprint preflight job, close it with update_sprint_preflight_job, then call listen again with the same connection_key to stay available.",
+            },
+          });
+        }
+
         const claim = this.deps.workerTaskDispatchService.pullNextDispatch({
           connectionKey: normalizedArgs.connection_key,
           projectId: normalizedArgs.project_id,
@@ -492,6 +510,24 @@ export class CoreToolHandler {
       sessionName: args.session_name,
       workerBranch: args.worker_branch,
       prUrl: args.pr_url,
+      summaryMarkdown: args.summary_markdown,
+      errorMessage: args.error_message,
+    });
+
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify(result, null, 2),
+      }],
+    };
+  }
+
+  async handleUpdateSprintPreflightJob(args: UpdateSprintPreflightJobArgs) {
+    const result = this.deps.workerSprintPreflightService.updateJob({
+      connectionKey: args.connection_key,
+      jobId: args.job_id,
+      leaseToken: args.lease_token,
+      state: args.state,
       summaryMarkdown: args.summary_markdown,
       errorMessage: args.error_message,
     });

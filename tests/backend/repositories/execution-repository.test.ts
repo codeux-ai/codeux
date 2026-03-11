@@ -222,6 +222,81 @@ describe("ExecutionRepository", () => {
     });
   });
 
+  it("creates and claims sprint preflight jobs for worker-owned sprint starts", async () => {
+    const { projectRepository, connectionRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Preflight Project",
+      sourceType: "local",
+      sourceRef: "/workspace/preflight-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Preflight Sprint",
+      number: 3,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mcp_worker",
+      status: "queued",
+    });
+    const worker = connectionRepository.upsertConnection({
+      connectionKey: "worker-preflight-1",
+      displayName: "Worker Preflight 1",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+
+    const created = executionRepository.createSprintPreflightJob({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+    });
+    const claimed = executionRepository.claimNextSprintPreflightJob({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+      connectionId: worker.id,
+    });
+
+    expect(created.status).toBe("queued");
+    expect(claimed).toMatchObject({
+      id: created.id,
+      status: "claimed",
+      connectionId: worker.id,
+    });
+  });
+
+  it("does not finalize sprint cancellation while a sprint preflight job is still active", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Preflight Cancel Project",
+      sourceType: "local",
+      sourceRef: "/workspace/preflight-cancel-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Preflight Cancel Sprint",
+      number: 6,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "cancel_requested",
+    });
+    executionRepository.createSprintPreflightJob({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      status: "running",
+    });
+
+    const finalized = executionRepository.finalizeSprintRunCancellationIfIdle(sprintRun.id);
+
+    expect(finalized).toBeNull();
+    expect(executionRepository.getSprintRun(sprintRun.id)?.status).toBe("cancel_requested");
+  });
+
   it("projects sprint runs and dispatches into an execution snapshot", async () => {
     const { projectRepository, connectionRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({

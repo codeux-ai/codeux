@@ -16,7 +16,7 @@ export function createDashboardDependencies(
   coreDeps: CoreDependencies,
   sprintDeps: SprintDependencies
 ): DashboardDependencies {
-  const { logger, projectRuntimeRepository, projectManagementRepository, executionRepository, julesApi, activeDispatchRegistry } = coreDeps;
+  const { logger, projectRuntimeRepository, projectManagementRepository, executionRepository, connectionChatRepository, julesApi, activeDispatchRegistry } = coreDeps;
   const { sprintTaskDispatchService, sprintOrchestrator } = sprintDeps;
 
   const activityCacheService = new ActivityCacheService(
@@ -117,6 +117,7 @@ export function createDashboardDependencies(
   const executionControlService = new ExecutionControlService({
     projectManagementRepository,
     executionRepository,
+    connectionChatRepository,
     taskRerunService,
     sprintOrchestrator,
     julesApi,

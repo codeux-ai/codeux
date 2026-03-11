@@ -2,6 +2,7 @@ import type { Subtask } from "../contracts/app-types.js";
 import type { TaskDispatchRecord, SprintRunRecord, TaskRunRecord } from "../contracts/execution-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
+import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
 import type { TaskRerunService } from "./task-rerun-service.js";
 import type { SprintOrchestrator } from "../sprint/sprint-orchestrator.js";
 import type { JulesApiClient } from "../integrations/jules-api-client.js";
@@ -11,6 +12,7 @@ import type { Logger } from "../shared/logging/logger.js";
 interface ExecutionControlServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;
+  connectionChatRepository: ConnectionChatRepository;
   taskRerunService: TaskRerunService;
   sprintOrchestrator: SprintOrchestrator;
   julesApi: JulesApiClient;
@@ -46,6 +48,31 @@ export class ExecutionControlService {
       throw new Error(
         `Sprint ${sprint.number ?? sprint.name} cannot be started because the previous orchestration still owns the sprint lease.`,
       );
+    }
+
+    if (this.hasAvailableWorker(projectId)) {
+      const sprintRun = this.deps.executionRepository.createSprintRun({
+        projectId,
+        sprintId,
+        triggerType: "dashboard",
+        triggeredBy: "execution_control",
+        executorMode: "mcp_worker",
+        status: "queued",
+      });
+      this.deps.executionRepository.createSprintPreflightJob({
+        projectId,
+        sprintId,
+        sprintRunId: sprintRun.id,
+        jobType: "branch_preflight",
+        status: "queued",
+      });
+      this.deps.executionRepository.appendSprintRunEvent(sprintRun.id, "sprint_preflight_queued", "system", {
+        requestedBy: "dashboard",
+        jobType: "branch_preflight",
+      }, {
+        sourceEventKey: `sprint-preflight-queued:${sprintRun.id}`,
+      });
+      return { ok: true };
     }
 
     void this.deps.sprintOrchestrator.execute({
@@ -115,6 +142,28 @@ export class ExecutionControlService {
       }
     }
 
+    for (const job of this.deps.executionRepository.listSprintPreflightJobs({
+      projectId: sprintRun.projectId,
+      sprintRunId,
+    })) {
+      if (job.status === "queued" || job.status === "claimed") {
+        this.deps.executionRepository.updateSprintPreflightJob(job.id, {
+          status: "cancelled",
+          finishedAt: now,
+          lastHeartbeatAt: now,
+          errorMessage: "Sprint run was cancelled from the dashboard.",
+        });
+        continue;
+      }
+      if (job.status === "running") {
+        this.deps.executionRepository.updateSprintPreflightJob(job.id, {
+          status: "cancel_requested",
+          lastHeartbeatAt: now,
+          errorMessage: "Sprint run was cancelled from the dashboard.",
+        });
+      }
+    }
+
     return this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(sprintRunId) || updated;
   }
 
@@ -133,6 +182,25 @@ export class ExecutionControlService {
         continue;
       }
       await this.forceCancelDispatchInternal(dispatch, now, "Sprint run was force-cancelled from the dashboard.");
+    }
+
+    for (const job of this.deps.executionRepository.listSprintPreflightJobs({
+      projectId: sprintRun.projectId,
+      sprintRunId,
+    })) {
+      if (!["queued", "claimed", "running", "cancel_requested"].includes(job.status)) {
+        continue;
+      }
+      const lease = this.deps.executionRepository.getLease("sprint_preflight_job", job.id);
+      if (lease) {
+        this.deps.executionRepository.releaseLease("sprint_preflight_job", job.id, lease.leaseToken);
+      }
+      this.deps.executionRepository.updateSprintPreflightJob(job.id, {
+        status: "cancelled",
+        finishedAt: now,
+        lastHeartbeatAt: now,
+        errorMessage: "Sprint run was force-cancelled from the dashboard.",
+      });
     }
 
     this.deps.executionRepository.releaseLease("sprint", sprintRun.sprintId);
@@ -413,5 +481,16 @@ export class ExecutionControlService {
     }
 
     return null;
+  }
+
+  private hasAvailableWorker(projectId: string): boolean {
+    return this.deps.connectionChatRepository
+      .listConnections(projectId)
+      .some((connection) => {
+        const projectIds = connection.activeProjectIds.length > 0 ? connection.activeProjectIds : connection.projectIds;
+        return connection.role === "worker"
+          && ["connected", "listening", "idle"].includes(connection.status)
+          && projectIds.includes(projectId);
+      });
   }
 }

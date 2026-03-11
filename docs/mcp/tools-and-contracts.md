@@ -14,6 +14,7 @@ These cover:
 - Activity APIs
 - Session wait/polling logic
 - listen-mode connection registration and inbox/reply flow
+- worker sprint preflight claim and completion flow
 - worker dispatch claim and completion flow
 
 ### Agent tools
@@ -60,6 +61,7 @@ Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/
 ### Worker execution
 - `pull_task_dispatch`
 - `update_task_dispatch`
+- `update_sprint_preflight_job`
 - `execute_worker_dispatch`
 - `cancel_local_dispatch`
 - `generate_dashboard_reply`
@@ -153,6 +155,8 @@ Unknown tool names raise MCP `MethodNotFound`.
 - The default internal idle polling cadence inside one blocking `listen` call is now `3000ms`, which reduces idle listener churn without changing the external MCP loop contract.
 - Connection heartbeat writes are throttled while listeners stay idle, so a healthy long-poll listener no longer rewrites connection state every second.
 - Workers may set `include_task_dispatch = true` so the same blocking listener call can also claim and return the next queued worker dispatch.
+- Worker listeners can now also receive a `sprint_preflight` event before normal task dispatches when Sprint OS needs branch preparation for a queued sprint run.
+- `sprint_preflight` events carry the project repo path and resolved default/feature branch so the worker can run git preflight locally.
 - `listen` is exposed on both the normal stdio `project_manager` runtime and the remote Streamable HTTP `worker_gateway` runtime.
 - `start_listen` registers or refreshes an MCP connection in sqlite and returns pending dashboard messages for the active project.
 - `pull_inbox` is the pull-based inbox endpoint for listening MCPs.
@@ -163,6 +167,9 @@ Unknown tool names raise MCP `MethodNotFound`.
 
 ### Worker-dispatch behavior
 - Worker MCPs register through `start_listen` with `role = worker`.
+- `listen` now prioritizes queued sprint preflight jobs before normal task dispatches for worker connections.
+- `update_sprint_preflight_job` is used for heartbeats and terminal worker outcomes for sprint-level preflight (`RUNNING`, `COMPLETED`, `FAILED`, `BLOCKED`).
+- Completing a sprint preflight job resumes the queued sprint run through the normal DB-native orchestrator path.
 - `pull_task_dispatch` claims the next queued `mcp_worker` dispatch for one of the worker's active projects.
 - Claiming a dispatch acquires a DB-backed lease on that dispatch and returns the full task payload plus project/sprint branch context.
 - `execute_worker_dispatch` starts the claimed dispatch on a headless worker-host Sprint OS server using the existing provider execution path.

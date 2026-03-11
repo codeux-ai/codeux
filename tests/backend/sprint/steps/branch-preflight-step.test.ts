@@ -1,6 +1,6 @@
 import * as fs from "fs/promises";
 import { commandRunner } from "../../../../src/shared/subprocess/command-runner.js";
-import { runBranchPreflightStep } from "../../../../src/sprint/steps/branch-preflight-step.js";
+import { ensureSprintBranchReady, runBranchPreflightStep } from "../../../../src/sprint/steps/branch-preflight-step.js";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { SprintOrchestrator } from "../../../../src/sprint/sprint-orchestrator.js";
 import { buildMockSettings } from "../../../builders/settings-builder.js";
@@ -96,7 +96,8 @@ vi.mock("fs/promises");
 vi.mock("../../../../src/shared/subprocess/command-runner.js", () => {
   return {
     commandRunner: {
-      run: vi.fn()
+      run: vi.fn(),
+      runStrict: vi.fn(),
     }
   };
 });
@@ -181,5 +182,38 @@ describe("runBranchPreflightStep (Async)", () => {
 
     const result = await runBranchPreflightStep("/valid-repo", "feature/sprint1");
     expect(result).toEqual({ existsLocal: false, existsRemote: false });
+  });
+
+  it("automatically creates and pushes a missing sprint branch from the default branch", async () => {
+    vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => true } as any);
+    vi.mocked(commandRunner.run)
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ ok: false, code: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ ok: false, code: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" });
+
+    const result = await ensureSprintBranchReady("/valid-repo", "feature/sprint1", "main");
+
+    expect(result.action).toBe("created_and_pushed");
+    expect(vi.mocked(commandRunner.runStrict)).toHaveBeenNthCalledWith(1, "git", ["checkout", "main"], { cwd: "/valid-repo" });
+    expect(vi.mocked(commandRunner.runStrict)).toHaveBeenNthCalledWith(2, "git", ["checkout", "-b", "feature/sprint1"], { cwd: "/valid-repo" });
+    expect(vi.mocked(commandRunner.runStrict)).toHaveBeenNthCalledWith(3, "git", ["push", "-u", "origin", "feature/sprint1"], { cwd: "/valid-repo" });
+  });
+
+  it("checks out a remote sprint branch locally when origin already has it", async () => {
+    vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => true } as any);
+    vi.mocked(commandRunner.run)
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "" })
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "hash refs/heads/feature/sprint1\n", stderr: "" });
+
+    const result = await ensureSprintBranchReady("/valid-repo", "feature/sprint1", "main");
+
+    expect(result.action).toBe("checked_out_remote_tracking");
+    expect(vi.mocked(commandRunner.runStrict)).toHaveBeenNthCalledWith(1, "git", ["fetch", "origin", "feature/sprint1"], { cwd: "/valid-repo" });
+    expect(vi.mocked(commandRunner.runStrict)).toHaveBeenNthCalledWith(2, "git", ["checkout", "-b", "feature/sprint1", "--track", "origin/feature/sprint1"], { cwd: "/valid-repo" });
   });
 });

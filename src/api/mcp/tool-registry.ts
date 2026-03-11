@@ -145,6 +145,15 @@ export interface UpdateTaskDispatchArgs {
   error_message?: string;
 }
 
+export interface UpdateSprintPreflightJobArgs {
+  connection_key: string;
+  job_id: string;
+  lease_token: string;
+  state: "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED";
+  summary_markdown?: string;
+  error_message?: string;
+}
+
 export interface McpToolArgsByName {
   get_source: GetSourceArgs;
   list_sources: ListSourcesArgs;
@@ -169,6 +178,7 @@ export interface McpToolArgsByName {
   post_listen_reply: PostListenReplyArgs;
   pull_task_dispatch: PullTaskDispatchArgs;
   update_task_dispatch: UpdateTaskDispatchArgs;
+  update_sprint_preflight_job: UpdateSprintPreflightJobArgs;
 }
 
 export type McpToolName = keyof McpToolArgsByName;

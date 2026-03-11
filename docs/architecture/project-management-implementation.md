@@ -121,6 +121,7 @@ Current behavior:
 - orchestrate executions now create `sprint_runs`, `task_dispatches`, and `task_runs`
 - orchestrate executions now hold a sprint-scoped execution lease while the loop is active
 - dashboard reruns now create DB-backed dispatches and task runs instead of directly bypassing execution state
+- when a worker is available for the project, sprint start now queues a worker-owned sprint preflight job before orchestration resumes
 
 ## Markdown Round-Trip
 

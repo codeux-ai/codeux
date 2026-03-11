@@ -3,16 +3,19 @@ import type { DatabaseSync } from "node:sqlite";
 import { AppDbStorage } from "./app-db-storage.js";
 import type {
   AcquireExecutionLeaseInput,
+  CreateSprintPreflightJobInput,
   CreateTaskRunInput,
   CreateSprintRunInput,
   CreateTaskDispatchInput,
   ExecutionLeaseRecord,
+  SprintPreflightJobRecord,
   SprintRunEventRecord,
   RenewExecutionLeaseInput,
   SprintRunRecord,
   TaskRunRecord,
   TaskRunEventRecord,
   TaskDispatchRecord,
+  UpdateSprintPreflightJobInput,
   UpdateTaskRunInput,
   UpdateSprintRunInput,
   UpdateTaskDispatchInput,
@@ -52,6 +55,24 @@ interface TaskDispatchRow {
   executor_type: string;
   status: string;
   priority: number | string;
+  queued_at: string;
+  claimed_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  last_heartbeat_at: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface SprintPreflightJobRow {
+  id: string;
+  project_id: string;
+  sprint_id: string;
+  sprint_run_id: string;
+  connection_id: string | null;
+  job_type: string;
+  status: string;
   queued_at: string;
   claimed_at: string | null;
   started_at: string | null;
@@ -325,6 +346,103 @@ export class ExecutionRepository {
     if (this.shouldPublishSprintRunUpdate(input)) {
       this.notifyRealtime(updated.projectId, true);
     }
+    return updated;
+  }
+
+  createSprintPreflightJob(input: CreateSprintPreflightJobInput): SprintPreflightJobRecord {
+    this.requireProject(input.projectId);
+    this.requireSprint(input.sprintId, input.projectId);
+    this.requireSprintRunScoped(input.sprintRunId, input.projectId, input.sprintId);
+    if (input.connectionId) {
+      this.requireConnection(input.connectionId);
+    }
+
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    const queuedAt = input.queuedAt || now;
+    this.db.prepare(`
+      INSERT INTO sprint_preflight_jobs (
+        id, project_id, sprint_id, sprint_run_id, connection_id, job_type, status,
+        queued_at, claimed_at, started_at, finished_at, last_heartbeat_at, error_message, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      input.projectId,
+      input.sprintId,
+      input.sprintRunId,
+      input.connectionId ?? null,
+      input.jobType || "branch_preflight",
+      input.status || "queued",
+      queuedAt,
+      null,
+      null,
+      null,
+      null,
+      null,
+      now,
+      now,
+    );
+
+    const created = this.requireSprintPreflightJob(id);
+    this.notifyRealtime(created.projectId, true);
+    return created;
+  }
+
+  getSprintPreflightJob(jobId: string): SprintPreflightJobRecord | null {
+    const row = this.db.prepare(`
+      SELECT *
+      FROM sprint_preflight_jobs
+      WHERE id = ?
+    `).get(jobId) as SprintPreflightJobRow | undefined;
+    return row ? this.mapSprintPreflightJobRow(row) : null;
+  }
+
+  listSprintPreflightJobs(args: { projectId: string; sprintId?: string; sprintRunId?: string }): SprintPreflightJobRecord[] {
+    this.requireProject(args.projectId);
+    const clauses = ["project_id = ?"];
+    const values: string[] = [args.projectId];
+    if (args.sprintId) {
+      clauses.push("sprint_id = ?");
+      values.push(args.sprintId);
+    }
+    if (args.sprintRunId) {
+      clauses.push("sprint_run_id = ?");
+      values.push(args.sprintRunId);
+    }
+
+    const rows = this.db.prepare(`
+      SELECT *
+      FROM sprint_preflight_jobs
+      WHERE ${clauses.join(" AND ")}
+      ORDER BY queued_at ASC, created_at ASC
+    `).all(...values) as unknown as SprintPreflightJobRow[];
+
+    return rows.map((row) => this.mapSprintPreflightJobRow(row));
+  }
+
+  updateSprintPreflightJob(jobId: string, input: UpdateSprintPreflightJobInput): SprintPreflightJobRecord {
+    const current = this.requireSprintPreflightJob(jobId);
+    if (input.connectionId) {
+      this.requireConnection(input.connectionId);
+    }
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      UPDATE sprint_preflight_jobs
+      SET connection_id = ?, status = ?, claimed_at = ?, started_at = ?, finished_at = ?, last_heartbeat_at = ?, error_message = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      input.connectionId === undefined ? current.connectionId : input.connectionId,
+      input.status || current.status,
+      input.claimedAt === undefined ? current.claimedAt : input.claimedAt,
+      input.startedAt === undefined ? current.startedAt : input.startedAt,
+      input.finishedAt === undefined ? current.finishedAt : input.finishedAt,
+      input.lastHeartbeatAt === undefined ? current.lastHeartbeatAt : input.lastHeartbeatAt,
+      input.errorMessage === undefined ? current.errorMessage : input.errorMessage,
+      now,
+      jobId,
+    );
+    const updated = this.requireSprintPreflightJob(jobId);
+    this.notifyRealtime(updated.projectId, true);
     return updated;
   }
 
@@ -1002,6 +1120,32 @@ export class ExecutionRepository {
     });
   }
 
+  claimNextSprintPreflightJob(args: {
+    projectId: string;
+    connectionId?: string | null;
+    sprintId?: string;
+    sprintRunId?: string;
+  }): SprintPreflightJobRecord | null {
+    const queue = this.listSprintPreflightJobs({
+      projectId: args.projectId,
+      sprintId: args.sprintId,
+      sprintRunId: args.sprintRunId,
+    }).filter((job) => job.status === "queued");
+
+    const next = queue[0];
+    if (!next) {
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    return this.updateSprintPreflightJob(next.id, {
+      connectionId: args.connectionId ?? null,
+      status: "claimed",
+      claimedAt: now,
+      lastHeartbeatAt: now,
+    });
+  }
+
   acquireLease(input: AcquireExecutionLeaseInput): ExecutionLeaseRecord {
     const existing = this.getLease(input.scopeType, input.scopeId);
     const now = new Date().toISOString();
@@ -1141,9 +1285,24 @@ export class ExecutionRepository {
     return toNumber(row?.total || 0) > 0;
   }
 
+  hasActiveSprintPreflightJobs(sprintRunId: string): boolean {
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM sprint_preflight_jobs
+      WHERE sprint_run_id = ?
+        AND status IN ('queued', 'claimed', 'running', 'cancel_requested')
+    `).get(sprintRunId) as { total: number | string } | undefined;
+    return toNumber(row?.total || 0) > 0;
+  }
+
   finalizeSprintRunCancellationIfIdle(sprintRunId: string): SprintRunRecord | null {
     const sprintRun = this.getSprintRun(sprintRunId);
-    if (!sprintRun || sprintRun.status !== "cancel_requested" || this.hasActiveTaskDispatches(sprintRunId)) {
+    if (
+      !sprintRun
+      || sprintRun.status !== "cancel_requested"
+      || this.hasActiveTaskDispatches(sprintRunId)
+      || this.hasActiveSprintPreflightJobs(sprintRunId)
+    ) {
       return null;
     }
 
@@ -1176,6 +1335,14 @@ export class ExecutionRepository {
       throw new Error(`Task dispatch not found: ${dispatchId}`);
     }
     return dispatch;
+  }
+
+  private requireSprintPreflightJob(jobId: string): SprintPreflightJobRecord {
+    const job = this.getSprintPreflightJob(jobId);
+    if (!job) {
+      throw new Error(`Sprint preflight job not found: ${jobId}`);
+    }
+    return job;
   }
 
   private requireTaskRun(taskRunId: string): TaskRunRecord {
@@ -1274,6 +1441,26 @@ export class ExecutionRepository {
       executorType: row.executor_type as TaskDispatchRecord["executorType"],
       status: row.status as TaskDispatchRecord["status"],
       priority: toNumber(row.priority),
+      queuedAt: row.queued_at,
+      claimedAt: row.claimed_at,
+      startedAt: row.started_at,
+      finishedAt: row.finished_at,
+      lastHeartbeatAt: row.last_heartbeat_at,
+      errorMessage: row.error_message,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  private mapSprintPreflightJobRow(row: SprintPreflightJobRow): SprintPreflightJobRecord {
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      sprintId: row.sprint_id,
+      sprintRunId: row.sprint_run_id,
+      connectionId: row.connection_id,
+      jobType: row.job_type as SprintPreflightJobRecord["jobType"],
+      status: row.status as SprintPreflightJobRecord["status"],
       queuedAt: row.queued_at,
       claimedAt: row.claimed_at,
       startedAt: row.started_at,
@@ -1487,6 +1674,15 @@ export class ExecutionRepository {
       const row = this.db.prepare(`
         SELECT project_id
         FROM task_dispatches
+        WHERE id = ?
+      `).get(scopeId) as { project_id: string } | undefined;
+      return row?.project_id || null;
+    }
+
+    if (scopeType === "sprint_preflight_job") {
+      const row = this.db.prepare(`
+        SELECT project_id
+        FROM sprint_preflight_jobs
         WHERE id = ?
       `).get(scopeId) as { project_id: string } | undefined;
       return row?.project_id || null;

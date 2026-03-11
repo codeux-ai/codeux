@@ -1,12 +1,14 @@
 export type SprintRunStatus = "queued" | "running" | "paused" | "cancel_requested" | "completed" | "failed" | "cancelled";
 export type SprintRunTriggerType = "manual" | "dashboard" | "mcp" | "system";
 export type SprintRunExecutorMode = "mixed" | "docker_cli" | "jules" | "mcp_worker";
+export type SprintPreflightJobType = "branch_preflight";
+export type SprintPreflightJobStatus = "queued" | "claimed" | "running" | "completed" | "failed" | "blocked" | "cancel_requested" | "cancelled";
 
 export type TaskDispatchExecutorType = "docker_cli" | "jules" | "mcp_worker";
 export type TaskDispatchStatus = "queued" | "claimed" | "running" | "cancel_requested" | "completed" | "failed" | "cancelled" | "blocked";
 export type TaskRunState = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED";
 
-export type ExecutionLeaseScopeType = "project" | "sprint" | "sprint_run" | "task_dispatch";
+export type ExecutionLeaseScopeType = "project" | "sprint" | "sprint_run" | "task_dispatch" | "sprint_preflight_job";
 
 export interface SprintRunRecord {
   id: string;
@@ -33,6 +35,24 @@ export interface TaskDispatchRecord {
   executorType: TaskDispatchExecutorType;
   status: TaskDispatchStatus;
   priority: number;
+  queuedAt: string;
+  claimedAt: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  lastHeartbeatAt: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SprintPreflightJobRecord {
+  id: string;
+  projectId: string;
+  sprintId: string;
+  sprintRunId: string;
+  connectionId: string | null;
+  jobType: SprintPreflightJobType;
+  status: SprintPreflightJobStatus;
   queuedAt: string;
   claimedAt: string | null;
   startedAt: string | null;
@@ -109,6 +129,26 @@ export interface UpdateSprintRunInput {
   startedAt?: string | null;
   finishedAt?: string | null;
   lastHeartbeatAt?: string | null;
+}
+
+export interface CreateSprintPreflightJobInput {
+  projectId: string;
+  sprintId: string;
+  sprintRunId: string;
+  connectionId?: string | null;
+  jobType?: SprintPreflightJobType;
+  status?: SprintPreflightJobStatus;
+  queuedAt?: string;
+}
+
+export interface UpdateSprintPreflightJobInput {
+  connectionId?: string | null;
+  status?: SprintPreflightJobStatus;
+  claimedAt?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  lastHeartbeatAt?: string | null;
+  errorMessage?: string | null;
 }
 
 export interface CreateTaskDispatchInput {
@@ -194,6 +234,32 @@ export interface WorkerTaskDispatchClaim {
     priority: string;
     dependsOnTaskIds: string[];
     executorType: "auto" | TaskDispatchExecutorType;
+  };
+  executionContext: {
+    repoPath: string;
+    defaultBranch: string;
+    featureBranch: string;
+  };
+}
+
+export interface WorkerSprintPreflightClaim {
+  job: SprintPreflightJobRecord;
+  leaseToken: string;
+  project: {
+    id: string;
+    name: string;
+    baseDir: string;
+    sourceType: string;
+    sourceRef: string;
+    defaultBranch: string | null;
+    featureBranchPrefix: string | null;
+  };
+  sprint: {
+    id: string;
+    name: string;
+    number: number | null;
+    goal: string;
+    featureBranch: string | null;
   };
   executionContext: {
     repoPath: string;

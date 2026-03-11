@@ -4,6 +4,7 @@ import * as os from "os";
 import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
+import { ConnectionChatRepository } from "../../../src/repositories/connection-chat-repository.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import { ExecutionControlService } from "../../../src/services/execution-control-service.js";
 
@@ -11,6 +12,7 @@ const tempDirs: string[] = [];
 
 async function createFixture(): Promise<{
   projectRepository: ProjectManagementRepository;
+  connectionRepository: ConnectionChatRepository;
   executionRepository: ExecutionRepository;
   service: ExecutionControlService;
   rerunTask: ReturnType<typeof vi.fn>;
@@ -22,6 +24,7 @@ async function createFixture(): Promise<{
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const projectRepository = new ProjectManagementRepository(storage);
+  const connectionRepository = new ConnectionChatRepository(storage);
   const executionRepository = new ExecutionRepository(storage);
   const rerunTask = vi.fn().mockResolvedValue({ id: "task-1" });
   const executeOrchestrator = vi.fn().mockResolvedValue({ content: [] });
@@ -31,6 +34,7 @@ async function createFixture(): Promise<{
   const service = new ExecutionControlService({
     projectManagementRepository: projectRepository,
     executionRepository,
+    connectionChatRepository: connectionRepository,
     taskRerunService: {
       rerunTask,
     } as any,
@@ -47,6 +51,7 @@ async function createFixture(): Promise<{
 
   return {
     projectRepository,
+    connectionRepository,
     executionRepository,
     service,
     rerunTask,
@@ -81,6 +86,44 @@ describe("ExecutionControlService", () => {
       sprint_id: sprint.id,
       wait: true,
     }));
+  });
+
+  it("queues a worker sprint preflight job instead of starting orchestrator immediately when a worker is available", async () => {
+    const { projectRepository, connectionRepository, executionRepository, service, executeOrchestrator } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Worker Planning Project",
+      sourceType: "local",
+      sourceRef: "/workspace/worker-planning-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Worker Planning Sprint",
+      number: 1,
+    });
+    connectionRepository.upsertConnection({
+      connectionKey: "worker-1",
+      displayName: "Worker 1",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+
+    await service.orchestrateSprint(project.id, sprint.id);
+
+    expect(executeOrchestrator).not.toHaveBeenCalled();
+    const sprintRun = executionRepository.findActiveSprintRun(project.id, sprint.id);
+    expect(sprintRun).toMatchObject({
+      status: "queued",
+      executorMode: "mcp_worker",
+    });
+    expect(executionRepository.listSprintPreflightJobs({
+      projectId: project.id,
+      sprintRunId: sprintRun!.id,
+    })).toHaveLength(1);
+    expect(executionRepository.listSprintRunEvents(sprintRun!.id)[0]).toMatchObject({
+      eventType: "sprint_preflight_queued",
+    });
   });
 
   it("releases a stale sprint lease before starting a fresh orchestration", async () => {

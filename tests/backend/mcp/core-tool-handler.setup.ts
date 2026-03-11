@@ -28,6 +28,19 @@ export const buildDeps = () => {
     listTrackedSessions: () => ({ sessions: [] }),
     listTrackedActivities: () => ({ activities: [] }),
     listAllTrackedActivities: () => [],
+    connectionChatRepository: {
+      startListen: vi.fn().mockReturnValue({ connection: { id: "conn-1", connectionKey: "listener-1" }, inbox: [] }),
+      pullInbox: vi.fn().mockReturnValue([]),
+      postListenReply: vi.fn().mockReturnValue({ threadId: "thread-1", deliveryStatus: "processed" }),
+    },
+    workerTaskDispatchService: {
+      pullNextDispatch: vi.fn().mockReturnValue(null),
+      updateDispatch: vi.fn().mockReturnValue({ dispatch: { id: "dispatch-1", status: "completed" }, controlAction: null }),
+    },
+    workerSprintPreflightService: {
+      pullNextJob: vi.fn().mockReturnValue(null),
+      updateJob: vi.fn().mockReturnValue({ job: { id: "job-1", status: "completed" }, controlAction: null }),
+    },
   };
 
   return { deps, getSession, listAllActivities, fetchRecentActivities };

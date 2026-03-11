@@ -259,6 +259,28 @@ export class AppDbStorage {
         FOREIGN KEY (connection_id) REFERENCES mcp_connections(id) ON DELETE SET NULL
       );
 
+      CREATE TABLE IF NOT EXISTS sprint_preflight_jobs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id TEXT NOT NULL,
+        sprint_run_id TEXT NOT NULL,
+        connection_id TEXT,
+        job_type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        queued_at TEXT NOT NULL,
+        claimed_at TEXT,
+        started_at TEXT,
+        finished_at TEXT,
+        last_heartbeat_at TEXT,
+        error_message TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_run_id) REFERENCES sprint_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY (connection_id) REFERENCES mcp_connections(id) ON DELETE SET NULL
+      );
+
       CREATE TABLE IF NOT EXISTS execution_leases (
         id TEXT PRIMARY KEY,
         scope_type TEXT NOT NULL,
@@ -299,6 +321,8 @@ export class AppDbStorage {
     this.ensureIndex("idx_sprint_runs_project_sprint", "sprint_runs", "project_id, sprint_id, created_at DESC");
     this.ensureIndex("idx_task_dispatches_sprint_run", "task_dispatches", "sprint_run_id, status, queued_at ASC");
     this.ensureIndex("idx_task_dispatches_task", "task_dispatches", "task_id, created_at DESC");
+    this.ensureIndex("idx_sprint_preflight_jobs_sprint_run", "sprint_preflight_jobs", "sprint_run_id, status, queued_at ASC");
+    this.ensureIndex("idx_sprint_preflight_jobs_project_status", "sprint_preflight_jobs", "project_id, status, queued_at ASC");
     this.ensureIndex("idx_execution_leases_scope", "execution_leases", "scope_type, scope_id");
     this.ensureIndex("idx_task_run_events_task_run_created", "task_run_events", "task_run_id, created_at DESC");
     this.ensureUniqueIndex("idx_task_run_events_source_event", "task_run_events", "task_run_id, source_event_key");

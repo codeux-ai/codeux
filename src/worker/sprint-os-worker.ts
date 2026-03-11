@@ -3,10 +3,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { CallToolResultSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { WorkerTaskDispatchClaim } from "../contracts/execution-types.js";
+import type { WorkerSprintPreflightClaim, WorkerTaskDispatchClaim } from "../contracts/execution-types.js";
 import type { JulesSession } from "../contracts/app-types.js";
 import type { ListenDashboardMessageEvent, ListenResponse } from "../contracts/connection-chat-types.js";
 import type { WorkerConfig } from "./worker-config.js";
+import { executeWorkerSprintPreflight } from "./worker-sprint-preflight-executor.js";
 
 interface ExecuteWorkerDispatchResponse {
   dispatchId: string;
@@ -25,6 +26,14 @@ interface ExecuteWorkerDispatchResponse {
 
 interface UpdateWorkerDispatchResponse {
   dispatch: {
+    id: string;
+    status: string;
+  };
+  controlAction: "cancel" | null;
+}
+
+interface UpdateSprintPreflightJobResponse {
+  job: {
     id: string;
     status: string;
   };
@@ -184,6 +193,11 @@ export class SprintOsWorker {
         continue;
       }
 
+      if (response.kind === "sprint_preflight") {
+        await this.processSprintPreflight(controlPlaneClient, response.job);
+        continue;
+      }
+
       if (response.kind === "noop_timeout") {
         await delay(this.config.dispatchPollIntervalMs, signal).catch(() => undefined);
         continue;
@@ -246,6 +260,34 @@ export class SprintOsWorker {
         return;
       }
       throw error;
+    }
+  }
+
+  private async processSprintPreflight(
+    controlPlaneClient: Client,
+    claim: WorkerSprintPreflightClaim,
+  ): Promise<void> {
+    try {
+      const result = await executeWorkerSprintPreflight(claim);
+      await this.callJsonTool<UpdateSprintPreflightJobResponse>(controlPlaneClient, "update_sprint_preflight_job", {
+        connection_key: this.config.connectionKey,
+        job_id: claim.job.id,
+        lease_token: claim.leaseToken,
+        state: "COMPLETED",
+        summary_markdown: result.summaryMarkdown,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.callJsonTool<UpdateSprintPreflightJobResponse>(controlPlaneClient, "update_sprint_preflight_job", {
+        connection_key: this.config.connectionKey,
+        job_id: claim.job.id,
+        lease_token: claim.leaseToken,
+        state: "BLOCKED",
+        error_message: message,
+        summary_markdown: `Sprint preflight could not complete.\n\n${message}`,
+      }).catch((updateError) => {
+        console.error("[sprint-os-worker] Failed to persist sprint preflight failure", updateError);
+      });
     }
   }
 

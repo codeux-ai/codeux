@@ -1,4 +1,4 @@
-import type { WorkerTaskDispatchClaim } from "./execution-types.js";
+import type { WorkerSprintPreflightClaim, WorkerTaskDispatchClaim } from "./execution-types.js";
 
 export type McpConnectionRole = "project_manager" | "worker" | "listener";
 export type McpConnectionStatus = "connected" | "listening" | "idle" | "paused" | "stale" | "offline";
@@ -181,6 +181,12 @@ export interface ListenTaskDispatchEvent {
   continuation: ListenContinuation;
 }
 
+export interface ListenSprintPreflightEvent {
+  kind: "sprint_preflight";
+  job: WorkerSprintPreflightClaim;
+  continuation: ListenContinuation;
+}
+
 export interface PostListenReplyResult {
   threadId: string;
   deliveryStatus: ConversationDeliveryStatus;
@@ -189,4 +195,5 @@ export interface PostListenReplyResult {
 export type ListenResponse =
   | ListenTimeoutEvent
   | ListenDashboardMessageEvent
+  | ListenSprintPreflightEvent
   | ListenTaskDispatchEvent;

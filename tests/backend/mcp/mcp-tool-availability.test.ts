@@ -18,6 +18,7 @@ describe("tool availability", () => {
     expect(workerHostTools.some((tool) => tool.name === "sprint_agent")).toBe(false);
     expect(workerGatewayTools.some((tool) => tool.name === "listen")).toBe(true);
     expect(workerGatewayTools.some((tool) => tool.name === "update_task_dispatch")).toBe(true);
+    expect(workerGatewayTools.some((tool) => tool.name === "update_sprint_preflight_job")).toBe(true);
     expect(workerGatewayTools.some((tool) => tool.name === "execute_worker_dispatch")).toBe(false);
     expect(workerGatewayTools.some((tool) => tool.name === "sprint_agent")).toBe(false);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "get_session", "project_manager")).toBe(true);
@@ -25,6 +26,7 @@ describe("tool availability", () => {
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "listen", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "listen", "worker_gateway")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "update_task_dispatch", "worker_gateway")).toBe(true);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "update_sprint_preflight_job", "worker_gateway")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "start_listen", "project_manager")).toBe(false);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "execute_worker_dispatch", "project_manager")).toBe(false);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "execute_worker_dispatch", "worker_host")).toBe(true);

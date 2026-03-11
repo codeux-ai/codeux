@@ -43,6 +43,7 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
     .register("post_listen_reply", (input) => args.coreToolHandler.handlePostListenReply(input))
     .register("pull_task_dispatch", (input) => args.coreToolHandler.handlePullTaskDispatch(input))
     .register("update_task_dispatch", (input) => args.coreToolHandler.handleUpdateTaskDispatch(input))
+    .register("update_sprint_preflight_job", (input) => args.coreToolHandler.handleUpdateSprintPreflightJob(input))
     .register("sprint_agent", async (input) => (await args.agentToolHandler.handleSprintAgent(input)) as McpToolResponse)
     .register("task_agent", async (input) => (await args.agentToolHandler.handleTaskAgent(input)) as McpToolResponse)
     .register("execute_worker_dispatch", async (input) => (await args.agentToolHandler.handleExecuteWorkerDispatch(input)) as McpToolResponse)
