@@ -34,14 +34,14 @@ describe("chat-page-state-utils", () => {
   });
 
   it("treats thread list as loading until the selected project snapshot is loaded", () => {
-    expect(isThreadListLoading("project-1", null, false)).toBe(true);
-    expect(isThreadListLoading("project-1", "project-1", false)).toBe(false);
-    expect(isThreadListLoading("project-1", "project-1", true)).toBe(true);
+    expect(isThreadListLoading("project-1", false, false)).toBe(false);
+    expect(isThreadListLoading("project-1", false, true)).toBe(true);
+    expect(isThreadListLoading("project-1", true, true)).toBe(false);
   });
 
   it("treats messages as loading until the selected thread snapshot is loaded", () => {
-    expect(isThreadMessagesLoading("thread-1", null, false)).toBe(true);
-    expect(isThreadMessagesLoading("thread-1", "thread-1", false)).toBe(false);
-    expect(isThreadMessagesLoading("thread-1", "thread-1", true)).toBe(true);
+    expect(isThreadMessagesLoading("thread-1", false, false)).toBe(false);
+    expect(isThreadMessagesLoading("thread-1", false, true)).toBe(true);
+    expect(isThreadMessagesLoading("thread-1", true, true)).toBe(false);
   });
 });

@@ -13,12 +13,12 @@ export const resolveSelectedThreadId = (
 
 export const isThreadListLoading = (
   selectedProjectId: string | null,
-  loadedProjectId: string | null,
+  hasProjectSnapshot: boolean,
   loading: boolean,
-): boolean => Boolean(selectedProjectId) && (loading || loadedProjectId !== selectedProjectId);
+): boolean => Boolean(selectedProjectId) && loading && !hasProjectSnapshot;
 
 export const isThreadMessagesLoading = (
   selectedThreadId: string | null,
-  loadedThreadId: string | null,
+  hasThreadSnapshot: boolean,
   loading: boolean,
-): boolean => Boolean(selectedThreadId) && (loading || loadedThreadId !== selectedThreadId);
+): boolean => Boolean(selectedThreadId) && loading && !hasThreadSnapshot;
