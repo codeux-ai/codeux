@@ -114,6 +114,7 @@ Legacy runtime:
 - Chat threads can now be deleted directly from the history rail; deletion is realtime-aware and removes the thread across open dashboard views
 - New thread creation now deduplicates optimistic UI insertion against realtime thread updates, so the sidebar count no longer briefly overstates the number of chats
 - Chat page now keeps explicit loading states for thread and message snapshots, so project chat does not briefly fall back to an empty-state card while the initial fetch is still in flight
+- After the first hydration, chat thread and message refreshes are background-only; realtime invalidation, manual refresh, send/delete flows, and unrelated project updates no longer block the chat surface with a foreground loading state
 - Chat composer now sends on `Enter` and inserts a newline on `Shift+Enter`
 - Thread assignment control is explicitly labeled as `Worker:` in the thread header to make routing intent clearer
 - Worker-routed tasks are created from the same task modal and appear in the same board; the executor badge shows whether work is automatic, CLI-backed, Jules-backed, or queued for a connected worker

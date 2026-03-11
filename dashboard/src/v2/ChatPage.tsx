@@ -257,6 +257,7 @@ export const ChatPage: FunctionComponent = () => {
   const messagesRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const selectedThreadIdRef = useRef<string | null>(null);
+  const messageCacheRef = useRef(new Map<string, ChatMessageRecord[]>());
   const { selectedProject } = useProjectData();
 
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -282,7 +283,29 @@ export const ChatPage: FunctionComponent = () => {
     selectedThreadIdRef.current = selectedThreadId;
   }, [selectedThreadId]);
 
-  const refreshThreads = useCallback(async (options?: { manual?: boolean }): Promise<void> => {
+  const applySelectedThread = useCallback((threadId: string | null): void => {
+    setSelectedThreadId(threadId);
+
+    if (!threadId) {
+      setMessages([]);
+      setLoadedThreadId(null);
+      setMessagesLoading(false);
+      return;
+    }
+
+    const cachedMessages = messageCacheRef.current.get(threadId);
+    if (cachedMessages) {
+      setMessages(cachedMessages);
+      setLoadedThreadId(threadId);
+      setMessagesLoading(false);
+      return;
+    }
+
+    setMessages([]);
+    setLoadedThreadId(null);
+  }, []);
+
+  const refreshThreads = useCallback(async (options?: { manual?: boolean; foreground?: boolean }): Promise<void> => {
     if (!selectedProject) {
       setThreads([]);
       setConnections([]);
@@ -291,13 +314,15 @@ export const ChatPage: FunctionComponent = () => {
       setLoadedProjectId(null);
       setLoadedThreadId(null);
       setMessagesLoading(false);
+      messageCacheRef.current.clear();
       setError(null);
       return;
     }
 
     if (options?.manual) {
       setManualRefreshing(true);
-    } else {
+    }
+    if (options?.foreground) {
       setLoading(true);
     }
     try {
@@ -309,20 +334,24 @@ export const ChatPage: FunctionComponent = () => {
       setConnections(nextConnections);
       setLoadedProjectId(selectedProject.id);
       const nextSelectedId = resolveSelectedThreadId(nextThreads, selectedThreadIdRef.current);
-      setSelectedThreadId(nextSelectedId);
+      applySelectedThread(nextSelectedId);
       setError(null);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
     } finally {
       if (options?.manual) {
         setManualRefreshing(false);
-      } else {
+      }
+      if (options?.foreground) {
         setLoading(false);
       }
     }
-  }, [selectedProject]);
+  }, [applySelectedThread, selectedProject]);
 
-  const refreshMessages = useCallback(async (threadId: string | null, options?: { silent?: boolean }): Promise<void> => {
+  const refreshMessages = useCallback(async (
+    threadId: string | null,
+    options?: { foreground?: boolean; useCache?: boolean },
+  ): Promise<void> => {
     if (!threadId) {
       setMessages([]);
       setLoadedThreadId(null);
@@ -331,28 +360,38 @@ export const ChatPage: FunctionComponent = () => {
     }
 
     try {
-      if (!options?.silent) {
+      const cachedMessages = options?.useCache === false ? undefined : messageCacheRef.current.get(threadId);
+      if (cachedMessages) {
+        setMessages(cachedMessages);
+        setLoadedThreadId(threadId);
+      }
+      if (options?.foreground) {
         setMessagesLoading(true);
       }
       const nextMessages = await fetchConversationMessages(threadId);
       setMessages(nextMessages);
       setLoadedThreadId(threadId);
+      messageCacheRef.current.set(threadId, nextMessages);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
     } finally {
-      if (!options?.silent) {
+      if (options?.foreground) {
         setMessagesLoading(false);
       }
     }
   }, []);
 
   useEffect(() => {
-    void refreshThreads();
+    void refreshThreads({ foreground: true });
   }, [refreshThreads]);
 
   useEffect(() => {
-    void refreshMessages(selectedThreadId);
-  }, [selectedThreadId]);
+    const foreground = selectedThreadId !== null && !messageCacheRef.current.has(selectedThreadId);
+    void refreshMessages(selectedThreadId, {
+      foreground,
+      useCache: true,
+    });
+  }, [refreshMessages, selectedThreadId]);
 
   useEffect(() => {
     if (!selectedProject) {
@@ -368,7 +407,7 @@ export const ChatPage: FunctionComponent = () => {
       if (message.type === "snapshot_required") {
         void refreshThreads();
         if (selectedThreadId) {
-          void refreshMessages(selectedThreadId);
+          void refreshMessages(selectedThreadId, { useCache: true });
         }
         return;
       }
@@ -391,7 +430,7 @@ export const ChatPage: FunctionComponent = () => {
         setThreads((current) => upsertChatThread(current, thread));
         setLoadedProjectId(selectedProject.id);
         if (!selectedThreadId) {
-          setSelectedThreadId(thread.id);
+          applySelectedThread(thread.id);
         }
         return;
       }
@@ -402,9 +441,9 @@ export const ChatPage: FunctionComponent = () => {
           return;
         }
         setThreads((current) => removeThread(current, payload.threadId));
+        messageCacheRef.current.delete(payload.threadId);
         if (selectedThreadId === payload.threadId) {
-          setSelectedThreadId(null);
-          setMessages([]);
+          applySelectedThread(null);
         }
         return;
       }
@@ -414,11 +453,15 @@ export const ChatPage: FunctionComponent = () => {
         if (realtimeMessage.threadId !== selectedThreadId) {
           return;
         }
-        setMessages((current) => upsertMessage(current, realtimeMessage));
+        setMessages((current) => {
+          const nextMessages = upsertMessage(current, realtimeMessage);
+          messageCacheRef.current.set(realtimeMessage.threadId, nextMessages);
+          return nextMessages;
+        });
         setLoadedThreadId(realtimeMessage.threadId);
       }
     });
-  }, [refreshMessages, selectedProject, selectedThreadId]);
+  }, [applySelectedThread, refreshMessages, selectedProject, selectedThreadId]);
 
   useEffect(() => {
     if (!messagesRef.current) return;
@@ -441,7 +484,7 @@ export const ChatPage: FunctionComponent = () => {
     return connections.find((connection) => connection.id === selectedThread.connectionId) || null;
   }, [connections, selectedThread]);
 
-  const createThreadForCompose = async (): Promise<ChatThread> => {
+  const createThreadForCompose = useCallback(async (): Promise<ChatThread> => {
     if (!selectedProject) {
       throw new Error("Select a project before starting a chat thread.");
     }
@@ -449,9 +492,9 @@ export const ChatPage: FunctionComponent = () => {
       title: `Project Chat ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
     });
     setThreads((current) => upsertChatThread(current, thread));
-    setSelectedThreadId(thread.id);
+    applySelectedThread(thread.id);
     return thread;
-  };
+  }, [applySelectedThread, selectedProject]);
 
   const handleAssignThread = async (connectionId: string): Promise<void> => {
     if (!selectedThread) {
@@ -463,7 +506,7 @@ export const ChatPage: FunctionComponent = () => {
         connectionId: connectionId || null,
       });
       setThreads((current) => current.map((thread) => thread.id === updated.id ? updated : thread));
-      await refreshMessages(updated.id, { silent: true });
+      await refreshMessages(updated.id, { useCache: true });
       setError(null);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : String(updateError));
@@ -487,7 +530,12 @@ export const ChatPage: FunctionComponent = () => {
       if (composerRef.current) {
         composerRef.current.style.height = "auto";
       }
-      setMessages((current) => upsertMessage(current, created));
+      setMessages((current) => {
+        const nextMessages = upsertMessage(current, created);
+        messageCacheRef.current.set(thread.id, nextMessages);
+        return nextMessages;
+      });
+      setLoadedThreadId(thread.id);
       await refreshThreads();
       setError(null);
     } catch (sendError) {
@@ -510,28 +558,26 @@ export const ChatPage: FunctionComponent = () => {
     setDeletingThreadId(threadId);
     setThreads((current) => removeThread(current, threadId));
     if (selectedThreadId === threadId) {
-      setSelectedThreadId(nextSelection);
-      if (!nextSelection) {
-        setMessages([]);
-      }
+      applySelectedThread(nextSelection);
     }
+    messageCacheRef.current.delete(threadId);
 
     try {
       await deleteConversationThread(threadId);
       if (nextSelection) {
-        await refreshMessages(nextSelection, { silent: true });
+        await refreshMessages(nextSelection, { useCache: true });
       }
       setError(null);
     } catch (deleteError) {
       await refreshThreads();
       if (selectedThreadId === threadId) {
-        await refreshMessages(threadId);
+        await refreshMessages(threadId, { foreground: false, useCache: true });
       }
       setError(deleteError instanceof Error ? deleteError.message : String(deleteError));
     } finally {
       setDeletingThreadId((current) => current === threadId ? null : current);
     }
-  }, [refreshMessages, refreshThreads, selectedThreadId, threads]);
+  }, [applySelectedThread, refreshMessages, refreshThreads, selectedThreadId, threads]);
 
   return (
     <div className="relative z-10 mx-auto flex min-h-[calc(100vh-70px)] max-w-[1900px] flex-col gap-10 px-8 py-16 md:px-20">
@@ -618,7 +664,7 @@ export const ChatPage: FunctionComponent = () => {
               <ThreadList
                 threads={threads}
                 selectedThreadId={selectedThreadId}
-                onSelect={setSelectedThreadId}
+                onSelect={applySelectedThread}
                 onDelete={(threadId) => void handleDeleteThread(threadId)}
                 deletingThreadId={deletingThreadId}
               />
