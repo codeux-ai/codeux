@@ -362,13 +362,14 @@ export class CoreToolHandler {
     if (immediateInboxMessage) {
       return this.wrapListenResponse({
         kind: "dashboard_message",
-        connection: startResponse.connection,
-        timeoutSeconds,
-        pollIntervalMs,
-        message: immediateInboxMessage,
+        message: {
+          id: immediateInboxMessage.id,
+          threadId: immediateInboxMessage.threadId,
+          projectId: immediateInboxMessage.projectId,
+          bodyMarkdown: immediateInboxMessage.bodyMarkdown,
+        },
         continuation: {
           nextTool: "listen",
-          connectionKey: startResponse.connection.connectionKey,
           instruction: "Reply in the dashboard thread with post_listen_reply, then call listen again with the same connection_key to stay in listening mode.",
         },
       });
@@ -385,13 +386,14 @@ export class CoreToolHandler {
       if (message) {
         return this.wrapListenResponse({
           kind: "dashboard_message",
-          connection: this.requireConnectionForListen(normalizedArgs.connection_key),
-          timeoutSeconds,
-          pollIntervalMs,
-          message,
+          message: {
+            id: message.id,
+            threadId: message.threadId,
+            projectId: message.projectId,
+            bodyMarkdown: message.bodyMarkdown,
+          },
           continuation: {
             nextTool: "listen",
-            connectionKey: normalizedArgs.connection_key,
             instruction: "Reply in the dashboard thread with post_listen_reply, then call listen again with the same connection_key to stay in listening mode.",
           },
         });
@@ -405,13 +407,9 @@ export class CoreToolHandler {
         if (claim) {
           return this.wrapListenResponse({
             kind: "task_dispatch",
-            connection: this.requireConnectionForListen(normalizedArgs.connection_key),
-            timeoutSeconds,
-            pollIntervalMs,
             dispatch: claim,
             continuation: {
               nextTool: "listen",
-              connectionKey: normalizedArgs.connection_key,
               instruction: "Handle the claimed task dispatch, close it with update_task_dispatch, then call listen again with the same connection_key to stay available.",
             },
           });
@@ -425,15 +423,10 @@ export class CoreToolHandler {
       await sleep(Math.min(pollIntervalMs, remainingMs));
     }
 
-    const connection = this.requireConnectionForListen(normalizedArgs.connection_key);
     return this.wrapListenResponse({
       kind: "noop_timeout",
-      connection,
-      timeoutSeconds,
-      pollIntervalMs,
       continuation: {
         nextTool: "listen",
-        connectionKey: connection.connectionKey,
         instruction: "No new dashboard messages or task dispatches arrived before timeout. Call listen again immediately with the same connection_key if you should remain in listening mode.",
       },
     });
@@ -465,7 +458,10 @@ export class CoreToolHandler {
     return {
       content: [{
         type: "text",
-        text: JSON.stringify(message, null, 2),
+        text: JSON.stringify({
+          threadId: message.threadId,
+          deliveryStatus: message.deliveryStatus,
+        }, null, 2),
       }],
     };
   }
@@ -526,14 +522,6 @@ export class CoreToolHandler {
       return DEFAULT_LISTEN_POLL_INTERVAL_MS;
     }
     return Math.max(MIN_LISTEN_POLL_INTERVAL_MS, Math.min(MAX_LISTEN_POLL_INTERVAL_MS, candidate));
-  }
-
-  private requireConnectionForListen(connectionKey: string) {
-    const connection = this.deps.connectionChatRepository.getConnectionByKey(connectionKey);
-    if (!connection) {
-      throw new Error(`Connection not found for key: ${connectionKey}`);
-    }
-    return connection;
   }
 
   private wrapListenResponse(response: ListenResponse) {

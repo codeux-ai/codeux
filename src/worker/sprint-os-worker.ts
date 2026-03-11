@@ -277,7 +277,6 @@ export class SprintOsWorker {
       const reply = await this.callJsonTool<GenerateDashboardReplyResponse>(localExecutorClient, "generate_dashboard_reply", {
         project_id: event.message.projectId,
         thread_id: event.message.threadId,
-        thread_title: event.message.threadTitle,
         body_markdown: event.message.bodyMarkdown,
       });
       await this.callJsonTool(controlPlaneClient, "post_listen_reply", {

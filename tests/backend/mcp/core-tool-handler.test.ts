@@ -45,7 +45,7 @@ describe("CoreToolHandler coverage", () => {
                 startListen: vi.fn().mockReturnValue({ connection: { id: "conn-1", connectionKey: "listener-1" }, inbox: [] }),
                 pullInbox: vi.fn().mockReturnValue([{ id: "msg-1" }]),
                 getConnectionByKey: vi.fn().mockReturnValue({ id: "conn-1", connectionKey: "listener-1" }),
-                postListenReply: vi.fn().mockReturnValue({ id: "reply-1" }),
+                postListenReply: vi.fn().mockReturnValue({ id: "reply-1", threadId: "thread-1", deliveryStatus: "processed" }),
             },
             workerTaskDispatchService: {
                 pullNextDispatch: vi.fn().mockReturnValue({ dispatch: { id: "dispatch-1" }, leaseToken: "lease-1" }),
@@ -234,6 +234,10 @@ describe("CoreToolHandler coverage", () => {
 
         expect(parsed.kind).toBe("dashboard_message");
         expect(parsed.message.bodyMarkdown).toBe("Hello from dashboard");
+        expect(parsed.message.threadId).toBe("thread-1");
+        expect(parsed.message.projectId).toBe("project-1");
+        expect(parsed.message.threadTitle).toBeUndefined();
+        expect(parsed.connection).toBeUndefined();
         expect(parsed.continuation.nextTool).toBe("listen");
     });
 
@@ -259,6 +263,7 @@ describe("CoreToolHandler coverage", () => {
 
         expect(parsed.kind).toBe("task_dispatch");
         expect(parsed.dispatch.dispatch.id).toBe("dispatch-1");
+        expect(parsed.connection).toBeUndefined();
         expect(parsed.continuation.nextTool).toBe("listen");
     });
 
@@ -276,10 +281,11 @@ describe("CoreToolHandler coverage", () => {
         const parsed = JSON.parse(response.content[0].text as string);
 
         expect(parsed.kind).toBe("noop_timeout");
+        expect(parsed.connection).toBeUndefined();
         expect(parsed.continuation.nextTool).toBe("listen");
     });
 
-    it("handleListen uses a slower default internal poll interval", async () => {
+    it("handleListen omits internal polling metadata from compact responses", async () => {
         defaultDeps.connectionChatRepository.startListen.mockReturnValue({
             connection: { id: "conn-1", connectionKey: "listener-1" },
             inbox: [{
@@ -297,7 +303,8 @@ describe("CoreToolHandler coverage", () => {
         const response = await handler.handleListen({ connection_key: "listener-1", project_id: "project-1" });
         const parsed = JSON.parse(response.content[0].text as string);
 
-        expect(parsed.pollIntervalMs).toBe(3000);
+        expect(parsed.pollIntervalMs).toBeUndefined();
+        expect(parsed.timeoutSeconds).toBeUndefined();
     });
 
     it("handlePullInbox", async () => {
@@ -342,17 +349,22 @@ describe("CoreToolHandler coverage", () => {
 
     it("handlePostListenReply", async () => {
         const handler = new CoreToolHandler(defaultDeps);
-        await handler.handlePostListenReply({
+        const response = await handler.handlePostListenReply({
             connection_key: "listener-1",
             thread_id: "thread-1",
             body_markdown: "reply",
             reply_to_message_id: "message-1",
         });
+        const parsed = JSON.parse(response.content[0].text as string);
         expect(defaultDeps.connectionChatRepository.postListenReply).toHaveBeenCalledWith({
             connectionKey: "listener-1",
             threadId: "thread-1",
             bodyMarkdown: "reply",
             replyToMessageId: "message-1",
+        });
+        expect(parsed).toEqual({
+            threadId: "thread-1",
+            deliveryStatus: "processed",
         });
     });
 

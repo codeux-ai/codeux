@@ -145,6 +145,10 @@ Unknown tool names raise MCP `MethodNotFound`.
 - `listen` is now the primary listening contract for both normal stdio MCP clients and workers.
 - `listen` registers or refreshes the connection, then blocks until one actionable event is available or timeout expires.
 - `listen` returns exactly one event at a time: a dashboard message, a worker dispatch, or a timeout result with explicit "call listen again" continuation guidance.
+- `listen` now returns compact event payloads instead of full connection/message records:
+  - dashboard messages: `id`, `threadId`, `projectId`, `bodyMarkdown`
+  - task dispatches: full dispatch claim payload
+  - timeout: continuation only
 - The default `listen` timeout is derived from dashboard settings `sprintLoopSteps.watchLoopOutputIntervalSeconds` and currently defaults to `300`.
 - The default internal idle polling cadence inside one blocking `listen` call is now `3000ms`, which reduces idle listener churn without changing the external MCP loop contract.
 - Connection heartbeat writes are throttled while listeners stay idle, so a healthy long-poll listener no longer rewrites connection state every second.
@@ -153,6 +157,7 @@ Unknown tool names raise MCP `MethodNotFound`.
 - `start_listen` registers or refreshes an MCP connection in sqlite and returns pending dashboard messages for the active project.
 - `pull_inbox` is the pull-based inbox endpoint for listening MCPs.
 - `post_listen_reply` writes a connection reply back into the project conversation thread and marks the handled dashboard message as processed.
+- `post_listen_reply` now returns only `threadId` and `deliveryStatus`, because the caller already knows the reply body and thread context it just submitted.
 - `start_listen` and `pull_inbox` now remain as low-level compatibility primitives and should not be the first-choice listener workflow for normal human-driven MCP clients.
 - New dashboard threads should remain unassigned by default until explicitly targeted or claimed by a real listener.
 

@@ -92,6 +92,13 @@ Low-level compatibility loop:
 
 The blocking long-poll `listen` contract is now the preferred listener UX for both stdio clients and workers. `start_listen` and `pull_inbox` remain as compatibility primitives while the rest of the system is migrated.
 
+Current compact listen payloads:
+- dashboard messages return only `message.id`, `message.threadId`, `message.projectId`, `message.bodyMarkdown`, plus continuation guidance
+- timeout results return continuation guidance only
+- `post_listen_reply` returns only `threadId` and `deliveryStatus`
+
+`reply_to_message_id` should still be supplied when replying. `thread_id` alone is not always enough, because a thread can hold multiple delivered dashboard messages and the reply tool otherwise has to mark all pending/delivered dashboard messages on that thread as handled.
+
 Workers now use the same listen loop in addition to dispatch polling, so a single connected worker can both answer chat and pick up `mcp_worker` tasks.
 
 Operational behavior:

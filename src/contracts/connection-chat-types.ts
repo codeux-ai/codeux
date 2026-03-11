@@ -154,34 +154,36 @@ export interface ListenInput {
 
 export interface ListenContinuation {
   nextTool: "listen";
-  connectionKey: string;
   instruction: string;
+}
+
+export interface ListenDashboardMessagePayload {
+  id: string;
+  threadId: string;
+  projectId: string;
+  bodyMarkdown: string;
 }
 
 export interface ListenTimeoutEvent {
   kind: "noop_timeout";
-  connection: McpConnectionRecord;
-  timeoutSeconds: number;
-  pollIntervalMs: number;
   continuation: ListenContinuation;
 }
 
 export interface ListenDashboardMessageEvent {
   kind: "dashboard_message";
-  connection: McpConnectionRecord;
-  timeoutSeconds: number;
-  pollIntervalMs: number;
-  message: ConnectionInboxMessage;
+  message: ListenDashboardMessagePayload;
   continuation: ListenContinuation;
 }
 
 export interface ListenTaskDispatchEvent {
   kind: "task_dispatch";
-  connection: McpConnectionRecord;
-  timeoutSeconds: number;
-  pollIntervalMs: number;
   dispatch: WorkerTaskDispatchClaim;
   continuation: ListenContinuation;
+}
+
+export interface PostListenReplyResult {
+  threadId: string;
+  deliveryStatus: ConversationDeliveryStatus;
 }
 
 export type ListenResponse =
