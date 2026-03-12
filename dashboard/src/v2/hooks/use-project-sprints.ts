@@ -13,6 +13,8 @@ interface UseProjectSprintsResult {
   refresh: () => Promise<void>;
 }
 
+const sprintCache = new Map<string, Sprint[]>();
+
 export function useProjectSprints(projectId: string | null): UseProjectSprintsResult {
   const [sprints, setSprints] = useState<Sprint[]>([]);
   const [loading, setLoading] = useState(false);
@@ -35,6 +37,7 @@ export function useProjectSprints(projectId: string | null): UseProjectSprintsRe
     try {
       const nextSprints = fetchSprints(projectId).then((data) => data.map(toSprintViewModel));
       const resolvedSprints = await nextSprints;
+      sprintCache.set(projectId, resolvedSprints);
       setSprints((current) => (areSprintListsEqual(current, resolvedSprints) ? current : resolvedSprints));
       hasLoadedRef.current = true;
       setError(null);
@@ -48,6 +51,22 @@ export function useProjectSprints(projectId: string | null): UseProjectSprintsRe
   }, [projectId]);
 
   useEffect(() => {
+    if (!projectId) {
+      hasLoadedRef.current = false;
+      void refreshInternal();
+      return;
+    }
+
+    const cachedSprints = sprintCache.get(projectId);
+    if (cachedSprints) {
+      setSprints(cachedSprints);
+      setLoading(false);
+      setError(null);
+      hasLoadedRef.current = true;
+      void refreshInternal({ silent: true });
+      return;
+    }
+
     hasLoadedRef.current = false;
     void refreshInternal();
   }, [projectId, refreshInternal]);

@@ -116,7 +116,9 @@ Legacy runtime:
 - Sprints page now also starts and stops sprint orchestration directly from sprint cards, with optimistic visual state updates tied to project-scoped execution data
 - The organic sprint bubble cells use the same live start/stop control path as the registry list, so the hover play/stop action is now functional instead of decorative
 - Sprint creation no longer asks for start/end dates
-- The sprint modal now supports `Plan & Start`, `Plan Only`, and `Save Draft`
+- Sprint creation now uses an in-page composer that replaces the showcase while writing, instead of opening a detached modal
+- The sprint composer supports `Plan & Start`, `Plan Only`, and `Save Draft`
+- Sprint data now hydrates cache-first when revisiting the page and refreshes in the background, so the showcase and ledger do not flash empty while the latest data loads
 - `Improve with AI` is worker-backed through the Planning agent and only rewrites the sprint prompt
 - Sprint planning is also worker-backed through the Planning agent and automatically creates task records from the returned plan
 - The sprint page now shows a visible planning-connection indicator, preferring a listen-mode project `worker` and then a listen-mode project `listener`
@@ -125,10 +127,14 @@ Legacy runtime:
 - The sprint gallery selection is now the full set of showcased sprints, ordered newest-first by sprint creation time
 - Completed sprint cells now use a static finished treatment and fade slightly instead of continuing animated motion
 - Sprint cell settings now open an animated menu with showcase toggle, `Edit`, `Export`, `Delete`, and placeholder `Overrides`
+- The showcase wrappers now leave enough vertical breathing room for hover expansion, so bubble motion is no longer clipped top or bottom
 - Sprint cells now use created-date metadata on the accent rail and move the visible sprint key into the card body instead of surfacing the UUID there
 - Sprint markdown export now includes direct download actions in the export modal
-- The sprint modal is compacted for small screens with scrollable height constraints and a stacked mobile layout
-- The sprint ledger below the showcase now lists all sprints, supports sorting from the column headers, includes showcase pinning controls, and can sort by sprint id (`SPR-x`)
+- The in-page sprint composer collapses into a stacked single-column layout on smaller screens, and both create and edit now use that same inline flow
+- The sprint ledger below the showcase now uses elevated card rows, supports sorting from the column headers, includes showcase pinning controls, and can sort by sprint id (`SPR-x`)
+- Ledger rows now expose the same control model as sprint cells: a primary start/stop button, an `Open Subtasks` button, and a compact settings menu for edit/export/showcase/overrides/delete
+- The sprint page no longer runs a full-page entrance fade on mount, which keeps initial navigation more immediate and avoids perceived flashing
+- The sprint page now uses lighter targeted motion on the heading instead of a full-page fade, keeping navigation more immediate without leaving the page static
 - Tasks page is project-scoped and supports create/edit/delete plus dependency metadata
 - Navigating from a sprint cell into `View Tasks` now preselects that sprint instead of leaving the board on `All Sprints`
 - Tasks page now refreshes from the same project-structure realtime invalidation path as sprints
