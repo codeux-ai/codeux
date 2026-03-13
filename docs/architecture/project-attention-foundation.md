@@ -123,6 +123,7 @@ When the watch loop finishes because no further automatic progress is possible:
 - a sprint-scoped attention item opens with type `manual_attention`
 - the payload includes `repoPath`, feature branch, and the blocked/running/ready task summary
 - this gives the assigned worker one sprint-level queue item even when the pause reason is broader than a single dispatch
+- pure dependency progression does not trigger this pause: if a task automerge or other CI-gate transition makes downstream tasks ready, Sprint OS re-derives readiness before deciding that manual attention is required
 
 ## Current Resolution Rule
 

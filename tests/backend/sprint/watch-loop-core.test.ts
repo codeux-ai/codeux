@@ -203,6 +203,58 @@ describe("WatchLoopRunner", () => {
     nowSpy.mockRestore();
   });
 
+  it("does not pause when only dependent pending work remains", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const nowSpy = vi.spyOn(Date, "now");
+
+    nowSpy.mockReturnValueOnce(0).mockReturnValue(61000);
+
+    deps.renderInstruction.mockImplementation(async (id) => {
+      if (id === "watchHeader") return "HEADER";
+      if (id === "watchContinue") return "WATCH_CONTINUE";
+      return "";
+    });
+
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "PENDING", is_independent: false })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "INST",
+      awaitingMerge: [],
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn());
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(result).toContain("WATCH_CONTINUE");
+    expect(deps.projectAttentionService.openItem).not.toHaveBeenCalledWith(expect.objectContaining({
+      attentionType: "manual_attention",
+    }));
+    nowSpy.mockRestore();
+  });
+
   it("stops when a dashboard pause is observed on the sprint run", async () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();

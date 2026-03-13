@@ -142,7 +142,7 @@ export class WatchLoopRunner {
       });
 
       const runningTasks = subtasks.filter((task) => task.status === "RUNNING");
-      const readyTasks = subtasks.filter((task) => task.status === "PENDING" && task.is_independent);
+      const readyTasks = subtasks.filter((task) => task.status === "PENDING");
 
       const allTerminal = subtasks.length > 0 && subtasks.every(
         (task) => (task.status === "COMPLETED" && task.is_merged) || task.status === "FAILED"

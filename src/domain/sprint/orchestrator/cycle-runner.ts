@@ -33,6 +33,11 @@ export interface CycleRunnerArgs {
   sprintRunId?: string;
 }
 
+interface TaskStateSnapshot {
+  id: string;
+  isMerged: boolean;
+}
+
 export class CycleRunner {
   private readonly ciAutofixRetryCounts = new Map<string, number>();
   private readonly featurePrGate = new FeaturePrGateService();
@@ -97,29 +102,7 @@ export class CycleRunner {
 
     let reportText = "";
     if (args.loopSteps.startReadyTasks && subtasks.length > 0) {
-      const startResult = await runStartReadyTasksStep(subtasks, {
-        action: args.action,
-        maxFailures: this.deps.settings.maxFailures || 5,
-        getConsecutiveFailures: this.deps.getConsecutiveFailures,
-        setConsecutiveFailures: this.deps.setConsecutiveFailures,
-        startTask: (task) => {
-          if (!args.sprintRunId) {
-            throw new Error("Missing sprint run id for orchestrate action.");
-          }
-          return this.deps.startTask(task, {
-            projectId: args.executionContext.project.id,
-            sprintId: args.executionContext.sprint.id,
-            sprintRunId: args.sprintRunId,
-            sourceId: args.executionContext.sourceId,
-            featureBranch: args.defaultFeatureBranch,
-            repoPath: args.repoPath,
-            sprintNumber: args.executionContext.sprintNumber,
-          });
-        },
-        resolveSessionName: this.deps.resolveSessionName,
-        extractSessionId: this.deps.extractSessionId,
-        logger: this.deps.logger.child({ component: "start-ready-tasks-step" }),
-      });
+      const startResult = await this.runStartReadyTasks(subtasks, args);
       subtasks = startResult.subtasks;
       reportText += startResult.reportText;
     }
@@ -141,6 +124,7 @@ export class CycleRunner {
     }
 
     if (subtasks.length > 0) {
+      const taskStateBeforeCiGate = snapshotTaskState(subtasks);
       const gitStatus = this.deps.getCiStatusForScope
         ? await this.deps.getCiStatusForScope({
             repoPath: args.repoPath,
@@ -181,6 +165,20 @@ export class CycleRunner {
       });
       subtasks = ciAutofixResult.subtasks;
       reportText += ciAutofixResult.reportText;
+
+      const ciGateRefreshNeeded = hasMergeStateChanges(taskStateBeforeCiGate, subtasks);
+      if (ciGateRefreshNeeded && args.loopSteps.statusDerivation) {
+        subtasks = runStatusDerivationStep(subtasks, {
+          retryFailed: args.retryFailed,
+          isActionRequiredState: this.deps.isActionRequiredState,
+        });
+      }
+
+      if (ciGateRefreshNeeded && args.loopSteps.startReadyTasks) {
+        const startResult = await this.runStartReadyTasks(subtasks, args);
+        subtasks = startResult.subtasks;
+        reportText += startResult.reportText;
+      }
     }
 
     const protocolResult = await runProtocolStep(subtasks, {
@@ -206,6 +204,35 @@ export class CycleRunner {
       instructions: protocolResult.instructions,
       awaitingMerge: protocolResult.awaitingMerge,
     };
+  }
+
+  private runStartReadyTasks(
+    subtasks: Subtask[],
+    args: CycleRunnerArgs,
+  ): Promise<{ subtasks: Subtask[]; reportText: string }> {
+    return runStartReadyTasksStep(subtasks, {
+      action: args.action,
+      maxFailures: this.deps.settings.maxFailures || 5,
+      getConsecutiveFailures: this.deps.getConsecutiveFailures,
+      setConsecutiveFailures: this.deps.setConsecutiveFailures,
+      startTask: (task) => {
+        if (!args.sprintRunId) {
+          throw new Error("Missing sprint run id for orchestrate action.");
+        }
+        return this.deps.startTask(task, {
+          projectId: args.executionContext.project.id,
+          sprintId: args.executionContext.sprint.id,
+          sprintRunId: args.sprintRunId,
+          sourceId: args.executionContext.sourceId,
+          featureBranch: args.defaultFeatureBranch,
+          repoPath: args.repoPath,
+          sprintNumber: args.executionContext.sprintNumber,
+        });
+      },
+      resolveSessionName: this.deps.resolveSessionName,
+      extractSessionId: this.deps.extractSessionId,
+      logger: this.deps.logger.child({ component: "start-ready-tasks-step" }),
+    });
   }
 
   private syncProtocolAttentionItems(
@@ -306,4 +333,21 @@ export class CycleRunner {
       }
     }
   }
+}
+
+function snapshotTaskState(subtasks: Subtask[]): Map<string, TaskStateSnapshot> {
+  return new Map(subtasks.map((task) => [task.id, {
+    id: task.id,
+    isMerged: Boolean(task.is_merged),
+  }]));
+}
+
+function hasMergeStateChanges(previous: Map<string, TaskStateSnapshot>, subtasks: Subtask[]): boolean {
+  return subtasks.some((task) => {
+    const earlier = previous.get(task.id);
+    if (!earlier) {
+      return true;
+    }
+    return earlier.isMerged !== Boolean(task.is_merged);
+  });
 }

@@ -308,6 +308,7 @@ Effect:
 - `julesCiAutofixMaxRetries` sets how many Jules autofix notifications are attempted before escalation. Escalation output includes exact task ids, PR links, failed check names, failed run summaries, and failed job names so no manual searching is needed.
 - `featurePrAutoMergeMode = WHEN_GREEN` executes feature-PR auto-merge once checks are green and review blockers are clear.
 - `featurePrAutoMergeMode = ALWAYS` attempts feature-PR auto-merge regardless of CI state (subject to repository merge protections).
+- a successful feature-PR automerge now refreshes dependency readiness in the same loop pass, so downstream tasks can continue without forcing a manual resume
 - Feature-PR CI wait/automerge matching uses worker branch first and falls back to the task `pr_url`, so tasks without a stored worker branch still remain gated correctly.
 - CI Runs in `Feature PR CI` tracking include recent runs from PR head branches targeting the feature implementation branch (plus feature branch runs), sorted newest-first; the panel shows the latest 5.
 - Failed CI runs in tracking are enriched with failed job details and failed-job log excerpts (bounded) from GitHub Actions `gh run view` data.
