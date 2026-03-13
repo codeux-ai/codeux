@@ -134,6 +134,7 @@ describe("dashboard-lifecycle-service", () => {
         }),
         getOverviewTelemetrySnapshot: vi.fn().mockReturnValue({
           activeProjects: [],
+          attentionProjects: [],
           recentEvents: [],
           updatedAt: "2026-03-09T00:00:00.000Z",
         }),

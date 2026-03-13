@@ -109,6 +109,16 @@ export interface ExecutionSprintRunSummary {
   createdAt: string;
   activeLeaseOwnerKey: string | null;
   activeLeaseExpiresAt: string | null;
+  humanIntervention: ExecutionHumanInterventionSummary | null;
+}
+
+export interface ExecutionHumanInterventionSummary {
+  title: string;
+  reason: string;
+  instructions: string;
+  attentionType: string | null;
+  severity: string | null;
+  ownerType: string | null;
 }
 
 export interface ExecutionTaskDispatchSummary {
@@ -263,10 +273,12 @@ export interface OverviewTelemetryProjectSummary {
   activeDispatchCount: number;
   runningDispatchCount: number;
   updatedAt: string | null;
+  humanIntervention: ExecutionHumanInterventionSummary | null;
 }
 
 export interface OverviewTelemetrySnapshot {
   activeProjects: OverviewTelemetryProjectSummary[];
+  attentionProjects: OverviewTelemetryProjectSummary[];
   recentEvents: ExecutionRuntimeEventSummary[];
   updatedAt: string | null;
 }

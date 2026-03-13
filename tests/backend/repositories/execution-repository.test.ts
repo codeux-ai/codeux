@@ -6,6 +6,7 @@ import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { ConnectionChatRepository } from "../../../src/repositories/connection-chat-repository.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
+import { ProjectAttentionRepository } from "../../../src/repositories/project-attention-repository.js";
 
 const tempDirs: string[] = [];
 
@@ -13,6 +14,7 @@ async function createRepositories(): Promise<{
   projectRepository: ProjectManagementRepository;
   connectionRepository: ConnectionChatRepository;
   executionRepository: ExecutionRepository;
+  projectAttentionRepository: ProjectAttentionRepository;
 }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-execution-repo-"));
   tempDirs.push(dir);
@@ -21,6 +23,7 @@ async function createRepositories(): Promise<{
     projectRepository: new ProjectManagementRepository(storage),
     connectionRepository: new ConnectionChatRepository(storage),
     executionRepository: new ExecutionRepository(storage),
+    projectAttentionRepository: new ProjectAttentionRepository(storage),
   };
 }
 
@@ -502,5 +505,97 @@ describe("ExecutionRepository", () => {
       taskId: null,
       sprintRunStatus: "paused",
     });
+  });
+
+  it("projects human intervention summaries for paused sprint runs", async () => {
+    const { projectRepository, executionRepository, projectAttentionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Intervention Project",
+      sourceType: "local",
+      sourceRef: "/workspace/intervention-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Intervention Sprint",
+      number: 7,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Merge the styling update",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "paused",
+      triggerType: "dashboard",
+      executorMode: "mixed",
+    });
+
+    projectAttentionRepository.openOrRefreshItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      attentionType: "merge_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge required for T02",
+      summaryMarkdown: "Task `T02` is complete and waiting to be merged into the sprint branch.",
+      payload: {
+        taskKey: "T02",
+        featureBranch: "feature/sprint7-work",
+        workerBranch: "worker/t02",
+        prUrl: "https://github.com/example/repo/pull/22",
+      },
+    });
+
+    const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
+
+    expect(snapshot.sprintRuns[0]?.humanIntervention).toMatchObject({
+      title: "Merge required for T02",
+      attentionType: "merge_required",
+      severity: "high",
+      reason: "Task T02 is complete and waiting to be merged into the sprint branch.",
+    });
+    expect(snapshot.sprintRuns[0]?.humanIntervention?.instructions).toContain("enable feature PR automerge");
+  });
+
+  it("includes paused intervention projects in overview telemetry", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Planning Blocked Project",
+      sourceType: "local",
+      sourceRef: "/workspace/planning-blocked-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Planning Blocked Sprint",
+      number: 8,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "paused",
+      triggerType: "dashboard",
+      executorMode: "mixed",
+    });
+
+    executionRepository.appendSprintRunEvent(sprintRun.id, "planning_preflight_blocked", "system", {
+      planningTarget: "Planning Blocked Sprint",
+    }, {
+      sourceEventKey: "planning-blocked-overview",
+    });
+
+    const telemetry = executionRepository.getOverviewTelemetrySnapshot();
+
+    expect(telemetry.activeProjects).toHaveLength(0);
+    expect(telemetry.attentionProjects).toHaveLength(1);
+    expect(telemetry.attentionProjects[0]).toMatchObject({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+    });
+    expect(telemetry.attentionProjects[0]?.humanIntervention).toMatchObject({
+      title: "Sprint planning required",
+      reason: "Planning Blocked Sprint must be planned into executable tasks before orchestration can continue.",
+    });
+    expect(telemetry.attentionProjects[0]?.humanIntervention?.instructions).toContain("Plan Sprint");
   });
 });

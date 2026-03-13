@@ -9,6 +9,7 @@ import {
 } from "lucide-preact";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
+import { HumanInterventionBadge } from "./components/ui/HumanInterventionBadge.js";
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
 import {
     cancelSprintRun,
@@ -24,6 +25,7 @@ import {
 } from "../lib/api/dashboard-api.js";
 import { formatTime } from "../lib/time.js";
 import { renderMarkdown } from "../lib/markdown.js";
+import { getPrimaryPausedInterventionRun } from "../lib/execution-intervention.js";
 import type { Subtask, GitTrackingStatus, ExecutionDashboardSnapshot, ExecutionRuntimeEventSummary } from "../types.js";
 
 /* ─── Status Maps ────────────────────────────────────────────────────────── */
@@ -1019,6 +1021,27 @@ const ExecutionRuntimePanel: FunctionComponent<{
                                             </>
                                         )}
                                     </div>
+                                    {run.humanIntervention && (
+                                        <div className="mt-3 rounded-xl border border-status-amber/18 bg-status-amber/8 p-3">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0">
+                                                    <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber">
+                                                        Human intervention needed
+                                                    </div>
+                                                    <div className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                                                        {run.humanIntervention.title}
+                                                    </div>
+                                                </div>
+                                                <HumanInterventionBadge summary={run.humanIntervention} label="Details" compact align="right" />
+                                            </div>
+                                            <p className="mt-2 text-[12px] leading-relaxed text-slate-600 dark:text-slate-300">
+                                                {run.humanIntervention.reason}
+                                            </p>
+                                            <p className="mt-2 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
+                                                {run.humanIntervention.instructions}
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -1489,6 +1512,11 @@ export const LiveSessionPage: FunctionComponent = () => {
         () => execution.sprintRuns.find((run) => run.status === "running" || run.status === "queued") || null,
         [execution.sprintRuns],
     );
+    const pausedInterventionRun = useMemo(
+        () => getPrimaryPausedInterventionRun(execution),
+        [execution],
+    );
+    const pausedIntervention = pausedInterventionRun?.humanIntervention || null;
     const hasLiveSprint = Boolean(liveSprintRun);
     const visibleTasksWithLiveActivities = hasLiveSprint ? tasksWithLiveActivities : [];
     const visibleStats = hasLiveSprint ? stats : EMPTY_RUNTIME_STATS;
@@ -1553,8 +1581,8 @@ export const LiveSessionPage: FunctionComponent = () => {
                     <div className="flex items-center gap-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em]">
                         <Radio className="w-3.5 h-3.5 text-status-red" strokeWidth={2.5} />
                         <span className="text-status-red">Live Session</span>
-                        {liveSprintRun?.sprintNumber != null && (
-                            <span className="text-slate-400 ml-1">· Sprint {liveSprintRun.sprintNumber}</span>
+                        {(liveSprintRun?.sprintNumber ?? pausedInterventionRun?.sprintNumber) != null && (
+                            <span className="text-slate-400 ml-1">· Sprint {liveSprintRun?.sprintNumber ?? pausedInterventionRun?.sprintNumber}</span>
                         )}
                     </div>
 
@@ -1579,7 +1607,9 @@ export const LiveSessionPage: FunctionComponent = () => {
                             ? status.feature_branch
                                 ? <>Monitoring <span className="font-mono text-signal-600 dark:text-signal-400">{status.feature_branch}</span> in real-time.</>
                                 : `Monitoring ${liveSprintRun?.sprintName || "the active sprint"} in real-time.`
-                            : "Waiting for sprint to start."
+                            : pausedIntervention
+                                ? pausedIntervention.instructions
+                                : "Waiting for sprint to start."
                         }
                     </p>
                 </div>
@@ -1590,13 +1620,18 @@ export const LiveSessionPage: FunctionComponent = () => {
                         <div className={`px-4 py-2.5 text-xs font-bold uppercase tracking-widest rounded-full border flex items-center gap-2.5 backdrop-blur-md ${
                             hasLiveSprint
                                 ? "bg-signal-500/8 dark:bg-signal-500/10 text-signal-600 dark:text-signal-400 border-signal-500/15 dark:border-signal-500/20 shadow-[0_0_20px_rgba(0,224,160,0.08)]"
-                                : "bg-black/[0.04] dark:bg-white/[0.04] text-slate-500 border-black/[0.06] dark:border-white/[0.06]"
+                                : pausedIntervention
+                                    ? "bg-status-amber/10 text-status-amber border-status-amber/20"
+                                    : "bg-black/[0.04] dark:bg-white/[0.04] text-slate-500 border-black/[0.06] dark:border-white/[0.06]"
                         }`}>
-                            <span className={`w-2 h-2 rounded-full relative ${hasLiveSprint ? "bg-signal-500" : "bg-slate-400"}`}>
+                            <span className={`w-2 h-2 rounded-full relative ${hasLiveSprint ? "bg-signal-500" : pausedIntervention ? "bg-status-amber" : "bg-slate-400"}`}>
                                 {hasLiveSprint && <span className="absolute inset-0 rounded-full animate-ping bg-signal-400 opacity-60" />}
                             </span>
-                            {hasLiveSprint ? `${visibleStats.running} Running` : "Waiting"}
+                            {hasLiveSprint ? `${visibleStats.running} Running` : pausedIntervention ? "Paused for intervention" : "Waiting"}
                         </div>
+                        {pausedIntervention && !hasLiveSprint && (
+                            <HumanInterventionBadge summary={pausedIntervention} label="Needs you" align="right" />
+                        )}
                         {visibleStats.failed > 0 && (
                             <div className="px-4 py-2.5 text-xs font-bold uppercase tracking-widest rounded-full
                                            bg-status-red/8 text-status-red border border-status-red/15
@@ -1615,6 +1650,34 @@ export const LiveSessionPage: FunctionComponent = () => {
                     )}
                 </div>
             </div>
+
+            {pausedIntervention && !hasLiveSprint && (
+                <div className="relative overflow-hidden rounded-[1.75rem] border border-status-amber/18 bg-status-amber/8 p-6 shadow-[0_12px_30px_rgba(245,158,11,0.08)]">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-status-amber">
+                                <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.2} />
+                                Sprint Paused For Human Intervention
+                            </div>
+                            <h3 className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white font-display">
+                                {pausedIntervention.title}
+                            </h3>
+                            <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                                {pausedIntervention.reason}
+                            </p>
+                            <div className="mt-4 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                                What to do now
+                            </div>
+                            <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                                {pausedIntervention.instructions}
+                            </p>
+                        </div>
+                        <div className="shrink-0">
+                            <HumanInterventionBadge summary={pausedIntervention} label="Details" align="right" />
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ── Stats Row ───────────────────────────────────────────── */}
             <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4">
@@ -1668,8 +1731,10 @@ export const LiveSessionPage: FunctionComponent = () => {
                 <div className="xl:col-span-8 flex flex-col gap-5">
                     {!hasLiveSprint ? (
                         <IdleRuntimeState
-                            title="Waiting for Sprint Start"
-                            subtitle="Launch a sprint to activate live task telemetry, protocol output, and runtime activity for this project."
+                            title={pausedIntervention ? "Human Intervention Needed" : "Waiting for Sprint Start"}
+                            subtitle={pausedIntervention
+                                ? pausedIntervention.instructions
+                                : "Launch a sprint to activate live task telemetry, protocol output, and runtime activity for this project."}
                         />
                     ) : filtered.length === 0 ? (
                         <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border-2 border-dashed border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-16 text-center">

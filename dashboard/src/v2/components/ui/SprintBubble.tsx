@@ -3,6 +3,7 @@ import { useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import {
   Activity,
+  AlertTriangle,
   CalendarDays,
   Check,
   CheckCircle2,
@@ -17,9 +18,10 @@ import {
   Square,
   XCircle,
 } from "lucide-preact";
-import type { Sprint, SprintStatus } from "../../types.js";
+import type { ExecutionHumanInterventionSummary, Sprint, SprintStatus } from "../../types.js";
 import { WaveFluid } from "./WaveFluid.js";
 import { BorderTrace } from "./BorderTrace.js";
+import { HumanInterventionBadge } from "./HumanInterventionBadge.js";
 
 const CARD_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -46,6 +48,7 @@ interface SprintBubbleProps {
   isEven: boolean;
   accentColor: string;
   primaryBusy?: boolean;
+  humanIntervention?: ExecutionHumanInterventionSummary | null;
   onPrimaryAction?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
@@ -65,6 +68,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
   isEven,
   accentColor,
   primaryBusy = false,
+  humanIntervention = null,
   onPrimaryAction,
   onEdit,
   onDelete,
@@ -154,6 +158,12 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
           {formatCardDate(sprint.createdAt)}
         </div>
 
+        {humanIntervention && (
+          <div className="absolute right-6 top-6">
+            <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="right" />
+          </div>
+        )}
+
         <div className={`inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-3 py-1.5 font-mono text-[11px] font-bold tracking-[0.14em] transition-transform duration-300 group-hover:-translate-y-3 dark:border-white/[0.06] dark:bg-white/[0.03] ${accentColor}`}>
           <Sparkles className="h-3.5 w-3.5" strokeWidth={2.2} />
           {formatSprintKey(sprint)}
@@ -174,6 +184,13 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
             <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Done</div>
           </div>
         </div>
+
+        {humanIntervention && (
+          <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-status-amber/20 bg-status-amber/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber transition-transform duration-300 group-hover:-translate-y-3">
+            <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2.2} />
+            Human intervention required
+          </div>
+        )}
 
         <div className="absolute bottom-5 flex w-full translate-y-2 items-center justify-center gap-3 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
           <button

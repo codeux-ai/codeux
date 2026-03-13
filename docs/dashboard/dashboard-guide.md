@@ -134,6 +134,7 @@ Legacy runtime:
 - Project selector and project cards now refresh over websocket when the project collection or selected project changes
 - Sprints page is project-scoped, creates sprint records in sqlite, and exposes markdown import/export controls
 - Sprints page now also refreshes from project-structure realtime invalidation, so sprint CRUD and status-adjacent updates propagate across open dashboard tabs
+- Sprint cells and ledger rows now surface a dedicated human-intervention badge when a paused sprint needs merge work, planning, or another operator action, and the hover card explains what to do before resuming
 - Sprints page now also starts and stops sprint orchestration directly from sprint cards, with optimistic visual state updates tied to project-scoped execution data
 - The organic sprint bubble cells use the same live start/stop control path as the registry list, so the hover play/stop action is now functional instead of decorative
 - Sprint creation no longer asks for start/end dates
@@ -183,6 +184,7 @@ Legacy runtime:
 - Task statistics
 - Execution runtime panel for sprint runs, dispatch queue state, live project connections, worker assignment, lease ownership, and recent runtime events
 - Live runtime visuals are only considered active when the selected project has a `running` or `queued` sprint run; cancelled, paused, and completed runs fall back to a waiting state
+- When no sprint is running but a paused sprint needs human intervention, the overview telemetry now switches from an empty state to an attention state with the exact reason and operator instructions
 - Task pipeline cards
 - Task cards include a `Rerun` action with confirmation prompt; rerun clears session/PR/merge state for that task and starts it again
 - Reruns now reuse the same dispatch model as `sprint_agent` instead of bypassing execution state
@@ -191,6 +193,7 @@ Legacy runtime:
 - `recentEvents` is now a unified runtime timeline spanning both `task_run_events` and `sprint_run_events`
 - The execution runtime panel can now start or resume sprint orchestration, pause or cancel sprint runs, cancel queued dispatches, and retry terminal dispatches
 - The execution runtime panel now also exposes the active attention queue, including worker claim, resolve, and dismiss controls for open project blockers
+- Live Session now shows a clear paused-for-human-intervention banner, repeats the reason/instructions in the hero state, and surfaces the same guidance inside paused sprint run cards
 - Worker escalations now also create project chat threads with a system-authored handoff message, so operator follow-up lives in the same project conversation model as the rest of dashboard chat
 - The execution runtime panel now also shows live project connections with transport, role, listening metadata, inbox load, dispatch load, and heartbeat-derived status
 - The Overview page telemetry now renders a consolidated runtime timeline across all currently active projects instead of a static placeholder

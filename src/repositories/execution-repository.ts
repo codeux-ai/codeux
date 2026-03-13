@@ -19,6 +19,7 @@ import type {
 } from "../contracts/execution-types.js";
 import type {
   ExecutionDashboardSnapshot,
+  ExecutionHumanInterventionSummary,
   OverviewTelemetryProjectSummary,
   OverviewTelemetrySnapshot,
   ExecutionRuntimeEventSummary,
@@ -207,6 +208,21 @@ interface OverviewTelemetryProjectSummaryRow {
   updated_at: string | null;
 }
 
+interface ProjectAttentionSummaryRow {
+  id: string;
+  project_id: string;
+  sprint_id: string | null;
+  sprint_run_id: string | null;
+  attention_type: string;
+  severity: string;
+  owner_type: string;
+  status: string;
+  title: string;
+  summary_markdown: string;
+  payload_json: string | null;
+  updated_at: string;
+}
+
 interface WorkerProjectAffinityRow {
   project_id: string;
   active_count: number | string;
@@ -228,6 +244,20 @@ function parsePayloadJson(value: string | null): Record<string, unknown> | null 
   } catch {
     return null;
   }
+}
+
+function asNonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function stripMarkdown(value: string): string {
+  return value
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[*_>#~-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export class ExecutionRepository {
@@ -716,10 +746,20 @@ export class ExecutionRepository {
       LIMIT 60
     `).all(projectId, projectId) as unknown as ExecutionRuntimeEventSummaryRow[];
 
+    const activeAttentionItems = this.listActiveAttentionRowsForProject(projectId);
+    const humanInterventionBySprintRunId = this.buildHumanInterventionSummaryBySprintRun(
+      sprintRuns,
+      activeAttentionItems,
+      recentEvents,
+    );
+
     return {
       projectId: projectRow?.id || null,
       projectName: projectRow?.name || null,
-      sprintRuns: sprintRuns.map((row) => this.mapExecutionSprintRunSummaryRow(row)),
+      sprintRuns: sprintRuns.map((row) => this.mapExecutionSprintRunSummaryRow(
+        row,
+        humanInterventionBySprintRunId.get(row.id) || null,
+      )),
       taskDispatches: taskDispatches.map((row) => this.mapExecutionTaskDispatchSummaryRow(row)),
       connections: [],
       primaryAssignedWorker: null,
@@ -761,8 +801,43 @@ export class ExecutionRepository {
       LIMIT 24
     `).all() as unknown as OverviewTelemetryProjectSummaryRow[];
 
-    const activeSprintRunIds = activeProjects.map((row) => row.sprint_run_id);
-    const recentEvents = activeSprintRunIds.length === 0
+    const pausedProjects = this.db.prepare(`
+      SELECT
+        sr.project_id,
+        p.name AS project_name,
+        sr.sprint_id,
+        s.name AS sprint_name,
+        s.number AS sprint_number,
+        sr.id AS sprint_run_id,
+        sr.status AS sprint_run_status,
+        (
+          SELECT COUNT(*)
+          FROM task_dispatches td
+          WHERE td.sprint_run_id = sr.id
+            AND td.status IN ('queued', 'claimed', 'running', 'cancel_requested', 'blocked')
+        ) AS active_dispatch_count,
+        (
+          SELECT COUNT(*)
+          FROM task_dispatches td
+          WHERE td.sprint_run_id = sr.id
+            AND td.status IN ('claimed', 'running')
+        ) AS running_dispatch_count,
+        COALESCE(sr.last_heartbeat_at, sr.updated_at, sr.started_at, sr.created_at) AS updated_at
+      FROM sprint_runs sr
+      INNER JOIN projects p ON p.id = sr.project_id
+      INNER JOIN sprints s ON s.id = sr.sprint_id
+      WHERE sr.status = 'paused'
+      ORDER BY updated_at DESC, p.name ASC, s.name ASC
+      LIMIT 24
+    `).all() as unknown as OverviewTelemetryProjectSummaryRow[];
+
+    const telemetrySprintRunIds = Array.from(new Set([
+      ...activeProjects.map((row) => row.sprint_run_id),
+      ...pausedProjects.map((row) => row.sprint_run_id),
+    ]));
+    const activeAttentionItems = this.listActiveAttentionRowsForSprintRuns(telemetrySprintRunIds);
+
+    const recentEvents = telemetrySprintRunIds.length === 0
       ? []
       : this.db.prepare(`
         SELECT *
@@ -801,7 +876,7 @@ export class ExecutionRepository {
           INNER JOIN sprints s ON s.id = tr.sprint_id
           INNER JOIN tasks t ON t.id = tr.task_id
           LEFT JOIN mcp_connections c ON c.id = tr.connection_id
-          WHERE tr.sprint_run_id IN (${activeSprintRunIds.map(() => "?").join(", ")})
+          WHERE tr.sprint_run_id IN (${telemetrySprintRunIds.map(() => "?").join(", ")})
 
           UNION ALL
 
@@ -836,14 +911,33 @@ export class ExecutionRepository {
           FROM sprint_run_events sre
           INNER JOIN sprint_runs sr ON sr.id = sre.sprint_run_id
           INNER JOIN sprints s ON s.id = sr.sprint_id
-          WHERE sre.sprint_run_id IN (${activeSprintRunIds.map(() => "?").join(", ")})
+          WHERE sre.sprint_run_id IN (${telemetrySprintRunIds.map(() => "?").join(", ")})
         )
         ORDER BY created_at DESC, id DESC
         LIMIT 80
-      `).all(...activeSprintRunIds, ...activeSprintRunIds) as unknown as ExecutionRuntimeEventSummaryRow[];
+      `).all(...telemetrySprintRunIds, ...telemetrySprintRunIds) as unknown as ExecutionRuntimeEventSummaryRow[];
+
+    const eventAwareHumanInterventionBySprintRunId = this.buildHumanInterventionSummaryBySprintRun(
+      [...activeProjects, ...pausedProjects].map((row) => ({
+        id: row.sprint_run_id,
+        sprint_id: row.sprint_id,
+        status: row.sprint_run_status,
+      })),
+      activeAttentionItems,
+      recentEvents,
+    );
 
     return {
-      activeProjects: activeProjects.map((row) => this.mapOverviewTelemetryProjectSummaryRow(row)),
+      activeProjects: activeProjects.map((row) => this.mapOverviewTelemetryProjectSummaryRow(
+        row,
+        eventAwareHumanInterventionBySprintRunId.get(row.sprint_run_id) || null,
+      )),
+      attentionProjects: pausedProjects
+        .filter((row) => Boolean(eventAwareHumanInterventionBySprintRunId.get(row.sprint_run_id)))
+        .map((row) => this.mapOverviewTelemetryProjectSummaryRow(
+          row,
+          eventAwareHumanInterventionBySprintRunId.get(row.sprint_run_id) || null,
+        )),
       recentEvents: recentEvents.map((row) => this.mapExecutionRuntimeEventSummaryRow(row)),
       updatedAt: new Date().toISOString(),
     };
@@ -1371,7 +1465,10 @@ export class ExecutionRepository {
     };
   }
 
-  private mapExecutionSprintRunSummaryRow(row: ExecutionSprintRunSummaryRow): ExecutionSprintRunSummary {
+  private mapExecutionSprintRunSummaryRow(
+    row: ExecutionSprintRunSummaryRow,
+    humanIntervention: ExecutionHumanInterventionSummary | null,
+  ): ExecutionSprintRunSummary {
     return {
       id: row.id,
       projectId: row.project_id,
@@ -1388,6 +1485,7 @@ export class ExecutionRepository {
       createdAt: row.created_at,
       activeLeaseOwnerKey: row.active_lease_owner_key,
       activeLeaseExpiresAt: row.active_lease_expires_at,
+      humanIntervention,
     };
   }
 
@@ -1458,7 +1556,10 @@ export class ExecutionRepository {
     };
   }
 
-  private mapOverviewTelemetryProjectSummaryRow(row: OverviewTelemetryProjectSummaryRow): OverviewTelemetryProjectSummary {
+  private mapOverviewTelemetryProjectSummaryRow(
+    row: OverviewTelemetryProjectSummaryRow,
+    humanIntervention: ExecutionHumanInterventionSummary | null,
+  ): OverviewTelemetryProjectSummary {
     return {
       projectId: row.project_id,
       projectName: row.project_name,
@@ -1470,6 +1571,344 @@ export class ExecutionRepository {
       activeDispatchCount: toNumber(row.active_dispatch_count),
       runningDispatchCount: toNumber(row.running_dispatch_count),
       updatedAt: row.updated_at,
+      humanIntervention,
+    };
+  }
+
+  private listActiveAttentionRowsForProject(projectId: string): ProjectAttentionSummaryRow[] {
+    return this.db.prepare(`
+      SELECT
+        id,
+        project_id,
+        sprint_id,
+        sprint_run_id,
+        attention_type,
+        severity,
+        owner_type,
+        status,
+        title,
+        summary_markdown,
+        payload_json,
+        updated_at
+      FROM project_attention_items
+      WHERE project_id = ?
+        AND status IN ('open', 'claimed')
+      ORDER BY updated_at DESC, opened_at DESC, id DESC
+    `).all(projectId) as unknown as ProjectAttentionSummaryRow[];
+  }
+
+  private listActiveAttentionRowsForSprintRuns(sprintRunIds: string[]): ProjectAttentionSummaryRow[] {
+    if (sprintRunIds.length === 0) {
+      return [];
+    }
+
+    return this.db.prepare(`
+      SELECT
+        id,
+        project_id,
+        sprint_id,
+        sprint_run_id,
+        attention_type,
+        severity,
+        owner_type,
+        status,
+        title,
+        summary_markdown,
+        payload_json,
+        updated_at
+      FROM project_attention_items
+      WHERE sprint_run_id IN (${sprintRunIds.map(() => "?").join(", ")})
+        AND status IN ('open', 'claimed')
+      ORDER BY updated_at DESC, opened_at DESC, id DESC
+    `).all(...sprintRunIds) as unknown as ProjectAttentionSummaryRow[];
+  }
+
+  private buildHumanInterventionSummaryBySprintRun(
+    sprintRuns: Array<{ id: string; sprint_id: string; status: string }>,
+    attentionRows: ProjectAttentionSummaryRow[],
+    recentEvents: ExecutionRuntimeEventSummaryRow[],
+  ): Map<string, ExecutionHumanInterventionSummary> {
+    const bySprintRunId = new Map<string, ExecutionHumanInterventionSummary>();
+    const attentionBySprintRunId = new Map<string, ProjectAttentionSummaryRow[]>();
+    const eventsBySprintRunId = new Map<string, ExecutionRuntimeEventSummaryRow[]>();
+
+    for (const row of attentionRows) {
+      const sprintRunId = asNonEmptyString(row.sprint_run_id);
+      if (!sprintRunId || !this.isOperatorInterventionAttentionRow(row)) {
+        continue;
+      }
+      const existing = attentionBySprintRunId.get(sprintRunId) || [];
+      existing.push(row);
+      attentionBySprintRunId.set(sprintRunId, existing);
+    }
+
+    for (const event of recentEvents) {
+      const sprintRunId = asNonEmptyString(event.sprint_run_id);
+      if (!sprintRunId) {
+        continue;
+      }
+      const existing = eventsBySprintRunId.get(sprintRunId) || [];
+      existing.push(event);
+      eventsBySprintRunId.set(sprintRunId, existing);
+    }
+
+    for (const sprintRun of sprintRuns) {
+      const attentionSummary = this.buildHumanInterventionSummaryFromAttentionRows(
+        attentionBySprintRunId.get(sprintRun.id) || [],
+      );
+      if (attentionSummary) {
+        bySprintRunId.set(sprintRun.id, attentionSummary);
+        continue;
+      }
+      const eventSummary = this.buildHumanInterventionSummaryFromEvents(
+        sprintRun.status,
+        eventsBySprintRunId.get(sprintRun.id) || [],
+      );
+      if (eventSummary) {
+        bySprintRunId.set(sprintRun.id, eventSummary);
+      }
+    }
+
+    return bySprintRunId;
+  }
+
+  private buildHumanInterventionSummaryFromAttentionRows(
+    attentionRows: ProjectAttentionSummaryRow[],
+  ): ExecutionHumanInterventionSummary | null {
+    const bestRow = [...attentionRows].sort((left, right) => this.compareAttentionPriority(left, right))[0];
+    if (!bestRow) {
+      return null;
+    }
+
+    const payload = parsePayloadJson(bestRow.payload_json);
+    const title = bestRow.title.trim() || "Human intervention required";
+    const reason = stripMarkdown(bestRow.summary_markdown || title) || title;
+
+    switch (bestRow.attention_type) {
+      case "merge_required": {
+        const featureBranch = asNonEmptyString(payload?.featureBranch);
+        const workerBranch = asNonEmptyString(payload?.workerBranch);
+        const prUrl = asNonEmptyString(payload?.prUrl);
+        const taskKey = asNonEmptyString(payload?.taskKey);
+        const instructions = prUrl
+          ? `Review and merge the completed task PR (${prUrl})${featureBranch ? ` into ${featureBranch}` : ""}, then resume the sprint. You can enable feature PR automerge later to avoid manual merges.`
+          : `Merge${taskKey ? ` ${taskKey}` : " the completed task"}${workerBranch ? ` from ${workerBranch}` : ""}${featureBranch ? ` into ${featureBranch}` : ""}, then resume the sprint. You can enable feature PR automerge later to avoid manual merges.`;
+        return this.createHumanInterventionSummary(bestRow, title, reason, instructions);
+      }
+      case "action_required": {
+        const interventionOwner = String(payload?.interventionOwner || "").toUpperCase();
+        const sessionState = asNonEmptyString(payload?.sessionState);
+        const provider = asNonEmptyString(payload?.provider);
+        const instructions = interventionOwner === "HUMAN" || bestRow.owner_type === "human"
+          ? `Open the blocked task${provider ? ` in ${provider}` : ""}${sessionState ? ` (${sessionState})` : ""}, provide the requested input or approval, then resume the sprint.`
+          : `Review the blocked task${provider ? ` in ${provider}` : ""}${sessionState ? ` (${sessionState})` : ""}, resolve the action-required state, then resume the sprint if worker automation does not clear it.`;
+        return this.createHumanInterventionSummary(bestRow, title, reason, instructions);
+      }
+      case "manual_attention":
+        return this.createHumanInterventionSummary(
+          bestRow,
+          title,
+          reason,
+          "Open the Live view, inspect the attention queue and blocked tasks, resolve the blocker, then resume the sprint.",
+        );
+      case "dashboard_reply_required":
+        return this.createHumanInterventionSummary(
+          bestRow,
+          title,
+          reason,
+          "Open the project conversation thread, send the requested dashboard reply, then resolve the attention item and resume the sprint.",
+        );
+      case "human_escalation_required":
+        return this.createHumanInterventionSummary(
+          bestRow,
+          title,
+          reason,
+          "Open the project handoff thread, perform the requested manual action, then resolve the attention item and resume the sprint.",
+        );
+      case "worker_dispatch_blocked":
+        return this.createHumanInterventionSummary(
+          bestRow,
+          title,
+          reason,
+          "Review the blocked worker dispatch in Live view, address the worker error, then retry or resume the sprint.",
+        );
+      case "worker_lease_expired":
+        return this.createHumanInterventionSummary(
+          bestRow,
+          title,
+          reason,
+          "Check the assigned worker connection, restart or reassign it if needed, then retry or resume the sprint.",
+        );
+      case "dispatch_cancel_stalled":
+        return this.createHumanInterventionSummary(
+          bestRow,
+          title,
+          reason,
+          "Review the stalled cancellation in Live view and force cancel or clean up the run before restarting the sprint.",
+        );
+      default:
+        return this.createHumanInterventionSummary(
+          bestRow,
+          title,
+          reason,
+          "Review the active attention item in Live view, resolve the blocker, then resume the sprint.",
+        );
+    }
+  }
+
+  private buildHumanInterventionSummaryFromEvents(
+    sprintRunStatus: string,
+    recentEvents: ExecutionRuntimeEventSummaryRow[],
+  ): ExecutionHumanInterventionSummary | null {
+    if (recentEvents.length === 0) {
+      return null;
+    }
+
+    const latestRelevantEvent = recentEvents.find((event) => (
+      event.event_type === "branch_preflight_blocked"
+      || event.event_type === "planning_preflight_blocked"
+      || event.event_type === "sprint_merge_required"
+      || event.event_type === "sprint_no_more_actions"
+      || event.event_type === "sprint_paused"
+    ));
+    if (!latestRelevantEvent) {
+      return null;
+    }
+
+    const payload = parsePayloadJson(latestRelevantEvent.payload_json);
+
+    switch (latestRelevantEvent.event_type) {
+      case "branch_preflight_blocked": {
+        const featureBranch = asNonEmptyString(payload?.featureBranch) || "the sprint feature branch";
+        return {
+          title: "Branch preparation blocked",
+          reason: `Sprint OS could not prepare ${featureBranch} automatically.`,
+          instructions: "Check git authentication, remote push permissions, and local branch state, then resume the sprint.",
+          attentionType: null,
+          severity: "high",
+          ownerType: "human",
+        };
+      }
+      case "planning_preflight_blocked": {
+        const planningTarget = asNonEmptyString(payload?.planningTarget) || "this sprint";
+        return {
+          title: "Sprint planning required",
+          reason: `${planningTarget} must be planned into executable tasks before orchestration can continue.`,
+          instructions: "Use Plan Sprint on the Sprints page, review the generated tasks, then start the sprint again.",
+          attentionType: null,
+          severity: "medium",
+          ownerType: "human",
+        };
+      }
+      case "sprint_merge_required": {
+        const awaitingMergeCount = Number(payload?.awaitingMergeCount || 0);
+        return {
+          title: "Manual merge required",
+          reason: `Sprint execution paused because ${awaitingMergeCount || "one or more"} completed task${awaitingMergeCount === 1 ? "" : "s"} still need manual merge work.`,
+          instructions: "Merge the completed task branches or PRs into the sprint branch, then resume the sprint. You can enable feature PR automerge later to reduce manual merges.",
+          attentionType: null,
+          severity: "high",
+          ownerType: "human",
+        };
+      }
+      case "sprint_no_more_actions":
+      case "sprint_paused":
+        if (sprintRunStatus !== "paused") {
+          return null;
+        }
+        return {
+          title: "Manual attention required",
+          reason: "Sprint execution paused because no further automatic action was available.",
+          instructions: "Open the Live view, inspect the blocked tasks and attention queue, resolve the blocker, then resume the sprint.",
+          attentionType: null,
+          severity: "medium",
+          ownerType: "human",
+        };
+      default:
+        return null;
+    }
+  }
+
+  private isOperatorInterventionAttentionRow(row: ProjectAttentionSummaryRow): boolean {
+    if (row.status !== "open" && row.status !== "claimed") {
+      return false;
+    }
+
+    if (
+      row.attention_type === "merge_required"
+      || row.attention_type === "manual_attention"
+      || row.attention_type === "dashboard_reply_required"
+      || row.attention_type === "human_escalation_required"
+      || row.attention_type === "worker_dispatch_blocked"
+      || row.attention_type === "worker_lease_expired"
+      || row.attention_type === "dispatch_cancel_stalled"
+    ) {
+      return true;
+    }
+
+    if (row.attention_type !== "action_required") {
+      return row.owner_type !== "worker";
+    }
+
+    const payload = parsePayloadJson(row.payload_json);
+    return row.owner_type === "human" || String(payload?.interventionOwner || "").toUpperCase() === "HUMAN";
+  }
+
+  private compareAttentionPriority(left: ProjectAttentionSummaryRow, right: ProjectAttentionSummaryRow): number {
+    const attentionPriority = (value: string): number => {
+      switch (value) {
+        case "human_escalation_required":
+          return 0;
+        case "dashboard_reply_required":
+          return 1;
+        case "merge_required":
+          return 2;
+        case "action_required":
+          return 3;
+        case "manual_attention":
+          return 4;
+        case "worker_dispatch_blocked":
+          return 5;
+        case "worker_lease_expired":
+          return 6;
+        case "dispatch_cancel_stalled":
+          return 7;
+        default:
+          return 8;
+      }
+    };
+    const severityPriority = (value: string): number => {
+      switch (value) {
+        case "critical":
+          return 0;
+        case "high":
+          return 1;
+        case "medium":
+          return 2;
+        default:
+          return 3;
+      }
+    };
+
+    return attentionPriority(left.attention_type) - attentionPriority(right.attention_type)
+      || severityPriority(left.severity) - severityPriority(right.severity)
+      || right.updated_at.localeCompare(left.updated_at)
+      || left.id.localeCompare(right.id);
+  }
+
+  private createHumanInterventionSummary(
+    row: ProjectAttentionSummaryRow,
+    title: string,
+    reason: string,
+    instructions: string,
+  ): ExecutionHumanInterventionSummary {
+    return {
+      title,
+      reason,
+      instructions,
+      attentionType: row.attention_type,
+      severity: row.severity,
+      ownerType: row.owner_type,
     };
   }
 
