@@ -6,6 +6,7 @@ import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { AgentPresetRepository } from "../../../src/repositories/agent-preset-repository.js";
 import { ConnectionChatRepository } from "../../../src/repositories/connection-chat-repository.js";
+import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
 import { AgentPresetSyncService } from "../../../src/services/agent-preset-sync-service.js";
 import { PlanningAgentService } from "../../../src/services/planning-agent-service.js";
 
@@ -24,7 +25,7 @@ describe("PlanningAgentService", () => {
     const repoPath = path.join(dir, "repo");
     await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".sprint-os", "agents", "Planning agent.md"),
+      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
       "Turn sprint goals into concrete executable tasks.\n",
       "utf8",
     );
@@ -33,9 +34,11 @@ describe("PlanningAgentService", () => {
     const projectRepository = new ProjectManagementRepository(storage);
     const agentPresetRepository = new AgentPresetRepository(storage);
     const connectionRepository = new ConnectionChatRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
     const syncService = new AgentPresetSyncService({
       projectManagementRepository: projectRepository,
       agentPresetRepository,
+      settingsRepository,
       projectRoot: dir,
     });
     const executionControlService = {
@@ -139,7 +142,7 @@ describe("PlanningAgentService", () => {
     const repoPath = path.join(dir, "repo");
     await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
     await fs.writeFile(
-      path.join(repoPath, ".sprint-os", "agents", "Planning agent.md"),
+      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
       "Turn sprint goals into concrete executable tasks.\n",
       "utf8",
     );
@@ -148,9 +151,11 @@ describe("PlanningAgentService", () => {
     const projectRepository = new ProjectManagementRepository(storage);
     const agentPresetRepository = new AgentPresetRepository(storage);
     const connectionRepository = new ConnectionChatRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
     const syncService = new AgentPresetSyncService({
       projectManagementRepository: projectRepository,
       agentPresetRepository,
+      settingsRepository,
       projectRoot: dir,
     });
 

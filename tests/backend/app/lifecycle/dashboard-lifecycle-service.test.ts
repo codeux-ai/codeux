@@ -83,6 +83,7 @@ describe("dashboard-lifecycle-service", () => {
             ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence },
             sprintLoopSteps: { ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps },
             cliWorkflow: { ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow },
+            agents: { ...DEFAULT_DASHBOARD_SETTINGS.agents },
             skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
           },
           mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),

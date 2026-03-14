@@ -436,6 +436,10 @@ export interface CliWorkflowSettings {
   containerClaudeCodeAuthPath: string;
 }
 
+export interface AgentSettings {
+  saveToProjectDirectory: boolean;
+}
+
 export interface SkillToggle {
   name: string;
   enabled: boolean;
@@ -458,6 +462,7 @@ export interface DashboardSettings {
   ciIntelligence: CiIntelligenceSettings;
   sprintLoopSteps: SprintLoopStepSettings;
   cliWorkflow: CliWorkflowSettings;
+  agents: AgentSettings;
   skills: SkillToggle[];
   mcpTools: McpToolToggle[];
 }

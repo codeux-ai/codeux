@@ -79,6 +79,7 @@ Runtime resolution:
   - `ciIntelligence`
   - `sprintLoopSteps`
   - `cliWorkflow`
+  - `agents`
   - `skills`
 
 `sprint_settings` fields:
@@ -138,6 +139,12 @@ The effective endpoints return:
     - if empty, falls back to `.sprint-os/container/setup.sh` in repo root and home directory
   - `containerMountGitConfig`
   - `containerMountGithubAuth`
+
+`agents` contains:
+- `saveToProjectDirectory` (default `true`)
+  - when enabled, dashboard agent create/update writes project-local markdown companions under `.sprint-os/agents`
+  - mirrored filenames use lowercase underscore-safe slugs such as `planning_agent.md`
+  - default/home markdown sources are never modified by dashboard edits; Sprint OS creates a project-level override file instead
   - `containerMountGeminiAuth`
   - `containerMountCodexAuth`
   - `containerMountClaudeCodeAuth`

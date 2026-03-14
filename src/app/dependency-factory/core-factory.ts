@@ -138,6 +138,7 @@ export function createCoreDependencies(
   const agentPresetSyncService = new AgentPresetSyncService({
     projectManagementRepository,
     agentPresetRepository,
+    settingsRepository,
     projectRoot: options.projectRoot,
     logger: logger.child({ component: "agent-preset-sync-service" }),
   });

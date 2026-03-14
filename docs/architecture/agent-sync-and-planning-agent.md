@@ -22,14 +22,23 @@ This agent is used by the sprint creation flow to:
 
 Agents are stored in sqlite and edited from the dashboard.
 
-Markdown files are import sources, not the live runtime authority.
+SQLite remains the live authority, but projects can also mirror dashboard edits into project-local markdown under:
+
+- `<project>/.sprint-os/agents/*.md`
+
+That mirror is controlled by the project setting:
+
+- `agents.saveToProjectDirectory` (default `true`)
 
 That means:
 
 - newly discovered markdown agents are imported into sqlite automatically
 - existing DB agents remain editable in the dashboard
-- if the linked markdown file changes later and is newer than the last import, the agent is marked `out_of_sync`
-- the dashboard can re-import that markdown into the DB record on demand
+- when project markdown mirroring is enabled, dashboard create/update writes the agent body into a project-local markdown file
+- mirrored project files use a filesystem-safe slug format such as `planning_agent.md`
+- editing a default or home-backed agent from the dashboard creates a project-local override file instead of modifying the default/home source
+- if the linked markdown file later differs from the DB copy, the agent is marked `out_of_sync`
+- the dashboard can re-import one agent or bulk-sync all out-of-sync project agents back into sqlite on demand
 
 ## Agent Metadata
 
@@ -52,10 +61,11 @@ The API record also exposes derived sync state:
 When Sprint OS syncs project agents:
 
 1. project-level `.sprint-os/agents` is scanned first
-2. home-level `.sprint-os/agents` is scanned second
-3. filename without `.md` becomes the agent name
-4. project-scoped files win on name collisions
-5. previously unseen agents are imported into sqlite automatically
+2. repo-default `.sprint-os/agents` from the running Sprint OS checkout is scanned second
+3. home-level `.sprint-os/agents` is scanned third
+4. filename without `.md` becomes the agent name
+5. project-scoped files win on name collisions
+6. previously unseen agents are imported into sqlite automatically
 
 ## Planning Agent Flow
 
@@ -89,6 +99,7 @@ The Agents page now shows:
 - whether an agent is DB-only or markdown-backed
 - out-of-sync state for changed markdown
 - `Import` action for linked markdown agents
+- `Sync All` action for pulling all out-of-sync local markdown back into sqlite
 
 ### Sprints page
 
@@ -103,8 +114,8 @@ Both `Improve with AI` and planning actions are worker-backed via the Planning a
 
 ## Default Agent
 
-This repository now includes the default project-level agent file:
+This repository now includes the default built-in agent file:
 
-- `.sprint-os/agents/Planning agent.md`
+- `.sprint-os/agents/planning_agent.md`
 
 That file is auto-imported when this repository is used as the selected project and no DB record exists yet.

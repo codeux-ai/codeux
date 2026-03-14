@@ -1,4 +1,5 @@
 import type {
+  AgentSettings,
   AutomationInterventionsSettings,
   AutomationLevel,
   CiIntelligenceSettings,
@@ -39,6 +40,7 @@ export interface ProjectSettings {
   ciIntelligence: CiIntelligenceSettings;
   sprintLoopSteps: DashboardSettings["sprintLoopSteps"];
   cliWorkflow: CliWorkflowSettings;
+  agents: AgentSettings;
   skills: SkillToggle[];
 }
 

@@ -9,8 +9,10 @@ import {
   deleteAgentPreset,
   fetchAgentPresets,
   importAgentPresetFromMarkdown,
+  syncAllAgentPresetsFromMarkdown,
   updateAgentPreset,
 } from "./lib/agent-preset-api.js";
+import { fetchProjectEffectiveSettings } from "./lib/settings-api.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
 
@@ -229,16 +231,24 @@ export const AgentsPage: FunctionComponent = () => {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [importingId, setImportingId] = useState<string | null>(null);
+  const [syncingAll, setSyncingAll] = useState(false);
+  const [projectFileSavingEnabled, setProjectFileSavingEnabled] = useState(true);
 
   const refreshPresets = async (): Promise<void> => {
     if (!selectedProject) {
       setPresets([]);
       setError(null);
-    return;
-  }
-  setLoading(true);
+      setProjectFileSavingEnabled(true);
+      return;
+    }
+    setLoading(true);
     try {
-      setPresets(await fetchAgentPresets(selectedProject.id));
+      const [nextPresets, effectiveSettings] = await Promise.all([
+        fetchAgentPresets(selectedProject.id),
+        fetchProjectEffectiveSettings(selectedProject.id),
+      ]);
+      setPresets(nextPresets);
+      setProjectFileSavingEnabled(effectiveSettings.settings.agents.saveToProjectDirectory);
       setError(null);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
@@ -298,6 +308,22 @@ export const AgentsPage: FunctionComponent = () => {
     }
   };
 
+  const handleSyncAll = async (): Promise<void> => {
+    if (!selectedProject) {
+      return;
+    }
+
+    setSyncingAll(true);
+    try {
+      setPresets(await syncAllAgentPresetsFromMarkdown(selectedProject.id));
+      setError(null);
+    } catch (syncError) {
+      setError(syncError instanceof Error ? syncError.message : String(syncError));
+    } finally {
+      setSyncingAll(false);
+    }
+  };
+
   const handleSave = async (
     presetId: string,
     next: { name: string; labels: string[]; instructionMarkdown: string },
@@ -345,7 +371,7 @@ export const AgentsPage: FunctionComponent = () => {
           </div>
           <p className="max-w-2xl text-lg leading-relaxed text-slate-500 dark:text-slate-400">
             {selectedProject
-              ? `Database-backed agents for ${selectedProject.name}. Markdown agents from home or project \`.sprint-os/agents\` are imported automatically and tracked for sync drift.`
+              ? `Database-backed agents for ${selectedProject.name}. Markdown agents from home or project \`.sprint-os/agents\` are imported automatically, and dashboard edits ${projectFileSavingEnabled ? "mirror back into the project directory" : "stay database-only for this project"}.`
               : "Select a project to create reusable agents with instructions and labels."}
           </p>
         </div>
@@ -376,6 +402,15 @@ export const AgentsPage: FunctionComponent = () => {
           </button>
           <button
             type="button"
+            onClick={() => void handleSyncAll()}
+            disabled={!selectedProject || syncingAll || presets.every((preset) => preset.syncStatus !== "out_of_sync")}
+            className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${syncingAll ? "animate-spin" : ""}`} strokeWidth={2.2} />
+            Sync All
+          </button>
+          <button
+            type="button"
             onClick={() => void handleCreate()}
             disabled={!selectedProject}
             className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-void-900 transition-colors hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
@@ -389,6 +424,14 @@ export const AgentsPage: FunctionComponent = () => {
       {error && (
         <div className="rounded-[1.5rem] border border-status-red/20 bg-status-red/10 px-5 py-4 text-sm text-status-red">
           {error}
+        </div>
+      )}
+
+      {selectedProject && (
+        <div className="rounded-[1.5rem] border border-black/[0.06] bg-white/60 px-5 py-4 text-sm leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
+          {projectFileSavingEnabled
+            ? "Project markdown mirroring is enabled. Saving an agent from the dashboard writes its markdown companion under `.sprint-os/agents` for this project."
+            : "Project markdown mirroring is disabled for this project. Dashboard edits stay in the database, but local `.sprint-os/agents` markdown is still discovered and can be imported."}
         </div>
       )}
 

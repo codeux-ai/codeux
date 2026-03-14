@@ -109,6 +109,9 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   cliWorkflow: {
     ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow,
   },
+  agents: {
+    ...DEFAULT_DASHBOARD_SETTINGS.agents,
+  },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
   mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),
 });
@@ -148,6 +151,15 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const ciIntelligence = sanitizeCiIntelligence(input, git.githubMode);
   const sprintLoopSteps = sanitizeSprintLoopSteps(input);
   const cliWorkflow = sanitizeCliWorkflow(input);
+  const agentsInput = (input.agents && typeof input.agents === "object")
+    ? input.agents as Partial<DashboardSettings["agents"]>
+    : {};
+  const agents = {
+    saveToProjectDirectory: readBoolean(
+      agentsInput.saveToProjectDirectory,
+      DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
+    ),
+  };
 
   const normalizedSkills = enforceGitManagerSkillset(sanitizeSkills(input.skills), git.githubMode);
   const mcpTools = sanitizeMcpTools(input.mcpTools);
@@ -162,6 +174,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     ciIntelligence,
     sprintLoopSteps,
     cliWorkflow,
+    agents,
     skills: normalizedSkills,
     mcpTools,
   };

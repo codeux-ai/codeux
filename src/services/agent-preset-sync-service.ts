@@ -3,12 +3,14 @@ import * as path from "path";
 import type { AgentPresetRecord, AgentSourceScope } from "../contracts/agent-preset-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { AgentPresetRepository } from "../repositories/agent-preset-repository.js";
+import type { SettingsRepository } from "../repositories/settings-repository.js";
 import { getHomeSprintOsPath, getRepoSprintOsPath } from "../shared/config/sprint-os-paths.js";
 import type { Logger } from "../shared/logging/logger.js";
 
 interface AgentPresetSyncServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
   agentPresetRepository: AgentPresetRepository;
+  settingsRepository: SettingsRepository;
   projectRoot: string;
   logger?: Logger;
 }
@@ -28,6 +30,90 @@ export class AgentPresetSyncService {
   async listAgentPresets(projectId: string): Promise<AgentPresetRecord[]> {
     await this.syncProjectAgents(projectId);
     return await this.decorateProjectAgentPresets(projectId);
+  }
+
+  async createAgentPreset(projectId: string, input: {
+    name: string;
+    instructionMarkdown?: string;
+    labels?: string[];
+  }): Promise<AgentPresetRecord> {
+    const nextName = input.name.trim();
+    this.assertAgentNameAvailable(projectId, nextName);
+
+    if (this.shouldSaveToProjectDirectory(projectId)) {
+      const project = this.requireProject(projectId);
+      const source = await this.writeProjectAgentFile({
+        projectBaseDir: project.baseDir,
+        name: nextName,
+        instructionMarkdown: input.instructionMarkdown?.trim() || "",
+      });
+      const created = this.deps.agentPresetRepository.importAgentPresetFromSource(projectId, {
+        name: nextName,
+        instructionMarkdown: source.instructionMarkdown,
+        labels: input.labels,
+        sourcePath: source.sourcePath,
+        sourceScope: source.sourceScope,
+        sourceUpdatedAt: source.sourceUpdatedAt,
+        sourceImportedAt: source.sourceUpdatedAt,
+      });
+      return await this.decorateAgentPreset(created);
+    }
+
+    const created = this.deps.agentPresetRepository.createAgentPreset(projectId, input);
+    return await this.decorateAgentPreset(created);
+  }
+
+  async updateAgentPreset(agentPresetId: string, input: {
+    name?: string;
+    instructionMarkdown?: string;
+    labels?: string[];
+  }): Promise<AgentPresetRecord> {
+    const existing = this.deps.agentPresetRepository.getAgentPreset(agentPresetId);
+    if (!existing) {
+      throw new Error(`Agent not found: ${agentPresetId}`);
+    }
+
+    const nextName = input.name?.trim() || existing.name;
+    const nextInstructionMarkdown = input.instructionMarkdown === undefined
+      ? existing.instructionMarkdown
+      : input.instructionMarkdown.trim();
+
+    this.assertAgentNameAvailable(existing.projectId, nextName, existing.id);
+
+    if (this.shouldSaveToProjectDirectory(existing.projectId)) {
+      const project = this.requireProject(existing.projectId);
+      const source = await this.writeProjectAgentFile({
+        projectBaseDir: project.baseDir,
+        name: nextName,
+        instructionMarkdown: nextInstructionMarkdown,
+        previousProjectSourcePath: existing.sourceScope === "project" ? existing.sourcePath : null,
+      });
+
+      this.deps.agentPresetRepository.updateAgentPreset(agentPresetId, input);
+      const linked = this.deps.agentPresetRepository.linkAgentPresetToSource(agentPresetId, {
+        sourcePath: source.sourcePath,
+        sourceScope: source.sourceScope,
+        sourceUpdatedAt: source.sourceUpdatedAt,
+        sourceImportedAt: source.sourceUpdatedAt,
+      });
+      return await this.decorateAgentPreset(linked);
+    }
+
+    const updated = this.deps.agentPresetRepository.updateAgentPreset(agentPresetId, input);
+    return await this.decorateAgentPreset(updated);
+  }
+
+  async deleteAgentPreset(agentPresetId: string): Promise<void> {
+    const existing = this.deps.agentPresetRepository.getAgentPreset(agentPresetId);
+    if (!existing) {
+      throw new Error(`Agent not found: ${agentPresetId}`);
+    }
+
+    if (existing.sourceScope === "project" && existing.sourcePath) {
+      await fs.rm(existing.sourcePath, { force: true }).catch(() => undefined);
+    }
+
+    this.deps.agentPresetRepository.deleteAgentPreset(agentPresetId);
   }
 
   async syncProjectAgents(projectId: string): Promise<void> {
@@ -85,7 +171,7 @@ export class AgentPresetSyncService {
 
     const source = await this.readAgentSourceFile(existing.sourcePath, existing.sourceScope || "project");
     const updated = this.deps.agentPresetRepository.importLinkedAgentPreset(agentPresetId, {
-      name: source.name,
+      name: existing.sourceScope === "project" ? existing.name : source.name,
       instructionMarkdown: source.instructionMarkdown,
       sourceUpdatedAt: source.sourceUpdatedAt,
     });
@@ -93,11 +179,24 @@ export class AgentPresetSyncService {
     return await this.decorateAgentPreset(updated);
   }
 
+  async syncAllAgentPresetsFromMarkdown(projectId: string): Promise<AgentPresetRecord[]> {
+    await this.syncProjectAgents(projectId);
+    const presets = await this.decorateProjectAgentPresets(projectId);
+
+    for (const preset of presets) {
+      if (preset.syncStatus === "out_of_sync" && preset.sourcePath) {
+        await this.importAgentPresetFromMarkdown(preset.id);
+      }
+    }
+
+    return await this.decorateProjectAgentPresets(projectId);
+  }
+
   async getPlanningAgent(projectId: string): Promise<AgentPresetRecord> {
     await this.syncProjectAgents(projectId);
     const planningAgent = this.deps.agentPresetRepository.findAgentPresetByName(projectId, "Planning agent");
     if (!planningAgent) {
-      throw new Error("Planning agent not found. Add `Planning agent.md` under `.sprint-os/agents` or create it in Agents.");
+      throw new Error("Planning agent not found. Add `planning_agent.md` under `.sprint-os/agents` or create it in Agents.");
     }
     return await this.decorateAgentPreset(planningAgent);
   }
@@ -136,16 +235,14 @@ export class AgentPresetSyncService {
 
     try {
       const source = await this.readAgentSourceFile(preset.sourcePath, preset.sourceScope || "project");
-      const sourceIsNewer = Boolean(
-        preset.sourceImportedAt
-        && new Date(source.sourceUpdatedAt).getTime() > new Date(preset.sourceImportedAt).getTime(),
-      );
+      const sourceDiffersFromDb = this.normalizeName(source.name) !== this.normalizeName(preset.name)
+        || source.instructionMarkdown.trim() !== preset.instructionMarkdown.trim();
       return {
         ...preset,
         sourceScope: source.sourceScope,
         sourceUpdatedAt: source.sourceUpdatedAt,
         sourceExists: true,
-        syncStatus: sourceIsNewer && source.instructionMarkdown.trim() !== preset.instructionMarkdown.trim()
+        syncStatus: sourceDiffersFromDb
           ? "out_of_sync"
           : "synced",
       };
@@ -187,7 +284,7 @@ export class AgentPresetSyncService {
     const stats = await fs.stat(sourcePath);
     const instructionMarkdown = await fs.readFile(sourcePath, "utf8");
     const rawName = path.basename(sourcePath, path.extname(sourcePath)).trim();
-    const name = rawName.length > 0 ? rawName : "Unnamed agent";
+    const name = this.toDisplayNameFromStem(rawName);
 
     return {
       name,
@@ -200,7 +297,71 @@ export class AgentPresetSyncService {
   }
 
   private normalizeName(value: string): string {
-    return value.trim().replace(/\s+/g, " ").toLowerCase();
+    return value.trim().replace(/[_-]+/g, " ").replace(/\s+/g, " ").toLowerCase();
+  }
+
+  private shouldSaveToProjectDirectory(projectId: string): boolean {
+    return this.deps.settingsRepository.getProjectResolvedSettings(projectId).agents.saveToProjectDirectory;
+  }
+
+  private assertAgentNameAvailable(projectId: string, name: string, currentAgentId?: string): void {
+    const existing = this.deps.agentPresetRepository.findAgentPresetByName(projectId, name);
+    if (existing && existing.id !== currentAgentId) {
+      throw new Error(`An agent named "${name}" already exists for this project.`);
+    }
+  }
+
+  private async writeProjectAgentFile(args: {
+    projectBaseDir: string;
+    name: string;
+    instructionMarkdown: string;
+    previousProjectSourcePath?: string | null;
+  }): Promise<AgentSourceFile> {
+    const directory = getRepoSprintOsPath(args.projectBaseDir, "agents");
+    await fs.mkdir(directory, { recursive: true });
+
+    const filePath = path.join(directory, `${this.toAgentFileStem(args.name)}.md`);
+    if (!args.previousProjectSourcePath || args.previousProjectSourcePath !== filePath) {
+      const fileAlreadyExists = await fs.stat(filePath)
+        .then(() => true)
+        .catch(() => false);
+      if (fileAlreadyExists) {
+        throw new Error(`Project agent file already exists: ${filePath}`);
+      }
+    }
+    await fs.writeFile(filePath, args.instructionMarkdown, "utf8");
+
+    if (args.previousProjectSourcePath && args.previousProjectSourcePath !== filePath) {
+      await fs.rm(args.previousProjectSourcePath, { force: true }).catch(() => undefined);
+    }
+
+    return await this.readAgentSourceFile(filePath, "project");
+  }
+
+  private toAgentFileStem(name: string): string {
+    const normalized = name.trim().replace(/\.md$/i, "").replace(/\s+/g, " ");
+    const sanitized = normalized
+      .toLowerCase()
+      .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .replace(/_+/g, "_")
+      .trim();
+    return sanitized || "unnamed_agent";
+  }
+
+  private toDisplayNameFromStem(stem: string): string {
+    const normalized = stem
+      .trim()
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (this.normalizeName(normalized) === "planning agent") {
+      return "Planning agent";
+    }
+
+    return normalized.length > 0 ? normalized : "Unnamed agent";
   }
 
   private requireProject(projectId: string): NonNullable<ReturnType<ProjectManagementRepository["getProject"]>> {

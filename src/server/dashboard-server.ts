@@ -104,10 +104,11 @@ export interface DashboardServerOptions {
   listConnections: (projectId: string) => McpConnectionRecord[];
   updateConnection: (connectionId: string, input: UpdateMcpConnectionInput) => McpConnectionRecord;
   listAgentPresets: (projectId: string) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
-  createAgentPreset: (projectId: string, input: CreateAgentPresetInput) => AgentPresetRecord;
-  updateAgentPreset: (agentPresetId: string, input: UpdateAgentPresetInput) => AgentPresetRecord;
-  deleteAgentPreset: (agentPresetId: string) => void;
+  createAgentPreset: (projectId: string, input: CreateAgentPresetInput) => Promise<AgentPresetRecord> | AgentPresetRecord;
+  updateAgentPreset: (agentPresetId: string, input: UpdateAgentPresetInput) => Promise<AgentPresetRecord> | AgentPresetRecord;
+  deleteAgentPreset: (agentPresetId: string) => Promise<void> | void;
   importAgentPresetFromMarkdown?: (agentPresetId: string) => Promise<AgentPresetRecord> | AgentPresetRecord;
+  syncAllAgentPresetsFromMarkdown?: (projectId: string) => Promise<AgentPresetRecord[]> | AgentPresetRecord[];
   listConversationThreads: (projectId: string) => ConversationThreadRecord[];
   createConversationThread: (projectId: string, input: CreateConversationThreadInput) => ConversationThreadRecord;
   updateConversationThread: (threadId: string, input: UpdateConversationThreadInput) => ConversationThreadRecord;
@@ -566,25 +567,25 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     }
   });
 
-  app.post("/api/projects/:projectId/agent-presets", (req, res) => {
+  app.post("/api/projects/:projectId/agent-presets", async (req, res) => {
     try {
-      res.status(201).json(options.createAgentPreset(String(req.params.projectId || "").trim(), req.body as CreateAgentPresetInput));
+      res.status(201).json(await options.createAgentPreset(String(req.params.projectId || "").trim(), req.body as CreateAgentPresetInput));
     } catch (error) {
       res.status(400).json({ error: toErrorMessage(error, "Failed to create agent preset") });
     }
   });
 
-  app.patch("/api/agent-presets/:agentPresetId", (req, res) => {
+  app.patch("/api/agent-presets/:agentPresetId", async (req, res) => {
     try {
-      res.json(options.updateAgentPreset(String(req.params.agentPresetId || "").trim(), req.body as UpdateAgentPresetInput));
+      res.json(await options.updateAgentPreset(String(req.params.agentPresetId || "").trim(), req.body as UpdateAgentPresetInput));
     } catch (error) {
       res.status(400).json({ error: toErrorMessage(error, "Failed to update agent preset") });
     }
   });
 
-  app.delete("/api/agent-presets/:agentPresetId", (req, res) => {
+  app.delete("/api/agent-presets/:agentPresetId", async (req, res) => {
     try {
-      options.deleteAgentPreset(String(req.params.agentPresetId || "").trim());
+      await options.deleteAgentPreset(String(req.params.agentPresetId || "").trim());
       res.json({ ok: true });
     } catch (error) {
       res.status(400).json({ error: toErrorMessage(error, "Failed to delete agent preset") });
@@ -600,6 +601,18 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       res.json(await options.importAgentPresetFromMarkdown(String(req.params.agentPresetId || "").trim()));
     } catch (error) {
       res.status(400).json({ error: toErrorMessage(error, "Failed to import agent markdown") });
+    }
+  });
+
+  app.post("/api/projects/:projectId/agent-presets/sync-markdown", async (req, res) => {
+    if (!options.syncAllAgentPresetsFromMarkdown) {
+      res.status(404).json({ error: "Bulk markdown sync is not enabled for agents." });
+      return;
+    }
+    try {
+      res.json(await options.syncAllAgentPresetsFromMarkdown(String(req.params.projectId || "").trim()));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to sync all agent markdown") });
     }
   });
 

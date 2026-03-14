@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import gsap from "gsap";
 import {
   AlertTriangle,
+  Bot,
   Check,
   ChevronDown,
   Cpu,
@@ -33,7 +34,7 @@ import {
 } from "./lib/settings-view-models.js";
 
 type SettingsScope = "system" | "project";
-type CategoryId = "general" | "models" | "sprint" | "integrations" | "danger";
+type CategoryId = "general" | "models" | "sprint" | "agents" | "integrations" | "danger";
 
 interface Category {
   id: CategoryId;
@@ -48,8 +49,9 @@ const CATEGORIES: Category[] = [
   { id: "general", num: "01", label: "General", icon: SlidersHorizontal, description: "Scope, runtime, and automation posture" },
   { id: "models", num: "02", label: "AI Models", icon: Cpu, description: "Provider routing, models, and weighting" },
   { id: "sprint", num: "03", label: "Sprint Engine", icon: Target, description: "Merge rules, loop control, and execution runtime" },
-  { id: "integrations", num: "04", label: "Integrations", icon: Plug, description: "Provider keys, GitHub, and external connection policy" },
-  { id: "danger", num: "05", label: "Danger Zone", icon: AlertTriangle, description: "Reset project overrides only when needed", danger: true },
+  { id: "agents", num: "04", label: "Agents", icon: Bot, description: "Project-local markdown mirrors and agent authoring behavior" },
+  { id: "integrations", num: "05", label: "Integrations", icon: Plug, description: "Provider keys, GitHub, and external connection policy" },
+  { id: "danger", num: "06", label: "Danger Zone", icon: AlertTriangle, description: "Reset project overrides only when needed", danger: true },
 ];
 
 const providerLabels: Record<keyof ProjectSettings["aiProvider"]["providers"], string> = {
@@ -1660,6 +1662,40 @@ export const SettingsPage: FunctionComponent = () => {
     );
   };
 
+  const renderAgentsSection = (): ComponentChildren => {
+    if (!editableSettings) {
+      return null;
+    }
+
+    return (
+      <div className="flex flex-col gap-5">
+        <SectionCard title="Project Markdown Mirror" watermark="AGT" badge={getBadge("agents")}>
+          <Row label="Save agent markdown to project directory" description="When enabled, dashboard edits write a companion markdown file under `.sprint-os/agents` for the selected project. Default and home agent files are never modified.">
+            <Toggle
+              value={editableSettings.agents.saveToProjectDirectory}
+              onChange={() => updateEditableSettings((current) => ({
+                ...current,
+                agents: {
+                  ...current.agents,
+                  saveToProjectDirectory: !current.agents.saveToProjectDirectory,
+                },
+              }))}
+            />
+          </Row>
+          <Row label="Mirror directory" description="Dashboard-authored markdown companions live alongside other project-local Sprint OS files." last>
+            <div className="rounded-xl bg-black/[0.04] px-3 py-2 font-mono text-sm text-slate-600 dark:bg-white/[0.04] dark:text-slate-300">
+              .sprint-os/agents
+            </div>
+          </Row>
+        </SectionCard>
+
+        <NoticePanel title="Agent sync behavior" tone="success">
+          The database stays authoritative for agent records, labels, and routing metadata. When the mirror is enabled, dashboard edits also refresh a project-local markdown file, and local markdown drift can be imported back into the dashboard from the Agents page.
+        </NoticePanel>
+      </div>
+    );
+  };
+
   const renderDangerSection = (): ComponentChildren => (
     <div className="flex flex-col gap-5">
       {activeScope === "project" ? (
@@ -1720,6 +1756,8 @@ export const SettingsPage: FunctionComponent = () => {
         return renderModelsSection();
       case "sprint":
         return renderSprintSection();
+      case "agents":
+        return renderAgentsSection();
       case "integrations":
         return renderIntegrationsSection();
       case "danger":

@@ -29,6 +29,7 @@ describe("SettingsRepository", () => {
     expect(system.defaults.aiProvider.provider).toBe("jules");
     expect(system.defaults.aiProvider.providers.codex.model).toBe("gpt-5.3-codex");
     expect(system.defaults.git.defaultBranch).toBe("main");
+    expect(system.defaults.agents.saveToProjectDirectory).toBe(true);
     expect(system.mcpTools.length).toBeGreaterThan(0);
 
     const projectOverride = repo.getProjectSettings("project-1");
@@ -124,6 +125,9 @@ describe("SettingsRepository", () => {
           containerGeminiAuthPath: "~/.gemini",
           containerCodexAuthPath: "~/.codex",
           containerClaudeCodeAuthPath: "~/.claude",
+        },
+        agents: {
+          saveToProjectDirectory: true,
         },
         skills: [
           { name: "worker", enabled: true, isInternal: true },

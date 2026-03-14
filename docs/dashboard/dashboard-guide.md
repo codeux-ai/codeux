@@ -57,13 +57,15 @@ Project management:
 - `GET /api/projects/:projectId/agent-presets`
   - Lists DB-backed project agents and auto-imports unseen markdown agents from `.sprint-os/agents`
 - `POST /api/projects/:projectId/agent-presets`
-  - Creates a manual DB-backed agent
+  - Creates a DB-backed agent and, when project markdown mirroring is enabled, also writes `.sprint-os/agents/<name>.md`
 - `PATCH /api/agent-presets/:agentPresetId`
-  - Updates agent metadata and instruction markdown
+  - Updates agent metadata and instruction markdown, mirroring the markdown back into the project agent directory when enabled
 - `DELETE /api/agent-presets/:agentPresetId`
   - Deletes an agent record
 - `POST /api/agent-presets/:agentPresetId/import-markdown`
   - Re-imports a linked markdown agent into sqlite
+- `POST /api/projects/:projectId/agent-presets/sync-markdown`
+  - Re-imports every out-of-sync linked markdown agent for the selected project
 - `POST /api/projects/:projectId/planning/improve-sprint-prompt`
   - Sends a draft sprint prompt to the Planning agent through a connected worker and returns the improved prompt
 - `POST /api/projects/:projectId/sprints/:sprintId/plan`
@@ -166,7 +168,8 @@ Legacy runtime:
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface
 - Agents page is DB-backed and manages project-scoped agents (`name`, `labels`, `instruction markdown`)
 - Agents are auto-imported from project and home `.sprint-os/agents/*.md` when first discovered
-- Markdown-backed agents now show sync state and support manual re-import when the file is newer than the DB copy
+- Project-local markdown mirroring is enabled by default through project settings, so dashboard edits create/update `.sprint-os/agents/*.md` in the selected repo without touching shipped defaults
+- Markdown-backed agents now show sync state and support both manual single-agent re-import and bulk `Sync All`
 - The first built-in role is `Planning agent`, which is editable under Agents like any other DB-backed agent
 - Chat page is DB-backed and stores project conversation threads/messages in sqlite
 - Chat page now receives websocket updates for thread assignment changes and incoming thread messages in the active thread
@@ -216,6 +219,7 @@ Runtime scoping:
 - The active backend model is now scoped as `system -> project -> sprint`
 - System settings own runtime, integrations, default project behavior, and MCP tool exposure
 - Project settings own inheritable execution behavior such as provider routing, git defaults, CI intelligence, sprint loop steps, CLI workflow, and skills
+- Project settings also own agent authoring behavior, including whether dashboard edits mirror agent markdown into the project directory
 - The `/config` page keeps the existing v2 settings shell and categories, but now binds them to real scoped settings instead of draft-only values
 - System scope only edits system-owned controls, while project scope only edits project-owned overrides for the selected project
 - The integrations view now owns provider API keys plus GitHub token and GitHub workflow settings, rather than splitting those across separate categories

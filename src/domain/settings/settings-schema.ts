@@ -205,6 +205,20 @@ const validateCliWorkflow = (
   if (typeof value.containerClaudeCodeAuthPath !== "string") issues.push({ path: `${path}.containerClaudeCodeAuthPath`, message: "Expected a string" });
 };
 
+const validateAgents = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[]
+) => {
+  if (!isRecord(value)) {
+    issues.push({ path, message: "Expected an object" });
+    return;
+  }
+  if (typeof value.saveToProjectDirectory !== "boolean") {
+    issues.push({ path: `${path}.saveToProjectDirectory`, message: "Expected a boolean" });
+  }
+};
+
 const validateSkills = (
   value: unknown,
   path: string,
@@ -287,6 +301,7 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
   validateCiIntelligence(payload.ciIntelligence, "ciIntelligence", issues);
   validateSprintLoopSteps(payload.sprintLoopSteps, "sprintLoopSteps", issues);
   validateCliWorkflow(payload.cliWorkflow, "cliWorkflow", issues);
+  validateAgents(payload.agents, "agents", issues);
   validateSkills(payload.skills, "skills", issues);
   validateMcpTools(payload.mcpTools, "mcpTools", issues);
 

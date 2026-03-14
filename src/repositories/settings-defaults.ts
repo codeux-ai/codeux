@@ -146,6 +146,9 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     containerCodexAuthPath: "~/.codex",
     containerClaudeCodeAuthPath: "~/.claude",
   },
+  agents: {
+    saveToProjectDirectory: true,
+  },
   skills: DEFAULT_SKILLS,
   mcpTools: DEFAULT_MCP_TOOL_TOGGLES.map((tool) => ({ ...tool })),
 };

@@ -16,6 +16,7 @@ import { SettingsRepository } from "../../../src/repositories/settings-repositor
 import { WorkerEndpointRepository } from "../../../src/repositories/worker-endpoint-repository.js";
 import { ProjectWorkerAssignmentRepository } from "../../../src/repositories/project-worker-assignment-repository.js";
 import { SprintMarkdownService } from "../../../src/services/sprint-markdown-service.js";
+import { AgentPresetSyncService } from "../../../src/services/agent-preset-sync-service.js";
 import { ProjectAttentionService } from "../../../src/domain/workers/project-attention-service.js";
 import { ProjectWorkerAssignmentService } from "../../../src/domain/workers/project-worker-assignment-service.js";
 import type { McpConnectionRecord } from "../../../src/contracts/connection-chat-types.js";
@@ -119,6 +120,7 @@ afterEach(async () => {
 });
 
 async function createServerHandle(): Promise<{
+  dir: string;
   port: number;
   repository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;
@@ -158,6 +160,12 @@ async function createServerHandle(): Promise<{
   const agentPresetRepository = new AgentPresetRepository(storage);
   const executionRepository = new ExecutionRepository(storage);
   const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+  const agentPresetSyncService = new AgentPresetSyncService({
+    projectManagementRepository: repository,
+    agentPresetRepository,
+    settingsRepository,
+    projectRoot: dir,
+  });
   const markdownService = new SprintMarkdownService(repository);
   const controlCalls = {
     orchestrate: [] as Array<{ projectId: string; sprintId: string }>,
@@ -314,10 +322,12 @@ async function createServerHandle(): Promise<{
     deleteTask: (taskId) => repository.deleteTask(taskId),
     listConnections: (projectId) => connectionRepository.listConnections(projectId),
     updateConnection: (connectionId, input) => connectionRepository.updateConnection(connectionId, input),
-    listAgentPresets: (projectId) => agentPresetRepository.listAgentPresets(projectId),
-    createAgentPreset: (projectId, input) => agentPresetRepository.createAgentPreset(projectId, input),
-    updateAgentPreset: (agentPresetId, input) => agentPresetRepository.updateAgentPreset(agentPresetId, input),
-    deleteAgentPreset: (agentPresetId) => agentPresetRepository.deleteAgentPreset(agentPresetId),
+    listAgentPresets: async (projectId) => await agentPresetSyncService.listAgentPresets(projectId),
+    createAgentPreset: async (projectId, input) => await agentPresetSyncService.createAgentPreset(projectId, input),
+    updateAgentPreset: async (agentPresetId, input) => await agentPresetSyncService.updateAgentPreset(agentPresetId, input),
+    deleteAgentPreset: async (agentPresetId) => await agentPresetSyncService.deleteAgentPreset(agentPresetId),
+    importAgentPresetFromMarkdown: async (agentPresetId) => await agentPresetSyncService.importAgentPresetFromMarkdown(agentPresetId),
+    syncAllAgentPresetsFromMarkdown: async (projectId) => await agentPresetSyncService.syncAllAgentPresetsFromMarkdown(projectId),
     listConversationThreads: (projectId) => connectionRepository.listThreads(projectId),
     createConversationThread: (projectId, input) => connectionRepository.createThread(projectId, input),
     updateConversationThread: (threadId, input) => connectionRepository.updateThread(threadId, input),
@@ -349,6 +359,7 @@ async function createServerHandle(): Promise<{
   serversToClose.push(handle.server);
 
   return {
+    dir,
     port: handle.port,
     repository,
     executionRepository,
@@ -367,6 +378,7 @@ async function createServerHandle(): Promise<{
 describe("dashboard project management API", () => {
   it("creates and queries DB-backed projects, sprints, tasks, and markdown export", async () => {
     const {
+      dir,
       port,
       runtimeRepository,
       controlCalls,
@@ -378,6 +390,7 @@ describe("dashboard project management API", () => {
       repository,
     } = await createServerHandle();
     const baseUrl = `http://127.0.0.1:${port}`;
+    const projectSourceRef = path.join(dir, "workspace", "dashboard-api-project");
 
     const projectResponse = await fetch(`${baseUrl}/api/projects`, {
       method: "POST",
@@ -385,7 +398,7 @@ describe("dashboard project management API", () => {
       body: JSON.stringify({
         name: "Dashboard API Project",
         sourceType: "local",
-        sourceRef: "/workspace/dashboard-api-project",
+        sourceRef: projectSourceRef,
       }),
     });
     const project = await projectResponse.json() as { id: string };
@@ -569,22 +582,56 @@ describe("dashboard project management API", () => {
       }),
     });
     expect(agentPresetCreateResponse.status).toBe(201);
-    const agentPreset = await agentPresetCreateResponse.json() as { id: string; name: string };
+    const agentPreset = await agentPresetCreateResponse.json() as {
+      id: string;
+      name: string;
+      sourceScope: string | null;
+      sourcePath: string | null;
+    };
     expect(agentPreset.name).toBe("Project Manager");
+    expect(agentPreset.sourceScope).toBe("project");
+    expect(agentPreset.sourcePath).toBe(path.join(project.baseDir, ".sprint-os", "agents", "project_manager.md"));
+    expect(await fs.readFile(agentPreset.sourcePath!, "utf8")).toContain("Coordinate the sprint");
 
     const agentPresetUpdateResponse = await fetch(`${baseUrl}/api/agent-presets/${agentPreset.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: "Worker",
+        instructionMarkdown: "Updated worker markdown from the dashboard.",
         labels: ["execution"],
       }),
     });
     expect(agentPresetUpdateResponse.status).toBe(200);
-    const updatedAgentPreset = await agentPresetUpdateResponse.json() as { name: string; labels: string[] };
+    const updatedAgentPreset = await agentPresetUpdateResponse.json() as {
+      name: string;
+      labels: string[];
+      sourceScope: string | null;
+      sourcePath: string | null;
+    };
     expect(updatedAgentPreset).toMatchObject({
       name: "Worker",
       labels: ["execution"],
+      sourceScope: "project",
+    });
+    expect(updatedAgentPreset.sourcePath).toBe(path.join(project.baseDir, ".sprint-os", "agents", "worker.md"));
+    expect(await fs.readFile(updatedAgentPreset.sourcePath!, "utf8")).toContain("Updated worker markdown");
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await fs.writeFile(updatedAgentPreset.sourcePath!, "Locally edited worker markdown.\n", "utf8");
+
+    const syncAllAgentPresetsResponse = await fetch(`${baseUrl}/api/projects/${project.id}/agent-presets/sync-markdown`, {
+      method: "POST",
+    });
+    expect(syncAllAgentPresetsResponse.status).toBe(200);
+    const syncedAgentPresets = await syncAllAgentPresetsResponse.json() as Array<{
+      id: string;
+      instructionMarkdown: string;
+      syncStatus: string;
+    }>;
+    expect(syncedAgentPresets.find((entry) => entry.id === agentPreset.id)).toMatchObject({
+      instructionMarkdown: "Locally edited worker markdown.",
+      syncStatus: "synced",
     });
 
     const listedAgentPresets = await fetch(`${baseUrl}/api/projects/${project.id}/agent-presets`)

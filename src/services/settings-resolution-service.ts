@@ -207,6 +207,9 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     ciIntelligence: sanitizeCiIntelligence(DEFAULT_DASHBOARD_SETTINGS, git.githubMode),
     sprintLoopSteps: sanitizeSprintLoopSteps(DEFAULT_DASHBOARD_SETTINGS),
     cliWorkflow: sanitizeCliWorkflow(DEFAULT_DASHBOARD_SETTINGS),
+    agents: {
+      ...DEFAULT_DASHBOARD_SETTINGS.agents,
+    },
     skills: cloneSkills(DEFAULT_SKILLS),
   };
 }
@@ -299,6 +302,11 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       ...DEFAULT_DASHBOARD_SETTINGS,
       cliWorkflow: deepMerge(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow, input.cliWorkflow),
     }),
+    agents: {
+      saveToProjectDirectory: typeof toRecord(input.agents).saveToProjectDirectory === "boolean"
+        ? Boolean(toRecord(input.agents).saveToProjectDirectory)
+        : DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
+    },
     skills: sanitizeSkills(input.skills, git.githubMode),
   };
 }
@@ -400,6 +408,7 @@ export function resolveDashboardSettings(args: {
     ciIntelligence: { ...sprintSettings.ciIntelligence },
     sprintLoopSteps: { ...sprintSettings.sprintLoopSteps },
     cliWorkflow: { ...sprintSettings.cliWorkflow },
+    agents: { ...sprintSettings.agents },
     skills: cloneSkills(sprintSettings.skills),
     mcpTools: cloneMcpTools(args.systemSettings.mcpTools),
   };

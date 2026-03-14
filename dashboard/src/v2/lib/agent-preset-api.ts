@@ -51,3 +51,9 @@ export const importAgentPresetFromMarkdown = async (agentPresetId: string): Prom
     method: "POST",
   });
 };
+
+export const syncAllAgentPresetsFromMarkdown = async (projectId: string): Promise<AgentPreset[]> => {
+  return fetchJson<AgentPreset[]>(`/api/projects/${encodeURIComponent(projectId)}/agent-presets/sync-markdown`, {
+    method: "POST",
+  });
+};

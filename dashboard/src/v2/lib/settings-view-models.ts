@@ -62,6 +62,9 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
   cliWorkflow: {
     ...settings.cliWorkflow,
   },
+  agents: {
+    ...settings.agents,
+  },
   skills: cloneSkills(settings.skills),
 });
 
@@ -91,6 +94,9 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
   },
   cliWorkflow: {
     ...settings.cliWorkflow,
+  },
+  agents: {
+    ...settings.agents,
   },
   skills: cloneSkills(settings.skills),
 });
