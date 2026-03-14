@@ -190,13 +190,6 @@ export class WatchLoopRunner {
             fullReport += await this.deps.renderInstruction("watchNoMoreActions", {}, repoPath);
           }
 
-          try {
-            const watchGuide = await this.deps.getGuideContent("watch.md", repoPath);
-            fullReport += `\n---\n\n### Watch Loop Operating Standard\n\n${watchGuide}`;
-          } catch {
-            // Guide is optional.
-          }
-
           if (subtasks.length > 0 && subtasks.every((task) => task.status === "COMPLETED" && task.is_merged)) {
             try {
               this.deps.completedSprints.add(`${scopedExecutionContext.project.id}:${scopedExecutionContext.sprint.id}`);

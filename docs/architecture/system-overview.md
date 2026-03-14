@@ -1,15 +1,15 @@
 # System Overview
 
-This project is a Model Context Protocol (MCP) server for Jules APIs with an integrated dashboard and an atomic sprint orchestration engine.
+This project is a Model Context Protocol (MCP) server with an integrated dashboard and a DB-backed sprint orchestration engine.
 
 ## Core Responsibilities
 
-- Expose structured MCP tools for sources, sessions, activities, and orchestration.
+- Expose structured MCP tools for listener, dispatch, and worker control flows.
 - Orchestrate sprint subtasks with dependency-aware scheduling.
-- Inject engineering guides into Jules task prompts.
+- Inject editable database-backed agent prompts into planning and worker flows.
 - Provide an operational dashboard for status, activity, git, CI, and settings.
 - Emit structured logs with request correlation IDs across dashboard and MCP dispatch paths.
-- Support editable markdown instruction templates for sprint loop messaging.
+- Support editable database-backed instruction templates for sprint loop messaging.
 
 ## Runtime Components
 
@@ -29,9 +29,9 @@ This project is a Model Context Protocol (MCP) server for Jules APIs with an int
 
 ### 2. MCP tool handlers
 - `src/mcp/core-tool-handler.ts`
-  - Handles core Jules API tools and wait logic.
+  - Handles `get_session`, listen-mode, inbox, dispatch, and attention tool calls.
 - `src/mcp/agent-tool-handler.ts`
-  - Handles `task_agent` and worker-local execution/reply helpers.
+  - Handles worker-local execution and reply helpers.
 
 ### 3. Sprint orchestration engine
 - `src/sprint/sprint-orchestrator.ts`
@@ -41,16 +41,15 @@ This project is a Model Context Protocol (MCP) server for Jules APIs with an int
 
 ### 4. Instruction template system
 - `src/instructions/instruction-template-service.ts`
-- `src/instructions/instruction-template-repository.ts`
 - `src/instructions/instruction-template-renderer.ts`
 - Template catalog defaults in `src/instructions/instruction-template-catalog.ts`
+- Templates persisted in scoped settings under `agents.instructionTemplates`
 
 ### 5. Dashboard server and frontend
 - API host: `src/server/dashboard-server.ts`
 - Frontend app: `dashboard/src/*`
 
 ### 6. Data and settings repositories
-- Guides: `src/repositories/guide-repository.ts`
 - Subtasks: `src/repositories/subtask-repository.ts`
 - Settings DB: `src/repositories/settings-repository.ts`
 - Settings defaults/sanitization/storage: `src/repositories/settings-defaults.ts`, `src/repositories/settings-sanitizer.ts`, `src/repositories/settings-db-storage.ts`
@@ -77,38 +76,33 @@ flowchart TD
   D --> F[src/sprint/sprint-orchestrator.ts]
   F --> G[src/sprint/steps/*]
   F --> H[src/instructions/instruction-template-service.ts]
-  H --> I[.jules-subagents/instructions/*]
+  H --> I[(settings.db)]
   D --> J[src/services/task-service.ts]
-  J --> K[src/repositories/guide-repository.ts]
   R --> L[src/server/dashboard-server.ts]
   L --> M[Dashboard UI dashboard/src/*]
   M -->|poll| N[/api/status + /api/live-activities + /api/git-status/]
   L --> O[src/repositories/settings-repository.ts]
-  O --> P[(~/.jules-subagents/settings.db)]
+  O --> P[(~/.sprint-os/settings.db)]
 ```
 
 ## High-Level Data Flow
 
 1. MCP client sends tool call over stdio.
 2. Server dispatches tool to core or agent handler.
-3. Handler invokes Jules API client and/or orchestrator.
+3. Handler invokes the DB-backed dispatch engine, inbox system, and provider execution layer.
 4. Orchestrator runs atomic steps and updates `lastStatus`.
 5. Dashboard polls `/api/status` and `/api/live-activities`.
 6. UI renders task pipeline, protocol instructions, and git/CI state.
 
 ## Configuration Priority Model
 
-For `.jules-subagents/settings.json` and guides, priority is resolved by search order in repositories and config loader.
+Settings live in sqlite and are resolved by scope rather than file search.
 
-Typical priority order (highest first):
-1. Repo-scoped path (when `repo_path` provided)
-2. Current working directory
-3. Project root
-4. Home directory (`~/.jules-subagents`)
-
-Instruction templates use the same pattern, with support for both:
-- `.jules-subagents/instructions`
-- `.jules-subagents/intructions` (compatibility fallback)
+Priority order:
+1. sprint override
+2. project override
+3. system defaults
+4. built-in code defaults
 
 ## Safety and Guardrails
 
@@ -123,5 +117,5 @@ The system is designed for independent edits in these layers:
 - Tool interface layer (`src/mcp/*`)
 - Orchestration control layer (`src/sprint/sprint-orchestrator.ts`)
 - Step behavior layer (`src/sprint/steps/*`)
-- Human-facing protocol text layer (`.jules-subagents/instructions/*`)
+- Human-facing protocol text layer (`agents.instructionTemplates` in settings)
 - Dashboard settings/presentation layer (`dashboard/src/*`)

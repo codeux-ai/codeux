@@ -18,7 +18,7 @@ const buildService = (): any => {
     sessionTracking: {} as any,
     executionRepository: undefined,
     getDashboardSettings: () => { throw new Error("not used"); },
-    getGuideContent: async () => "",
+    agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: async () => null } as any,
     getGithubToken: () => undefined,
   }) as any;
 };
@@ -48,7 +48,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
         updateSession: vi.fn(),
       },
       getDashboardSettings: vi.fn().mockReturnValue({ cliWorkflow: { containerImage: "  " } }),
-      getGuideContent: vi.fn().mockResolvedValue("guide"),
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
       getGithubToken: vi.fn().mockReturnValue("token"),
       executionRepository,
       logger: { error: vi.fn() },
@@ -120,7 +120,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
         updateSession: vi.fn(),
       },
       getDashboardSettings: vi.fn().mockReturnValue({ cliWorkflow: { containerImage: "  " } }),
-      getGuideContent: vi.fn().mockResolvedValue("guide"),
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
       getGithubToken: vi.fn().mockReturnValue("token"),
       executionRepository,
       logger: { error: vi.fn() },
@@ -190,7 +190,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
         updateSession: vi.fn(),
       },
       getDashboardSettings: vi.fn().mockReturnValue({ cliWorkflow: { containerImage: "  " } }),
-      getGuideContent: vi.fn().mockResolvedValue("guide"),
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
       getGithubToken: vi.fn().mockReturnValue("token"),
       logger: { error: vi.fn() },
     };
@@ -230,7 +230,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
         updateSession: vi.fn(),
       },
       getDashboardSettings: vi.fn().mockReturnValue({ cliWorkflow: { resumeFailedTaskInSameWorkspace: true, executionMode: "docker" } }),
-      getGuideContent: vi.fn().mockResolvedValue("guide"),
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
       getGithubToken: vi.fn().mockReturnValue("token"),
       logger: { error: vi.fn() },
     };
@@ -262,7 +262,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
         updateSession: vi.fn(),
       },
       getDashboardSettings: vi.fn().mockReturnValue({ cliWorkflow: {} }),
-      getGuideContent: vi.fn().mockResolvedValue("guide"),
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
       getGithubToken: vi.fn().mockReturnValue("token"),
       logger: { error: vi.fn() },
     };

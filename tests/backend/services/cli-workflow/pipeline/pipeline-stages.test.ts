@@ -55,7 +55,7 @@ const createMockContext = (): PipelineContext => {
     deps: {
       sessionTracking: { appendActivity: vi.fn(), updateSession: vi.fn() } as any,
       getDashboardSettings: vi.fn(),
-      getGuideContent: vi.fn(),
+      getWorkerInstruction: vi.fn(),
       getGithubToken: vi.fn(),
       logger: { error: vi.fn() } as any,
     },
@@ -69,7 +69,7 @@ describe("executePrepareStage", () => {
     vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
     vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
     vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
-    vi.mocked(ctx.deps.getGuideContent).mockResolvedValue("worker guide content");
+    vi.mocked(ctx.deps.getWorkerInstruction).mockResolvedValue("worker guide content");
 
     const result = await executePrepareStage(ctx);
 
@@ -223,4 +223,3 @@ describe("executeCleanupStage", () => {
     }));
   });
 });
-

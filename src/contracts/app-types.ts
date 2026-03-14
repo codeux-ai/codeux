@@ -1,3 +1,5 @@
+import type { InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
+
 export interface JulesSource {
   name: string;
   id: string;
@@ -438,6 +440,7 @@ export interface CliWorkflowSettings {
 
 export interface AgentSettings {
   saveToProjectDirectory: boolean;
+  instructionTemplates: Record<InstructionTemplateId, string>;
 }
 
 export interface SkillToggle {

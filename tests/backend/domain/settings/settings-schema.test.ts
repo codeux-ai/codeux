@@ -190,6 +190,7 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("cliWorkflow.executionMode");
     expect(paths).toContain("cliWorkflow.containerClaudeCodeAuthPath");
     expect(paths).toContain("agents.saveToProjectDirectory");
+    expect(paths).toContain("agents.instructionTemplates");
     expect(paths).toContain("skills[0]");
     expect(paths).toContain("skills[1].isInternal");
     expect(paths).toContain("mcpTools[0]");

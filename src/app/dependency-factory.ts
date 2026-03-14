@@ -28,7 +28,6 @@ export interface ServerContext {
   getDashboardPort: () => number;
   isJulesApiConfigured: () => boolean;
   getMissingJulesApiKeyInstruction: () => string;
-  getGuideContentIfEnabled: (guideName: string, repoPath?: string) => Promise<string>;
   isActionRequiredState: (state?: string) => boolean;
   resolveSessionName: (session: Partial<JulesSession>) => string | undefined;
   extractSessionId: (session: Partial<JulesSession>) => string | undefined;

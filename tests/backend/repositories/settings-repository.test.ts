@@ -30,6 +30,7 @@ describe("SettingsRepository", () => {
     expect(system.defaults.aiProvider.providers.codex.model).toBe("gpt-5.3-codex");
     expect(system.defaults.git.defaultBranch).toBe("main");
     expect(system.defaults.agents.saveToProjectDirectory).toBe(true);
+    expect(system.defaults.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
     expect(system.mcpTools.length).toBeGreaterThan(0);
 
     const projectOverride = repo.getProjectSettings("project-1");
@@ -128,6 +129,9 @@ describe("SettingsRepository", () => {
         },
         agents: {
           saveToProjectDirectory: true,
+          instructionTemplates: {
+            ...repo.getSystemSettings().defaults.agents.instructionTemplates,
+          },
         },
         skills: [
           { name: "worker", enabled: true, isInternal: true },

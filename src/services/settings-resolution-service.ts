@@ -19,6 +19,7 @@ import { sanitizeCliWorkflow } from "../domain/settings/settings-sanitizers/cli-
 import { sanitizeGit } from "../domain/settings/settings-sanitizers/git-sanitizer.js";
 import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/sprint-loop-sanitizer.js";
 import { sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
+import { DEFAULT_INSTRUCTION_TEMPLATES, INSTRUCTION_TEMPLATE_IDS, type InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
 import { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SKILLS, INTERNAL_SKILL_NAMES, INTERNAL_SKILL_SET } from "../repositories/settings-defaults.js";
 
 function cloneSkills(skills: SkillToggle[]): SkillToggle[] {
@@ -27,6 +28,12 @@ function cloneSkills(skills: SkillToggle[]): SkillToggle[] {
 
 function cloneMcpTools(tools: McpToolToggle[]): McpToolToggle[] {
   return tools.map((tool) => ({ ...tool }));
+}
+
+function cloneInstructionTemplates(
+  templates: Record<InstructionTemplateId, string>,
+): Record<InstructionTemplateId, string> {
+  return { ...templates };
 }
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -158,6 +165,20 @@ function sanitizeSkills(value: unknown, githubMode: DashboardSettings["git"]["gi
   return [...internalSkills, ...customSkills];
 }
 
+function sanitizeInstructionTemplates(value: unknown): Record<InstructionTemplateId, string> {
+  const input = toRecord(value);
+  const nextTemplates = { ...DEFAULT_INSTRUCTION_TEMPLATES };
+
+  for (const templateId of INSTRUCTION_TEMPLATE_IDS) {
+    const candidate = input[templateId];
+    if (typeof candidate === "string") {
+      nextTemplates[templateId] = candidate;
+    }
+  }
+
+  return nextTemplates;
+}
+
 export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHints): ProjectSettings {
   const aiProvider = sanitizeAiProvider(DEFAULT_DASHBOARD_SETTINGS, externalHints);
   const git = sanitizeGit(DEFAULT_DASHBOARD_SETTINGS, externalHints);
@@ -208,7 +229,8 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     sprintLoopSteps: sanitizeSprintLoopSteps(DEFAULT_DASHBOARD_SETTINGS),
     cliWorkflow: sanitizeCliWorkflow(DEFAULT_DASHBOARD_SETTINGS),
     agents: {
-      ...DEFAULT_DASHBOARD_SETTINGS.agents,
+      saveToProjectDirectory: DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
+      instructionTemplates: cloneInstructionTemplates(DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates),
     },
     skills: cloneSkills(DEFAULT_SKILLS),
   };
@@ -306,6 +328,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       saveToProjectDirectory: typeof toRecord(input.agents).saveToProjectDirectory === "boolean"
         ? Boolean(toRecord(input.agents).saveToProjectDirectory)
         : DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
+      instructionTemplates: sanitizeInstructionTemplates(toRecord(input.agents).instructionTemplates),
     },
     skills: sanitizeSkills(input.skills, git.githubMode),
   };

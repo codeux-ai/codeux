@@ -17,6 +17,7 @@ import {
   CLI_EXECUTION_MODES,
   FEATURE_PR_AUTOMERGE_MODES,
 } from "../../repositories/settings-defaults.js";
+import { INSTRUCTION_TEMPLATE_IDS } from "../../instructions/instruction-template-catalog.js";
 
 export interface ValidationIssue {
   path: string;
@@ -216,6 +217,15 @@ const validateAgents = (
   }
   if (typeof value.saveToProjectDirectory !== "boolean") {
     issues.push({ path: `${path}.saveToProjectDirectory`, message: "Expected a boolean" });
+  }
+  if (!isRecord(value.instructionTemplates)) {
+    issues.push({ path: `${path}.instructionTemplates`, message: "Expected an object" });
+    return;
+  }
+  for (const templateId of INSTRUCTION_TEMPLATE_IDS) {
+    if (typeof value.instructionTemplates[templateId] !== "string") {
+      issues.push({ path: `${path}.instructionTemplates.${templateId}`, message: "Expected a string" });
+    }
   }
 };
 

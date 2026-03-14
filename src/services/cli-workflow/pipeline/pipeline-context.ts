@@ -11,7 +11,7 @@ export interface PipelineContextDeps {
   sessionTracking: SessionTrackingRepository;
   executionRepository?: ExecutionRepository;
   getDashboardSettings: () => DashboardSettings;
-  getGuideContent: (guideName: string, repoPath?: string) => Promise<string>;
+  getWorkerInstruction: (repoPath: string) => Promise<string>;
   getGithubToken: () => string | undefined;
   logger?: Logger;
 }

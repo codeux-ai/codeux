@@ -24,18 +24,7 @@ export interface McpRequestRouterArgs {
 export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => {
   const logger = args.logger;
   const toolRegistry = new ToolRegistry<McpToolArgsByName, McpToolResponse>()
-    .register("get_source", (input) => args.coreToolHandler.handleGetSource(input))
-    .register("list_sources", (input) => args.coreToolHandler.handleListSources(input))
-    .register("list_all_sources", (input) => args.coreToolHandler.handleListAllSources(input))
-    .register("create_session", (input) => args.coreToolHandler.handleCreateSession(input))
     .register("get_session", (input) => args.coreToolHandler.handleGetSession(input))
-    .register("list_sessions", (input) => args.coreToolHandler.handleListSessions(input))
-    .register("approve_session_plan", (input) => args.coreToolHandler.handleApproveSessionPlan(input))
-    .register("send_session_message", (input) => args.coreToolHandler.handleSendSessionMessage(input))
-    .register("wait_for_session_completion", async (input) => (await args.coreToolHandler.handleWaitForSessionCompletion(input)) as McpToolResponse)
-    .register("get_activity", (input) => args.coreToolHandler.handleGetActivity(input))
-    .register("list_activities", (input) => args.coreToolHandler.handleListActivities(input))
-    .register("list_all_activities", (input) => args.coreToolHandler.handleListAllActivities(input))
     .register("listen", (input) => args.coreToolHandler.handleListenForRuntime(input, args.getRuntimeRole()))
     .register("start_listen", (input) => args.coreToolHandler.handleStartListen(input))
     .register("pull_inbox", (input) => args.coreToolHandler.handlePullInbox(input))
@@ -45,7 +34,6 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
     .register("claim_attention_item", (input) => args.coreToolHandler.handleClaimAttentionItem(input))
     .register("resolve_attention_item", (input) => args.coreToolHandler.handleResolveAttentionItem(input))
     .register("report_attention_outcome", (input) => args.coreToolHandler.handleReportAttentionOutcome(input))
-    .register("task_agent", async (input) => (await args.agentToolHandler.handleTaskAgent(input)) as McpToolResponse)
     .register("execute_worker_dispatch", async (input) => (await args.agentToolHandler.handleExecuteWorkerDispatch(input)) as McpToolResponse)
     .register("cancel_local_dispatch", async (input) => (await args.agentToolHandler.handleCancelLocalDispatch(input)) as McpToolResponse)
     .register("generate_dashboard_reply", async (input) => (await args.agentToolHandler.handleGenerateDashboardReply(input)) as McpToolResponse);

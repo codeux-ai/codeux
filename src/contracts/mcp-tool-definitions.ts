@@ -2,175 +2,15 @@ export type McpRuntimeRole = "project_manager" | "worker_host" | "worker_gateway
 
 export const TOOL_DEFINITIONS = [
   {
-    name: "get_source",
-    runtimeRoles: ["project_manager"],
-    description: "Retrieve comprehensive details for a specific code source (e.g., a GitHub repository).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        source_id: { type: "string", description: "The unique identifier for the source." },
-      },
-      required: ["source_id"],
-    },
-  },
-  {
-    name: "list_sources",
-    runtimeRoles: ["project_manager"],
-    description: "Enumerate available code sources with filtering and pagination capabilities.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        filter: { type: "string" },
-        page_size: { type: "number" },
-        page_token: { type: "string" },
-      },
-    },
-  },
-  {
-    name: "list_all_sources",
-    runtimeRoles: ["project_manager"],
-    description: "Retrieve the complete list of available sources by automatically handling multi-page results.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        filter: { type: "string" },
-      },
-    },
-  },
-  {
-    name: "create_session",
-    runtimeRoles: ["project_manager"],
-    description: "Initiate a new agent session to perform tasks on a specific codebase.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        prompt: { type: "string" },
-        source: { type: "string" },
-        starting_branch: { type: "string" },
-        title: { type: "string" },
-        require_plan_approval: { type: "boolean" },
-        automation_mode: { type: "string", enum: ["AUTO_CREATE_PR"] },
-      },
-      required: ["prompt", "source"],
-    },
-  },
-  {
     name: "get_session",
-    runtimeRoles: ["project_manager", "worker_host"],
-    description: "Get the current status, state, and outputs of an active or historical session.",
+    runtimeRoles: ["project_manager", "worker_host", "worker_gateway"],
+    description: "Get the current status, state, and outputs of a tracked or active execution session.",
     inputSchema: {
       type: "object",
       properties: {
         session_id: { type: "string" },
       },
       required: ["session_id"],
-    },
-  },
-  {
-    name: "list_sessions",
-    runtimeRoles: ["project_manager"],
-    description: "List recent agent sessions with pagination.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        page_size: { type: "number" },
-        page_token: { type: "string" },
-      },
-    },
-  },
-  {
-    name: "approve_session_plan",
-    runtimeRoles: ["project_manager"],
-    description: "Authorize the agent to proceed with the proposed plan.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        session_id: { type: "string" },
-      },
-      required: ["session_id"],
-    },
-  },
-  {
-    name: "send_session_message",
-    runtimeRoles: ["project_manager"],
-    description: "Provide additional feedback, instructions, or corrections to the agent.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        session_id: { type: "string" },
-        prompt: { type: "string" },
-      },
-      required: ["session_id", "prompt"],
-    },
-  },
-  {
-    name: "wait_for_session_completion",
-    runtimeRoles: ["project_manager"],
-    description: "Monitor a session until it reaches a terminal state or a PR is generated.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        session_id: { type: "string" },
-        poll_interval: { type: "number", default: 10 },
-        timeout: { type: "number", default: 900 },
-      },
-      required: ["session_id"],
-    },
-  },
-  {
-    name: "get_activity",
-    runtimeRoles: ["project_manager"],
-    description: "Retrieve detailed information about a specific interaction step.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        session_id: { type: "string" },
-        activity_id: { type: "string" },
-      },
-      required: ["session_id", "activity_id"],
-    },
-  },
-  {
-    name: "list_activities",
-    runtimeRoles: ["project_manager"],
-    description: "Fetch a chronologically ordered list of activities for a session.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        session_id: { type: "string" },
-        page_size: { type: "number" },
-        page_token: { type: "string" },
-      },
-      required: ["session_id"],
-    },
-  },
-  {
-    name: "list_all_activities",
-    runtimeRoles: ["project_manager"],
-    description: "Retrieve all activities for a session automatically.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        session_id: { type: "string" },
-      },
-      required: ["session_id"],
-    },
-  },
-  {
-    name: "task_agent",
-    runtimeRoles: ["project_manager"],
-    description: "Executes a single specific task on a codebase via the configured provider workflow with injected engineering standards.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        prompt: { type: "string", description: "The specific task to perform." },
-        source_id: { type: "string", description: "Optional Jules source ID override (e.g., 'sources/123'). Auto-resolved from repo path when omitted." },
-        repo_path: { type: "string", description: "Optional explicit repo path. When omitted, the current working directory is used." },
-        title: { type: "string", description: "Optional title for the session." },
-        branch: { type: "string", description: "Optional starting branch." },
-        wait: { type: "boolean", description: "Whether to wait for the task to reach a terminal state (COMPLETED/FAILED).", default: false }
-      },
-      required: ["prompt"],
     },
   },
   {
@@ -200,7 +40,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "generate_dashboard_reply",
-    runtimeRoles: ["worker_host"],
+    runtimeRoles: ["project_manager", "worker_host", "worker_gateway"],
     description: "Generate a non-coding dashboard reply for a worker/listener connection using the local provider stack.",
     inputSchema: {
       type: "object",
@@ -238,7 +78,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "start_listen",
-    runtimeRoles: ["worker_host"],
+    runtimeRoles: ["project_manager", "worker_host", "worker_gateway"],
     description: "Low-level compatibility tool that registers an MCP listener connection and returns pending dashboard messages immediately.",
     inputSchema: {
       type: "object",
@@ -258,7 +98,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "pull_inbox",
-    runtimeRoles: ["worker_host"],
+    runtimeRoles: ["project_manager", "worker_host", "worker_gateway"],
     description: "Low-level compatibility tool that polls the dashboard inbox for pending messages for a registered MCP connection.",
     inputSchema: {
       type: "object",
@@ -287,7 +127,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "pull_task_dispatch",
-    runtimeRoles: ["worker_host"],
+    runtimeRoles: ["project_manager", "worker_host", "worker_gateway"],
     description: "Claim the next queued worker task dispatch for a registered MCP worker connection.",
     inputSchema: {
       type: "object",
@@ -301,7 +141,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "update_task_dispatch",
-    runtimeRoles: ["worker_host", "worker_gateway"],
+    runtimeRoles: ["project_manager", "worker_host", "worker_gateway"],
     description: "Heartbeat, complete, fail, or block a claimed worker task dispatch and persist the result back into Sprint OS.",
     inputSchema: {
       type: "object",
@@ -323,7 +163,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "claim_attention_item",
-    runtimeRoles: ["worker_host", "worker_gateway"],
+    runtimeRoles: ["project_manager", "worker_host", "worker_gateway"],
     description: "Claim an open worker attention item so Sprint OS knows which worker is actively handling it.",
     inputSchema: {
       type: "object",
@@ -353,7 +193,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "report_attention_outcome",
-    runtimeRoles: ["worker_host", "worker_gateway"],
+    runtimeRoles: ["project_manager", "worker_host", "worker_gateway"],
     description: "Report the worker's supervision outcome for a claimed attention item and hand it off cleanly when operator follow-up is required.",
     inputSchema: {
       type: "object",

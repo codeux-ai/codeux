@@ -1,49 +1,36 @@
 # Markdown Template System
 
-The sprint loop uses editable markdown templates for all major operator-facing instructions.
+The sprint engine uses editable markdown templates for operator-facing status, merge, attention, and cleanup instructions.
 
 ## Why This Exists
 
 - Make orchestration messaging editable without TypeScript edits.
-- Keep operational language human-readable and policy-driven.
-- Allow project/team overrides while preserving safe defaults.
+- Keep protocol text in the database-backed settings model instead of loose markdown files.
+- Allow system defaults plus per-project overrides while preserving built-in fallbacks.
 
 ## Template Service Components
 
 - `src/instructions/instruction-template-renderer.ts`
   - Replaces placeholders like `{{key}}`.
   - Supports nested keys like `{{group.subkey}}`.
-- `src/instructions/instruction-template-repository.ts`
-  - Instruction-specific adapter for template file lookup.
-- `src/infrastructure/repositories/file-template-repository.ts`
-  - Shared file lookup logic backed by `buildSearchRoots`.
 - `src/instructions/instruction-template-catalog.ts`
-  - Maps template IDs to relative paths and fallback defaults.
+  - Defines template IDs and built-in default markdown.
 - `src/instructions/instruction-template-service.ts`
-  - Loads override template or fallback, then renders placeholders.
+  - Resolves the effective template from scoped settings, then renders placeholders.
+- `src/repositories/settings-repository.ts`
+  - Stores the system and project copies of `agents.instructionTemplates`.
+- `dashboard/src/v2/SettingsPage.tsx`
+  - Provides the editor under `Settings -> Agents`.
 
-## Search Paths
+## Storage Model
 
-Template lookup order is built from available context and deduplicated:
+Templates are stored in the `agents.instructionTemplates` settings section:
 
-1. `repo_path/.jules-subagents/instructions/...` (if repo path is provided)
-2. `cwd/.jules-subagents/instructions/...`
-3. `projectRoot/.jules-subagents/instructions/...`
-4. `home/.jules-subagents/instructions/...`
-
-Compatibility fallback is also checked for each root:
-- `.jules-subagents/intructions/...`
-
-## Current Template Structure
-
-```text
-.jules-subagents/instructions/sprint-main-loop/
-├─ guards/
-├─ planning/
-├─ protocol/
-├─ watch/
-└─ cleanup/
-```
+1. built-in defaults come from `src/instructions/instruction-template-catalog.ts`
+2. system scope can override any template in sqlite
+3. project scope can override any template for a selected project
+4. runtime resolution uses the project override when `repoPath` maps to a known project
+5. no file lookup under `.sprint-os/instructions` or `.jules-subagents/instructions` remains
 
 ## Template IDs in Catalog
 
@@ -84,6 +71,7 @@ Examples:
 2. Do not remove placeholders expected by the code path unless you also adjust orchestration logic.
 3. Keep instruction text imperative and explicit.
 4. Include command examples in fenced code blocks where action is required.
+5. Use system scope for shared defaults and project scope only when a repository truly needs custom operator guidance.
 
 ## Example
 

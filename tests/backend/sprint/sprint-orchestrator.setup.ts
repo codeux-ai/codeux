@@ -6,7 +6,6 @@ import type { Subtask } from "../../../src/contracts/app-types.js";
 
 export const buildDeps = () => {
   const listSessions = vi.fn().mockResolvedValue({ sessions: [] });
-  const getGuideContent = vi.fn().mockResolvedValue("guide");
   const subtaskRepository = {
     loadSubtasks: vi.fn<() => Promise<Subtask[]>>().mockResolvedValue([]),
     setMerged: vi.fn(async (dir: string, taskId: string, merged: boolean) => {
@@ -101,7 +100,6 @@ export const buildDeps = () => {
       loadSubtasks: vi.fn(() => subtaskRepository.loadSubtasks()),
     },
     startTask: vi.fn(),
-    getGuideContent,
     approveSessionPlan: vi.fn().mockResolvedValue({}),
     sendSessionMessage: vi.fn().mockResolvedValue({}),
     autoMergeFeaturePr: vi.fn().mockResolvedValue({ ok: true }),
@@ -114,5 +112,5 @@ export const buildDeps = () => {
     },
   };
 
-  return { deps, listSessions, subtaskRepository, getGuideContent };
+  return { deps, listSessions, subtaskRepository };
 };

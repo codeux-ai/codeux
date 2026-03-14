@@ -7,7 +7,6 @@ const buildDeps = () => ({
   renderInstruction: vi.fn().mockResolvedValue("instruction"),
   updateLastStatus: vi.fn(),
   getDashboardSettings: () => buildMockSettings(),
-  getGuideContent: vi.fn().mockResolvedValue("guide"),
   completedSprints: new Set<string>(),
   projectAttentionService: {
     openItem: vi.fn(),

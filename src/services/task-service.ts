@@ -2,14 +2,13 @@ import type { JulesApiClient, JulesCreateSessionRequest } from "../integrations/
 import { chooseProviderForTask } from "./provider-routing.js";
 import type { DashboardSettings, JulesSession, ProviderId, Subtask } from "../contracts/app-types.js";
 import type { CliWorkflowService } from "./cli-workflow-service.js";
+import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import { buildTaskRunTag } from "./task-run-key.js";
 import type { Logger } from "../shared/logging/logger.js";
 
 export interface TaskServiceDependencies {
   julesApi: JulesApiClient;
-  guideRepository: {
-    getGuideContent: (guideName: string, repoPath?: string) => Promise<string>;
-  };
+  agentPresetSyncService: AgentPresetSyncService;
   resolveJulesSourceId: (args: { repoPath: string; sourceId?: string }) => Promise<string>;
   getDashboardSettings: () => DashboardSettings;
   isJulesApiConfigured: () => boolean;
@@ -52,12 +51,9 @@ export class TaskService {
   }
 
   private async buildPrompt(repoPath: string, sectionTitle: string, taskPrompt: string): Promise<string> {
-    let workerGuide = "";
-    try {
-      workerGuide = await this.deps.guideRepository.getGuideContent("worker.md", repoPath);
-    } catch {
-      // optional
-    }
+    const workerGuide = (await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(repoPath))
+      ?.instructionMarkdown
+      ?.trim() || "";
 
     return workerGuide
       ? `## SYSTEM INSTRUCTIONS & ENGINEERING STANDARDS\n\n${workerGuide}\n\n---\n\n## ${sectionTitle}\n\n${taskPrompt}`

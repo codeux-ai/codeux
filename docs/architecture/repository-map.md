@@ -92,12 +92,10 @@ This map explains where major responsibilities live.
 - `types.ts`
   - Dashboard-side type contracts.
 
-## Local Configuration and Templates (`.jules-subagents/`)
+## Local Configuration and Templates (`.sprint-os/`)
 
 - `agents/`
-  - `worker.md`, `orchestrator.md`, `watch.md`, `git_manager*.md`, etc.
-- `instructions/`
-  - Organized sprint-loop templates (guards/planning/protocol/watch/cleanup).
+  - project/home/default agent markdown mirrors such as `planning_agent.md` and `worker.md`
 - `sprints/`
   - Runtime sprint plans and generated subtask markdown files.
 

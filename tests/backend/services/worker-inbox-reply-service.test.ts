@@ -23,7 +23,7 @@ describe("WorkerInboxReplyService", () => {
     vi.clearAllMocks();
   });
 
-  it("generates a markdown reply with listener guide context", async () => {
+  it("generates a markdown reply with worker agent context", async () => {
     vi.mocked(runCommandStrict).mockResolvedValue({
       ok: true,
       code: 0,
@@ -42,8 +42,12 @@ describe("WorkerInboxReplyService", () => {
       taskService: {
         selectCliProviderForTask: vi.fn().mockReturnValue("gemini"),
       } as any,
+      agentPresetSyncService: {
+        getWorkerAgent: vi.fn().mockResolvedValue({
+          instructionMarkdown: "Always answer with operational clarity.",
+        }),
+      } as any,
       getDashboardSettings: () => settings,
-      getGuideContent: vi.fn().mockResolvedValue("Always answer with operational clarity."),
       getGithubToken: () => "gh-token",
     });
 
@@ -68,17 +72,13 @@ describe("WorkerInboxReplyService", () => {
     );
   });
 
-  it("falls back from missing listener guide to worker guide", async () => {
+  it("includes the editable worker agent instructions in the reply prompt", async () => {
     vi.mocked(runCommandStrict).mockResolvedValue({
       ok: true,
       code: 0,
       stdout: "Use the worker queue view in Live.",
       stderr: "",
     });
-
-    const getGuideContent = vi.fn()
-      .mockRejectedValueOnce(new Error("Guide not found"))
-      .mockResolvedValueOnce("Worker guide fallback");
 
     const service = new WorkerInboxReplyService({
       projectManagementRepository: {
@@ -91,8 +91,12 @@ describe("WorkerInboxReplyService", () => {
       taskService: {
         selectCliProviderForTask: vi.fn().mockReturnValue("gemini"),
       } as any,
+      agentPresetSyncService: {
+        getWorkerAgent: vi.fn().mockResolvedValue({
+          instructionMarkdown: "Worker guide fallback",
+        }),
+      } as any,
       getDashboardSettings: () => settings,
-      getGuideContent,
       getGithubToken: () => undefined,
     });
 
@@ -103,7 +107,5 @@ describe("WorkerInboxReplyService", () => {
     });
 
     expect(result.bodyMarkdown).toContain("worker queue");
-    expect(getGuideContent).toHaveBeenNthCalledWith(1, "listener.md", "/repo");
-    expect(getGuideContent).toHaveBeenNthCalledWith(2, "worker.md", "/repo");
   });
 });

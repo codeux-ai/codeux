@@ -55,7 +55,6 @@ describe("Sprint Factory", () => {
         dashboardSettings: { setting1: true },
         consecutiveFailures: 1,
       },
-      getGuideContentIfEnabled: vi.fn(),
       getEffectiveGithubToken: vi.fn(),
       isJulesApiConfigured: vi.fn(),
       getDashboardPort: vi.fn().mockReturnValue(3001),
@@ -80,6 +79,7 @@ describe("Sprint Factory", () => {
       julesSourceResolver: {
         resolveSourceId: vi.fn(),
       },
+      agentPresetSyncService: {},
       instructionService: {
         render: vi.fn(),
       },
@@ -114,8 +114,7 @@ describe("Sprint Factory", () => {
 
     expect(cliArgs.getDashboardSettings()).toEqual({ setting1: true });
 
-    cliArgs.getGuideContent("guide1", "repo1");
-    expect(mockContext.getGuideContentIfEnabled).toHaveBeenCalledWith("guide1", "repo1");
+    expect(cliArgs.agentPresetSyncService).toBe(mockCoreDeps.agentPresetSyncService);
 
     cliArgs.getGithubToken();
     expect(mockContext.getEffectiveGithubToken).toHaveBeenCalled();
@@ -123,8 +122,7 @@ describe("Sprint Factory", () => {
     // Get the arguments passed to TaskService constructor
     const taskArgs = vi.mocked(TaskService).mock.calls[0][0];
 
-    taskArgs.guideRepository.getGuideContent("guide2", "repo2");
-    expect(mockContext.getGuideContentIfEnabled).toHaveBeenCalledWith("guide2", "repo2");
+    expect(taskArgs.agentPresetSyncService).toBe(mockCoreDeps.agentPresetSyncService);
 
     taskArgs.resolveJulesSourceId({ repoPath: "path1", sourceId: "id1" });
     expect(mockCoreDeps.julesSourceResolver.resolveSourceId).toHaveBeenCalledWith({
@@ -173,9 +171,6 @@ describe("Sprint Factory", () => {
       repoPath: "repo1",
       sprintNumber: 1,
     });
-
-    sprintArgs.getGuideContent("guide3", "repo3");
-    expect(mockContext.getGuideContentIfEnabled).toHaveBeenCalledWith("guide3", "repo3");
 
     sprintArgs.updateLastStatus({ test: 1 });
     expect(mockCoreDeps.projectRuntimeRepository.syncDashboardStatus).toHaveBeenCalledWith({ test: 1 });

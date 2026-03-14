@@ -31,7 +31,6 @@ function buildDeps(): SprintOrchestratorDependencies {
       loadSubtasks: vi.fn().mockResolvedValue([]),
     } as any,
     startTask: vi.fn(),
-    getGuideContent: vi.fn().mockResolvedValue(""),
     updateLastStatus: vi.fn(),
     getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
     isJulesApiConfigured: () => true,

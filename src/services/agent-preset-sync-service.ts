@@ -129,7 +129,7 @@ export class AgentPresetSyncService {
         || null;
 
       if (!existing) {
-        const labels = source.normalizedName === "planning agent" ? ["planning"] : [];
+        const labels = this.inferLabelsForSource(source.normalizedName);
         const created = this.deps.agentPresetRepository.importAgentPresetFromSource(projectId, {
           name: source.name,
           instructionMarkdown: source.instructionMarkdown,
@@ -193,12 +193,15 @@ export class AgentPresetSyncService {
   }
 
   async getPlanningAgent(projectId: string): Promise<AgentPresetRecord> {
-    await this.syncProjectAgents(projectId);
-    const planningAgent = this.deps.agentPresetRepository.findAgentPresetByName(projectId, "Planning agent");
-    if (!planningAgent) {
-      throw new Error("Planning agent not found. Add `planning_agent.md` under `.sprint-os/agents` or create it in Agents.");
-    }
-    return await this.decorateAgentPreset(planningAgent);
+    return await this.getRequiredAgent(projectId, "Planning agent", "planning_agent.md");
+  }
+
+  async getWorkerAgent(projectId: string): Promise<AgentPresetRecord> {
+    return await this.getRequiredAgent(projectId, "Worker", "worker.md");
+  }
+
+  async getOptionalWorkerAgentForRepoPath(repoPath: string): Promise<AgentPresetRecord | null> {
+    return await this.getOptionalAgentForRepoPath(repoPath, "Worker");
   }
 
   private async decorateProjectAgentPresets(projectId: string): Promise<AgentPresetRecord[]> {
@@ -298,6 +301,36 @@ export class AgentPresetSyncService {
 
   private normalizeName(value: string): string {
     return value.trim().replace(/[_-]+/g, " ").replace(/\s+/g, " ").toLowerCase();
+  }
+
+  private inferLabelsForSource(normalizedName: string): string[] {
+    if (normalizedName === "planning agent") {
+      return ["planning"];
+    }
+    if (normalizedName === "worker") {
+      return ["worker"];
+    }
+    return [];
+  }
+
+  private async getRequiredAgent(projectId: string, name: string, suggestedFileName: string): Promise<AgentPresetRecord> {
+    await this.syncProjectAgents(projectId);
+    const agent = this.deps.agentPresetRepository.findAgentPresetByName(projectId, name);
+    if (!agent) {
+      throw new Error(`${name} not found. Add \`${suggestedFileName}\` under \`.sprint-os/agents\` or create it in Agents.`);
+    }
+    return await this.decorateAgentPreset(agent);
+  }
+
+  private async getOptionalAgentForRepoPath(repoPath: string, name: string): Promise<AgentPresetRecord | null> {
+    const project = this.deps.projectManagementRepository.findProjectByBaseDir(repoPath);
+    if (!project) {
+      return null;
+    }
+
+    await this.syncProjectAgents(project.id);
+    const agent = this.deps.agentPresetRepository.findAgentPresetByName(project.id, name);
+    return agent ? await this.decorateAgentPreset(agent) : null;
   }
 
   private shouldSaveToProjectDirectory(projectId: string): boolean {

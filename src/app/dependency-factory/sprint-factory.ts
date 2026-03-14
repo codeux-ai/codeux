@@ -26,6 +26,7 @@ export function createSprintDependencies(
     julesApi,
     sessionTracking,
     julesSourceResolver,
+    agentPresetSyncService,
     instructionService,
     projectRuntimeRepository,
     projectManagementRepository,
@@ -40,16 +41,14 @@ export function createSprintDependencies(
     projectManagementRepository,
     activeDispatchRegistry,
     getDashboardSettings: () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
-    getGuideContent: (guideName: string, repoPath?: string) => context.getGuideContentIfEnabled(guideName, repoPath),
+    agentPresetSyncService,
     getGithubToken: () => context.getEffectiveGithubToken(),
     logger: logger.child({ component: "cli-workflow-service" }),
   });
 
   const taskService = new TaskService({
     julesApi,
-    guideRepository: {
-      getGuideContent: (guideName: string, repoPath?: string) => context.getGuideContentIfEnabled(guideName, repoPath),
-    },
+    agentPresetSyncService,
     resolveJulesSourceId: (args) =>
       julesSourceResolver.resolveSourceId({
         repoPath: args.repoPath,
@@ -94,7 +93,6 @@ export function createSprintDependencies(
         task,
         ...executionArgs,
       }),
-    getGuideContent: (guideName, repoPath) => context.getGuideContentIfEnabled(guideName, repoPath),
     updateLastStatus: (status) => {
       projectRuntimeRepository.syncDashboardStatus(status);
       context.runtimeContext.lastStatus = status;

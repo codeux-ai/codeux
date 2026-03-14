@@ -6,12 +6,24 @@ import { buildDeps } from "./core-tool-handler.setup.js";
 
 describe("CoreToolHandler validation", () => {
   it("rejects malformed payloads with ErrorCode.InvalidParams before handler dispatch", async () => {
-    const { deps, getSession } = buildDeps();
+    const { deps } = buildDeps();
     const handler = new CoreToolHandler(deps as any);
 
     // Track if handler is called
     let handlerCalled = false;
-    deps.julesApi.getSession = vi.fn().mockImplementation(async () => {
+    deps.connectionChatRepository = {
+      upsertConnection: vi.fn().mockImplementation(async () => {
+        handlerCalled = true;
+        return {};
+      }),
+    } as any;
+    deps.workerTaskDispatchService = {
+      maybeClaimNextDispatchForConnection: vi.fn().mockResolvedValue(null),
+    } as any;
+    deps.workerListenEventService = {
+      buildNextListenEvent: vi.fn().mockResolvedValue(null),
+    } as any;
+    deps.connectionChatRepository.upsertConnection = vi.fn().mockImplementation(async () => {
       handlerCalled = true;
       return {};
     });
@@ -24,7 +36,7 @@ describe("CoreToolHandler validation", () => {
       server: mockServer as any,
       coreToolHandler: handler,
       agentToolHandler: {} as any,
-      getDashboardSettings: () => ({ mcpTools: [{ name: "get_session", enabled: true }] }) as any,
+      getDashboardSettings: () => ({ mcpTools: [{ name: "listen", enabled: true }] }) as any,
       getRuntimeRole: () => "project_manager",
       formatError: (e) => {
         if (e instanceof McpError) throw e;
@@ -40,12 +52,12 @@ describe("CoreToolHandler validation", () => {
 
     const callHandler = callHandlerArgs![1];
 
-    // Missing required 'session_id'
+    // Missing required 'connection_key'
     try {
       await callHandler({
         method: "tools/call",
         params: {
-          name: "get_session",
+          name: "listen",
           arguments: { wrong_field: "123" }
         }
       }, {} as any);
@@ -56,7 +68,7 @@ describe("CoreToolHandler validation", () => {
       }
       expect(e).toBeInstanceOf(McpError);
       expect(e.code).toBe(ErrorCode.InvalidParams);
-      expect(e.message).toContain("must have required property 'session_id'");
+      expect(e.message).toContain("must have required property 'connection_key'");
     }
 
     // Assert that the underlying handler was never executed

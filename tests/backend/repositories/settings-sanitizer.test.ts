@@ -33,6 +33,7 @@ describe("settings-sanitizer", () => {
     expect(settings.aiProvider.providers["claude-code"].apiKey).toBe("resolved-claude");
     expect(settings.git.githubToken).toBe("resolved-github");
     expect(settings.agents.saveToProjectDirectory).toBe(true);
+    expect(settings.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
   });
 
   it("sanitizes malformed input back to safe defaults", () => {
@@ -97,6 +98,7 @@ describe("settings-sanitizer", () => {
     expect(settings.cliWorkflow.containerImage).toBe("node:24-bookworm");
     expect(settings.cliWorkflow.containerMountGeminiAuth).toBe(true);
     expect(settings.agents.saveToProjectDirectory).toBe(true);
+    expect(settings.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
     expect(settings.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(true);
     expect(settings.skills.find((skill) => skill.name === "git_manager_local")?.enabled).toBe(false);
     expect(settings.skills.find((skill) => skill.name === "custom-skill")?.isInternal).toBe(false);

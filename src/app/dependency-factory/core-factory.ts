@@ -1,7 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { AppConfig } from "../../config/app-config.js";
 import { JulesApiClient } from "../../integrations/jules-api-client.js";
-import { GuideRepository } from "../../repositories/guide-repository.js";
 import { SubtaskFileRepository } from "../../infrastructure/repositories/subtask-file-repository.js";
 import { SettingsRepository } from "../../repositories/settings-repository.js";
 import { InstructionService } from "../../instructions/instruction-template-service.js";
@@ -36,7 +35,6 @@ export interface CoreDependencies {
   logger: Logger;
   server: Server;
   julesApi: JulesApiClient;
-  guideRepository: GuideRepository;
   subtaskRepository: SubtaskFileRepository;
   instructionService: InstructionService;
   sessionTracking: SessionTrackingRepository;
@@ -102,9 +100,7 @@ export function createCoreDependencies(
     baseUrl: options.appConfig.baseUrl,
   });
 
-  const guideRepository = new GuideRepository(options.projectRoot);
   const subtaskRepository = new SubtaskFileRepository();
-  const instructionService = new InstructionService(options.projectRoot);
   const sessionTracking = new SessionTrackingRepository();
   const appDbStorage = new AppDbStorage();
   const dashboardRealtimeEventRepository = new DashboardRealtimeEventRepository(appDbStorage);
@@ -154,12 +150,15 @@ export function createCoreDependencies(
   );
   const julesSourceResolver = new JulesSourceResolver(julesApi);
   const activitySummary = new ActivitySummaryService();
+  const instructionService = new InstructionService({
+    settingsRepository,
+    projectManagementRepository,
+  });
 
   return {
     logger,
     server,
     julesApi,
-    guideRepository,
     subtaskRepository,
     instructionService,
     sessionTracking,

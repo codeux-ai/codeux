@@ -10,13 +10,20 @@ Sprint OS now treats dashboard agents as database-backed records that can be see
 - `<project>/.sprint-os/agents/*.md`
 - `~/.sprint-os/agents/*.md`
 
-The first concrete built-in role is the `Planning agent`.
+The built-in roles are now:
 
-This agent is used by the sprint creation flow to:
+- `Planning agent`
+- `Worker`
 
-- improve a sprint prompt before creation
-- plan sprint subtasks after creation
-- optionally start the sprint immediately after planning
+These agents are used as follows:
+
+- `Planning agent`
+  - improve a sprint prompt before creation
+  - plan sprint subtasks after creation
+  - optionally start the sprint immediately after planning
+- `Worker`
+  - provide the editable execution prompt for background CLI task runs
+  - provide the editable reply prompt for connected worker/listener inbox responses
 
 ## Source Of Truth
 
@@ -89,6 +96,33 @@ Sprint planning expects structured JSON from the worker reply and creates DB tas
 
 If `autoStart` is enabled, Sprint OS starts orchestration after the tasks are created.
 
+## Worker Agent Flow
+
+The Worker agent is resolved from sqlite in the same way as the Planning agent.
+
+Behavior:
+
+1. Sprint OS syncs/imports the `Worker` preset from markdown if a linked project/default/home file exists
+2. task execution prompt assembly loads the `Worker` instructions from sqlite
+3. dashboard inbox reply generation also loads the `Worker` instructions from sqlite
+4. when the dashboard edits `Worker`, the DB record is updated and optionally mirrored back into `<project>/.sprint-os/agents/worker.md`
+
+This replaces the old `worker.md` and `listener.md` guide-loading path.
+
+## Instruction Templates
+
+Sprint protocol text such as planning blockers, merge guidance, attention summaries, watch-loop headers, and cleanup output is no longer file-backed.
+
+Those templates now live in scoped settings:
+
+- `agents.instructionTemplates`
+
+They are edited from:
+
+- `Settings -> Agents`
+
+Built-in defaults remain in code, while system and project settings can override them in sqlite.
+
 ## Dashboard Surface
 
 ### Agents page
@@ -119,3 +153,7 @@ This repository now includes the default built-in agent file:
 - `.sprint-os/agents/planning_agent.md`
 
 That file is auto-imported when this repository is used as the selected project and no DB record exists yet.
+
+The repository also now includes:
+
+- `.sprint-os/agents/worker.md`

@@ -9,10 +9,7 @@ Implemented in:
 - `src/mcp/core-tool-handler.ts`
 
 These cover:
-- Source APIs
-- Session APIs
-- Activity APIs
-- Session wait/polling logic
+- `get_session`
 - listen-mode connection registration and inbox/reply flow
 - worker dispatch claim and completion flow
 
@@ -21,7 +18,6 @@ Implemented in:
 - `src/mcp/agent-tool-handler.ts`
 
 These cover:
-- `task_agent`
 - `execute_worker_dispatch`
 - `cancel_local_dispatch`
 - `generate_dashboard_reply`
@@ -32,24 +28,7 @@ Defined in `src/contracts/mcp-tool-definitions.ts`.
 
 Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/tool-registry.ts`.
 
-### Sources
-- `get_source`
-- `list_sources`
-- `list_all_sources`
-
-### Sessions
-- `create_session`
 - `get_session`
-- `list_sessions`
-- `approve_session_plan`
-- `send_session_message`
-- `wait_for_session_completion`
-
-### Activities
-- `get_activity`
-- `list_activities`
-- `list_all_activities`
-
 ### Listen mode
 - `listen`
 - `start_listen`
@@ -64,22 +43,7 @@ Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/
 - `generate_dashboard_reply`
 
 ### Output minimization
-- `get_source` returns a compact source summary (`id`, `name`).
-- `list_sources` returns compact source summaries (`id`, `name`) with page metadata.
-- `list_all_sources` returns compact source summaries (`id`, `name`) with result count.
-- `create_session` returns a compact session summary.
-- `approve_session_plan` returns a compact action summary.
-- `send_session_message` returns a compact action summary.
-- `task_agent` (non-`wait` mode) returns a compact session summary.
 - `get_session` returns a compact session summary (state, provider, PR links, last activity summary) instead of full raw payload.
-- `list_sessions` returns compact session summaries with pagination metadata instead of full raw session objects.
-- `wait_for_session_completion` returns the same compact session summary on terminal/action-required exit.
-- `get_activity` returns a compact activity summary.
-- `list_activities` returns compact activity summaries plus page metadata and kind counts.
-- `list_all_activities` returns aggregate metadata plus a small recent-activity preview list, not the full activity objects.
-
-### Agent workflows
-- `task_agent`
 
 ## Common Response Shape
 
@@ -108,26 +72,6 @@ Unknown tool names raise MCP `MethodNotFound`.
 
 ## Important Runtime Behaviors
 
-### Emergency stop for creation failures
-- Counter tracked in server state.
-- Threshold from `settings.maxFailures` (default 5).
-- Blocks new session/task creation when threshold reached.
-
-### Session waiting logic
-`wait_for_session_completion` returns when one of these is true:
-- `COMPLETED`
-- `FAILED`
-- Action-required states (`AWAITING_PLAN_APPROVAL`, `AWAITING_USER_FEEDBACK`, `PAUSED`)
-- PR output detected in session outputs
-
-### `task_agent` behavior
-- Injects `worker.md` into prompt when guide is found.
-- Creates session with `AUTO_CREATE_PR`.
-- `source_id` is optional; when provider is Jules and `source_id` is omitted, source is auto-resolved from the repo's `remote.origin.url`.
-- For Jules sessions, explicit `source_id` values are validated against the repo remote and rejected on mismatch.
-- `repo_path` is now optional and overrides `process.cwd()` when the task must run against an explicit project repository.
-- Optional `wait: true` delegates to session completion wait flow.
-
 ### Listen-mode behavior
 - `listen` is now the primary listening contract for both normal stdio MCP clients and workers.
 - `listen` registers or refreshes the connection, then blocks until one actionable event is available or timeout expires.
@@ -149,19 +93,38 @@ Unknown tool names raise MCP `MethodNotFound`.
 - New dashboard threads should remain unassigned by default until explicitly targeted or claimed by a real listener.
 
 ### Worker-dispatch behavior
-- Worker MCPs register through `start_listen` with `role = worker`.
+- Worker MCPs register through `listen` or `start_listen` with `role = worker`.
 - `pull_task_dispatch` claims the next queued `mcp_worker` dispatch for one of the worker's active projects.
 - Claiming a dispatch acquires a DB-backed lease on that dispatch and returns the full task payload plus project/sprint branch context.
 - `execute_worker_dispatch` starts the claimed dispatch on a headless worker-host Sprint OS server using the existing provider execution path.
-- `generate_dashboard_reply` generates a reply-only markdown response for a dashboard inbox message using a local CLI-capable provider and the project repo context.
+- `generate_dashboard_reply` generates a reply-only markdown response for a dashboard inbox message using the editable `Worker` agent plus the project repo context.
 - `update_task_dispatch` is used for heartbeats and terminal worker outcomes (`RUNNING`, `COMPLETED`, `FAILED`, `BLOCKED`).
 - `update_task_dispatch` now returns both the persisted dispatch state and an optional `controlAction`.
 - When the dashboard cancels a running worker dispatch, the next worker heartbeat receives `controlAction = "cancel"` while the dispatch remains `cancel_requested`.
-- `cancel_local_dispatch` is the worker-host side stop hook for active local execution and Jules soft-stop requests.
+- `cancel_local_dispatch` is the worker-host side stop hook for active local execution.
 - Workers are expected to stop promptly and send a terminal `update_task_dispatch` result to close the dispatch cleanly.
 - Worker execution writes back into the same `task_dispatches`, `task_runs`, and `task_run_events` records used by the rest of Sprint OS.
 - The external `sprint-os-worker` client now uses the same blocking `listen` contract for both inbox and dispatch work.
 - In remote mode, the worker uses Streamable HTTP for the control plane and a local stdio `worker_host` runtime for execution hooks.
+
+## Removed Legacy Surface
+
+These legacy MCP tools are no longer registered:
+
+- `get_source`
+- `list_sources`
+- `list_all_sources`
+- `create_session`
+- `list_sessions`
+- `approve_session_plan`
+- `send_session_message`
+- `wait_for_session_completion`
+- `get_activity`
+- `list_activities`
+- `list_all_activities`
+- `task_agent`
+
+Sprint OS now keeps orchestration inside its own DB-backed dispatch layer. External MCP clients interact through listener, inbox, dispatch, and control-plane tools instead of direct Jules session management.
 
 ## Stability Expectations
 

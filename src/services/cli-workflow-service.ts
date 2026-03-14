@@ -29,6 +29,7 @@ import { executeGitFinalizeStage } from "./cli-workflow/pipeline/git-finalize-st
 import { executePrFinalizeStage } from "./cli-workflow/pipeline/pr-finalize-stage.js";
 import { executeCleanupStage } from "./cli-workflow/pipeline/cleanup-stage.js";
 import type { ActiveDispatchRegistry } from "./active-dispatch-registry.js";
+import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 
 interface CliWorkflowServiceDependencies {
   sessionTracking: SessionTrackingRepository;
@@ -36,7 +37,7 @@ interface CliWorkflowServiceDependencies {
   projectManagementRepository?: ProjectManagementRepository;
   activeDispatchRegistry?: ActiveDispatchRegistry;
   getDashboardSettings: () => DashboardSettings;
-  getGuideContent: (guideName: string, repoPath?: string) => Promise<string>;
+  agentPresetSyncService: AgentPresetSyncService;
   getGithubToken: () => string | undefined;
   logger?: Logger;
 }
@@ -151,7 +152,14 @@ export class CliWorkflowService {
       workspaceManager: this.workspaceManager,
       prService: this.prService,
       providerRunner: this.providerRunner,
-      deps: this.deps,
+      deps: {
+        ...this.deps,
+        getWorkerInstruction: async (repoPath: string) => (
+          (await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(repoPath))
+            ?.instructionMarkdown
+            ?.trim() || ""
+        ),
+      },
       runCommand: (command, commandArgs, cwd, env = process.env) =>
         this.runCommand(command, commandArgs, cwd, env, abortController.signal),
     };

@@ -58,7 +58,6 @@ export interface SprintOrchestratorDependencies {
       sprintNumber: number;
     },
   ) => Promise<StartSprintDispatchResult>;
-  getGuideContent: (guideName: string, repoPath?: string) => Promise<string>;
   updateLastStatus: (status: any) => void;
   getDashboardSettings: () => DashboardSettings;
   isJulesApiConfigured: () => boolean;
@@ -166,20 +165,12 @@ export class SprintOrchestrator {
   }
 
   private async runPlanningAction(args: SprintAgentArgs, planningTarget: string, repoPath: string): Promise<any> {
-    let planningGuideBlock = "";
-    try {
-      const planningGuide = await this.deps.getGuideContent("sprint_agent_guide.md", repoPath);
-      planningGuideBlock = `\n\n### Technical Operating Standard\n\n${planningGuide}\n`;
-    } catch {
-      // Guide is optional.
-    }
-
     const text = await this.renderInstruction(
       "planningCreated",
       {
         sprint_number: args.sprint_number ?? "selected",
         planning_target: planningTarget,
-        planning_guide_block: planningGuideBlock,
+        planning_guide_block: "",
       },
       repoPath,
     );

@@ -8,7 +8,6 @@ import { AgentToolHandler } from "../../../../src/mcp/agent-tool-handler.js";
 
 vi.mock("../../../../src/mcp/core-tool-handler.js", () => {
   const CoreToolHandler = vi.fn();
-  CoreToolHandler.prototype.handleWaitForSessionCompletion = vi.fn();
   return { CoreToolHandler };
 });
 
@@ -72,6 +71,7 @@ describe("MCP Factory", () => {
       projectAttentionRepository: {},
       executionRepository: {},
       projectManagementRepository: {},
+      agentPresetSyncService: {},
       sessionTracking: {
         getSession: vi.fn(),
         listSessions: vi.fn(),
@@ -111,16 +111,6 @@ describe("MCP Factory", () => {
     coreArgs.fetchRecentActivities("session1", 10);
     expect(mockContext.fetchRecentActivities).toHaveBeenCalledWith("session1", 10);
 
-    coreArgs.isActionRequiredState("state1");
-    expect(mockContext.isActionRequiredState).toHaveBeenCalledWith("state1");
-
-    expect(coreArgs.getConsecutiveFailures()).toBe(2);
-
-    coreArgs.setConsecutiveFailures(3);
-    expect(mockContext.runtimeContext.consecutiveFailures).toBe(3);
-
-    expect(coreArgs.getMaxFailures()).toBe(5);
-
     coreArgs.isJulesApiConfigured();
     expect(mockContext.isJulesApiConfigured).toHaveBeenCalled();
 
@@ -136,29 +126,11 @@ describe("MCP Factory", () => {
     coreArgs.getTrackedSession("s1");
     expect(mockCoreDeps.sessionTracking.getSession).toHaveBeenCalledWith("s1");
 
-    coreArgs.listTrackedSessions(10);
-    expect(mockCoreDeps.sessionTracking.listSessions).toHaveBeenCalledWith(10);
-
-    coreArgs.listTrackedActivities({ test: 1 });
-    expect(mockCoreDeps.sessionTracking.listActivities).toHaveBeenCalledWith({ test: 1 });
-
-    coreArgs.listAllTrackedActivities("s1");
-    expect(mockCoreDeps.sessionTracking.listAllActivities).toHaveBeenCalledWith("s1");
-
     // Get the arguments passed to AgentToolHandler constructor
     const agentArgs = vi.mocked(AgentToolHandler).mock.calls[0][0];
 
-    expect(agentArgs.getConsecutiveFailures()).toBe(3); // Updated from setConsecutiveFailures(3) above
-
-    agentArgs.setConsecutiveFailures(4);
-    expect(mockContext.runtimeContext.consecutiveFailures).toBe(4);
-
-    expect(agentArgs.getMaxFailures()).toBe(5);
-
-    agentArgs.waitForSessionCompletion({ arg: 1 });
-    // waitForSessionCompletion proxies to coreToolHandler.handleWaitForSessionCompletion
-    const coreHandlerInstance = (CoreToolHandler as any).mock.instances[0];
-    expect(coreHandlerInstance.handleWaitForSessionCompletion).toHaveBeenCalledWith({ arg: 1 });
+    expect(agentArgs.workerDispatchExecutionService).toBeDefined();
+    expect(agentArgs.workerInboxReplyService).toBeDefined();
   });
 
   it("handles missing dashboardSettings and maxFailures", () => {
@@ -171,10 +143,7 @@ describe("MCP Factory", () => {
       mockSprintDeps as unknown as SprintDependencies
     );
 
-    const coreArgs = vi.mocked(CoreToolHandler).mock.calls[0][0];
-    expect(coreArgs.getMaxFailures()).toBe(5);
-
     const agentArgs = vi.mocked(AgentToolHandler).mock.calls[0][0];
-    expect(agentArgs.getMaxFailures()).toBe(5);
+    expect(agentArgs.workerDispatchExecutionService).toBeDefined();
   });
 });

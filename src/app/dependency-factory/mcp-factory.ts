@@ -32,6 +32,7 @@ export function createMcpDependencies(
     executionRepository,
     projectManagementRepository,
     activeDispatchRegistry,
+    agentPresetSyncService,
   } = coreDeps;
   const { taskService } = sprintDeps;
   const workerTaskDispatchService = new WorkerTaskDispatchService(
@@ -51,10 +52,6 @@ export function createMcpDependencies(
     normalizeName: (type, id) => context.normalizeName(type, id),
     resolveSessionName: (session) => context.resolveSessionName(session),
     fetchRecentActivities: (sessionName, pageSize) => context.fetchRecentActivities(sessionName, pageSize),
-    isActionRequiredState: (state) => context.isActionRequiredState(state),
-    getConsecutiveFailures: () => context.runtimeContext.consecutiveFailures,
-    setConsecutiveFailures: (value) => { context.runtimeContext.consecutiveFailures = value; },
-    getMaxFailures: () => context.runtimeContext.settings.maxFailures || 5,
     isJulesApiConfigured: () => context.isJulesApiConfigured(),
     getMissingJulesApiKeyInstruction: () => context.getMissingJulesApiKeyInstruction(),
     isTrackedCliSession: (sessionId) => {
@@ -62,9 +59,6 @@ export function createMcpDependencies(
       return context.isTrackedCliSession(normalized);
     },
     getTrackedSession: (sessionId) => sessionTracking.getSession(sessionId),
-    listTrackedSessions: (limit) => sessionTracking.listSessions(limit),
-    listTrackedActivities: (args) => sessionTracking.listActivities(args),
-    listAllTrackedActivities: (sessionId) => sessionTracking.listAllActivities(sessionId),
     getDashboardSettings: () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
     connectionChatRepository,
     workerEndpointRepository,
@@ -83,7 +77,6 @@ export function createMcpDependencies(
   });
 
   const agentToolHandler = new AgentToolHandler({
-    taskService,
     workerDispatchExecutionService: new WorkerDispatchExecutionService(
       executionRepository,
       projectManagementRepository,
@@ -95,15 +88,11 @@ export function createMcpDependencies(
     workerInboxReplyService: new WorkerInboxReplyService({
       projectManagementRepository,
       taskService,
+      agentPresetSyncService,
       getDashboardSettings: () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
-      getGuideContent: (guideName, repoPath) => context.getGuideContentIfEnabled(guideName, repoPath),
       getGithubToken: () => context.getEffectiveGithubToken(),
       logger: logger.child({ component: "worker-inbox-reply-service" }),
     }),
-    getConsecutiveFailures: () => context.runtimeContext.consecutiveFailures,
-    setConsecutiveFailures: (value) => { context.runtimeContext.consecutiveFailures = value; },
-    getMaxFailures: () => context.runtimeContext.settings.maxFailures || 5,
-    waitForSessionCompletion: (args) => coreToolHandler.handleWaitForSessionCompletion(args),
   });
 
   return {

@@ -3,75 +3,8 @@ import type { McpConnectionCapabilities, McpConnectionRole } from "../../contrac
 import type { TaskRunState } from "../../contracts/execution-types.js";
 import type { WorkerAttentionOutcome } from "../../contracts/project-attention-types.js";
 
-export interface GetSourceArgs {
-  source_id: string;
-}
-
-export interface ListSourcesArgs {
-  filter?: string;
-  page_size?: number;
-  page_token?: string;
-}
-
-export interface ListAllSourcesArgs {
-  filter?: string;
-}
-
-export interface CreateSessionArgs {
-  prompt: string;
-  source: string;
-  starting_branch?: string;
-  title?: string;
-  require_plan_approval?: boolean;
-  automation_mode?: "AUTO_CREATE_PR";
-}
-
 export interface GetSessionArgs {
   session_id: string;
-}
-
-export interface ListSessionsArgs {
-  page_size?: number;
-  page_token?: string;
-}
-
-export interface ApproveSessionPlanArgs {
-  session_id: string;
-}
-
-export interface SendSessionMessageArgs {
-  session_id: string;
-  prompt: string;
-}
-
-export interface WaitForSessionCompletionArgs {
-  session_id: string;
-  poll_interval?: number;
-  timeout?: number;
-}
-
-export interface GetActivityArgs {
-  session_id: string;
-  activity_id: string;
-}
-
-export interface ListActivitiesArgs {
-  session_id: string;
-  page_size?: number;
-  page_token?: string;
-}
-
-export interface ListAllActivitiesArgs {
-  session_id: string;
-}
-
-export interface TaskAgentArgs {
-  prompt: string;
-  source_id?: string;
-  repo_path?: string;
-  title?: string;
-  branch?: string;
-  wait?: boolean;
 }
 
 export interface ExecuteWorkerDispatchArgs {
@@ -174,19 +107,7 @@ export interface ReportAttentionOutcomeArgs {
 }
 
 export interface McpToolArgsByName {
-  get_source: GetSourceArgs;
-  list_sources: ListSourcesArgs;
-  list_all_sources: ListAllSourcesArgs;
-  create_session: CreateSessionArgs;
   get_session: GetSessionArgs;
-  list_sessions: ListSessionsArgs;
-  approve_session_plan: ApproveSessionPlanArgs;
-  send_session_message: SendSessionMessageArgs;
-  wait_for_session_completion: WaitForSessionCompletionArgs;
-  get_activity: GetActivityArgs;
-  list_activities: ListActivitiesArgs;
-  list_all_activities: ListAllActivitiesArgs;
-  task_agent: TaskAgentArgs;
   execute_worker_dispatch: ExecuteWorkerDispatchArgs;
   cancel_local_dispatch: CancelLocalDispatchArgs;
   generate_dashboard_reply: GenerateDashboardReplyArgs;

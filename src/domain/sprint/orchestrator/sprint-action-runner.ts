@@ -156,13 +156,6 @@ export class SprintActionRunner {
     report += statusTable;
     report += instructions;
 
-    try {
-      const orchGuide = await this.deps.getGuideContent("orchestrator.md", repoPath);
-      report += `\n---\n\n### Orchestration Guidance\n\n${orchGuide}`;
-    } catch {
-      // Guide is optional.
-    }
-
     this.deps.updateLastStatus({
       project_id: options.cycleResult.subtasks[0]?.project_id,
       sprint_number: args.sprint_number,

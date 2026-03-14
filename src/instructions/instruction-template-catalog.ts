@@ -19,6 +19,7 @@ export const INSTRUCTION_TEMPLATE_PATHS = {
 } as const;
 
 export type InstructionTemplateId = keyof typeof INSTRUCTION_TEMPLATE_PATHS;
+export const INSTRUCTION_TEMPLATE_IDS = Object.keys(INSTRUCTION_TEMPLATE_PATHS) as InstructionTemplateId[];
 
 export const DEFAULT_INSTRUCTION_TEMPLATES: Record<InstructionTemplateId, string> = {
   branchMissing: `### 🛑 ACTION REQUIRED: Branch Configuration Missing\n\nSprint OS could not prepare the feature branch \`{{feature_branch}}\` automatically.\n\n{{create_branch_step}}{{push_branch_step}}**Important:** Once these steps are completed, run this tool again to proceed with the \`{{action}}\` phase.`,

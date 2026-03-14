@@ -3,13 +3,13 @@ import { TaskService } from "../../../src/services/task-service.js";
 
 describe("TaskService", () => {
   const createSession = vi.fn();
-  const getGuideContent = vi.fn();
+  const getWorkerAgent = vi.fn();
   const startCliTask = vi.fn();
   const resolveJulesSourceId = vi.fn();
 
   const service = new TaskService({
     julesApi: { createSession } as any,
-    guideRepository: { getGuideContent } as any,
+    agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: getWorkerAgent } as any,
     resolveJulesSourceId,
     getDashboardSettings: () => ({
       aiProvider: {
@@ -35,8 +35,8 @@ describe("TaskService", () => {
     );
   });
 
-  it("creates task_agent session with worker guide injected", async () => {
-    getGuideContent.mockResolvedValue("## Worker Rules");
+  it("creates task_agent session with worker agent instructions injected", async () => {
+    getWorkerAgent.mockResolvedValue({ instructionMarkdown: "## Worker Rules" });
     createSession.mockResolvedValue({ id: "s1" });
 
     await service.createTaskAgentSession({
@@ -47,7 +47,7 @@ describe("TaskService", () => {
       branch: "feature/branch",
     });
 
-    expect(getGuideContent).toHaveBeenCalledWith("worker.md", "/tmp/repo");
+    expect(getWorkerAgent).toHaveBeenCalledWith("/tmp/repo");
     expect(createSession).toHaveBeenCalledTimes(1);
     const payload = createSession.mock.calls[0][0];
     expect(payload.prompt).toContain("## Worker Rules");
@@ -58,8 +58,8 @@ describe("TaskService", () => {
     expect(payload.automationMode).toBe("AUTO_CREATE_PR");
   });
 
-  it("falls back to raw prompt when worker guide is missing", async () => {
-    getGuideContent.mockRejectedValue(new Error("missing"));
+  it("falls back to raw prompt when worker agent instructions are missing", async () => {
+    getWorkerAgent.mockResolvedValue(null);
     createSession.mockResolvedValue({ id: "s2" });
 
     await service.createTaskAgentSession({
@@ -73,7 +73,7 @@ describe("TaskService", () => {
   });
 
   it("auto-resolves source id when omitted", async () => {
-    getGuideContent.mockResolvedValue("Rules");
+    getWorkerAgent.mockResolvedValue({ instructionMarkdown: "Rules" });
     createSession.mockResolvedValue({ id: "s-auto" });
 
     await service.createTaskAgentSession({
@@ -90,7 +90,7 @@ describe("TaskService", () => {
   });
 
   it("creates sprint task session payload with sprint metadata", async () => {
-    getGuideContent.mockResolvedValue("Rules");
+    getWorkerAgent.mockResolvedValue({ instructionMarkdown: "Rules" });
     createSession.mockResolvedValue({ id: "s3" });
 
     await service.startSprintTask(
@@ -119,7 +119,7 @@ describe("TaskService", () => {
   it("falls back to cli provider when jules is unavailable", async () => {
     const fallbackService = new TaskService({
       julesApi: { createSession } as any,
-      guideRepository: { getGuideContent } as any,
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: getWorkerAgent } as any,
       resolveJulesSourceId,
       getDashboardSettings: () => ({
         aiProvider: {
@@ -140,7 +140,7 @@ describe("TaskService", () => {
       } as any,
     });
 
-    getGuideContent.mockResolvedValue("Rules");
+    getWorkerAgent.mockResolvedValue({ instructionMarkdown: "Rules" });
     await fallbackService.startSprintTask(
       {
         id: "01-task",

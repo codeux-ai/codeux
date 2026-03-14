@@ -7,39 +7,17 @@ describe("CoreToolHandler coverage", () => {
     beforeEach(() => {
         defaultDeps = {
             julesApi: {
-                getSource: vi.fn(),
-                listSources: vi.fn().mockResolvedValue({}),
-                listAllSources: vi.fn().mockResolvedValue([]),
-                createSession: vi.fn().mockResolvedValue({ id: "1" }),
                 getSession: vi.fn().mockResolvedValue({ id: "1", state: "COMPLETED" }),
-                listSessions: vi.fn().mockResolvedValue({ sessions: [] }),
-                approveSessionPlan: vi.fn().mockResolvedValue({}),
-                sendSessionMessage: vi.fn().mockResolvedValue({}),
-                getActivity: vi.fn().mockResolvedValue({}),
-                listActivities: vi.fn().mockResolvedValue({}),
-                listAllActivities: vi.fn().mockResolvedValue([]),
             },
             activitySummary: {
-                toSourceSummary: vi.fn(),
-                toSourcePageSummary: vi.fn(),
-                extractSourceListResponse: vi.fn().mockReturnValue({ sources: [], nextPageToken: undefined }),
                 toSessionSummary: vi.fn(x => x),
-                toActionResponseSummary: vi.fn(),
-                toActivitySummary: vi.fn(),
-                toActivityPageSummary: vi.fn(),
-                toActivityCollectionSummary: vi.fn(),
                 getActivityRecentLimit: vi.fn().mockReturnValue(1),
             },
             isJulesApiConfigured: vi.fn().mockReturnValue(true),
             normalizeName: vi.fn(x => x),
-            getConsecutiveFailures: vi.fn().mockReturnValue(0), getMissingJulesApiKeyInstruction: vi.fn().mockReturnValue("Jules API err"),
-            setConsecutiveFailures: vi.fn(),
-            getMaxFailures: vi.fn().mockReturnValue(3),
+            getMissingJulesApiKeyInstruction: vi.fn().mockReturnValue("Jules API err"),
             isTrackedCliSession: vi.fn().mockReturnValue(false),
             getTrackedSession: vi.fn(),
-            listTrackedSessions: vi.fn().mockReturnValue({ sessions: [] }),
-            listAllTrackedActivities: vi.fn(),
-            listTrackedActivities: vi.fn(),
             getDashboardSettings: vi.fn().mockReturnValue({ sprintLoopSteps: { watchLoopOutputIntervalSeconds: 300 } }),
             connectionChatRepository: {
                 startListen: vi.fn().mockReturnValue({ connection: { id: "conn-1", connectionKey: "listener-1" }, inbox: [] }),
@@ -94,48 +72,8 @@ describe("CoreToolHandler coverage", () => {
             },
             resolveSessionName: vi.fn(),
             fetchRecentActivities: vi.fn().mockResolvedValue([]),
-            isActionRequiredState: vi.fn().mockReturnValue(false),
             logger: { warn: vi.fn() },
         };
-    });
-
-    it("handleGetSource throws if not configured", async () => {
-        defaultDeps.isJulesApiConfigured.mockReturnValue(false);
-        const handler = new CoreToolHandler(defaultDeps);
-        await expect(handler.handleGetSource({ source_id: "s" })).rejects.toThrow("Jules API");
-    });
-
-    it("handleListSources", async () => {
-        const handler = new CoreToolHandler(defaultDeps);
-        await handler.handleListSources({});
-        expect(defaultDeps.julesApi.listSources).toHaveBeenCalled();
-    });
-
-    it("handleListAllSources", async () => {
-        const handler = new CoreToolHandler(defaultDeps);
-        await handler.handleListAllSources({});
-        expect(defaultDeps.julesApi.listAllSources).toHaveBeenCalled();
-    });
-
-    it("handleCreateSession with args", async () => {
-        const handler = new CoreToolHandler(defaultDeps);
-        await handler.handleCreateSession({ prompt: "p", source: "s", starting_branch: "b", title: "t", require_plan_approval: true, automation_mode: "m" });
-        expect(defaultDeps.julesApi.createSession).toHaveBeenCalledWith(expect.objectContaining({
-            title: "t", requirePlanApproval: true, automationMode: "m"
-        }));
-    });
-
-    it("handleCreateSession fails on max", async () => {
-        defaultDeps.getConsecutiveFailures.mockReturnValue(3);
-        const handler = new CoreToolHandler(defaultDeps);
-        await expect(handler.handleCreateSession({ prompt: "p", source: "s" })).rejects.toThrow("Emergency stop");
-    });
-
-    it("handleCreateSession increments fail", async () => {
-        defaultDeps.julesApi.createSession.mockRejectedValue(new Error());
-        const handler = new CoreToolHandler(defaultDeps);
-        await expect(handler.handleCreateSession({ prompt: "p", source: "s" })).rejects.toThrow();
-        expect(defaultDeps.setConsecutiveFailures).toHaveBeenCalledWith(1);
     });
 
     it("handleGetSession tracked", async () => {
@@ -158,87 +96,6 @@ describe("CoreToolHandler coverage", () => {
         const handler = new CoreToolHandler(defaultDeps);
         await handler.handleGetSession({ session_id: "1" });
         expect(defaultDeps.logger.warn).toHaveBeenCalled();
-    });
-
-    it("handleListSessions unconfigured", async () => {
-        defaultDeps.isJulesApiConfigured.mockReturnValue(false);
-        const handler = new CoreToolHandler(defaultDeps);
-        await handler.handleListSessions({});
-        expect(defaultDeps.julesApi.listSessions).not.toHaveBeenCalled();
-    });
-
-    it("handleApproveSessionPlan", async () => {
-        const handler = new CoreToolHandler(defaultDeps);
-        await handler.handleApproveSessionPlan({ session_id: "1" });
-        expect(defaultDeps.julesApi.approveSessionPlan).toHaveBeenCalled();
-    });
-
-    it("handleSendSessionMessage", async () => {
-        const handler = new CoreToolHandler(defaultDeps);
-        await handler.handleSendSessionMessage({ session_id: "1", prompt: "p" });
-        expect(defaultDeps.julesApi.sendSessionMessage).toHaveBeenCalled();
-    });
-
-    it("handleWaitForSessionCompletion handles track error", async () => {
-        defaultDeps.isTrackedCliSession.mockReturnValue(true);
-        defaultDeps.getTrackedSession.mockReturnValue(undefined);
-        const handler = new CoreToolHandler(defaultDeps);
-        await expect(handler.handleWaitForSessionCompletion({ session_id: "1", poll_interval: 0.01, timeout: 0.05 })).rejects.toThrow("not found");
-    });
-
-    it("handleWaitForSessionCompletion handles timeout", async () => {
-        defaultDeps.julesApi.getSession.mockResolvedValue({ id: "1", state: "PENDING" });
-        const handler = new CoreToolHandler(defaultDeps);
-        await expect(handler.handleWaitForSessionCompletion({ session_id: "1", poll_interval: 0.01, timeout: 0.05 })).rejects.toThrow("Timeout waiting for");
-    });
-
-    it("handleGetActivity tracked", async () => {
-        defaultDeps.isTrackedCliSession.mockReturnValue(true);
-        defaultDeps.listAllTrackedActivities.mockReturnValue([{ id: "activities/a" }]);
-        const handler = new CoreToolHandler(defaultDeps);
-        await handler.handleGetActivity({ session_id: "1", activity_id: "a" });
-        expect(defaultDeps.activitySummary.toActivitySummary).toHaveBeenCalled();
-    });
-
-    it("handleGetActivity tracked not found", async () => {
-        defaultDeps.isTrackedCliSession.mockReturnValue(true);
-        defaultDeps.listAllTrackedActivities.mockReturnValue([]);
-        const handler = new CoreToolHandler(defaultDeps);
-        await expect(handler.handleGetActivity({ session_id: "1", activity_id: "a" })).rejects.toThrow("not found");
-    });
-
-    it("handleGetActivity not tracked", async () => {
-        const handler = new CoreToolHandler(defaultDeps);
-        await handler.handleGetActivity({ session_id: "1", activity_id: "a" });
-        expect(defaultDeps.julesApi.getActivity).toHaveBeenCalled();
-    });
-
-    it("handleListActivities tracked", async () => {
-        defaultDeps.isTrackedCliSession.mockReturnValue(true);
-        defaultDeps.listTrackedActivities.mockReturnValue({});
-        const handler = new CoreToolHandler(defaultDeps);
-        await handler.handleListActivities({ session_id: "1" });
-        expect(defaultDeps.activitySummary.toActivityPageSummary).toHaveBeenCalled();
-    });
-
-    it("handleListActivities not tracked", async () => {
-        const handler = new CoreToolHandler(defaultDeps);
-        await handler.handleListActivities({ session_id: "1" });
-        expect(defaultDeps.julesApi.listActivities).toHaveBeenCalled();
-    });
-
-    it("handleListAllActivities tracked", async () => {
-        defaultDeps.isTrackedCliSession.mockReturnValue(true);
-        defaultDeps.listAllTrackedActivities.mockReturnValue([]);
-        const handler = new CoreToolHandler(defaultDeps);
-        await handler.handleListAllActivities({ session_id: "1" });
-        expect(defaultDeps.activitySummary.toActivityCollectionSummary).toHaveBeenCalled();
-    });
-
-    it("handleListAllActivities not tracked", async () => {
-        const handler = new CoreToolHandler(defaultDeps);
-        await handler.handleListAllActivities({ session_id: "1" });
-        expect(defaultDeps.julesApi.listAllActivities).toHaveBeenCalled();
     });
 
     it("handleStartListen", async () => {

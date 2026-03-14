@@ -8,6 +8,7 @@ import { providerSpecs } from "../infrastructure/providers/cli/provider-runner.j
 import { runCommandStrict } from "./cli-process-runner.js";
 import { getRepoSprintOsPath } from "../shared/config/sprint-os-paths.js";
 import type { TaskService } from "./task-service.js";
+import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 
 export interface GenerateDashboardReplyInput {
@@ -26,8 +27,8 @@ export interface GenerateDashboardReplyResult {
 interface WorkerInboxReplyServiceDependencies {
   projectManagementRepository: ProjectManagementRepository;
   taskService: TaskService;
+  agentPresetSyncService: AgentPresetSyncService;
   getDashboardSettings: () => DashboardSettings;
-  getGuideContent: (guideName: string, repoPath?: string) => Promise<string>;
   getGithubToken: () => string | undefined;
   logger?: Logger;
 }
@@ -45,6 +46,7 @@ export class WorkerInboxReplyService {
     const provider = this.chooseProvider(input.bodyMarkdown, settings);
     const providerSettings = settings.aiProvider.providers[provider];
     const rawPrompt = await this.buildPrompt({
+      projectId: input.projectId,
       repoPath: project.baseDir,
       projectName: project.name,
       threadId: input.threadId,
@@ -93,27 +95,16 @@ export class WorkerInboxReplyService {
   }
 
   private async buildPrompt(args: {
+    projectId: string;
     repoPath: string;
     projectName: string;
     threadId: string;
     threadTitle?: string;
     bodyMarkdown: string;
   }): Promise<string> {
-    const guides: string[] = [];
-
-    try {
-      guides.push(await this.deps.getGuideContent("listener.md", args.repoPath));
-    } catch {
-      // optional
-    }
-
-    if (guides.length === 0) {
-      try {
-        guides.push(await this.deps.getGuideContent("worker.md", args.repoPath));
-      } catch {
-        // optional
-      }
-    }
+    const workerInstructions = (await this.deps.agentPresetSyncService.getWorkerAgent(args.projectId))
+      .instructionMarkdown
+      .trim();
 
     const instructions = [
       "You are a Sprint OS connected worker replying to a dashboard chat message.",
@@ -124,7 +115,7 @@ export class WorkerInboxReplyService {
     ].join("\n");
 
     return [
-      guides.length > 0 ? `## REPOSITORY INSTRUCTIONS\n\n${guides.join("\n\n---\n\n")}` : "",
+      workerInstructions ? `## WORKER INSTRUCTIONS\n\n${workerInstructions}` : "",
       "## ROLE",
       instructions,
       "",

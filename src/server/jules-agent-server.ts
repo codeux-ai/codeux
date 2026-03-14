@@ -1,7 +1,6 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import axios from "axios";
 import type { AxiosError } from "axios";
-import * as path from "path";
 import express from "express";
 import type { AppConfig } from "../config/app-config.js";
 import { JulesApiClient } from "../integrations/jules-api-client.js";
@@ -20,7 +19,6 @@ import type {
   ReadinessProbeStatus,
 } from "../contracts/app-types.js";
 import { SprintOrchestrator } from "../sprint/sprint-orchestrator.js";
-import { GuideRepository } from "../repositories/guide-repository.js";
 import { SubtaskFileRepository } from "../infrastructure/repositories/subtask-file-repository.js";
 import { TaskService } from "../services/task-service.js";
 import { SettingsRepository } from "../repositories/settings-repository.js";
@@ -78,7 +76,6 @@ export class JulesAgentServer {
   private completedSprints: Set<number> = new Set();
   private runtimeContext: RuntimeContext = new DefaultRuntimeContext();
   private app = express();
-  private guideRepository: GuideRepository;
   private subtaskRepository: SubtaskFileRepository;
   private taskService: TaskService;
   private julesSourceResolver: JulesSourceResolver;
@@ -119,7 +116,6 @@ export class JulesAgentServer {
     this.server = deps.server;
     this.logger = deps.logger;
     this.julesApi = deps.julesApi;
-    this.guideRepository = deps.guideRepository;
     this.subtaskRepository = deps.subtaskRepository;
     this.taskService = deps.taskService;
     this.julesSourceResolver = deps.julesSourceResolver;
@@ -227,7 +223,6 @@ export class JulesAgentServer {
       getDashboardPort: () => this.getDashboardPort(),
       isJulesApiConfigured: () => this.isJulesApiConfigured(),
       getMissingJulesApiKeyInstruction: () => this.getMissingJulesApiKeyInstruction(),
-      getGuideContentIfEnabled: (guideName, repoPath) => this.getGuideContentIfEnabled(guideName, repoPath),
       isActionRequiredState: (state) => this.isActionRequiredState(state),
       resolveSessionName: (session) => this.resolveSessionName(session),
       extractSessionId: (session) => this.extractSessionId(session),
@@ -452,27 +447,6 @@ export class JulesAgentServer {
       return this.resolveSessionName({ id: task.session_id });
     }
     return undefined;
-  }
-
-  private getSkillNameForGuide(guideName: string): string {
-    return guideName.replace(/\.md$/i, "");
-  }
-
-  private isSkillEnabled(skillName: string): boolean {
-    const settings = this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
-    const skill = settings.skills.find((entry) => entry.name === skillName);
-    return skill ? skill.enabled : true;
-  }
-
-  private async getGuideContentIfEnabled(guideName: string, repoPath?: string): Promise<string> {
-    const skillName = this.getSkillNameForGuide(guideName);
-    if (!this.isSkillEnabled(skillName)) {
-      throw new Error(`Skill '${skillName}' is disabled in dashboard settings.`);
-    }
-    if (!this.guideRepository) {
-      return "";
-    }
-    return this.guideRepository.getGuideContent(guideName, repoPath);
   }
 
   private isTrackedCliSession(sessionName: string): boolean {

@@ -63,7 +63,8 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     ...settings.cliWorkflow,
   },
   agents: {
-    ...settings.agents,
+    saveToProjectDirectory: settings.agents.saveToProjectDirectory,
+    instructionTemplates: { ...settings.agents.instructionTemplates },
   },
   skills: cloneSkills(settings.skills),
 });
@@ -96,7 +97,8 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
     ...settings.cliWorkflow,
   },
   agents: {
-    ...settings.agents,
+    saveToProjectDirectory: settings.agents.saveToProjectDirectory,
+    instructionTemplates: { ...settings.agents.instructionTemplates },
   },
   skills: cloneSkills(settings.skills),
 });

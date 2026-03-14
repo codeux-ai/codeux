@@ -35,6 +35,7 @@ import {
 
 type SettingsScope = "system" | "project";
 type CategoryId = "general" | "models" | "sprint" | "agents" | "integrations" | "danger";
+type AgentInstructionTemplateId = keyof ProjectSettings["agents"]["instructionTemplates"];
 
 interface Category {
   id: CategoryId;
@@ -81,6 +82,30 @@ const INTEGRATIONS: IntegrationDefinition[] = [
   { id: "codex", label: "Codex", description: "Hosted execution provider and future worker endpoint" },
   { id: "claude-code", label: "Claude Code", description: "Hosted execution provider and future worker endpoint" },
   { id: "github", label: "GitHub", description: "Repository, pull request, branch, and CI integration" },
+];
+
+const AGENT_INSTRUCTION_TEMPLATE_OPTIONS: Array<{
+  value: AgentInstructionTemplateId;
+  label: string;
+  description: string;
+}> = [
+  { value: "planningMissing", label: "Planning Missing", description: "Shown when a sprint has no planned tasks yet." },
+  { value: "planningCreated", label: "Planning Created", description: "Shown after a planning request is prepared." },
+  { value: "branchMissing", label: "Branch Missing", description: "Shown when the sprint feature branch must be created first." },
+  { value: "mergeHeader", label: "Merge Header", description: "Header for merge-required intervention output." },
+  { value: "mergeTask", label: "Merge Task", description: "Per-task merge instruction block." },
+  { value: "actionRequiredAgentHeader", label: "Agent Attention Header", description: "Header for agent-owned intervention items." },
+  { value: "actionRequiredAgentTask", label: "Agent Attention Task", description: "Per-task agent intervention block." },
+  { value: "actionRequiredHumanHeader", label: "Human Attention Header", description: "Header for human-owned intervention items." },
+  { value: "actionRequiredHumanTask", label: "Human Attention Task", description: "Per-task human intervention block." },
+  { value: "watchHeader", label: "Run Header", description: "Top section for live orchestration status output." },
+  { value: "watchMergeRequired", label: "Run Merge Required", description: "Shown when orchestration pauses for merges." },
+  { value: "watchNoMoreActions", label: "Run No More Actions", description: "Shown when orchestration pauses with nothing runnable." },
+  { value: "completionSteps", label: "Completion Steps", description: "Final sprint completion guidance." },
+  { value: "cleanupAllMerged", label: "Cleanup All Merged", description: "Shown when cleanup confirms a fully merged sprint." },
+  { value: "cleanupFailed", label: "Cleanup Failed", description: "Shown when cleanup is skipped because tasks failed." },
+  { value: "cleanupDeferred", label: "Cleanup Deferred", description: "Shown when cleanup waits on merges." },
+  { value: "cleanupEmpty", label: "Cleanup Empty", description: "Shown when the sprint is still empty." },
 ];
 
 const Toggle: FunctionComponent<{
@@ -146,6 +171,21 @@ const TextInput: FunctionComponent<{
     className={`min-w-[210px] rounded-xl border border-black/[0.06] bg-black/[0.04] px-3 py-2 text-sm text-slate-700 placeholder-slate-400 transition-colors duration-200 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-200 ${
       mono ? "font-mono" : "font-sans"
     }`}
+  />
+);
+
+const TextAreaInput: FunctionComponent<{
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  rows?: number;
+}> = ({ value, onChange, placeholder, rows = 12 }) => (
+  <textarea
+    value={value}
+    rows={rows}
+    placeholder={placeholder}
+    onInput={(event) => onChange((event.currentTarget as HTMLTextAreaElement).value)}
+    className="min-h-[320px] w-full rounded-[1.3rem] border border-black/[0.06] bg-black/[0.04] px-4 py-3 text-sm leading-relaxed text-slate-700 placeholder-slate-400 transition-colors duration-200 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/10 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-200"
   />
 );
 
@@ -391,6 +431,7 @@ export const SettingsPage: FunctionComponent = () => {
   const [activeCategory, setActiveCategory] = useState<CategoryId>("general");
   const [activeScope, setActiveScope] = useState<SettingsScope>("system");
   const [selectedIntegration, setSelectedIntegration] = useState<IntegrationId>("github");
+  const [selectedAgentTemplate, setSelectedAgentTemplate] = useState<AgentInstructionTemplateId>("planningMissing");
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
   const [savedSystemSettings, setSavedSystemSettings] = useState<SystemSettings | null>(null);
   const [projectSettings, setProjectSettings] = useState<ProjectSettings | null>(null);
@@ -1667,6 +1708,10 @@ export const SettingsPage: FunctionComponent = () => {
       return null;
     }
 
+    const selectedTemplateConfig = AGENT_INSTRUCTION_TEMPLATE_OPTIONS.find((option) => option.value === selectedAgentTemplate)
+      ?? AGENT_INSTRUCTION_TEMPLATE_OPTIONS[0]!;
+    const selectedTemplateValue = editableSettings.agents.instructionTemplates[selectedAgentTemplate] || "";
+
     return (
       <div className="flex flex-col gap-5">
         <SectionCard title="Project Markdown Mirror" watermark="AGT" badge={getBadge("agents")}>
@@ -1689,8 +1734,44 @@ export const SettingsPage: FunctionComponent = () => {
           </Row>
         </SectionCard>
 
+        <SectionCard title="Instruction Templates" watermark="TXT" badge={getBadge("agents")}>
+          <Row label="Template" description="Pick the orchestration instruction block you want to edit in the database-backed settings store.">
+            <SelectInput
+              value={selectedAgentTemplate}
+              onChange={(value) => setSelectedAgentTemplate(value as AgentInstructionTemplateId)}
+              options={AGENT_INSTRUCTION_TEMPLATE_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+            />
+          </Row>
+          <div className="py-4">
+            <div className="mb-3 text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">
+              {selectedTemplateConfig.label}
+            </div>
+            <div className="mb-4 text-xs font-medium leading-relaxed text-slate-400">
+              {selectedTemplateConfig.description}
+            </div>
+            <TextAreaInput
+              value={selectedTemplateValue}
+              placeholder="Markdown template text with {{variables}} placeholders."
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                agents: {
+                  ...current.agents,
+                  instructionTemplates: {
+                    ...current.agents.instructionTemplates,
+                    [selectedAgentTemplate]: value,
+                  },
+                },
+              }))}
+            />
+          </div>
+        </SectionCard>
+
         <NoticePanel title="Agent sync behavior" tone="success">
           The database stays authoritative for agent records, labels, and routing metadata. When the mirror is enabled, dashboard edits also refresh a project-local markdown file, and local markdown drift can be imported back into the dashboard from the Agents page.
+        </NoticePanel>
+
+        <NoticePanel title="Instruction template storage">
+          Sprint protocol and intervention templates are now stored in scoped settings. Built-in defaults stay in code, system scope defines the default copy, and project scope can override any template without relying on `.sprint-os/instructions`.
         </NoticePanel>
       </div>
     );

@@ -9,14 +9,10 @@ import type {
   ThinkingMode,
 } from "../contracts/app-types.js";
 import { DEFAULT_SPRINT_BRANCH_SCHEME } from "../git/sprint-branch-scheme.js";
+import { DEFAULT_INSTRUCTION_TEMPLATES } from "../instructions/instruction-template-catalog.js";
 import { DEFAULT_MCP_TOOL_TOGGLES } from "../mcp/mcp-tool-availability.js";
 
 export const INTERNAL_SKILL_NAMES = [
-  "orchestrator",
-  "worker",
-  "watch",
-  "watch-skill",
-  "sprint_agent_guide",
   "git_manager",
   "git_manager_remote",
   "git_manager_local",
@@ -148,6 +144,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   },
   agents: {
     saveToProjectDirectory: true,
+    instructionTemplates: { ...DEFAULT_INSTRUCTION_TEMPLATES },
   },
   skills: DEFAULT_SKILLS,
   mcpTools: DEFAULT_MCP_TOOL_TOGGLES.map((tool) => ({ ...tool })),

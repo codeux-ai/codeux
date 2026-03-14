@@ -7,12 +7,7 @@ export async function executePrepareStage(
 ): Promise<{ worktreePath: string; initialHead: string; providerPrompt: string }> {
   const providerSettings = ctx.settings.aiProvider.providers[ctx.provider];
 
-  let workerGuide = "";
-  try {
-    workerGuide = await ctx.deps.getGuideContent("worker.md", ctx.repoPath);
-  } catch {
-    /* optional */
-  }
+  const workerGuide = await ctx.deps.getWorkerInstruction(ctx.repoPath);
 
   const promptBody = workerGuide
     ? `## SYSTEM INSTRUCTIONS & ENGINEERING STANDARDS\n\n${workerGuide}\n\n---\n\n## SUBTASK TO EXECUTE\n\n${ctx.task.prompt}`
