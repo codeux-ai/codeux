@@ -576,6 +576,17 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               mono
             />
           </Row>
+          <Row label="Cache setup as image" description="Build and reuse a derived Docker image keyed by the base image and setup script contents.">
+            <ToggleField
+              checked={settings.cliWorkflow.containerCacheSetupScriptImage}
+              onChange={(value) => update({
+                cliWorkflow: {
+                  ...settings.cliWorkflow,
+                  containerCacheSetupScriptImage: value,
+                },
+              })}
+            />
+          </Row>
         </div>
         <div className="grid gap-3 xl:grid-cols-2">
           {[

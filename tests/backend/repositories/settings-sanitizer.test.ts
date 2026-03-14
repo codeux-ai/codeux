@@ -70,6 +70,7 @@ describe("settings-sanitizer", () => {
         executionMode: "invalid",
         containerImage: 42,
         containerSetupScriptPath: 7,
+        containerCacheSetupScriptImage: "bad",
         containerMountGeminiAuth: "bad",
       },
       agents: {
@@ -96,6 +97,7 @@ describe("settings-sanitizer", () => {
     expect(settings.sprintLoopSteps.watchLoopOutputIntervalSeconds).toBe(300);
     expect(settings.cliWorkflow.executionMode).toBe("HOST");
     expect(settings.cliWorkflow.containerImage).toBe("node:24-bookworm");
+    expect(settings.cliWorkflow.containerCacheSetupScriptImage).toBe(false);
     expect(settings.cliWorkflow.containerMountGeminiAuth).toBe(true);
     expect(settings.agents.saveToProjectDirectory).toBe(true);
     expect(settings.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");

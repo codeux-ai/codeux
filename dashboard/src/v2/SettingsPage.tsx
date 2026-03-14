@@ -1276,6 +1276,15 @@ export const SettingsPage: FunctionComponent = () => {
               mono
             />
           </Row>
+          <Row label="Cache setup as image" description="Build and reuse a derived Docker image from the base image plus setup script contents.">
+            <Toggle value={editableSettings.cliWorkflow.containerCacheSetupScriptImage} onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              cliWorkflow: {
+                ...current.cliWorkflow,
+                containerCacheSetupScriptImage: !current.cliWorkflow.containerCacheSetupScriptImage,
+              },
+            }))} />
+          </Row>
           <Row label="Mount git config" description="Share host git config with the task container." last>
             <Toggle value={editableSettings.cliWorkflow.containerMountGitConfig} onChange={() => updateEditableSettings((current) => ({
               ...current,

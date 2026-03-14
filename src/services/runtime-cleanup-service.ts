@@ -4,11 +4,13 @@ import { ProjectManagementRepository } from "../repositories/project-management-
 import { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
 import type { TaskRunState } from "../contracts/execution-types.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { DockerRuntimePruneService } from "./docker-runtime-prune-service.js";
 
 export interface RuntimeCleanupResult {
   staleConnectionIds: string[];
   offlineConnectionIds: string[];
   prunedConnectionIds: string[];
+  prunedDockerRuntimePaths: string[];
   blockedDispatchIds: string[];
   forceCancelledDispatchIds: string[];
   reconciledDispatchIds: string[];
@@ -25,11 +27,13 @@ export class RuntimeCleanupService {
     private readonly executionRepository: ExecutionRepository,
     private readonly projectManagementRepository: ProjectManagementRepository,
     private readonly projectAttentionService: ProjectAttentionService,
+    private readonly dockerRuntimePruneService?: DockerRuntimePruneService,
     private readonly logger?: Logger,
   ) {}
 
   cleanup(now = new Date()): RuntimeCleanupResult {
     const connectionResult = this.connectionChatRepository.cleanupConnectionLifecycle(now);
+    const dockerRuntimeResult = this.dockerRuntimePruneService?.cleanup(now) || { prunedPaths: [] };
     const blockedDispatchIds: string[] = [];
     const forceCancelledDispatchIds: string[] = [];
     const reconciledDispatchIds = this.reconcileTerminalDispatches(now);
@@ -157,6 +161,7 @@ export class RuntimeCleanupService {
       connectionResult.staleConnectionIds.length > 0
       || connectionResult.offlineConnectionIds.length > 0
       || connectionResult.prunedConnectionIds.length > 0
+      || dockerRuntimeResult.prunedPaths.length > 0
       || blockedDispatchIds.length > 0
       || forceCancelledDispatchIds.length > 0
       || reconciledDispatchIds.length > 0
@@ -166,6 +171,7 @@ export class RuntimeCleanupService {
         staleConnections: connectionResult.staleConnectionIds.length,
         offlineConnections: connectionResult.offlineConnectionIds.length,
         prunedConnections: connectionResult.prunedConnectionIds.length,
+        prunedDockerRuntimePaths: dockerRuntimeResult.prunedPaths.length,
         blockedDispatches: blockedDispatchIds.length,
         forceCancelledDispatches: forceCancelledDispatchIds.length,
         reconciledDispatches: reconciledDispatchIds.length,
@@ -175,6 +181,7 @@ export class RuntimeCleanupService {
 
     return {
       ...connectionResult,
+      prunedDockerRuntimePaths: dockerRuntimeResult.prunedPaths,
       blockedDispatchIds,
       forceCancelledDispatchIds,
       reconciledDispatchIds,

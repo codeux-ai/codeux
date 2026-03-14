@@ -136,7 +136,10 @@ The effective endpoints return:
 - Docker runtime config:
   - `containerImage`
   - `containerSetupScriptPath` (optional; when set to a relative path, runtime checks both sprint repo root and current server working directory)
-    - if empty, falls back to `.sprint-os/container/setup.sh` in repo root and home directory
+    - if empty, falls back to `.sprint-os/container/setup.sh` in repo root, then home directory, then the bundled Sprint OS default script
+  - `containerCacheSetupScriptImage` (default `false`)
+    - when enabled, Docker runtime builds and reuses a derived image keyed by the base image plus setup script contents
+    - cache misses fall back to the current per-run setup script path if the image build fails
   - `containerMountGitConfig`
   - `containerMountGithubAuth`
 
@@ -178,9 +181,13 @@ Repository demo script:
   - `home/` (container `HOME`)
   - `npm-global/` (CLI fallback install prefix)
   - `npm-cache/` (npm cache)
+  - `setup-image-cache/` (generated Docker build contexts for setup-script-derived images)
   - Codex runs use isolated per-session homes (`home-codex-<session-id>`) to avoid stale local state interference between runs.
+  - Runtime cleanup automatically prunes stale per-session Codex homes and stale shared runtime temp directories after sessions are no longer active.
   - Optional override: `JULES_DOCKER_RUNTIME_ROOT` (absolute path, `~` supported, repo-relative when relative)
 - If setup script is missing or does not provide the requested provider CLI, the runner attempts a provider-specific fallback install (`gemini`, `codex`, or `claude`) before failing.
+  - When `containerCacheSetupScriptImage` is enabled and a setup script is present, runtime first tries to reuse a prebuilt `sprint-os-setup-cache:<hash>` image instead of rerunning the setup script on every container launch.
+  - An empty `containerSetupScriptPath` still participates in caching because runtime resolves the default script chain automatically, including the bundled Sprint OS setup script.
   - `claude` fallback uses the official installer: `curl -fsSL https://claude.ai/install.sh | bash`
   - Claude runner uses explicit headless prompt mode (`claude -p "<prompt>"`) with `--dangerously-skip-permissions`.
   - When Claude credential mounts are enabled, runtime mounts `~/.claude` and also `~/.claude.json` when present.

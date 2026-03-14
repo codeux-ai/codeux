@@ -24,6 +24,7 @@ import { JulesSourceResolver } from "../../services/jules-source-resolver.js";
 import { SprintMarkdownService } from "../../services/sprint-markdown-service.js";
 import { ActiveDispatchRegistry } from "../../services/active-dispatch-registry.js";
 import { RuntimeCleanupService } from "../../services/runtime-cleanup-service.js";
+import { DockerRuntimePruneService } from "../../services/docker-runtime-prune-service.js";
 import { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
 import { DashboardSettings, ExternalSettingsHints } from "../../contracts/app-types.js";
 import { loadExternalSettingsHints } from "../../config/external-settings.js";
@@ -141,11 +142,16 @@ export function createCoreDependencies(
   const executionRepository = new ExecutionRepository(appDbStorage, dashboardRealtimeService);
   const sprintMarkdownService = new SprintMarkdownService(projectManagementRepository);
   const activeDispatchRegistry = new ActiveDispatchRegistry();
+  const dockerRuntimePruneService = new DockerRuntimePruneService(
+    sessionTracking,
+    logger.child({ component: "docker-runtime-prune-service" }),
+  );
   const runtimeCleanupService = new RuntimeCleanupService(
     connectionChatRepository,
     executionRepository,
     projectManagementRepository,
     projectAttentionService,
+    dockerRuntimePruneService,
     logger.child({ component: "runtime-cleanup-service" }),
   );
   const julesSourceResolver = new JulesSourceResolver(julesApi);

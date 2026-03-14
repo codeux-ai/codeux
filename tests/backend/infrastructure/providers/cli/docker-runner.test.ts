@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, Mock } from "vitest";
 import * as fs from "fs/promises";
 import os from "os";
 import path from "path";
+import { fileURLToPath } from "url";
 import { DockerRunner } from "../../../../../src/infrastructure/providers/cli/docker-runner.js";
 import { runStreamingCommand } from "../../../../../src/services/cli-process-runner.js";
 import {
@@ -13,6 +14,7 @@ import {
 } from "../../../../../src/services/cli-docker-utils.js";
 import { DockerBootstrapBuilder } from "../../../../../src/infrastructure/providers/cli/docker-bootstrap-builder.js";
 import { DockerCredentialMountBuilder } from "../../../../../src/infrastructure/providers/cli/docker-credential-mount-builder.js";
+import { DockerSetupImageCache } from "../../../../../src/infrastructure/providers/cli/docker-setup-image-cache.js";
 import { CliWorkflowSettings } from "../../../../../src/contracts/app-types.js";
 
 vi.mock("fs/promises");
@@ -43,8 +45,20 @@ vi.mock("../../../../../src/infrastructure/providers/cli/docker-credential-mount
   mockBuilder.prototype.build = vi.fn().mockResolvedValue([]);
   return { DockerCredentialMountBuilder: mockBuilder };
 });
+vi.mock("../../../../../src/infrastructure/providers/cli/docker-setup-image-cache.js", () => {
+  const mockBuilder = vi.fn();
+  mockBuilder.prototype.resolveImage = vi.fn().mockResolvedValue({
+    image: "node:20",
+    runSetupScriptAtRuntime: false,
+  });
+  return { DockerSetupImageCache: mockBuilder };
+});
 
 describe("DockerRunner", () => {
+  const bundledSetupScriptPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../../../.sprint-os/container/setup.sh",
+  );
   let runner: DockerRunner;
   let defaultWorkflowSettings: CliWorkflowSettings;
 
@@ -55,6 +69,10 @@ describe("DockerRunner", () => {
     // Reset prototype mocks to defaults so they are iterable
     DockerCredentialMountBuilder.prototype.build = vi.fn().mockResolvedValue([]);
     DockerBootstrapBuilder.prototype.build = vi.fn().mockReturnValue("mock-bootstrap-script");
+    DockerSetupImageCache.prototype.resolveImage = vi.fn().mockResolvedValue({
+      image: "node:20",
+      runSetupScriptAtRuntime: false,
+    });
 
     vi.mocked(fs.mkdir).mockResolvedValue(undefined);
     vi.mocked(fs.access).mockRejectedValue(new Error("not found"));
@@ -78,6 +96,7 @@ describe("DockerRunner", () => {
       executionMode: "DOCKER",
       containerImage: "node:20",
       containerSetupScriptPath: "",
+      containerCacheSetupScriptImage: false,
     } as CliWorkflowSettings;
 
     process.env = {}; // Clear process.env for predictability
@@ -126,6 +145,9 @@ describe("DockerRunner", () => {
     // Expect env vars
     expect(args).toContain("-e");
     expect(args).toContain("TEST_ENV=test");
+    expect(DockerBootstrapBuilder.prototype.build).toHaveBeenCalledWith(expect.objectContaining({
+      runSetupScript: false,
+    }));
   });
 
   it("should handle codex provider mapping home differently", async () => {
@@ -151,6 +173,10 @@ describe("DockerRunner", () => {
   it("should resolve and mount a setup script if available", async () => {
     const onActivity = vi.fn();
     defaultWorkflowSettings.containerSetupScriptPath = "setup.sh";
+    DockerSetupImageCache.prototype.resolveImage = vi.fn().mockResolvedValue({
+      image: "node:20",
+      runSetupScriptAtRuntime: true,
+    });
     vi.mocked(fs.access).mockImplementation(async (p) => {
       if (p.toString().includes("setup.sh")) return;
       if (p.toString() === "/.dockerenv") throw new Error();
@@ -176,6 +202,106 @@ describe("DockerRunner", () => {
 
     const [cmd, args] = vi.mocked(runStreamingCommand).mock.calls[0];
     expect(args).toContain("--mount");
+  });
+
+  it("should use the cached setup image when available", async () => {
+    const onActivity = vi.fn();
+    defaultWorkflowSettings.containerSetupScriptPath = "setup.sh";
+    defaultWorkflowSettings.containerCacheSetupScriptImage = true;
+    DockerSetupImageCache.prototype.resolveImage = vi.fn().mockResolvedValue({
+      image: "sprint-os-setup-cache:abc123",
+      runSetupScriptAtRuntime: false,
+    });
+    vi.mocked(fs.access).mockImplementation(async (p) => {
+      if (p.toString().includes("setup.sh")) return;
+      if (p.toString() === "/.dockerenv") throw new Error();
+      throw new Error("not found");
+    });
+
+    await runner.runProviderInDocker({
+      command: "test-cmd",
+      args: [],
+      cwd: "/repo/path",
+      providerEnv: {},
+      sessionId: "session-123",
+      providerLabel: "gemini",
+      workflowSettings: defaultWorkflowSettings,
+      repoPath: "/repo/path",
+      onActivity,
+    });
+
+    const [cmd, args] = vi.mocked(runStreamingCommand).mock.calls[0];
+    expect(args).toContain("sprint-os-setup-cache:abc123");
+    expect(toDockerMountArg).not.toHaveBeenCalledWith(expect.objectContaining({
+      destination: "/opt/jules/setup.sh",
+    }));
+    expect(DockerBootstrapBuilder.prototype.build).toHaveBeenCalledWith(expect.objectContaining({
+      runSetupScript: false,
+    }));
+  });
+
+  it("should resolve the default repo setup script for cached images when no explicit path is configured", async () => {
+    const onActivity = vi.fn();
+    defaultWorkflowSettings.containerCacheSetupScriptImage = true;
+    DockerSetupImageCache.prototype.resolveImage = vi.fn().mockResolvedValue({
+      image: "sprint-os-setup-cache:def456",
+      runSetupScriptAtRuntime: false,
+    });
+    vi.mocked(fs.access).mockImplementation(async (p) => {
+      if (p.toString() === "/repo/path/.sprint-os/container/setup.sh") return;
+      if (p.toString() === "/.dockerenv") throw new Error();
+      throw new Error("not found");
+    });
+
+    await runner.runProviderInDocker({
+      command: "test-cmd",
+      args: [],
+      cwd: "/repo/path",
+      providerEnv: {},
+      sessionId: "session-123",
+      providerLabel: "gemini",
+      workflowSettings: defaultWorkflowSettings,
+      repoPath: "/repo/path",
+      onActivity,
+    });
+
+    expect(DockerSetupImageCache.prototype.resolveImage).toHaveBeenCalledWith(expect.objectContaining({
+      setupScriptPath: "/repo/path/.sprint-os/container/setup.sh",
+      cacheEnabled: true,
+    }));
+    expect(onActivity).toHaveBeenCalledWith("Resolved default container setup script: /repo/path/.sprint-os/container/setup.sh");
+  });
+
+  it("should resolve the bundled default setup script for cached images when repo and home scripts are absent", async () => {
+    const onActivity = vi.fn();
+    defaultWorkflowSettings.containerCacheSetupScriptImage = true;
+    DockerSetupImageCache.prototype.resolveImage = vi.fn().mockResolvedValue({
+      image: "sprint-os-setup-cache:ghi789",
+      runSetupScriptAtRuntime: false,
+    });
+    vi.mocked(fs.access).mockImplementation(async (p) => {
+      if (p.toString() === bundledSetupScriptPath) return;
+      if (p.toString() === "/.dockerenv") throw new Error();
+      throw new Error("not found");
+    });
+
+    await runner.runProviderInDocker({
+      command: "test-cmd",
+      args: [],
+      cwd: "/repo/path",
+      providerEnv: {},
+      sessionId: "session-123",
+      providerLabel: "gemini",
+      workflowSettings: defaultWorkflowSettings,
+      repoPath: "/repo/path",
+      onActivity,
+    });
+
+    expect(DockerSetupImageCache.prototype.resolveImage).toHaveBeenCalledWith(expect.objectContaining({
+      setupScriptPath: bundledSetupScriptPath,
+      cacheEnabled: true,
+    }));
+    expect(onActivity).toHaveBeenCalledWith(`Resolved default container setup script: ${bundledSetupScriptPath}`);
   });
 
   it("should add credentials via DockerCredentialMountBuilder", async () => {

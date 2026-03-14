@@ -16,6 +16,7 @@ describe("dashboard settings helpers", () => {
     first.cliWorkflow.resumeFailedTaskInSameWorkspace = false;
     first.cliWorkflow.executionMode = "DOCKER";
     first.cliWorkflow.containerImage = "custom:image";
+    first.cliWorkflow.containerCacheSetupScriptImage = true;
     first.mcpTools[0].enabled = false;
     expect(second.git.defaultBranch).toBe("main");
     expect(second.dashboardPort).toBe(4444);
@@ -28,6 +29,7 @@ describe("dashboard settings helpers", () => {
     expect(second.cliWorkflow.resumeFailedTaskInSameWorkspace).toBe(true);
     expect(second.cliWorkflow.executionMode).toBe("HOST");
     expect(second.cliWorkflow.containerImage).toBe("node:24-bookworm");
+    expect(second.cliWorkflow.containerCacheSetupScriptImage).toBe(false);
     expect(second.mcpTools[0].enabled).toBe(true);
   });
 
