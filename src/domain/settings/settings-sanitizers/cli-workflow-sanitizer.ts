@@ -44,6 +44,10 @@ export const sanitizeCliWorkflow = (
       cliInput.containerSetupScriptPath,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerSetupScriptPath
     ).trim(),
+    containerCacheSetupScriptImage: readBoolean(
+      cliInput.containerCacheSetupScriptImage,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerCacheSetupScriptImage
+    ),
     containerMountGitConfig: readBoolean(
       cliInput.containerMountGitConfig,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerMountGitConfig

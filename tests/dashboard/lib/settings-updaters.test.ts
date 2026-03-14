@@ -103,9 +103,11 @@ describe("dashboard settings updater helpers", () => {
     const workflow = updateCliWorkflow(settings, {
       executionMode: "DOCKER",
       containerImage: "node:22-bookworm",
+      containerCacheSetupScriptImage: true,
     });
     expect(workflow.cliWorkflow.executionMode).toBe("DOCKER");
     expect(workflow.cliWorkflow.containerImage).toBe("node:22-bookworm");
+    expect(workflow.cliWorkflow.containerCacheSetupScriptImage).toBe(true);
     expect(settings.cliWorkflow.executionMode).toBe("HOST");
   });
 });

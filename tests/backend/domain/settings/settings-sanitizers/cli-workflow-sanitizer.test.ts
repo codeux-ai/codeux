@@ -10,6 +10,7 @@ describe("sanitizeCliWorkflow", () => {
   it("keeps provider credential mounts independent", () => {
     const result = sanitizeCliWorkflow({
       cliWorkflow: {
+        containerCacheSetupScriptImage: true,
         containerMountGithubAuth: false,
         containerMountGeminiAuth: true,
         containerMountCodexAuth: false,
@@ -17,6 +18,7 @@ describe("sanitizeCliWorkflow", () => {
       },
     });
 
+    expect(result.containerCacheSetupScriptImage).toBe(true);
     expect(result.containerMountGitConfig).toBe(true);
     expect(result.containerMountGithubAuth).toBe(false);
     expect(result.containerMountGeminiAuth).toBe(true);

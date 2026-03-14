@@ -1,7 +1,7 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import os from "os";
-import { createHash } from "crypto";
+import { fileURLToPath } from "url";
 import { CliWorkflowSettings, ProviderId } from "../../../contracts/app-types.js";
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import {
@@ -15,7 +15,14 @@ import {
 import { CONTAINER_SETUP_SCRIPT } from "../../../services/cli-workflow-utils.js";
 import { DockerBootstrapBuilder } from "./docker-bootstrap-builder.js";
 import { DockerCredentialMountBuilder } from "./docker-credential-mount-builder.js";
+import { DockerSetupImageCache } from "./docker-setup-image-cache.js";
+import { resolveDockerRuntimeRoot } from "./docker-runtime-paths.js";
 import { getHomeSprintOsPath, getRepoSprintOsPath } from "../../../shared/config/sprint-os-paths.js";
+
+const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../../.sprint-os/container/setup.sh",
+);
 
 export interface IDockerRunner {
   runProviderInDocker(args: {
@@ -50,7 +57,7 @@ export class DockerRunner implements IDockerRunner {
     const { command, args, cwd, providerEnv, sessionId, providerLabel, workflowSettings, repoPath, signal, onActivity } = input;
 
     await this.maybeLogDockerPathMappingHint(sessionId, repoPath, onActivity);
-    const runtimeRoot = this.resolveDockerRuntimeRoot(repoPath);
+    const runtimeRoot = resolveDockerRuntimeRoot(repoPath);
     const runtimeHome = providerLabel === "codex"
       ? path.join(runtimeRoot, `home-codex-${sessionId}`)
       : path.join(runtimeRoot, "home");
@@ -64,6 +71,19 @@ export class DockerRunner implements IDockerRunner {
 
     const repoSource = this.mapDockerSourcePathForDaemon(repoPath, repoPath, sessionId, "workspace", onActivity);
     const runtimeSource = this.mapDockerSourcePathForDaemon(runtimeRoot, repoPath, sessionId, "runtime", onActivity);
+    const setupScriptPath = await this.resolveContainerSetupScriptPath(workflowSettings, repoPath, sessionId, onActivity);
+    const baseImage = workflowSettings.containerImage.trim() || "node:18";
+    const resolvedImage = await new DockerSetupImageCache().resolveImage({
+      baseImage,
+      setupScriptPath,
+      cacheEnabled: workflowSettings.containerCacheSetupScriptImage,
+      runtimeRoot,
+      repoPath,
+      signal,
+      onActivity,
+      mapSourcePathForDaemon: (sourcePath, label) =>
+        this.mapDockerSourcePathForDaemon(sourcePath, repoPath, sessionId, label, onActivity),
+    });
 
     const dockerArgs = [
       "run", "--rm", "-i", "--network", "host", "--workdir", cwd,
@@ -80,8 +100,7 @@ export class DockerRunner implements IDockerRunner {
       dockerArgs.push("-e", `${variable.key}=${variable.value}`);
     }
 
-    const setupScriptPath = await this.resolveContainerSetupScriptPath(workflowSettings, repoPath, sessionId, onActivity);
-    if (setupScriptPath) {
+    if (setupScriptPath && resolvedImage.runSetupScriptAtRuntime) {
       const setupScriptSource = this.mapDockerSourcePathForDaemon(setupScriptPath, repoPath, sessionId, "setup script", onActivity);
       dockerArgs.push("--mount", toDockerMountArg({ source: setupScriptSource, destination: CONTAINER_SETUP_SCRIPT, readonly: true }));
     }
@@ -92,28 +111,21 @@ export class DockerRunner implements IDockerRunner {
       dockerArgs.push("--mount", toDockerMountArg({ ...mount, source }));
     }
 
-    const image = workflowSettings.containerImage.trim() || "node:18"; // Default fallback
     const bootstrapScript = new DockerBootstrapBuilder().build({
       runtimeNpmPrefix,
       runtimeNpmCache,
+      runSetupScript: resolvedImage.runSetupScriptAtRuntime,
     });
 
-    dockerArgs.push(image, "bash", "-c", bootstrapScript, "provider-runner", command, ...args);
+    dockerArgs.push(resolvedImage.image, "bash", "-c", bootstrapScript, "provider-runner", command, ...args);
 
-    onActivity(`Running ${providerLabel} in Docker image ${image} (credentials mounted: ${credentialMounts.length > 0 ? "yes" : "no"}).`);
+    onActivity(`Running ${providerLabel} in Docker image ${resolvedImage.image} (credentials mounted: ${credentialMounts.length > 0 ? "yes" : "no"}).`);
 
     return await runStreamingCommand("docker", dockerArgs, cwd, process.env, {
       signal,
       onStdoutLine: (line) => onActivity(line, "agent"),
       onStderrLine: (line) => onActivity(`[${providerLabel}] ${line}`, "provider"),
     });
-  }
-
-  private resolveDockerRuntimeRoot(repoPath: string): string {
-    const configured = (process.env.JULES_DOCKER_RUNTIME_ROOT || "").trim();
-    if (configured.length > 0) return resolveConfiguredPath(repoPath, configured);
-    const repoHash = createHash("sha1").update(path.resolve(repoPath)).digest("hex").slice(0, 12);
-    return getHomeSprintOsPath("runtime", "docker", repoHash);
   }
 
   private async maybeLogDockerPathMappingHint(sessionId: string, repoPath: string, onActivity: (desc: string) => void): Promise<void> {
@@ -148,13 +160,32 @@ export class DockerRunner implements IDockerRunner {
     const configured = workflowSettings.containerSetupScriptPath.trim();
     if (configured) {
       const p = resolveConfiguredPath(repoPath, configured);
-      try { await fs.access(p); return p; } catch { onActivity(`Configured container setup script not found: ${p}`); return undefined; }
+      try {
+        await fs.access(p);
+        onActivity(`Resolved configured container setup script: ${p}`);
+        return p;
+      } catch {
+        onActivity(`Configured container setup script not found: ${p}`);
+        return undefined;
+      }
     }
     const candidates = [
       getRepoSprintOsPath(repoPath, "container", "setup.sh"),
       getHomeSprintOsPath("container", "setup.sh"),
+      BUNDLED_CONTAINER_SETUP_SCRIPT,
     ];
-    for (const c of candidates) { try { await fs.access(c); return c; } catch { /* next */ } }
+    for (const c of candidates) {
+      try {
+        await fs.access(c);
+        onActivity(`Resolved default container setup script: ${c}`);
+        return c;
+      } catch {
+        /* next */
+      }
+    }
+    if (workflowSettings.containerCacheSetupScriptImage) {
+      onActivity("Docker setup image cache is enabled, but no container setup script was resolved.");
+    }
     return undefined;
   }
 

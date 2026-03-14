@@ -32,6 +32,14 @@ interface SessionIdRow {
   id: string;
 }
 
+export interface TrackedCliSessionRow {
+  id: string;
+  provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+  state: string;
+  repoPath: string | null;
+  updateTime: string;
+}
+
 export interface FailedCliSessionResumeTarget {
   sessionId: string;
   workerBranch: string;
@@ -201,6 +209,21 @@ export class SessionTrackingRepository {
     return {
       sessions: rows.map((row) => this.rowToSession(row)),
     };
+  }
+
+  listTrackedCliSessions(): TrackedCliSessionRow[] {
+    return this.db.prepare(`
+      SELECT
+        id,
+        provider,
+        state,
+        repo_path AS repoPath,
+        update_time AS updateTime
+      FROM provider_sessions
+      WHERE provider IN ('gemini', 'codex', 'claude-code')
+        AND id LIKE 'cli-%'
+      ORDER BY update_time DESC
+    `).all() as unknown as TrackedCliSessionRow[];
   }
 
   listActivities(args: { session_id: string; page_size?: number; page_token?: string }): { activities: JulesActivity[]; nextPageToken?: string } {

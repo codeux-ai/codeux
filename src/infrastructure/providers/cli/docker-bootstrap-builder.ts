@@ -12,6 +12,7 @@ export interface DockerBootstrapOptions {
   runtimeNpmPrefix: string;
   runtimeNpmCache: string;
   fallbackProviders?: string[];
+  runSetupScript?: boolean;
 }
 
 /**
@@ -27,7 +28,7 @@ export class DockerBootstrapBuilder {
       this.header(),
       this.credentialSync(),
       this.npmConfig(options.runtimeNpmPrefix, options.runtimeNpmCache),
-      this.setupScript(),
+      this.setupScript(options.runSetupScript !== false),
       this.fallbackInstall(options.fallbackProviders || ["gemini", "codex", "claude"]),
       this.claudeAuth(),
       this.execution(),
@@ -63,7 +64,10 @@ export class DockerBootstrapBuilder {
     ].join("\n");
   }
 
-  private setupScript(): string {
+  private setupScript(enabled: boolean): string {
+    if (!enabled) {
+      return "";
+    }
     return `if [ -f "${CONTAINER_SETUP_SCRIPT}" ]; then bash "${CONTAINER_SETUP_SCRIPT}" || echo "provider-runner: setup script failed" >&2; fi`;
   }
 

@@ -64,10 +64,13 @@ Checks:
 - If `Settings -> CLI Workflow -> Execution Mode` is `Docker`:
   - Is Docker daemon available (`docker ps`)?
   - Is the configured image pullable/runnable?
-  - If provider tools are not in the image, is a setup script configured (or present at `.jules-subagents/container/setup.sh`)?
+  - If provider tools are not in the image, is a setup script configured, present at `.sprint-os/container/setup.sh`, or available through the bundled Sprint OS default script?
+  - If `Cache setup as image` is enabled, check session activity for cache hits or image-build failures before the worker command starts.
   - Check session activity for setup resolution details:
     - `Configured container setup script not found: ...`
-    - `No container setup script found. Checked: ...`
+    - `Using cached Docker setup image ...`
+    - `Building cached Docker setup image ...`
+    - `Cached Docker setup image build failed ... Falling back to runtime setup script.`
   - Provider runner now falls back to installing missing provider CLI in-container before failing:
     - `gemini`: `npm install -g @google/gemini-cli`
     - `codex`: `npm install -g @openai/codex`
@@ -77,8 +80,9 @@ Checks:
   - Runtime now syncs only those Claude auth files before launch, avoiding recursive copy of all `.claude` state.
   - If auth is expected from host login state, is the relevant Docker auth mount enabled and is its mount path valid?
   - Docker mode requires daemon-visible workspace paths. Runtime now prefers repo-scoped worktree paths for Docker sessions.
-  - Docker runtime state is stored under `~/.jules-subagents/runtime/docker/<repo-hash>/` by default (override with `JULES_DOCKER_RUNTIME_ROOT`).
+  - Docker runtime state is stored under `~/.sprint-os/runtime/docker/<repo-hash>/` by default (override with `JULES_DOCKER_RUNTIME_ROOT`).
   - Codex uses per-session container home directories under that runtime root to prevent stale state from previous Codex runs.
+  - Runtime cleanup prunes stale `home-codex-*` session homes and stale shared runtime temp directories automatically once those sessions are no longer active.
   - GitHub/Gemini credential sync copies mount contents into fixed dirs (`~/.config/gh`, `~/.gemini`) to avoid nested auth directories across repeated runs.
   - If provider output says "No file changes produced", runtime now still checks for unpushed worker-branch commits and will push/create (or reuse) the feature PR when commits exist.
   - For Docker-in-Docker or remote daemon path mismatches, configure:

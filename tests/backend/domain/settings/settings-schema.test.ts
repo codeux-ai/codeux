@@ -149,6 +149,7 @@ describe("validateSettingsPayload", () => {
         executionMode: "bad",
         containerImage: 1,
         containerSetupScriptPath: 2,
+        containerCacheSetupScriptImage: "bad",
         containerMountGitConfig: "bad",
         containerMountGithubAuth: "bad",
         containerMountGeminiAuth: "bad",
@@ -188,6 +189,7 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("ciIntelligence.featurePrAutoMergeMode");
     expect(paths).toContain("sprintLoopSteps.watchLoopOutputIntervalSeconds");
     expect(paths).toContain("cliWorkflow.executionMode");
+    expect(paths).toContain("cliWorkflow.containerCacheSetupScriptImage");
     expect(paths).toContain("cliWorkflow.containerClaudeCodeAuthPath");
     expect(paths).toContain("agents.saveToProjectDirectory");
     expect(paths).toContain("agents.instructionTemplates");

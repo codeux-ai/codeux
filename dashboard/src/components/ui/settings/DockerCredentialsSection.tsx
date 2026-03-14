@@ -26,6 +26,14 @@ const topDescriptors: FieldDescriptor<DashboardSettings["cliWorkflow"]>[] = [
     getValue: (workflow) => workflow.containerSetupScriptPath,
     onInput: (workflow, value) => ({ ...workflow, containerSetupScriptPath: value }),
   },
+  {
+    id: "containerCacheSetupScriptImage",
+    type: "toggle",
+    label: "Cache setup as image",
+    description: "Build and reuse a derived image from the base image and setup script contents.",
+    getValue: (workflow) => workflow.containerCacheSetupScriptImage,
+    onToggle: (workflow, checked) => ({ ...workflow, containerCacheSetupScriptImage: checked }),
+  },
 ];
 
 const toggleDescriptors: FieldDescriptor<DashboardSettings["cliWorkflow"]>[] = [

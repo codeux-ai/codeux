@@ -543,14 +543,18 @@ export class JulesAgentServer {
       logger: this.logger,
     });
     this.refreshJulesApiKey();
-    const recovery = this.sessionTracking.recoverInterruptedCliSessions();
-    if (recovery.recoveredCount > 0) {
-      const sample = recovery.sessionIds.slice(0, 5).join(", ");
-      this.logger.warn("Recovered interrupted CLI sessions", {
-        recoveredCount: recovery.recoveredCount,
-        sampleSessionIds: sample,
-        additionalRecoveredCount: Math.max(recovery.recoveredCount - 5, 0),
-      });
+    try {
+      const recovery = this.sessionTracking.recoverInterruptedCliSessions();
+      if (recovery.recoveredCount > 0) {
+        const sample = recovery.sessionIds.slice(0, 5).join(", ");
+        this.logger.warn("Recovered interrupted CLI sessions", {
+          recoveredCount: recovery.recoveredCount,
+          sampleSessionIds: sample,
+          additionalRecoveredCount: Math.max(recovery.recoveredCount - 5, 0),
+        });
+      }
+    } catch (error) {
+      this.logger.error("Failed to recover interrupted CLI sessions on startup", { error });
     }
 
     if (this.isDashboardEnabled()) {
