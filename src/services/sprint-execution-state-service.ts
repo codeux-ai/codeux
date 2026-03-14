@@ -57,7 +57,7 @@ export class SprintExecutionStateService {
     const sprintNumber = sprint.number ?? args.sprint_number;
 
     if (typeof sprintNumber !== "number" || Number.isNaN(sprintNumber)) {
-      throw new Error(`Sprint ${sprint.id} has no number configured. Assign a sprint number in the dashboard before running sprint_agent.`);
+      throw new Error(`Sprint ${sprint.id} has no number configured. Assign a sprint number in the dashboard before starting orchestration.`);
     }
 
     const repoPath = path.resolve((args.repo_path && args.repo_path.trim()) || project.baseDir);

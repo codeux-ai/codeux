@@ -13,6 +13,12 @@ import { ConnectionChatRepository } from "../../repositories/connection-chat-rep
 import { ExecutionRepository } from "../../repositories/execution-repository.js";
 import { AgentPresetRepository } from "../../repositories/agent-preset-repository.js";
 import { DashboardRealtimeEventRepository } from "../../repositories/dashboard-realtime-event-repository.js";
+import { WorkerEndpointRepository } from "../../repositories/worker-endpoint-repository.js";
+import { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
+import { ProjectWorkerAssignmentService } from "../../domain/workers/project-worker-assignment-service.js";
+import { ProjectAttentionRepository } from "../../repositories/project-attention-repository.js";
+import { ProjectAttentionService } from "../../domain/workers/project-attention-service.js";
+import { WorkerAttentionOutcomeService } from "../../domain/workers/worker-attention-outcome-service.js";
 import { AgentPresetSyncService } from "../../services/agent-preset-sync-service.js";
 import { ActivitySummaryService } from "../../domain/sessions/activity-summary.js";
 import { JulesSourceResolver } from "../../services/jules-source-resolver.js";
@@ -41,6 +47,12 @@ export interface CoreDependencies {
   projectManagementRepository: ProjectManagementRepository;
   projectRuntimeRepository: ProjectRuntimeRepository;
   connectionChatRepository: ConnectionChatRepository;
+  workerEndpointRepository: WorkerEndpointRepository;
+  projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
+  projectWorkerAssignmentService: ProjectWorkerAssignmentService;
+  projectAttentionRepository: ProjectAttentionRepository;
+  projectAttentionService: ProjectAttentionService;
+  workerAttentionOutcomeService: WorkerAttentionOutcomeService;
   agentPresetRepository: AgentPresetRepository;
   agentPresetSyncService: AgentPresetSyncService;
   executionRepository: ExecutionRepository;
@@ -59,7 +71,7 @@ export function createCoreDependencies(
 ): CoreDependencies {
   const externalSettingsHints = loadExternalSettingsHints(options.projectRoot);
   const settingsRepository = new SettingsRepository(undefined, externalSettingsHints);
-  const dashboardSettings = settingsRepository.getSettings();
+  const dashboardSettings = settingsRepository.getDefaultDashboardSettings();
   context.runtimeContext.dashboardSettings = dashboardSettings;
 
   const logFilePath = dashboardSettings.enableDebugLogFile
@@ -102,7 +114,26 @@ export function createCoreDependencies(
   );
   const projectManagementRepository = new ProjectManagementRepository(appDbStorage, dashboardRealtimeService);
   const projectRuntimeRepository = new ProjectRuntimeRepository(appDbStorage);
-  const connectionChatRepository = new ConnectionChatRepository(appDbStorage, dashboardRealtimeService);
+  const workerEndpointRepository = new WorkerEndpointRepository(appDbStorage);
+  const projectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(appDbStorage);
+  const projectWorkerAssignmentService = new ProjectWorkerAssignmentService(
+    projectWorkerAssignmentRepository,
+    workerEndpointRepository,
+  );
+  const projectAttentionRepository = new ProjectAttentionRepository(appDbStorage);
+  const projectAttentionService = new ProjectAttentionService(
+    projectAttentionRepository,
+    projectWorkerAssignmentRepository,
+  );
+  const connectionChatRepository = new ConnectionChatRepository(
+    appDbStorage,
+    dashboardRealtimeService,
+    workerEndpointRepository,
+  );
+  const workerAttentionOutcomeService = new WorkerAttentionOutcomeService(
+    projectAttentionService,
+    connectionChatRepository,
+  );
   const agentPresetRepository = new AgentPresetRepository(appDbStorage);
   const agentPresetSyncService = new AgentPresetSyncService({
     projectManagementRepository,
@@ -117,6 +148,7 @@ export function createCoreDependencies(
     connectionChatRepository,
     executionRepository,
     projectManagementRepository,
+    projectAttentionService,
     logger.child({ component: "runtime-cleanup-service" }),
   );
   const julesSourceResolver = new JulesSourceResolver(julesApi);
@@ -137,6 +169,12 @@ export function createCoreDependencies(
     projectManagementRepository,
     projectRuntimeRepository,
     connectionChatRepository,
+    workerEndpointRepository,
+    projectWorkerAssignmentRepository,
+    projectWorkerAssignmentService,
+    projectAttentionRepository,
+    projectAttentionService,
+    workerAttentionOutcomeService,
     agentPresetRepository,
     agentPresetSyncService,
     executionRepository,

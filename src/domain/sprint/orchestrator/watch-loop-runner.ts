@@ -64,7 +64,7 @@ export class WatchLoopRunner {
     };
 
     let allFinished = false;
-    const watchStartedAt = Date.now();
+    let checkpointWindowStartedAt = Date.now();
     let fullReport = await this.deps.renderInstruction(
       "watchHeader",
       {
@@ -142,7 +142,7 @@ export class WatchLoopRunner {
       });
 
       const runningTasks = subtasks.filter((task) => task.status === "RUNNING");
-      const readyTasks = subtasks.filter((task) => task.status === "PENDING" && task.is_independent);
+      const readyTasks = subtasks.filter((task) => task.status === "PENDING");
 
       const allTerminal = subtasks.length > 0 && subtasks.every(
         (task) => (task.status === "COMPLETED" && task.is_merged) || task.status === "FAILED"
@@ -151,7 +151,7 @@ export class WatchLoopRunner {
       const needsManualMerge = awaitingMerge.length > 0;
 
       allFinished = allTerminal || noMoreActionPossible || needsManualMerge;
-      const elapsedMs = Date.now() - watchStartedAt;
+      const elapsedMs = Date.now() - checkpointWindowStartedAt;
       const outputIntervalReached = elapsedMs >= watchLoopOutputIntervalMs;
 
       const nextState = determineNextState({
@@ -161,6 +161,12 @@ export class WatchLoopRunner {
 
       switch (nextState) {
         case WatchLoopState.FINISHED: {
+          this.deps.projectAttentionService.resolveItemsForSprintRun(
+            scopedExecutionContext.project.id,
+            sprintRunId,
+            ["manual_attention"],
+            "watch_loop_finished",
+          );
           fullReport += reportText;
           fullReport += statusTable;
           fullReport += instructions;
@@ -288,6 +294,27 @@ export class WatchLoopRunner {
             }, {
               sourceEventKey: `sprint-paused:${sprintRunId}:manual-attention`,
             });
+            this.deps.projectAttentionService.openItem({
+              projectId: scopedExecutionContext.project.id,
+              sprintId: scopedExecutionContext.sprint.id,
+              sprintRunId,
+              attentionType: "manual_attention",
+              severity: "medium",
+              ownerType: "worker",
+              title: `Sprint ${scopedExecutionContext.sprint.name} needs manual attention`,
+              summaryMarkdown: "Sprint execution paused because no further automatic action was available.",
+              payload: {
+                repoPath,
+                featureBranch: defaultFeatureBranch,
+                defaultBranch,
+                sprintNumber: scopedExecutionContext.sprintNumber,
+                runningTaskIds: runningTasks.map((task) => task.record_id || task.id),
+                readyTaskIds: readyTasks.map((task) => task.record_id || task.id),
+                blockedTaskIds: subtasks
+                  .filter((task) => task.status === "BLOCKED")
+                  .map((task) => task.record_id || task.id),
+              },
+            });
           }
 
           fullReport += "\n✅ **Sprint Execution Finished.**\n";
@@ -295,46 +322,26 @@ export class WatchLoopRunner {
         }
 
         case WatchLoopState.CHECKPOINT: {
-          const pendingTasks = subtasks.filter((task) => task.status === "PENDING");
-          const completedTasks = subtasks.filter((task) => task.status === "COMPLETED");
-          const failedTasks = subtasks.filter((task) => task.status === "FAILED");
-
-          fullReport += reportText;
-          fullReport += statusTable;
-          fullReport += instructions;
-          fullReport += await this.deps.renderInstruction(
-            "watchContinue",
-            {
-              elapsed_seconds: Math.floor(elapsedMs / 1000),
-              action: args.action,
-              running_tasks: runningTasks.length,
-              pending_tasks: pendingTasks.length,
-              completed_tasks: completedTasks.length,
-              failed_tasks: failedTasks.length,
-            },
-            repoPath
-          );
-          return fullReport;
+          this.renewSprintRunHeartbeat({
+            sprintRunId,
+            sprintId: scopedExecutionContext.sprint.id,
+            leaseToken,
+          });
+          checkpointWindowStartedAt = Date.now();
+          await new Promise((resolve) => setTimeout(resolve, watchLoopIntervalMs));
+          break;
         }
 
         case WatchLoopState.RUNNING: {
-          const now = new Date().toISOString();
           const latestRun = this.deps.executionRepository.getSprintRun(sprintRunId);
           if (latestRun?.status === "paused" || latestRun?.status === "cancelled" || latestRun?.status === "cancel_requested") {
             continue;
           }
-          this.deps.executionRepository.updateSprintRun(sprintRunId, {
-            status: "running",
-            lastHeartbeatAt: now,
+          this.renewSprintRunHeartbeat({
+            sprintRunId,
+            sprintId: scopedExecutionContext.sprint.id,
+            leaseToken,
           });
-          if (leaseToken) {
-            this.deps.executionRepository.renewLease({
-              scopeType: "sprint",
-              scopeId: scopedExecutionContext.sprint.id,
-              leaseToken,
-              expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-            });
-          }
           await new Promise((resolve) => setTimeout(resolve, watchLoopIntervalMs));
           break;
         }
@@ -350,5 +357,25 @@ export class WatchLoopRunner {
     repoPath?: string
   ): Promise<string> {
     return await this.deps.renderInstruction(templateId, variables, repoPath);
+  }
+
+  private renewSprintRunHeartbeat(args: {
+    sprintRunId: string;
+    sprintId: string;
+    leaseToken?: string;
+  }): void {
+    const now = new Date().toISOString();
+    this.deps.executionRepository.updateSprintRun(args.sprintRunId, {
+      status: "running",
+      lastHeartbeatAt: now,
+    });
+    if (args.leaseToken) {
+      this.deps.executionRepository.renewLease({
+        scopeType: "sprint",
+        scopeId: args.sprintId,
+        leaseToken: args.leaseToken,
+        expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      });
+    }
   }
 }

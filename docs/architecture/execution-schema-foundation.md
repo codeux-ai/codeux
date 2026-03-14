@@ -88,7 +88,7 @@ Current fields include:
 
 ## Follow-Up
 
-The next shipped slice that actually wires these records into `sprint_agent` is documented in:
+The next shipped slice that actually wired these records into the DB-native orchestrator is documented in:
 
 - `docs/architecture/db-native-orchestrator-integration.md`
 

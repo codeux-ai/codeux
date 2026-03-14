@@ -58,6 +58,9 @@ describe("Dashboard Factory", () => {
         createSprintRun: vi.fn(),
         updateSprintRun: vi.fn(),
       },
+      projectAttentionService: {
+        resolveItemsForDispatch: vi.fn(),
+      },
     };
 
     mockSprintDeps = {

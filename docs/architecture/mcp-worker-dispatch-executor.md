@@ -31,7 +31,7 @@ Tasks now store `executorType` in sqlite:
 
 ### Queueing
 
-When `sprint_agent` starts a ready task whose `executorType = mcp_worker`:
+When sprint orchestration starts a ready task whose `executorType = mcp_worker`:
 
 1. Sprint OS creates a `task_dispatch` with `executor_type = mcp_worker`
 2. Sprint OS creates a `task_run`

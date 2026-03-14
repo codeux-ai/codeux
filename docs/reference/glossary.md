@@ -1,7 +1,7 @@
 # Glossary
 
 ## Agent Tool Handler
-Module that handles `sprint_agent` and `task_agent` calls.
+Module that handles `task_agent` and worker-local agent helper calls.
 
 ## Core Tool Handler
 Module that handles source/session/activity tool calls.

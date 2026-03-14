@@ -6,6 +6,9 @@ import type { McpConnectionRecord } from "../contracts/connection-chat-types.js"
 import { ExecutionRepository } from "../repositories/execution-repository.js";
 import { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
+import { WorkerEndpointRepository } from "../repositories/worker-endpoint-repository.js";
+import { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
+import { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 
 export interface PullWorkerTaskDispatchArgs {
@@ -38,12 +41,15 @@ export class WorkerTaskDispatchService {
     private readonly executionRepository: ExecutionRepository,
     private readonly projectManagementRepository: ProjectManagementRepository,
     private readonly connectionChatRepository: ConnectionChatRepository,
+    private readonly workerEndpointRepository: WorkerEndpointRepository,
+    private readonly projectWorkerAssignmentService: ProjectWorkerAssignmentService,
+    private readonly projectAttentionService: ProjectAttentionService,
     private readonly getDashboardSettings: () => DashboardSettings,
     private readonly logger?: Logger,
   ) {}
 
   pullNextDispatch(args: PullWorkerTaskDispatchArgs): WorkerTaskDispatchClaim | null {
-    const connection = this.requireWorkerConnection(args.connectionKey);
+    const { connection, workerEndpoint } = this.requireWorkerConnection(args.connectionKey);
     const projectIds = this.resolveProjectIds(connection, args.projectId);
 
     for (const projectId of projectIds) {
@@ -84,6 +90,7 @@ export class WorkerTaskDispatchService {
       const project = this.requireProject(dispatch.projectId);
       const sprint = this.requireSprint(dispatch.sprintId);
       const task = this.requireTask(dispatch.taskId);
+      this.projectWorkerAssignmentService.noteWorkerActivity(project.id, workerEndpoint.id);
       const featureBranch = sprint.featureBranch?.trim()
         || (typeof sprint.number === "number"
           ? formatSprintBranch(this.getDashboardSettings().git.sprintBranchScheme, sprint.number)
@@ -150,7 +157,7 @@ export class WorkerTaskDispatchService {
   }
 
   updateDispatch(args: UpdateWorkerTaskDispatchArgs): UpdateWorkerTaskDispatchResult {
-    const connection = this.requireWorkerConnection(args.connectionKey);
+    const { connection, workerEndpoint } = this.requireWorkerConnection(args.connectionKey);
     const dispatch = this.requireDispatch(args.dispatchId);
     const taskRun = this.requireTaskRun(dispatch.id);
     const lease = this.executionRepository.getLease("task_dispatch", dispatch.id);
@@ -163,6 +170,7 @@ export class WorkerTaskDispatchService {
     }
 
     const now = new Date().toISOString();
+    this.projectWorkerAssignmentService.noteWorkerActivity(dispatch.projectId, workerEndpoint.id);
     const cancelRequested = dispatch.status === "cancel_requested";
     const taskUpdateStatus = cancelRequested
       ? "pending"
@@ -234,6 +242,38 @@ export class WorkerTaskDispatchService {
     }
 
     this.executionRepository.releaseLease("task_dispatch", dispatch.id, args.leaseToken);
+    if (args.state === "COMPLETED") {
+      this.projectAttentionService.resolveItemsForDispatch(dispatch.id, "worker_completed_dispatch");
+    } else if (args.state === "FAILED") {
+      this.projectAttentionService.resolveItemsForDispatch(dispatch.id, "worker_failed_dispatch");
+    } else if (args.state === "BLOCKED") {
+      this.projectAttentionService.openItem({
+        projectId: dispatch.projectId,
+        sprintId: dispatch.sprintId,
+        taskId: dispatch.taskId,
+        sprintRunId: dispatch.sprintRunId,
+        dispatchId: dispatch.id,
+        attentionType: "worker_dispatch_blocked",
+        severity: "high",
+        ownerType: "worker",
+        preferredWorkerEndpointId: workerEndpoint.id,
+        title: `Worker blocked on task ${this.requireTask(dispatch.taskId).taskKey}`,
+        summaryMarkdown: args.summaryMarkdown?.trim()
+          || args.errorMessage?.trim()
+          || "Worker marked the dispatch as blocked and requested follow-up supervision.",
+        payload: {
+          dispatchId: dispatch.id,
+          taskId: dispatch.taskId,
+          sprintId: dispatch.sprintId,
+          provider: args.provider ?? taskRun.provider ?? null,
+          sessionId: args.sessionId ?? taskRun.sessionId ?? null,
+          sessionName: args.sessionName ?? taskRun.sessionName ?? null,
+          workerBranch: args.workerBranch ?? taskRun.workerBranch ?? null,
+          prUrl: args.prUrl ?? taskRun.prUrl ?? null,
+          errorMessage: args.errorMessage ?? null,
+        },
+      });
+    }
     if (nextDispatch.sprintRunId) {
       this.executionRepository.finalizeSprintRunCancellationIfIdle(nextDispatch.sprintRunId);
     }
@@ -249,7 +289,7 @@ export class WorkerTaskDispatchService {
     };
   }
 
-  private requireWorkerConnection(connectionKey: string): McpConnectionRecord {
+  private requireWorkerConnection(connectionKey: string): { connection: McpConnectionRecord; workerEndpoint: NonNullable<ReturnType<WorkerEndpointRepository["getWorkerEndpointByConnectionId"]>> } {
     const connection = this.connectionChatRepository.getConnectionByKey(connectionKey);
     if (!connection) {
       throw new Error(`Connection not found for key: ${connectionKey}`);
@@ -257,7 +297,14 @@ export class WorkerTaskDispatchService {
     if (connection.role !== "worker") {
       throw new Error(`Connection ${connectionKey} is not registered as a worker.`);
     }
-    return connection;
+    const workerEndpoint = this.workerEndpointRepository.getWorkerEndpointByConnectionId(connection.id);
+    if (!workerEndpoint) {
+      throw new Error(`Worker endpoint not found for connection ${connectionKey}.`);
+    }
+    if (!workerEndpoint.capabilities.canExecuteTasks) {
+      throw new Error(`Worker ${connectionKey} cannot execute task dispatches.`);
+    }
+    return { connection, workerEndpoint };
   }
 
   private resolveProjectIds(
@@ -279,7 +326,29 @@ export class WorkerTaskDispatchService {
     if (projectIds.length === 0) {
       throw new Error(`Connection ${connection.connectionKey} is not bound to any active project.`);
     }
-    return projectIds;
+
+    const affinityProjectIds = this.executionRepository.listWorkerProjectAffinity(connection.id);
+    if (affinityProjectIds.length === 0) {
+      return projectIds;
+    }
+
+    const availableProjectIds = new Set(projectIds);
+    const orderedProjectIds: string[] = [];
+
+    for (const projectId of affinityProjectIds) {
+      if (availableProjectIds.has(projectId)) {
+        orderedProjectIds.push(projectId);
+        availableProjectIds.delete(projectId);
+      }
+    }
+
+    for (const projectId of projectIds) {
+      if (availableProjectIds.has(projectId)) {
+        orderedProjectIds.push(projectId);
+      }
+    }
+
+    return orderedProjectIds;
   }
 
   private requireProject(projectId: string) {

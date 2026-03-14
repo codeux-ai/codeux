@@ -23,6 +23,7 @@ export function createDashboardDependencies(
     projectRuntimeRepository,
     projectManagementRepository,
     connectionChatRepository,
+    projectAttentionService,
     agentPresetSyncService,
     executionRepository,
     julesApi,
@@ -128,6 +129,7 @@ export function createDashboardDependencies(
   const executionControlService = new ExecutionControlService({
     projectManagementRepository,
     executionRepository,
+    projectAttentionService,
     taskRerunService,
     sprintOrchestrator,
     julesApi,

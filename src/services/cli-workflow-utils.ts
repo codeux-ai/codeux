@@ -8,7 +8,6 @@ export const DEFAULT_CLI_WORKFLOW_SETTINGS: CliWorkflowSettings = {
   executionMode: "HOST",
   containerImage: "node:24-bookworm",
   containerSetupScriptPath: "",
-  containerMountCredentials: false,
   containerMountGitConfig: true,
   containerMountGithubAuth: true,
   containerMountGeminiAuth: true,

@@ -88,6 +88,7 @@ describe("Sprint Factory", () => {
       },
       projectManagementRepository: {},
       executionRepository: {},
+      projectAttentionService: {},
     };
   });
 

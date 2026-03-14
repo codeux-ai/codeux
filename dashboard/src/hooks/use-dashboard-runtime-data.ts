@@ -30,6 +30,9 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
     sprintRuns: [],
     taskDispatches: [],
     connections: [],
+    primaryAssignedWorker: null,
+    overflowAssignedWorkers: [],
+    attentionItems: [],
     recentEvents: [],
     updatedAt: null,
   });

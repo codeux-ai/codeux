@@ -2,6 +2,7 @@ import type { Subtask } from "../contracts/app-types.js";
 import type { TaskDispatchRecord, SprintRunRecord, TaskRunRecord } from "../contracts/execution-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
+import type { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
 import type { TaskRerunService } from "./task-rerun-service.js";
 import type { SprintOrchestrator } from "../sprint/sprint-orchestrator.js";
 import type { JulesApiClient } from "../integrations/jules-api-client.js";
@@ -11,6 +12,7 @@ import type { Logger } from "../shared/logging/logger.js";
 interface ExecutionControlServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;
+  projectAttentionService: ProjectAttentionService;
   taskRerunService: TaskRerunService;
   sprintOrchestrator: SprintOrchestrator;
   julesApi: JulesApiClient;
@@ -198,6 +200,8 @@ export class ExecutionControlService {
         sourceEventKey: `dashboard-retry:${dispatchId}`,
       },
     );
+
+    this.deps.projectAttentionService.resolveItemsForDispatch(dispatchId, "dispatch_retry_requested");
 
     return await this.deps.taskRerunService.rerunTask(task.id);
   }

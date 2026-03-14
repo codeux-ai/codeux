@@ -136,7 +136,6 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     executionMode: "HOST",
     containerImage: "node:24-bookworm",
     containerSetupScriptPath: "",
-    containerMountCredentials: false,
     containerMountGitConfig: true,
     containerMountGithubAuth: true,
     containerMountGeminiAuth: true,

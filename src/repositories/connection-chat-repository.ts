@@ -18,6 +18,7 @@ import type {
   UpsertMcpConnectionInput,
 } from "../contracts/connection-chat-types.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
+import { WorkerEndpointRepository } from "./worker-endpoint-repository.js";
 
 interface ConnectionRow {
   id: string;
@@ -41,6 +42,22 @@ interface BindingRow {
   connection_id: string;
   project_id: string;
   is_active: number | string;
+  last_attention_cursor: string | null;
+  last_assignment_cursor: string | null;
+}
+
+export interface ConnectionProjectBindingState {
+  projectId: string;
+  isActive: boolean;
+  lastAttentionCursor: string | null;
+  lastAssignmentCursor: string | null;
+}
+
+export interface CreateSystemConversationMessageInput {
+  threadId?: string;
+  title?: string;
+  connectionId?: string | null;
+  bodyMarkdown: string;
 }
 
 interface ThreadRow {
@@ -115,6 +132,7 @@ export class ConnectionChatRepository {
   constructor(
     storage: AppDbStorage = new AppDbStorage(),
     private readonly realtimeService?: DashboardRealtimeService,
+    private readonly workerEndpointRepository: WorkerEndpointRepository = new WorkerEndpointRepository(storage),
   ) {
     this.db = storage.getDatabase();
   }
@@ -263,8 +281,14 @@ export class ConnectionChatRepository {
 
       if (normalizedProjectIds.length > 0) {
         const insertBinding = this.db.prepare(`
-          INSERT INTO connection_project_bindings (connection_id, project_id, is_active, created_at)
-          VALUES (?, ?, ?, ?)
+          INSERT INTO connection_project_bindings (
+            connection_id,
+            project_id,
+            is_active,
+            last_attention_cursor,
+            last_assignment_cursor,
+            created_at
+          ) VALUES (?, ?, ?, NULL, NULL, ?)
         `);
         for (const projectId of normalizedProjectIds) {
           insertBinding.run(connectionId, projectId, Number(activeProjectIds.includes(projectId)), now);
@@ -273,6 +297,7 @@ export class ConnectionChatRepository {
     });
 
     const connection = this.requireConnection(connectionId);
+    this.syncWorkerEndpoint(connection);
     this.notifyProjects([...connection.projectIds, ...connection.activeProjectIds]);
     return connection;
   }
@@ -309,6 +334,7 @@ export class ConnectionChatRepository {
     });
 
     const connection = this.requireConnection(connectionId);
+    this.syncWorkerEndpoint(connection);
     this.notifyProjects([...connection.projectIds, ...connection.activeProjectIds]);
     return connection;
   }
@@ -487,8 +513,73 @@ export class ConnectionChatRepository {
     return created;
   }
 
+  postSystemMessage(projectId: string, input: CreateSystemConversationMessageInput): ConversationMessageRecord {
+    this.requireProject(projectId);
+    const thread = input.threadId
+      ? this.requireThread(input.threadId)
+      : this.createThread(projectId, {
+        title: input.title?.trim() || `Worker Attention ${new Date().toISOString().slice(0, 16)}`,
+        connectionId: input.connectionId ?? undefined,
+      });
+
+    if (thread.projectId !== projectId) {
+      throw new Error(`Thread ${thread.id} does not belong to project ${projectId}`);
+    }
+
+    const preferredConnectionId = thread.connectionId || input.connectionId || null;
+    const now = new Date().toISOString();
+    const messageId = randomUUID();
+
+    this.runInTransaction(() => {
+      if (!thread.connectionId && preferredConnectionId) {
+        this.db.prepare(`
+          UPDATE conversation_threads
+          SET connection_id = ?, updated_at = ?
+          WHERE id = ?
+        `).run(preferredConnectionId, now, thread.id);
+      } else {
+        this.db.prepare(`
+          UPDATE conversation_threads
+          SET updated_at = ?
+          WHERE id = ?
+        `).run(now, thread.id);
+      }
+
+      this.db.prepare(`
+        INSERT INTO conversation_messages (
+          id, thread_id, direction, author_type, author_connection_id, body_markdown, delivery_status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        messageId,
+        thread.id,
+        "connection_to_dashboard",
+        "system",
+        null,
+        input.bodyMarkdown.trim(),
+        "processed",
+        now,
+      );
+    });
+
+    const message = this.requireMessage(messageId);
+    this.notifyProjects([projectId]);
+    this.publishThreadUpdatedEvent(this.requireThread(thread.id));
+    this.publishMessageCreatedEvent(projectId, thread.id, message);
+    return message;
+  }
+
   startListen(input: StartListenInput): StartListenResponse {
-    const projectId = input.projectId?.trim() || this.getSelectedProjectId();
+    const normalizedProjectIds = this.normalizeListenProjectIds(input.projectIds, input.projectId);
+    const fallbackProjectId = normalizedProjectIds[0] || this.getSelectedProjectId();
+    const projectIds = normalizedProjectIds.length > 0
+      ? normalizedProjectIds
+      : fallbackProjectId
+        ? [fallbackProjectId]
+        : [];
+    const activeProjectIds = this.normalizeActiveProjectIds(
+      projectIds,
+      input.activeProjectIds && input.activeProjectIds.length > 0 ? input.activeProjectIds : projectIds,
+    );
     const connection = this.upsertConnection({
       connectionKey: input.connectionKey,
       displayName: input.displayName?.trim() || input.connectionKey.trim(),
@@ -499,13 +590,13 @@ export class ConnectionChatRepository {
         listenMode: true,
         ...(input.capabilities || {}),
       },
-      projectIds: projectId ? [projectId] : [],
-      activeProjectIds: projectId ? [projectId] : [],
+      projectIds,
+      activeProjectIds,
     });
 
     const inbox = this.pullInbox({
       connectionKey: input.connectionKey,
-      projectId: projectId || undefined,
+      projectId: fallbackProjectId || undefined,
       maxMessages: input.maxMessages,
     });
 
@@ -733,12 +824,53 @@ export class ConnectionChatRepository {
       offlineConnectionIds: offlineRows.map((row) => row.id),
       prunedConnectionIds: prunedRows.map((row) => row.id),
     };
+    for (const connectionId of [...result.staleConnectionIds, ...result.offlineConnectionIds]) {
+      const connection = this.getConnection(connectionId);
+      if (connection) {
+        this.syncWorkerEndpoint(connection);
+      }
+    }
     this.notifyProjects([
       ...this.resolveProjectIdsForConnections(result.staleConnectionIds),
       ...this.resolveProjectIdsForConnections(result.offlineConnectionIds),
       ...prunedProjectIds,
     ]);
     return result;
+  }
+
+  listProjectBindingStates(connectionId: string): ConnectionProjectBindingState[] {
+    const rows = this.db.prepare(`
+      SELECT connection_id, project_id, is_active, last_attention_cursor, last_assignment_cursor
+      FROM connection_project_bindings
+      WHERE connection_id = ?
+      ORDER BY is_active DESC, project_id ASC
+    `).all(connectionId) as unknown as BindingRow[];
+
+    return rows.map((row) => ({
+      projectId: row.project_id,
+      isActive: toBoolean(row.is_active),
+      lastAttentionCursor: row.last_attention_cursor,
+      lastAssignmentCursor: row.last_assignment_cursor,
+    }));
+  }
+
+  updateProjectBindingCursor(
+    connectionId: string,
+    projectId: string,
+    updates: { attentionCursor?: string | null; assignmentCursor?: string | null },
+  ): void {
+    this.db.prepare(`
+      UPDATE connection_project_bindings
+      SET last_attention_cursor = COALESCE(?, last_attention_cursor),
+          last_assignment_cursor = COALESCE(?, last_assignment_cursor)
+      WHERE connection_id = ?
+        AND project_id = ?
+    `).run(
+      updates.attentionCursor === undefined ? null : updates.attentionCursor,
+      updates.assignmentCursor === undefined ? null : updates.assignmentCursor,
+      connectionId,
+      projectId,
+    );
   }
 
   private inflateConnections(rows: ConnectionRow[]): McpConnectionRecord[] {
@@ -1059,7 +1191,15 @@ export class ConnectionChatRepository {
       SET status = COALESCE(?, status), last_heartbeat_at = ?, updated_at = ?
       WHERE id = ?
     `).run(requestedStatus || null, now, now, connection.id);
+    const refreshed = this.getConnection(connection.id);
+    if (refreshed) {
+      this.syncWorkerEndpoint(refreshed);
+    }
     return true;
+  }
+
+  private syncWorkerEndpoint(connection: McpConnectionRecord): void {
+    this.workerEndpointRepository.upsertMcpConnectionEndpoint(connection);
   }
 
   private normalizeProjectIds(projectIds?: string[]): string[] {
@@ -1075,6 +1215,14 @@ export class ConnectionChatRepository {
       normalized.push(trimmed);
     }
     return normalized;
+  }
+
+  private normalizeListenProjectIds(projectIds?: string[], projectId?: string): string[] {
+    const combined = [...(projectIds || [])];
+    if (projectId?.trim()) {
+      combined.push(projectId.trim());
+    }
+    return this.normalizeProjectIds(combined);
   }
 
   private normalizeActiveProjectIds(projectIds: string[], activeProjectIds?: string[]): string[] {

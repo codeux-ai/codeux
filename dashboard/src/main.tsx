@@ -23,7 +23,6 @@ const AgentsPage    = lazy(() => import("./v2/AgentsPage.js").then(m => ({ defau
 const SettingsPage  = lazy(() => import("./v2/SettingsPage.js").then(m => ({ default: m.SettingsPage })));
 const MemoryPage    = lazy(() => import("./v2/MemoryPage.js").then(m => ({ default: m.MemoryPage })));
 const LiveSessionPage = lazy(() => import("./v2/LiveSessionPage.js").then(m => ({ default: m.LiveSessionPage })));
-const LegacyApp     = lazy(() => import("./legacy-app.js").then(m => ({ default: m.App })));
 
 // 1. Root layout route
 const rootRoute = createRootRoute({
@@ -107,12 +106,6 @@ const liveRoute = createRoute({
   component: LiveSessionPage,
 });
 
-const legacyRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/legacy",
-  component: LegacyApp,
-});
-
 // 3. Router
 const configRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -126,29 +119,11 @@ const memoryRoute = createRoute({
   component: MemoryPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, configRoute, memoryRoute, liveRoute, legacyRoute]);
+const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, configRoute, memoryRoute, liveRoute]);
 const router = createRouter({ routeTree });
 
-// 4. Entry — legacy hash fallback preserved
-const Root = () => {
-  const [legacyHash, setLegacyHash] = useState(window.location.hash);
-
-  useEffect(() => {
-    const handler = () => setLegacyHash(window.location.hash);
-    window.addEventListener("hashchange", handler);
-    return () => window.removeEventListener("hashchange", handler);
-  }, []);
-
-  if (legacyHash === "#legacy") {
-    return (
-      <Suspense fallback={null}>
-        <LegacyApp />
-      </Suspense>
-    );
-  }
-
-  return <RouterProvider router={router} />;
-};
+// 4. Entry
+const Root = () => <RouterProvider router={router} />;
 
 const container = document.getElementById("app");
 if (!container) throw new Error("Dashboard root element '#app' not found");

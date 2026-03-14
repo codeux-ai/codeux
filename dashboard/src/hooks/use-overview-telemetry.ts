@@ -5,6 +5,7 @@ import { subscribeToDashboardRealtime } from "../lib/realtime/dashboard-realtime
 
 const EMPTY_TELEMETRY: OverviewTelemetrySnapshot = {
   activeProjects: [],
+  attentionProjects: [],
   recentEvents: [],
   updatedAt: null,
 };

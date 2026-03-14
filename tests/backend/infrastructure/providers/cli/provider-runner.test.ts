@@ -148,6 +148,34 @@ describe("ProviderRunner", () => {
     expect(mockDockerRunner.runProviderInDocker).toHaveBeenCalled();
   });
 
+  it("should not pass mounted Gemini auth or GitHub token env vars into Docker", async () => {
+    const onActivity = vi.fn();
+    defaultWorkflowSettings = {
+      executionMode: "DOCKER",
+      containerMountGithubAuth: true,
+      containerMountGeminiAuth: true,
+    } as CliWorkflowSettings;
+
+    await runner.runProvider({
+      provider: "gemini",
+      prompt: "test prompt",
+      cwd: "/repo",
+      model: "test-model",
+      apiKey: "test-api-key",
+      sessionId: "session-1",
+      workflowSettings: defaultWorkflowSettings,
+      repoPath: "/repo",
+      githubToken: "gh-token-123",
+      onActivity,
+    });
+
+    const [input] = vi.mocked(mockDockerRunner.runProviderInDocker).mock.calls[0];
+    expect(input.providerEnv.GEMINI_MODEL).toBe("test-model");
+    expect(input.providerEnv.GEMINI_API_KEY).toBeUndefined();
+    expect(input.providerEnv.GH_TOKEN).toBeUndefined();
+    expect(input.providerEnv.GITHUB_TOKEN).toBeUndefined();
+  });
+
   it("should handle Docker workspace mount error", async () => {
     const onActivity = vi.fn();
     defaultWorkflowSettings.executionMode = "DOCKER";

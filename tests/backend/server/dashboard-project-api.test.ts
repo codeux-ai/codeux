@@ -5,14 +5,19 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { setupDashboardServer } from "../../../src/server/dashboard-server.js";
-import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { ProjectRuntimeRepository } from "../../../src/repositories/project-runtime-repository.js";
 import { ConnectionChatRepository } from "../../../src/repositories/connection-chat-repository.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
+import { ProjectAttentionRepository } from "../../../src/repositories/project-attention-repository.js";
 import { AgentPresetRepository } from "../../../src/repositories/agent-preset-repository.js";
+import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
+import { WorkerEndpointRepository } from "../../../src/repositories/worker-endpoint-repository.js";
+import { ProjectWorkerAssignmentRepository } from "../../../src/repositories/project-worker-assignment-repository.js";
 import { SprintMarkdownService } from "../../../src/services/sprint-markdown-service.js";
+import { ProjectAttentionService } from "../../../src/domain/workers/project-attention-service.js";
+import { ProjectWorkerAssignmentService } from "../../../src/domain/workers/project-worker-assignment-service.js";
 import type { McpConnectionRecord } from "../../../src/contracts/connection-chat-types.js";
 
 const serversToClose: Server[] = [];
@@ -43,6 +48,57 @@ const mapExecutionConnections = (connections: McpConnectionRecord[]) => (
   }))
 );
 
+const mapAssignedWorkers = (projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository, projectId: string) => {
+  const assignments = projectWorkerAssignmentRepository.listAssignmentsForProject(projectId, { activeOnly: true })
+    .map((assignment) => ({
+      assignmentId: assignment.id,
+      workerEndpointId: assignment.workerEndpointId,
+      workerEndpointKey: assignment.workerEndpointKey,
+      workerEndpointType: assignment.workerEndpointType,
+      workerDisplayName: assignment.workerDisplayName,
+      connectionId: assignment.connectionId,
+      connectionKey: assignment.connectionKey,
+      transport: assignment.transport,
+      assignmentRole: assignment.assignmentRole,
+      status: assignment.status,
+      assignedAt: assignment.assignedAt,
+      lastAffinityAt: assignment.lastAffinityAt,
+      workerStatus: assignment.workerStatus,
+      canSuperviseProjects: assignment.capabilities.canSuperviseProjects,
+      canExecuteTasks: assignment.capabilities.canExecuteTasks,
+    }));
+
+  return {
+    primaryAssignedWorker: assignments.find((assignment) => assignment.assignmentRole === "primary") || null,
+    overflowAssignedWorkers: assignments.filter((assignment) => assignment.assignmentRole === "overflow"),
+  };
+};
+
+const mapAttentionItems = (projectAttentionRepository: ProjectAttentionRepository, projectId: string) => (
+  projectAttentionRepository.listProjectAttentionItems(projectId, {
+    statuses: ["open", "claimed"],
+    limit: 50,
+  }).map((item) => ({
+    id: item.id,
+    sprintId: item.sprintId,
+    taskId: item.taskId,
+    sprintRunId: item.sprintRunId,
+    dispatchId: item.dispatchId,
+    attentionType: item.attentionType,
+    severity: item.severity,
+    ownerType: item.ownerType,
+    status: item.status,
+    assignedWorkerEndpointId: item.assignedWorkerEndpointId,
+    title: item.title,
+    summaryMarkdown: item.summaryMarkdown,
+    payload: item.payload,
+    openedAt: item.openedAt,
+    claimedAt: item.claimedAt,
+    resolvedAt: item.resolvedAt,
+    updatedAt: item.updatedAt,
+  }))
+);
+
 const closeServer = async (server: Server): Promise<void> => {
   await new Promise<void>((resolve, reject) => {
     server.close((error) => {
@@ -68,6 +124,11 @@ async function createServerHandle(): Promise<{
   executionRepository: ExecutionRepository;
   runtimeRepository: ProjectRuntimeRepository;
   connectionRepository: ConnectionChatRepository;
+  workerEndpointRepository: WorkerEndpointRepository;
+  projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
+  projectWorkerAssignmentService: ProjectWorkerAssignmentService;
+  projectAttentionRepository: ProjectAttentionRepository;
+  projectAttentionService: ProjectAttentionService;
   markdownService: SprintMarkdownService;
   controlCalls: {
     orchestrate: Array<{ projectId: string; sprintId: string }>;
@@ -82,9 +143,21 @@ async function createServerHandle(): Promise<{
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const repository = new ProjectManagementRepository(storage);
   const runtimeRepository = new ProjectRuntimeRepository(storage);
-  const connectionRepository = new ConnectionChatRepository(storage);
+  const workerEndpointRepository = new WorkerEndpointRepository(storage);
+  const projectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(storage);
+  const projectWorkerAssignmentService = new ProjectWorkerAssignmentService(
+    projectWorkerAssignmentRepository,
+    workerEndpointRepository,
+  );
+  const projectAttentionRepository = new ProjectAttentionRepository(storage);
+  const projectAttentionService = new ProjectAttentionService(
+    projectAttentionRepository,
+    projectWorkerAssignmentRepository,
+  );
+  const connectionRepository = new ConnectionChatRepository(storage, undefined, workerEndpointRepository);
   const agentPresetRepository = new AgentPresetRepository(storage);
   const executionRepository = new ExecutionRepository(storage);
+  const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
   const markdownService = new SprintMarkdownService(repository);
   const controlCalls = {
     orchestrate: [] as Array<{ projectId: string; sprintId: string }>,
@@ -107,14 +180,92 @@ async function createServerHandle(): Promise<{
         ? {
           ...executionRepository.getProjectExecutionSnapshot(selectedProjectId),
           connections: mapExecutionConnections(connectionRepository.listConnections(selectedProjectId)),
+          ...mapAssignedWorkers(projectWorkerAssignmentRepository, selectedProjectId),
+          attentionItems: mapAttentionItems(projectAttentionRepository, selectedProjectId),
         }
-        : { projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null };
+        : {
+          projectId: null,
+          projectName: null,
+          sprintRuns: [],
+          taskDispatches: [],
+          connections: [],
+          primaryAssignedWorker: null,
+          overflowAssignedWorkers: [],
+          attentionItems: [],
+          recentEvents: [],
+          updatedAt: null,
+        };
     },
     getOverviewTelemetrySnapshot: () => executionRepository.getOverviewTelemetrySnapshot(),
     getProjectExecutionSnapshot: (projectId) => ({
       ...executionRepository.getProjectExecutionSnapshot(projectId),
       connections: mapExecutionConnections(connectionRepository.listConnections(projectId)),
+      ...mapAssignedWorkers(projectWorkerAssignmentRepository, projectId),
+      attentionItems: mapAttentionItems(projectAttentionRepository, projectId),
     }),
+    claimAttentionItem: (projectId, attentionItemId, input) => {
+      const current = projectAttentionRepository.getAttentionItem(attentionItemId);
+      if (!current || current.projectId !== projectId) {
+        throw new Error(`Project attention item not found: ${attentionItemId}`);
+      }
+      const workerEndpointId = input?.workerEndpointId
+        || current.assignedWorkerEndpointId
+        || mapAssignedWorkers(projectWorkerAssignmentRepository, projectId).primaryAssignedWorker?.workerEndpointId
+        || mapAssignedWorkers(projectWorkerAssignmentRepository, projectId).overflowAssignedWorkers[0]?.workerEndpointId;
+      if (!workerEndpointId) {
+        throw new Error(`No worker endpoint available to claim ${attentionItemId}`);
+      }
+      const item = projectAttentionService.claimItem(attentionItemId, workerEndpointId, input?.claimReason);
+      return {
+        id: item.id,
+        sprintId: item.sprintId,
+        taskId: item.taskId,
+        sprintRunId: item.sprintRunId,
+        dispatchId: item.dispatchId,
+        attentionType: item.attentionType,
+        severity: item.severity,
+        ownerType: item.ownerType,
+        status: item.status,
+        assignedWorkerEndpointId: item.assignedWorkerEndpointId,
+        title: item.title,
+        summaryMarkdown: item.summaryMarkdown,
+        payload: item.payload,
+        openedAt: item.openedAt,
+        claimedAt: item.claimedAt,
+        resolvedAt: item.resolvedAt,
+        updatedAt: item.updatedAt,
+      };
+    },
+    resolveAttentionItem: (projectId, attentionItemId, input) => {
+      const current = projectAttentionRepository.getAttentionItem(attentionItemId);
+      if (!current || current.projectId !== projectId) {
+        throw new Error(`Project attention item not found: ${attentionItemId}`);
+      }
+      const item = projectAttentionService.resolveItem(attentionItemId, {
+        status: input?.status || "resolved",
+        reason: input?.reason,
+        resolutionSummaryMarkdown: input?.resolutionSummaryMarkdown,
+      });
+      return {
+        id: item.id,
+        sprintId: item.sprintId,
+        taskId: item.taskId,
+        sprintRunId: item.sprintRunId,
+        dispatchId: item.dispatchId,
+        attentionType: item.attentionType,
+        severity: item.severity,
+        ownerType: item.ownerType,
+        status: item.status,
+        assignedWorkerEndpointId: item.assignedWorkerEndpointId,
+        title: item.title,
+        summaryMarkdown: item.summaryMarkdown,
+        payload: item.payload,
+        openedAt: item.openedAt,
+        claimedAt: item.claimedAt,
+        resolvedAt: item.resolvedAt,
+        updatedAt: item.updatedAt,
+      };
+    },
     getLiveActivities: async () => ({}),
     getGitStatus: async () => ({
       mode: "LOCAL",
@@ -135,7 +286,16 @@ async function createServerHandle(): Promise<{
       settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
       resolved: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
     }),
-    getSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+    getSystemSettings: () => settingsRepository.getSystemSettings(),
+    saveSystemSettings: (settings) => settingsRepository.saveSystemSettings(settings),
+    getProjectSettings: (projectId) => settingsRepository.getProjectSettings(projectId),
+    saveProjectSettings: (projectId, settings) => settingsRepository.saveProjectSettings(projectId, settings),
+    resetProjectSettings: (projectId) => settingsRepository.resetProjectSettings(projectId),
+    getProjectEffectiveSettings: (projectId) => settingsRepository.resolveProjectDashboardSettings(projectId),
+    getSprintSettings: (sprintId) => settingsRepository.getSprintSettings(sprintId),
+    saveSprintSettings: (projectId, sprintId, settings) => settingsRepository.saveSprintSettings(sprintId, settingsRepository.getProjectResolvedSettings(projectId), settings),
+    resetSprintSettings: (sprintId) => settingsRepository.resetSprintSettings(sprintId),
+    getSprintEffectiveSettings: (projectId, sprintId) => settingsRepository.resolveSprintDashboardSettings(projectId, sprintId),
     listProjects: () => repository.listProjects(),
     createProject: (input) => repository.createProject(input),
     getProject: (projectId) => repository.getProject(projectId),
@@ -164,7 +324,6 @@ async function createServerHandle(): Promise<{
     deleteConversationThread: (threadId) => connectionRepository.deleteThread(threadId),
     listConversationMessages: (threadId) => connectionRepository.listMessages(threadId),
     postConversationMessage: (projectId, input) => connectionRepository.postDashboardMessage(projectId, input),
-    saveSettings: (settings) => settings,
     rerunTask: async () => ({ ok: true }),
     orchestrateSprint: async (projectId, sprintId) => {
       controlCalls.orchestrate.push({ projectId, sprintId });
@@ -195,6 +354,11 @@ async function createServerHandle(): Promise<{
     executionRepository,
     runtimeRepository,
     connectionRepository,
+    workerEndpointRepository,
+    projectWorkerAssignmentRepository,
+    projectWorkerAssignmentService,
+    projectAttentionRepository,
+    projectAttentionService,
     markdownService,
     controlCalls,
   };
@@ -202,7 +366,17 @@ async function createServerHandle(): Promise<{
 
 describe("dashboard project management API", () => {
   it("creates and queries DB-backed projects, sprints, tasks, and markdown export", async () => {
-    const { port, runtimeRepository, controlCalls, connectionRepository, executionRepository, repository } = await createServerHandle();
+    const {
+      port,
+      runtimeRepository,
+      controlCalls,
+      connectionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentService,
+      projectAttentionService,
+      executionRepository,
+      repository,
+    } = await createServerHandle();
     const baseUrl = `http://127.0.0.1:${port}`;
 
     const projectResponse = await fetch(`${baseUrl}/api/projects`, {
@@ -259,6 +433,131 @@ describe("dashboard project management API", () => {
     const taskRecords = await fetch(`${baseUrl}/api/projects/${project.id}/tasks`)
       .then(async (response) => response.json()) as Array<{ executorType: string }>;
     expect(taskRecords[0]?.executorType).toBe("mcp_worker");
+
+    const systemSettingsResponse = await fetch(`${baseUrl}/api/system-settings`);
+    expect(systemSettingsResponse.status).toBe(200);
+    const initialSystemSettings = await systemSettingsResponse.json() as {
+      runtime: { dashboardPort: number; enableDebugLogFile: boolean };
+      integrations: { githubToken: string };
+      defaults: { git: { defaultBranch: string } };
+    };
+    expect(initialSystemSettings.runtime.dashboardPort).toBeGreaterThan(0);
+
+    const saveSystemSettingsResponse = await fetch(`${baseUrl}/api/system-settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...initialSystemSettings,
+        runtime: {
+          ...initialSystemSettings.runtime,
+          dashboardPort: 4555,
+          enableDebugLogFile: true,
+        },
+        integrations: {
+          ...initialSystemSettings.integrations,
+          githubToken: "gh-test-token",
+        },
+        defaults: {
+          ...initialSystemSettings.defaults,
+          git: {
+            ...initialSystemSettings.defaults.git,
+            defaultBranch: "mainline",
+          },
+        },
+      }),
+    });
+    expect(saveSystemSettingsResponse.status).toBe(200);
+
+    const savedProjectSettingsResponse = await fetch(`${baseUrl}/api/projects/${project.id}/settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        automationLevel: "SEMI_AUTO",
+        git: {
+          defaultBranch: "develop",
+        },
+      }),
+    });
+    expect(savedProjectSettingsResponse.status).toBe(200);
+    expect(await savedProjectSettingsResponse.json()).toEqual({
+      git: {
+        defaultBranch: "develop",
+      },
+    });
+
+    const effectiveProjectSettingsResponse = await fetch(`${baseUrl}/api/projects/${project.id}/settings/effective`);
+    expect(effectiveProjectSettingsResponse.status).toBe(200);
+    const effectiveProjectSettings = await effectiveProjectSettingsResponse.json() as {
+      settings: {
+        dashboardPort: number;
+        enableDebugLogFile: boolean;
+        automationLevel: string;
+        git: { defaultBranch: string; githubToken: string };
+      };
+      sources: Record<string, string>;
+    };
+    expect(effectiveProjectSettings.settings).toMatchObject({
+      dashboardPort: 4555,
+      enableDebugLogFile: true,
+      automationLevel: "SEMI_AUTO",
+      git: {
+        defaultBranch: "develop",
+        githubToken: "gh-test-token",
+      },
+    });
+    expect(effectiveProjectSettings.sources["git.defaultBranch"]).toBe("project");
+    expect(effectiveProjectSettings.sources["automationLevel"]).toBe("system");
+
+    const sprintSettingsResponse = await fetch(`${baseUrl}/api/sprints/${sprint.id}/settings`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        projectId: project.id,
+        automationLevel: "ALWAYS_ASK",
+      }),
+    });
+    expect(sprintSettingsResponse.status).toBe(200);
+    expect(await sprintSettingsResponse.json()).toEqual({
+      automationLevel: "ALWAYS_ASK",
+    });
+
+    const effectiveSprintSettingsResponse = await fetch(`${baseUrl}/api/projects/${project.id}/sprints/${sprint.id}/settings/effective`);
+    expect(effectiveSprintSettingsResponse.status).toBe(200);
+    const effectiveSprintSettings = await effectiveSprintSettingsResponse.json() as {
+      settings: { automationLevel: string; git: { defaultBranch: string } };
+      sources: Record<string, string>;
+    };
+    expect(effectiveSprintSettings.settings).toMatchObject({
+      automationLevel: "ALWAYS_ASK",
+      git: {
+        defaultBranch: "develop",
+      },
+    });
+    expect(effectiveSprintSettings.sources["automationLevel"]).toBe("sprint");
+    expect(effectiveSprintSettings.sources["git.defaultBranch"]).toBe("project");
+
+    const resetSprintSettingsResponse = await fetch(`${baseUrl}/api/sprints/${sprint.id}/settings`, {
+      method: "DELETE",
+    });
+    expect(resetSprintSettingsResponse.status).toBe(200);
+
+    const resetProjectSettingsResponse = await fetch(`${baseUrl}/api/projects/${project.id}/settings`, {
+      method: "DELETE",
+    });
+    expect(resetProjectSettingsResponse.status).toBe(200);
+
+    const resetEffectiveProjectSettingsResponse = await fetch(`${baseUrl}/api/projects/${project.id}/settings/effective`);
+    expect(resetEffectiveProjectSettingsResponse.status).toBe(200);
+    const resetEffectiveProjectSettings = await resetEffectiveProjectSettingsResponse.json() as {
+      settings: { automationLevel: string; git: { defaultBranch: string } };
+      sources: Record<string, string>;
+    };
+    expect(resetEffectiveProjectSettings.settings).toMatchObject({
+      git: {
+        defaultBranch: "mainline",
+      },
+    });
+    expect(resetEffectiveProjectSettings.sources["git.defaultBranch"]).toBe("system");
 
     const agentPresetCreateResponse = await fetch(`${baseUrl}/api/projects/${project.id}/agent-presets`, {
       method: "POST",
@@ -421,6 +720,7 @@ describe("dashboard project management API", () => {
     const executionSnapshotWithConnection = await fetch(`${baseUrl}/api/execution`)
       .then(async (response) => response.json()) as {
         connections: Array<{ id: string; displayName: string; status: string; listenMode: boolean; pendingInboxCount: number }>;
+        primaryAssignedWorker: null | { workerDisplayName: string; assignmentRole: string };
       };
     expect(executionSnapshotWithConnection.connections[0]).toMatchObject({
       id: listener.connection.id,
@@ -429,6 +729,93 @@ describe("dashboard project management API", () => {
       listenMode: true,
       pendingInboxCount: 0,
     });
+
+    const worker = connectionRepository.upsertConnection({
+      connectionKey: "worker-api",
+      displayName: "Worker API",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+    const workerEndpoint = workerEndpointRepository.getWorkerEndpointByConnectionId(worker.id);
+    expect(workerEndpoint).not.toBeNull();
+    projectWorkerAssignmentService.noteWorkerActivity(project.id, workerEndpoint!.id);
+
+    const executionSnapshotWithAssignment = await fetch(`${baseUrl}/api/execution`)
+      .then(async (response) => response.json()) as {
+        primaryAssignedWorker: null | { workerDisplayName: string; assignmentRole: string };
+      };
+    expect(executionSnapshotWithAssignment.primaryAssignedWorker).toMatchObject({
+      workerDisplayName: "Worker API",
+      assignmentRole: "primary",
+    });
+
+    const attentionItem = projectAttentionService.openItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: firstTask.id,
+      attentionType: "merge_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge required for Wire selected project state",
+      summaryMarkdown: "Waiting for merge handling before the sprint can finish.",
+      payload: {
+        repoPath: "/workspace/dashboard-api-project",
+      },
+    });
+
+    const claimAttentionResponse = await fetch(`${baseUrl}/api/projects/${project.id}/attention-items/${attentionItem.id}/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        claimReason: "dashboard_claimed",
+      }),
+    });
+    expect(claimAttentionResponse.status).toBe(200);
+    const claimedAttention = await claimAttentionResponse.json() as {
+      status: string;
+      assignedWorkerEndpointId: string | null;
+      claimedAt: string | null;
+    };
+    expect(claimedAttention).toMatchObject({
+      status: "claimed",
+      assignedWorkerEndpointId: workerEndpoint!.id,
+    });
+    expect(claimedAttention.claimedAt).toBeTruthy();
+
+    const executionSnapshotWithAttention = await fetch(`${baseUrl}/api/execution`)
+      .then(async (response) => response.json()) as {
+        attentionItems: Array<{ id: string; status: string; assignedWorkerEndpointId: string | null }>;
+      };
+    expect(executionSnapshotWithAttention.attentionItems[0]).toMatchObject({
+      id: attentionItem.id,
+      status: "claimed",
+      assignedWorkerEndpointId: workerEndpoint!.id,
+    });
+
+    const resolveAttentionResponse = await fetch(`${baseUrl}/api/projects/${project.id}/attention-items/${attentionItem.id}/resolve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        status: "dismissed",
+        reason: "dashboard_dismissed",
+      }),
+    });
+    expect(resolveAttentionResponse.status).toBe(200);
+    const resolvedAttention = await resolveAttentionResponse.json() as {
+      status: string;
+      resolvedAt: string | null;
+    };
+    expect(resolvedAttention.status).toBe("dismissed");
+    expect(resolvedAttention.resolvedAt).toBeTruthy();
+
+    const executionSnapshotAfterAttentionResolution = await fetch(`${baseUrl}/api/execution`)
+      .then(async (response) => response.json()) as {
+        attentionItems: Array<{ id: string }>;
+      };
+    expect(executionSnapshotAfterAttentionResolution.attentionItems).toEqual([]);
 
     const messages = await fetch(`${baseUrl}/api/conversations/threads/${thread.id}/messages`)
       .then(async (response) => response.json()) as Array<{ bodyMarkdown: string }>;

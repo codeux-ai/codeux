@@ -47,8 +47,8 @@ describe("Smoke Test", () => {
     
     // Check for some expected tools
     const toolNames = result.tools.map((t: any) => t.name);
-    expect(toolNames).toContain("sprint_agent");
     expect(toolNames).toContain("task_agent");
+    expect(toolNames).toContain("listen");
 
     errorSpy.mockRestore();
     warnSpy.mockRestore();

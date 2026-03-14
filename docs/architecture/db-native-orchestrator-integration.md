@@ -1,6 +1,6 @@
 # DB-Native Orchestrator Integration
 
-This page describes the first shipped execution refactor that moves `sprint_agent` onto the Sprint OS database model.
+This page describes the execution refactor that moved sprint orchestration onto the Sprint OS database model and is now driven from the dashboard/runtime services instead of a dedicated MCP orchestration tool.
 
 ## Scope
 
@@ -21,6 +21,7 @@ It now:
 - persists direct CLI pipeline stage events and CI-gate state changes into `task_run_events`
 - persists action-required automation and protocol state into `task_run_events`
 - persists branch/planning preflight blockers and watch-loop sprint lifecycle into `sprint_run_events`
+- orchestrate branch preflight now auto-prepares the local sprint feature branch and best-effort pushes it to `origin` before opening a blocker
 - exposes dashboard control actions for sprint orchestration and dispatch management on the same DB-native runtime
 
 It does not yet:
@@ -39,7 +40,7 @@ It does not yet:
 
 ## New Runtime Shape
 
-`sprint_agent` now resolves a concrete execution scope before orchestration starts:
+Sprint orchestration now resolves a concrete execution scope before execution starts:
 
 - `project`
 - `sprint`
@@ -50,9 +51,9 @@ It does not yet:
 
 That scope comes from sqlite, not from a subtask directory path.
 
-## `sprint_agent` Arguments
+## Execution Scope Inputs
 
-`sprint_agent` now accepts project-scoped arguments:
+The internal orchestration service accepts project-scoped inputs:
 
 - `project_id`
 - `sprint_id`

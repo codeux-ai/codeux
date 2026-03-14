@@ -1,17 +1,11 @@
 import type { TaskService } from "../services/task-service.js";
-import type { DashboardSettings } from "../contracts/app-types.js";
-import type { SprintOrchestrator } from "../sprint/sprint-orchestrator.js";
-import type { SprintAgentArgs } from "../sprint/sprint-types.js";
 import type { WorkerDispatchExecutionService } from "../services/worker-dispatch-execution-service.js";
 import type { WorkerInboxReplyService } from "../services/worker-inbox-reply-service.js";
 
 interface AgentToolHandlerDependencies {
-  sprintOrchestrator: SprintOrchestrator;
   taskService: TaskService;
   workerDispatchExecutionService: WorkerDispatchExecutionService;
   workerInboxReplyService: WorkerInboxReplyService;
-  getDashboardSettings: () => DashboardSettings;
-  formatSprintBranch: (scheme: string | undefined, sprintNumber: number) => string;
   getConsecutiveFailures: () => number;
   setConsecutiveFailures: (value: number) => void;
   getMaxFailures: () => number;
@@ -46,18 +40,6 @@ export class AgentToolHandler {
       hasPullRequest: pullRequests.length > 0,
       pullRequests,
     };
-  }
-
-  async handleSprintAgent(args: SprintAgentArgs) {
-    const settings = this.deps.getDashboardSettings();
-    const resolvedArgs: SprintAgentArgs = {
-      ...args,
-      feature_branch: args.feature_branch
-        || (typeof args.sprint_number === "number"
-          ? this.deps.formatSprintBranch(settings.git.sprintBranchScheme, args.sprint_number)
-          : undefined),
-    };
-    return await this.deps.sprintOrchestrator.execute(resolvedArgs);
   }
 
   async handleTaskAgent(args: {

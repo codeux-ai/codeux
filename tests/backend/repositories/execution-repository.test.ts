@@ -6,6 +6,7 @@ import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { ConnectionChatRepository } from "../../../src/repositories/connection-chat-repository.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
+import { ProjectAttentionRepository } from "../../../src/repositories/project-attention-repository.js";
 
 const tempDirs: string[] = [];
 
@@ -13,6 +14,7 @@ async function createRepositories(): Promise<{
   projectRepository: ProjectManagementRepository;
   connectionRepository: ConnectionChatRepository;
   executionRepository: ExecutionRepository;
+  projectAttentionRepository: ProjectAttentionRepository;
 }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-execution-repo-"));
   tempDirs.push(dir);
@@ -21,6 +23,7 @@ async function createRepositories(): Promise<{
     projectRepository: new ProjectManagementRepository(storage),
     connectionRepository: new ConnectionChatRepository(storage),
     executionRepository: new ExecutionRepository(storage),
+    projectAttentionRepository: new ProjectAttentionRepository(storage),
   };
 }
 
@@ -158,7 +161,7 @@ describe("ExecutionRepository", () => {
     executionRepository.acquireLease({
       scopeType: "sprint",
       scopeId: sprint.id,
-      ownerKey: "sprint_agent",
+      ownerKey: "sprint_orchestrator",
       leaseToken: "cancel-lease-token",
       expiresAt: "2030-03-09T12:00:00.000Z",
     });
@@ -222,6 +225,95 @@ describe("ExecutionRepository", () => {
     });
   });
 
+  it("orders worker project affinity by active load and recency", async () => {
+    const { projectRepository, connectionRepository, executionRepository } = await createRepositories();
+    const projectA = projectRepository.createProject({
+      name: "Affinity Project A",
+      sourceType: "local",
+      sourceRef: "/workspace/affinity-project-a",
+    });
+    const projectB = projectRepository.createProject({
+      name: "Affinity Project B",
+      sourceType: "local",
+      sourceRef: "/workspace/affinity-project-b",
+    });
+    const sprintA = projectRepository.createSprint(projectA.id, {
+      name: "Affinity Sprint A",
+      number: 1,
+    });
+    const sprintB = projectRepository.createSprint(projectB.id, {
+      name: "Affinity Sprint B",
+      number: 2,
+    });
+    const taskA = projectRepository.createTask(projectA.id, {
+      sprintId: sprintA.id,
+      title: "Affinity task A",
+      executorType: "mcp_worker",
+    });
+    const taskB = projectRepository.createTask(projectB.id, {
+      sprintId: sprintB.id,
+      title: "Affinity task B",
+      executorType: "mcp_worker",
+    });
+    const sprintRunA = executionRepository.createSprintRun({
+      projectId: projectA.id,
+      sprintId: sprintA.id,
+      executorMode: "mcp_worker",
+      status: "running",
+    });
+    const sprintRunB = executionRepository.createSprintRun({
+      projectId: projectB.id,
+      sprintId: sprintB.id,
+      executorMode: "mcp_worker",
+      status: "running",
+    });
+    const worker = connectionRepository.upsertConnection({
+      connectionKey: "worker-affinity-1",
+      displayName: "Worker Affinity 1",
+      role: "worker",
+      transport: "stdio",
+      status: "connected",
+      projectIds: [projectA.id, projectB.id],
+      activeProjectIds: [projectA.id, projectB.id],
+    });
+
+    const recentCompletedDispatch = executionRepository.createTaskDispatch({
+      projectId: projectA.id,
+      sprintId: sprintA.id,
+      taskId: taskA.id,
+      sprintRunId: sprintRunA.id,
+      executorType: "mcp_worker",
+      connectionId: worker.id,
+      status: "completed",
+    });
+    executionRepository.updateTaskDispatch(recentCompletedDispatch.id, {
+      claimedAt: "2026-03-12T11:00:00.000Z",
+      startedAt: "2026-03-12T11:01:00.000Z",
+      finishedAt: "2026-03-12T11:10:00.000Z",
+      lastHeartbeatAt: "2026-03-12T11:10:00.000Z",
+    });
+
+    const activeDispatch = executionRepository.createTaskDispatch({
+      projectId: projectB.id,
+      sprintId: sprintB.id,
+      taskId: taskB.id,
+      sprintRunId: sprintRunB.id,
+      executorType: "mcp_worker",
+      connectionId: worker.id,
+      status: "running",
+    });
+    executionRepository.updateTaskDispatch(activeDispatch.id, {
+      claimedAt: "2026-03-12T10:00:00.000Z",
+      startedAt: "2026-03-12T10:01:00.000Z",
+      lastHeartbeatAt: "2026-03-12T10:30:00.000Z",
+    });
+
+    expect(executionRepository.listWorkerProjectAffinity(worker.id)).toEqual([
+      projectB.id,
+      projectA.id,
+    ]);
+  });
+
   it("projects sprint runs and dispatches into an execution snapshot", async () => {
     const { projectRepository, connectionRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({
@@ -257,7 +349,7 @@ describe("ExecutionRepository", () => {
     executionRepository.acquireLease({
       scopeType: "sprint",
       scopeId: sprint.id,
-      ownerKey: "sprint_agent",
+      ownerKey: "sprint_orchestrator",
       leaseToken: "lease-sprint-1",
       expiresAt: "2030-03-09T12:00:00.000Z",
     });
@@ -309,7 +401,7 @@ describe("ExecutionRepository", () => {
       sprintId: sprint.id,
       sprintName: "Snapshot Sprint",
       status: "running",
-      activeLeaseOwnerKey: "sprint_agent",
+      activeLeaseOwnerKey: "sprint_orchestrator",
     });
     expect(snapshot.taskDispatches[0]).toMatchObject({
       id: dispatch.id,
@@ -395,7 +487,7 @@ describe("ExecutionRepository", () => {
       sprintId: sprint.id,
       status: "paused",
       triggerType: "mcp",
-      triggeredBy: "sprint_agent",
+      triggeredBy: "sprint_orchestrator",
     });
 
     executionRepository.appendSprintRunEvent(sprintRun.id, "planning_preflight_blocked", "system", {
@@ -413,5 +505,97 @@ describe("ExecutionRepository", () => {
       taskId: null,
       sprintRunStatus: "paused",
     });
+  });
+
+  it("projects human intervention summaries for paused sprint runs", async () => {
+    const { projectRepository, executionRepository, projectAttentionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Intervention Project",
+      sourceType: "local",
+      sourceRef: "/workspace/intervention-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Intervention Sprint",
+      number: 7,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Merge the styling update",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "paused",
+      triggerType: "dashboard",
+      executorMode: "mixed",
+    });
+
+    projectAttentionRepository.openOrRefreshItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      attentionType: "merge_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge required for T02",
+      summaryMarkdown: "Task `T02` is complete and waiting to be merged into the sprint branch.",
+      payload: {
+        taskKey: "T02",
+        featureBranch: "feature/sprint7-work",
+        workerBranch: "worker/t02",
+        prUrl: "https://github.com/example/repo/pull/22",
+      },
+    });
+
+    const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
+
+    expect(snapshot.sprintRuns[0]?.humanIntervention).toMatchObject({
+      title: "Merge required for T02",
+      attentionType: "merge_required",
+      severity: "high",
+      reason: "Task T02 is complete and waiting to be merged into the sprint branch.",
+    });
+    expect(snapshot.sprintRuns[0]?.humanIntervention?.instructions).toContain("enable feature PR automerge");
+  });
+
+  it("includes paused intervention projects in overview telemetry", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Planning Blocked Project",
+      sourceType: "local",
+      sourceRef: "/workspace/planning-blocked-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Planning Blocked Sprint",
+      number: 8,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "paused",
+      triggerType: "dashboard",
+      executorMode: "mixed",
+    });
+
+    executionRepository.appendSprintRunEvent(sprintRun.id, "planning_preflight_blocked", "system", {
+      planningTarget: "Planning Blocked Sprint",
+    }, {
+      sourceEventKey: "planning-blocked-overview",
+    });
+
+    const telemetry = executionRepository.getOverviewTelemetrySnapshot();
+
+    expect(telemetry.activeProjects).toHaveLength(0);
+    expect(telemetry.attentionProjects).toHaveLength(1);
+    expect(telemetry.attentionProjects[0]).toMatchObject({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+    });
+    expect(telemetry.attentionProjects[0]?.humanIntervention).toMatchObject({
+      title: "Sprint planning required",
+      reason: "Planning Blocked Sprint must be planned into executable tasks before orchestration can continue.",
+    });
+    expect(telemetry.attentionProjects[0]?.humanIntervention?.instructions).toContain("Plan Sprint");
   });
 });

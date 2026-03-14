@@ -125,10 +125,77 @@ export class AppDbStorage {
         updated_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS worker_endpoints (
+        id TEXT PRIMARY KEY,
+        endpoint_key TEXT NOT NULL UNIQUE,
+        endpoint_type TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        connection_id TEXT UNIQUE,
+        connection_key TEXT,
+        transport TEXT,
+        capabilities_json TEXT,
+        last_heartbeat_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (connection_id) REFERENCES mcp_connections(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS project_worker_assignments (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        worker_endpoint_id TEXT,
+        worker_endpoint_key TEXT NOT NULL,
+        worker_endpoint_type TEXT NOT NULL,
+        worker_display_name TEXT NOT NULL,
+        connection_id TEXT,
+        connection_key TEXT,
+        worker_transport TEXT,
+        assignment_role TEXT NOT NULL,
+        status TEXT NOT NULL,
+        assigned_at TEXT NOT NULL,
+        released_at TEXT,
+        release_reason TEXT,
+        last_affinity_at TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (worker_endpoint_id) REFERENCES worker_endpoints(id) ON DELETE SET NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS project_attention_items (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id TEXT,
+        task_id TEXT,
+        sprint_run_id TEXT,
+        dispatch_id TEXT,
+        attention_type TEXT NOT NULL,
+        severity TEXT NOT NULL,
+        owner_type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        assigned_worker_endpoint_id TEXT,
+        title TEXT NOT NULL,
+        summary_markdown TEXT NOT NULL,
+        payload_json TEXT,
+        opened_at TEXT NOT NULL,
+        claimed_at TEXT,
+        resolved_at TEXT,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_run_id) REFERENCES sprint_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY (dispatch_id) REFERENCES task_dispatches(id) ON DELETE CASCADE,
+        FOREIGN KEY (assigned_worker_endpoint_id) REFERENCES worker_endpoints(id) ON DELETE SET NULL
+      );
+
       CREATE TABLE IF NOT EXISTS connection_project_bindings (
         connection_id TEXT NOT NULL,
         project_id TEXT NOT NULL,
         is_active INTEGER NOT NULL DEFAULT 1,
+        last_attention_cursor TEXT,
+        last_assignment_cursor TEXT,
         created_at TEXT NOT NULL,
         PRIMARY KEY (connection_id, project_id),
         FOREIGN KEY (connection_id) REFERENCES mcp_connections(id) ON DELETE CASCADE,
@@ -306,6 +373,8 @@ export class AppDbStorage {
     this.ensureColumn("agent_presets", "source_scope", "TEXT");
     this.ensureColumn("agent_presets", "source_updated_at", "TEXT");
     this.ensureColumn("agent_presets", "source_imported_at", "TEXT");
+    this.ensureColumn("connection_project_bindings", "last_attention_cursor", "TEXT");
+    this.ensureColumn("connection_project_bindings", "last_assignment_cursor", "TEXT");
     this.ensureIndex("idx_sprint_runs_project_sprint", "sprint_runs", "project_id, sprint_id, created_at DESC");
     this.ensureIndex("idx_task_dispatches_sprint_run", "task_dispatches", "sprint_run_id, status, queued_at ASC");
     this.ensureIndex("idx_task_dispatches_task", "task_dispatches", "task_id, created_at DESC");
@@ -317,6 +386,12 @@ export class AppDbStorage {
     this.ensureIndex("idx_dashboard_realtime_events_scope_sequence", "dashboard_realtime_events", "scope_type, scope_id, sequence DESC");
     this.ensureIndex("idx_agent_presets_project_updated", "agent_presets", "project_id, updated_at DESC");
     this.ensureIndex("idx_agent_presets_project_name", "agent_presets", "project_id, name");
+    this.ensureUniqueIndex("idx_worker_endpoints_connection", "worker_endpoints", "connection_id");
+    this.ensureIndex("idx_worker_endpoints_type_status", "worker_endpoints", "endpoint_type, status, updated_at DESC");
+    this.ensureIndex("idx_project_worker_assignments_project_status", "project_worker_assignments", "project_id, status, assignment_role, last_affinity_at DESC");
+    this.ensureIndex("idx_project_worker_assignments_worker_status", "project_worker_assignments", "worker_endpoint_id, status, last_affinity_at DESC");
+    this.ensureIndex("idx_project_attention_items_project_status", "project_attention_items", "project_id, status, opened_at DESC");
+    this.ensureIndex("idx_project_attention_items_dispatch_status", "project_attention_items", "dispatch_id, status, opened_at DESC");
   }
 
   getPath(): string {
@@ -335,6 +410,33 @@ export class AppDbStorage {
     `).get(name) as TableRow | undefined;
 
     return row?.name === name;
+  }
+
+  resetAllData(): void {
+    const rows = this.db.prepare(`
+      SELECT name
+      FROM sqlite_master
+      WHERE type = 'table'
+        AND name NOT LIKE 'sqlite_%'
+        AND name != 'schema_migrations'
+    `).all() as unknown as TableRow[];
+
+    this.db.exec("PRAGMA foreign_keys = OFF");
+    try {
+      this.db.exec("BEGIN");
+      for (const row of rows) {
+        this.db.exec(`DELETE FROM ${row.name}`);
+      }
+      if (this.hasTable("sqlite_sequence")) {
+        this.db.exec("DELETE FROM sqlite_sequence");
+      }
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    } finally {
+      this.db.exec("PRAGMA foreign_keys = ON");
+    }
   }
 
   private ensureColumn(tableName: string, columnName: string, columnDefinition: string): void {

@@ -21,7 +21,6 @@ Implemented in:
 - `src/mcp/agent-tool-handler.ts`
 
 These cover:
-- `sprint_agent`
 - `task_agent`
 - `execute_worker_dispatch`
 - `cancel_local_dispatch`
@@ -80,7 +79,6 @@ Typed tool argument contracts and registry dispatch are defined in `src/api/mcp/
 - `list_all_activities` returns aggregate metadata plus a small recent-activity preview list, not the full activity objects.
 
 ### Agent workflows
-- `sprint_agent`
 - `task_agent`
 
 ## Common Response Shape
@@ -129,17 +127,6 @@ Unknown tool names raise MCP `MethodNotFound`.
 - For Jules sessions, explicit `source_id` values are validated against the repo remote and rejected on mismatch.
 - `repo_path` is now optional and overrides `process.cwd()` when the task must run against an explicit project repository.
 - Optional `wait: true` delegates to session completion wait flow.
-
-### `sprint_agent` behavior
-- Supports `plan`, `status`, `orchestrate`.
-- Resolves execution scope from `project_id`, `sprint_id`, `sprint_number`, `repo_path`, and selected dashboard project state.
-- Resolves feature branch from sprint DB state or the dashboard branch scheme when not explicitly passed.
-- `source_id` is optional for orchestration; Jules source resolution only occurs when a Jules task is actually started.
-- Loads tasks from sqlite and starts work through `sprint_runs`, `task_dispatches`, and `task_runs`.
-- Acquires a sprint-scoped lease during `orchestrate` so duplicate sprint loops do not run concurrently.
-- Markdown is no longer used as orchestration input; it remains import/export only.
-- `status` is always single-cycle (instant output); wait-loop mode is only used by `orchestrate`.
-- In automation modes, action-required Jules tasks can be auto-handled (plan approval, clarification replies, paused-session resume) or explicitly routed as `AGENT` vs `HUMAN` intervention in protocol output.
 
 ### Listen-mode behavior
 - `listen` is now the primary listening contract for both normal stdio MCP clients and workers.
@@ -219,6 +206,6 @@ Behavior:
 - headless worker-host processes expose only the worker-local execution tool surface they actually need
 - the Streamable HTTP worker gateway exposes the remote worker control-plane tool surface
 - worker-only tools such as `execute_worker_dispatch`, `cancel_local_dispatch`, and `generate_dashboard_reply` are no longer visible on normal human-driven MCP connections
-- project-manager-only tools such as `sprint_agent` are not exposed on the worker gateway
+- dashboard-only orchestration stays outside the worker gateway; the worker gateway exposes only the listener and worker-control-plane tools it actually needs
 
 This keeps Gemini CLI and other regular MCP clients compatible without cluttering them with worker-local controls.

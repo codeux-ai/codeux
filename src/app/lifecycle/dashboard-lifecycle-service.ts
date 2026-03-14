@@ -5,20 +5,22 @@ import type { Express } from "express";
 import type { Logger } from "../../shared/logging/logger.js";
 import type { RuntimeContext } from "../runtime-context.js";
 import type {
-  DashboardSettings,
+  ExecutionAttentionItemSummary,
   ExecutionConnectionSummary,
+  ExecutionAssignedWorkerSummary,
   ExternalSettingsHints,
   GitTrackingStatus,
   JulesActivity,
-  DashboardStatus,
-  Subtask,
   ReadinessProbeStatus
 } from "../../contracts/app-types.js";
 import type { McpConnectionRecord } from "../../contracts/connection-chat-types.js";
+import type { AppDbStorage } from "../../repositories/app-db-storage.js";
 import type { SettingsRepository } from "../../repositories/settings-repository.js";
 import type { ProjectManagementRepository } from "../../repositories/project-management-repository.js";
 import type { ProjectRuntimeRepository } from "../../repositories/project-runtime-repository.js";
 import type { ConnectionChatRepository } from "../../repositories/connection-chat-repository.js";
+import type { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
+import type { ProjectAttentionRepository } from "../../repositories/project-attention-repository.js";
 import type { AgentPresetRepository } from "../../repositories/agent-preset-repository.js";
 import type { AgentPresetSyncService } from "../../services/agent-preset-sync-service.js";
 import type { ExecutionRepository } from "../../repositories/execution-repository.js";
@@ -36,11 +38,14 @@ export interface BootDashboardDeps {
   getDashboardPort: () => number;
   runtimeContext: RuntimeContext;
   externalSettingsHints: ExternalSettingsHints;
+  appDbStorage: AppDbStorage;
   settingsRepository: SettingsRepository;
   projectManagementRepository: ProjectManagementRepository;
   projectRuntimeRepository: ProjectRuntimeRepository;
   executionRepository: ExecutionRepository;
   connectionChatRepository: ConnectionChatRepository;
+  projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
+  projectAttentionRepository: ProjectAttentionRepository;
   agentPresetRepository: AgentPresetRepository;
   agentPresetSyncService: AgentPresetSyncService;
   sprintMarkdownService: SprintMarkdownService;
@@ -102,16 +107,145 @@ function mapExecutionConnections(connections: McpConnectionRecord[]): ExecutionC
   }));
 }
 
+function mapAssignedWorkers(assignments: ReturnType<ProjectWorkerAssignmentRepository["listAssignmentsForProject"]>): {
+  primaryAssignedWorker: ExecutionAssignedWorkerSummary | null;
+  overflowAssignedWorkers: ExecutionAssignedWorkerSummary[];
+} {
+  const mapped = assignments.map((assignment) => ({
+    assignmentId: assignment.id,
+    workerEndpointId: assignment.workerEndpointId,
+    workerEndpointKey: assignment.workerEndpointKey,
+    workerEndpointType: assignment.workerEndpointType,
+    workerDisplayName: assignment.workerDisplayName,
+    connectionId: assignment.connectionId,
+    connectionKey: assignment.connectionKey,
+    transport: assignment.transport,
+    assignmentRole: assignment.assignmentRole,
+    status: assignment.status,
+    assignedAt: assignment.assignedAt,
+    lastAffinityAt: assignment.lastAffinityAt,
+    workerStatus: assignment.workerStatus,
+    canSuperviseProjects: assignment.capabilities.canSuperviseProjects,
+    canExecuteTasks: assignment.capabilities.canExecuteTasks,
+  }));
+
+  return {
+    primaryAssignedWorker: mapped.find((assignment) => assignment.assignmentRole === "primary") || null,
+    overflowAssignedWorkers: mapped.filter((assignment) => assignment.assignmentRole === "overflow"),
+  };
+}
+
+function mapAttentionItems(attentionItems: ReturnType<ProjectAttentionRepository["listProjectAttentionItems"]>) {
+  return attentionItems.map((item) => ({
+    id: item.id,
+    sprintId: item.sprintId,
+    taskId: item.taskId,
+    sprintRunId: item.sprintRunId,
+    dispatchId: item.dispatchId,
+    attentionType: item.attentionType,
+    severity: item.severity,
+    ownerType: item.ownerType,
+    status: item.status,
+    assignedWorkerEndpointId: item.assignedWorkerEndpointId,
+    title: item.title,
+    summaryMarkdown: item.summaryMarkdown,
+    payload: item.payload,
+    openedAt: item.openedAt,
+    claimedAt: item.claimedAt,
+    resolvedAt: item.resolvedAt,
+    updatedAt: item.updatedAt,
+  }));
+}
+
+function mapAttentionItem(item: NonNullable<ReturnType<ProjectAttentionRepository["getAttentionItem"]>>): ExecutionAttentionItemSummary {
+  return {
+    id: item.id,
+    sprintId: item.sprintId,
+    taskId: item.taskId,
+    sprintRunId: item.sprintRunId,
+    dispatchId: item.dispatchId,
+    attentionType: item.attentionType,
+    severity: item.severity,
+    ownerType: item.ownerType,
+    status: item.status,
+    assignedWorkerEndpointId: item.assignedWorkerEndpointId,
+    title: item.title,
+    summaryMarkdown: item.summaryMarkdown,
+    payload: item.payload,
+    openedAt: item.openedAt,
+    claimedAt: item.claimedAt,
+    resolvedAt: item.resolvedAt,
+    updatedAt: item.updatedAt,
+  };
+}
+
+function requireProjectAttentionItem(
+  deps: Pick<BootDashboardDeps, "projectAttentionRepository">,
+  projectId: string,
+  attentionItemId: string,
+) {
+  const item = deps.projectAttentionRepository.getAttentionItem(attentionItemId);
+  if (!item) {
+    throw new Error(`Project attention item not found: ${attentionItemId}`);
+  }
+  if (item.projectId !== projectId) {
+    throw new Error(`Attention item ${attentionItemId} does not belong to project ${projectId}.`);
+  }
+  return item;
+}
+
+function resolveAttentionClaimWorkerEndpointId(
+  deps: Pick<BootDashboardDeps, "projectWorkerAssignmentRepository">,
+  projectId: string,
+  preferredWorkerEndpointId?: string | null,
+): string {
+  if (preferredWorkerEndpointId) {
+    return preferredWorkerEndpointId;
+  }
+
+  const assignments = deps.projectWorkerAssignmentRepository.listAssignmentsForProject(projectId, {
+    activeOnly: true,
+  });
+  const primary = assignments.find((assignment) => (
+    assignment.assignmentRole === "primary" && assignment.capabilities.canSuperviseProjects
+  ));
+  if (primary?.workerEndpointId) {
+    return primary.workerEndpointId;
+  }
+
+  const overflow = assignments.find((assignment) => (
+    assignment.assignmentRole === "overflow" && assignment.capabilities.canSuperviseProjects
+  ));
+  if (overflow?.workerEndpointId) {
+    return overflow.workerEndpointId;
+  }
+
+  throw new Error(`No supervising worker is assigned to project ${projectId}.`);
+}
+
 export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
   const dashboardDir = `${deps.projectRoot}/dashboard`;
   const port = deps.getDashboardPort();
 
   const getOverviewTelemetrySnapshot = () => deps.executionRepository.getOverviewTelemetrySnapshot();
   const getProjectsSnapshot = () => deps.projectManagementRepository.listProjects();
-  const getProjectExecutionSnapshot = (projectId: string) => ({
-    ...deps.executionRepository.getProjectExecutionSnapshot(projectId),
-    connections: mapExecutionConnections(deps.connectionChatRepository.listConnections(projectId)),
-  });
+  const getProjectExecutionSnapshot = (projectId: string) => {
+    const assignedWorkers = mapAssignedWorkers(
+      deps.projectWorkerAssignmentRepository.listAssignmentsForProject(projectId, { activeOnly: true }),
+    );
+
+    return {
+      ...deps.executionRepository.getProjectExecutionSnapshot(projectId),
+      connections: mapExecutionConnections(deps.connectionChatRepository.listConnections(projectId)),
+      ...assignedWorkers,
+      attentionItems: mapAttentionItems(
+        deps.projectAttentionRepository.listProjectAttentionItems(projectId, {
+          statuses: ["open", "claimed"],
+          limit: 50,
+        }),
+      ),
+    };
+  };
 
   deps.dashboardRealtimeService.setSnapshotLoaders({
     getProjectsSnapshot,
@@ -135,16 +269,114 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
           sprintRuns: [],
           taskDispatches: [],
           connections: [],
+          primaryAssignedWorker: null,
+          overflowAssignedWorkers: [],
+          attentionItems: [],
           recentEvents: [],
           updatedAt: null,
         };
     },
     getOverviewTelemetrySnapshot,
     getProjectExecutionSnapshot,
+    claimAttentionItem: (projectId, attentionItemId, input) => {
+      const item = requireProjectAttentionItem(deps, projectId, attentionItemId);
+      const workerEndpointId = resolveAttentionClaimWorkerEndpointId(
+        deps,
+        projectId,
+        input?.workerEndpointId || item.assignedWorkerEndpointId,
+      );
+
+      return mapAttentionItem(deps.projectAttentionRepository.claimAttentionItem(attentionItemId, {
+        assignedWorkerEndpointId: workerEndpointId,
+        claimReason: input?.claimReason,
+      }));
+    },
+    resolveAttentionItem: (projectId, attentionItemId, input) => {
+      requireProjectAttentionItem(deps, projectId, attentionItemId);
+      return mapAttentionItem(deps.projectAttentionRepository.resolveAttentionItem(attentionItemId, {
+        status: input?.status || "resolved",
+        reason: input?.reason,
+        resolutionSummaryMarkdown: input?.resolutionSummaryMarkdown,
+      }));
+    },
     getLiveActivities: deps.getLiveActivitiesForActiveTasks,
     getGitStatus: deps.getGitStatus,
     getExternalSettingsHints: () => deps.externalSettingsHints,
-    getSettings: () => deps.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
+    getSystemSettings: () => deps.settingsRepository.getSystemSettings(),
+    saveSystemSettings: (settings) => {
+      const saved = deps.settingsRepository.saveSystemSettings(settings);
+      deps.runtimeContext.dashboardSettings = deps.settingsRepository.getDefaultDashboardSettings();
+      deps.syncGitSettingsFromDashboard();
+      deps.refreshJulesApiKey();
+
+      const newLogger = reinitializeLogger({
+        projectRoot: deps.projectRoot,
+        runtimeContext: deps.runtimeContext,
+      });
+      deps.setLogger(newLogger);
+      deps.activityCacheService.invalidateGitStatusCache();
+      return saved;
+    },
+    resetDatabase: () => {
+      deps.appDbStorage.resetAllData();
+      deps.settingsRepository.resetAllData();
+      deps.runtimeContext.dashboardSettings = deps.settingsRepository.getDefaultDashboardSettings();
+      deps.syncGitSettingsFromDashboard();
+      deps.refreshJulesApiKey();
+
+      const newLogger = reinitializeLogger({
+        projectRoot: deps.projectRoot,
+        runtimeContext: deps.runtimeContext,
+      });
+      deps.setLogger(newLogger);
+      deps.activityCacheService.invalidateGitStatusCache();
+      deps.projectManagementRepository.notifyProjectsUpdated();
+      deps.dashboardRealtimeService.scheduleOverviewRefresh();
+    },
+    getProjectSettings: (projectId) => deps.settingsRepository.getProjectSettings(projectId),
+    saveProjectSettings: (projectId, settings) => {
+      const project = deps.projectManagementRepository.getProject(projectId);
+      if (!project) {
+        throw new Error(`Project not found: ${projectId}`);
+      }
+      return deps.settingsRepository.saveProjectSettings(projectId, settings);
+    },
+    resetProjectSettings: (projectId) => {
+      const project = deps.projectManagementRepository.getProject(projectId);
+      if (!project) {
+        throw new Error(`Project not found: ${projectId}`);
+      }
+      deps.settingsRepository.resetProjectSettings(projectId);
+    },
+    getProjectEffectiveSettings: (projectId) => {
+      const project = deps.projectManagementRepository.getProject(projectId);
+      if (!project) {
+        throw new Error(`Project not found: ${projectId}`);
+      }
+      return deps.settingsRepository.resolveProjectDashboardSettings(projectId);
+    },
+    getSprintSettings: (sprintId) => deps.settingsRepository.getSprintSettings(sprintId),
+    saveSprintSettings: (projectId, sprintId, settings) => {
+      const sprint = deps.projectManagementRepository.getSprint(sprintId);
+      if (!sprint || sprint.projectId !== projectId) {
+        throw new Error(`Sprint not found in project: ${sprintId}`);
+      }
+      return deps.settingsRepository.saveSprintSettings(sprintId, deps.settingsRepository.getProjectResolvedSettings(projectId), settings);
+    },
+    resetSprintSettings: (sprintId) => {
+      const sprint = deps.projectManagementRepository.getSprint(sprintId);
+      if (!sprint) {
+        throw new Error(`Sprint not found: ${sprintId}`);
+      }
+      deps.settingsRepository.resetSprintSettings(sprintId);
+    },
+    getSprintEffectiveSettings: (projectId, sprintId) => {
+      const sprint = deps.projectManagementRepository.getSprint(sprintId);
+      if (!sprint || sprint.projectId !== projectId) {
+        throw new Error(`Sprint not found in project: ${sprintId}`);
+      }
+      return deps.settingsRepository.resolveSprintDashboardSettings(projectId, sprintId);
+    },
     listProjects: () => deps.projectManagementRepository.listProjects(),
     createProject: (input) => deps.projectManagementRepository.createProject(input),
     getProject: (projectId) => deps.projectManagementRepository.getProject(projectId),
@@ -178,20 +410,6 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     deleteConversationThread: (threadId) => deps.connectionChatRepository.deleteThread(threadId),
     listConversationMessages: (threadId) => deps.connectionChatRepository.listMessages(threadId),
     postConversationMessage: (projectId, input) => deps.connectionChatRepository.postDashboardMessage(projectId, input),
-    saveSettings: (settings: DashboardSettings) => {
-      deps.runtimeContext.dashboardSettings = deps.settingsRepository.saveSettings(settings);
-      deps.syncGitSettingsFromDashboard();
-      deps.refreshJulesApiKey();
-
-      const newLogger = reinitializeLogger({
-        projectRoot: deps.projectRoot,
-        runtimeContext: deps.runtimeContext
-      });
-      deps.setLogger(newLogger);
-
-      deps.activityCacheService.invalidateGitStatusCache();
-      return deps.runtimeContext.dashboardSettings;
-    },
     rerunTask: async (taskId: string) => {
       const task = await deps.taskRerunService.rerunTask(taskId);
       deps.activityCacheService.invalidateGitStatusCache();

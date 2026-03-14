@@ -16,11 +16,11 @@ If started without key:
 
 ## Sprint Execution Procedure
 
-1. Validate feature branch exists locally and on origin.
-2. Run `sprint_agent(action: "plan")`.
-3. Create or verify subtask markdown files.
-4. Run `sprint_agent(action: "orchestrate")`.
-5. Follow merge and action-required protocol until terminal state.
+1. Verify the repo is a healthy git checkout. Sprint OS now prepares the local feature branch automatically on orchestration start and will try to push it to `origin` when that remote exists.
+2. Create or verify sprint tasks in the dashboard, or import them from markdown when needed.
+3. Ensure at least one worker is connected through `listen` for the project when you want supervised execution.
+4. Start the sprint from the dashboard.
+5. Follow merge and action-required protocol until terminal state, resuming from the dashboard after manual intervention.
 
 ## Safety Controls
 
@@ -31,7 +31,7 @@ If consecutive task creation failures reach threshold:
 - Re-run after corrective actions.
 
 ### Preflight blockers
-- Branch preflight blocker means local/remote branch setup is incomplete.
+- Branch preflight blocker means Sprint OS could not prepare the local feature branch, or it could not push the branch to `origin` on a repo that expects a remote feature branch.
 - Planning preflight blocker means subtask files are missing.
 
 ## Common Incidents
@@ -75,7 +75,7 @@ Checks:
   - Claude runner executes headless using `claude -p "<prompt>" --dangerously-skip-permissions`.
   - For Claude auth mounts, ensure host has `~/.claude/.credentials.json`; if auth still stalls, also verify `~/.claude.json` exists (runtime mounts it automatically when present).
   - Runtime now syncs only those Claude auth files before launch, avoiding recursive copy of all `.claude` state.
-  - If auth is expected from host login state, is `Mount user credentials into container` enabled and are mount paths valid?
+  - If auth is expected from host login state, is the relevant Docker auth mount enabled and is its mount path valid?
   - Docker mode requires daemon-visible workspace paths. Runtime now prefers repo-scoped worktree paths for Docker sessions.
   - Docker runtime state is stored under `~/.jules-subagents/runtime/docker/<repo-hash>/` by default (override with `JULES_DOCKER_RUNTIME_ROOT`).
   - Codex uses per-session container home directories under that runtime root to prevent stale state from previous Codex runs.
@@ -112,12 +112,12 @@ Checks:
 - Restart MCP once to trigger startup recovery.
 - Verify startup logs for a recovery line:
   - `[Recovery] Marked <N> interrupted CLI session(s) as FAILED ...`
-- Run `sprint_agent(action: "orchestrate")` again so failed tasks are retried.
+- Restart the sprint from the dashboard so failed tasks are retried on a fresh orchestration attempt.
 
 ## Recovery Techniques
 
 - Temporarily disable selected loop steps for diagnosis.
-- Run `status` action to inspect state without creating tasks.
+- Use the dashboard live view to inspect state without starting new work.
 - Use activities APIs to inspect detailed session trace.
 - Re-enable steps after diagnosis to restore normal operation.
 - On startup, interrupted local CLI sessions (`cli-*` with `RUNNING`) are auto-recovered to `FAILED` so orchestration can safely retry them.

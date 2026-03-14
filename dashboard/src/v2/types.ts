@@ -20,6 +20,7 @@ import type {
   UpdateConversationThreadInput,
   UpdateMcpConnectionInput,
 } from "../../../src/contracts/connection-chat-types.js";
+import type { ExecutionHumanInterventionSummary } from "../../../src/contracts/app-types.js";
 import type {
   CreateProjectInput,
   CreateSprintInput,
@@ -100,6 +101,7 @@ export type {
   SprintStatus,
   StartListenInput,
   StartListenResponse,
+  ExecutionHumanInterventionSummary,
   UpdateConversationThreadInput,
   TaskExecutorType,
   TaskPriority,

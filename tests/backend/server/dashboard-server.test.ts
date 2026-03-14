@@ -7,6 +7,7 @@ import * as os from "os";
 import * as path from "path";
 import { setupDashboardServer } from "../../../src/server/dashboard-server.js";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { DashboardRealtimeEventRepository } from "../../../src/repositories/dashboard-realtime-event-repository.js";
 import { DashboardRealtimeService } from "../../../src/services/dashboard-realtime-service.js";
 import { createLogger } from "../../../src/shared/logging/logger.js";
@@ -62,6 +63,80 @@ async function getAvailablePort(): Promise<number> {
   return port;
 }
 
+function buildSettingsServerOptions() {
+  return {
+    getSystemSettings: () => ({
+      runtime: {
+        dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
+        enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
+      },
+      integrations: {
+        julesApiKey: "",
+        geminiApiKey: "",
+        codexApiKey: "",
+        claudeCodeApiKey: "",
+        githubToken: "",
+      },
+      defaults: {
+        automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
+        automationInterventions: { ...DEFAULT_DASHBOARD_SETTINGS.automationInterventions },
+        aiProvider: {
+          provider: DEFAULT_DASHBOARD_SETTINGS.aiProvider.provider,
+          strategy: DEFAULT_DASHBOARD_SETTINGS.aiProvider.strategy,
+          providers: {
+            jules: {
+              enabled: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.jules.enabled,
+              model: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.jules.model,
+              weight: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.jules.weight,
+              thinkingMode: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.jules.thinkingMode,
+            },
+            gemini: {
+              enabled: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.gemini.enabled,
+              model: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.gemini.model,
+              weight: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.gemini.weight,
+              thinkingMode: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.gemini.thinkingMode,
+            },
+            codex: {
+              enabled: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.codex.enabled,
+              model: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.codex.model,
+              weight: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.codex.weight,
+              thinkingMode: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.codex.thinkingMode,
+            },
+            "claude-code": {
+              enabled: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["claude-code"].enabled,
+              model: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["claude-code"].model,
+              weight: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["claude-code"].weight,
+              thinkingMode: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["claude-code"].thinkingMode,
+            },
+          },
+        },
+        git: {
+          githubMode: DEFAULT_DASHBOARD_SETTINGS.git.githubMode,
+          defaultBranch: DEFAULT_DASHBOARD_SETTINGS.git.defaultBranch,
+          autoCreatePr: DEFAULT_DASHBOARD_SETTINGS.git.autoCreatePr,
+          featureBranchPrefix: DEFAULT_DASHBOARD_SETTINGS.git.featureBranchPrefix,
+          sprintBranchScheme: DEFAULT_DASHBOARD_SETTINGS.git.sprintBranchScheme,
+        },
+        ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence },
+        sprintLoopSteps: { ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps },
+        cliWorkflow: { ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow },
+        skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
+      },
+      mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),
+    }),
+    saveSystemSettings: (settings: unknown) => settings,
+    resetDatabase: async () => {},
+    getProjectSettings: () => ({}),
+    saveProjectSettings: (_projectId: string, settings: unknown) => settings,
+    resetProjectSettings: () => {},
+    getProjectEffectiveSettings: () => ({ settings: DEFAULT_DASHBOARD_SETTINGS, sources: {} }),
+    getSprintSettings: () => ({}),
+    saveSprintSettings: (_projectId: string, _sprintId: string, settings: unknown) => settings,
+    resetSprintSettings: () => {},
+    getSprintEffectiveSettings: () => ({ settings: DEFAULT_DASHBOARD_SETTINGS, sources: {} }),
+  };
+}
+
 async function waitForRealtimeMessage(
   socket: WebSocket,
   predicate: (message: DashboardRealtimeServerMessage) => boolean,
@@ -101,9 +176,9 @@ describe("setupDashboardServer", () => {
       port: blockedPort,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
-      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null }),
-      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], recentEvents: [], updatedAt: null }),
-      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null }),
+      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
       getLiveActivities: async () => ({}),
       getGitStatus: async () => ({
         mode: "LOCAL",
@@ -124,86 +199,11 @@ describe("setupDashboardServer", () => {
         settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
         resolved: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
       }),
-      getSettings: () => ({
-        dashboardPort: 4444,
-        automationLevel: "SEMI_AUTO",
-        automationInterventions: {
-          autoApprovePlan: true,
-          autoAnswerClarification: false,
-          autoResumePaused: false,
-          clarificationAnswerTemplate: "",
-        },
-        aiProvider: {
-          provider: "jules",
-          strategy: "MANUAL",
-          providers: {
-            jules: { enabled: true, model: "default", weight: 60, thinkingMode: "MEDIUM", apiKey: "" },
-            gemini: { enabled: true, model: "default", weight: 20, thinkingMode: "MEDIUM", apiKey: "" },
-            codex: { enabled: true, model: "default", weight: 20, thinkingMode: "HIGH", apiKey: "" },
-            "claude-code": { enabled: false, model: "default", weight: 0, thinkingMode: "HIGH", apiKey: "" },
-          },
-          julesApiKey: "",
-        },
-        git: {
-          githubMode: "LOCAL",
-          githubToken: "",
-          defaultBranch: "main",
-          autoCreatePr: true,
-          featureBranchPrefix: "feature/",
-          sprintBranchScheme: "feature/sprint{sprint}-implementation",
-        },
-        ciIntelligence: {
-          enabled: false,
-          enableLivePrMonitoring: false,
-          waitForCiBeforeMainMerge: false,
-          resolveAllCommentsBeforeMainMerge: false,
-          waitForCiBeforeFeatureMerge: false,
-          resolveAllCommentsBeforeFeatureMerge: false,
-          waitForJulesCiAutofix: false,
-          julesCiAutofixMaxRetries: 0,
-          featurePrAutoMergeMode: "OFF",
-        },
-        sprintLoopSteps: {
-          branchPreflight: true,
-          planningPreflight: true,
-          loadSubtasks: true,
-          sessionSync: true,
-          statusDerivation: true,
-          startReadyTasks: true,
-          mergeProtocol: true,
-          actionRequiredProtocol: true,
-          statusTable: true,
-          watchLoop: false,
-          watchLoopIntervalSeconds: 120,
-          watchLoopOutputIntervalSeconds: 300,
-        },
-        cliWorkflow: {
-          cleanupWorktreeOnSuccess: true,
-          cleanupWorktreeOnFailure: false,
-          retryOnReadFileNotFound: true,
-          resumeFailedTaskInSameWorkspace: true,
-          executionMode: "HOST",
-          containerImage: "node:24-bookworm",
-          containerSetupScriptPath: "",
-          containerMountCredentials: false,
-          containerMountGitConfig: true,
-          containerMountGithubAuth: true,
-          containerMountGeminiAuth: true,
-          containerMountCodexAuth: true,
-          containerMountClaudeCodeAuth: true,
-          containerGithubAuthPath: "~/.config/gh",
-          containerGeminiAuthPath: "~/.gemini",
-          containerCodexAuthPath: "~/.codex",
-          containerClaudeCodeAuthPath: "~/.claude",
-        },
-        skills: [],
-        mcpTools: [],
-      }),
+      ...buildSettingsServerOptions(),
       listAgentPresets: () => [],
       createAgentPreset: () => ({ id: "agent-1" } as any),
       updateAgentPreset: () => ({ id: "agent-1" } as any),
       deleteAgentPreset: () => {},
-      saveSettings: (settings) => settings,
       rerunTask: async () => ({ ok: true }),
       orchestrateSprint: async () => ({ ok: true }),
       pauseSprintRun: async () => ({ ok: true }),
@@ -241,18 +241,17 @@ describe("setupDashboardServer", () => {
       port: 3001,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
-      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null }),
-      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], recentEvents: [], updatedAt: null }),
-      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null }),
+      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
       getLiveActivities: async () => ({}),
       getGitStatus: async () => ({} as any),
       getExternalSettingsHints: () => ({} as any),
-      getSettings: () => ({} as any),
+      ...buildSettingsServerOptions(),
       listAgentPresets: () => [],
       createAgentPreset: () => ({ id: "agent-1" } as any),
       updateAgentPreset: () => ({ id: "agent-1" } as any),
       deleteAgentPreset: () => {},
-      saveSettings: (settings) => settings,
       rerunTask: async () => ({ ok: true }),
       orchestrateSprint: async () => ({ ok: true }),
       pauseSprintRun: async () => ({ ok: true }),
@@ -290,18 +289,17 @@ describe("setupDashboardServer", () => {
       port: 4000,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
-      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null }),
-      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], recentEvents: [], updatedAt: null }),
-      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null }),
+      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
       getLiveActivities: async () => ({}),
       getGitStatus: async () => ({} as any),
       getExternalSettingsHints: () => ({} as any),
-      getSettings: () => ({} as any),
+      ...buildSettingsServerOptions(),
       listAgentPresets: () => [],
       createAgentPreset: () => ({ id: "agent-1" } as any),
       updateAgentPreset: () => ({ id: "agent-1" } as any),
       deleteAgentPreset: () => {},
-      saveSettings: (settings) => settings,
       rerunTask: async () => ({ ok: true }),
       orchestrateSprint: async () => ({ ok: true }),
       pauseSprintRun: async () => ({ ok: true }),
@@ -315,6 +313,161 @@ describe("setupDashboardServer", () => {
     const readyResponse = await fetch(`http://127.0.0.1:${handle.port}/ready`);
     expect(readyResponse.status).toBe(503);
     expect(await readyResponse.json()).toEqual(probeResponse);
+  });
+
+  it("resets the database through the system reset endpoint", async () => {
+    const app = express();
+    let resetCalls = 0;
+
+    const handle = await setupDashboardServer({
+      app,
+      dashboardDir: "dashboard",
+      port: await getAvailablePort(),
+      liveActivityCacheMs: 1000,
+      getStatus: () => ({ ok: true }),
+      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getLiveActivities: async () => ({}),
+      getGitStatus: async () => ({} as any),
+      getExternalSettingsHints: () => ({} as any),
+      ...buildSettingsServerOptions(),
+      resetDatabase: async () => {
+        resetCalls += 1;
+      },
+      listAgentPresets: () => [],
+      createAgentPreset: () => ({ id: "agent-1" } as any),
+      updateAgentPreset: () => ({ id: "agent-1" } as any),
+      deleteAgentPreset: () => {},
+      rerunTask: async () => ({ ok: true }),
+      orchestrateSprint: async () => ({ ok: true }),
+      pauseSprintRun: async () => ({ ok: true }),
+      cancelSprintRun: async () => ({ ok: true }),
+      cancelTaskDispatch: async () => ({ ok: true }),
+      retryTaskDispatch: async () => ({ ok: true }),
+    });
+    serversToClose.push(handle.server);
+
+    const response = await fetch(`http://127.0.0.1:${handle.port}/api/system/reset-database`, {
+      method: "POST",
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(resetCalls).toBe(1);
+  });
+
+  it("routes attention item claim and resolve actions", async () => {
+    const app = express();
+    const claimedItem = {
+      id: "attention-1",
+      sprintId: "sprint-1",
+      taskId: "task-1",
+      sprintRunId: null,
+      dispatchId: "dispatch-1",
+      attentionType: "merge_required",
+      severity: "high",
+      ownerType: "worker",
+      status: "claimed",
+      assignedWorkerEndpointId: "worker-endpoint-1",
+      title: "Merge required",
+      summaryMarkdown: "Needs merge handling",
+      payload: { repoPath: "/repo" },
+      openedAt: "2026-03-13T00:00:00.000Z",
+      claimedAt: "2026-03-13T00:05:00.000Z",
+      resolvedAt: null,
+      updatedAt: "2026-03-13T00:05:00.000Z",
+    };
+    const resolvedItem = {
+      ...claimedItem,
+      status: "dismissed",
+      resolvedAt: "2026-03-13T00:10:00.000Z",
+      updatedAt: "2026-03-13T00:10:00.000Z",
+    };
+    let claimArgs: unknown;
+    let resolveArgs: unknown;
+
+    const handle = await setupDashboardServer({
+      app,
+      dashboardDir: "dashboard",
+      port: await getAvailablePort(),
+      liveActivityCacheMs: 1000,
+      getStatus: () => ({ ok: true }),
+      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      claimAttentionItem: (projectId, attentionItemId, input) => {
+        claimArgs = { projectId, attentionItemId, input };
+        return claimedItem as any;
+      },
+      resolveAttentionItem: (projectId, attentionItemId, input) => {
+        resolveArgs = { projectId, attentionItemId, input };
+        return resolvedItem as any;
+      },
+      getLiveActivities: async () => ({}),
+      getGitStatus: async () => ({} as any),
+      getExternalSettingsHints: () => ({} as any),
+      ...buildSettingsServerOptions(),
+      listAgentPresets: () => [],
+      createAgentPreset: () => ({ id: "agent-1" } as any),
+      updateAgentPreset: () => ({ id: "agent-1" } as any),
+      deleteAgentPreset: () => {},
+      rerunTask: async () => ({ ok: true }),
+      orchestrateSprint: async () => ({ ok: true }),
+      pauseSprintRun: async () => ({ ok: true }),
+      cancelSprintRun: async () => ({ ok: true }),
+      cancelTaskDispatch: async () => ({ ok: true }),
+      retryTaskDispatch: async () => ({ ok: true }),
+    });
+    serversToClose.push(handle.server);
+
+    const claimResponse = await fetch(`http://127.0.0.1:${handle.port}/api/projects/project-1/attention-items/attention-1/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workerEndpointId: "worker-endpoint-1",
+        claimReason: "dashboard_claimed",
+      }),
+    });
+    expect(claimResponse.status).toBe(200);
+    expect(await claimResponse.json()).toMatchObject({
+      id: "attention-1",
+      status: "claimed",
+      assignedWorkerEndpointId: "worker-endpoint-1",
+    });
+    expect(claimArgs).toEqual({
+      projectId: "project-1",
+      attentionItemId: "attention-1",
+      input: {
+        workerEndpointId: "worker-endpoint-1",
+        claimReason: "dashboard_claimed",
+      },
+    });
+
+    const resolveResponse = await fetch(`http://127.0.0.1:${handle.port}/api/projects/project-1/attention-items/attention-1/resolve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        status: "dismissed",
+        reason: "dashboard_dismissed",
+        resolutionSummaryMarkdown: "Handled manually in the dashboard.",
+      }),
+    });
+    expect(resolveResponse.status).toBe(200);
+    expect(await resolveResponse.json()).toMatchObject({
+      id: "attention-1",
+      status: "dismissed",
+      resolvedAt: "2026-03-13T00:10:00.000Z",
+    });
+    expect(resolveArgs).toEqual({
+      projectId: "project-1",
+      attentionItemId: "attention-1",
+      input: {
+        status: "dismissed",
+        reason: "dashboard_dismissed",
+        resolutionSummaryMarkdown: "Handled manually in the dashboard.",
+      },
+    });
   });
 
   it("streams and replays realtime events over /api/realtime", async () => {
@@ -332,11 +485,15 @@ describe("setupDashboardServer", () => {
         sprintRuns: [],
         taskDispatches: [],
         connections: [],
+        primaryAssignedWorker: null,
+        overflowAssignedWorkers: [],
+        attentionItems: [],
         recentEvents: [],
         updatedAt: "2026-03-10T00:00:00.000Z",
       }),
       getOverviewTelemetrySnapshot: () => ({
         activeProjects: [],
+        attentionProjects: [],
         recentEvents: [],
         updatedAt: "2026-03-10T00:00:00.000Z",
       }),
@@ -348,18 +505,17 @@ describe("setupDashboardServer", () => {
       port,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
-      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null }),
-      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], recentEvents: [], updatedAt: null }),
-      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null }),
+      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
       getLiveActivities: async () => ({}),
       getGitStatus: async () => ({} as any),
       getExternalSettingsHints: () => ({} as any),
-      getSettings: () => ({} as any),
+      ...buildSettingsServerOptions(),
       listAgentPresets: () => [],
       createAgentPreset: () => ({ id: "agent-1" } as any),
       updateAgentPreset: () => ({ id: "agent-1" } as any),
       deleteAgentPreset: () => {},
-      saveSettings: (settings) => settings,
       rerunTask: async () => ({ ok: true }),
       orchestrateSprint: async () => ({ ok: true }),
       pauseSprintRun: async () => ({ ok: true }),
@@ -438,11 +594,15 @@ describe("setupDashboardServer", () => {
         sprintRuns: [],
         taskDispatches: [],
         connections: [],
+        primaryAssignedWorker: null,
+        overflowAssignedWorkers: [],
+        attentionItems: [],
         recentEvents: [],
         updatedAt: "2026-03-10T00:00:00.000Z",
       }),
       getOverviewTelemetrySnapshot: () => ({
         activeProjects: [],
+        attentionProjects: [],
         recentEvents: [],
         updatedAt: "2026-03-10T00:00:00.000Z",
       }),
@@ -454,18 +614,17 @@ describe("setupDashboardServer", () => {
       port,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
-      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null }),
-      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], recentEvents: [], updatedAt: null }),
-      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], recentEvents: [], updatedAt: null }),
+      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
       getLiveActivities: async () => ({}),
       getGitStatus: async () => ({} as any),
       getExternalSettingsHints: () => ({} as any),
-      getSettings: () => ({} as any),
+      ...buildSettingsServerOptions(),
       listAgentPresets: () => [],
       createAgentPreset: () => ({ id: "agent-1" } as any),
       updateAgentPreset: () => ({ id: "agent-1" } as any),
       deleteAgentPreset: () => {},
-      saveSettings: (settings) => settings,
       rerunTask: async () => ({ ok: true }),
       orchestrateSprint: async () => ({ ok: true }),
       pauseSprintRun: async () => ({ ok: true }),

@@ -31,7 +31,7 @@ This project is a Model Context Protocol (MCP) server for Jules APIs with an int
 - `src/mcp/core-tool-handler.ts`
   - Handles core Jules API tools and wait logic.
 - `src/mcp/agent-tool-handler.ts`
-  - Handles `sprint_agent` and `task_agent`.
+  - Handles `task_agent` and worker-local execution/reply helpers.
 
 ### 3. Sprint orchestration engine
 - `src/sprint/sprint-orchestrator.ts`

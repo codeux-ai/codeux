@@ -68,6 +68,7 @@ Project management:
   - Sends a draft sprint prompt to the Planning agent through a connected worker and returns the improved prompt
 - `POST /api/projects/:projectId/sprints/:sprintId/plan`
   - Sends a created sprint to the Planning agent through a connected worker, creates subtasks from the reply, and can auto-start the sprint
+  - Auto-start orchestration now prepares the local sprint feature branch automatically and attempts to push it to `origin` when that remote exists
 - `GET /api/projects/:projectId/conversations/threads`
   - Lists project conversation threads
 - `POST /api/projects/:projectId/conversations/threads`
@@ -92,12 +93,32 @@ Legacy runtime:
   - websocket upgrade endpoint for dashboard realtime subscriptions (`projects`, `overview`, `project:<projectId>`, `thread:<threadId>`)
 - `GET /api/projects/:projectId/execution`
   - Project-scoped execution control-plane snapshot for the v2 runtime
+- `POST /api/projects/:projectId/attention-items/:attentionItemId/claim`
+  - Claims an active worker-owned attention item on behalf of the assigned project worker
+- `POST /api/projects/:projectId/attention-items/:attentionItemId/resolve`
+  - Resolves or dismisses an active attention item from the dashboard runtime surface
 - `GET /api/live-activities`
   - Session activity stream for running tasks in the selected project
-- `GET /api/settings`
-  - Persisted dashboard settings
-- `PUT /api/settings`
-  - Save settings
+- `GET /api/system-settings`
+  - Persisted system-wide settings (`runtime`, `integrations`, `defaults`, `mcpTools`)
+- `PUT /api/system-settings`
+  - Save system-wide settings
+- `GET /api/projects/:projectId/settings`
+  - Raw project override document
+- `PUT /api/projects/:projectId/settings`
+  - Save project overrides
+- `DELETE /api/projects/:projectId/settings`
+  - Reset project overrides back to inherited system defaults
+- `GET /api/projects/:projectId/settings/effective`
+  - Resolved project settings plus source metadata
+- `GET /api/sprints/:sprintId/settings`
+  - Raw sprint override document
+- `PUT /api/sprints/:sprintId/settings`
+  - Save sprint overrides (requires `projectId` in body)
+- `DELETE /api/sprints/:sprintId/settings`
+  - Reset sprint overrides
+- `GET /api/projects/:projectId/sprints/:sprintId/settings/effective`
+  - Resolved sprint settings plus source metadata
 - `GET /api/settings/import-sources`
   - External key hints from env/json
 - `GET /api/git-status`
@@ -113,6 +134,7 @@ Legacy runtime:
 - Project selector and project cards now refresh over websocket when the project collection or selected project changes
 - Sprints page is project-scoped, creates sprint records in sqlite, and exposes markdown import/export controls
 - Sprints page now also refreshes from project-structure realtime invalidation, so sprint CRUD and status-adjacent updates propagate across open dashboard tabs
+- Sprint cells and ledger rows now surface a dedicated human-intervention badge when a paused sprint needs merge work, planning, or another operator action, and the hover card explains what to do before resuming
 - Sprints page now also starts and stops sprint orchestration directly from sprint cards, with optimistic visual state updates tied to project-scoped execution data
 - The organic sprint bubble cells use the same live start/stop control path as the registry list, so the hover play/stop action is now functional instead of decorative
 - Sprint creation no longer asks for start/end dates
@@ -126,7 +148,7 @@ Legacy runtime:
 - Completed sprints are automatically removed from showcase pinning and drop out of the top gallery
 - The sprint gallery selection is now the full set of showcased sprints, ordered newest-first by sprint creation time
 - Completed sprint cells now use a static finished treatment and fade slightly instead of continuing animated motion
-- Sprint cell settings now open an animated menu with showcase toggle, `Edit`, `Export`, `Delete`, and placeholder `Overrides`
+- Sprint cell settings now open an animated menu with showcase toggle, `Edit`, `Export`, `Delete`, and live `Overrides`
 - The showcase wrappers now leave enough vertical breathing room for hover expansion, so bubble motion is no longer clipped top or bottom
 - Sprint cells now use created-date metadata on the accent rail and move the visible sprint key into the card body instead of surfacing the UUID there
 - Sprint markdown export now includes direct download actions in the export modal
@@ -162,13 +184,17 @@ Legacy runtime:
 - Task statistics
 - Execution runtime panel for sprint runs, dispatch queue state, live project connections, worker assignment, lease ownership, and recent runtime events
 - Live runtime visuals are only considered active when the selected project has a `running` or `queued` sprint run; cancelled, paused, and completed runs fall back to a waiting state
+- When no sprint is running but a paused sprint needs human intervention, the overview telemetry now switches from an empty state to an attention state with the exact reason and operator instructions
 - Task pipeline cards
 - Task cards include a `Rerun` action with confirmation prompt; rerun clears session/PR/merge state for that task and starts it again
-- Reruns now reuse the same dispatch model as `sprint_agent` instead of bypassing execution state
+- Reruns now reuse the same dispatch model as normal dashboard orchestration instead of bypassing execution state
 - Task cards now open a DB-backed runtime feed sourced from `task_run_events`
 - The runtime feed now includes direct CLI stage events, action-required and protocol events, sprint-run lifecycle events, and CI/merge-gate state changes in addition to provider session activity
 - `recentEvents` is now a unified runtime timeline spanning both `task_run_events` and `sprint_run_events`
 - The execution runtime panel can now start or resume sprint orchestration, pause or cancel sprint runs, cancel queued dispatches, and retry terminal dispatches
+- The execution runtime panel now also exposes the active attention queue, including worker claim, resolve, and dismiss controls for open project blockers
+- Live Session now shows a clear paused-for-human-intervention banner, repeats the reason/instructions in the hero state, and surfaces the same guidance inside paused sprint run cards
+- Worker escalations now also create project chat threads with a system-authored handoff message, so operator follow-up lives in the same project conversation model as the rest of dashboard chat
 - The execution runtime panel now also shows live project connections with transport, role, listening metadata, inbox load, dispatch load, and heartbeat-derived status
 - The Overview page telemetry now renders a consolidated runtime timeline across all currently active projects instead of a static placeholder
 - Running dispatch cancel is now request-based instead of instant-terminal:
@@ -187,14 +213,20 @@ Runtime scoping:
 - dashboard runtime state is projected through sqlite task-run records instead of being served only from one in-memory global payload
 
 ### Settings view
-- Basic settings
-  - includes `Dashboard Port` field
-- AI provider settings
-- Git settings
-- CI Intelligence settings
-- Sprint loop step toggles
-- MCP tool toggles
-- Skill toggles
+- The active backend model is now scoped as `system -> project -> sprint`
+- System settings own runtime, integrations, default project behavior, and MCP tool exposure
+- Project settings own inheritable execution behavior such as provider routing, git defaults, CI intelligence, sprint loop steps, CLI workflow, and skills
+- The `/config` page keeps the existing v2 settings shell and categories, but now binds them to real scoped settings instead of draft-only values
+- System scope only edits system-owned controls, while project scope only edits project-owned overrides for the selected project
+- The integrations view now owns provider API keys plus GitHub token and GitHub workflow settings, rather than splitting those across separate categories
+- The integrations view uses a registry-style list with per-integration `Configure` actions so additional integrations can be added without turning the page into one long form
+- Individual MCP tool toggles and skill toggles are intentionally not exposed in the current user-facing settings surface
+- The settings surface is regrouped into smaller operational cards so GitHub integration, provider credentials, merge gates, loop control, and execution runtime are separated cleanly
+- Danger Zone now supports project deletion in project scope and full database reset in system scope
+- Project saves operate on the effective form but persist only sparse diffs relative to the current system defaults
+- Sprint settings are sparse overrides applied from the sprint page through the live override modal
+- Effective settings APIs expose per-field source metadata so the UI can show inherited vs overridden values
+- The old legacy dashboard settings route is removed; there is no runtime fallback to the pre-refactor global settings page
 
 ## Polling Behavior
 
@@ -227,8 +259,7 @@ Chat-specific behavior:
 - The Chat refresh button is now manual-only.
 - Background realtime sync and fallback refreshes no longer drive the refresh button spinner state.
 
-Settings are loaded from `dashboard/src/hooks/use-dashboard-settings.ts` and saved through
-`dashboard/src/lib/api/dashboard-api.ts` request helpers.
+The old legacy settings hook remains outside the active v2 flow; the live dashboard now uses the scoped settings API above.
 
 Project management requests are centralized in:
 - `dashboard/src/v2/lib/project-api.ts`
@@ -277,6 +308,7 @@ Effect:
 - `julesCiAutofixMaxRetries` sets how many Jules autofix notifications are attempted before escalation. Escalation output includes exact task ids, PR links, failed check names, failed run summaries, and failed job names so no manual searching is needed.
 - `featurePrAutoMergeMode = WHEN_GREEN` executes feature-PR auto-merge once checks are green and review blockers are clear.
 - `featurePrAutoMergeMode = ALWAYS` attempts feature-PR auto-merge regardless of CI state (subject to repository merge protections).
+- a successful feature-PR automerge now refreshes dependency readiness in the same loop pass, so downstream tasks can continue without forcing a manual resume
 - Feature-PR CI wait/automerge matching uses worker branch first and falls back to the task `pr_url`, so tasks without a stored worker branch still remain gated correctly.
 - CI Runs in `Feature PR CI` tracking include recent runs from PR head branches targeting the feature implementation branch (plus feature branch runs), sorted newest-first; the panel shows the latest 5.
 - Failed CI runs in tracking are enriched with failed job details and failed-job log excerpts (bounded) from GitHub Actions `gh run view` data.

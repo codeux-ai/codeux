@@ -8,3 +8,4 @@ server.log
 .pnpm-store
 coverage/
 .jules-subagents/debug.log
+.sprint-os/debug.log

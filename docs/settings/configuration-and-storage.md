@@ -30,48 +30,99 @@ For `.sprint-os/settings.json`, search roots include:
 - project root
 - home directory
 
-## Dashboard Settings Persistence
+## Scoped Settings Persistence
 
 Backend file:
 - `src/repositories/settings-repository.ts`
+- `src/repositories/settings-db-storage.ts`
+- `src/services/settings-resolution-service.ts`
 
 Storage:
-- dashboard settings DB at `~/.sprint-os/settings.db`
+- scoped settings DB at `~/.sprint-os/settings.db`
+  - `system_settings`
+  - `project_settings`
+  - `sprint_settings`
+  - `app_settings` is retained only as a one-time legacy migration source for development data that predates the scoped model
 - provider session DB at `~/.sprint-os/session-tracking.db`
 - Sprint OS app DB at `~/.sprint-os/app.db`
   - includes project planning tables plus selected-project runtime projection in `app_settings`, `task_runs`, and `task_run_events`
 
-## Persisted Dashboard Settings Model
+Runtime resolution:
+- effective runtime settings always resolve as `system -> project -> sprint`
+- project settings inherit live system defaults; they do not snapshot them
+- project saves are diffed against the current system defaults, not hardcoded app defaults
+- sprint settings are sparse temporary overrides on top of resolved project settings
+- the old global `/api/settings` contract is removed in favor of explicit scoped endpoints
 
-Top-level fields:
-- `dashboardPort`
-- `automationLevel`
-- `automationInterventions`
-- `aiProvider`
-- `git`
-- `ciIntelligence`
-- `sprintLoopSteps`
-- `cliWorkflow`
-- `skills`
+## Persisted Scoped Settings Model
+
+`system_settings` fields:
+- `runtime`
+  - `dashboardPort`
+  - `enableDebugLogFile`
+- `integrations`
+  - `julesApiKey`
+  - `geminiApiKey`
+  - `codexApiKey`
+  - `claudeCodeApiKey`
+  - `githubToken`
+- `defaults`
+  - full inheritable project settings baseline
 - `mcpTools`
 
+`project_settings` fields:
+- sparse overrides of:
+  - `automationLevel`
+  - `automationInterventions`
+  - `aiProvider`
+  - `git`
+  - `ciIntelligence`
+  - `sprintLoopSteps`
+  - `cliWorkflow`
+  - `skills`
+
+`sprint_settings` fields:
+- sparse overrides of the same project-level fields
+- used only for sprint-local deviations from the resolved project baseline
+
+System-level integrations are injected into effective dashboard settings at resolution time:
+- provider API keys are system-scoped
+- `git.githubToken` is system-scoped
+- runtime fields like `dashboardPort` and `enableDebugLogFile` are system-scoped
+
+Backend contract:
+- `src/contracts/app-types.ts`
+- `src/contracts/settings-scope-types.ts`
+
+Frontend contract:
+- `dashboard/src/types.ts`
+
+Effective settings APIs:
+- `GET /api/system-settings`
+- `PUT /api/system-settings`
+- `GET /api/projects/:projectId/settings`
+- `PUT /api/projects/:projectId/settings`
+- `DELETE /api/projects/:projectId/settings`
+- `GET /api/projects/:projectId/settings/effective`
+- `GET /api/sprints/:sprintId/settings`
+- `PUT /api/sprints/:sprintId/settings`
+- `DELETE /api/sprints/:sprintId/settings`
+- `GET /api/projects/:projectId/sprints/:sprintId/settings/effective`
+
+The effective endpoints return:
+- resolved `DashboardSettings`
+- per-field source metadata (`system`, `project`, or `sprint`)
+
 `aiProvider` contains:
-- `provider` (`jules|gemini|codex`)
+- `provider` (`jules|gemini|codex|claude-code`)
 - `strategy` (`MANUAL|WEIGHTED|ORCHESTRATOR`)
-- `providers` map (enabled/model/weight/thinkingMode/apiKey per provider)
-- `julesApiKey` (backward-compatible alias synced with `providers.jules.apiKey`)
+- `providers` map (enabled/model/weight/thinkingMode)
 
 `automationInterventions` contains:
 - `autoApprovePlan` (default `true`): auto-approve `AWAITING_PLAN_APPROVAL` sessions in `SEMI_AUTO`
 - `autoAnswerClarification` (default `false`): auto-answer `AWAITING_USER_FEEDBACK` sessions in `SEMI_AUTO`
 - `autoResumePaused` (default `false`): auto-send resume nudge for `PAUSED` sessions in `SEMI_AUTO`
 - `clarificationAnswerTemplate`: default response body used for clarification auto-replies
-
-Backend contract:
-- `src/contracts/app-types.ts`
-
-Frontend contract:
-- `dashboard/src/types.ts`
 
 `cliWorkflow` contains:
 - Retry/cleanup toggles:
@@ -85,14 +136,15 @@ Frontend contract:
   - `containerImage`
   - `containerSetupScriptPath` (optional; when set to a relative path, runtime checks both sprint repo root and current server working directory)
     - if empty, falls back to `.sprint-os/container/setup.sh` in repo root and home directory
-  - `containerMountCredentials` (master toggle)
   - `containerMountGitConfig`
   - `containerMountGithubAuth`
   - `containerMountGeminiAuth`
   - `containerMountCodexAuth`
+  - `containerMountClaudeCodeAuth`
   - `containerGithubAuthPath` (default `~/.config/gh`)
   - `containerGeminiAuthPath` (default `~/.gemini`)
   - `containerCodexAuthPath` (default `~/.codex`)
+  - `containerClaudeCodeAuthPath` (default `~/.claude`)
 
 `sprintLoopSteps` also includes:
 - `watchLoopIntervalSeconds` (default `120`, clamped to `1..3600`)
@@ -127,6 +179,7 @@ Repository demo script:
   - When Claude credential mounts are enabled, runtime mounts `~/.claude` and also `~/.claude.json` when present.
   - Runtime syncs only Claude auth artifacts into container home before launch (`~/.claude/.credentials.json` and `~/.claude.json`) instead of recursively copying the full `.claude` state tree.
   - GitHub/Gemini sync now copies directory contents into fixed destinations (`~/.config/gh`, `~/.gemini`) to avoid nested paths on repeated runs.
+  - Provider auth mounts are controlled per credential type. When a Docker auth mount is enabled, the matching API key/token is no longer injected into the container environment.
 
 ## Default Values
 
@@ -156,7 +209,7 @@ Git manager skill toggles are mode-aware:
 ## Recommended Policy
 
 - Keep secrets in environment or local secured settings.
-- Use dashboard settings for behavior toggles, not hardcoded logic edits.
+- Use system settings for secrets/runtime behavior and project or sprint overrides for execution behavior.
 - Treat sqlite DB as local runtime state, not source-of-truth config for production deployment.
 
 ## Dashboard Port Resolution

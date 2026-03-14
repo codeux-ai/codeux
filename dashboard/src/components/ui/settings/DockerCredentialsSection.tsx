@@ -30,17 +30,9 @@ const topDescriptors: FieldDescriptor<DashboardSettings["cliWorkflow"]>[] = [
 
 const toggleDescriptors: FieldDescriptor<DashboardSettings["cliWorkflow"]>[] = [
   {
-    id: "containerMountCredentials",
-    type: "toggle",
-    label: "Mount user credentials into container",
-    getValue: (workflow) => workflow.containerMountCredentials,
-    onToggle: (workflow, checked) => ({ ...workflow, containerMountCredentials: checked }),
-  },
-  {
     id: "containerMountGitConfig",
     type: "toggle",
     label: "Mount ~/.gitconfig",
-    disabled: (workflow) => !workflow.containerMountCredentials,
     getValue: (workflow) => workflow.containerMountGitConfig,
     onToggle: (workflow, checked) => ({ ...workflow, containerMountGitConfig: checked }),
   },
@@ -48,7 +40,6 @@ const toggleDescriptors: FieldDescriptor<DashboardSettings["cliWorkflow"]>[] = [
     id: "containerMountGithubAuth",
     type: "toggle",
     label: "Mount GitHub CLI auth",
-    disabled: (workflow) => !workflow.containerMountCredentials,
     getValue: (workflow) => workflow.containerMountGithubAuth,
     onToggle: (workflow, checked) => ({ ...workflow, containerMountGithubAuth: checked }),
   },
@@ -56,7 +47,6 @@ const toggleDescriptors: FieldDescriptor<DashboardSettings["cliWorkflow"]>[] = [
     id: "containerMountGeminiAuth",
     type: "toggle",
     label: "Mount Gemini auth",
-    disabled: (workflow) => !workflow.containerMountCredentials,
     getValue: (workflow) => workflow.containerMountGeminiAuth,
     onToggle: (workflow, checked) => ({ ...workflow, containerMountGeminiAuth: checked }),
   },
@@ -64,7 +54,6 @@ const toggleDescriptors: FieldDescriptor<DashboardSettings["cliWorkflow"]>[] = [
     id: "containerMountCodexAuth",
     type: "toggle",
     label: "Mount Codex auth",
-    disabled: (workflow) => !workflow.containerMountCredentials,
     getValue: (workflow) => workflow.containerMountCodexAuth,
     onToggle: (workflow, checked) => ({ ...workflow, containerMountCodexAuth: checked }),
   },
@@ -72,7 +61,6 @@ const toggleDescriptors: FieldDescriptor<DashboardSettings["cliWorkflow"]>[] = [
     id: "containerMountClaudeCodeAuth",
     type: "toggle",
     label: "Mount Claude Code auth",
-    disabled: (workflow) => !workflow.containerMountCredentials,
     getValue: (workflow) => workflow.containerMountClaudeCodeAuth,
     onToggle: (workflow, checked) => ({ ...workflow, containerMountClaudeCodeAuth: checked }),
   },
@@ -84,7 +72,7 @@ const pathInputDescriptors: FieldDescriptor<DashboardSettings["cliWorkflow"]>[] 
     type: "input",
     label: "GitHub auth path",
     placeholder: "~/.config/gh",
-    disabled: (workflow) => !workflow.containerMountCredentials || !workflow.containerMountGithubAuth,
+    disabled: (workflow) => !workflow.containerMountGithubAuth,
     getValue: (workflow) => workflow.containerGithubAuthPath,
     onInput: (workflow, value) => ({ ...workflow, containerGithubAuthPath: value }),
   },
@@ -93,7 +81,7 @@ const pathInputDescriptors: FieldDescriptor<DashboardSettings["cliWorkflow"]>[] 
     type: "input",
     label: "Gemini auth path",
     placeholder: "~/.gemini",
-    disabled: (workflow) => !workflow.containerMountCredentials || !workflow.containerMountGeminiAuth,
+    disabled: (workflow) => !workflow.containerMountGeminiAuth,
     getValue: (workflow) => workflow.containerGeminiAuthPath,
     onInput: (workflow, value) => ({ ...workflow, containerGeminiAuthPath: value }),
   },
@@ -102,7 +90,7 @@ const pathInputDescriptors: FieldDescriptor<DashboardSettings["cliWorkflow"]>[] 
     type: "input",
     label: "Codex auth path",
     placeholder: "~/.codex",
-    disabled: (workflow) => !workflow.containerMountCredentials || !workflow.containerMountCodexAuth,
+    disabled: (workflow) => !workflow.containerMountCodexAuth,
     getValue: (workflow) => workflow.containerCodexAuthPath,
     onInput: (workflow, value) => ({ ...workflow, containerCodexAuthPath: value }),
   },
@@ -111,7 +99,7 @@ const pathInputDescriptors: FieldDescriptor<DashboardSettings["cliWorkflow"]>[] 
     type: "input",
     label: "Claude Code auth path",
     placeholder: "~/.claude",
-    disabled: (workflow) => !workflow.containerMountCredentials || !workflow.containerMountClaudeCodeAuth,
+    disabled: (workflow) => !workflow.containerMountClaudeCodeAuth,
     getValue: (workflow) => workflow.containerClaudeCodeAuthPath,
     onInput: (workflow, value) => ({ ...workflow, containerClaudeCodeAuthPath: value }),
   },
@@ -153,7 +141,7 @@ export const DockerCredentialsSection: FunctionComponent<DockerCredentialsSectio
     </div>
 
     <p className="text-[11px] text-slate-500">
-      Credential mounts are read-only and optional. Leave provider API keys empty if you want system/global auth to be used.
+      Credential mounts are read-only and optional. Enable the provider-specific toggle you want to sync into Docker.
     </p>
   </div>
 );

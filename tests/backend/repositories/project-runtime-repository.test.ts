@@ -176,4 +176,42 @@ describe("ProjectRuntimeRepository", () => {
     expect(status.repo_path).toBeUndefined();
     expect(status.timestamp).toBeNull();
   });
+
+  it("treats AUTOMERGE indicators as merged in projected runtime status", async () => {
+    const { projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Gamma",
+      sourceType: "local",
+      sourceRef: "/workspace/gamma",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Gamma Sprint",
+      number: 5,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "G01",
+      title: "Auto-merged task",
+      promptMarkdown: "Already merged by automation.",
+      status: "completed",
+    });
+
+    projectRepository.setSelectedProjectId(project.id);
+    projectRepository.updateTask(task.id, {
+      isMerged: false,
+      mergeIndicator: "AUTOMERGE",
+      status: "completed",
+    });
+
+    const status = runtimeRepository.getSelectedProjectStatus();
+
+    expect(status.subtasks).toHaveLength(1);
+    expect(status.subtasks[0]).toMatchObject({
+      id: "G01",
+      status: "COMPLETED",
+      is_merged: true,
+      merge_indicator: "AUTOMERGE",
+    });
+  });
 });

@@ -67,7 +67,6 @@ vi.mock("fs/promises");
 describe("DockerCredentialMountBuilder", () => {
   const mockRepoPath = "/mock/repo";
   const mockSettings = {
-    containerMountCredentials: true,
     containerMountGitConfig: false,
     containerMountGithubAuth: false,
     containerMountGeminiAuth: false,
@@ -83,15 +82,15 @@ describe("DockerCredentialMountBuilder", () => {
     vi.clearAllMocks();
   });
 
-  it("returns empty array if containerMountCredentials is false", async () => {
+  it("returns empty array if no credential mounts are enabled", async () => {
     const builder = new DockerCredentialMountBuilder();
-    const settings = { ...mockSettings, containerMountCredentials: false };
+    const settings = { ...mockSettings };
     const onActivity = vi.fn();
 
     const mounts = await builder.build(settings, mockRepoPath, onActivity);
 
     expect(mounts).toEqual([]);
-    expect(onActivity).toHaveBeenCalledWith("Credential mounts are disabled in workflow settings.");
+    expect(onActivity).toHaveBeenCalledWith("No container credential mounts were enabled or resolved.");
   });
 
   it("resolves enabled mounts correctly", async () => {

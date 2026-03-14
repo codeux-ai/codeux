@@ -43,6 +43,7 @@ That means:
 - if a lingering sprint lease still exists after stale-run recovery, the dashboard start request now fails fast instead of returning a misleading success while no new run can start
 - a sprint cannot be restarted while an older run is still `cancel_requested` with active dispatch shutdown still pending
 - if an older `cancel_requested` run is already idle, Sprint OS finalizes it to `cancelled` before allowing a fresh start
+- dashboard-owned watch loops now continue through watch-loop output checkpoints instead of exiting and requiring a manual rerun; the checkpoint return behavior is preserved only for interactive MCP callers
 
 ### Pause Sprint Run
 
@@ -66,10 +67,22 @@ The watch loop exits as soon as it observes `cancel_requested`, so Sprint OS sto
 Once no active dispatches remain, Sprint OS finalizes the run to `cancelled` and writes `sprint_cancelled`.
 That finalization path now also releases any stale sprint lease for the sprint so a fully cancelled run can be restarted immediately.
 
+Unexpected orchestration exceptions no longer leave the sprint run stranded in `running`.
+If the background orchestrator throws after creating the sprint run, Sprint OS now marks that run `failed` and writes a `sprint_failed` event with reason `orchestrator_exception`.
+
 This means `cancel_requested` is a real stop-pending state, not a terminal state:
 
 - Sprint OS will not start a fresh orchestration attempt while the cancelled run still has active dispatch work
 - Sprint OS will finalize an already-idle `cancel_requested` run immediately and allow restart
+
+## Stale Run Recovery
+
+The runtime cleanup sweep now reconciles stale execution records before they block the dashboard:
+
+- if a `task_run` is already terminal but its linked `task_dispatch` is still `queued`, `claimed`, `running`, or `cancel_requested`, the dispatch is reconciled to the same terminal outcome
+- if a `running` sprint run has no active sprint lease, no active dispatches, and its heartbeat is stale, Sprint OS marks it `failed` with reason `orchestration_heartbeat_stalled`
+
+This prevents dead background orchestration attempts from leaving the dashboard permanently stuck in a fake active state.
 
 ## Dispatch Controls
 

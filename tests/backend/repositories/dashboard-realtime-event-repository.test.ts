@@ -53,6 +53,7 @@ describe("DashboardRealtimeEventRepository", () => {
       entityId: "overview",
       payload: {
         activeProjects: [],
+        attentionProjects: [],
       },
     });
 

@@ -58,6 +58,18 @@ describe("MCP Factory", () => {
         getConnectionByKey: vi.fn(),
         touchConnectionHeartbeat: vi.fn(),
       },
+      workerEndpointRepository: {
+        getWorkerEndpointByConnectionId: vi.fn(),
+      },
+      projectWorkerAssignmentService: {
+        noteWorkerActivity: vi.fn(),
+      },
+      projectAttentionService: {
+        openItem: vi.fn(),
+        resolveItemsForDispatch: vi.fn(),
+      },
+      projectWorkerAssignmentRepository: {},
+      projectAttentionRepository: {},
       executionRepository: {},
       projectManagementRepository: {},
       sessionTracking: {
@@ -136,7 +148,6 @@ describe("MCP Factory", () => {
     // Get the arguments passed to AgentToolHandler constructor
     const agentArgs = vi.mocked(AgentToolHandler).mock.calls[0][0];
 
-    expect(agentArgs.getDashboardSettings()).toEqual({ testSetting: true });
     expect(agentArgs.getConsecutiveFailures()).toBe(3); // Updated from setConsecutiveFailures(3) above
 
     agentArgs.setConsecutiveFailures(4);
@@ -165,6 +176,5 @@ describe("MCP Factory", () => {
 
     const agentArgs = vi.mocked(AgentToolHandler).mock.calls[0][0];
     expect(agentArgs.getMaxFailures()).toBe(5);
-    expect(agentArgs.getDashboardSettings()).toBeDefined();
   });
 });

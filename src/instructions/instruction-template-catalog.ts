@@ -9,7 +9,6 @@ export const INSTRUCTION_TEMPLATE_PATHS = {
   actionRequiredHumanHeader: "sprint-main-loop/protocol/action-required-human-header.md",
   actionRequiredHumanTask: "sprint-main-loop/protocol/action-required-human-task.md",
   watchHeader: "sprint-main-loop/watch/watch-header.md",
-  watchContinue: "sprint-main-loop/watch/watch-continue.md",
   watchMergeRequired: "sprint-main-loop/watch/watch-merge-required.md",
   watchNoMoreActions: "sprint-main-loop/watch/watch-no-more-actions.md",
   completionSteps: "sprint-main-loop/watch/completion-steps.md",
@@ -22,17 +21,16 @@ export const INSTRUCTION_TEMPLATE_PATHS = {
 export type InstructionTemplateId = keyof typeof INSTRUCTION_TEMPLATE_PATHS;
 
 export const DEFAULT_INSTRUCTION_TEMPLATES: Record<InstructionTemplateId, string> = {
-  branchMissing: `### 🛑 ACTION REQUIRED: Branch Configuration Missing\n\nThe feature branch \`{{feature_branch}}\` is not ready. Jules agents require this branch to exist on the remote repository to begin work.\n\n{{create_branch_step}}{{push_branch_step}}**Important:** Once these steps are completed, run this tool again to proceed with the \`{{action}}\` phase.`,
-  planningMissing: `### 🛑 ACTION REQUIRED: Sprint Planning Missing\n\nNo tasks were found for \`{{planning_target}}{{subtasks_dir}}\`. You must create or import sprint tasks before orchestration can begin.\n\n**Instruction:** Use the v2 dashboard Projects/Sprints/Tasks flow or markdown import to populate the sprint, then rerun \`sprint_agent\`.`,
+  branchMissing: `### 🛑 ACTION REQUIRED: Branch Configuration Missing\n\nSprint OS could not prepare the feature branch \`{{feature_branch}}\` automatically.\n\n{{create_branch_step}}{{push_branch_step}}**Important:** Once these steps are completed, run this tool again to proceed with the \`{{action}}\` phase.`,
+  planningMissing: `### 🛑 ACTION REQUIRED: Sprint Planning Missing\n\nNo tasks were found for \`{{planning_target}}{{subtasks_dir}}\`. You must create or import sprint tasks before orchestration can begin.\n\n**Instruction:** Use the v2 dashboard Projects/Sprints/Tasks flow or markdown import to populate the sprint, then start or resume orchestration from the dashboard.`,
   planningCreated: `### Planning Phase for Sprint {{sprint_number}}\n\nTarget sprint: \`{{planning_target}}{{subtasks_dir}}\`.\n\n{{planning_guide_block}}**Instructions for the calling Agent:**\n1. Open the v2 dashboard sprint and define the task breakdown there, or use markdown import.\n2. Keep dependencies explicit so Sprint OS can derive task readiness from the database.\n3. Use markdown only as import/export transport, not as runtime state.`,
   mergeHeader: `\n### 📥 MERGE INSTRUCTIONS\n`,
-  mergeTask: `- **Task {{task_id}}** ({{provider}}): Use \`git_manager\` ({{git_manager_skill}}) to merge the task PR/branch into \`{{feature_branch}}\`.\n{{feature_ci_wait_line}}{{feature_comments_line}}- Mark \`{{task_reference}}\` as merged in Sprint OS if it was not auto-updated.\n- Rerun \`sprint_agent(action: "orchestrate", wait: true)\`.`,
+  mergeTask: `- **Task {{task_id}}** ({{provider}}): Use \`git_manager\` ({{git_manager_skill}}) to merge the task PR/branch into \`{{feature_branch}}\`.\n{{feature_ci_wait_line}}{{feature_comments_line}}- Mark \`{{task_reference}}\` as merged in Sprint OS if it was not auto-updated.\n- Resume the sprint from the dashboard once the merge is complete.`,
   actionRequiredAgentHeader: `\n### 🤖 AGENT INTERVENTION NEEDED\n`,
   actionRequiredAgentTask: `- **Task {{task_id}}** ({{provider}}) is \`{{session_state}}\`.\n{{intervention_hint_line}}- Agent should resolve this in-session, then rerun orchestration.`,
   actionRequiredHumanHeader: `\n### ✋ HUMAN INTERVENTION NEEDED\n`,
   actionRequiredHumanTask: `- **Task {{task_id}}** ({{provider}}) is \`{{session_state}}\`.\n{{intervention_hint_line}}- Human action is required before rerunning orchestration.`,
   watchHeader: `### Sprint {{sprint_number}} Continuous Orchestration\n\n**Feature Branch:** \`{{feature_branch}}\`\n**Dashboard:** [http://localhost:{{dashboard_port}}](http://localhost:{{dashboard_port}})\n`,
-  watchContinue: `\n⏸️ **Watch Loop Output Interval Reached**\n- Elapsed: {{elapsed_seconds}} seconds\n- Running tasks: {{running_tasks}}\n- Pending tasks: {{pending_tasks}}\n- Completed tasks: {{completed_tasks}}\n- Failed tasks: {{failed_tasks}}\n\nAll currently active tasks are still in progress.\n\n**Instruction:** Call \`sprint_agent(action: "{{action}}", wait: true)\` again to continue the watch loop.\n`,
   watchMergeRequired: `\n🛑 **Action Required: Merge Detected**\nOne or more tasks have finished. Please follow the **MERGE INSTRUCTIONS** below, then run \`orchestrate\` again to continue.\n`,
   watchNoMoreActions: `\n🛑 **Action Required:** Orchestration paused. No tasks are running and no pending tasks can be started.\n`,
   completionSteps: `\n## 🏁 SPRINT COMPLETION STEPS\n1. **Final Merge via Git Manager**: Use \`git_manager\` ({{git_manager_skill}}) to merge \`{{feature_branch}}\` into \`{{default_branch}}\`.\n{{main_ci_wait_line}}{{main_comments_line}}2. **Next Sprint**: Proceed with Sprint {{next_sprint}} once \`{{default_branch}}\` is green.\n`,

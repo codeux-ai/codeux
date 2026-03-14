@@ -94,12 +94,35 @@ The blocking long-poll `listen` contract is now the preferred listener UX for bo
 
 Current compact listen payloads:
 - dashboard messages return only `message.id`, `message.threadId`, `message.projectId`, `message.bodyMarkdown`, plus continuation guidance
+- worker assignment changes return `assignment`, `project`, `workingDirectoryHint`, and `contextDigest`
+- worker attention items return `item`, `project`, `workingDirectoryHint`, and `contextDigest`
 - timeout results return continuation guidance only
 - `post_listen_reply` returns only `threadId` and `deliveryStatus`
+- `claim_attention_item` returns only `itemId`, `status`, `assignedWorkerEndpointId`, and `claimedAt`
+- `resolve_attention_item` returns only `itemId`, `status`, and `resolvedAt`
+- `report_attention_outcome` returns the resolved source item id/status plus any created handoff thread and human attention item ids
 
 `reply_to_message_id` should still be supplied when replying. `thread_id` alone is not always enough, because a thread can hold multiple delivered dashboard messages and the reply tool otherwise has to mark all pending/delivered dashboard messages on that thread as handled.
 
 Workers now use the same listen loop in addition to dispatch polling, so a single connected worker can both answer chat and pick up `mcp_worker` tasks.
+
+The in-repo worker runtime now also uses the supervision part of that loop actively:
+
+- `assignment_changed` updates the worker's local project-supervision state
+- `attention_item` causes the worker to auto-claim open worker-owned blockers
+- after claim, the worker now reports a structured supervision outcome:
+  - `needs_dashboard_reply` creates a worker-bound project thread with a system handoff message
+  - `needs_human_escalation` does the same and also opens a human-owned escalation queue item
+- subsequent `listen` calls send the worker's current active supervised project ids instead of staying fully static
+
+The worker listener contract now also supports:
+
+- `project_ids` to bind one connection to multiple projects
+- `active_project_ids` to declare the subset currently being supervised
+- `include_attention_items` to receive `assignment_changed` and `attention_item` events during the same listen loop
+- `claim_attention_item` so a worker can explicitly take ownership of a blocker it starts handling
+- `resolve_attention_item` so a worker can close or dismiss a blocker after handling it
+- `report_attention_outcome` so a worker can hand supervision off to the operator side without leaving the original item claimed forever
 
 Operational behavior:
 
@@ -132,6 +155,12 @@ When a listener polls inbox:
 When a listener replies:
 - the reply is inserted into the same thread
 - related pending/delivered dashboard messages are marked `processed`
+
+When a worker escalates an attention item:
+- Sprint OS creates a project thread bound to that worker connection
+- Sprint OS inserts a `system` authored `connection_to_dashboard` message with the worker handoff summary
+- the original worker-owned item resolves
+- a human-owned handoff attention item is opened when follow-up is still required
 
 ## Why This Matters
 

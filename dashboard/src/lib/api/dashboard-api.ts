@@ -1,6 +1,7 @@
 import type {
   DashboardSettings,
   DashboardStatus,
+  ExecutionAttentionItemSummary,
   ExecutionDashboardSnapshot,
   ExternalSettingsHints,
   GitTrackingStatus,
@@ -107,4 +108,34 @@ export const retryTaskDispatch = async (dispatchId: string): Promise<void> => {
   await fetchJson(`/api/task-dispatches/${encodeURIComponent(dispatchId)}/retry`, {
     method: "POST",
   });
+};
+
+export const claimAttentionItem = async (
+  projectId: string,
+  attentionItemId: string,
+  input?: { workerEndpointId?: string; claimReason?: string },
+): Promise<ExecutionAttentionItemSummary> => {
+  return fetchJson<ExecutionAttentionItemSummary>(
+    `/api/projects/${encodeURIComponent(projectId)}/attention-items/${encodeURIComponent(attentionItemId)}/claim`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input || {}),
+    },
+  );
+};
+
+export const resolveAttentionItem = async (
+  projectId: string,
+  attentionItemId: string,
+  input?: { status?: "resolved" | "dismissed"; reason?: string; resolutionSummaryMarkdown?: string },
+): Promise<ExecutionAttentionItemSummary> => {
+  return fetchJson<ExecutionAttentionItemSummary>(
+    `/api/projects/${encodeURIComponent(projectId)}/attention-items/${encodeURIComponent(attentionItemId)}/resolve`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input || {}),
+    },
+  );
 };

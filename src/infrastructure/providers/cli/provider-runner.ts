@@ -58,7 +58,7 @@ export class ProviderRunner implements IProviderRunner {
     onActivity: (desc: string, originator?: string) => void;
   }): Promise<CommandResult> {
     const { provider, prompt, cwd, model, apiKey, sessionId, workflowSettings, repoPath, githubToken, signal, onActivity } = input;
-    const providerEnv = this.withProviderEnv(provider, model, apiKey, githubToken);
+    const providerEnv = this.withProviderEnv(provider, model, apiKey, workflowSettings, githubToken);
 
     const spec = providerSpecs[provider](model, prompt);
     const { command, args } = spec;
@@ -90,17 +90,33 @@ export class ProviderRunner implements IProviderRunner {
     return result;
   }
 
-  private withProviderEnv(provider: ProviderId, model: string, apiKey: string, githubToken?: string): NodeJS.ProcessEnv {
+  private withProviderEnv(
+    provider: ProviderId,
+    model: string,
+    apiKey: string,
+    workflowSettings: CliWorkflowSettings,
+    githubToken?: string
+  ): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = { ...process.env };
-    if (githubToken) { env.GH_TOKEN = githubToken; env.GITHUB_TOKEN = githubToken; }
+    const useContainerMounts = workflowSettings.executionMode === "DOCKER";
+    const useGithubMount = useContainerMounts && workflowSettings.containerMountGithubAuth;
+    const useProviderMount = useContainerMounts
+      && ((provider === "gemini" && workflowSettings.containerMountGeminiAuth)
+        || (provider === "claude-code" && workflowSettings.containerMountClaudeCodeAuth)
+        || (provider === "codex" && workflowSettings.containerMountCodexAuth));
+
+    if (githubToken && !useGithubMount) {
+      env.GH_TOKEN = githubToken;
+      env.GITHUB_TOKEN = githubToken;
+    }
     if (provider === "gemini") {
       if (model && model !== "default") env.GEMINI_MODEL = model;
-      if (apiKey) env.GEMINI_API_KEY = apiKey;
+      if (apiKey && !useProviderMount) env.GEMINI_API_KEY = apiKey;
     } else if (provider === "claude-code") {
-      if (apiKey) env.ANTHROPIC_API_KEY = apiKey;
+      if (apiKey && !useProviderMount) env.ANTHROPIC_API_KEY = apiKey;
     } else if (provider === "codex") {
       if (model && model !== "default") env.CODEX_MODEL = model;
-      if (apiKey) env.OPENAI_API_KEY = apiKey;
+      if (apiKey && !useProviderMount) env.OPENAI_API_KEY = apiKey;
     }
     return env;
   }

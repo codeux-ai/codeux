@@ -9,6 +9,10 @@ const buildDeps = () => ({
   getDashboardSettings: () => buildMockSettings(),
   getGuideContent: vi.fn().mockResolvedValue("guide"),
   completedSprints: new Set<string>(),
+  projectAttentionService: {
+    openItem: vi.fn(),
+    resolveItemsForSprintRun: vi.fn(),
+  },
   executionRepository: {
     appendSprintRunEvent: vi.fn(),
     finalizeSprintRunCancellationIfIdle: vi.fn().mockReturnValue(null),
@@ -30,31 +34,45 @@ const buildCycleRunner = () => ({
 });
 
 describe("WatchLoopRunner", () => {
-  it("returns intermediate report when CHECKPOINT transition is triggered (output interval reached)", async () => {
+  it("continues past checkpoint boundaries until a terminal condition is reached", async () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();
-    const nowSpy = vi.spyOn(Date, "now");
-    
-    // 1. Initial start time
-    // 2. elapsedMs calculation (must be >= 60000 for default min)
-    nowSpy.mockReturnValueOnce(0).mockReturnValue(61000);
+    const nowValues = [0, 61_000, 62_000, 63_000];
+    const nowSpy = vi.spyOn(Date, "now").mockImplementation(() => nowValues.shift() ?? 63_000);
 
     deps.renderInstruction.mockImplementation(async (id) => {
       if (id === "watchHeader") return "HEADER";
-      if (id === "watchContinue") return "WATCH_CONTINUE";
+      if (id === "cleanupAllMerged") return "CLEANUP_MERGED";
       return "";
     });
 
-    cycleRunner.run.mockResolvedValue({
-      subtasks: [buildMockSubtask({ status: "RUNNING" }), buildMockSubtask({ status: "PENDING", is_independent: false })],
-      reportText: "REPORT",
-      statusTable: "TABLE",
-      instructions: "INST",
-      awaitingMerge: [],
-    });
+    cycleRunner.run
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "RUNNING" }), buildMockSubtask({ status: "PENDING", is_independent: false })],
+        reportText: "REPORT_1",
+        statusTable: "TABLE_1",
+        instructions: "INST_1",
+        awaitingMerge: [],
+      })
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],
+        reportText: "REPORT_2",
+        statusTable: "TABLE_2",
+        instructions: "INST_2",
+        awaitingMerge: [],
+      });
 
-    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn());
-    
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn().mockResolvedValue({
+      text: "",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    }));
+
     const result = await runner.run({
       args: { sprint_number: 1, action: "orchestrate" } as any,
       executionContext: {
@@ -78,7 +96,17 @@ describe("WatchLoopRunner", () => {
       sprintRunId: "run-1",
     });
 
-    expect(result).toContain("WATCH_CONTINUE");
+    expect(cycleRunner.run).toHaveBeenCalledTimes(2);
+    expect(result).toContain("Sprint Execution Finished");
+    expect(result).toContain("REPORT_2");
+    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({
+        status: "running",
+        lastHeartbeatAt: expect.any(String),
+      }),
+    );
+
     nowSpy.mockRestore();
   });
 
@@ -150,22 +178,26 @@ describe("WatchLoopRunner", () => {
     const nowSpy = vi.spyOn(Date, "now");
 
     // First loop iteration: elapsedMs < 60000, not finished -> RUNNING state.
-    // Second loop iteration: elapsedMs >= 60000 -> CHECKPOINT state.
-    nowSpy.mockReturnValueOnce(0).mockReturnValueOnce(1000).mockReturnValueOnce(61000);
+    // Second loop iteration: elapsedMs >= 60000 triggers an internal checkpoint rollover.
+    nowSpy.mockReturnValueOnce(0).mockReturnValueOnce(1000).mockReturnValueOnce(61000).mockReturnValueOnce(62000);
 
-    deps.renderInstruction.mockImplementation(async (id) => {
-      if (id === "watchHeader") return "HEADER";
-      if (id === "watchContinue") return "WATCH_CONTINUE";
-      return "";
-    });
+    deps.renderInstruction.mockImplementation(async (id) => id === "watchHeader" ? "HEADER" : "");
 
-    cycleRunner.run.mockResolvedValue({
-      subtasks: [buildMockSubtask({ status: "RUNNING" })],
-      reportText: "REPORT",
-      statusTable: "TABLE",
-      instructions: "INST",
-      awaitingMerge: [],
-    });
+    cycleRunner.run
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "RUNNING" })],
+        reportText: "REPORT",
+        statusTable: "TABLE",
+        instructions: "INST",
+        awaitingMerge: [],
+      })
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],
+        reportText: "REPORT_DONE",
+        statusTable: "TABLE_DONE",
+        instructions: "INST_DONE",
+        awaitingMerge: [],
+      });
 
     const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn());
 
@@ -194,8 +226,64 @@ describe("WatchLoopRunner", () => {
 
     const result = await runPromise;
     expect(cycleRunner.run).toHaveBeenCalledTimes(2);
-    expect(result).toContain("WATCH_CONTINUE");
+    expect(result).toContain("Sprint Execution Finished");
 
+    nowSpy.mockRestore();
+  });
+
+  it("does not pause when only dependent pending work remains", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const nowSpy = vi.spyOn(Date, "now");
+
+    nowSpy.mockReturnValueOnce(0).mockReturnValueOnce(61000).mockReturnValueOnce(62000);
+
+    deps.renderInstruction.mockImplementation(async (id) => id === "watchHeader" ? "HEADER" : "");
+
+    cycleRunner.run
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "PENDING", is_independent: false })],
+        reportText: "REPORT",
+        statusTable: "TABLE",
+        instructions: "INST",
+        awaitingMerge: [],
+      })
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],
+        reportText: "REPORT_DONE",
+        statusTable: "TABLE_DONE",
+        instructions: "INST_DONE",
+        awaitingMerge: [],
+      });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn());
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(result).toContain("Sprint Execution Finished");
+    expect(deps.projectAttentionService.openItem).not.toHaveBeenCalledWith(expect.objectContaining({
+      attentionType: "manual_attention",
+    }));
     nowSpy.mockRestore();
   });
 

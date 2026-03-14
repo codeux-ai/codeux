@@ -9,6 +9,9 @@ const EMPTY_SNAPSHOT: ExecutionDashboardSnapshot = {
   sprintRuns: [],
   taskDispatches: [],
   connections: [],
+  primaryAssignedWorker: null,
+  overflowAssignedWorkers: [],
+  attentionItems: [],
   recentEvents: [],
   updatedAt: null,
 };

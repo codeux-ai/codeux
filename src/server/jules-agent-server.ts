@@ -50,6 +50,9 @@ import { createRuntimeDependencies, ServerContext } from "../app/dependency-fact
 import { generateCorrelationId, runWithCorrelationId } from "../shared/logging/correlation-id.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../repositories/settings-defaults.js";
+import { AppDbStorage } from "../repositories/app-db-storage.js";
+import { ProjectWorkerAssignmentRepository } from "../repositories/project-worker-assignment-repository.js";
+import { ProjectAttentionRepository } from "../repositories/project-attention-repository.js";
 import { DefaultRuntimeContext, RuntimeContext } from "../app/runtime-context.js";
 import { bootSettings, syncGitSettingsFromDashboard } from "../app/lifecycle/settings-lifecycle-service.js";
 import { bootDashboard } from "../app/lifecycle/dashboard-lifecycle-service.js";
@@ -80,10 +83,13 @@ export class JulesAgentServer {
   private taskService: TaskService;
   private julesSourceResolver: JulesSourceResolver;
   private sprintOrchestrator: SprintOrchestrator;
+  private appDbStorage: AppDbStorage;
   private settingsRepository: SettingsRepository;
   private projectManagementRepository: ProjectManagementRepository;
   private projectRuntimeRepository: ProjectRuntimeRepository;
   private connectionChatRepository: ConnectionChatRepository;
+  private projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
+  private projectAttentionRepository: ProjectAttentionRepository;
   private agentPresetRepository: AgentPresetRepository;
   private agentPresetSyncService: AgentPresetSyncService;
   private executionRepository: ExecutionRepository;
@@ -118,10 +124,13 @@ export class JulesAgentServer {
     this.taskService = deps.taskService;
     this.julesSourceResolver = deps.julesSourceResolver;
     this.sprintOrchestrator = deps.sprintOrchestrator;
+    this.appDbStorage = deps.appDbStorage;
     this.settingsRepository = deps.settingsRepository;
     this.projectManagementRepository = deps.projectManagementRepository;
     this.projectRuntimeRepository = deps.projectRuntimeRepository;
     this.connectionChatRepository = deps.connectionChatRepository;
+    this.projectWorkerAssignmentRepository = deps.projectWorkerAssignmentRepository;
+    this.projectAttentionRepository = deps.projectAttentionRepository;
     this.agentPresetRepository = deps.agentPresetRepository;
     this.agentPresetSyncService = deps.agentPresetSyncService;
     this.executionRepository = deps.executionRepository;
@@ -577,11 +586,14 @@ export class JulesAgentServer {
         getDashboardPort: () => this.getDashboardPort(),
         runtimeContext: this.runtimeContext,
         externalSettingsHints: this.externalSettingsHints,
+        appDbStorage: this.appDbStorage,
         settingsRepository: this.settingsRepository,
         projectManagementRepository: this.projectManagementRepository,
         projectRuntimeRepository: this.projectRuntimeRepository,
         executionRepository: this.executionRepository,
         connectionChatRepository: this.connectionChatRepository,
+        projectWorkerAssignmentRepository: this.projectWorkerAssignmentRepository,
+        projectAttentionRepository: this.projectAttentionRepository,
         agentPresetRepository: this.agentPresetRepository,
         agentPresetSyncService: this.agentPresetSyncService,
         sprintMarkdownService: this.sprintMarkdownService,

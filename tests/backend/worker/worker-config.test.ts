@@ -43,6 +43,8 @@ describe("loadWorkerConfig", () => {
     expect(config.connectionKey).toBe("worker-1");
     expect(config.displayName).toBe("CI Worker");
     expect(config.projectId).toBe("project-1");
+    expect(config.projectIds).toEqual(["project-1"]);
+    expect(config.activeProjectIds).toEqual([]);
     expect(config.sprintId).toBe("sprint-1");
     expect(config.dispatchPollIntervalMs).toBe(2000);
     expect(config.sessionPollIntervalMs).toBe(3000);
@@ -66,5 +68,22 @@ describe("loadWorkerConfig", () => {
     expect(config.serverCommand).toBe(process.execPath);
     expect(config.serverArgs).toContain("--runtime-role");
     expect(config.serverArgs).toContain("worker-host");
+  });
+
+  it("parses multi-project worker flags", () => {
+    const config = loadWorkerConfig([
+      "node",
+      "worker.js",
+      "--project-id",
+      "project-1",
+      "--project-id",
+      "project-2",
+      "--active-project-id",
+      "project-2",
+    ]);
+
+    expect(config.projectId).toBe("project-1");
+    expect(config.projectIds).toEqual(["project-1", "project-2"]);
+    expect(config.activeProjectIds).toEqual(["project-2"]);
   });
 });

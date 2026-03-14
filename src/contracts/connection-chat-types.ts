@@ -13,6 +13,8 @@ export interface McpConnectionCapabilities {
   model?: string;
   labels?: string[];
   listenMode?: boolean;
+  workerCanSuperviseProjects?: boolean;
+  workerCanExecuteTasks?: boolean;
   machineName?: string;
   platform?: string;
   arch?: string;
@@ -81,6 +83,8 @@ export interface StartListenInput {
   displayName?: string;
   role?: McpConnectionRole;
   projectId?: string;
+  projectIds?: string[];
+  activeProjectIds?: string[];
   transport?: string;
   capabilities?: McpConnectionCapabilities;
   maxMessages?: number;
@@ -145,9 +149,12 @@ export interface ListenInput {
   displayName?: string;
   role?: McpConnectionRole;
   projectId?: string;
+  projectIds?: string[];
+  activeProjectIds?: string[];
   transport?: string;
   capabilities?: McpConnectionCapabilities;
   includeTaskDispatch?: boolean;
+  includeAttentionItems?: boolean;
   timeoutSeconds?: number;
   pollIntervalMs?: number;
 }
@@ -162,6 +169,55 @@ export interface ListenDashboardMessagePayload {
   threadId: string;
   projectId: string;
   bodyMarkdown: string;
+}
+
+export interface ListenProjectPayload {
+  id: string;
+  name: string;
+  repoPath: string;
+  defaultBranch: string | null;
+  featureBranch: string | null;
+}
+
+export interface ListenContextDigestPayload {
+  activeSprintId: string | null;
+  activeSprintName: string | null;
+  activeSprintNumber: number | null;
+  unresolvedAttentionCount: number;
+  unresolvedAttentionTitles: string[];
+  recentEventTypes: string[];
+}
+
+export interface ListenAttentionItemPayload {
+  id: string;
+  projectId: string;
+  sprintId: string | null;
+  taskId: string | null;
+  sprintRunId: string | null;
+  dispatchId: string | null;
+  attentionType: string;
+  severity: string;
+  ownerType: string;
+  status: string;
+  assignedWorkerEndpointId: string | null;
+  title: string;
+  summaryMarkdown: string;
+  payload: Record<string, unknown> | null;
+  openedAt: string;
+  updatedAt: string;
+}
+
+export interface ListenAssignmentChangedPayload {
+  assignmentId: string;
+  workerEndpointId: string | null;
+  assignmentRole: string;
+  status: string;
+  assignedAt: string;
+  updatedAt: string;
+  releasedAt: string | null;
+  releaseReason: string | null;
+  primaryAssignedWorkerEndpointId: string | null;
+  overflowAssignedWorkerEndpointIds: string[];
 }
 
 export interface ListenTimeoutEvent {
@@ -181,6 +237,24 @@ export interface ListenTaskDispatchEvent {
   continuation: ListenContinuation;
 }
 
+export interface ListenAttentionItemEvent {
+  kind: "attention_item";
+  item: ListenAttentionItemPayload;
+  project: ListenProjectPayload;
+  workingDirectoryHint: string;
+  contextDigest: ListenContextDigestPayload;
+  continuation: ListenContinuation;
+}
+
+export interface ListenAssignmentChangedEvent {
+  kind: "assignment_changed";
+  assignment: ListenAssignmentChangedPayload;
+  project: ListenProjectPayload;
+  workingDirectoryHint: string;
+  contextDigest: ListenContextDigestPayload;
+  continuation: ListenContinuation;
+}
+
 export interface PostListenReplyResult {
   threadId: string;
   deliveryStatus: ConversationDeliveryStatus;
@@ -189,4 +263,6 @@ export interface PostListenReplyResult {
 export type ListenResponse =
   | ListenTimeoutEvent
   | ListenDashboardMessageEvent
-  | ListenTaskDispatchEvent;
+  | ListenTaskDispatchEvent
+  | ListenAttentionItemEvent
+  | ListenAssignmentChangedEvent;

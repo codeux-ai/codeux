@@ -3,7 +3,7 @@ import * as path from "path";
 import { DatabaseSync } from "node:sqlite";
 import { getHomeSprintOsPath } from "../shared/config/sprint-os-paths.js";
 
-interface RowResult {
+interface PayloadRow {
   payload: string;
 }
 
@@ -31,21 +31,95 @@ export class SettingsDbStorage {
         payload TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS system_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        payload TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS project_settings (
+        project_id TEXT PRIMARY KEY,
+        payload TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS sprint_settings (
+        sprint_id TEXT PRIMARY KEY,
+        payload TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
     `);
   }
 
-  readPayload(): string | null {
-    const row = this.db.prepare("SELECT payload FROM app_settings WHERE id = 1").get() as RowResult | undefined;
+  readLegacyPayload(): string | null {
+    const row = this.db.prepare("SELECT payload FROM app_settings WHERE id = 1").get() as PayloadRow | undefined;
     return row?.payload ?? null;
   }
 
-  writePayload(payload: string): void {
+  deleteLegacyPayload(): void {
+    this.db.prepare("DELETE FROM app_settings WHERE id = 1").run();
+  }
+
+  readSystemPayload(): string | null {
+    const row = this.db.prepare("SELECT payload FROM system_settings WHERE id = 1").get() as PayloadRow | undefined;
+    return row?.payload ?? null;
+  }
+
+  writeSystemPayload(payload: string): void {
     this.db.prepare(`
-      INSERT INTO app_settings (id, payload, updated_at)
+      INSERT INTO system_settings (id, payload, updated_at)
       VALUES (1, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         payload = excluded.payload,
         updated_at = excluded.updated_at
     `).run(payload, new Date().toISOString());
+  }
+
+  readProjectPayload(projectId: string): string | null {
+    const row = this.db.prepare("SELECT payload FROM project_settings WHERE project_id = ?").get(projectId) as PayloadRow | undefined;
+    return row?.payload ?? null;
+  }
+
+  writeProjectPayload(projectId: string, payload: string): void {
+    this.db.prepare(`
+      INSERT INTO project_settings (project_id, payload, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(project_id) DO UPDATE SET
+        payload = excluded.payload,
+        updated_at = excluded.updated_at
+    `).run(projectId, payload, new Date().toISOString());
+  }
+
+  deleteProjectPayload(projectId: string): void {
+    this.db.prepare("DELETE FROM project_settings WHERE project_id = ?").run(projectId);
+  }
+
+  readSprintPayload(sprintId: string): string | null {
+    const row = this.db.prepare("SELECT payload FROM sprint_settings WHERE sprint_id = ?").get(sprintId) as PayloadRow | undefined;
+    return row?.payload ?? null;
+  }
+
+  writeSprintPayload(sprintId: string, payload: string): void {
+    this.db.prepare(`
+      INSERT INTO sprint_settings (sprint_id, payload, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(sprint_id) DO UPDATE SET
+        payload = excluded.payload,
+        updated_at = excluded.updated_at
+    `).run(sprintId, payload, new Date().toISOString());
+  }
+
+  deleteSprintPayload(sprintId: string): void {
+    this.db.prepare("DELETE FROM sprint_settings WHERE sprint_id = ?").run(sprintId);
+  }
+
+  resetAllData(): void {
+    this.db.exec(`
+      DELETE FROM app_settings;
+      DELETE FROM system_settings;
+      DELETE FROM project_settings;
+      DELETE FROM sprint_settings;
+    `);
   }
 }

@@ -2,4 +2,4 @@
 
 No subtasks found in `{{subtasks_dir}}`. You must plan the sprint before orchestration can begin.
 
-**Instruction:** Run the `sprint_agent` with `action: "plan"` to initialize the subtasks and define the work items.
+**Instruction:** Use the dashboard sprint editor or markdown import to create the tasks, then start the sprint from the dashboard.

@@ -131,7 +131,8 @@ When auto-intervention fails, tasks are routed to `AGENT INTERVENTION NEEDED` wi
 When `action=orchestrate`, `wait` is true, and `watchLoop` is enabled:
 - Orchestrator enters continuous loop.
 - Wait interval is 120 seconds between cycles.
-- Output interval defaults to 300 seconds: if tasks are still in progress at that point, the loop returns a status checkpoint and instructs the caller to rerun `sprint_agent(..., wait: true)`.
+- Output interval defaults to 300 seconds and is now used only as an internal checkpoint boundary for heartbeat/lease renewal inside the same sprint run.
+- Sprint OS does not stop at that boundary anymore. It keeps the same sprint run alive, renews its lease/heartbeat, resets the checkpoint window, and continues watching until a real terminal condition is reached.
 - Loop exits when:
   - all tasks terminal (`COMPLETED+merged` or `FAILED`), or
   - no runnable tasks remain, or

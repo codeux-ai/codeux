@@ -138,6 +138,42 @@ describe("ConnectionChatRepository", () => {
     });
   });
 
+  it("stores system-authored project messages without creating worker inbox backlog", async () => {
+    const { projectRepository, connectionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "System Message Project",
+      sourceType: "local",
+      sourceRef: "/workspace/system-message-project",
+    });
+
+    const listen = connectionRepository.startListen({
+      connectionKey: "worker-system-message",
+      displayName: "Worker System Message",
+      role: "worker",
+      projectId: project.id,
+    });
+
+    const message = connectionRepository.postSystemMessage(project.id, {
+      title: "Worker escalation",
+      connectionId: listen.connection.id,
+      bodyMarkdown: "Operator follow-up is required for this project blocker.",
+    });
+
+    expect(message).toMatchObject({
+      direction: "connection_to_dashboard",
+      authorType: "system",
+      deliveryStatus: "processed",
+    });
+    expect(connectionRepository.pullInbox({
+      connectionKey: "worker-system-message",
+      projectId: project.id,
+    })).toEqual([]);
+    expect(connectionRepository.listThreads(project.id)[0]).toMatchObject({
+      connectionId: listen.connection.id,
+      pendingMessageCount: 0,
+    });
+  });
+
   it("derives stale and offline connection states from heartbeat age", async () => {
     const { storage, projectRepository, connectionRepository } = await createRepositories();
     const project = projectRepository.createProject({

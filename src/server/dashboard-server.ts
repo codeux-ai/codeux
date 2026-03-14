@@ -4,7 +4,7 @@ import * as path from "path";
 import type { Server } from "http";
 import { createServer } from "http";
 import type {
-  DashboardSettings,
+  ExecutionAttentionItemSummary,
   ExecutionDashboardSnapshot,
   ExternalSettingsHints,
   GitTrackingStatus,
@@ -12,6 +12,13 @@ import type {
   OverviewTelemetrySnapshot,
   ReadinessProbeStatus,
 } from "../contracts/app-types.js";
+import type {
+  EffectiveSettingsResponse,
+  ProjectSettings,
+  ProjectSettingsOverride,
+  SprintSettingsOverride,
+  SystemSettings,
+} from "../contracts/settings-scope-types.js";
 import type {
   AgentPresetRecord,
   CreateAgentPresetInput,
@@ -53,11 +60,31 @@ export interface DashboardServerOptions {
   getStatus: () => unknown;
   getExecutionSnapshot: () => ExecutionDashboardSnapshot;
   getProjectExecutionSnapshot: (projectId: string) => ExecutionDashboardSnapshot;
+  claimAttentionItem?: (
+    projectId: string,
+    attentionItemId: string,
+    input?: { workerEndpointId?: string; claimReason?: string },
+  ) => ExecutionAttentionItemSummary;
+  resolveAttentionItem?: (
+    projectId: string,
+    attentionItemId: string,
+    input?: { status?: "resolved" | "dismissed"; reason?: string; resolutionSummaryMarkdown?: string },
+  ) => ExecutionAttentionItemSummary;
   getOverviewTelemetrySnapshot: () => OverviewTelemetrySnapshot;
   getLiveActivities: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
   getExternalSettingsHints: () => ExternalSettingsHints;
-  getSettings: () => DashboardSettings;
+  getSystemSettings: () => SystemSettings;
+  saveSystemSettings: (settings: SystemSettings) => SystemSettings;
+  resetDatabase: () => Promise<void> | void;
+  getProjectSettings: (projectId: string) => ProjectSettingsOverride;
+  saveProjectSettings: (projectId: string, settings: ProjectSettingsOverride) => ProjectSettingsOverride;
+  resetProjectSettings: (projectId: string) => void;
+  getProjectEffectiveSettings: (projectId: string) => EffectiveSettingsResponse;
+  getSprintSettings: (sprintId: string) => SprintSettingsOverride;
+  saveSprintSettings: (projectId: string, sprintId: string, settings: SprintSettingsOverride) => SprintSettingsOverride;
+  resetSprintSettings: (sprintId: string) => void;
+  getSprintEffectiveSettings: (projectId: string, sprintId: string) => EffectiveSettingsResponse;
   listProjects: () => ProjectCollectionResponse;
   createProject: (input: CreateProjectInput) => ProjectSummary;
   getProject: (projectId: string) => ProjectSummary | null;
@@ -87,7 +114,6 @@ export interface DashboardServerOptions {
   deleteConversationThread: (threadId: string) => void;
   listConversationMessages: (threadId: string) => ConversationMessageRecord[];
   postConversationMessage: (projectId: string, input: CreateDashboardConversationMessageInput) => ConversationMessageRecord;
-  saveSettings: (settings: DashboardSettings) => DashboardSettings;
   rerunTask: (taskId: string) => Promise<unknown>;
   orchestrateSprint: (projectId: string, sprintId: string) => Promise<unknown>;
   improveSprintPrompt?: (projectId: string, input: { name: string; goal: string }) => Promise<unknown>;
@@ -150,8 +176,17 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     getLiveActivities,
     getGitStatus,
     getExternalSettingsHints,
-    getSettings,
-    saveSettings,
+    getSystemSettings,
+    saveSystemSettings,
+    resetDatabase,
+    getProjectSettings,
+    saveProjectSettings,
+    resetProjectSettings,
+    getProjectEffectiveSettings,
+    getSprintSettings,
+    saveSprintSettings,
+    resetSprintSettings,
+    getSprintEffectiveSettings,
     rerunTask,
     orchestrateSprint,
     improveSprintPrompt,
@@ -222,6 +257,50 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     }
   });
 
+  app.post("/api/projects/:projectId/attention-items/:attentionItemId/claim", (req, res) => {
+    if (!options.claimAttentionItem) {
+      res.status(501).json({ error: "Attention item claim is not enabled." });
+      return;
+    }
+
+    try {
+      res.json(options.claimAttentionItem(
+        String(req.params.projectId || "").trim(),
+        String(req.params.attentionItemId || "").trim(),
+        {
+          workerEndpointId: typeof req.body?.workerEndpointId === "string" ? req.body.workerEndpointId.trim() : undefined,
+          claimReason: typeof req.body?.claimReason === "string" ? req.body.claimReason.trim() : undefined,
+        },
+      ));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to claim attention item") });
+    }
+  });
+
+  app.post("/api/projects/:projectId/attention-items/:attentionItemId/resolve", (req, res) => {
+    if (!options.resolveAttentionItem) {
+      res.status(501).json({ error: "Attention item resolution is not enabled." });
+      return;
+    }
+
+    try {
+      const requestedStatus = typeof req.body?.status === "string" ? req.body.status.trim() : undefined;
+      res.json(options.resolveAttentionItem(
+        String(req.params.projectId || "").trim(),
+        String(req.params.attentionItemId || "").trim(),
+        {
+          status: requestedStatus === "dismissed" ? "dismissed" : "resolved",
+          reason: typeof req.body?.reason === "string" ? req.body.reason.trim() : undefined,
+          resolutionSummaryMarkdown: typeof req.body?.resolutionSummaryMarkdown === "string"
+            ? req.body.resolutionSummaryMarkdown
+            : undefined,
+        },
+      ));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to resolve attention item") });
+    }
+  });
+
   app.get("/api/live-activities", async (req, res) => {
     try {
       const activitiesBySession = await getLiveActivities();
@@ -236,8 +315,25 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     }
   });
 
-  app.get("/api/settings", (req, res) => {
-    res.json(getSettings());
+  app.get("/api/system-settings", (req, res) => {
+    res.json(getSystemSettings());
+  });
+
+  app.put("/api/system-settings", (req, res) => {
+    try {
+      res.json(saveSystemSettings(req.body as SystemSettings));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to save system settings") });
+    }
+  });
+
+  app.post("/api/system/reset-database", async (req, res) => {
+    try {
+      await resetDatabase();
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to reset database") });
+    }
   });
 
   app.get("/api/projects", (req, res) => {
@@ -260,6 +356,39 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       return;
     }
     res.json(project);
+  });
+
+  app.get("/api/projects/:projectId/settings", (req, res) => {
+    try {
+      res.json(getProjectSettings(String(req.params.projectId || "").trim()));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to load project settings") });
+    }
+  });
+
+  app.put("/api/projects/:projectId/settings", (req, res) => {
+    try {
+      res.json(saveProjectSettings(String(req.params.projectId || "").trim(), req.body as ProjectSettingsOverride));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to save project settings") });
+    }
+  });
+
+  app.delete("/api/projects/:projectId/settings", (req, res) => {
+    try {
+      resetProjectSettings(String(req.params.projectId || "").trim());
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to reset project settings") });
+    }
+  });
+
+  app.get("/api/projects/:projectId/settings/effective", (req, res) => {
+    try {
+      res.json(getProjectEffectiveSettings(String(req.params.projectId || "").trim()));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to load effective project settings") });
+    }
   });
 
   app.patch("/api/projects/:projectId", (req, res) => {
@@ -328,6 +457,51 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       res.json(options.updateSprint(String(req.params.sprintId || "").trim(), req.body as UpdateSprintInput));
     } catch (error) {
       res.status(400).json({ error: toErrorMessage(error, "Failed to update sprint") });
+    }
+  });
+
+  app.get("/api/sprints/:sprintId/settings", (req, res) => {
+    try {
+      res.json(getSprintSettings(String(req.params.sprintId || "").trim()));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to load sprint settings") });
+    }
+  });
+
+  app.put("/api/sprints/:sprintId/settings", (req, res) => {
+    const projectId = typeof req.body?.projectId === "string" ? req.body.projectId.trim() : "";
+    if (!projectId) {
+      res.status(400).json({ error: "projectId is required when saving sprint settings." });
+      return;
+    }
+
+    try {
+      const sprintId = String(req.params.sprintId || "").trim();
+      const payload = { ...(req.body as Record<string, unknown>) };
+      delete payload.projectId;
+      res.json(saveSprintSettings(projectId, sprintId, payload as SprintSettingsOverride));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to save sprint settings") });
+    }
+  });
+
+  app.delete("/api/sprints/:sprintId/settings", (req, res) => {
+    try {
+      resetSprintSettings(String(req.params.sprintId || "").trim());
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to reset sprint settings") });
+    }
+  });
+
+  app.get("/api/projects/:projectId/sprints/:sprintId/settings/effective", (req, res) => {
+    try {
+      res.json(getSprintEffectiveSettings(
+        String(req.params.projectId || "").trim(),
+        String(req.params.sprintId || "").trim(),
+      ));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to load effective sprint settings") });
     }
   });
 
@@ -501,16 +675,6 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       res.status(500).json({ error: `Failed to fetch git status: ${message}` });
-    }
-  });
-
-  app.put("/api/settings", (req, res) => {
-    try {
-      const saved = saveSettings(req.body as DashboardSettings);
-      res.json(saved);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      res.status(400).json({ error: `Failed to save settings: ${message}` });
     }
   });
 

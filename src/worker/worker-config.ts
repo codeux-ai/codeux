@@ -6,6 +6,8 @@ export interface WorkerConfig {
   connectionKey: string;
   displayName: string;
   projectId?: string;
+  projectIds?: string[];
+  activeProjectIds?: string[];
   sprintId?: string;
   dispatchPollIntervalMs: number;
   sessionPollIntervalMs: number;
@@ -82,6 +84,8 @@ export function loadWorkerConfig(argv: string[] = process.argv): WorkerConfig {
     connectionKey,
     displayName,
     projectId: parseStringFlag(argv, "--project-id")?.trim() || undefined,
+    projectIds: parseRepeatedStringFlag(argv, "--project-id"),
+    activeProjectIds: parseRepeatedStringFlag(argv, "--active-project-id"),
     sprintId: parseStringFlag(argv, "--sprint-id")?.trim() || undefined,
     dispatchPollIntervalMs: parseIntegerFlag(argv, "--dispatch-poll-interval-ms", DEFAULT_DISPATCH_POLL_INTERVAL_MS),
     sessionPollIntervalMs: parseIntegerFlag(argv, "--session-poll-interval-ms", DEFAULT_SESSION_POLL_INTERVAL_MS),

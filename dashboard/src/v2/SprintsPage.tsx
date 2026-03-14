@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/ho
 import gsap from "gsap";
 import {
   Activity,
+  AlertTriangle,
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
@@ -22,8 +23,10 @@ import {
   XCircle,
 } from "lucide-preact";
 import { SprintBubble } from "./components/ui/SprintBubble.js";
+import { HumanInterventionBadge } from "./components/ui/HumanInterventionBadge.js";
 import { SprintComposer, type SprintSubmitMode } from "./components/ui/SprintComposer.js";
 import { SprintMarkdownModal } from "./components/ui/SprintMarkdownModal.js";
+import { SprintSettingsOverrideModal } from "./components/ui/SprintSettingsOverrideModal.js";
 import type { Sprint, SprintStatus } from "./types.js";
 import { useProjectData } from "./context/project-data.js";
 import { useProjectSprints } from "./hooks/use-project-sprints.js";
@@ -40,6 +43,7 @@ import {
 } from "./lib/project-api.js";
 import { buildTaskBundle, parseTaskBundle } from "./lib/markdown-transfer.js";
 import { cancelSprintRun, orchestrateSprint } from "../lib/api/dashboard-api.js";
+import { getSprintHumanInterventionBySprintId } from "../lib/execution-intervention.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 const TABLE_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
@@ -125,6 +129,7 @@ export const SprintsPage: FunctionComponent = () => {
     sprintMarkdown: string;
     tasksMarkdown: string;
   } | null>(null);
+  const [overrideSprint, setOverrideSprint] = useState<Sprint | null>(null);
   const [tableSort, setTableSort] = useState<{
     key: SprintTableSortKey;
     direction: SprintTableSortDirection;
@@ -221,6 +226,11 @@ export const SprintsPage: FunctionComponent = () => {
     }
     return map;
   }, [actualActiveRunsBySprintId, suppressedRunningSprintIds]);
+
+  const interventionBySprintId = useMemo(
+    () => getSprintHumanInterventionBySprintId(execution),
+    [execution],
+  );
 
   const displaySprints = useMemo(() => (
     sprints.map((sprint) => ({
@@ -684,6 +694,7 @@ export const SprintsPage: FunctionComponent = () => {
                         isEven={index % 2 === 0}
                         accentColor={ACCENT_CYCLE[index % ACCENT_CYCLE.length]}
                         primaryBusy={pendingActionIds.has(pendingActionId)}
+                        humanIntervention={interventionBySprintId.get(sprint.id) || null}
                         onPrimaryAction={() => { handleSprintToggle(sprint.id); }}
                         onEdit={() => {
                           setEditingSprint(sprint);
@@ -691,7 +702,7 @@ export const SprintsPage: FunctionComponent = () => {
                         }}
                         onDelete={() => { void handleDeleteSprint(sprint.id); }}
                         onExport={() => { void handleOpenExport(sprint.id, sprint.name); }}
-                        onOverrides={() => window.alert("Overrides are a placeholder for the next iteration.")}
+                        onOverrides={() => { setOverrideSprint(sprint); }}
                         onToggleShowcase={() => { void handleToggleShowcase(sprint); }}
                       />
                     );
@@ -857,6 +868,7 @@ export const SprintsPage: FunctionComponent = () => {
                     <tbody>
                       {tableSprints.map((sprint) => {
                         const activeRun = activeRunsBySprintId.get(sprint.id);
+                        const humanIntervention = interventionBySprintId.get(sprint.id) || null;
                         const pendingActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
                         const pinActionId = `sprint-showcase:${sprint.id}`;
                         const isCompleted = sprint.status === "completed";
@@ -890,6 +902,11 @@ export const SprintsPage: FunctionComponent = () => {
                                 <span>·</span>
                                 <span>{formatTableDate(sprint.createdAt)}</span>
                               </div>
+                              {humanIntervention && (
+                                <div className="mt-3">
+                                  <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="left" />
+                                </div>
+                              )}
                               {sprint.goal ? (
                                 <p className={`mt-2 max-w-xl text-sm leading-relaxed ${isCompleted ? "text-slate-400 dark:text-slate-500" : "text-slate-500 dark:text-slate-400"}`}>
                                   {sprint.goal}
@@ -897,9 +914,17 @@ export const SprintsPage: FunctionComponent = () => {
                               ) : null}
                             </td>
                             <td className={cellClass}>
-                              <span className={`inline-flex rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] ${STATUS_BADGE_TONES[sprint.status]}`}>
-                                {STATUS_LABELS[sprint.status]}
-                              </span>
+                              <div className="flex flex-col items-start gap-2">
+                                <span className={`inline-flex rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] ${STATUS_BADGE_TONES[sprint.status]}`}>
+                                  {STATUS_LABELS[sprint.status]}
+                                </span>
+                                {humanIntervention && (
+                                  <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber">
+                                    <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2.2} />
+                                    Intervention
+                                  </div>
+                                )}
+                              </div>
                             </td>
                             <td className={cellClass}>
                               <div className="font-mono text-lg font-bold text-slate-700 dark:text-white">{sprint.tasksCount}</div>
@@ -1017,7 +1042,7 @@ export const SprintsPage: FunctionComponent = () => {
               type="button"
               onClick={() => {
                 setRowMenu(null);
-                window.alert("Overrides are a placeholder for the next iteration.");
+                setOverrideSprint(activeRowMenuSprint);
               }}
               className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
             >
@@ -1054,6 +1079,17 @@ export const SprintsPage: FunctionComponent = () => {
           sprintMarkdown={exportState.sprintMarkdown}
           tasksMarkdown={exportState.tasksMarkdown}
           onClose={() => setExportState(null)}
+        />
+      )}
+
+      {overrideSprint && selectedProject && (
+        <SprintSettingsOverrideModal
+          projectId={selectedProject.id}
+          sprint={overrideSprint}
+          onClose={() => setOverrideSprint(null)}
+          onSaved={async () => {
+            await Promise.all([refresh(), refreshExecution()]);
+          }}
         />
       )}
     </>

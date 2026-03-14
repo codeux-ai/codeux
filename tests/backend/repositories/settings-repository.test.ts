@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
+import { DatabaseSync } from "node:sqlite";
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
 
 const tempDirs: string[] = [];
@@ -18,84 +19,274 @@ afterEach(async () => {
 });
 
 describe("SettingsRepository", () => {
-  it("returns defaults when db is empty", async () => {
+  it("returns scoped defaults when db is empty", async () => {
     const { repo } = await createRepo();
-    const settings = repo.getSettings();
-    expect(settings.automationLevel).toBe("SEMI_AUTO");
-    expect(settings.dashboardPort).toBe(4444);
-    expect(settings.automationInterventions.autoApprovePlan).toBe(true);
-    expect(settings.automationInterventions.autoAnswerClarification).toBe(false);
-    expect(settings.aiProvider.provider).toBe("jules");
-    expect(settings.aiProvider.strategy).toBe("MANUAL");
-    expect(settings.aiProvider.providers.codex.model).toBe("gpt-5.3-codex");
-    expect(settings.git.defaultBranch).toBe("main");
-    expect(settings.git.githubMode).toBe("REMOTE");
-    expect(settings.ciIntelligence.enabled).toBe(true);
-    expect(settings.ciIntelligence.enableLivePrMonitoring).toBe(true);
-    expect(settings.ciIntelligence.waitForJulesCiAutofix).toBe(false);
-    expect(settings.ciIntelligence.julesCiAutofixMaxRetries).toBe(3);
-    expect(settings.ciIntelligence.featurePrAutoMergeMode).toBe("OFF");
-    expect(settings.sprintLoopSteps.watchLoop).toBe(true);
-    expect(settings.sprintLoopSteps.watchLoopIntervalSeconds).toBe(120);
-    expect(settings.sprintLoopSteps.watchLoopOutputIntervalSeconds).toBe(300);
-    expect(settings.cliWorkflow.cleanupWorktreeOnSuccess).toBe(true);
-    expect(settings.cliWorkflow.cleanupWorktreeOnFailure).toBe(false);
-    expect(settings.cliWorkflow.retryOnReadFileNotFound).toBe(true);
-    expect(settings.cliWorkflow.resumeFailedTaskInSameWorkspace).toBe(true);
-    expect(settings.cliWorkflow.executionMode).toBe("HOST");
-    expect(settings.cliWorkflow.containerImage).toBe("node:24-bookworm");
-    expect(settings.cliWorkflow.containerMountCredentials).toBe(false);
-    expect(settings.cliWorkflow.containerMountGeminiAuth).toBe(true);
-    expect(settings.cliWorkflow.containerGeminiAuthPath).toBe("~/.gemini");
-    expect(settings.skills.length).toBeGreaterThan(0);
-    expect(settings.skills.every((skill) => skill.isInternal)).toBe(true);
-    expect(settings.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(true);
-    expect(settings.skills.find((skill) => skill.name === "git_manager_local")?.enabled).toBe(false);
-    expect(settings.mcpTools.length).toBeGreaterThan(0);
-    expect(settings.mcpTools.find((tool) => tool.name === "get_session")?.enabled).toBe(true);
-    expect(settings.mcpTools.find((tool) => tool.name === "list_all_activities")?.enabled).toBe(true);
+
+    const system = repo.getSystemSettings();
+    expect(system.runtime.dashboardPort).toBe(4444);
+    expect(system.runtime.enableDebugLogFile).toBe(false);
+    expect(system.defaults.automationLevel).toBe("SEMI_AUTO");
+    expect(system.defaults.aiProvider.provider).toBe("jules");
+    expect(system.defaults.aiProvider.providers.codex.model).toBe("gpt-5.3-codex");
+    expect(system.defaults.git.defaultBranch).toBe("main");
+    expect(system.mcpTools.length).toBeGreaterThan(0);
+
+    const projectOverride = repo.getProjectSettings("project-1");
+    const sprintOverride = repo.getSprintSettings("sprint-1");
+    expect(projectOverride).toEqual({});
+    expect(sprintOverride).toEqual({});
+
+    const effectiveProject = repo.resolveProjectDashboardSettings("project-1");
+    expect(effectiveProject.settings.aiProvider.providers.codex.apiKey).toBe("");
+    expect(effectiveProject.settings.git.githubToken).toBe("");
+    expect(effectiveProject.sources["automationLevel"]).toBe("system");
   });
 
-  it("persists and reads settings", async () => {
+  it("persists system settings and resolves project/sprint overrides", async () => {
     const { repo, dbPath } = await createRepo();
-    const saved = repo.saveSettings({
-      dashboardPort: 4450,
-      enableDebugLogFile: false,
+
+    repo.saveSystemSettings({
+      runtime: {
+        dashboardPort: 4450,
+        enableDebugLogFile: true,
+      },
+      integrations: {
+        julesApiKey: "sys-jules",
+        geminiApiKey: "sys-gemini",
+        codexApiKey: "sys-codex",
+        claudeCodeApiKey: "sys-claude",
+        githubToken: "sys-gh",
+      },
+      defaults: {
+        automationLevel: "FULL",
+        automationInterventions: {
+          autoApprovePlan: true,
+          autoAnswerClarification: true,
+          autoResumePaused: false,
+          clarificationAnswerTemplate: "Proceed.",
+        },
+        aiProvider: {
+          provider: "gemini",
+          strategy: "WEIGHTED",
+          providers: {
+            jules: { enabled: true, model: "default", weight: 50, thinkingMode: "MEDIUM" },
+            gemini: { enabled: true, model: "gemini-2.5-pro", weight: 30, thinkingMode: "MEDIUM" },
+            codex: { enabled: true, model: "gpt-5.3-codex", weight: 20, thinkingMode: "HIGH" },
+            "claude-code": { enabled: false, model: "default", weight: 0, thinkingMode: "HIGH" },
+          },
+        },
+        git: {
+          githubMode: "REMOTE",
+          defaultBranch: "main",
+          autoCreatePr: true,
+          featureBranchPrefix: "feature/",
+          sprintBranchScheme: "feature/sprint{sprint}",
+        },
+        ciIntelligence: {
+          enabled: true,
+          enableLivePrMonitoring: true,
+          waitForCiBeforeMainMerge: true,
+          resolveAllCommentsBeforeMainMerge: true,
+          waitForCiBeforeFeatureMerge: true,
+          resolveAllCommentsBeforeFeatureMerge: true,
+          waitForJulesCiAutofix: false,
+          julesCiAutofixMaxRetries: 3,
+          featurePrAutoMergeMode: "OFF",
+        },
+        sprintLoopSteps: {
+          branchPreflight: true,
+          planningPreflight: true,
+          loadSubtasks: true,
+          sessionSync: true,
+          statusDerivation: true,
+          startReadyTasks: true,
+          mergeProtocol: true,
+          actionRequiredProtocol: true,
+          statusTable: true,
+          watchLoop: true,
+          watchLoopIntervalSeconds: 120,
+          watchLoopOutputIntervalSeconds: 300,
+        },
+        cliWorkflow: {
+          cleanupWorktreeOnSuccess: true,
+          cleanupWorktreeOnFailure: false,
+          retryOnReadFileNotFound: true,
+          resumeFailedTaskInSameWorkspace: true,
+          executionMode: "HOST",
+          containerImage: "node:24-bookworm",
+          containerSetupScriptPath: "",
+          containerMountGitConfig: true,
+          containerMountGithubAuth: true,
+          containerMountGeminiAuth: true,
+          containerMountCodexAuth: true,
+          containerMountClaudeCodeAuth: true,
+          containerGithubAuthPath: "~/.config/gh",
+          containerGeminiAuthPath: "~/.gemini",
+          containerCodexAuthPath: "~/.codex",
+          containerClaudeCodeAuthPath: "~/.claude",
+        },
+        skills: [
+          { name: "worker", enabled: true, isInternal: true },
+        ],
+      },
+      mcpTools: [
+        { name: "get_session", enabled: false, isInternal: true },
+      ],
+    });
+
+    const projectOverride = repo.saveProjectSettings("project-1", {
+      automationLevel: "ALWAYS_ASK",
+      git: {
+        defaultBranch: "develop",
+      },
+      aiProvider: {
+        provider: "codex",
+      },
+    });
+    expect(projectOverride.automationLevel).toBe("ALWAYS_ASK");
+    expect(projectOverride.git?.defaultBranch).toBe("develop");
+
+    const baseProjectSettings = repo.getProjectResolvedSettings("project-1");
+    const sprintOverride = repo.saveSprintSettings("sprint-1", baseProjectSettings, {
+      sprintLoopSteps: {
+        watchLoop: false,
+      },
+      aiProvider: {
+        strategy: "MANUAL",
+      },
+    });
+    expect(sprintOverride.sprintLoopSteps?.watchLoop).toBe(false);
+
+    const reloaded = new SettingsRepository(dbPath);
+    const effectiveProject = reloaded.resolveProjectDashboardSettings("project-1");
+    expect(effectiveProject.settings.dashboardPort).toBe(4450);
+    expect(effectiveProject.settings.enableDebugLogFile).toBe(true);
+    expect(effectiveProject.settings.aiProvider.providers.jules.apiKey).toBe("sys-jules");
+    expect(effectiveProject.settings.git.githubToken).toBe("sys-gh");
+    expect(effectiveProject.settings.automationLevel).toBe("ALWAYS_ASK");
+    expect(effectiveProject.settings.git.defaultBranch).toBe("develop");
+    expect(effectiveProject.sources["automationLevel"]).toBe("project");
+    expect(effectiveProject.sources["git.defaultBranch"]).toBe("project");
+
+    const effectiveSprint = reloaded.resolveSprintDashboardSettings("project-1", "sprint-1");
+    expect(effectiveSprint.settings.automationLevel).toBe("ALWAYS_ASK");
+    expect(effectiveSprint.settings.sprintLoopSteps.watchLoop).toBe(false);
+    expect(effectiveSprint.settings.aiProvider.strategy).toBe("MANUAL");
+    expect(effectiveSprint.sources["sprintLoopSteps.watchLoop"]).toBe("sprint");
+    expect(effectiveSprint.sources["aiProvider.strategy"]).toBe("sprint");
+  });
+
+  it("stores project overrides relative to current system defaults", async () => {
+    const { repo } = await createRepo();
+
+    repo.saveSystemSettings({
+      ...repo.getSystemSettings(),
+      defaults: {
+        ...repo.getSystemSettings().defaults,
+        automationLevel: "FULL",
+        git: {
+          ...repo.getSystemSettings().defaults.git,
+          defaultBranch: "mainline",
+        },
+      },
+    });
+
+    const savedProjectOverride = repo.saveProjectSettings("project-1", {
+      automationLevel: "FULL",
+      git: {
+        defaultBranch: "develop",
+      },
+    });
+
+    expect(savedProjectOverride).toEqual({
+      git: {
+        defaultBranch: "develop",
+      },
+    });
+
+    const effectiveProject = repo.resolveProjectDashboardSettings("project-1");
+    expect(effectiveProject.settings.automationLevel).toBe("FULL");
+    expect(effectiveProject.sources["automationLevel"]).toBe("system");
+    expect(effectiveProject.settings.git.defaultBranch).toBe("develop");
+    expect(effectiveProject.sources["git.defaultBranch"]).toBe("project");
+  });
+
+  it("resets all scoped settings back to defaults", async () => {
+    const { repo } = await createRepo();
+
+    repo.saveSystemSettings({
+      ...repo.getSystemSettings(),
+      integrations: {
+        julesApiKey: "sys-jules",
+        geminiApiKey: "sys-gemini",
+        codexApiKey: "sys-codex",
+        claudeCodeApiKey: "sys-claude",
+        githubToken: "sys-gh",
+      },
+    });
+    repo.saveProjectSettings("project-1", {
+      git: {
+        defaultBranch: "develop",
+      },
+    });
+    repo.saveSprintSettings("sprint-1", repo.getProjectResolvedSettings("project-1"), {
+      sprintLoopSteps: {
+        watchLoop: false,
+      },
+    });
+
+    repo.resetAllData();
+
+    expect(repo.getProjectSettings("project-1")).toEqual({});
+    expect(repo.getSprintSettings("sprint-1")).toEqual({});
+    expect(repo.getSystemSettings().integrations.githubToken).toBe("");
+    expect(repo.resolveProjectDashboardSettings("project-1").settings.git.defaultBranch).toBe("main");
+  });
+
+  it("migrates legacy single-document settings into system settings", async () => {
+    const { repo, dbPath } = await createRepo();
+    const db = new DatabaseSync(dbPath);
+    db.prepare(`
+      INSERT INTO app_settings (id, payload, updated_at)
+      VALUES (1, ?, ?)
+    `).run(JSON.stringify({
+      dashboardPort: 4999,
+      enableDebugLogFile: true,
       automationLevel: "ALWAYS_ASK",
       automationInterventions: {
         autoApprovePlan: false,
         autoAnswerClarification: true,
         autoResumePaused: true,
-        clarificationAnswerTemplate: "Proceed with defaults and continue.",
+        clarificationAnswerTemplate: "Legacy template",
       },
       aiProvider: {
-        provider: "jules",
-        strategy: "WEIGHTED",
+        provider: "codex",
+        strategy: "MANUAL",
         providers: {
-          jules: { enabled: true, model: "default", weight: 50, thinkingMode: "MEDIUM", apiKey: "test-key" },
-          gemini: { enabled: true, model: "gemini-2.5-pro", weight: 25, thinkingMode: "MEDIUM", apiKey: "gem-key" },
-          codex: { enabled: true, model: "gpt-5.3-codex", weight: 25, thinkingMode: "HIGH", apiKey: "codex-key" },
+          jules: { enabled: true, model: "default", weight: 50, thinkingMode: "MEDIUM", apiKey: "legacy-jules" },
+          gemini: { enabled: true, model: "default", weight: 20, thinkingMode: "MEDIUM", apiKey: "legacy-gemini" },
+          codex: { enabled: true, model: "gpt-5.3-codex", weight: 30, thinkingMode: "HIGH", apiKey: "legacy-codex" },
           "claude-code": { enabled: false, model: "default", weight: 0, thinkingMode: "HIGH", apiKey: "" },
         },
-        julesApiKey: "test-key",
+        julesApiKey: "legacy-jules",
       },
       git: {
         githubMode: "LOCAL",
-        githubToken: "ghp_test",
+        githubToken: "legacy-gh",
         defaultBranch: "develop",
         autoCreatePr: false,
         featureBranchPrefix: "work/",
-        sprintBranchScheme: "feature/sprint{sprint}-implementation",
+        sprintBranchScheme: "feature/sprint{sprint}",
       },
       ciIntelligence: {
         enabled: true,
         enableLivePrMonitoring: true,
         waitForCiBeforeMainMerge: false,
         resolveAllCommentsBeforeMainMerge: false,
-        waitForCiBeforeFeatureMerge: true,
+        waitForCiBeforeFeatureMerge: false,
         resolveAllCommentsBeforeFeatureMerge: false,
         waitForJulesCiAutofix: true,
-        julesCiAutofixMaxRetries: 7,
+        julesCiAutofixMaxRetries: 2,
         featurePrAutoMergeMode: "WHEN_GREEN",
       },
       sprintLoopSteps: {
@@ -105,26 +296,25 @@ describe("SettingsRepository", () => {
         sessionSync: true,
         statusDerivation: true,
         startReadyTasks: true,
-        mergeProtocol: false,
+        mergeProtocol: true,
         actionRequiredProtocol: true,
         statusTable: true,
         watchLoop: false,
-        watchLoopIntervalSeconds: 30,
-        watchLoopOutputIntervalSeconds: 420,
+        watchLoopIntervalSeconds: 60,
+        watchLoopOutputIntervalSeconds: 300,
       },
       cliWorkflow: {
         cleanupWorktreeOnSuccess: true,
         cleanupWorktreeOnFailure: false,
         retryOnReadFileNotFound: true,
         resumeFailedTaskInSameWorkspace: true,
-        executionMode: "DOCKER",
+        executionMode: "HOST",
         containerImage: "node:24-bookworm",
-        containerSetupScriptPath: ".jules-subagents/container/setup.sh",
-        containerMountCredentials: true,
+        containerSetupScriptPath: "",
         containerMountGitConfig: true,
         containerMountGithubAuth: true,
         containerMountGeminiAuth: true,
-        containerMountCodexAuth: false,
+        containerMountCodexAuth: true,
         containerMountClaudeCodeAuth: true,
         containerGithubAuthPath: "~/.config/gh",
         containerGeminiAuthPath: "~/.gemini",
@@ -133,109 +323,18 @@ describe("SettingsRepository", () => {
       },
       skills: [
         { name: "worker", enabled: false, isInternal: true },
-        { name: "my-custom-skill", enabled: true, isInternal: false },
       ],
       mcpTools: [
         { name: "get_session", enabled: false, isInternal: true },
-        { name: "list_all_activities", enabled: false, isInternal: true },
       ],
-    });
+    }), new Date().toISOString());
 
-    expect(saved.automationLevel).toBe("ALWAYS_ASK");
-    expect(saved.dashboardPort).toBe(4450);
-    expect(saved.automationInterventions.autoApprovePlan).toBe(false);
-    expect(saved.automationInterventions.autoAnswerClarification).toBe(true);
-    expect(saved.automationInterventions.autoResumePaused).toBe(true);
-    expect(saved.automationInterventions.clarificationAnswerTemplate).toContain("Proceed with defaults");
-    expect(saved.aiProvider.julesApiKey).toBe("test-key");
-    expect(saved.aiProvider.providers.gemini.model).toBe("gemini-2.5-pro");
-    expect(saved.aiProvider.strategy).toBe("WEIGHTED");
-    expect(saved.git.githubToken).toBe("ghp_test");
-    expect(saved.git.featureBranchPrefix).toBe("work/");
-    expect(saved.git.githubMode).toBe("LOCAL");
-    expect(saved.ciIntelligence.waitForCiBeforeMainMerge).toBe(false);
-    expect(saved.ciIntelligence.enableLivePrMonitoring).toBe(false);
-    expect(saved.ciIntelligence.waitForJulesCiAutofix).toBe(true);
-    expect(saved.ciIntelligence.julesCiAutofixMaxRetries).toBe(7);
-    expect(saved.ciIntelligence.featurePrAutoMergeMode).toBe("WHEN_GREEN");
-    expect(saved.sprintLoopSteps.watchLoop).toBe(false);
-    expect(saved.sprintLoopSteps.watchLoopIntervalSeconds).toBe(30);
-    expect(saved.sprintLoopSteps.watchLoopOutputIntervalSeconds).toBe(420);
-    expect(saved.cliWorkflow.cleanupWorktreeOnFailure).toBe(false);
-    expect(saved.cliWorkflow.resumeFailedTaskInSameWorkspace).toBe(true);
-    expect(saved.cliWorkflow.executionMode).toBe("DOCKER");
-    expect(saved.cliWorkflow.containerMountCredentials).toBe(true);
-    expect(saved.cliWorkflow.containerMountCodexAuth).toBe(false);
-    expect(saved.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(false);
-    expect(saved.skills.find((skill) => skill.name === "git_manager_local")?.enabled).toBe(true);
-    expect(saved.mcpTools.find((tool) => tool.name === "get_session")?.enabled).toBe(false);
-    expect(saved.mcpTools.find((tool) => tool.name === "list_all_activities")?.enabled).toBe(false);
-
-    const reloaded = new SettingsRepository(dbPath).getSettings();
-    expect(reloaded).toEqual(saved);
-    expect(reloaded.skills.find((skill) => skill.name === "worker")?.enabled).toBe(false);
-    expect(reloaded.skills.find((skill) => skill.name === "my-custom-skill")?.isInternal).toBe(false);
-    expect(reloaded.mcpTools.find((tool) => tool.name === "get_session")?.enabled).toBe(false);
-  });
-
-  it("initializes defaults from external hints", async () => {
-    const { dbPath } = await createRepo();
-    const repo = new SettingsRepository(dbPath, {
-      env: { julesApiKey: "env-jules", geminiApiKey: "env-gem", codexApiKey: "env-cdx", claudeCodeApiKey: "", githubToken: "env-gh" },
-      settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
-      resolved: { julesApiKey: "env-jules", geminiApiKey: "env-gem", codexApiKey: "env-cdx", claudeCodeApiKey: "", githubToken: "env-gh" },
-    });
-
-    const settings = repo.getSettings();
-    expect(settings.aiProvider.julesApiKey).toBe("env-jules");
-    expect(settings.aiProvider.providers.gemini.apiKey).toBe("env-gem");
-    expect(settings.aiProvider.providers.codex.apiKey).toBe("env-cdx");
-    expect(settings.git.githubToken).toBe("env-gh");
-  });
-
-  it("throws validation error when saving invalid settings payload", async () => {
-    const { repo } = await createRepo();
-    const settings = repo.getSettings();
-
-    // Create an invalid settings object
-    const invalidSettings = {
-      ...settings,
-      automationLevel: "INVALID_LEVEL", // should be "FULL" | "SEMI_AUTO" | "ALWAYS_ASK"
-      dashboardPort: "Not a number", // should be a number
-    };
-
-    let caughtError: any;
-    try {
-      // @ts-ignore - testing runtime validation
-      repo.saveSettings(invalidSettings);
-    } catch (e) {
-      caughtError = e;
-    }
-
-    expect(caughtError).toBeDefined();
-    expect(caughtError.name).toBe("SettingsValidationError");
-    expect(caughtError.issues).toBeDefined();
-    expect(Array.isArray(caughtError.issues)).toBe(true);
-
-    // Check that we got the expected structured issues
-    const paths = caughtError.issues.map((i: any) => i.path);
-    expect(paths).toContain("dashboardPort");
-    expect(paths).toContain("automationLevel");
-  });
-
-  it("handles empty objects safely and throws validation errors", async () => {
-    const { repo } = await createRepo();
-
-    let caughtError: any;
-    try {
-      // @ts-ignore - testing runtime validation
-      repo.saveSettings({});
-    } catch (e) {
-      caughtError = e;
-    }
-
-    expect(caughtError).toBeDefined();
-    expect(caughtError.name).toBe("SettingsValidationError");
-    expect(caughtError.issues.length).toBeGreaterThan(0);
+    const migrated = repo.getSystemSettings();
+    expect(migrated.runtime.dashboardPort).toBe(4999);
+    expect(migrated.integrations.githubToken).toBe("legacy-gh");
+    expect(migrated.defaults.automationLevel).toBe("ALWAYS_ASK");
+    expect(migrated.defaults.git.defaultBranch).toBe("develop");
+    expect(repo.getDefaultDashboardSettings().git.githubToken).toBe("legacy-gh");
+    expect(db.prepare("SELECT payload FROM app_settings WHERE id = 1").get()).toBeUndefined();
   });
 });

@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { Activity, FolderKanban, Radio } from "lucide-preact";
+import { Activity, AlertTriangle, FolderKanban, Radio } from "lucide-preact";
 import { useOverviewTelemetry } from "../../hooks/use-overview-telemetry.js";
 import { formatTime } from "../../lib/time.js";
 
@@ -30,6 +30,9 @@ const describeEvent = (eventType: string): string => {
 
 export const OverviewTelemetry: FunctionComponent = () => {
   const { telemetry, error } = useOverviewTelemetry();
+  const hasActiveProjects = telemetry.activeProjects.length > 0;
+  const hasAttentionProjects = telemetry.attentionProjects.length > 0;
+  const hasRuntimeSignal = hasActiveProjects || hasAttentionProjects;
 
   if (error) {
     return (
@@ -49,14 +52,26 @@ export const OverviewTelemetry: FunctionComponent = () => {
     <aside className="sticky top-24 flex flex-col h-[760px] overflow-hidden group">
       <h3 className="text-3xl font-black tracking-tighter text-slate-900 dark:text-white mb-12 flex items-center gap-4 font-display">
         <div className="relative flex items-center justify-center">
-          <div className={`absolute inset-0 rounded-full blur-[10px] animate-[pulse_2s_ease-in-out_infinite] ${telemetry.activeProjects.length > 0 ? "bg-status-red opacity-70" : "bg-slate-300 dark:bg-slate-700 opacity-50"}`} />
-          <div className={`w-3.5 h-3.5 rounded-full relative z-10 ${telemetry.activeProjects.length > 0 ? "bg-status-red" : "bg-slate-400 dark:bg-slate-500"}`} />
+          <div className={`absolute inset-0 rounded-full blur-[10px] animate-[pulse_2s_ease-in-out_infinite] ${
+            hasActiveProjects
+              ? "bg-status-red opacity-70"
+              : hasAttentionProjects
+                ? "bg-status-amber opacity-70"
+                : "bg-slate-300 dark:bg-slate-700 opacity-50"
+          }`} />
+          <div className={`w-3.5 h-3.5 rounded-full relative z-10 ${
+            hasActiveProjects
+              ? "bg-status-red"
+              : hasAttentionProjects
+                ? "bg-status-amber"
+                : "bg-slate-400 dark:bg-slate-500"
+          }`} />
         </div>
         Telemetry.
       </h3>
 
       <div className="relative flex-1 overflow-hidden rounded-[2rem] border border-black/[0.06] dark:border-white/[0.06] bg-white/65 dark:bg-void-800/60 backdrop-blur-2xl p-7">
-        {telemetry.activeProjects.length === 0 ? (
+        {!hasRuntimeSignal ? (
           <div className="h-full flex items-center justify-center relative overflow-hidden">
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="w-48 h-48 rounded-full border border-black/[0.07] dark:border-white/[0.08] animate-[ping_4s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
@@ -73,10 +88,14 @@ export const OverviewTelemetry: FunctionComponent = () => {
           </div>
         ) : (
           <div className="relative z-10 h-full flex flex-col">
-            <div className="grid grid-cols-2 gap-3 mb-6">
+            <div className="grid grid-cols-3 gap-3 mb-6">
               <div className="rounded-2xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-4">
                 <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active Projects</div>
                 <div className="mt-2 text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry.activeProjects.length}</div>
+              </div>
+              <div className="rounded-2xl border border-status-amber/15 bg-status-amber/8 p-4">
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-status-amber">Needs Attention</div>
+                <div className="mt-2 text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry.attentionProjects.length}</div>
               </div>
               <div className="rounded-2xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-4">
                 <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Timeline Events</div>
@@ -84,7 +103,49 @@ export const OverviewTelemetry: FunctionComponent = () => {
               </div>
             </div>
 
-            <div className="space-y-2 mb-6">
+            {telemetry.attentionProjects.length > 0 && (
+              <div className="mb-6 rounded-[1.6rem] border border-status-amber/18 bg-status-amber/8 p-4">
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-status-amber">
+                  <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.1} />
+                  Human Intervention Needed
+                </div>
+                <div className="mt-3 space-y-3">
+                  {telemetry.attentionProjects.slice(0, 3).map((project) => (
+                    <div key={project.sprintRunId} className="rounded-2xl border border-status-amber/15 bg-white/75 p-4 dark:bg-void-800/55">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold tracking-tight text-slate-900 dark:text-white truncate">
+                            {project.projectName}
+                          </div>
+                          <div className="mt-1 text-[10px] font-mono text-slate-400">
+                            {project.sprintName}{project.sprintNumber != null ? ` · Sprint ${project.sprintNumber}` : ""}
+                          </div>
+                        </div>
+                        <div className="inline-flex items-center gap-1.5 rounded-full border border-status-amber/20 bg-status-amber/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-amber">
+                          <AlertTriangle className="w-3 h-3" strokeWidth={2.2} />
+                          Paused
+                        </div>
+                      </div>
+                      <div className="mt-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                        {project.humanIntervention?.title || "Human intervention required"}
+                      </div>
+                      <p className="mt-2 text-[12px] leading-relaxed text-slate-600 dark:text-slate-300">
+                        {project.humanIntervention?.reason}
+                      </p>
+                      <div className="mt-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                        What to do
+                      </div>
+                      <p className="mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
+                        {project.humanIntervention?.instructions}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {telemetry.activeProjects.length > 0 && (
+              <div className="space-y-2 mb-6">
               {telemetry.activeProjects.slice(0, 4).map((project) => (
                 <div key={project.sprintRunId} className="rounded-2xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-4">
                   <div className="flex items-center justify-between gap-3">
@@ -103,7 +164,8 @@ export const OverviewTelemetry: FunctionComponent = () => {
                   </div>
                 </div>
               ))}
-            </div>
+              </div>
+            )}
 
             <div className="flex-1 min-h-0">
               <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 mb-3">Runtime Timeline</div>
@@ -115,7 +177,9 @@ export const OverviewTelemetry: FunctionComponent = () => {
                       <div className="text-[10px] font-mono text-slate-400">{formatTime(event.createdAt)}</div>
                     </div>
                     <div className="mt-1 text-xs font-semibold text-slate-800 dark:text-slate-200">
-                      {telemetry.activeProjects.find((project) => project.projectId === event.projectId)?.projectName || "Project"}
+                      {telemetry.activeProjects.find((project) => project.projectId === event.projectId)?.projectName
+                        || telemetry.attentionProjects.find((project) => project.projectId === event.projectId)?.projectName
+                        || "Project"}
                     </div>
                     <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-500 font-mono">
                       {event.sprintName}{event.sprintNumber != null ? ` · Sprint ${event.sprintNumber}` : ""}

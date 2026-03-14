@@ -3,7 +3,6 @@ import { AgentToolHandler } from "../../../src/mcp/agent-tool-handler.js";
 
 describe("AgentToolHandler", () => {
     const defaultDeps = {
-        sprintOrchestrator: { execute: vi.fn() } as any,
         taskService: { createTaskAgentSession: vi.fn() } as any,
         workerDispatchExecutionService: {
             executeDispatch: vi.fn().mockResolvedValue({ dispatchId: "dispatch-1" }),
@@ -12,19 +11,11 @@ describe("AgentToolHandler", () => {
         workerInboxReplyService: {
             generateReply: vi.fn().mockResolvedValue({ bodyMarkdown: "reply" }),
         } as any,
-        getDashboardSettings: vi.fn().mockReturnValue({ git: { sprintBranchScheme: "sprint" } }),
-        formatSprintBranch: vi.fn().mockReturnValue("branch-x"),
         getConsecutiveFailures: vi.fn().mockReturnValue(0),
         setConsecutiveFailures: vi.fn(),
         getMaxFailures: vi.fn().mockReturnValue(3),
         waitForSessionCompletion: vi.fn().mockResolvedValue({ wait: true }),
     };
-
-    it("handleSprintAgent uses resolved args", async () => {
-        const handler = new AgentToolHandler(defaultDeps);
-        await handler.handleSprintAgent({ sprint_number: 1, repo_path: "repo", feature_branch: "" } as any);
-        expect(defaultDeps.sprintOrchestrator.execute).toHaveBeenCalledWith(expect.objectContaining({ feature_branch: "branch-x" }));
-    });
 
     it("handleTaskAgent prevents execution on max fails", async () => {
         const handler = new AgentToolHandler({ ...defaultDeps, getConsecutiveFailures: () => 3, getMaxFailures: () => 3 });

@@ -30,6 +30,7 @@ export function createSprintDependencies(
     projectRuntimeRepository,
     projectManagementRepository,
     executionRepository,
+    projectAttentionService,
     activeDispatchRegistry,
   } = coreDeps;
 
@@ -86,6 +87,7 @@ export function createSprintDependencies(
     listSessions: () => context.listSessionsForSync(),
     projectManagementRepository,
     executionRepository,
+    projectAttentionService,
     sprintExecutionStateService,
     startTask: (task, executionArgs) =>
       sprintTaskDispatchService.startTask({

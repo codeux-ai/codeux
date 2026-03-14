@@ -5,6 +5,9 @@ import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
+import { ProjectWorkerAssignmentRepository } from "../../../src/repositories/project-worker-assignment-repository.js";
+import { ProjectAttentionRepository } from "../../../src/repositories/project-attention-repository.js";
+import { ProjectAttentionService } from "../../../src/domain/workers/project-attention-service.js";
 import { ExecutionControlService } from "../../../src/services/execution-control-service.js";
 
 const tempDirs: string[] = [];
@@ -12,6 +15,7 @@ const tempDirs: string[] = [];
 async function createFixture(): Promise<{
   projectRepository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;
+  projectAttentionRepository: ProjectAttentionRepository;
   service: ExecutionControlService;
   rerunTask: ReturnType<typeof vi.fn>;
   executeOrchestrator: ReturnType<typeof vi.fn>;
@@ -23,6 +27,7 @@ async function createFixture(): Promise<{
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const projectRepository = new ProjectManagementRepository(storage);
   const executionRepository = new ExecutionRepository(storage);
+  const projectAttentionRepository = new ProjectAttentionRepository(storage);
   const rerunTask = vi.fn().mockResolvedValue({ id: "task-1" });
   const executeOrchestrator = vi.fn().mockResolvedValue({ content: [] });
   const requestStop = vi.fn().mockResolvedValue({ accepted: true });
@@ -31,6 +36,10 @@ async function createFixture(): Promise<{
   const service = new ExecutionControlService({
     projectManagementRepository: projectRepository,
     executionRepository,
+    projectAttentionService: new ProjectAttentionService(
+      projectAttentionRepository,
+      new ProjectWorkerAssignmentRepository(storage),
+    ),
     taskRerunService: {
       rerunTask,
     } as any,
@@ -48,6 +57,7 @@ async function createFixture(): Promise<{
   return {
     projectRepository,
     executionRepository,
+    projectAttentionRepository,
     service,
     rerunTask,
     executeOrchestrator,
@@ -106,7 +116,7 @@ describe("ExecutionControlService", () => {
     executionRepository.acquireLease({
       scopeType: "sprint",
       scopeId: sprint.id,
-      ownerKey: "sprint_agent",
+      ownerKey: "sprint_orchestrator",
       leaseToken: "stale-lease-token",
       expiresAt: "2030-03-09T12:00:00.000Z",
     });
@@ -144,7 +154,7 @@ describe("ExecutionControlService", () => {
     executionRepository.acquireLease({
       scopeType: "sprint",
       scopeId: sprint.id,
-      ownerKey: "sprint_agent",
+      ownerKey: "sprint_orchestrator",
       leaseToken: "lingering-lease-token",
       expiresAt: "2030-03-09T12:00:00.000Z",
     });
@@ -209,6 +219,69 @@ describe("ExecutionControlService", () => {
     expect(executionRepository.listSprintRunEvents(sprintRun.id)[0]).toMatchObject({
       eventType: "sprint_pause_requested",
       originator: "user",
+    });
+  });
+
+  it("resolves active dispatch attention items when a dispatch is retried", async () => {
+    const { projectRepository, executionRepository, projectAttentionRepository, service, rerunTask } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Retry Attention Project",
+      sourceType: "local",
+      sourceRef: "/workspace/retry-attention-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Retry Attention Sprint",
+      number: 4,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Retry blocked dispatch",
+      executorType: "mcp_worker",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "failed",
+      executorMode: "mcp_worker",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "mcp_worker",
+      status: "blocked",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      state: "BLOCKED",
+      startedAt: "2026-03-12T10:00:00.000Z",
+      finishedAt: "2026-03-12T10:10:00.000Z",
+    });
+    projectAttentionRepository.openOrRefreshItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      attentionType: "worker_dispatch_blocked",
+      severity: "high",
+      ownerType: "worker",
+      title: "Blocked dispatch",
+      summaryMarkdown: "Needs retry",
+      payload: { taskRunId: taskRun.id },
+    });
+
+    await service.retryTaskDispatch(dispatch.id);
+
+    expect(rerunTask).toHaveBeenCalledWith(task.id);
+    expect(projectAttentionRepository.listProjectAttentionItems(project.id)[0]).toMatchObject({
+      dispatchId: dispatch.id,
+      status: "resolved",
     });
   });
 

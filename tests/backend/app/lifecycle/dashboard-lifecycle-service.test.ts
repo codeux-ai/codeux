@@ -24,8 +24,83 @@ describe("dashboard-lifecycle-service", () => {
         dashboardRuntimePort: undefined,
       } as any,
       externalSettingsHints: {} as any,
+      appDbStorage: {
+        resetAllData: vi.fn(),
+      } as any,
       settingsRepository: {
-        saveSettings: vi.fn().mockImplementation((s) => s),
+        getSystemSettings: vi.fn().mockReturnValue({
+          runtime: {
+            dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
+            enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
+          },
+          integrations: {
+            julesApiKey: "",
+            geminiApiKey: "",
+            codexApiKey: "",
+            claudeCodeApiKey: "",
+            githubToken: "",
+          },
+          defaults: {
+            automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
+            automationInterventions: { ...DEFAULT_DASHBOARD_SETTINGS.automationInterventions },
+            aiProvider: {
+              provider: DEFAULT_DASHBOARD_SETTINGS.aiProvider.provider,
+              strategy: DEFAULT_DASHBOARD_SETTINGS.aiProvider.strategy,
+              providers: {
+                jules: {
+                  enabled: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.jules.enabled,
+                  model: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.jules.model,
+                  weight: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.jules.weight,
+                  thinkingMode: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.jules.thinkingMode,
+                },
+                gemini: {
+                  enabled: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.gemini.enabled,
+                  model: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.gemini.model,
+                  weight: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.gemini.weight,
+                  thinkingMode: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.gemini.thinkingMode,
+                },
+                codex: {
+                  enabled: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.codex.enabled,
+                  model: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.codex.model,
+                  weight: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.codex.weight,
+                  thinkingMode: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.codex.thinkingMode,
+                },
+                "claude-code": {
+                  enabled: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["claude-code"].enabled,
+                  model: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["claude-code"].model,
+                  weight: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["claude-code"].weight,
+                  thinkingMode: DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["claude-code"].thinkingMode,
+                },
+              },
+            },
+            git: {
+              githubMode: DEFAULT_DASHBOARD_SETTINGS.git.githubMode,
+              defaultBranch: DEFAULT_DASHBOARD_SETTINGS.git.defaultBranch,
+              autoCreatePr: DEFAULT_DASHBOARD_SETTINGS.git.autoCreatePr,
+              featureBranchPrefix: DEFAULT_DASHBOARD_SETTINGS.git.featureBranchPrefix,
+              sprintBranchScheme: DEFAULT_DASHBOARD_SETTINGS.git.sprintBranchScheme,
+            },
+            ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence },
+            sprintLoopSteps: { ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps },
+            cliWorkflow: { ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow },
+            skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
+          },
+          mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),
+        }),
+        saveSystemSettings: vi.fn().mockImplementation((s) => s),
+        resetAllData: vi.fn(),
+        getDefaultDashboardSettings: vi.fn().mockReturnValue({ ...DEFAULT_DASHBOARD_SETTINGS }),
+        getProjectSettings: vi.fn().mockReturnValue({}),
+        saveProjectSettings: vi.fn(),
+        resetProjectSettings: vi.fn(),
+        resolveProjectDashboardSettings: vi.fn(),
+        getSprintSettings: vi.fn().mockReturnValue({}),
+        saveSprintSettings: vi.fn(),
+        resetSprintSettings: vi.fn(),
+        resolveSprintDashboardSettings: vi.fn(),
+        getProjectResolvedSettings: vi.fn().mockReturnValue({
+          automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
+        }),
       } as any,
       projectManagementRepository: {
         getSelectedProjectId: vi.fn().mockReturnValue("project-1"),
@@ -38,6 +113,12 @@ describe("dashboard-lifecycle-service", () => {
       connectionChatRepository: {
         listConnections: vi.fn().mockReturnValue([]),
       } as any,
+      projectWorkerAssignmentRepository: {
+        listAssignmentsForProject: vi.fn().mockReturnValue([]),
+      } as any,
+      projectAttentionRepository: {
+        listProjectAttentionItems: vi.fn().mockReturnValue([]),
+      } as any,
       executionRepository: {
         getProjectExecutionSnapshot: vi.fn().mockReturnValue({
           projectId: "project-1",
@@ -45,11 +126,15 @@ describe("dashboard-lifecycle-service", () => {
           sprintRuns: [],
           taskDispatches: [],
           connections: [],
+          primaryAssignedWorker: null,
+          overflowAssignedWorkers: [],
+          attentionItems: [],
           recentEvents: [],
           updatedAt: "2026-03-09T00:00:00.000Z",
         }),
         getOverviewTelemetrySnapshot: vi.fn().mockReturnValue({
           activeProjects: [],
+          attentionProjects: [],
           recentEvents: [],
           updatedAt: "2026-03-09T00:00:00.000Z",
         }),
@@ -134,18 +219,24 @@ describe("dashboard-lifecycle-service", () => {
       expect(mockDeps.runtimeContext.dashboardRuntimePort).toBe(3000);
     });
 
-    it("handles saveSettings callback correctly", async () => {
+    it("handles saveSystemSettings callback correctly", async () => {
       const mockLogger = {};
       vi.mocked(createLogger).mockReturnValue(mockLogger as any);
 
       await bootDashboard(mockDeps);
 
       const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
-      const newSettings = { ...DEFAULT_DASHBOARD_SETTINGS, enableDebugLogFile: true };
+      const newSettings = {
+        ...mockDeps.settingsRepository.getSystemSettings(),
+        runtime: {
+          dashboardPort: 4444,
+          enableDebugLogFile: true,
+        },
+      };
 
-      const result = setupArgs.saveSettings(newSettings);
+      const result = setupArgs.saveSystemSettings(newSettings);
 
-      expect(mockDeps.settingsRepository.saveSettings).toHaveBeenCalledWith(newSettings);
+      expect(mockDeps.settingsRepository.saveSystemSettings).toHaveBeenCalledWith(newSettings);
       expect(mockDeps.syncGitSettingsFromDashboard).toHaveBeenCalled();
       expect(mockDeps.refreshJulesApiKey).toHaveBeenCalled();
       expect(createLogger).toHaveBeenCalled(); // via reinitializeLogger
@@ -230,11 +321,10 @@ describe("dashboard-lifecycle-service", () => {
 
       expect(setupArgs.getExternalSettingsHints()).toBe(mockDeps.externalSettingsHints);
 
-      mockDeps.runtimeContext.dashboardSettings = undefined;
-      expect(setupArgs.getSettings()).toEqual(DEFAULT_DASHBOARD_SETTINGS);
+      expect(setupArgs.getSystemSettings()).toEqual(mockDeps.settingsRepository.getSystemSettings());
 
-      mockDeps.runtimeContext.dashboardSettings = { someSetting: "value" } as any;
-      expect(setupArgs.getSettings()).toEqual({ someSetting: "value" });
+      mockDeps.settingsRepository.getSystemSettings = vi.fn().mockReturnValue({ someSetting: "value" } as any);
+      expect(setupArgs.getSystemSettings()).toEqual({ someSetting: "value" });
 
       expect(setupArgs.isReady).toBe(mockDeps.isReady);
       expect(setupArgs.isHealthy).toBe(mockDeps.isHealthy);

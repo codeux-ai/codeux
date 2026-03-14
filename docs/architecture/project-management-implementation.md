@@ -16,7 +16,7 @@ It includes:
 - selected-project runtime projection for live dashboard status
 - DB-backed project-scoped Agents and Chat pages
 - first listen-loop MCP connection and conversation contracts
-- first DB-native `sprint_agent` execution slice for project/sprint scope
+- first DB-native sprint orchestration slice for project/sprint scope
 
 It does not yet include:
 - multi-MCP scheduling
@@ -117,7 +117,7 @@ Current behavior:
 - Agents page manages project-scoped agent presets rather than live MCP connections
 - Chat page lists sqlite-backed conversation threads/messages for the selected project
 - Dashboard messages are queued for listeners through the same sqlite model
-- `sprint_agent(status|orchestrate)` resolves project/sprint scope from sqlite instead of markdown task directories
+- internal sprint orchestration resolves project/sprint scope from sqlite instead of markdown task directories
 - orchestrate executions now create `sprint_runs`, `task_dispatches`, and `task_runs`
 - orchestrate executions now hold a sprint-scoped execution lease while the loop is active
 - dashboard reruns now create DB-backed dispatches and task runs instead of directly bypassing execution state

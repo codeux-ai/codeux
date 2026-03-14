@@ -289,7 +289,9 @@ export class ProjectRuntimeRepository {
         worker_branch: run?.worker_branch || undefined,
         pr_url: run?.pr_url || undefined,
         is_independent: toBoolean(task.row.is_independent),
-        is_merged: run ? task.row.merge_indicator === "MERGED" || toBoolean(task.row.is_merged) : toBoolean(task.row.is_merged),
+        is_merged: task.row.merge_indicator === "MERGED"
+          || task.row.merge_indicator === "AUTOMERGE"
+          || toBoolean(task.row.is_merged),
         merge_indicator: toMergeIndicator(task.row.merge_indicator),
       };
     });

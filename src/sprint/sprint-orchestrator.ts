@@ -5,7 +5,7 @@ import {
   DEFAULT_CI_INTELLIGENCE_SETTINGS,
   DEFAULT_SPRINT_LOOP_STEP_SETTINGS,
 } from "./sprint-orchestrator-defaults.js";
-import { runBranchPreflightStep } from "./steps/branch-preflight-step.js";
+import { prepareBranchForOrchestration, runBranchPreflightStep } from "./steps/branch-preflight-step.js";
 import type { SprintAgentArgs } from "./sprint-types.js";
 import type {
   AutomationInterventionsSettings,
@@ -21,11 +21,14 @@ import type { ProjectManagementRepository } from "../repositories/project-manage
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { SprintExecutionStateService } from "../services/sprint-execution-state-service.js";
 import type { StartSprintDispatchResult } from "../services/sprint-task-dispatch-service.js";
+import type { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
 import { CycleRunner } from "../domain/sprint/orchestrator/cycle-runner.js";
 import { WatchLoopRunner } from "../domain/sprint/orchestrator/watch-loop-runner.js";
 import { SprintActionRunner } from "../domain/sprint/orchestrator/sprint-action-runner.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { MainMergeGateService, type MergeFeedbackResult } from "../domain/sprint/ci/main-merge-gate.js";
+
+const SPRINT_ORCHESTRATOR_OWNER_KEY = "sprint_orchestrator";
 
 export interface SprintOrchestratorDependencies {
   settings: Settings;
@@ -41,6 +44,7 @@ export interface SprintOrchestratorDependencies {
   listSessions: () => Promise<{ sessions?: JulesSession[] }>;
   projectManagementRepository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;
+  projectAttentionService: ProjectAttentionService;
   sprintExecutionStateService: SprintExecutionStateService;
   startTask: (
     task: Subtask,
@@ -232,7 +236,7 @@ export class SprintOrchestrator {
       projectId: args.projectId,
       sprintId: args.sprintId,
       triggerType: "mcp",
-      triggeredBy: "sprint_agent",
+      triggeredBy: SPRINT_ORCHESTRATOR_OWNER_KEY,
       executorMode: "mixed",
       status: "paused",
     });
@@ -279,8 +283,21 @@ export class SprintOrchestrator {
     }
 
     if (loopSteps.branchPreflight && (args.action === "plan" || args.action === "orchestrate")) {
-      const { existsLocal, existsRemote } = await runBranchPreflightStep(repoPath, defaultFeatureBranch);
+      const branchAvailability = args.action === "orchestrate"
+        ? await prepareBranchForOrchestration(repoPath, defaultFeatureBranch, defaultBranch)
+        : await runBranchPreflightStep(repoPath, defaultFeatureBranch);
+      const { existsLocal, existsRemote } = branchAvailability;
+      const requiresRemoteBranch = args.action === "plan"
+        || ("hasRemoteOrigin" in branchAvailability && branchAvailability.hasRemoteOrigin);
       if (!existsLocal || !existsRemote) {
+        if (args.action === "orchestrate" && existsLocal && !requiresRemoteBranch) {
+          this.deps.logger.info("Continuing sprint orchestration without a remote feature branch because no origin remote is configured.", {
+            projectId: executionContext.project.id,
+            sprintId: executionContext.sprint.id,
+            repoPath,
+            featureBranch: defaultFeatureBranch,
+          });
+        } else {
         const branchBlocker = await this.renderBranchBlocker(args, repoPath, defaultFeatureBranch, existsLocal, existsRemote);
         this.recordBlockedSprintRun({
           action: args.action,
@@ -294,6 +311,7 @@ export class SprintOrchestrator {
           },
         });
         return { content: [{ type: "text", text: branchBlocker }] };
+        }
       }
     }
 
@@ -329,7 +347,6 @@ export class SprintOrchestrator {
     const requestedWait = args.wait !== undefined ? args.wait : supportsWatchMode;
     const shouldWait = supportsWatchMode && requestedWait;
     const watchLoopEnabled = shouldWait && loopSteps.watchLoop;
-
     switch (args.action) {
       case "plan":
         return await this.actionRunner.runPlan(args, planningTarget, repoPath);
@@ -389,7 +406,7 @@ export class SprintOrchestrator {
           this.deps.executionRepository.acquireLease({
             scopeType: "sprint",
             scopeId: executionContext.sprint.id,
-            ownerKey: "sprint_agent",
+            ownerKey: SPRINT_ORCHESTRATOR_OWNER_KEY,
             leaseToken,
             expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
           });
@@ -413,7 +430,7 @@ export class SprintOrchestrator {
           projectId: executionContext.project.id,
           sprintId: executionContext.sprint.id,
           triggerType: "mcp",
-          triggeredBy: "sprint_agent",
+          triggeredBy: SPRINT_ORCHESTRATOR_OWNER_KEY,
           executorMode: "mixed",
           status: "running",
         });
@@ -424,24 +441,41 @@ export class SprintOrchestrator {
         });
 
         try {
-          return await this.actionRunner.runOrchestrate({
-            args,
-            executionContext,
-            repoPath,
-            defaultFeatureBranch,
-            defaultBranch,
-            githubMode,
-            retryFailed,
-            loopSteps,
-            ciIntelligence,
-            automationLevel,
-            automationInterventions,
-            dashboardPort,
-            shouldWait,
-            watchLoopEnabled,
-            sprintRunId: sprintRun.id,
-            leaseToken,
-          });
+          try {
+            return await this.actionRunner.runOrchestrate({
+              args,
+              executionContext,
+              repoPath,
+              defaultFeatureBranch,
+              defaultBranch,
+              githubMode,
+              retryFailed,
+              loopSteps,
+              ciIntelligence,
+              automationLevel,
+              automationInterventions,
+              dashboardPort,
+              shouldWait,
+              watchLoopEnabled,
+              sprintRunId: sprintRun.id,
+              leaseToken,
+            });
+          } catch (error) {
+            const failedAt = new Date().toISOString();
+            const message = error instanceof Error ? error.message : String(error);
+            this.deps.executionRepository.updateSprintRun(sprintRun.id, {
+              status: "failed",
+              finishedAt: failedAt,
+              lastHeartbeatAt: failedAt,
+            });
+            this.deps.executionRepository.appendSprintRunEvent(sprintRun.id, "sprint_failed", "system", {
+              reason: "orchestrator_exception",
+              errorMessage: message,
+            }, {
+              sourceEventKey: `orchestrator-error:${sprintRun.id}:${message}`,
+            });
+            throw error;
+          }
         } finally {
           this.deps.executionRepository.releaseLease("sprint", executionContext.sprint.id, leaseToken);
         }

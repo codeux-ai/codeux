@@ -58,7 +58,6 @@ Examples:
 - `actionRequiredHumanHeader`
 - `actionRequiredHumanTask`
 - `watchHeader`
-- `watchContinue`
 - `watchMergeRequired`
 - `watchNoMoreActions`
 - `completionSteps`

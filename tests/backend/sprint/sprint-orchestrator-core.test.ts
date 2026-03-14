@@ -74,20 +74,11 @@ describe("SprintOrchestrator core execution", () => {
     expect(result.content[0].text).toContain("feature/sprint1-implementation");
   });
 
-  it("returns intermediate watch output when watch loop output interval is reached", async () => {
+  it("keeps the watch loop alive past output interval boundaries", async () => {
     const nowSpy = vi.spyOn(Date, "now");
     try {
-      let nowCallCount = 0;
-      nowSpy.mockImplementation(() => {
-        nowCallCount += 1;
-        if (nowCallCount === 1) {
-          return 61_000;
-        }
-        if (nowCallCount === 2) {
-          return 0;
-        }
-        return 61_000;
-      });
+      const nowValues = [0, 61_000, 62_000, 63_000];
+      nowSpy.mockImplementation(() => nowValues.shift() ?? 63_000);
       const { deps, subtaskRepository } = buildDeps();
       deps.getDashboardSettings = () => ({
         ...DEFAULT_DASHBOARD_SETTINGS,
@@ -99,13 +90,13 @@ describe("SprintOrchestrator core execution", () => {
           statusDerivation: false,
           startReadyTasks: false,
           watchLoop: true,
-          watchLoopIntervalSeconds: 30,
+          watchLoopIntervalSeconds: 0.01,
           watchLoopOutputIntervalSeconds: 60,
         },
       });
       deps.renderInstruction = vi.fn(async (templateId: string) => {
         if (templateId === "watchHeader") return "### Sprint Header";
-        if (templateId === "watchContinue") return "WATCH_CONTINUE";
+        if (templateId === "cleanupAllMerged") return "CLEANUP_MERGED";
         return "";
       });
 
@@ -115,16 +106,28 @@ describe("SprintOrchestrator core execution", () => {
       await fs.mkdir(subtasksDir, { recursive: true });
       await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\nprompt:\nDo it\n", "utf-8");
 
-      subtaskRepository.loadSubtasks.mockResolvedValue([
-        {
-          id: "01-task",
-          title: "Test task",
-          prompt: "Do it",
-          depends_on: [],
-          is_independent: false,
-          status: "RUNNING",
-        },
-      ]);
+      subtaskRepository.loadSubtasks
+        .mockResolvedValueOnce([
+          {
+            id: "01-task",
+            title: "Test task",
+            prompt: "Do it",
+            depends_on: [],
+            is_independent: false,
+            status: "RUNNING",
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: "01-task",
+            title: "Test task",
+            prompt: "Do it",
+            depends_on: [],
+            is_independent: false,
+            status: "COMPLETED",
+            is_merged: true,
+          },
+        ]);
 
       const executePromise = orchestrator.execute({
         sprint_number: 1,
@@ -136,16 +139,8 @@ describe("SprintOrchestrator core execution", () => {
 
       const result = await executePromise;
       const text = result.content[0].text as string;
-      expect(text).toContain("WATCH_CONTINUE");
-      expect(text).not.toContain("Sprint Execution Finished");
-      expect(deps.renderInstruction).toHaveBeenCalledWith(
-        "watchContinue",
-        expect.objectContaining({
-          action: "orchestrate",
-          running_tasks: 1,
-        }),
-        tmpRoot
-      );
+      expect(text).toContain("Sprint Execution Finished");
+      expect(text).toContain("CLEANUP_MERGED");
 
       await fs.rm(tmpRoot, { recursive: true, force: true });
     } finally {
@@ -226,5 +221,48 @@ describe("SprintOrchestrator core execution", () => {
     expect(deps.executionRepository.acquireLease).toHaveBeenCalled();
 
     await fs.rm(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("marks the sprint run failed when orchestration throws unexpectedly", async () => {
+    const { deps } = buildDeps();
+    deps.getDashboardSettings = () => ({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      sprintLoopSteps: {
+        ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps,
+        branchPreflight: false,
+        planningPreflight: false,
+        watchLoop: false,
+      },
+    });
+    const orchestrator = new SprintOrchestrator(deps as any);
+    vi.spyOn((orchestrator as any).actionRunner as SprintActionRunner, "runOrchestrate")
+      .mockRejectedValue(new Error("watch loop exploded"));
+
+    await expect(orchestrator.execute({
+      sprint_number: 1,
+      repo_path: "/tmp/repo",
+      source_id: "sources/123",
+      action: "orchestrate",
+      wait: false,
+    })).rejects.toThrow("watch loop exploded");
+
+    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({
+        status: "failed",
+        finishedAt: expect.any(String),
+        lastHeartbeatAt: expect.any(String),
+      }),
+    );
+    expect(deps.executionRepository.appendSprintRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "sprint_failed",
+      "system",
+      expect.objectContaining({
+        reason: "orchestrator_exception",
+        errorMessage: "watch loop exploded",
+      }),
+      expect.any(Object),
+    );
   });
 });

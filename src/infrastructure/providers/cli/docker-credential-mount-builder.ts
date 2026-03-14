@@ -15,11 +15,6 @@ export class DockerCredentialMountBuilder {
     repoPath: string,
     onActivity: (desc: string) => void
   ): Promise<ContainerMount[]> {
-    if (!workflowSettings.containerMountCredentials) {
-      onActivity("Credential mounts are disabled in workflow settings.");
-      return [];
-    }
-
     const mounts: ContainerMount[] = [];
 
     const addMount = async (enabled: boolean, source: string, dest: string, label: string) => {
@@ -48,6 +43,10 @@ export class DockerCredentialMountBuilder {
     await addMount(workflowSettings.containerMountGeminiAuth, workflowSettings.containerGeminiAuthPath, GEMINI_CREDENTIALS_MOUNT, "Gemini");
     await addMount(workflowSettings.containerMountCodexAuth, workflowSettings.containerCodexAuthPath, CODEX_CREDENTIALS_MOUNT, "Codex");
     await addMount(workflowSettings.containerMountClaudeCodeAuth, workflowSettings.containerClaudeCodeAuthPath, CLAUDE_CODE_CREDENTIALS_MOUNT, "Claude Code");
+
+    if (mounts.length === 0) {
+      onActivity("No container credential mounts were enabled or resolved.");
+    }
 
     return mounts;
   }

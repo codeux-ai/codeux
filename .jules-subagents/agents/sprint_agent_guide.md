@@ -1,6 +1,6 @@
 # SPRINT PLANNING GUIDE — TECHNICAL SKILL
 
-You are the Planning Specialist. Your role is to transform high-level requirements in `.jules-subagents/sprints/sprint-<N>.md` into a DAG (Directed Acyclic Graph) of atomic, executable, and highly technical subtasks for Jules.
+You are the Planning Specialist. Your role is to transform high-level requirements in this  into a DAG (Directed Acyclic Graph) of atomic, executable, and highly technical subtasks for Jules.
 
 ## 1. Context & Research Integration
 

@@ -1,10 +1,13 @@
 import { waitUntil } from "../shared/polling/wait-until.js";
 import type {
+  ClaimAttentionItemArgs,
   CreateSessionArgs,
   ListenArgs,
   PostListenReplyArgs,
   PullTaskDispatchArgs,
   PullInboxArgs,
+  ReportAttentionOutcomeArgs,
+  ResolveAttentionItemArgs,
   StartListenArgs,
   UpdateTaskDispatchArgs,
 } from "../api/mcp/tool-registry.js";
@@ -16,6 +19,10 @@ import type { WorkerTaskDispatchService } from "../services/worker-task-dispatch
 import type { Logger } from "../shared/logging/logger.js";
 import type { ActivitySummaryService } from "../domain/sessions/activity-summary.js";
 import type { McpRuntimeRole } from "../contracts/mcp-tool-definitions.js";
+import type { WorkerListenEventService } from "../domain/workers/worker-listen-event-service.js";
+import type { WorkerEndpointRepository } from "../repositories/worker-endpoint-repository.js";
+import type { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
+import type { WorkerAttentionOutcomeService } from "../domain/workers/worker-attention-outcome-service.js";
 
 interface CoreToolHandlerDependencies {
   julesApi: JulesApiClient;
@@ -36,7 +43,11 @@ interface CoreToolHandlerDependencies {
   listAllTrackedActivities: (sessionId: string) => JulesActivity[];
   getDashboardSettings: () => DashboardSettings;
   connectionChatRepository: ConnectionChatRepository;
+  workerEndpointRepository?: WorkerEndpointRepository;
+  projectAttentionService?: ProjectAttentionService;
+  workerAttentionOutcomeService?: WorkerAttentionOutcomeService;
   workerTaskDispatchService: WorkerTaskDispatchService;
+  workerListenEventService?: WorkerListenEventService;
   logger?: Logger;
 }
 
@@ -318,6 +329,8 @@ export class CoreToolHandler {
       displayName: args.display_name,
       role: args.role,
       projectId: args.project_id,
+      projectIds: args.project_ids,
+      activeProjectIds: args.active_project_ids,
       transport: args.transport,
       capabilities: args.capabilities,
       maxMessages: args.max_messages,
@@ -347,12 +360,15 @@ export class CoreToolHandler {
     const timeoutSeconds = this.normalizeListenTimeoutSeconds(normalizedArgs.timeout_seconds, settings);
     const pollIntervalMs = this.normalizeListenPollIntervalMs(normalizedArgs.poll_interval_ms);
     const shouldIncludeTaskDispatch = Boolean(normalizedArgs.include_task_dispatch ?? (normalizedArgs.role === "worker"));
+    const shouldIncludeAttentionItems = Boolean(normalizedArgs.include_attention_items ?? (normalizedArgs.role === "worker"));
 
     const startResponse = this.deps.connectionChatRepository.startListen({
       connectionKey: normalizedArgs.connection_key,
       displayName: normalizedArgs.display_name,
       role: normalizedArgs.role,
       projectId: normalizedArgs.project_id,
+      projectIds: normalizedArgs.project_ids,
+      activeProjectIds: normalizedArgs.active_project_ids,
       transport: normalizedArgs.transport,
       capabilities: normalizedArgs.capabilities,
       maxMessages: 1,
@@ -397,6 +413,17 @@ export class CoreToolHandler {
             instruction: "Reply in the dashboard thread with post_listen_reply, then call listen again with the same connection_key to stay in listening mode.",
           },
         });
+      }
+
+      if (shouldIncludeAttentionItems && this.deps.workerListenEventService) {
+        const workerEvent = this.deps.workerListenEventService.pullNextEvent({
+          connectionKey: normalizedArgs.connection_key,
+          projectId: normalizedArgs.project_id,
+          includeAttentionItems: true,
+        });
+        if (workerEvent) {
+          return this.wrapListenResponse(workerEvent);
+        }
       }
 
       if (shouldIncludeTaskDispatch) {
@@ -504,6 +531,91 @@ export class CoreToolHandler {
     };
   }
 
+  async handleClaimAttentionItem(args: ClaimAttentionItemArgs) {
+    const workerEndpointId = this.requireWorkerEndpointId(args.connection_key);
+    const projectAttentionService = this.requireProjectAttentionService();
+    const item = projectAttentionService.claimItem(
+      args.attention_item_id,
+      workerEndpointId,
+      args.claim_reason,
+    );
+
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          itemId: item.id,
+          status: item.status,
+          assignedWorkerEndpointId: item.assignedWorkerEndpointId,
+          claimedAt: item.claimedAt,
+        }, null, 2),
+      }],
+    };
+  }
+
+  async handleResolveAttentionItem(args: ResolveAttentionItemArgs) {
+    const connection = this.deps.connectionChatRepository.getConnectionByKey(args.connection_key);
+    if (!connection) {
+      throw new Error(`Connection not found for key: ${args.connection_key}`);
+    }
+
+    const workerEndpointId = connection.role === "worker"
+      ? this.requireWorkerEndpointId(args.connection_key)
+      : null;
+    const projectAttentionService = this.requireProjectAttentionService();
+    const item = projectAttentionService.resolveItem(args.attention_item_id, {
+      status: args.resolution_status || "resolved",
+      reason: args.resolution_reason,
+      resolutionSummaryMarkdown: args.resolution_summary_markdown,
+      workerEndpointId,
+    });
+
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          itemId: item.id,
+          status: item.status,
+          resolvedAt: item.resolvedAt,
+        }, null, 2),
+      }],
+    };
+  }
+
+  async handleReportAttentionOutcome(args: ReportAttentionOutcomeArgs) {
+    const connection = this.deps.connectionChatRepository.getConnectionByKey(args.connection_key);
+    if (!connection) {
+      throw new Error(`Connection not found for key: ${args.connection_key}`);
+    }
+
+    const workerEndpointId = this.requireWorkerEndpointId(args.connection_key);
+    const workerAttentionOutcomeService = this.requireWorkerAttentionOutcomeService();
+    const result = workerAttentionOutcomeService.reportOutcome({
+      attentionItemId: args.attention_item_id,
+      workerEndpointId,
+      connectionId: connection.id,
+      outcome: args.outcome,
+      summaryMarkdown: args.summary_markdown,
+      resolutionReason: args.resolution_reason,
+      threadTitle: args.thread_title,
+    });
+
+    return {
+      content: [{
+        type: "text",
+        text: JSON.stringify({
+          itemId: result.sourceItem.id,
+          status: result.sourceItem.status,
+          outcome: args.outcome,
+          handoffAttentionItemId: result.handoffItem?.id ?? null,
+          threadId: result.threadId,
+          threadMessageId: result.threadMessageId,
+          resolvedAt: result.sourceItem.resolvedAt,
+        }, null, 2),
+      }],
+    };
+  }
+
   private normalizeListenTimeoutSeconds(
     requestedTimeoutSeconds: number | undefined,
     settings: DashboardSettings,
@@ -531,5 +643,31 @@ export class CoreToolHandler {
         text: JSON.stringify(response, null, 2),
       }],
     };
+  }
+
+  private requireWorkerEndpointId(connectionKey: string): string {
+    const connection = this.deps.connectionChatRepository.getConnectionByKey(connectionKey);
+    if (!connection) {
+      throw new Error(`Connection not found for key: ${connectionKey}`);
+    }
+    const workerEndpoint = this.deps.workerEndpointRepository?.getWorkerEndpointByConnectionId(connection.id);
+    if (!workerEndpoint) {
+      throw new Error(`Worker endpoint not found for connection ${connectionKey}`);
+    }
+    return workerEndpoint.id;
+  }
+
+  private requireProjectAttentionService(): ProjectAttentionService {
+    if (!this.deps.projectAttentionService) {
+      throw new Error("Project attention service is not available.");
+    }
+    return this.deps.projectAttentionService;
+  }
+
+  private requireWorkerAttentionOutcomeService(): WorkerAttentionOutcomeService {
+    if (!this.deps.workerAttentionOutcomeService) {
+      throw new Error("Worker attention outcome service is not available.");
+    }
+    return this.deps.workerAttentionOutcomeService;
   }
 }

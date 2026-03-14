@@ -47,6 +47,11 @@ const buildDeps = () => {
     completedSprints: new Set<string>(),
     projectManagementRepository: { updateTask: vi.fn() },
     executionRepository: { updateSprintRun: vi.fn() },
+    projectAttentionService: {
+      openItem: vi.fn(),
+      resolveItemsForTask: vi.fn(),
+      resolveItemsForSprintRun: vi.fn(),
+    },
     sprintExecutionStateService: {
       resolveContext: vi.fn((args: any) => ({
         project: { id: "project-1", name: "Test Project" },

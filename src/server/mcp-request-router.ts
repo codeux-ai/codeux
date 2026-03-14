@@ -7,7 +7,6 @@ import type { AgentToolHandler } from "../mcp/agent-tool-handler.js";
 import { validateToolArguments } from "../api/mcp/validators/tool-validators.js";
 import type { CoreToolHandler } from "../mcp/core-tool-handler.js";
 import { getEnabledToolDefinitions, isToolEnabled } from "../mcp/mcp-tool-availability.js";
-import type { SprintAgentArgs } from "../sprint/sprint-orchestrator.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { McpRuntimeRole } from "../contracts/mcp-tool-definitions.js";
 
@@ -43,7 +42,9 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
     .register("post_listen_reply", (input) => args.coreToolHandler.handlePostListenReply(input))
     .register("pull_task_dispatch", (input) => args.coreToolHandler.handlePullTaskDispatch(input))
     .register("update_task_dispatch", (input) => args.coreToolHandler.handleUpdateTaskDispatch(input))
-    .register("sprint_agent", async (input) => (await args.agentToolHandler.handleSprintAgent(input)) as McpToolResponse)
+    .register("claim_attention_item", (input) => args.coreToolHandler.handleClaimAttentionItem(input))
+    .register("resolve_attention_item", (input) => args.coreToolHandler.handleResolveAttentionItem(input))
+    .register("report_attention_outcome", (input) => args.coreToolHandler.handleReportAttentionOutcome(input))
     .register("task_agent", async (input) => (await args.agentToolHandler.handleTaskAgent(input)) as McpToolResponse)
     .register("execute_worker_dispatch", async (input) => (await args.agentToolHandler.handleExecuteWorkerDispatch(input)) as McpToolResponse)
     .register("cancel_local_dispatch", async (input) => (await args.agentToolHandler.handleCancelLocalDispatch(input)) as McpToolResponse)

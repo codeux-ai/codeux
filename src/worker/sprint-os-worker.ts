@@ -5,8 +5,14 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { CallToolResultSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { WorkerTaskDispatchClaim } from "../contracts/execution-types.js";
 import type { JulesSession } from "../contracts/app-types.js";
-import type { ListenDashboardMessageEvent, ListenResponse } from "../contracts/connection-chat-types.js";
+import type {
+  ListenAssignmentChangedEvent,
+  ListenAttentionItemEvent,
+  ListenDashboardMessageEvent,
+  ListenResponse,
+} from "../contracts/connection-chat-types.js";
 import type { WorkerConfig } from "./worker-config.js";
+import { WorkerSupervisionState } from "./worker-supervision-state.js";
 
 interface ExecuteWorkerDispatchResponse {
   dispatchId: string;
@@ -35,6 +41,23 @@ interface GenerateDashboardReplyResponse {
   bodyMarkdown: string;
   provider: string;
   model: string;
+}
+
+interface ClaimAttentionItemResponse {
+  itemId: string;
+  status: string;
+  assignedWorkerEndpointId: string | null;
+  claimedAt: string | null;
+}
+
+interface ReportAttentionOutcomeResponse {
+  itemId: string;
+  status: string;
+  outcome: "handled_locally" | "needs_dashboard_reply" | "needs_human_escalation";
+  handoffAttentionItemId: string | null;
+  threadId: string | null;
+  threadMessageId: string | null;
+  resolvedAt: string | null;
 }
 
 const ACTION_REQUIRED_STATES = new Set(["AWAITING_PLAN_APPROVAL", "AWAITING_USER_FEEDBACK", "PAUSED"]);
@@ -66,7 +89,11 @@ const delay = async (ms: number, signal?: AbortSignal): Promise<void> => {
 };
 
 export class SprintOsWorker {
-  constructor(private readonly config: WorkerConfig) {}
+  private readonly supervisionState: WorkerSupervisionState;
+
+  constructor(private readonly config: WorkerConfig) {
+    this.supervisionState = new WorkerSupervisionState(config.activeProjectIds || []);
+  }
 
   async run(signal?: AbortSignal): Promise<void> {
     while (!signal?.aborted) {
@@ -159,8 +186,11 @@ export class SprintOsWorker {
         display_name: this.config.displayName,
         role: "worker",
         project_id: this.config.projectId,
+        project_ids: this.config.projectIds,
+        active_project_ids: this.resolveActiveProjectIds(),
         transport: this.config.controlPlaneUrl ? "streamable_http" : "stdio",
         include_task_dispatch: true,
+        include_attention_items: true,
         capabilities: {
           instruction: this.config.controlPlaneUrl
             ? "Claims Sprint OS worker dispatches from the remote control plane and executes them on the local worker host."
@@ -181,6 +211,16 @@ export class SprintOsWorker {
 
       if (response.kind === "task_dispatch") {
         await this.processDispatch(controlPlaneClient, localExecutorClient, response.dispatch, signal);
+        continue;
+      }
+
+      if (response.kind === "assignment_changed") {
+        this.processAssignmentChanged(response);
+        continue;
+      }
+
+      if (response.kind === "attention_item") {
+        await this.processAttentionItem(controlPlaneClient, response);
         continue;
       }
 
@@ -294,6 +334,148 @@ export class SprintOsWorker {
     }
   }
 
+  private processAssignmentChanged(event: ListenAssignmentChangedEvent): void {
+    this.supervisionState.noteAssignmentChanged(event);
+    console.info("[sprint-os-worker] Assignment changed", {
+      projectId: event.project.id,
+      projectName: event.project.name,
+      repoPath: event.project.repoPath,
+      assignmentRole: event.assignment.assignmentRole,
+      status: event.assignment.status,
+      activeProjectIds: this.resolveActiveProjectIds(),
+    });
+  }
+
+  private async processAttentionItem(
+    controlPlaneClient: Client,
+    event: ListenAttentionItemEvent,
+  ): Promise<void> {
+    this.supervisionState.noteAttentionItem(event);
+
+    const logPayload = {
+      projectId: event.project.id,
+      projectName: event.project.name,
+      repoPath: event.project.repoPath,
+      workingDirectoryHint: event.workingDirectoryHint,
+      attentionItemId: event.item.id,
+      attentionType: event.item.attentionType,
+      severity: event.item.severity,
+      status: event.item.status,
+      title: event.item.title,
+      unresolvedAttentionCount: event.contextDigest.unresolvedAttentionCount,
+      activeProjectIds: this.resolveActiveProjectIds(),
+    };
+
+    if (event.item.ownerType !== "worker") {
+      console.warn("[sprint-os-worker] Attention item requires non-worker handling", logPayload);
+      return;
+    }
+
+    if (event.item.status === "open") {
+      try {
+        const claimed = await this.callJsonTool<ClaimAttentionItemResponse>(controlPlaneClient, "claim_attention_item", {
+          connection_key: this.config.connectionKey,
+          attention_item_id: event.item.id,
+          claim_reason: "worker_listen_claimed",
+        });
+        this.supervisionState.markAttentionItemClaimed(event.project.id, event.item.id);
+        console.warn("[sprint-os-worker] Claimed attention item", {
+          ...logPayload,
+          assignedWorkerEndpointId: claimed.assignedWorkerEndpointId,
+          claimedAt: claimed.claimedAt,
+        });
+        await this.reportAttentionOutcome(controlPlaneClient, event);
+      } catch (error) {
+        console.error("[sprint-os-worker] Failed to claim attention item", {
+          ...logPayload,
+          error,
+        });
+      }
+      return;
+    }
+
+    if (event.item.status === "claimed") {
+      this.supervisionState.markAttentionItemClaimed(event.project.id, event.item.id);
+      await this.reportAttentionOutcome(controlPlaneClient, event);
+    }
+
+    console.warn("[sprint-os-worker] Attention item requires worker supervision", logPayload);
+  }
+
+  private async reportAttentionOutcome(
+    controlPlaneClient: Client,
+    event: ListenAttentionItemEvent,
+  ): Promise<void> {
+    const outcome = this.classifyAttentionOutcome(event);
+    const summaryMarkdown = this.buildAttentionOutcomeSummary(event, outcome);
+
+    try {
+      const reported = await this.callJsonTool<ReportAttentionOutcomeResponse>(controlPlaneClient, "report_attention_outcome", {
+        connection_key: this.config.connectionKey,
+        attention_item_id: event.item.id,
+        outcome,
+        summary_markdown: summaryMarkdown,
+      });
+
+      if (reported.status === "resolved" || reported.status === "dismissed") {
+        this.supervisionState.markAttentionItemResolved(event.project.id, event.item.id);
+      }
+
+      console.info("[sprint-os-worker] Reported attention outcome", {
+        projectId: event.project.id,
+        repoPath: event.project.repoPath,
+        attentionItemId: event.item.id,
+        attentionType: event.item.attentionType,
+        outcome: reported.outcome,
+        handoffAttentionItemId: reported.handoffAttentionItemId,
+        threadId: reported.threadId,
+      });
+    } catch (error) {
+      console.error("[sprint-os-worker] Failed to report attention outcome", {
+        projectId: event.project.id,
+        repoPath: event.project.repoPath,
+        attentionItemId: event.item.id,
+        attentionType: event.item.attentionType,
+        outcome,
+        error,
+      });
+    }
+  }
+
+  private classifyAttentionOutcome(
+    event: ListenAttentionItemEvent,
+  ): "needs_dashboard_reply" | "needs_human_escalation" {
+    switch (event.item.attentionType) {
+      case "merge_required":
+      case "action_required":
+      case "manual_attention":
+        return "needs_human_escalation";
+      default:
+        return "needs_dashboard_reply";
+    }
+  }
+
+  private buildAttentionOutcomeSummary(
+    event: ListenAttentionItemEvent,
+    outcome: "needs_dashboard_reply" | "needs_human_escalation",
+  ): string {
+    const lines = [
+      `Worker acknowledged ${event.item.attentionType} for ${event.project.name}.`,
+      `Repo path: ${event.project.repoPath}`,
+      `Working directory hint: ${event.workingDirectoryHint}`,
+      `Recommended outcome: ${outcome === "needs_dashboard_reply" ? "dashboard reply" : "human escalation"}.`,
+      "",
+      "Current blocker:",
+      event.item.summaryMarkdown.trim(),
+    ];
+
+    if (event.contextDigest.unresolvedAttentionTitles.length > 0) {
+      lines.push("", `Open supervision items: ${event.contextDigest.unresolvedAttentionTitles.join(", ")}`);
+    }
+
+    return lines.join("\n");
+  }
+
   private resolveTerminalTaskState(session: JulesSession): "COMPLETED" | "FAILED" | "BLOCKED" | null {
     if (this.extractPullRequest(session) || session.state === "COMPLETED") {
       return "COMPLETED";
@@ -339,6 +521,11 @@ export class SprintOsWorker {
     return await this.callJsonTool<JulesSession>(client, "get_session", {
       session_id: sessionId,
     });
+  }
+
+  private resolveActiveProjectIds(): string[] | undefined {
+    const activeProjectIds = this.supervisionState.getActiveProjectIds();
+    return activeProjectIds.length > 0 ? activeProjectIds : undefined;
   }
 
   private async callJsonTool<T>(client: Client, name: string, args: Record<string, unknown>): Promise<T> {

@@ -1,6 +1,6 @@
 import * as fs from "fs/promises";
 import { commandRunner } from "../../../../src/shared/subprocess/command-runner.js";
-import { runBranchPreflightStep } from "../../../../src/sprint/steps/branch-preflight-step.js";
+import { prepareBranchForOrchestration, runBranchPreflightStep } from "../../../../src/sprint/steps/branch-preflight-step.js";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { SprintOrchestrator } from "../../../../src/sprint/sprint-orchestrator.js";
 import { buildMockSettings } from "../../../builders/settings-builder.js";
@@ -181,5 +181,63 @@ describe("runBranchPreflightStep (Async)", () => {
 
     const result = await runBranchPreflightStep("/valid-repo", "feature/sprint1");
     expect(result).toEqual({ existsLocal: false, existsRemote: false });
+  });
+
+  it("creates and pushes the feature branch during orchestration preparation when missing", async () => {
+    vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => true } as any);
+    vi.mocked(commandRunner.run)
+      // runBranchPreflightStep -> is git repo
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // runBranchPreflightStep -> local branch missing
+      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "" })
+      // runBranchPreflightStep -> remote branch missing
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // has remote origin
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "git@github.com:example/repo.git\n", stderr: "" })
+      // createLocalBranch -> default branch exists
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // createLocalBranch -> checkout -B feature branch from default branch
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // push remote branch
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" });
+
+    const result = await prepareBranchForOrchestration("/valid-repo", "feature/sprint1", "main");
+
+    expect(result).toEqual({
+      existsLocal: true,
+      existsRemote: true,
+      hasRemoteOrigin: true,
+      createdLocal: true,
+      checkedOutLocal: true,
+      pushedRemote: true,
+    });
+    expect(commandRunner.run).toHaveBeenNthCalledWith(6, "git", ["checkout", "-B", "feature/sprint1", "main"], { cwd: "/valid-repo" });
+    expect(commandRunner.run).toHaveBeenNthCalledWith(7, "git", ["push", "-u", "origin", "feature/sprint1"], { cwd: "/valid-repo" });
+  });
+
+  it("does not block orchestration on a missing remote branch when no origin remote exists", async () => {
+    vi.mocked(fs.stat).mockResolvedValue({ isDirectory: () => true } as any);
+    vi.mocked(commandRunner.run)
+      // runBranchPreflightStep -> is git repo
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // runBranchPreflightStep -> local branch exists
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // runBranchPreflightStep -> remote branch missing
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" })
+      // has remote origin -> false
+      .mockResolvedValueOnce({ ok: false, code: 2, stdout: "", stderr: "No such remote" })
+      // checkout existing branch
+      .mockResolvedValueOnce({ ok: true, code: 0, stdout: "", stderr: "" });
+
+    const result = await prepareBranchForOrchestration("/valid-repo", "feature/sprint1", "main");
+
+    expect(result).toEqual({
+      existsLocal: true,
+      existsRemote: false,
+      hasRemoteOrigin: false,
+      createdLocal: false,
+      checkedOutLocal: true,
+      pushedRemote: false,
+    });
   });
 });

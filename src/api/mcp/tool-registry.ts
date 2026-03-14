@@ -1,7 +1,7 @@
 import type { ToolName as ContractToolName } from "../../contracts/mcp-tool-definitions.js";
 import type { McpConnectionCapabilities, McpConnectionRole } from "../../contracts/connection-chat-types.js";
 import type { TaskRunState } from "../../contracts/execution-types.js";
-import type { SprintAgentArgs } from "../../sprint/sprint-types.js";
+import type { WorkerAttentionOutcome } from "../../contracts/project-attention-types.js";
 
 export interface GetSourceArgs {
   source_id: string;
@@ -95,6 +95,8 @@ export interface StartListenArgs {
   display_name?: string;
   role?: McpConnectionRole;
   project_id?: string;
+  project_ids?: string[];
+  active_project_ids?: string[];
   transport?: string;
   capabilities?: McpConnectionCapabilities;
   max_messages?: number;
@@ -105,9 +107,12 @@ export interface ListenArgs {
   display_name?: string;
   role?: McpConnectionRole;
   project_id?: string;
+  project_ids?: string[];
+  active_project_ids?: string[];
   transport?: string;
   capabilities?: McpConnectionCapabilities;
   include_task_dispatch?: boolean;
+  include_attention_items?: boolean;
   timeout_seconds?: number;
   poll_interval_ms?: number;
 }
@@ -145,6 +150,29 @@ export interface UpdateTaskDispatchArgs {
   error_message?: string;
 }
 
+export interface ClaimAttentionItemArgs {
+  connection_key: string;
+  attention_item_id: string;
+  claim_reason?: string;
+}
+
+export interface ResolveAttentionItemArgs {
+  connection_key: string;
+  attention_item_id: string;
+  resolution_status?: "resolved" | "dismissed";
+  resolution_reason?: string;
+  resolution_summary_markdown?: string;
+}
+
+export interface ReportAttentionOutcomeArgs {
+  connection_key: string;
+  attention_item_id: string;
+  outcome: WorkerAttentionOutcome;
+  summary_markdown: string;
+  resolution_reason?: string;
+  thread_title?: string;
+}
+
 export interface McpToolArgsByName {
   get_source: GetSourceArgs;
   list_sources: ListSourcesArgs;
@@ -158,7 +186,6 @@ export interface McpToolArgsByName {
   get_activity: GetActivityArgs;
   list_activities: ListActivitiesArgs;
   list_all_activities: ListAllActivitiesArgs;
-  sprint_agent: SprintAgentArgs;
   task_agent: TaskAgentArgs;
   execute_worker_dispatch: ExecuteWorkerDispatchArgs;
   cancel_local_dispatch: CancelLocalDispatchArgs;
@@ -169,6 +196,9 @@ export interface McpToolArgsByName {
   post_listen_reply: PostListenReplyArgs;
   pull_task_dispatch: PullTaskDispatchArgs;
   update_task_dispatch: UpdateTaskDispatchArgs;
+  claim_attention_item: ClaimAttentionItemArgs;
+  resolve_attention_item: ResolveAttentionItemArgs;
+  report_attention_outcome: ReportAttentionOutcomeArgs;
 }
 
 export type McpToolName = keyof McpToolArgsByName;

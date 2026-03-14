@@ -3,7 +3,7 @@
 ## Scope
 This document describes the refactor that introduces:
 - Atomic sprint-loop architecture with independent step toggles.
-- Separation of MCP core tool logic and agent tool logic.
+- Separation of MCP core tool logic and task/worker agent tool logic.
 - Editable markdown instruction templates with placeholder parsing.
 - Home directory migration from `~/jules-subagents` to `~/.jules-subagents`.
 - Dashboard settings for CI Intelligence merge gates.
@@ -28,7 +28,7 @@ New handler modules:
 - `src/mcp/core-tool-handler.ts`
   - Jules API tool behavior: source/session/activity tools, wait logic, create-session safety.
 - `src/mcp/agent-tool-handler.ts`
-  - Agent behavior: `sprint_agent` and `task_agent` orchestration entrypoints.
+  - Agent behavior: `task_agent` plus worker-local execution/reply entrypoints.
 
 Runtime composition:
 - `src/index.ts` now composes specialized handlers instead of embedding every handler implementation inline.
@@ -180,7 +180,7 @@ Validation run:
   - `.jules-subagents/settings.json`
   - dashboard settings (`http://localhost:4444` default)
 - API-backed MCP handlers now preflight key presence and return setup guidance text when missing.
-- `sprint_agent` allows `plan` without key, but `status/orchestrate` return setup guidance until key exists.
+- Dashboard planning remains available without a Jules key, but API-backed execution and session tools still return setup guidance until a key exists.
 - Saving dashboard settings now refreshes Jules API key in runtime (no restart required).
 - Runtime key resolution now checks live environment variables (`JULES_API_KEY` / `JULES_KEY`) when dashboard key is empty.
 
@@ -393,12 +393,12 @@ Allow background Gemini/Codex runs to execute in isolated containers while prese
 - `executionMode` (`HOST|DOCKER`, default `HOST`)
 - `containerImage` (default `node:24-bookworm`)
 - `containerSetupScriptPath` (optional)
-- `containerMountCredentials` (master toggle, default `false`)
 - Credential mount toggles and paths:
   - `containerMountGitConfig`
   - `containerMountGithubAuth` + `containerGithubAuthPath`
   - `containerMountGeminiAuth` + `containerGeminiAuthPath`
   - `containerMountCodexAuth` + `containerCodexAuthPath`
+  - `containerMountClaudeCodeAuth` + `containerClaudeCodeAuthPath`
 
 ### Runtime Behavior
 

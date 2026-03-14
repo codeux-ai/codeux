@@ -14,7 +14,9 @@ import type {
   OverviewTelemetrySnapshot,
   OverviewTelemetryProjectSummary,
   ExecutionConnectionSummary,
+  ExecutionAttentionItemSummary,
   ExecutionSprintRunSummary,
+  ExecutionHumanInterventionSummary,
   ExecutionTaskDispatchSummary,
   ExecutionRuntimeEventSummary,
   ExecutionTaskRunEventSummary,
@@ -36,6 +38,14 @@ import type {
   GitTrackingStatus,
   ExternalSettingsHints
 } from "../../src/contracts/app-types.js";
+import type {
+  EffectiveSettingsResponse,
+  ProjectSettings,
+  ProjectSettingsOverride,
+  SettingsValueSource,
+  SprintSettingsOverride,
+  SystemSettings,
+} from "../../src/contracts/settings-scope-types.js";
 
 export type {
   JulesActivity,
@@ -53,7 +63,9 @@ export type {
   OverviewTelemetrySnapshot,
   OverviewTelemetryProjectSummary,
   ExecutionConnectionSummary,
+  ExecutionAttentionItemSummary,
   ExecutionSprintRunSummary,
+  ExecutionHumanInterventionSummary,
   ExecutionTaskDispatchSummary,
   ExecutionRuntimeEventSummary,
   ExecutionTaskRunEventSummary,
@@ -73,7 +85,13 @@ export type {
   GitTrackingScope,
   GitTrackingTarget,
   GitTrackingStatus,
-  ExternalSettingsHints
+  ExternalSettingsHints,
+  EffectiveSettingsResponse,
+  ProjectSettings,
+  ProjectSettingsOverride,
+  SettingsValueSource,
+  SprintSettingsOverride,
+  SystemSettings,
 };
 
 /**
