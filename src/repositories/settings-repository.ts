@@ -191,6 +191,7 @@ export class SettingsRepository {
           ciIntelligence: legacySettings.ciIntelligence,
           sprintLoopSteps: legacySettings.sprintLoopSteps,
           cliWorkflow: legacySettings.cliWorkflow,
+          workers: legacySettings.workers || defaults.workers,
           agents: legacySettings.agents || defaults.agents,
           skills: legacySettings.skills || defaults.skills,
         },

@@ -133,4 +133,31 @@ describe("WorkerEndpointRepository", () => {
 
     expect(workerEndpointRepository.getWorkerEndpointByConnectionId(worker.id)?.status).toBe("stale");
   });
+
+  it("creates and deletes ephemeral virtual CLI worker endpoints", async () => {
+    const { workerEndpointRepository } = await createRepositories();
+
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:test-project:123",
+      displayName: "Virtual Codex Worker",
+      capabilities: {
+        canSuperviseProjects: true,
+        canExecuteTasks: true,
+      },
+    });
+
+    expect(endpoint).toMatchObject({
+      endpointType: "virtual_cli",
+      endpointKey: "virtual:test-project:123",
+      displayName: "Virtual Codex Worker",
+      status: "connected",
+      connectionId: null,
+      transport: "internal",
+    });
+    expect(workerEndpointRepository.getWorkerEndpointByKey("virtual:test-project:123")?.id).toBe(endpoint.id);
+
+    workerEndpointRepository.deleteWorkerEndpoint(endpoint.id);
+
+    expect(workerEndpointRepository.getWorkerEndpoint(endpoint.id)).toBeNull();
+  });
 });

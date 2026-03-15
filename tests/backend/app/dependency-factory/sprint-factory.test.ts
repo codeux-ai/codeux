@@ -6,6 +6,7 @@ import { CliWorkflowService } from "../../../../src/services/cli-workflow-servic
 import { SprintExecutionStateService } from "../../../../src/services/sprint-execution-state-service.js";
 import { SprintTaskDispatchService } from "../../../../src/services/sprint-task-dispatch-service.js";
 import { TaskService } from "../../../../src/services/task-service.js";
+import { VirtualWorkerService } from "../../../../src/services/virtual-worker-service.js";
 import { SprintOrchestrator } from "../../../../src/sprint/sprint-orchestrator.js";
 
 vi.mock("../../../../src/services/cli-workflow-service.js", () => {
@@ -29,6 +30,12 @@ vi.mock("../../../../src/services/sprint-task-dispatch-service.js", () => {
   const SprintTaskDispatchService = vi.fn();
   SprintTaskDispatchService.prototype.startTask = vi.fn();
   return { SprintTaskDispatchService };
+});
+
+vi.mock("../../../../src/services/virtual-worker-service.js", () => {
+  const VirtualWorkerService = vi.fn();
+  VirtualWorkerService.prototype.scheduleProject = vi.fn();
+  return { VirtualWorkerService };
 });
 
 vi.mock("../../../../src/sprint/sprint-orchestrator.js", () => {
@@ -88,7 +95,22 @@ describe("Sprint Factory", () => {
       },
       projectManagementRepository: {},
       executionRepository: {},
-      projectAttentionService: {},
+      projectAttentionService: {
+        setWorkerAttentionOpenedCallback: vi.fn(),
+      },
+      settingsRepository: {
+        resolveProjectDashboardSettings: vi.fn().mockReturnValue({
+          settings: { workers: { executionMode: "VIRTUAL" } },
+        }),
+        resolveSprintDashboardSettings: vi.fn().mockReturnValue({
+          settings: { workers: { executionMode: "VIRTUAL" } },
+        }),
+      },
+      workerEndpointRepository: {},
+      projectWorkerAssignmentRepository: {},
+      projectWorkerAssignmentService: {},
+      connectionChatRepository: {},
+      activeDispatchRegistry: {},
     };
   });
 
@@ -107,6 +129,7 @@ describe("Sprint Factory", () => {
     expect(TaskService).toHaveBeenCalledTimes(1);
     expect(SprintExecutionStateService).toHaveBeenCalledTimes(1);
     expect(SprintTaskDispatchService).toHaveBeenCalledTimes(1);
+    expect(VirtualWorkerService).toHaveBeenCalledTimes(1);
     expect(SprintOrchestrator).toHaveBeenCalledTimes(1);
 
     // Get the arguments passed to CliWorkflowService constructor
@@ -195,6 +218,7 @@ describe("Sprint Factory", () => {
 
     sprintArgs.renderInstruction("template1", { var: 1 }, "repo1");
     expect(mockCoreDeps.instructionService.render).toHaveBeenCalledWith("template1", { var: 1 }, "repo1");
+    expect(mockCoreDeps.projectAttentionService.setWorkerAttentionOpenedCallback).toHaveBeenCalledTimes(1);
   });
 
   it("handles missing dashboardSettings", () => {

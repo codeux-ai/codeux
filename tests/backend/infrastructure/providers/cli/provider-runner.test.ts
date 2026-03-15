@@ -44,6 +44,9 @@ describe("ProviderRunner", () => {
     });
 
     vi.mocked(fs.access).mockResolvedValue(undefined);
+    vi.mocked(fs.mkdir).mockResolvedValue(undefined);
+    vi.mocked(fs.readFile).mockResolvedValue("captured response");
+    vi.mocked(fs.rm).mockResolvedValue(undefined);
     vi.mocked(isDockerWorkspaceMountError).mockReturnValue(false);
 
     defaultWorkflowSettings = {
@@ -126,6 +129,31 @@ describe("ProviderRunner", () => {
     expect(args).toEqual(["exec", "--yolo", "--output-last-message", "/tmp/codex-last-message.txt", "--model", "test-model", "test prompt"]);
     expect(env.CODEX_MODEL).toBe("test-model");
     expect(env.OPENAI_API_KEY).toBe("test-api-key");
+  });
+
+  it("should capture codex text responses into a mounted output file", async () => {
+    const onActivity = vi.fn();
+
+    const result = await runner.runProviderForText({
+      provider: "codex",
+      prompt: "return json",
+      cwd: "/repo",
+      model: "test-model",
+      apiKey: "test-api-key",
+      sessionId: "session-1",
+      workflowSettings: defaultWorkflowSettings,
+      repoPath: "/repo",
+      onActivity,
+    });
+
+    expect(runStreamingCommand).toHaveBeenCalled();
+    const [cmd, args] = vi.mocked(runStreamingCommand).mock.calls[0];
+    expect(cmd).toBe("codex");
+    expect(args[2]).toBe("--output-last-message");
+    expect(String(args[3])).toContain(".sprint-os/tmp/provider-last-message-session-1.txt");
+    expect(result.text).toBe("captured response");
+    expect(fs.readFile).toHaveBeenCalled();
+    expect(fs.rm).toHaveBeenCalled();
   });
 
   it("should execute via DockerRunner when executionMode is DOCKER", async () => {

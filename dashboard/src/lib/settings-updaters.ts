@@ -123,3 +123,16 @@ export const updateCliWorkflow = (
     },
   };
 };
+
+export const updateWorkers = (
+  settings: DashboardSettings,
+  patch: Partial<DashboardSettings["workers"]>
+): DashboardSettings => {
+  return {
+    ...settings,
+    workers: {
+      ...settings.workers,
+      ...patch,
+    },
+  };
+};

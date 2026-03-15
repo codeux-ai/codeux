@@ -18,6 +18,7 @@ import { sanitizeCiIntelligence } from "../domain/settings/settings-sanitizers/c
 import { sanitizeCliWorkflow } from "../domain/settings/settings-sanitizers/cli-workflow-sanitizer.js";
 import { sanitizeGit } from "../domain/settings/settings-sanitizers/git-sanitizer.js";
 import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/sprint-loop-sanitizer.js";
+import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
 import { sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES, INSTRUCTION_TEMPLATE_IDS, type InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
 import { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SKILLS, INTERNAL_SKILL_NAMES, INTERNAL_SKILL_SET } from "../repositories/settings-defaults.js";
@@ -228,6 +229,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     ciIntelligence: sanitizeCiIntelligence(DEFAULT_DASHBOARD_SETTINGS, git.githubMode),
     sprintLoopSteps: sanitizeSprintLoopSteps(DEFAULT_DASHBOARD_SETTINGS),
     cliWorkflow: sanitizeCliWorkflow(DEFAULT_DASHBOARD_SETTINGS),
+    workers: sanitizeWorkers(DEFAULT_DASHBOARD_SETTINGS),
     agents: {
       saveToProjectDirectory: DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
       instructionTemplates: cloneInstructionTemplates(DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates),
@@ -323,6 +325,10 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
     cliWorkflow: sanitizeCliWorkflow({
       ...DEFAULT_DASHBOARD_SETTINGS,
       cliWorkflow: deepMerge(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow, input.cliWorkflow),
+    }),
+    workers: sanitizeWorkers({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      workers: deepMerge(DEFAULT_DASHBOARD_SETTINGS.workers, input.workers),
     }),
     agents: {
       saveToProjectDirectory: typeof toRecord(input.agents).saveToProjectDirectory === "boolean"
@@ -431,6 +437,7 @@ export function resolveDashboardSettings(args: {
     ciIntelligence: { ...sprintSettings.ciIntelligence },
     sprintLoopSteps: { ...sprintSettings.sprintLoopSteps },
     cliWorkflow: { ...sprintSettings.cliWorkflow },
+    workers: { ...sprintSettings.workers },
     agents: { ...sprintSettings.agents },
     skills: cloneSkills(sprintSettings.skills),
     mcpTools: cloneMcpTools(args.systemSettings.mcpTools),

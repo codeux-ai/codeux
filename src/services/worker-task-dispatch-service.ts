@@ -3,6 +3,7 @@ import { formatSprintBranch } from "../git/sprint-branch-scheme.js";
 import type { DashboardSettings } from "../contracts/app-types.js";
 import type { WorkerTaskDispatchClaim, TaskRunState } from "../contracts/execution-types.js";
 import type { McpConnectionRecord } from "../contracts/connection-chat-types.js";
+import type { WorkerExecutionMode } from "../contracts/app-types.js";
 import { ExecutionRepository } from "../repositories/execution-repository.js";
 import { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
@@ -45,6 +46,7 @@ export class WorkerTaskDispatchService {
     private readonly projectWorkerAssignmentService: ProjectWorkerAssignmentService,
     private readonly projectAttentionService: ProjectAttentionService,
     private readonly getDashboardSettings: () => DashboardSettings,
+    private readonly resolveWorkerExecutionMode: (projectId: string, sprintId?: string | null) => WorkerExecutionMode = () => "CONNECTED_MCP",
     private readonly logger?: Logger,
   ) {}
 
@@ -53,111 +55,167 @@ export class WorkerTaskDispatchService {
     const projectIds = this.resolveProjectIds(connection, args.projectId);
 
     for (const projectId of projectIds) {
-      const claimed = this.executionRepository.claimNextTaskDispatch({
+      const claimed = this.claimNextDispatchForWorker({
         projectId,
         sprintId: args.sprintId,
-        executorType: "mcp_worker",
+        workerEndpointId: workerEndpoint.id,
         connectionId: connection.id,
+        connectionKey: connection.connectionKey,
+        executionMode: "CONNECTED_MCP",
       });
       if (!claimed) {
         continue;
       }
-
-      const now = new Date().toISOString();
-      const leaseToken = randomUUID();
-      this.executionRepository.acquireLease({
-        scopeType: "task_dispatch",
-        scopeId: claimed.id,
-        ownerKey: connection.connectionKey,
-        leaseToken,
-        expiresAt: this.createLeaseExpiry(),
-      });
-
-      const dispatch = this.executionRepository.updateTaskDispatch(claimed.id, {
-        connectionId: connection.id,
-        status: "running",
-        startedAt: claimed.startedAt || now,
-        lastHeartbeatAt: now,
-      });
-      const taskRun = this.requireTaskRun(dispatch.id);
-      this.executionRepository.updateTaskRun(taskRun.id, {
-        connectionId: connection.id,
-        mode: "mcp_worker",
-        state: "RUNNING",
-        startedAt: taskRun.startedAt || now,
-      });
-
-      const project = this.requireProject(dispatch.projectId);
-      const sprint = this.requireSprint(dispatch.sprintId);
-      const task = this.requireTask(dispatch.taskId);
-      this.projectWorkerAssignmentService.noteWorkerActivity(project.id, workerEndpoint.id);
-      const featureBranch = sprint.featureBranch?.trim()
-        || (typeof sprint.number === "number"
-          ? formatSprintBranch(this.getDashboardSettings().git.sprintBranchScheme, sprint.number)
-          : this.getDashboardSettings().git.featureBranchPrefix + task.taskKey.toLowerCase());
-      const defaultBranch = project.defaultBranch?.trim() || this.getDashboardSettings().git.defaultBranch || "main";
-      const repoPath = project.baseDir;
-
-      this.projectManagementRepository.updateTask(task.id, {
-        status: "in_progress",
-      });
-      this.executionRepository.appendTaskRunEvent(taskRun.id, "worker_claimed", "connection", {
-        dispatchId: dispatch.id,
-        connectionId: connection.id,
-        connectionKey: connection.connectionKey,
-      });
       this.connectionChatRepository.touchConnectionHeartbeat(connection.id, "connected");
-      this.logger?.info("Worker claimed task dispatch", {
-        connectionKey: connection.connectionKey,
-        dispatchId: dispatch.id,
-        taskId: task.id,
-        projectId: project.id,
-        sprintId: sprint.id,
-      });
-
-      return {
-        dispatch,
-        leaseToken,
-        project: {
-          id: project.id,
-          name: project.name,
-          baseDir: project.baseDir,
-          sourceType: project.sourceType,
-          sourceRef: project.sourceRef,
-          defaultBranch: project.defaultBranch,
-          featureBranchPrefix: project.featureBranchPrefix,
-        },
-        sprint: {
-          id: sprint.id,
-          name: sprint.name,
-          number: sprint.number,
-          goal: sprint.goal,
-          featureBranch: sprint.featureBranch,
-        },
-        task: {
-          id: task.id,
-          taskKey: task.taskKey,
-          title: task.title,
-          promptMarkdown: task.promptMarkdown,
-          description: task.description,
-          priority: task.priority,
-          dependsOnTaskIds: task.dependsOnTaskIds,
-          executorType: task.executorType,
-        },
-        executionContext: {
-          repoPath,
-          defaultBranch,
-          featureBranch,
-        },
-      };
+      return claimed;
     }
 
     this.connectionChatRepository.touchConnectionHeartbeat(connection.id, "listening");
     return null;
   }
 
+  claimNextDispatchForWorker(args: {
+    projectId: string;
+    workerEndpointId: string;
+    executionMode: WorkerExecutionMode;
+    ownerKey?: string;
+    connectionId?: string | null;
+    connectionKey?: string | null;
+    sprintId?: string;
+  }): WorkerTaskDispatchClaim | null {
+    const queuedDispatch = this.executionRepository.listTaskDispatches({
+      projectId: args.projectId,
+      sprintId: args.sprintId,
+    }).find((dispatch) => (
+      dispatch.executorType === "mcp_worker"
+      && dispatch.status === "queued"
+      && this.resolveWorkerExecutionMode(dispatch.projectId, dispatch.sprintId) === args.executionMode
+    ));
+    if (!queuedDispatch) {
+      return null;
+    }
+
+    const workerEndpoint = this.requireWorkerEndpoint(args.workerEndpointId);
+    if (!workerEndpoint.capabilities.canExecuteTasks) {
+      throw new Error(`Worker endpoint ${workerEndpoint.id} cannot execute task dispatches.`);
+    }
+
+    const now = new Date().toISOString();
+    const leaseToken = randomUUID();
+    const claimed = this.executionRepository.updateTaskDispatch(queuedDispatch.id, {
+      connectionId: args.connectionId ?? null,
+      status: "claimed",
+      claimedAt: now,
+      lastHeartbeatAt: now,
+    });
+
+    this.executionRepository.acquireLease({
+      scopeType: "task_dispatch",
+      scopeId: claimed.id,
+      ownerKey: args.ownerKey || workerEndpoint.endpointKey,
+      leaseToken,
+      expiresAt: this.createLeaseExpiry(),
+    });
+
+    const dispatch = this.executionRepository.updateTaskDispatch(claimed.id, {
+      connectionId: args.connectionId ?? null,
+      status: "running",
+      startedAt: claimed.startedAt || now,
+      lastHeartbeatAt: now,
+    });
+    const taskRun = this.requireTaskRun(dispatch.id);
+    this.executionRepository.updateTaskRun(taskRun.id, {
+      connectionId: args.connectionId ?? null,
+      mode: "mcp_worker",
+      state: "RUNNING",
+      startedAt: taskRun.startedAt || now,
+    });
+
+    const project = this.requireProject(dispatch.projectId);
+    const sprint = this.requireSprint(dispatch.sprintId);
+    const task = this.requireTask(dispatch.taskId);
+    this.projectWorkerAssignmentService.noteWorkerActivity(project.id, workerEndpoint.id);
+    const featureBranch = sprint.featureBranch?.trim()
+      || (typeof sprint.number === "number"
+        ? formatSprintBranch(this.getDashboardSettings().git.sprintBranchScheme, sprint.number)
+        : this.getDashboardSettings().git.featureBranchPrefix + task.taskKey.toLowerCase());
+    const defaultBranch = project.defaultBranch?.trim() || this.getDashboardSettings().git.defaultBranch || "main";
+    const repoPath = project.baseDir;
+
+    this.projectManagementRepository.updateTask(task.id, {
+      status: "in_progress",
+    });
+    this.executionRepository.appendTaskRunEvent(taskRun.id, "worker_claimed", args.connectionId ? "connection" : "system", {
+      dispatchId: dispatch.id,
+      connectionId: args.connectionId ?? null,
+      connectionKey: args.connectionKey ?? null,
+      workerEndpointId: workerEndpoint.id,
+      workerEndpointKey: workerEndpoint.endpointKey,
+      executionMode: args.executionMode,
+    });
+    this.logger?.info("Worker claimed task dispatch", {
+      connectionKey: args.connectionKey ?? null,
+      workerEndpointId: workerEndpoint.id,
+      dispatchId: dispatch.id,
+      taskId: task.id,
+      projectId: project.id,
+      sprintId: sprint.id,
+      executionMode: args.executionMode,
+    });
+
+    return {
+      dispatch,
+      leaseToken,
+      project: {
+        id: project.id,
+        name: project.name,
+        baseDir: project.baseDir,
+        sourceType: project.sourceType,
+        sourceRef: project.sourceRef,
+        defaultBranch: project.defaultBranch,
+        featureBranchPrefix: project.featureBranchPrefix,
+      },
+      sprint: {
+        id: sprint.id,
+        name: sprint.name,
+        number: sprint.number,
+        goal: sprint.goal,
+        featureBranch: sprint.featureBranch,
+      },
+      task: {
+        id: task.id,
+        taskKey: task.taskKey,
+        title: task.title,
+        promptMarkdown: task.promptMarkdown,
+        description: task.description,
+        priority: task.priority,
+        dependsOnTaskIds: task.dependsOnTaskIds,
+        executorType: task.executorType,
+      },
+      executionContext: {
+        repoPath,
+        defaultBranch,
+        featureBranch,
+      },
+    };
+  }
+
   updateDispatch(args: UpdateWorkerTaskDispatchArgs): UpdateWorkerTaskDispatchResult {
     const { connection, workerEndpoint } = this.requireWorkerConnection(args.connectionKey);
+    return this.updateDispatchForWorker({
+      ...args,
+      workerEndpointId: workerEndpoint.id,
+      connectionId: connection.id,
+      connectionKey: connection.connectionKey,
+    });
+  }
+
+  updateDispatchForWorker(args: Omit<UpdateWorkerTaskDispatchArgs, "connectionKey"> & {
+    workerEndpointId: string;
+    connectionId?: string | null;
+    connectionKey?: string | null;
+  }): UpdateWorkerTaskDispatchResult {
+    const workerEndpoint = this.requireWorkerEndpoint(args.workerEndpointId);
     const dispatch = this.requireDispatch(args.dispatchId);
     const taskRun = this.requireTaskRun(dispatch.id);
     const lease = this.executionRepository.getLease("task_dispatch", dispatch.id);
@@ -165,7 +223,7 @@ export class WorkerTaskDispatchService {
     if (!lease || lease.leaseToken !== args.leaseToken) {
       throw new Error(`Worker lease is not active for dispatch ${dispatch.id}`);
     }
-    if (dispatch.connectionId && dispatch.connectionId !== connection.id) {
+    if (dispatch.connectionId && args.connectionId && dispatch.connectionId !== args.connectionId) {
       throw new Error(`Dispatch ${dispatch.id} is assigned to another connection.`);
     }
 
@@ -175,13 +233,13 @@ export class WorkerTaskDispatchService {
     const taskUpdateStatus = cancelRequested
       ? "pending"
       : args.state === "COMPLETED"
-      ? "completed"
-      : args.state === "RUNNING"
-        ? "in_progress"
-        : "pending";
+        ? "completed"
+        : args.state === "RUNNING"
+          ? "in_progress"
+          : "pending";
 
     const nextDispatch = this.executionRepository.updateTaskDispatch(dispatch.id, {
-      connectionId: connection.id,
+      connectionId: args.connectionId ?? dispatch.connectionId ?? null,
       status: this.mapTaskRunStateToDispatchStatus(args.state, cancelRequested),
       startedAt: dispatch.startedAt || now,
       finishedAt: args.state === "RUNNING" ? dispatch.finishedAt : now,
@@ -190,7 +248,7 @@ export class WorkerTaskDispatchService {
     });
 
     this.executionRepository.updateTaskRun(taskRun.id, {
-      connectionId: connection.id,
+      connectionId: args.connectionId ?? taskRun.connectionId ?? null,
       provider: args.provider === undefined ? taskRun.provider : args.provider,
       mode: "mcp_worker",
       sessionId: args.sessionId === undefined ? taskRun.sessionId : args.sessionId,
@@ -209,10 +267,12 @@ export class WorkerTaskDispatchService {
       status: taskUpdateStatus,
     });
 
-    this.executionRepository.appendTaskRunEvent(taskRun.id, this.mapTaskRunStateToEventType(args.state, cancelRequested), "connection", {
+    this.executionRepository.appendTaskRunEvent(taskRun.id, this.mapTaskRunStateToEventType(args.state, cancelRequested), args.connectionId ? "connection" : "system", {
       dispatchId: dispatch.id,
-      connectionId: connection.id,
-      connectionKey: connection.connectionKey,
+      connectionId: args.connectionId ?? null,
+      connectionKey: args.connectionKey ?? null,
+      workerEndpointId: workerEndpoint.id,
+      workerEndpointKey: workerEndpoint.endpointKey,
       provider: args.provider ?? taskRun.provider,
       sessionId: args.sessionId ?? taskRun.sessionId,
       sessionName: args.sessionName ?? taskRun.sessionName,
@@ -229,9 +289,12 @@ export class WorkerTaskDispatchService {
         leaseToken: args.leaseToken,
         expiresAt: this.createLeaseExpiry(),
       });
-      this.connectionChatRepository.touchConnectionHeartbeat(connection.id, "connected");
+      if (args.connectionId) {
+        this.connectionChatRepository.touchConnectionHeartbeat(args.connectionId, "connected");
+      }
       this.logger?.debug("Worker heartbeat updated", {
-        connectionKey: connection.connectionKey,
+        connectionKey: args.connectionKey ?? null,
+        workerEndpointId: workerEndpoint.id,
         dispatchId: dispatch.id,
         state: args.state,
       });
@@ -277,9 +340,12 @@ export class WorkerTaskDispatchService {
     if (nextDispatch.sprintRunId) {
       this.executionRepository.finalizeSprintRunCancellationIfIdle(nextDispatch.sprintRunId);
     }
-    this.connectionChatRepository.touchConnectionHeartbeat(connection.id, "listening");
+    if (args.connectionId) {
+      this.connectionChatRepository.touchConnectionHeartbeat(args.connectionId, "listening");
+    }
     this.logger?.info("Worker finished task dispatch", {
-      connectionKey: connection.connectionKey,
+      connectionKey: args.connectionKey ?? null,
+      workerEndpointId: workerEndpoint.id,
       dispatchId: dispatch.id,
       state: args.state,
     });
@@ -305,6 +371,14 @@ export class WorkerTaskDispatchService {
       throw new Error(`Worker ${connectionKey} cannot execute task dispatches.`);
     }
     return { connection, workerEndpoint };
+  }
+
+  private requireWorkerEndpoint(workerEndpointId: string): NonNullable<ReturnType<WorkerEndpointRepository["getWorkerEndpoint"]>> {
+    const workerEndpoint = this.workerEndpointRepository.getWorkerEndpoint(workerEndpointId);
+    if (!workerEndpoint) {
+      throw new Error(`Worker endpoint not found: ${workerEndpointId}.`);
+    }
+    return workerEndpoint;
   }
 
   private resolveProjectIds(

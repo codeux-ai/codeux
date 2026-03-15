@@ -3,6 +3,8 @@ import { CommandResult, runStreamingCommand } from "../../../services/cli-proces
 import { IDockerRunner } from "./docker-runner.js";
 import { isDockerWorkspaceMountError } from "../../../services/cli-docker-utils.js";
 import * as fs from "fs/promises";
+import * as path from "path";
+import { getRepoSprintOsPath } from "../../../shared/config/sprint-os-paths.js";
 
 export type ProviderCommandSpec = (model: string, prompt: string) => { command: string; args: string[] };
 
@@ -39,6 +41,19 @@ export interface IProviderRunner {
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
   }): Promise<CommandResult>;
+  runProviderForText(input: {
+    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+    prompt: string;
+    cwd: string;
+    model: string;
+    apiKey: string;
+    sessionId: string;
+    workflowSettings: CliWorkflowSettings;
+    repoPath: string;
+    githubToken?: string;
+    signal?: AbortSignal;
+    onActivity: (desc: string, originator?: string) => void;
+  }): Promise<CommandResult & { text: string }>;
 }
 
 export class ProviderRunner implements IProviderRunner {
@@ -57,10 +72,69 @@ export class ProviderRunner implements IProviderRunner {
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
   }): Promise<CommandResult> {
+    return await this.runProviderInternal(input);
+  }
+
+  async runProviderForText(input: {
+    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+    prompt: string;
+    cwd: string;
+    model: string;
+    apiKey: string;
+    sessionId: string;
+    workflowSettings: CliWorkflowSettings;
+    repoPath: string;
+    githubToken?: string;
+    signal?: AbortSignal;
+    onActivity: (desc: string, originator?: string) => void;
+  }): Promise<CommandResult & { text: string }> {
+    const outputPath = input.provider === "codex"
+      ? path.join(getRepoSprintOsPath(input.repoPath, "tmp"), `provider-last-message-${input.sessionId}.txt`)
+      : null;
+
+    if (outputPath) {
+      await fs.mkdir(path.dirname(outputPath), { recursive: true });
+    }
+
+    try {
+      const result = await this.runProviderInternal({
+        ...input,
+        codexOutputPath: outputPath,
+      });
+
+      const capturedText = outputPath
+        ? (await fs.readFile(outputPath, "utf8").catch(() => "")).trim()
+        : "";
+
+      return {
+        ...result,
+        text: capturedText || result.stdout || result.stderr,
+      };
+    } finally {
+      if (outputPath) {
+        await fs.rm(outputPath, { force: true }).catch(() => undefined);
+      }
+    }
+  }
+
+  private async runProviderInternal(input: {
+    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+    prompt: string;
+    cwd: string;
+    model: string;
+    apiKey: string;
+    sessionId: string;
+    workflowSettings: CliWorkflowSettings;
+    repoPath: string;
+    githubToken?: string;
+    signal?: AbortSignal;
+    onActivity: (desc: string, originator?: string) => void;
+    codexOutputPath?: string | null;
+  }): Promise<CommandResult> {
     const { provider, prompt, cwd, model, apiKey, sessionId, workflowSettings, repoPath, githubToken, signal, onActivity } = input;
     const providerEnv = this.withProviderEnv(provider, model, apiKey, workflowSettings, githubToken);
 
-    const spec = providerSpecs[provider](model, prompt);
+    const spec = this.buildCommandSpec(provider, model, prompt, input.codexOutputPath);
     const { command, args } = spec;
 
     const runCmd = async () => {
@@ -88,6 +162,24 @@ export class ProviderRunner implements IProviderRunner {
       result = await runCmd();
     }
     return result;
+  }
+
+  private buildCommandSpec(
+    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">,
+    model: string,
+    prompt: string,
+    codexOutputPath?: string | null,
+  ): { command: string; args: string[] } {
+    if (provider === "codex" && codexOutputPath) {
+      const args = ["exec", "--yolo", "--output-last-message", codexOutputPath];
+      if (model && model !== "default") {
+        args.push("--model", model);
+      }
+      args.push(prompt);
+      return { command: "codex", args };
+    }
+
+    return providerSpecs[provider](model, prompt);
   }
 
   private withProviderEnv(

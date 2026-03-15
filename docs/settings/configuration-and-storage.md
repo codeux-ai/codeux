@@ -156,6 +156,16 @@ The effective endpoints return:
   - `containerCodexAuthPath` (default `~/.codex`)
   - `containerClaudeCodeAuthPath` (default `~/.claude`)
 
+`workers` contains:
+- `executionMode` (default `CONNECTED_MCP`)
+  - `CONNECTED_MCP`: worker-owned dispatches and attention are routed only to connected MCP workers
+  - `VIRTUAL`: Sprint OS spins up an internal one-shot CLI worker when worker work exists, handles one planning request, task dispatch, or worker-owned attention item, then tears it down
+- `virtualWorkerProvider` (default `codex`)
+  - allowed values: `gemini`, `codex`, `claude-code`
+  - used only when `executionMode = VIRTUAL`
+  - Jules is intentionally excluded from worker mode; virtual workers are CLI-only
+- In the dashboard, these controls are exposed in the active v2 settings page under `Sprint Engine -> Worker Runtime`
+
 `sprintLoopSteps` also includes:
 - `watchLoopIntervalSeconds` (default `120`, clamped to `1..3600`)
 - `watchLoopOutputIntervalSeconds` (default `300`, clamped to `60..3600`): max watch-loop runtime before returning an in-progress status and rerun instruction
@@ -164,7 +174,7 @@ The effective endpoints return:
 - `enableLivePrMonitoring` (default `true`): controls live PR/CI monitoring gates in sprint loop (`REMOTE` mode only; auto-disabled in `LOCAL` mode).
 - `resolveMainMergeConflicts` (default `false`): when enabled, a `feature -> main` PR in `DIRTY` merge state opens a worker-owned `merge_conflict` attention item with repo path, working-directory hint, conflicting branches, PR metadata, sprint context, and merged task prompts already present on the feature branch.
 - `resolveMergeConflicts` (default `false`): when enabled, feature PRs in `DIRTY` merge state open a dedicated worker-owned `merge_conflict` attention item instead of a generic merge-required item. The payload includes repo path, working directory hint, source/target branches, PR details, the current task prompt, and merged task prompts already on the feature branch so the connected worker can resolve the conflict with full context.
-- worker-owned merge conflicts do not end the watch loop as manual merge work anymore; Sprint OS keeps the loop alive while the connected worker is expected to handle the conflict, and the dashboard no longer projects those worker-owned conflict items as human intervention.
+- worker-owned merge conflicts do not end the watch loop as manual merge work anymore; Sprint OS keeps the loop alive while the selected worker runtime is expected to handle the conflict, and the dashboard no longer projects those worker-owned conflict items as human intervention.
 - `waitForJulesCiAutofix` (default `false`): when enabled with feature-branch CI gating, completed tasks stay in work status while feature PR checks are pending/failed so Jules can apply CI autofix before merge.
 - `julesCiAutofixMaxRetries` (default `3`, clamped to `0..20`): max Jules CI autofix notify attempts before escalation to intervention (`FULL -> AGENT`, `SEMI_AUTO/ALWAYS_ASK -> HUMAN`) with explicit task IDs, PR links, and failed check names.
 - `featurePrAutoMergeMode` (default `"OFF"`):
@@ -198,6 +208,13 @@ Repository demo script:
   - Runtime syncs only Claude auth artifacts into container home before launch (`~/.claude/.credentials.json` and `~/.claude.json`) instead of recursively copying the full `.claude` state tree.
   - GitHub sync still copies directory contents into a fixed destination (`~/.config/gh`); Gemini now avoids recursive state copy so concurrent Docker sessions do not race on shared `.gemini/tmp` output files.
   - Provider auth mounts are controlled per credential type. When a Docker auth mount is enabled, the matching API key/token is no longer injected into the container environment.
+
+Worker runtime notes:
+- connected MCP workers remain the default worker mode
+- virtual workers create ephemeral `worker_endpoints` rows with `endpoint_type = virtual_cli`
+- virtual workers do not create MCP connection rows, so the connection tab remains MCP-only
+- startup now prunes orphaned virtual worker endpoints before new virtual cycles begin
+- sprint planning and prompt improvement also honor worker mode, so `VIRTUAL` projects can plan without any live MCP listener
 
 ## Default Values
 

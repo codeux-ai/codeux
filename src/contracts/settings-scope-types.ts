@@ -9,6 +9,7 @@ import type {
   ProviderId,
   SkillToggle,
   ThinkingMode,
+  WorkerSettings,
 } from "./app-types.js";
 
 export interface ProjectProviderSettings {
@@ -40,6 +41,7 @@ export interface ProjectSettings {
   ciIntelligence: CiIntelligenceSettings;
   sprintLoopSteps: DashboardSettings["sprintLoopSteps"];
   cliWorkflow: CliWorkflowSettings;
+  workers: WorkerSettings;
   agents: AgentSettings;
   skills: SkillToggle[];
 }

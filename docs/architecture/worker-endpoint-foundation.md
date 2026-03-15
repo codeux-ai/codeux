@@ -12,6 +12,7 @@ The current system still executes real worker traffic through MCP connections, b
 This gives the backend a stable worker abstraction that can later support:
 
 - MCP-connected workers
+- server-managed virtual CLI workers
 - hosted API workers
 - Ollama-backed workers
 
@@ -24,6 +25,12 @@ Implemented on March 12, 2026:
 - added `WorkerEndpointRepository`
 - synchronized MCP worker registrations into `worker_endpoints`
 - made worker dispatch claims require a worker endpoint with `canExecuteTasks = true`
+
+Extended on March 15, 2026:
+
+- added ephemeral `virtual_cli` worker endpoints
+- added create/update/delete lifecycle helpers for non-MCP endpoints
+- virtual worker startup now prunes orphaned `virtual_cli` endpoints from previous runs
 
 Primary files:
 
@@ -76,6 +83,14 @@ Current MCP capability overrides:
 - `workerCanExecuteTasks: false`
 
 This allows the system to distinguish supervision-only workers from workers that may claim `mcp_worker` task dispatches.
+
+Virtual worker defaults:
+
+- `endpointType = virtual_cli`
+- `transport = internal`
+- `canSuperviseProjects = true`
+- `canExecuteTasks = true`
+- endpoints are deleted when the one-shot virtual cycle completes
 
 ## Current Limitation
 

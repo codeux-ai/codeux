@@ -1,28 +1,43 @@
 import { ProjectAttentionRepository, type OpenProjectAttentionItemInput } from "../../repositories/project-attention-repository.js";
 import { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
 import type { ProjectAttentionItemRecord, ProjectAttentionOwnerType, ProjectAttentionType } from "../../contracts/project-attention-types.js";
+import type { WorkerExecutionMode } from "../../contracts/app-types.js";
 
 function isAssignableWorkerStatus(status: string | null | undefined): boolean {
   return status !== null && status !== "stale" && status !== "offline";
 }
 
 export class ProjectAttentionService {
+  private onWorkerAttentionOpenedCallback?: (projectId: string) => void;
+
   constructor(
     private readonly projectAttentionRepository: ProjectAttentionRepository,
     private readonly projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository,
+    private readonly resolveWorkerExecutionMode: (projectId: string, sprintId?: string | null) => WorkerExecutionMode = () => "CONNECTED_MCP",
   ) {}
+
+  setWorkerAttentionOpenedCallback(callback: ((projectId: string) => void) | undefined): void {
+    this.onWorkerAttentionOpenedCallback = callback;
+  }
 
   openItem(input: OpenProjectAttentionItemInput & { preferredWorkerEndpointId?: string | null }): ProjectAttentionItemRecord {
     const assignedWorkerEndpointId = this.resolveAssignedWorkerEndpointId(
       input.projectId,
+      input.sprintId ?? null,
       input.ownerType,
       input.preferredWorkerEndpointId,
     );
 
-    return this.projectAttentionRepository.openOrRefreshItem({
+    const item = this.projectAttentionRepository.openOrRefreshItem({
       ...input,
       assignedWorkerEndpointId,
     });
+
+    if (input.ownerType === "worker" && item.status === "open") {
+      this.onWorkerAttentionOpenedCallback?.(input.projectId);
+    }
+
+    return item;
   }
 
   resolveItemsForDispatch(dispatchId: string, reason?: string): number {
@@ -120,10 +135,14 @@ export class ProjectAttentionService {
 
   private resolveAssignedWorkerEndpointId(
     projectId: string,
+    sprintId: string | null | undefined,
     ownerType: ProjectAttentionOwnerType,
     preferredWorkerEndpointId?: string | null,
   ): string | null {
     if (ownerType !== "worker") {
+      return null;
+    }
+    if (this.resolveWorkerExecutionMode(projectId, sprintId) === "VIRTUAL") {
       return null;
     }
     const assignments = this.projectWorkerAssignmentRepository.listAssignmentsForProject(projectId, {

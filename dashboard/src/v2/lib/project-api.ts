@@ -77,7 +77,7 @@ export const createSprint = async (projectId: string, input: CreateSprintInput):
 export const improveSprintPrompt = async (
   projectId: string,
   input: { name: string; goal: string },
-): Promise<{ goal: string; threadId: string; agentId: string; workerConnectionId: string }> => {
+): Promise<{ goal: string; threadId: string; agentId: string; workerConnectionId: string | null }> => {
   return fetchJson(`/api/projects/${encodeURIComponent(projectId)}/planning/improve-sprint-prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

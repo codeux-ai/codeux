@@ -28,6 +28,7 @@ export class SprintTaskDispatchService {
     private readonly executionRepository: ExecutionRepository,
     private readonly projectManagementRepository: ProjectManagementRepository,
     private readonly taskService: TaskService,
+    private readonly onWorkerDispatchQueued?: (projectId: string) => void,
     private readonly logger?: Logger,
   ) {}
 
@@ -85,6 +86,7 @@ export class SprintTaskDispatchService {
     });
 
     if (executorType === "mcp_worker") {
+      this.onWorkerDispatchQueued?.(args.projectId);
       return {
         id: dispatch.id,
         name: `dispatches/${dispatch.id}`,

@@ -55,6 +55,7 @@ describe("validateSettingsPayload", () => {
       ciIntelligence: "invalid",
       sprintLoopSteps: "invalid",
       cliWorkflow: "invalid",
+      workers: "invalid",
       agents: "invalid",
       skills: "invalid",
       mcpTools: "invalid",
@@ -70,6 +71,7 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("ciIntelligence");
     expect(paths).toContain("sprintLoopSteps");
     expect(paths).toContain("cliWorkflow");
+    expect(paths).toContain("workers");
     expect(paths).toContain("agents");
     expect(paths).toContain("skills");
     expect(paths).toContain("mcpTools");
@@ -162,6 +164,10 @@ describe("validateSettingsPayload", () => {
         containerCodexAuthPath: 5,
         containerClaudeCodeAuthPath: 6,
       },
+      workers: {
+        executionMode: "bad",
+        virtualWorkerProvider: "jules",
+      },
       agents: {
         saveToProjectDirectory: "bad",
       },
@@ -193,6 +199,8 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("cliWorkflow.executionMode");
     expect(paths).toContain("cliWorkflow.containerCacheSetupScriptImage");
     expect(paths).toContain("cliWorkflow.containerClaudeCodeAuthPath");
+    expect(paths).toContain("workers.executionMode");
+    expect(paths).toContain("workers.virtualWorkerProvider");
     expect(paths).toContain("agents.saveToProjectDirectory");
     expect(paths).toContain("agents.instructionTemplates");
     expect(paths).toContain("skills[0]");

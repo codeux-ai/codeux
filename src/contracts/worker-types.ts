@@ -1,4 +1,4 @@
-export type WorkerEndpointType = "mcp_connection" | "hosted_api" | "ollama";
+export type WorkerEndpointType = "mcp_connection" | "virtual_cli" | "hosted_api" | "ollama";
 export type WorkerEndpointStatus = "configured" | "connected" | "idle" | "paused" | "stale" | "offline";
 export type ProjectWorkerAssignmentRole = "primary" | "overflow";
 export type ProjectWorkerAssignmentStatus = "active" | "released";

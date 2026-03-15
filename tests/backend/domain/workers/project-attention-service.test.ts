@@ -26,6 +26,7 @@ async function createFixture() {
     connectionRepository: new ConnectionChatRepository(storage, undefined, workerEndpointRepository),
     workerEndpointRepository,
     projectWorkerAssignmentRepository,
+    projectAttentionRepository,
     projectAttentionService: new ProjectAttentionService(
       projectAttentionRepository,
       projectWorkerAssignmentRepository,
@@ -95,5 +96,46 @@ describe("ProjectAttentionService", () => {
     });
 
     expect(item.assignedWorkerEndpointId).toBe(liveEndpoint.id);
+  });
+
+  it("leaves worker-owned attention unassigned when the project uses virtual workers", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionRepository,
+    } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Virtual Worker Attention Project",
+      sourceType: "local",
+      sourceRef: "/workspace/virtual-worker-attention-project",
+    });
+    const worker = connectionRepository.startListen({
+      connectionKey: "virtual-worker-connected",
+      displayName: "Connected Worker",
+      role: "worker",
+      projectId: project.id,
+    });
+    const workerEndpoint = workerEndpointRepository.getWorkerEndpointByConnectionId(worker.connection.id)!;
+    projectWorkerAssignmentRepository.createAssignment(project.id, workerEndpoint, "primary");
+
+    const projectAttentionService = new ProjectAttentionService(
+      projectAttentionRepository,
+      projectWorkerAssignmentRepository,
+      () => "VIRTUAL",
+    );
+
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      preferredWorkerEndpointId: workerEndpoint.id,
+      title: "Merge conflict for T6",
+      summaryMarkdown: "Should stay unassigned for the virtual worker runtime.",
+    });
+
+    expect(item.assignedWorkerEndpointId).toBeNull();
   });
 });

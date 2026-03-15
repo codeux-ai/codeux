@@ -35,6 +35,11 @@ export function createMcpDependencies(
     agentPresetSyncService,
   } = coreDeps;
   const { taskService } = sprintDeps;
+  const resolveWorkerExecutionMode = (projectId: string, sprintId?: string | null) => (
+    sprintId
+      ? coreDeps.settingsRepository.resolveSprintDashboardSettings(projectId, sprintId).settings.workers.executionMode
+      : coreDeps.settingsRepository.resolveProjectDashboardSettings(projectId).settings.workers.executionMode
+  );
   const workerTaskDispatchService = new WorkerTaskDispatchService(
     executionRepository,
     projectManagementRepository,
@@ -43,6 +48,7 @@ export function createMcpDependencies(
     projectWorkerAssignmentService,
     projectAttentionService,
     () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
+    resolveWorkerExecutionMode,
     logger.child({ component: "worker-task-dispatch-service" }),
   );
 
@@ -73,7 +79,9 @@ export function createMcpDependencies(
       coreDeps.projectWorkerAssignmentRepository,
       coreDeps.projectAttentionRepository,
       executionRepository,
+      resolveWorkerExecutionMode,
     ),
+    resolveWorkerExecutionMode,
     logger: logger.child({ component: "core-tool-handler" }),
   });
 

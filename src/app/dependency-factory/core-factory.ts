@@ -72,6 +72,11 @@ export function createCoreDependencies(
   const settingsRepository = new SettingsRepository(undefined, externalSettingsHints);
   const dashboardSettings = settingsRepository.getDefaultDashboardSettings();
   context.runtimeContext.dashboardSettings = dashboardSettings;
+  const resolveWorkerExecutionMode = (projectId: string, sprintId?: string | null) => (
+    sprintId
+      ? settingsRepository.resolveSprintDashboardSettings(projectId, sprintId).settings.workers.executionMode
+      : settingsRepository.resolveProjectDashboardSettings(projectId).settings.workers.executionMode
+  );
 
   const logFilePath = dashboardSettings.enableDebugLogFile
     ? getRepoDebugLogPath(options.projectRoot)
@@ -121,6 +126,7 @@ export function createCoreDependencies(
   const projectAttentionService = new ProjectAttentionService(
     projectAttentionRepository,
     projectWorkerAssignmentRepository,
+    resolveWorkerExecutionMode,
   );
   const connectionChatRepository = new ConnectionChatRepository(
     appDbStorage,
