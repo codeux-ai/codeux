@@ -130,6 +130,7 @@ When CI intelligence sees a feature PR in `DIRTY` merge state and `ciIntelligenc
 - feature PR auto-merge failures now also promote into the same worker-owned `merge_conflict` path when the merge command reports a real merge conflict, even if the last PR snapshot had not yet surfaced `DIRTY`
 - the watch loop now also trusts the active worker-owned `merge_conflict` queue directly, so an already-open conflict item cannot regress into `no further action possible` if one cycle returns incomplete merge classification
 - assignment for these conflict items now uses effective heartbeat status, not just persisted worker status, so a dead primary worker cannot keep conflict items pinned away from the live connected worker
+- the same watch-loop guard now applies to any open or claimed worker-owned attention item, not just merge conflicts, so worker-managed `action_required` and `worker_dispatch_blocked` states no longer collapse into the generic `manual_attention` sprint pause while the worker still has actionable supervision work
 
 When the main merge PR (`feature -> default`) is in `DIRTY` state and `ciIntelligence.resolveMainMergeConflicts` is enabled:
 

@@ -150,20 +150,23 @@ export class WatchLoopRunner {
 
       const runningTasks = subtasks.filter((task) => task.status === "RUNNING");
       const readyTasks = subtasks.filter((task) => task.status === "PENDING");
-      const activeWorkerMergeConflictAttention = typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
-        ? this.deps.projectAttentionService.listActiveProjectItems(scopedExecutionContext.project.id).some((item) => (
-          item.attentionType === "merge_conflict" && item.ownerType === "worker"
+      const activeWorkerAttentionItems = typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
+        ? this.deps.projectAttentionService.listActiveProjectItems(scopedExecutionContext.project.id).filter((item) => (
+          item.ownerType === "worker" && (item.status === "open" || item.status === "claimed")
         ))
-        : false;
+        : [];
+      const activeWorkerMergeConflictAttention = activeWorkerAttentionItems.some((item) => item.attentionType === "merge_conflict");
 
       const allTerminal = subtasks.length > 0 && subtasks.every(
         (task) => (task.status === "COMPLETED" && task.is_merged) || task.status === "FAILED"
       );
       const noMoreActionPossible = runningTasks.length === 0 && readyTasks.length === 0;
       const needsManualMerge = manualMergeTasks.length > 0;
-      const waitingOnWorkerMergeConflict = workerEscalatedMergeConflictTasks.length > 0 || activeWorkerMergeConflictAttention;
+      const waitingOnWorkerAttention = workerEscalatedMergeConflictTasks.length > 0
+        || activeWorkerMergeConflictAttention
+        || activeWorkerAttentionItems.length > 0;
 
-      allFinished = allTerminal || needsManualMerge || (noMoreActionPossible && !waitingOnWorkerMergeConflict);
+      allFinished = allTerminal || needsManualMerge || (noMoreActionPossible && !waitingOnWorkerAttention);
       const elapsedMs = Date.now() - checkpointWindowStartedAt;
       const outputIntervalReached = elapsedMs >= watchLoopOutputIntervalMs;
 
