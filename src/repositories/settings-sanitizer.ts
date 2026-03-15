@@ -11,6 +11,7 @@ import { sanitizeGit } from "../domain/settings/settings-sanitizers/git-sanitize
 import { sanitizeCiIntelligence } from "../domain/settings/settings-sanitizers/ci-sanitizer.js";
 import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/sprint-loop-sanitizer.js";
 import { sanitizeCliWorkflow } from "../domain/settings/settings-sanitizers/cli-workflow-sanitizer.js";
+import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
 import {
   DEFAULT_DASHBOARD_SETTINGS,
   DEFAULT_SKILLS,
@@ -109,6 +110,9 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   cliWorkflow: {
     ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow,
   },
+  workers: {
+    ...DEFAULT_DASHBOARD_SETTINGS.workers,
+  },
   agents: {
     saveToProjectDirectory: DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
     instructionTemplates: { ...DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates },
@@ -152,6 +156,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const ciIntelligence = sanitizeCiIntelligence(input, git.githubMode);
   const sprintLoopSteps = sanitizeSprintLoopSteps(input);
   const cliWorkflow = sanitizeCliWorkflow(input);
+  const workers = sanitizeWorkers(input);
   const agentsInput = (input.agents && typeof input.agents === "object")
     ? input.agents as Partial<DashboardSettings["agents"]>
     : {};
@@ -183,6 +188,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     ciIntelligence,
     sprintLoopSteps,
     cliWorkflow,
+    workers,
     agents,
     skills: normalizedSkills,
     mcpTools,

@@ -1094,6 +1094,42 @@ export const SettingsPage: FunctionComponent = () => {
           </Row>
         </SectionCard>
 
+        <SectionCard title="Worker Runtime" watermark="WRK" badge={getBadge("workers")}>
+          <Row label="Worker execution mode" description="Choose whether worker-owned dispatches and supervision run through connected MCP listeners or a short-lived internal virtual worker.">
+            <SelectInput
+              value={editableSettings.workers.executionMode}
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                workers: {
+                  ...current.workers,
+                  executionMode: value as ProjectSettings["workers"]["executionMode"],
+                },
+              }))}
+              options={[
+                { value: "CONNECTED_MCP", label: "Connected MCP" },
+                { value: "VIRTUAL", label: "Virtual on-demand" },
+              ]}
+            />
+          </Row>
+          <Row label="Virtual worker CLI" description="Preferred CLI provider for virtual workers. They start only when worker work exists, handle one cycle, then shut down. Jules is intentionally excluded." last>
+            <SelectInput
+              value={editableSettings.workers.virtualWorkerProvider}
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                workers: {
+                  ...current.workers,
+                  virtualWorkerProvider: value as ProjectSettings["workers"]["virtualWorkerProvider"],
+                },
+              }))}
+              options={[
+                { value: "gemini", label: "Gemini" },
+                { value: "codex", label: "Codex" },
+                { value: "claude-code", label: "Claude Code" },
+              ]}
+            />
+          </Row>
+        </SectionCard>
+
         <SectionCard title="Execution Pipeline" watermark="RUN" badge={getBadge("sprintLoopSteps")}>
           <Row label="Branch preflight" description="Verify branch state before the orchestration loop starts." >
             <Toggle value={editableSettings.sprintLoopSteps.branchPreflight} onChange={() => updateEditableSettings((current) => ({

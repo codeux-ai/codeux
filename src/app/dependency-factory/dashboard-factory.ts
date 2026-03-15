@@ -26,6 +26,7 @@ export function createDashboardDependencies(
     projectAttentionService,
     agentPresetSyncService,
     executionRepository,
+    settingsRepository,
     julesApi,
     activeDispatchRegistry,
   } = coreDeps;
@@ -140,6 +141,7 @@ export function createDashboardDependencies(
   const planningAgentService = new PlanningAgentService({
     projectManagementRepository,
     connectionChatRepository,
+    settingsRepository,
     agentPresetSyncService,
     executionControlService,
     logger: logger.child({ component: "planning-agent-service" }),

@@ -8,7 +8,9 @@ import type {
   FeaturePrAutoMergeMode,
   ProviderSettings,
   SkillToggle,
-  McpToolToggle
+  McpToolToggle,
+  VirtualWorkerProvider,
+  WorkerExecutionMode,
 } from "../../contracts/app-types.js";
 import {
   PROVIDER_IDS,
@@ -16,6 +18,8 @@ import {
   PROVIDER_STRATEGIES,
   CLI_EXECUTION_MODES,
   FEATURE_PR_AUTOMERGE_MODES,
+  VIRTUAL_WORKER_PROVIDERS,
+  WORKER_EXECUTION_MODES,
 } from "../../repositories/settings-defaults.js";
 import { INSTRUCTION_TEMPLATE_IDS } from "../../instructions/instruction-template-catalog.js";
 
@@ -209,6 +213,26 @@ const validateCliWorkflow = (
   if (typeof value.containerClaudeCodeAuthPath !== "string") issues.push({ path: `${path}.containerClaudeCodeAuthPath`, message: "Expected a string" });
 };
 
+const validateWorkers = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+) => {
+  if (!isRecord(value)) {
+    issues.push({ path, message: "Expected an object" });
+    return;
+  }
+  if (typeof value.executionMode !== "string" || !WORKER_EXECUTION_MODES.includes(value.executionMode as WorkerExecutionMode)) {
+    issues.push({ path: `${path}.executionMode`, message: `Expected one of: ${WORKER_EXECUTION_MODES.join(", ")}` });
+  }
+  if (
+    typeof value.virtualWorkerProvider !== "string"
+    || !VIRTUAL_WORKER_PROVIDERS.includes(value.virtualWorkerProvider as VirtualWorkerProvider)
+  ) {
+    issues.push({ path: `${path}.virtualWorkerProvider`, message: `Expected one of: ${VIRTUAL_WORKER_PROVIDERS.join(", ")}` });
+  }
+};
+
 const validateAgents = (
   value: unknown,
   path: string,
@@ -314,6 +338,7 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
   validateCiIntelligence(payload.ciIntelligence, "ciIntelligence", issues);
   validateSprintLoopSteps(payload.sprintLoopSteps, "sprintLoopSteps", issues);
   validateCliWorkflow(payload.cliWorkflow, "cliWorkflow", issues);
+  validateWorkers(payload.workers, "workers", issues);
   validateAgents(payload.agents, "agents", issues);
   validateSkills(payload.skills, "skills", issues);
   validateMcpTools(payload.mcpTools, "mcpTools", issues);

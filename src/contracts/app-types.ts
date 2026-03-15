@@ -51,6 +51,8 @@ export type ProviderStrategy = "MANUAL" | "WEIGHTED" | "ORCHESTRATOR";
 export type ThinkingMode = "SMALL" | "MEDIUM" | "HIGH";
 export type CliExecutionMode = "HOST" | "DOCKER";
 export type FeaturePrAutoMergeMode = "OFF" | "WHEN_GREEN" | "ALWAYS";
+export type WorkerExecutionMode = "CONNECTED_MCP" | "VIRTUAL";
+export type VirtualWorkerProvider = Exclude<ProviderId, "jules">;
 
 export interface Subtask {
   record_id?: string;
@@ -442,6 +444,11 @@ export interface CliWorkflowSettings {
   containerClaudeCodeAuthPath: string;
 }
 
+export interface WorkerSettings {
+  executionMode: WorkerExecutionMode;
+  virtualWorkerProvider: VirtualWorkerProvider;
+}
+
 export interface AgentSettings {
   saveToProjectDirectory: boolean;
   instructionTemplates: Record<InstructionTemplateId, string>;
@@ -469,6 +476,7 @@ export interface DashboardSettings {
   ciIntelligence: CiIntelligenceSettings;
   sprintLoopSteps: SprintLoopStepSettings;
   cliWorkflow: CliWorkflowSettings;
+  workers: WorkerSettings;
   agents: AgentSettings;
   skills: SkillToggle[];
   mcpTools: McpToolToggle[];

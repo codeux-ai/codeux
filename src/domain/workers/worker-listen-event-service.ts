@@ -10,6 +10,7 @@ import { ProjectAttentionRepository } from "../../repositories/project-attention
 import { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
 import { WorkerEndpointRepository } from "../../repositories/worker-endpoint-repository.js";
 import { ExecutionRepository } from "../../repositories/execution-repository.js";
+import type { WorkerExecutionMode } from "../../contracts/app-types.js";
 
 function makeCursor(updatedAt: string, id: string): string {
   return `${updatedAt}::${id}`;
@@ -31,6 +32,7 @@ export class WorkerListenEventService {
     private readonly projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository,
     private readonly projectAttentionRepository: ProjectAttentionRepository,
     private readonly executionRepository: ExecutionRepository,
+    private readonly resolveWorkerExecutionMode: (projectId: string, sprintId?: string | null) => WorkerExecutionMode = () => "CONNECTED_MCP",
   ) {}
 
   pullNextEvent(args: {
@@ -63,6 +65,9 @@ export class WorkerListenEventService {
     );
 
     for (const projectId of scopedProjectIds) {
+      if (this.resolveWorkerExecutionMode(projectId) !== "CONNECTED_MCP") {
+        continue;
+      }
       const event = this.pullAssignmentChangedEvent(workerEndpoint.id, projectId, bindings.get(projectId)?.lastAssignmentCursor || null);
       if (event) {
         this.connectionChatRepository.updateProjectBindingCursor(connection.id, projectId, {
@@ -77,6 +82,9 @@ export class WorkerListenEventService {
     }
 
     for (const projectId of scopedProjectIds) {
+      if (this.resolveWorkerExecutionMode(projectId) !== "CONNECTED_MCP") {
+        continue;
+      }
       const event = this.pullAttentionItemEvent(workerEndpoint.id, projectId, bindings.get(projectId)?.lastAttentionCursor || null);
       if (event) {
         this.connectionChatRepository.updateProjectBindingCursor(connection.id, projectId, {
@@ -145,6 +153,10 @@ export class WorkerListenEventService {
     projectId: string,
     _lastCursor: string | null,
   ): ListenAttentionItemEvent | null {
+    if (this.resolveWorkerExecutionMode(projectId) !== "CONNECTED_MCP") {
+      return null;
+    }
+
     const activeAssignments = this.projectWorkerAssignmentRepository.listAssignmentsForProject(projectId, {
       activeOnly: true,
     });
@@ -158,6 +170,7 @@ export class WorkerListenEventService {
       limit: 200,
     }).filter((candidate) => (
       candidate.ownerType === "worker"
+      && this.resolveWorkerExecutionMode(candidate.projectId, candidate.sprintId) === "CONNECTED_MCP"
       && (candidate.assignedWorkerEndpointId === workerEndpointId || candidate.assignedWorkerEndpointId === null)
     )).sort(compareCursor)[0];
 

@@ -5,6 +5,8 @@ import { CliWorkflowService } from "../../services/cli-workflow-service.js";
 import { TaskService } from "../../services/task-service.js";
 import { SprintExecutionStateService } from "../../services/sprint-execution-state-service.js";
 import { SprintTaskDispatchService } from "../../services/sprint-task-dispatch-service.js";
+import { WorkerTaskDispatchService } from "../../services/worker-task-dispatch-service.js";
+import { VirtualWorkerService } from "../../services/virtual-worker-service.js";
 import { SprintOrchestrator } from "../../sprint/sprint-orchestrator.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 
@@ -13,6 +15,7 @@ export interface SprintDependencies {
   taskService: TaskService;
   sprintExecutionStateService: SprintExecutionStateService;
   sprintTaskDispatchService: SprintTaskDispatchService;
+  virtualWorkerService: VirtualWorkerService;
   sprintOrchestrator: SprintOrchestrator;
 }
 
@@ -65,12 +68,45 @@ export function createSprintDependencies(
     executionRepository,
   );
 
+  const virtualWorkerService = new VirtualWorkerService({
+    settingsRepository: coreDeps.settingsRepository,
+    sessionTracking,
+    executionRepository,
+    projectManagementRepository,
+    workerEndpointRepository: coreDeps.workerEndpointRepository,
+    projectWorkerAssignmentRepository: coreDeps.projectWorkerAssignmentRepository,
+    projectWorkerAssignmentService: coreDeps.projectWorkerAssignmentService,
+    projectAttentionService,
+    workerTaskDispatchService: new WorkerTaskDispatchService(
+      executionRepository,
+      projectManagementRepository,
+      coreDeps.connectionChatRepository,
+      coreDeps.workerEndpointRepository,
+      coreDeps.projectWorkerAssignmentService,
+      projectAttentionService,
+      () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
+      (projectId, sprintId) => (
+        sprintId
+          ? coreDeps.settingsRepository.resolveSprintDashboardSettings(projectId, sprintId).settings.workers.executionMode
+          : coreDeps.settingsRepository.resolveProjectDashboardSettings(projectId).settings.workers.executionMode
+      ),
+      logger.child({ component: "virtual-worker-task-dispatch-service" }),
+    ),
+    cliWorkflowService,
+    logger: logger.child({ component: "virtual-worker-service" }),
+  });
+
   const sprintTaskDispatchService = new SprintTaskDispatchService(
     executionRepository,
     projectManagementRepository,
     taskService,
+    (projectId) => virtualWorkerService.scheduleProject(projectId, "worker_dispatch_queued"),
     logger.child({ component: "sprint-task-dispatch-service" }),
   );
+
+  projectAttentionService.setWorkerAttentionOpenedCallback((projectId) => {
+    virtualWorkerService.scheduleProject(projectId, "worker_attention_opened");
+  });
 
   const sprintOrchestrator = new SprintOrchestrator({
     settings: context.runtimeContext.settings,
@@ -113,6 +149,7 @@ export function createSprintDependencies(
     taskService,
     sprintExecutionStateService,
     sprintTaskDispatchService,
+    virtualWorkerService,
     sprintOrchestrator,
   };
 }

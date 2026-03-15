@@ -62,6 +62,9 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
   cliWorkflow: {
     ...settings.cliWorkflow,
   },
+  workers: {
+    ...settings.workers,
+  },
   agents: {
     saveToProjectDirectory: settings.agents.saveToProjectDirectory,
     instructionTemplates: { ...settings.agents.instructionTemplates },
@@ -95,6 +98,9 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
   },
   cliWorkflow: {
     ...settings.cliWorkflow,
+  },
+  workers: {
+    ...settings.workers,
   },
   agents: {
     saveToProjectDirectory: settings.agents.saveToProjectDirectory,

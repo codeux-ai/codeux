@@ -21,6 +21,7 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
   ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence },
   sprintLoopSteps: { ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps },
   cliWorkflow: { ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow },
+  workers: { ...DEFAULT_DASHBOARD_SETTINGS.workers },
   agents: {
     saveToProjectDirectory: DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
     instructionTemplates: { ...DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates },

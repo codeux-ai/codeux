@@ -20,6 +20,14 @@ export class ProjectWorkerAssignmentService {
     return this.upsertWorkerAssignment(projectId, workerEndpointId, false);
   }
 
+  releaseWorkerAssignment(projectId: string, workerEndpointId: string, releaseReason?: string): ProjectWorkerAssignmentRecord | null {
+    const current = this.projectWorkerAssignmentRepository.getActiveAssignment(projectId, workerEndpointId);
+    if (!current) {
+      return null;
+    }
+    return this.projectWorkerAssignmentRepository.releaseAssignment(current.id, releaseReason);
+  }
+
   private upsertWorkerAssignment(
     projectId: string,
     workerEndpointId: string,

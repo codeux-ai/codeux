@@ -42,6 +42,7 @@ import {
   updateSprint,
 } from "./lib/project-api.js";
 import { buildTaskBundle, parseTaskBundle } from "./lib/markdown-transfer.js";
+import { fetchProjectEffectiveSettings } from "./lib/settings-api.js";
 import { cancelSprintRun, orchestrateSprint } from "../lib/api/dashboard-api.js";
 import { getSprintHumanInterventionBySprintId } from "../lib/execution-intervention.js";
 
@@ -93,6 +94,11 @@ const CONNECTION_STATUS_PRIORITY: Record<string, number> = {
   stale: 4,
   offline: 5,
 };
+const VIRTUAL_PROVIDER_LABELS: Record<string, string> = {
+  gemini: "Virtual Gemini Worker",
+  codex: "Virtual Codex Worker",
+  "claude-code": "Virtual Claude Code Worker",
+};
 
 type SprintTableSortKey = "showcasePinned" | "sprintKey" | "name" | "status" | "tasksCount" | "completion" | "createdAt";
 type SprintTableSortDirection = "asc" | "desc";
@@ -130,6 +136,10 @@ export const SprintsPage: FunctionComponent = () => {
     tasksMarkdown: string;
   } | null>(null);
   const [overrideSprint, setOverrideSprint] = useState<Sprint | null>(null);
+  const [workerMode, setWorkerMode] = useState<null | {
+    executionMode: "CONNECTED_MCP" | "VIRTUAL";
+    virtualWorkerProvider: string;
+  }>(null);
   const [tableSort, setTableSort] = useState<{
     key: SprintTableSortKey;
     direction: SprintTableSortDirection;
@@ -158,6 +168,37 @@ export const SprintsPage: FunctionComponent = () => {
     }
     createStageRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [editingSprint, showCreateComposer]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!selectedProject) {
+      setWorkerMode(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void fetchProjectEffectiveSettings(selectedProject.id)
+      .then((response) => {
+        if (cancelled) {
+          return;
+        }
+        setWorkerMode({
+          executionMode: response.settings.workers.executionMode,
+          virtualWorkerProvider: response.settings.workers.virtualWorkerProvider,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setWorkerMode(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProject?.id]);
 
   useEffect(() => {
     if (!rowMenu) {
@@ -281,6 +322,27 @@ export const SprintsPage: FunctionComponent = () => {
         return compareString(left.displayName, right.displayName);
       })[0] || null
   ), [execution.connections]);
+
+  const planningRoute = useMemo(() => {
+    if (workerMode?.executionMode === "VIRTUAL") {
+      return {
+        available: true,
+        label: VIRTUAL_PROVIDER_LABELS[workerMode.virtualWorkerProvider] || "Virtual Worker",
+      };
+    }
+
+    if (planningConnection) {
+      return {
+        available: true,
+        label: planningConnection.displayName,
+      };
+    }
+
+    return {
+      available: false,
+      label: null,
+    };
+  }, [planningConnection, workerMode]);
 
   const tableSprints = useMemo(() => {
     const ordered = [...sortedSprints].sort((left, right) => {
@@ -617,12 +679,12 @@ export const SprintsPage: FunctionComponent = () => {
             </p>
             {selectedProject && (
               <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
-                planningConnection
+                planningRoute.available
                   ? "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 dark:text-signal-300"
                   : "border-status-red/20 bg-status-red/10 text-status-red"
               }`}>
                 <Radio className="h-3.5 w-3.5" strokeWidth={2.1} />
-                {planningConnection ? `Planning via ${planningConnection.displayName}` : "No planning listener available"}
+                {planningRoute.available ? `Planning via ${planningRoute.label}` : "No planning worker available"}
               </div>
             )}
           </div>
@@ -754,7 +816,7 @@ export const SprintsPage: FunctionComponent = () => {
                   <SprintComposer
                     nextId={nextId}
                     initialSprint={editingSprint}
-                    planningConnectionLabel={planningConnection?.displayName || null}
+                    planningRouteLabel={planningRoute.label}
                     onClose={() => {
                       setShowCreateComposer(false);
                       setEditingSprint(null);

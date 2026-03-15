@@ -45,6 +45,7 @@ async function createFixture() {
   );
 
   return {
+    storage,
     projectRepository,
     connectionRepository,
     executionRepository,
@@ -168,6 +169,85 @@ describe("WorkerTaskDispatchService", () => {
     });
 
     expect(executionRepository.getLease("task_dispatch", dispatch.id)).toBeNull();
+  });
+
+  it("does not let connected workers claim dispatches on virtual-worker projects", async () => {
+    const { storage, projectRepository, connectionRepository, executionRepository } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Virtual Worker Mode Project",
+      sourceType: "local",
+      sourceRef: "/workspace/virtual-worker-mode",
+      defaultBranch: "main",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Virtual Worker Sprint",
+      number: 7,
+      featureBranch: "feature/sprint-7",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Reserved for virtual worker",
+      promptMarkdown: "A connected worker should not claim this dispatch.",
+      executorType: "mcp_worker",
+      priority: "high",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mcp_worker",
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "mcp_worker",
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      mode: "mcp_worker",
+      state: "RUNNING",
+      startedAt: "2026-03-09T10:00:00.000Z",
+    });
+    connectionRepository.upsertConnection({
+      connectionKey: "worker-virtual-mode-1",
+      displayName: "Worker Virtual Mode 1",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+
+    const gatedWorkerService = new WorkerTaskDispatchService(
+      executionRepository,
+      projectRepository,
+      connectionRepository,
+      new WorkerEndpointRepository(storage),
+      new ProjectWorkerAssignmentService(
+        new ProjectWorkerAssignmentRepository(storage),
+        new WorkerEndpointRepository(storage),
+      ),
+      new ProjectAttentionService(
+        new ProjectAttentionRepository(storage),
+        new ProjectWorkerAssignmentRepository(storage),
+      ),
+      () => DEFAULT_DASHBOARD_SETTINGS,
+      () => "VIRTUAL",
+    );
+
+    const claim = gatedWorkerService.pullNextDispatch({
+      connectionKey: "worker-virtual-mode-1",
+      projectId: project.id,
+    });
+
+    expect(claim).toBeNull();
+    expect(executionRepository.getTaskDispatch(dispatch.id)?.status).toBe("queued");
   });
 
   it("prefers the worker's sticky project affinity when listening across multiple projects", async () => {

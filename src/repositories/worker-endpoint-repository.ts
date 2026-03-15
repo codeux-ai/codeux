@@ -78,6 +78,112 @@ export class WorkerEndpointRepository {
     return row ? this.mapRow(row) : null;
   }
 
+  getWorkerEndpointByKey(endpointKey: string): WorkerEndpointRecord | null {
+    const row = this.db.prepare(`
+      SELECT *
+      FROM worker_endpoints
+      WHERE endpoint_key = ?
+    `).get(endpointKey) as WorkerEndpointRow | undefined;
+
+    return row ? this.mapRow(row) : null;
+  }
+
+  createVirtualEndpoint(input: {
+    endpointKey: string;
+    displayName: string;
+    status?: WorkerEndpointStatus;
+    transport?: string | null;
+    capabilities?: Partial<WorkerEndpointCapabilities>;
+  }): WorkerEndpointRecord {
+    const now = new Date().toISOString();
+    const id = randomUUID();
+    const capabilities = {
+      ...DEFAULT_WORKER_ENDPOINT_CAPABILITIES,
+      ...(input.capabilities || {}),
+    };
+
+    this.db.prepare(`
+      INSERT INTO worker_endpoints (
+        id,
+        endpoint_key,
+        endpoint_type,
+        display_name,
+        status,
+        connection_id,
+        connection_key,
+        transport,
+        capabilities_json,
+        last_heartbeat_at,
+        created_at,
+        updated_at
+      ) VALUES (?, ?, 'virtual_cli', ?, ?, NULL, NULL, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      input.endpointKey,
+      input.displayName,
+      input.status || "connected",
+      input.transport ?? "internal",
+      JSON.stringify(capabilities),
+      now,
+      now,
+      now,
+    );
+
+    return this.requireWorkerEndpoint(id);
+  }
+
+  updateWorkerEndpoint(endpointId: string, updates: {
+    displayName?: string;
+    status?: WorkerEndpointStatus;
+    transport?: string | null;
+    capabilities?: Partial<WorkerEndpointCapabilities>;
+    lastHeartbeatAt?: string | null;
+  }): WorkerEndpointRecord {
+    const current = this.requireWorkerEndpoint(endpointId);
+    const nextCapabilities = updates.capabilities
+      ? {
+        ...current.capabilities,
+        ...updates.capabilities,
+      }
+      : current.capabilities;
+    const now = new Date().toISOString();
+
+    this.db.prepare(`
+      UPDATE worker_endpoints
+      SET display_name = ?,
+          status = ?,
+          transport = ?,
+          capabilities_json = ?,
+          last_heartbeat_at = ?,
+          updated_at = ?
+      WHERE id = ?
+    `).run(
+      updates.displayName ?? current.displayName,
+      updates.status ?? current.status,
+      updates.transport === undefined ? current.transport : updates.transport,
+      JSON.stringify(nextCapabilities),
+      updates.lastHeartbeatAt === undefined ? current.lastHeartbeatAt : updates.lastHeartbeatAt,
+      now,
+      endpointId,
+    );
+
+    return this.requireWorkerEndpoint(endpointId);
+  }
+
+  touchWorkerEndpointHeartbeat(endpointId: string, status?: WorkerEndpointStatus): WorkerEndpointRecord {
+    return this.updateWorkerEndpoint(endpointId, {
+      status,
+      lastHeartbeatAt: new Date().toISOString(),
+    });
+  }
+
+  deleteWorkerEndpoint(endpointId: string): void {
+    this.db.prepare(`
+      DELETE FROM worker_endpoints
+      WHERE id = ?
+    `).run(endpointId);
+  }
+
   upsertMcpConnectionEndpoint(connection: McpConnectionRecord): WorkerEndpointRecord | null {
     if (connection.role !== "worker") {
       this.deleteByConnectionId(connection.id);
@@ -136,6 +242,14 @@ export class WorkerEndpointRepository {
       DELETE FROM worker_endpoints
       WHERE connection_id = ?
     `).run(connectionId);
+  }
+
+  private requireWorkerEndpoint(endpointId: string): WorkerEndpointRecord {
+    const endpoint = this.getWorkerEndpoint(endpointId);
+    if (!endpoint) {
+      throw new Error(`Worker endpoint not found: ${endpointId}`);
+    }
+    return endpoint;
   }
 
   private mapRow(row: WorkerEndpointRow): WorkerEndpointRecord {

@@ -22,6 +22,7 @@ import type { WorkerEndpointRepository } from "../repositories/worker-endpoint-r
 import type { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
 import type { WorkerAttentionOutcomeService } from "../domain/workers/worker-attention-outcome-service.js";
 import type { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
+import type { WorkerExecutionMode } from "../contracts/app-types.js";
 
 interface CoreToolHandlerDependencies {
   julesApi: JulesApiClient;
@@ -41,6 +42,7 @@ interface CoreToolHandlerDependencies {
   workerAttentionOutcomeService?: WorkerAttentionOutcomeService;
   workerTaskDispatchService: WorkerTaskDispatchService;
   workerListenEventService?: WorkerListenEventService;
+  resolveWorkerExecutionMode?: (projectId: string, sprintId?: string | null) => WorkerExecutionMode;
   logger?: Logger;
 }
 
@@ -445,6 +447,9 @@ export class CoreToolHandler {
     ) || [];
 
     for (const projectId of projectIds.map((value) => String(value || "").trim()).filter(Boolean)) {
+      if (this.deps.resolveWorkerExecutionMode?.(projectId) === "VIRTUAL") {
+        continue;
+      }
       this.deps.projectWorkerAssignmentService.ensureWorkerAssignment(projectId, workerEndpoint.id);
     }
   }

@@ -22,7 +22,7 @@ interface SprintDraftInput {
 interface SprintComposerProps {
   nextId: string;
   initialSprint?: Sprint | null;
-  planningConnectionLabel?: string | null;
+  planningRouteLabel?: string | null;
   onClose: () => void;
   onImprovePrompt?: (draft: SprintDraftInput) => Promise<string>;
   onSubmit: (payload: SprintDraftInput & { submitMode: SprintSubmitMode }) => Promise<void> | void;
@@ -57,7 +57,7 @@ const CREATE_MODES: Array<{
 export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   nextId,
   initialSprint = null,
-  planningConnectionLabel = null,
+  planningRouteLabel = null,
   onClose,
   onImprovePrompt,
   onSubmit,
@@ -188,12 +188,12 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
               <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Planning Route</div>
               <div className={`mt-2 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
-                planningConnectionLabel
+                planningRouteLabel
                   ? "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 dark:text-signal-300"
                   : "border-status-red/20 bg-status-red/10 text-status-red"
               }`}>
                 <Sparkles className="h-3.5 w-3.5" strokeWidth={2.2} />
-                {planningConnectionLabel ? planningConnectionLabel : "Unavailable"}
+                {planningRouteLabel ? planningRouteLabel : "Unavailable"}
               </div>
             </div>
           </div>

@@ -9,6 +9,7 @@ import { ConnectionChatRepository } from "../../../src/repositories/connection-c
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
 import { AgentPresetSyncService } from "../../../src/services/agent-preset-sync-service.js";
 import { PlanningAgentService } from "../../../src/services/planning-agent-service.js";
+import type { IProviderRunner } from "../../../src/infrastructure/providers/cli/provider-runner.js";
 
 const tempDirs: string[] = [];
 
@@ -48,6 +49,7 @@ describe("PlanningAgentService", () => {
     const service = new PlanningAgentService({
       projectManagementRepository: projectRepository,
       connectionChatRepository: connectionRepository,
+      settingsRepository,
       agentPresetSyncService: syncService,
       executionControlService: executionControlService as any,
     });
@@ -162,6 +164,7 @@ describe("PlanningAgentService", () => {
     const service = new PlanningAgentService({
       projectManagementRepository: projectRepository,
       connectionChatRepository: connectionRepository,
+      settingsRepository,
       agentPresetSyncService: syncService,
       executionControlService: {
         orchestrateSprint: vi.fn(async () => ({ ok: true })),
@@ -207,5 +210,217 @@ describe("PlanningAgentService", () => {
     });
 
     expect(improved.goal).toBe("Improved by listener connection.");
+  });
+
+  it("plans through a virtual worker when the project worker mode is virtual", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-virtual-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      "Turn sprint goals into concrete executable tasks.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const connectionRepository = new ConnectionChatRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+    const executionControlService = {
+      orchestrateSprint: vi.fn(async () => ({ ok: true })),
+    } as const;
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          stdout: "",
+          stderr: "",
+          code: 0,
+          signal: null,
+          text: '{"goal":"Virtual worker improved sprint prompt."}',
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          stdout: "",
+          stderr: "",
+          code: 0,
+          signal: null,
+          text: JSON.stringify({
+            goal: "Virtual worker improved sprint prompt.",
+            tasks: [
+              {
+                key: "TASK-1",
+                title: "Plan via virtual worker",
+                description: "Ensure planning runs without a connected MCP listener.",
+                promptMarkdown: "Use the virtual worker runtime to produce sprint tasks.",
+                priority: "medium",
+                executorType: "auto",
+                dependsOn: [],
+              },
+            ],
+          }),
+        }),
+    };
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: executionControlService as any,
+      providerRunner,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Virtual Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Virtual Planning Sprint",
+      goal: "Plan with no live MCP worker attached.",
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: {
+        executionMode: "VIRTUAL",
+        virtualWorkerProvider: "codex",
+      },
+    });
+
+    const improved = await service.improveSprintPrompt(project.id, {
+      name: sprint.name,
+      goal: sprint.goal,
+    });
+    expect(improved.goal).toBe("Virtual worker improved sprint prompt.");
+    expect(improved.workerConnectionId).toBeNull();
+
+    const planned = await service.planSprint(project.id, sprint.id, { autoStart: true });
+    expect(planned.createdTaskIds).toHaveLength(1);
+    expect(executionControlService.orchestrateSprint).toHaveBeenCalledWith(project.id, sprint.id);
+
+    expect(providerRunner.runProviderForText).toHaveBeenCalledTimes(2);
+    const createdTasks = projectRepository.listTasks(project.id, sprint.id);
+    expect(createdTasks).toHaveLength(1);
+    expect(createdTasks[0]?.title).toBe("Plan via virtual worker");
+  });
+
+  it("accepts loose virtual planning JSON with prose, subtasks, prompt, and dependencies fields", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-loose-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      "Turn sprint goals into concrete executable tasks.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const connectionRepository = new ConnectionChatRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          stdout: "",
+          stderr: "",
+          code: 0,
+          signal: null,
+          text: 'Here is the refined prompt:\n```json\n{"goal":"Loose improved prompt"}\n```',
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          stdout: "",
+          stderr: "",
+          code: 0,
+          signal: null,
+          text: [
+            "Planned sprint:",
+            "{",
+            '  "goal": "Loose improved prompt",',
+            '  "subtasks": [',
+            "    {",
+            '      "id": "TASK-1",',
+            '      "name": "First task",',
+            '      "description": "Setup work",',
+            '      "prompt": "Perform the setup work",',
+            '      "priority": "HIGH",',
+            '      "executorType": "AUTO"',
+            "    },",
+            "    {",
+            '      "id": "TASK-2",',
+            '      "name": "Second task",',
+            '      "instructions": "Finish the follow-up work",',
+            '      "dependencies": ["TASK-1"],',
+            '      "executorType": "MCP_WORKER"',
+            "    }",
+            "  ]",
+            "}",
+          ].join("\n"),
+        }),
+    };
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: {
+        orchestrateSprint: vi.fn(async () => ({ ok: true })),
+      } as any,
+      providerRunner,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Loose Virtual Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Loose Planning Sprint",
+      goal: "Plan from permissive JSON.",
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: {
+        executionMode: "VIRTUAL",
+        virtualWorkerProvider: "gemini",
+      },
+    });
+
+    const improved = await service.improveSprintPrompt(project.id, {
+      name: sprint.name,
+      goal: sprint.goal,
+    });
+    expect(improved.goal).toBe("Loose improved prompt");
+
+    await service.planSprint(project.id, sprint.id, { autoStart: false });
+    const createdTasks = projectRepository.listTasks(project.id, sprint.id);
+    expect(createdTasks).toHaveLength(2);
+    expect(createdTasks[0]?.promptMarkdown).toBe("Perform the setup work");
+    expect(createdTasks[0]?.priority).toBe("high");
+    expect(createdTasks[1]?.executorType).toBe("mcp_worker");
+    expect(createdTasks[1]?.dependsOnTaskIds).toHaveLength(1);
   });
 });

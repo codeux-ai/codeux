@@ -58,6 +58,7 @@ import { bootDashboard } from "../app/lifecycle/dashboard-lifecycle-service.js";
 import { bootMcpHttpTransport, bootMcpTransport, type McpHttpTransportHandle } from "../app/lifecycle/mcp-lifecycle-service.js";
 import { getSprintSubtasksDir, SPRINT_OS_SERVICE_NAME } from "../shared/config/sprint-os-paths.js";
 import { SprintMarkdownService } from "../services/sprint-markdown-service.js";
+import { VirtualWorkerService } from "../services/virtual-worker-service.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -103,6 +104,7 @@ export class JulesAgentServer {
   private agentPresetSyncService: AgentPresetSyncService;
   private executionRepository: ExecutionRepository;
   private sprintMarkdownService: SprintMarkdownService;
+  private virtualWorkerService: VirtualWorkerService;
   private externalSettingsHints: ExternalSettingsHints;
   private instructionService: InstructionService;
   private sessionTracking: SessionTrackingRepository;
@@ -143,6 +145,7 @@ export class JulesAgentServer {
     this.agentPresetSyncService = deps.agentPresetSyncService;
     this.executionRepository = deps.executionRepository;
     this.sprintMarkdownService = deps.sprintMarkdownService;
+    this.virtualWorkerService = deps.virtualWorkerService;
     this.externalSettingsHints = deps.externalSettingsHints;
     this.instructionService = deps.instructionService;
     this.sessionTracking = deps.sessionTracking;
@@ -167,6 +170,7 @@ export class JulesAgentServer {
         await this.mcpHttpHandle.close().catch(() => undefined);
         this.mcpHttpHandle = null;
       }
+      this.virtualWorkerService.stop();
       await this.server.close();
       process.exit(0);
     });
@@ -648,5 +652,6 @@ export class JulesAgentServer {
     });
     this.mcpServiceBound = true;
     this.startRuntimeCleanupLoop();
+    this.virtualWorkerService.start();
   }
 }

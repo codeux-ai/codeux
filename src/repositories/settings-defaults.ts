@@ -6,6 +6,8 @@ import type {
   ProviderSettings,
   ProviderStrategy,
   SkillToggle,
+  VirtualWorkerProvider,
+  WorkerExecutionMode,
   ThinkingMode,
 } from "../contracts/app-types.js";
 import { DEFAULT_SPRINT_BRANCH_SCHEME } from "../git/sprint-branch-scheme.js";
@@ -31,6 +33,8 @@ export const THINKING_MODES: ThinkingMode[] = ["SMALL", "MEDIUM", "HIGH"];
 export const PROVIDER_STRATEGIES: ProviderStrategy[] = ["MANUAL", "WEIGHTED", "ORCHESTRATOR"];
 export const CLI_EXECUTION_MODES: CliExecutionMode[] = ["HOST", "DOCKER"];
 export const FEATURE_PR_AUTOMERGE_MODES: FeaturePrAutoMergeMode[] = ["OFF", "WHEN_GREEN", "ALWAYS"];
+export const WORKER_EXECUTION_MODES: WorkerExecutionMode[] = ["CONNECTED_MCP", "VIRTUAL"];
+export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code"];
 
 export const MIN_WATCH_LOOP_INTERVAL_SECONDS = 1;
 export const MAX_WATCH_LOOP_INTERVAL_SECONDS = 3600;
@@ -144,6 +148,10 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     containerGeminiAuthPath: "~/.gemini",
     containerCodexAuthPath: "~/.codex",
     containerClaudeCodeAuthPath: "~/.claude",
+  },
+  workers: {
+    executionMode: "CONNECTED_MCP",
+    virtualWorkerProvider: "codex",
   },
   agents: {
     saveToProjectDirectory: true,

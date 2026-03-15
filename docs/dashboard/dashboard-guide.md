@@ -198,6 +198,13 @@ Legacy runtime:
 - The execution runtime panel now also exposes the active attention queue, including worker claim, resolve, and dismiss controls for open project blockers
 - Live Session now shows a clear paused-for-human-intervention banner, repeats the reason/instructions in the hero state, and surfaces the same guidance inside paused sprint run cards
 - worker-owned merge conflicts are now excluded from that human-intervention projection; they remain visible in the attention queue and realtime runtime feed, but they no longer tell the operator to merge or resume while the worker is handling them
+- Worker mode is now explicit in settings:
+  - `Connected MCP` keeps worker dispatches and worker-owned attention on live MCP listeners
+  - `Virtual on-demand` hands that same work to short-lived internal CLI workers that do not create MCP connection rows
+- In the active v2 settings UI, these controls live under `Settings -> Sprint Engine -> Worker Runtime`
+- Sprint compose/planning also follows that same worker mode:
+  - with `Connected MCP`, the composer looks for a live planning worker/listener
+  - with `Virtual on-demand`, the composer shows the selected virtual worker route and planning works without any live MCP connection
 - that exclusion is now sticky while the worker-owned conflict item remains active, so transient PR metadata gaps no longer flip the same task back into a manual merge warning
 - the same suppression now applies to any active worker-owned supervision item, so agent-managed blocked dispatches and worker-owned action-required recovery no longer trigger the generic `Manual attention required` pause banner while the worker still has actionable queue work
 - merge conflicts are now first-class task indicators in the live UI, including dedicated task badges and a realtime `Conflicts` metric in the runtime stats row
