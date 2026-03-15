@@ -43,6 +43,11 @@ export const fetchRuntimeDashboardPayload = async (): Promise<RuntimeDashboardPa
   };
 };
 
+/** Single HTTP call returning both status + execution — used for fast initial load. */
+export const fetchLivePayload = async (): Promise<RuntimeDashboardPayload> => {
+  return fetchJson<RuntimeDashboardPayload>("/api/live");
+};
+
 export const fetchOverviewTelemetry = async (): Promise<OverviewTelemetrySnapshot> => {
   return fetchJson<OverviewTelemetrySnapshot>("/api/telemetry/overview");
 };

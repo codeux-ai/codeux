@@ -246,6 +246,14 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     res.json(options.getExecutionSnapshot());
   });
 
+  // Combined endpoint — single HTTP call for live page initial load
+  app.get("/api/live", (req, res) => {
+    res.json({
+      status: getStatus(),
+      execution: options.getExecutionSnapshot(),
+    });
+  });
+
   app.get("/api/telemetry/overview", (req, res) => {
     res.json(options.getOverviewTelemetrySnapshot());
   });

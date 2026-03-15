@@ -232,7 +232,7 @@ function resolveAttentionClaimWorkerEndpointId(
 export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
   const dashboardDir = `${deps.projectRoot}/dashboard`;
   const port = deps.getDashboardPort();
-  const PROJECT_EXECUTION_CACHE_TTL_MS = 250;
+  const PROJECT_EXECUTION_CACHE_TTL_MS = 2_000;
   const OVERVIEW_CACHE_TTL_MS = 500;
   const PROJECTS_CACHE_TTL_MS = 500;
 

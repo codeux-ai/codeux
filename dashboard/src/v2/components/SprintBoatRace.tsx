@@ -38,16 +38,15 @@ const getShipType = (task: Subtask, dispatches: ExecutionTaskDispatchSummary[]):
 // Checkpoints define confirmed positions along the course (0–1)
 const CP = {
     HARBOUR:    0.00,
-    DEPARTURE:  0.06,
-    BLOCKED:    0.04,
-    RUNNING:    0.50,   // target for running ships
-    COMPLETED:  0.54,
-    COMP_TARGET: 0.62,
-    CI:         0.66,
-    CI_TARGET:  0.76,
-    AUTOMERGE:  0.80,
-    AM_TARGET:  0.92,
-    MERGED:     0.95,
+    DEPARTURE:  0.04,
+    RUNNING:    0.25,   // target for running ships — 1/4 into the race
+    COMPLETED:  0.48,
+    COMP_TARGET: 0.56,
+    CI:         0.62,
+    CI_TARGET:  0.72,
+    AUTOMERGE:  0.78,
+    AM_TARGET:  0.90,
+    MERGED:     0.94,
     FINISH:     1.00,
 } as const;
 
@@ -63,7 +62,7 @@ interface ProgressTarget {
 const getProgressTarget = (task: Subtask): ProgressTarget => {
     switch (task.status) {
         case "PENDING":  return { confirmed: CP.HARBOUR, target: CP.HARBOUR, stopped: true };
-        case "BLOCKED":  return { confirmed: CP.BLOCKED, target: CP.BLOCKED, stopped: true };
+        case "BLOCKED":  return { confirmed: CP.HARBOUR, target: CP.HARBOUR, stopped: true };
         case "FAILED":   return { confirmed: CP.DEPARTURE + stableRand(task.id, 30) * 0.12, target: CP.DEPARTURE + stableRand(task.id, 30) * 0.12, stopped: true };
         case "RUNNING":  return { confirmed: CP.DEPARTURE, target: CP.RUNNING, stopped: false };
         case "COMPLETED": {
@@ -120,9 +119,12 @@ interface ShipDatum {
     task: Subtask;
     shipType: "container" | "wooden";
     progress: ProgressTarget;
-    laneY: number;
+    laneY: number;       // target lane Y (ships spread to this)
     style: StatusStyle;
 }
+
+// Center Y where all ships spawn before spreading
+const SPAWN_Y = (LANE_TOP + LANE_BOT) / 2;
 
 /* ─── SVG: Container Ship (enhanced) ─────────────────────────────────────── */
 
@@ -406,7 +408,7 @@ const HarbourBuilding: FunctionComponent<{ x: number; waitingCount: number }> = 
                 </text>
                 <text y={9} textAnchor="middle" fill="#FFB800" fontSize={4.5} fontFamily="monospace"
                     dominantBaseline="middle" opacity={0.5} letterSpacing="0.1em">
-                    QUEUED
+                    WAITING
                 </text>
             </g>
         )}
@@ -517,28 +519,36 @@ const WaveLayer: FunctionComponent<{
 
 export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispatches, hasLiveSprint }) => {
     const shipsGroupRef = useRef<SVGGElement>(null);
-    const animStateRef = useRef<Map<string, { currentProgress: number; lastTime: number }>>(new Map());
+    const animStateRef = useRef<Map<string, {
+        currentProgress: number;
+        currentY: number;       // animated Y (starts at SPAWN_Y, drifts to laneY)
+        lastTime: number;
+        yWobbleOffset: number;  // small random Y wobble for natural movement
+        yWobblePhase: number;   // phase of wobble oscillation
+    }>>(new Map());
     const tickerRef = useRef<(() => void) | null>(null);
     const bobTweensRef = useRef<gsap.core.Tween[]>([]);
 
-    /* ── Separate pending (harbour) vs active (on water) ─────────── */
+    /* ── Separate waiting (harbour) vs active (on water) ────────── */
     const { activeShips, harbourCount } = useMemo(() => {
         if (!hasLiveSprint || tasks.length === 0) return { activeShips: [] as ShipDatum[], harbourCount: 0 };
 
-        const pending = tasks.filter(t => t.status === "PENDING");
-        const active = tasks.filter(t => t.status !== "PENDING").slice(0, MAX_SHIPS);
+        // PENDING + BLOCKED = waiting in harbour
+        const waiting = tasks.filter(t => t.status === "PENDING" || t.status === "BLOCKED");
+        const active = tasks.filter(t => t.status !== "PENDING" && t.status !== "BLOCKED").slice(0, MAX_SHIPS);
 
+        // Dynamic lanes based on active ship count
         const count = active.length;
         const usable = LANE_BOT - LANE_TOP;
-        const laneH = Math.min(65, count > 0 ? usable / count : usable);
+        const laneH = count > 0 ? Math.min(75, usable / count) : usable;
         const totalH = laneH * count;
         const offsetY = LANE_TOP + (usable - totalH) / 2;
 
         const ships: ShipDatum[] = active.map((task, i) => {
             const progress = getProgressTarget(task);
             const style = getStyle(task);
-            // Add vertical jitter for natural look
-            const yJitter = (stableRand(task.id, 20) - 0.5) * laneH * 0.25;
+            // Subtle vertical jitter within lane for natural look
+            const yJitter = (stableRand(task.id, 20) - 0.5) * laneH * 0.2;
             return {
                 id: task.id,
                 task,
@@ -549,7 +559,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
             };
         });
 
-        return { activeShips: ships, harbourCount: pending.length };
+        return { activeShips: ships, harbourCount: waiting.length };
     }, [tasks, dispatches, hasLiveSprint]);
 
     /* ── Continuous Zeno's paradox animation via GSAP ticker ─────── */
@@ -569,17 +579,25 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
             const confirmed = ship.progress.confirmed;
 
             if (!state) {
-                // First appearance — start at harbour, animate out
-                const initial = confirmed > 0 ? confirmed * 0.3 : 0;
-                animStateRef.current.set(ship.id, { currentProgress: initial, lastTime: now });
-                const x = HARBOUR_X + 20 + initial * RACE_LEN;
-                gsap.set(el, { x, y: ship.laneY, opacity: 0, scale: 0.6 });
+                // First appearance — spawn at centre of start line
+                const initial = CP.DEPARTURE * 0.5;
+                // Small horizontal offset so ships don't stack perfectly
+                const spawnXOffset = (stableRand(ship.id, 40) - 0.5) * 0.02;
+                animStateRef.current.set(ship.id, {
+                    currentProgress: initial + spawnXOffset,
+                    currentY: SPAWN_Y + (stableRand(ship.id, 41) - 0.5) * 20, // cluster near center with slight spread
+                    lastTime: now,
+                    yWobbleOffset: (stableRand(ship.id, 42) - 0.5) * 6,
+                    yWobblePhase: stableRand(ship.id, 43) * Math.PI * 2,
+                });
+                const x = HARBOUR_X + 20 + (initial + spawnXOffset) * RACE_LEN;
+                gsap.set(el, { x, y: SPAWN_Y, opacity: 0, scale: 0.6 });
                 gsap.to(el, {
                     opacity: 1,
                     scale: 1,
-                    duration: 1.8,
+                    duration: 1.6,
                     ease: "power2.out",
-                    delay: i * 0.15,
+                    delay: i * 0.12,
                 });
                 return;
             }
@@ -587,23 +605,37 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
             const dt = now - state.lastTime;
             state.lastTime = now;
 
-            // Ensure current is at least at confirmed checkpoint
+            // ── X: Ensure current is at least at confirmed checkpoint
             if (state.currentProgress < confirmed) {
-                // Status advanced — boost forward smoothly
-                state.currentProgress = state.currentProgress + (confirmed - state.currentProgress) * 0.15;
+                state.currentProgress = state.currentProgress + (confirmed - state.currentProgress) * 0.12;
                 if (confirmed - state.currentProgress < 0.002) {
                     state.currentProgress = confirmed;
                 }
             }
 
-            // Zeno's paradox drift toward target
+            // ── X: Zeno's paradox drift toward target
             if (!ship.progress.stopped && Math.abs(target - state.currentProgress) > 0.0005) {
                 const decay = 1 - Math.pow(0.5, dt / HALF_LIFE_MS);
                 state.currentProgress += (target - state.currentProgress) * decay;
             }
 
+            // ── Y: Smoothly drift from current Y toward target lane
+            const targetY = ship.laneY;
+            const yDiff = targetY - state.currentY;
+            if (Math.abs(yDiff) > 0.5) {
+                // Smooth exponential approach with natural wobble
+                const yDecay = 1 - Math.pow(0.5, dt / 3000); // ~3s half-life for lane spreading
+                state.currentY += yDiff * yDecay;
+                // Add subtle sinusoidal wobble for natural curved paths
+                state.yWobblePhase += dt * 0.0008;
+                const wobble = Math.sin(state.yWobblePhase) * state.yWobbleOffset * Math.min(1, Math.abs(yDiff) / 30);
+                state.currentY += wobble * yDecay * 0.3;
+            } else {
+                state.currentY = targetY;
+            }
+
             const x = HARBOUR_X + 20 + state.currentProgress * RACE_LEN;
-            gsap.set(el, { x });
+            gsap.set(el, { x, y: state.currentY });
         });
     }, [activeShips]);
 
@@ -629,27 +661,8 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
         };
     }, [activeShips, updatePositions]);
 
-    /* ── Set Y positions (only when lineup changes) ──────────────── */
-    const shipIdLineup = useMemo(() => activeShips.map(s => `${s.id}:${s.laneY.toFixed(0)}`).join(","), [activeShips]);
-
-    useEffect(() => {
-        const group = shipsGroupRef.current;
-        if (!group || activeShips.length === 0) return;
-
-        const els = Array.from(group.querySelectorAll<SVGGElement>(".race-ship"));
-        els.forEach((el, i) => {
-            const ship = activeShips[i];
-            if (!ship) return;
-            gsap.to(el, {
-                y: ship.laneY,
-                duration: 2.0,
-                ease: "power2.inOut",
-                overwrite: false,
-            });
-        });
-    }, [shipIdLineup]);
-
     /* ── Bobbing & sway animation ────────────────────────────────── */
+    const shipIdLineup = useMemo(() => activeShips.map(s => s.id).join(","), [activeShips]);
     useEffect(() => {
         const group = shipsGroupRef.current;
         if (!group || activeShips.length === 0) return;
@@ -700,7 +713,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
 
     /* ─── Checkpoint buoy data ───────────────────────────────────── */
     const buoys = useMemo(() => [
-        { progress: CP.RUNNING, label: "RUNNING", color: "#00E0A0" },
+        { progress: CP.RUNNING, label: "CODING", color: "#00E0A0" },
         { progress: CP.COMPLETED, label: "DONE", color: "#00AB84" },
         { progress: CP.CI, label: "CI", color: "#5dade2" },
         { progress: CP.AUTOMERGE, label: "MERGE", color: "#FFB800" },
