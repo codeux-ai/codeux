@@ -178,7 +178,7 @@
     50%      { transform: skewX(-3deg); }
   }
 
-  /* Boat race container ambient glow */
+  /* Boat race container ambient glow (legacy) */
   .boat-race-container::before {
     content: "";
     position: absolute;
@@ -188,6 +188,18 @@
       radial-gradient(ellipse 80% 40% at 92% 50%, rgba(0, 224, 160, 0.06) 0%, transparent 60%);
     pointer-events: none;
     z-index: 1;
+  }
+
+  /* Boat race — edge-blending water effect */
+  .boat-race-bleed {
+    -webkit-mask-image:
+      linear-gradient(to right, transparent 0%, black 3%, black 97%, transparent 100%),
+      linear-gradient(to bottom, black 0%, black 85%, transparent 100%);
+    -webkit-mask-composite: destination-in;
+    mask-image:
+      linear-gradient(to right, transparent 0%, black 3%, black 97%, transparent 100%),
+      linear-gradient(to bottom, black 0%, black 85%, transparent 100%);
+    mask-composite: intersect;
   }
 
   /* View toggle glow underline */
