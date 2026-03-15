@@ -5,6 +5,7 @@ import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ConnectionChatRepository } from "../../../src/repositories/connection-chat-repository.js";
 import { DashboardRealtimeEventRepository } from "../../../src/repositories/dashboard-realtime-event-repository.js";
+import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { DashboardRealtimeService } from "../../../src/services/dashboard-realtime-service.js";
 import { createLogger } from "../../../src/shared/logging/logger.js";
@@ -205,12 +206,12 @@ describe("ConnectionChatRepository", () => {
       UPDATE mcp_connections
       SET last_heartbeat_at = ?
       WHERE id = ?
-    `).run(new Date(Date.now() - 11 * 60 * 1000).toISOString(), stale.connection.id);
+    `).run(new Date(Date.now() - 2 * 60 * 1000).toISOString(), stale.connection.id);
     storage.getDatabase().prepare(`
       UPDATE mcp_connections
       SET last_heartbeat_at = ?
       WHERE id = ?
-    `).run(new Date(Date.now() - 31 * 60 * 1000).toISOString(), offline.connection.id);
+    `).run(new Date(Date.now() - 4 * 60 * 1000).toISOString(), offline.connection.id);
 
     const connections = connectionRepository.listConnections(project.id);
     expect(connections.find((connection) => connection.id === listening.connection.id)?.status).toBe("listening");
@@ -253,6 +254,43 @@ describe("ConnectionChatRepository", () => {
     });
   });
 
+  it("preserves project binding cursors when a listener is re-registered on the same project scope", async () => {
+    const { projectRepository, connectionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Cursor Preserve Project",
+      sourceType: "local",
+      sourceRef: "/workspace/cursor-preserve-project",
+    });
+
+    const started = connectionRepository.startListen({
+      connectionKey: "listener-cursor-preserve",
+      displayName: "Cursor Preserve",
+      role: "worker",
+      projectId: project.id,
+    });
+
+    connectionRepository.updateProjectBindingCursor(started.connection.id, project.id, {
+      attentionCursor: "attention-cursor-1",
+      assignmentCursor: "assignment-cursor-1",
+    });
+
+    connectionRepository.startListen({
+      connectionKey: "listener-cursor-preserve",
+      displayName: "Cursor Preserve",
+      role: "worker",
+      projectId: project.id,
+    });
+
+    expect(connectionRepository.listProjectBindingStates(started.connection.id)).toEqual([
+      expect.objectContaining({
+        projectId: project.id,
+        isActive: true,
+        lastAttentionCursor: "attention-cursor-1",
+        lastAssignmentCursor: "assignment-cursor-1",
+      }),
+    ]);
+  });
+
   it("throttles connection heartbeat writes while a listener stays idle", async () => {
     const { storage, projectRepository, connectionRepository } = await createRepositories();
     const project = projectRepository.createProject({
@@ -271,20 +309,20 @@ describe("ConnectionChatRepository", () => {
     const before = connectionRepository.getConnection(started.connection.id);
     expect(before?.lastHeartbeatAt).toBe("2026-03-10T00:00:00.000Z");
 
-    vi.setSystemTime(new Date("2026-03-10T00:00:05.000Z"));
+    vi.setSystemTime(new Date("2026-03-10T00:00:04.000Z"));
     const throttled = connectionRepository.touchConnectionHeartbeat(started.connection.id, "listening");
     expect(throttled.lastHeartbeatAt).toBe("2026-03-10T00:00:00.000Z");
 
-    vi.setSystemTime(new Date("2026-03-10T00:00:20.000Z"));
+    vi.setSystemTime(new Date("2026-03-10T00:00:06.000Z"));
     const refreshed = connectionRepository.touchConnectionHeartbeat(started.connection.id, "listening");
-    expect(refreshed.lastHeartbeatAt).toBe("2026-03-10T00:00:20.000Z");
+    expect(refreshed.lastHeartbeatAt).toBe("2026-03-10T00:00:06.000Z");
 
     const stored = storage.getDatabase().prepare(`
       SELECT last_heartbeat_at
       FROM mcp_connections
       WHERE id = ?
     `).get(started.connection.id) as { last_heartbeat_at: string };
-    expect(stored.last_heartbeat_at).toBe("2026-03-10T00:00:20.000Z");
+    expect(stored.last_heartbeat_at).toBe("2026-03-10T00:00:06.000Z");
   });
 
   it("cleans up stale, offline, and long-dead connections", async () => {
@@ -319,17 +357,17 @@ describe("ConnectionChatRepository", () => {
       UPDATE mcp_connections
       SET last_heartbeat_at = ?
       WHERE id = ?
-    `).run(new Date(now.getTime() - 11 * 60 * 1000).toISOString(), stale.connection.id);
+    `).run(new Date(now.getTime() - 2 * 60 * 1000).toISOString(), stale.connection.id);
     storage.getDatabase().prepare(`
       UPDATE mcp_connections
       SET last_heartbeat_at = ?
       WHERE id = ?
-    `).run(new Date(now.getTime() - 31 * 60 * 1000).toISOString(), offline.connection.id);
+    `).run(new Date(now.getTime() - 4 * 60 * 1000).toISOString(), offline.connection.id);
     storage.getDatabase().prepare(`
       UPDATE mcp_connections
       SET status = 'offline', last_heartbeat_at = ?
       WHERE id = ?
-    `).run(new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000).toISOString(), prunable.connection.id);
+    `).run(new Date(now.getTime() - 4 * 60 * 1000).toISOString(), prunable.connection.id);
 
     const result = connectionRepository.cleanupConnectionLifecycle(now);
     expect(result.staleConnectionIds).toContain(stale.connection.id);
@@ -339,6 +377,72 @@ describe("ConnectionChatRepository", () => {
     expect(connectionRepository.getConnection(stale.connection.id)?.status).toBe("stale");
     expect(connectionRepository.getConnection(offline.connection.id)?.status).toBe("offline");
     expect(connectionRepository.getConnection(prunable.connection.id)).toBeNull();
+  });
+
+  it("prunes disconnected startup connections while keeping ones with active dispatches", async () => {
+    const { storage, projectRepository, connectionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Startup Prune Project",
+      sourceType: "local",
+      sourceRef: "/workspace/startup-prune-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      number: 1,
+      featureBranch: "feature/sprint-1",
+    });
+    const executionRepository = new ExecutionRepository(storage);
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      triggerType: "manual",
+      executorMode: "managed",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Task 1",
+      promptMarkdown: "Keep active worker attached",
+      status: "pending",
+      isIndependent: true,
+    });
+
+    const disconnected = connectionRepository.startListen({
+      connectionKey: "listener-startup-prune",
+      displayName: "Startup Prune",
+      role: "worker",
+      projectId: project.id,
+    });
+    const active = connectionRepository.startListen({
+      connectionKey: "listener-startup-keep",
+      displayName: "Startup Keep",
+      role: "worker",
+      projectId: project.id,
+    });
+
+    storage.getDatabase().prepare(`
+      INSERT INTO task_dispatches (
+        id, project_id, sprint_id, task_id, sprint_run_id, connection_id, executor_type, status, queued_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'worker', 'running', ?, ?, ?)
+    `).run(
+      "dispatch-1",
+      project.id,
+      sprint.id,
+      task.id,
+      sprintRun.id,
+      active.connection.id,
+      "2026-03-10T00:00:00.000Z",
+      "2026-03-10T00:00:00.000Z",
+      "2026-03-10T00:00:00.000Z",
+    );
+
+    const result = connectionRepository.pruneDisconnectedConnectionsOnStartup();
+
+    expect(result.prunedConnectionIds).toContain(disconnected.connection.id);
+    expect(result.prunedConnectionIds).not.toContain(active.connection.id);
+    expect(connectionRepository.getConnection(disconnected.connection.id)).toBeNull();
+    expect(connectionRepository.getConnection(active.connection.id)).not.toBeNull();
   });
 
   it("reassigns a thread and requeues pending dashboard messages", async () => {

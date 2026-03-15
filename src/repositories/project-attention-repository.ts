@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { AppDbStorage } from "./app-db-storage.js";
+import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
 import type {
   ProjectAttentionItemRecord,
   ProjectAttentionOwnerType,
@@ -89,7 +90,10 @@ export interface ResolveProjectAttentionItemInput {
 export class ProjectAttentionRepository {
   private readonly db: DatabaseSync;
 
-  constructor(storage: AppDbStorage = new AppDbStorage()) {
+  constructor(
+    storage: AppDbStorage = new AppDbStorage(),
+    private readonly realtimeNotifier?: DashboardRealtimeMutationNotifier,
+  ) {
     this.db = storage.getDatabase();
   }
 
@@ -149,7 +153,7 @@ export class ProjectAttentionRepository {
         now,
         existing.id,
       );
-      return this.requireItem(existing.id);
+      return this.requireAndNotifyItem(existing.id, input.projectId, true);
     }
 
     const id = randomUUID();
@@ -192,7 +196,7 @@ export class ProjectAttentionRepository {
       now,
     );
 
-    return this.requireItem(id);
+    return this.requireAndNotifyItem(id, input.projectId, true);
   }
 
   resolveAttentionItemsForDispatch(dispatchId: string, resolution: { status?: Extract<ProjectAttentionStatus, "resolved" | "dismissed" | "expired">; reason?: string }): number {
@@ -211,11 +215,11 @@ export class ProjectAttentionRepository {
     const { clause, params } = this.buildResolveFilter(filter);
     const now = new Date().toISOString();
     const rows = this.db.prepare(`
-      SELECT id
+      SELECT id, project_id
       FROM project_attention_items
       WHERE status IN ('open', 'claimed')
         ${clause}
-    `).all(...params) as Array<{ id: string }>;
+    `).all(...params) as Array<{ id: string; project_id: string }>;
 
     const status = resolution.status || "resolved";
     const statement = this.db.prepare(`
@@ -234,6 +238,9 @@ export class ProjectAttentionRepository {
       statement.run(status, now, now, resolution.reason ?? null, resolution.reason ?? null, row.id);
     }
 
+    for (const projectId of new Set(rows.map((row) => row.project_id).filter(Boolean))) {
+      this.notifyProjectRefresh(projectId, true);
+    }
     return rows.length;
   }
 
@@ -272,7 +279,7 @@ export class ProjectAttentionRepository {
       itemId,
     );
 
-    return this.requireItem(itemId);
+    return this.requireAndNotifyItem(itemId, current.projectId, true);
   }
 
   resolveAttentionItem(itemId: string, input: ResolveProjectAttentionItemInput): ProjectAttentionItemRecord {
@@ -306,7 +313,24 @@ export class ProjectAttentionRepository {
       itemId,
     );
 
-    return this.requireItem(itemId);
+    return this.requireAndNotifyItem(itemId, current.projectId, true);
+  }
+
+  private requireAndNotifyItem(itemId: string, projectId: string, includeOverview: boolean): ProjectAttentionItemRecord {
+    const item = this.requireItem(itemId);
+    this.notifyProjectRefresh(projectId, includeOverview);
+    return item;
+  }
+
+  private notifyProjectRefresh(projectId: string | undefined, includeOverview: boolean): void {
+    const normalizedProjectId = String(projectId || "").trim();
+    if (!normalizedProjectId) {
+      return;
+    }
+    this.realtimeNotifier?.scheduleProjectExecutionRefresh(normalizedProjectId, {
+      includeOverview,
+      includeProjects: false,
+    });
   }
 
   private buildResolveFilter(filter: ResolveProjectAttentionItemsFilter): { clause: string; params: Array<string | null> } {

@@ -217,14 +217,15 @@ export function bootDashboardRealtimeWebSocketServer(args: {
 
           const afterSequence = Math.max(0, Number(message.lastSequence ?? 0) || 0);
           if (afterSequence > 0 && validScopes.length > 0) {
-            const latestSequence = args.realtimeService.getLatestSequence();
+            const latestSequence = args.realtimeService.getLatestSequenceForScopes(validScopes);
+            const missedNonReplayableSnapshot = args.realtimeService.hasNonReplayableEventsSince(validScopes, afterSequence);
             const replayEvents = args.realtimeService.replay(validScopes, afterSequence, 200);
             const replayLastSequence = replayEvents[replayEvents.length - 1]?.sequence ?? afterSequence;
 
-            if (latestSequence !== null && replayLastSequence < latestSequence) {
+            if (missedNonReplayableSnapshot || (latestSequence !== null && replayLastSequence < latestSequence)) {
               sendJson(socket, {
                 type: "snapshot_required",
-                reason: "replay_window_exceeded",
+                reason: missedNonReplayableSnapshot ? "non_replayable_event_missed" : "replay_window_exceeded",
               });
             } else {
               for (const replayEvent of replayEvents) {

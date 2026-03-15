@@ -19,6 +19,13 @@ import type {
 } from "../contracts/connection-chat-types.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import { WorkerEndpointRepository } from "./worker-endpoint-repository.js";
+import {
+  deriveConnectionHeartbeatStatus,
+  HEARTBEAT_WRITE_INTERVAL_MS,
+  OFFLINE_CONNECTION_THRESHOLD_MS,
+  PRUNE_CONNECTION_THRESHOLD_MS,
+  STALE_CONNECTION_THRESHOLD_MS,
+} from "./connection-lifecycle.js";
 
 interface ConnectionRow {
   id: string;
@@ -44,6 +51,7 @@ interface BindingRow {
   is_active: number | string;
   last_attention_cursor: string | null;
   last_assignment_cursor: string | null;
+  created_at?: string | null;
 }
 
 export interface ConnectionProjectBindingState {
@@ -92,11 +100,6 @@ interface InboxRow extends MessageRow {
 }
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
-const HEARTBEAT_WRITE_INTERVAL_MS = 15 * 1000;
-const STALE_CONNECTION_THRESHOLD_MS = 10 * 60 * 1000;
-const OFFLINE_CONNECTION_THRESHOLD_MS = 30 * 60 * 1000;
-const PRUNE_CONNECTION_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
-
 export interface ConnectionLifecycleCleanupResult {
   staleConnectionIds: string[];
   offlineConnectionIds: string[];
@@ -241,6 +244,14 @@ export class ConnectionChatRepository {
     const connectionId = existing?.id || randomUUID();
     const normalizedProjectIds = this.normalizeProjectIds(input.projectIds);
     const activeProjectIds = this.normalizeActiveProjectIds(normalizedProjectIds, input.activeProjectIds);
+    const existingBindings = existing
+      ? this.db.prepare(`
+        SELECT connection_id, project_id, is_active, last_attention_cursor, last_assignment_cursor, created_at
+        FROM connection_project_bindings
+        WHERE connection_id = ?
+      `).all(connectionId) as unknown as BindingRow[]
+      : [];
+    const existingBindingsByProjectId = new Map(existingBindings.map((binding) => [binding.project_id, binding]));
 
     this.runInTransaction(() => {
       this.db.prepare(`DELETE FROM connection_project_bindings WHERE connection_id = ?`).run(connectionId);
@@ -288,10 +299,18 @@ export class ConnectionChatRepository {
             last_attention_cursor,
             last_assignment_cursor,
             created_at
-          ) VALUES (?, ?, ?, NULL, NULL, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?)
         `);
         for (const projectId of normalizedProjectIds) {
-          insertBinding.run(connectionId, projectId, Number(activeProjectIds.includes(projectId)), now);
+          const existingBinding = existingBindingsByProjectId.get(projectId);
+          insertBinding.run(
+            connectionId,
+            projectId,
+            Number(activeProjectIds.includes(projectId)),
+            existingBinding?.last_attention_cursor ?? null,
+            existingBinding?.last_assignment_cursor ?? null,
+            existingBinding?.created_at ?? now,
+          );
         }
       }
     });
@@ -588,6 +607,12 @@ export class ConnectionChatRepository {
       status: "listening",
       capabilities: {
         listenMode: true,
+        ...((input.role || "listener") === "worker"
+          ? {
+            workerCanSuperviseProjects: true,
+            workerCanExecuteTasks: true,
+          }
+          : {}),
         ...(input.capabilities || {}),
       },
       projectIds,
@@ -809,6 +834,9 @@ export class ConnectionChatRepository {
       }
 
       if (prunedRows.length > 0) {
+        for (const row of prunedRows) {
+          this.workerEndpointRepository.deleteByConnectionId(row.id);
+        }
         const statement = this.db.prepare(`
           DELETE FROM mcp_connections
           WHERE id = ?
@@ -836,6 +864,42 @@ export class ConnectionChatRepository {
       ...prunedProjectIds,
     ]);
     return result;
+  }
+
+  pruneDisconnectedConnectionsOnStartup(): { prunedConnectionIds: string[] } {
+    const rows = this.db.prepare(`
+      SELECT c.id
+      FROM mcp_connections c
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM task_dispatches td
+        WHERE td.connection_id = c.id
+          AND td.status IN ('claimed', 'running', 'cancel_requested')
+      )
+    `).all() as Array<{ id: string }>;
+
+    if (rows.length === 0) {
+      return { prunedConnectionIds: [] };
+    }
+
+    const prunedProjectIds = this.resolveProjectIdsForConnections(rows.map((row) => row.id));
+    this.runInTransaction(() => {
+      for (const row of rows) {
+        this.workerEndpointRepository.deleteByConnectionId(row.id);
+      }
+      const statement = this.db.prepare(`
+        DELETE FROM mcp_connections
+        WHERE id = ?
+      `);
+      for (const row of rows) {
+        statement.run(row.id);
+      }
+    });
+
+    this.notifyProjects(prunedProjectIds);
+    return {
+      prunedConnectionIds: rows.map((row) => row.id),
+    };
   }
 
   listProjectBindingStates(connectionId: string): ConnectionProjectBindingState[] {
@@ -928,18 +992,9 @@ export class ConnectionChatRepository {
     lastHeartbeatAt: string | null,
     activeDispatchCount: number,
   ): McpConnectionRecord["status"] {
-    if (!lastHeartbeatAt) {
-      return storedStatus;
-    }
-
-    const ageMs = Date.now() - new Date(lastHeartbeatAt).getTime();
-    if (Number.isFinite(ageMs)) {
-      if (ageMs >= OFFLINE_CONNECTION_THRESHOLD_MS) {
-        return "offline";
-      }
-      if (ageMs >= STALE_CONNECTION_THRESHOLD_MS) {
-        return "stale";
-      }
+    const heartbeatStatus = deriveConnectionHeartbeatStatus(storedStatus, lastHeartbeatAt);
+    if (heartbeatStatus === "offline" || heartbeatStatus === "stale") {
+      return heartbeatStatus;
     }
 
     if (activeDispatchCount > 0 && storedStatus !== "paused") {

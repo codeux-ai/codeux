@@ -480,6 +480,11 @@ describe("setupDashboardServer", () => {
         projects: [],
         selectedProjectId: null,
       }),
+      getProjectStatusSnapshot: () => ({
+        project_id: "project-1",
+        subtasks: [],
+        timestamp: "2026-03-10T00:00:00.000Z",
+      }),
       getProjectExecutionSnapshot: () => ({
         projectId: "project-1",
         projectName: "Project 1",
@@ -589,6 +594,11 @@ describe("setupDashboardServer", () => {
         projects: [],
         selectedProjectId: null,
       }),
+      getProjectStatusSnapshot: () => ({
+        project_id: "project-1",
+        subtasks: [],
+        timestamp: "2026-03-10T00:00:00.000Z",
+      }),
       getProjectExecutionSnapshot: () => ({
         projectId: "project-1",
         projectName: "Project 1",
@@ -664,6 +674,101 @@ describe("setupDashboardServer", () => {
       expect(snapshotRequired).toMatchObject({
         type: "snapshot_required",
         reason: "replay_window_exceeded",
+      });
+    } finally {
+      socket.close();
+    }
+  });
+
+  it("requires a snapshot when a client misses a live-only project snapshot event", async () => {
+    const app = express();
+    const realtimeService = await createRealtimeService();
+    const port = await getAvailablePort();
+    realtimeService.setSnapshotLoaders({
+      getProjectsSnapshot: () => ({
+        projects: [],
+        selectedProjectId: null,
+      }),
+      getProjectStatusSnapshot: () => ({
+        project_id: "project-1",
+        subtasks: [],
+        timestamp: "2026-03-10T00:00:00.000Z",
+      }),
+      getProjectExecutionSnapshot: () => ({
+        projectId: "project-1",
+        projectName: "Project 1",
+        sprintRuns: [],
+        taskDispatches: [],
+        connections: [],
+        primaryAssignedWorker: null,
+        overflowAssignedWorkers: [],
+        attentionItems: [],
+        recentEvents: [],
+        updatedAt: "2026-03-10T00:00:00.000Z",
+      }),
+      getOverviewTelemetrySnapshot: () => ({
+        activeProjects: [],
+        attentionProjects: [],
+        recentEvents: [],
+        updatedAt: "2026-03-10T00:00:00.000Z",
+      }),
+    });
+
+    const handle = await setupDashboardServer({
+      app,
+      dashboardDir: "dashboard",
+      port,
+      liveActivityCacheMs: 1000,
+      getStatus: () => ({ ok: true }),
+      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getLiveActivities: async () => ({}),
+      getGitStatus: async () => ({} as any),
+      getExternalSettingsHints: () => ({} as any),
+      ...buildSettingsServerOptions(),
+      listAgentPresets: () => [],
+      createAgentPreset: () => ({ id: "agent-1" } as any),
+      updateAgentPreset: () => ({ id: "agent-1" } as any),
+      deleteAgentPreset: () => {},
+      rerunTask: async () => ({ ok: true }),
+      orchestrateSprint: async () => ({ ok: true }),
+      pauseSprintRun: async () => ({ ok: true }),
+      cancelSprintRun: async () => ({ ok: true }),
+      forceCancelSprintRun: async () => ({ ok: true }),
+      cancelTaskDispatch: async () => ({ ok: true }),
+      forceCancelTaskDispatch: async () => ({ ok: true }),
+      retryTaskDispatch: async () => ({ ok: true }),
+      realtimeService,
+    });
+    serversToClose.push(handle.server);
+
+    realtimeService.publishRawEvent({
+      scopeType: "project",
+      scopeId: "project-1",
+      eventType: "project.runtime_status.updated",
+      entityType: "project_status",
+      entityId: "project-1",
+      projectId: "project-1",
+      payload: { project_id: "project-1", subtasks: [] },
+    });
+    realtimeService.scheduleProjectExecutionRefresh("project-1");
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    const socket = await openRealtimeSocket(handle.port);
+    try {
+      socket.send(JSON.stringify({
+        type: "set_subscriptions",
+        scopes: ["project:project-1"],
+        lastSequence: 1,
+      }));
+
+      const snapshotRequired = await waitForRealtimeMessage(socket, (message) => (
+        message.type === "snapshot_required"
+      ));
+      expect(snapshotRequired).toMatchObject({
+        type: "snapshot_required",
+        reason: "non_replayable_event_missed",
       });
     } finally {
       socket.close();

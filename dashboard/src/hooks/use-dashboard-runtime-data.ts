@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { computeStats } from "../lib/status.js";
 import { fetchGitTrackingStatus, fetchRuntimeDashboardPayload } from "../lib/api/dashboard-api.js";
 import type {
@@ -7,8 +7,12 @@ import type {
   GitTrackingStatus,
   DashboardRealtimeServerMessage,
 } from "../types.js";
-import { DEFAULT_POLL_INTERVAL_MS, useDashboardPollManager } from "./use-dashboard-poll-manager.js";
+import { useDashboardPollManager } from "./use-dashboard-poll-manager.js";
 import { subscribeToDashboardRealtime } from "../lib/realtime/dashboard-realtime-client.js";
+
+const RUNTIME_POLL_INTERVAL_MS = 5_000;
+const GIT_STATUS_POLL_INTERVAL_MS = 30_000;
+const REALTIME_GIT_REFRESH_DEBOUNCE_MS = 2_500;
 
 interface UseDashboardRuntimeDataResult {
   error: string | null;
@@ -39,6 +43,7 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
   const [error, setError] = useState<string | null>(null);
   const [gitStatus, setGitStatus] = useState<GitTrackingStatus | null>(null);
   const [gitStatusError, setGitStatusError] = useState<string | null>(null);
+  const gitRefreshTimerRef = useRef<number | null>(null);
 
   const refreshRuntimeStatusAction = useCallback(async (): Promise<void> => {
     try {
@@ -63,12 +68,36 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
     }
   }, []);
 
-  const unifiedPoll = useDashboardPollManager({
-    intervalMs: DEFAULT_POLL_INTERVAL_MS,
-    onPoll: [refreshRuntimeStatusAction, refreshGitStatusAction],
+  const scheduleGitStatusRefresh = useCallback((delayMs: number = REALTIME_GIT_REFRESH_DEBOUNCE_MS): void => {
+    if (gitRefreshTimerRef.current !== null) {
+      return;
+    }
+
+    gitRefreshTimerRef.current = window.setTimeout(() => {
+      gitRefreshTimerRef.current = null;
+      void refreshGitStatusAction().catch(() => undefined);
+    }, Math.max(0, delayMs));
+  }, [refreshGitStatusAction]);
+
+  useDashboardPollManager({
+    intervalMs: RUNTIME_POLL_INTERVAL_MS,
+    onPoll: [refreshRuntimeStatusAction],
+  });
+
+  useDashboardPollManager({
+    intervalMs: GIT_STATUS_POLL_INTERVAL_MS,
+    onPoll: [refreshGitStatusAction],
   });
 
   const realtimeProjectId = execution.projectId || status.project_id || null;
+
+  useEffect(() => {
+    return () => {
+      if (gitRefreshTimerRef.current !== null) {
+        window.clearTimeout(gitRefreshTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!realtimeProjectId) {
@@ -79,14 +108,28 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
       if (message.type === "event" && message.event.eventType === "project.execution.updated") {
         setExecution(message.event.payload as ExecutionDashboardSnapshot);
         setError(null);
+        scheduleGitStatusRefresh();
+        return;
+      }
+
+      if (message.type === "event" && message.event.eventType === "project.runtime_status.updated") {
+        setStatus(message.event.payload as DashboardStatus);
+        setError(null);
+        return;
+      }
+
+      if (message.type === "event" && message.event.eventType === "project.structure.updated") {
+        void refreshRuntimeStatusAction();
+        scheduleGitStatusRefresh();
         return;
       }
 
       if (message.type === "snapshot_required") {
         void refreshRuntimeStatusAction();
+        scheduleGitStatusRefresh(0);
       }
     });
-  }, [realtimeProjectId, refreshRuntimeStatusAction]);
+  }, [realtimeProjectId, refreshRuntimeStatusAction, scheduleGitStatusRefresh]);
 
   const tasksWithLiveActivities = useMemo(() => status.subtasks || [], [status.subtasks]);
 

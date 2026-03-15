@@ -8,17 +8,19 @@ describe("dashboard status helpers", () => {
       { id: "2", title: "b", prompt: "", depends_on: [], is_independent: true, status: "COMPLETED", is_merged: true, merge_indicator: "AUTOMERGE" },
       { id: "3", title: "c", prompt: "", depends_on: [], is_independent: true, status: "FAILED" },
       { id: "4", title: "d", prompt: "", depends_on: [], is_independent: true, status: "RUNNING", merge_indicator: "MERGE_BLOCKED" },
+      { id: "5", title: "e", prompt: "", depends_on: [], is_independent: true, status: "COMPLETED", merge_indicator: "MERGE_CONFLICT" },
     ]);
 
     expect(stats).toEqual({
-      total: 4,
+      total: 5,
       running: 2,
-      completed: 1,
+      completed: 2,
       failed: 1,
       ci: 1,
       automerge: 1,
       merged: 1,
       mergeBlocked: 1,
+      mergeConflicts: 1,
     });
   });
 

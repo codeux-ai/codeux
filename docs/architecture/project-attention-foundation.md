@@ -72,6 +72,12 @@ When an item is opened with `ownerType = worker`:
 - prefer the current primary assigned worker for the project
 - otherwise use an overflow assignment that can supervise projects
 - otherwise leave the item unassigned
+- a preferred worker endpoint is only kept when that endpoint is still effectively live; heartbeat-aged `stale` and `offline` workers are skipped immediately instead of waiting for a background cleanup rewrite
+
+Worker listen-mode supervision now backfills that assignment path:
+
+- when a worker enters `listen` for a project, Sprint OS ensures a project-worker assignment for that active project scope even if the worker has not claimed a task dispatch yet
+- this lets worker-owned items that were opened before any dispatch activity still reach the connected worker through `listen`
 
 This keeps the sticky-worker behavior intact without forcing a worker connection to be online at open time.
 
@@ -105,6 +111,32 @@ When the sprint protocol detects a completed task that still needs merge handlin
 - a task-scoped attention item opens with type `merge_required`
 - the payload includes `repoPath`, feature branch, worker branch, and PR URL context
 - owner routing stays with the assigned project worker
+
+### Merge-conflict escalation
+
+When CI intelligence sees a feature PR in `DIRTY` merge state and `ciIntelligence.resolveMergeConflicts` is enabled:
+
+- the protocol opens a task-scoped attention item with type `merge_conflict`
+- the item stays worker-owned so the connected worker receives it through `listen`
+- the payload includes:
+  - `repoPath` and `workingDirectoryHint`
+  - conflicting source and target branches
+  - PR number, URL, and merge-state metadata
+  - the current task key, title, and main prompt
+  - the prompts for merged tasks already present on the feature branch
+- generic `merge_required` attention for the same task is resolved automatically so the queue shows one clear conflict item
+- these worker-owned conflict items do not count as human merge protocol anymore, so the watch loop keeps running instead of pausing for operator merge work
+- once a worker-owned `merge_conflict` item exists for a task, the orchestrator keeps that routing sticky across later loops until the blocker clears; a stale or incomplete PR snapshot no longer downgrades the task back into manual `merge_required` pause flow
+- feature PR auto-merge failures now also promote into the same worker-owned `merge_conflict` path when the merge command reports a real merge conflict, even if the last PR snapshot had not yet surfaced `DIRTY`
+- the watch loop now also trusts the active worker-owned `merge_conflict` queue directly, so an already-open conflict item cannot regress into `no further action possible` if one cycle returns incomplete merge classification
+- assignment for these conflict items now uses effective heartbeat status, not just persisted worker status, so a dead primary worker cannot keep conflict items pinned away from the live connected worker
+- the same watch-loop guard now applies to any open or claimed worker-owned attention item, not just merge conflicts, so worker-managed `action_required` and `worker_dispatch_blocked` states no longer collapse into the generic `manual_attention` sprint pause while the worker still has actionable supervision work
+
+When the main merge PR (`feature -> default`) is in `DIRTY` state and `ciIntelligence.resolveMainMergeConflicts` is enabled:
+
+- the completion path opens a sprint-scoped worker-owned `merge_conflict` item
+- the payload includes `repoPath`, working-directory hint, conflicting branches, PR metadata, sprint identity, and merged task prompts already present on the feature branch
+- this keeps main-branch conflict handling on the connected worker instead of downgrading it into a dashboard/operator blocker by default
 
 ### Blocked action-required protocol tasks
 
@@ -173,7 +205,8 @@ Current worker runtime behavior:
 - the in-repo worker client now treats `attention_item` as actionable supervision work, not just a log event
 - when a worker receives an open worker-owned item, it immediately calls `claim_attention_item`
 - after claim, the worker now reports a structured outcome instead of holding the item indefinitely:
-  - `merge_required`, `action_required`, and `manual_attention` currently map to `needs_human_escalation`
+  - `merge_required`, `action_required`, and `manual_attention` currently map to escalation-style outcomes in the in-repo worker client
+  - `merge_conflict` is claimed and then left worker-owned so the conflict stays assigned to the connected worker instead of being immediately re-routed into human escalation
   - other current worker queue items map to `needs_dashboard_reply`
 - the worker keeps a local supervision map keyed by project so future `listen` calls carry the currently active supervised projects
 - assignment changes and claimed attention items now update that local project context, including `repoPath` and `workingDirectoryHint`
@@ -203,6 +236,7 @@ Current dashboard behavior:
 - claim prefers the item's current assigned worker endpoint
 - if the item is unassigned, claim falls back to the project's primary supervising worker, then overflow worker
 - resolved and dismissed items drop out of the active execution snapshot because the dashboard only shows `open` and `claimed` items
+- attention open/claim/resolve mutations now trigger a direct project execution realtime refresh, so the Live view updates immediately instead of waiting for adjacent execution events
 
 ## Current Limitation
 

@@ -9,6 +9,7 @@ interface ProtocolStepOptions {
   enableActionRequiredProtocol: boolean;
   isActionRequiredState: (state?: string) => boolean;
   renderInstruction: (templateId: InstructionTemplateId, variables: Record<string, unknown>) => Promise<string>;
+  isWorkerEscalatedMergeConflictTask?: (task: Subtask) => boolean;
   onTaskEvent?: (args: {
     task: Subtask;
     eventType: string;
@@ -20,6 +21,8 @@ interface ProtocolStepOptions {
 export interface ProtocolStepResult {
   instructions: string;
   awaitingMerge: Subtask[];
+  manualMergeTasks: Subtask[];
+  workerEscalatedMergeConflictTasks: Subtask[];
   actionRequiredTasks: Subtask[];
   agentInterventionTasks: Subtask[];
   humanInterventionTasks: Subtask[];
@@ -41,6 +44,8 @@ const buildFeatureCommentsLine = (settings: CiIntelligenceSettings): string => {
 
 export const runProtocolStep = async (subtasks: Subtask[], options: ProtocolStepOptions): Promise<ProtocolStepResult> => {
   const awaitingMerge = subtasks.filter((task) => task.status === "COMPLETED" && !task.is_merged);
+  const workerEscalatedMergeConflictTasks = awaitingMerge.filter((task) => options.isWorkerEscalatedMergeConflictTask?.(task) === true);
+  const manualMergeTasks = awaitingMerge.filter((task) => !workerEscalatedMergeConflictTasks.includes(task));
   const actionRequiredTasks = subtasks.filter(
     (task) => task.status === "BLOCKED" && (options.isActionRequiredState(task.session_state) || !!task.intervention_owner)
   );
@@ -49,10 +54,10 @@ export const runProtocolStep = async (subtasks: Subtask[], options: ProtocolStep
 
   let instructions = "";
 
-  if (options.enableMergeProtocol && awaitingMerge.length > 0) {
+  if (options.enableMergeProtocol && manualMergeTasks.length > 0) {
     instructions += await options.renderInstruction("mergeHeader", {});
 
-    for (const task of awaitingMerge) {
+    for (const task of manualMergeTasks) {
       options.onTaskEvent?.({
         task,
         eventType: "protocol_merge_required",
@@ -132,5 +137,13 @@ export const runProtocolStep = async (subtasks: Subtask[], options: ProtocolStep
     }
   }
 
-  return { instructions, awaitingMerge, actionRequiredTasks, agentInterventionTasks, humanInterventionTasks };
+  return {
+    instructions,
+    awaitingMerge,
+    manualMergeTasks,
+    workerEscalatedMergeConflictTasks,
+    actionRequiredTasks,
+    agentInterventionTasks,
+    humanInterventionTasks,
+  };
 };

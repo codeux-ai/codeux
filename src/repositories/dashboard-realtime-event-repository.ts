@@ -21,6 +21,7 @@ interface DashboardRealtimeEventRow {
   task_run_id: string | null;
   connection_id: string | null;
   correlation_id: string | null;
+  is_replayable: number | string;
   payload_json: string | null;
   created_at: string;
 }
@@ -40,6 +41,7 @@ export interface AppendDashboardRealtimeEventInput {
   taskRunId?: string | null;
   connectionId?: string | null;
   correlationId?: string | null;
+  replayable?: boolean;
   payload?: unknown;
   emittedAt?: string;
 }
@@ -112,6 +114,7 @@ export class DashboardRealtimeEventRepository {
 
   appendEvent(input: AppendDashboardRealtimeEventInput): DashboardRealtimeEvent {
     const emittedAt = input.emittedAt || new Date().toISOString();
+    const replayable = input.replayable !== false;
     const result = this.db.prepare(`
       INSERT INTO dashboard_realtime_events (
         scope_type,
@@ -128,9 +131,10 @@ export class DashboardRealtimeEventRepository {
         task_run_id,
         connection_id,
         correlation_id,
+        is_replayable,
         payload_json,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       input.scopeType,
       input.scopeId,
@@ -146,28 +150,20 @@ export class DashboardRealtimeEventRepository {
       input.taskRunId ?? null,
       input.connectionId ?? null,
       input.correlationId ?? null,
-      input.payload === undefined ? null : JSON.stringify(input.payload),
+      Number(replayable),
+      replayable && input.payload !== undefined ? JSON.stringify(input.payload) : null,
       emittedAt,
     );
 
-    const sequence = Number((result as { lastInsertRowid?: number | bigint }).lastInsertRowid ?? 0);
-    const row = this.db.prepare(`
-      SELECT *
-      FROM dashboard_realtime_events
-      WHERE sequence = ?
-    `).get(sequence) as DashboardRealtimeEventRow | undefined;
-
-    if (!row) {
-      throw new Error(`Dashboard realtime event was not persisted: ${input.eventType}`);
-    }
-
-    return this.mapRow(row);
+    return this.buildEvent(
+      Number((result as { lastInsertRowid?: number | bigint }).lastInsertRowid ?? 0),
+      input,
+      emittedAt,
+    );
   }
 
   listEventsSince(scopes: string[], afterSequence: number, limit: number = 200): DashboardRealtimeEvent[] {
-    const parsedScopes = scopes
-      .map((scope) => parseDashboardRealtimeScope(scope))
-      .filter((scope): scope is { scopeType: DashboardRealtimeScopeType; scopeId: string } => scope !== null);
+    const parsedScopes = this.parseScopes(scopes);
 
     if (parsedScopes.length === 0) {
       return [];
@@ -184,12 +180,62 @@ export class DashboardRealtimeEventRepository {
       SELECT *
       FROM dashboard_realtime_events
       WHERE sequence > ?
+        AND is_replayable = 1
         AND (${predicates})
       ORDER BY sequence ASC
       LIMIT ?
     `).all(...values) as unknown as DashboardRealtimeEventRow[];
 
     return rows.map((row) => this.mapRow(row));
+  }
+
+  getLatestSequenceForScopes(scopes: string[]): number | null {
+    const parsedScopes = this.parseScopes(scopes);
+    if (parsedScopes.length === 0) {
+      return null;
+    }
+
+    const predicates = parsedScopes.map(() => "(scope_type = ? AND scope_id = ?)").join(" OR ");
+    const values: string[] = [];
+    for (const scope of parsedScopes) {
+      values.push(scope.scopeType, scope.scopeId);
+    }
+
+    const row = this.db.prepare(`
+      SELECT MAX(sequence) AS max_sequence
+      FROM dashboard_realtime_events
+      WHERE ${predicates}
+    `).get(...values) as { max_sequence?: number | string | null } | undefined;
+
+    if (!row || row.max_sequence === null || row.max_sequence === undefined) {
+      return null;
+    }
+
+    return toNumber(row.max_sequence);
+  }
+
+  hasNonReplayableEventsSince(scopes: string[], afterSequence: number): boolean {
+    const parsedScopes = this.parseScopes(scopes);
+    if (parsedScopes.length === 0) {
+      return false;
+    }
+
+    const predicates = parsedScopes.map(() => "(scope_type = ? AND scope_id = ?)").join(" OR ");
+    const values: Array<string | number> = [Math.max(0, afterSequence)];
+    for (const scope of parsedScopes) {
+      values.push(scope.scopeType, scope.scopeId);
+    }
+
+    const row = this.db.prepare(`
+      SELECT 1 AS has_match
+      FROM dashboard_realtime_events
+      WHERE sequence > ?
+        AND is_replayable = 0
+        AND (${predicates})
+      LIMIT 1
+    `).get(...values) as { has_match?: number | string } | undefined;
+
+    return row !== undefined;
   }
 
   getLatestSequence(): number | null {
@@ -206,25 +252,59 @@ export class DashboardRealtimeEventRepository {
   }
 
   private mapRow(row: DashboardRealtimeEventRow): DashboardRealtimeEvent {
+    return this.buildEvent(
+      toNumber(row.sequence),
+      {
+        scopeType: row.scope_type as DashboardRealtimeScopeType,
+        scopeId: row.scope_id,
+        eventType: row.event_type,
+        entityType: row.entity_type,
+        entityId: row.entity_id,
+        projectId: row.project_id,
+        sprintId: row.sprint_id,
+        threadId: row.thread_id,
+        taskId: row.task_id,
+        dispatchId: row.dispatch_id,
+        sprintRunId: row.sprint_run_id,
+        taskRunId: row.task_run_id,
+        connectionId: row.connection_id,
+        correlationId: row.correlation_id,
+        payload: parsePayload(row.payload_json),
+      },
+      row.created_at,
+    );
+  }
+
+  private buildEvent(
+    sequence: number,
+    input: Omit<AppendDashboardRealtimeEventInput, "emittedAt">,
+    emittedAt: string,
+  ): DashboardRealtimeEvent {
     return {
-      sequence: toNumber(row.sequence),
-      emittedAt: row.created_at,
-      scopeType: row.scope_type as DashboardRealtimeScopeType,
-      scopeId: row.scope_id,
-      scope: buildScope(row.scope_type as DashboardRealtimeScopeType, row.scope_id),
-      eventType: row.event_type,
-      entityType: row.entity_type,
-      entityId: row.entity_id,
-      projectId: row.project_id,
-      sprintId: row.sprint_id,
-      threadId: row.thread_id,
-      taskId: row.task_id,
-      dispatchId: row.dispatch_id,
-      sprintRunId: row.sprint_run_id,
-      taskRunId: row.task_run_id,
-      connectionId: row.connection_id,
-      correlationId: row.correlation_id,
-      payload: parsePayload(row.payload_json),
+      sequence,
+      emittedAt,
+      scopeType: input.scopeType,
+      scopeId: input.scopeId,
+      scope: buildScope(input.scopeType, input.scopeId),
+      eventType: input.eventType,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      projectId: input.projectId ?? null,
+      sprintId: input.sprintId ?? null,
+      threadId: input.threadId ?? null,
+      taskId: input.taskId ?? null,
+      dispatchId: input.dispatchId ?? null,
+      sprintRunId: input.sprintRunId ?? null,
+      taskRunId: input.taskRunId ?? null,
+      connectionId: input.connectionId ?? null,
+      correlationId: input.correlationId ?? null,
+      payload: input.payload ?? null,
     };
+  }
+
+  private parseScopes(scopes: string[]): Array<{ scopeType: DashboardRealtimeScopeType; scopeId: string }> {
+    return scopes
+      .map((scope) => parseDashboardRealtimeScope(scope))
+      .filter((scope): scope is { scopeType: DashboardRealtimeScopeType; scopeId: string } => scope !== null);
   }
 }

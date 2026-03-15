@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { AppDbStorage } from "./app-db-storage.js";
+import { deriveWorkerEndpointStatus } from "./connection-lifecycle.js";
 import type { McpConnectionRecord } from "../contracts/connection-chat-types.js";
 import type { WorkerEndpointCapabilities, WorkerEndpointRecord, WorkerEndpointStatus } from "../contracts/worker-types.js";
 
@@ -143,7 +144,7 @@ export class WorkerEndpointRepository {
       endpointKey: row.endpoint_key,
       endpointType: row.endpoint_type as WorkerEndpointRecord["endpointType"],
       displayName: row.display_name,
-      status: row.status as WorkerEndpointRecord["status"],
+      status: deriveWorkerEndpointStatus(row.status as WorkerEndpointRecord["status"], row.last_heartbeat_at),
       connectionId: row.connection_id,
       connectionKey: row.connection_key,
       transport: row.transport,

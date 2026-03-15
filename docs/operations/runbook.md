@@ -42,6 +42,17 @@ Checks:
 - Is configured dashboard port free?
 - Any startup warning for `EADDRINUSE`?
 
+### 1a. Dashboard loads slowly or live view feels stale during a sprint
+Checks:
+- Look at dashboard request timings for static assets and `/api/execution`; multi-second `304` or static asset responses usually indicate event-loop pressure from orchestration work rather than network latency.
+- Verify the current build includes the March 15, 2026 realtime hardening:
+  - throttled project execution snapshots
+  - lightweight non-replayable snapshot markers in `dashboard_realtime_events`
+  - direct attention-item realtime refresh
+  - scope-aware websocket replay checks
+- If the live view updates task state but Git/CI panels lag, confirm `/api/git-status` is healthy; that surface is rate-limited to avoid external API spam, so it may trail runtime updates by a couple of seconds under heavy activity.
+- If the dashboard still degrades under load, inspect whether debug file logging is enabled; file logging now uses async streams, but sustained log volume is still a useful signal that a hot loop is too noisy.
+
 ### 2. No PR/CI data in remote mode
 Checks:
 - `gh --version`
@@ -78,12 +89,13 @@ Checks:
   - Claude runner executes headless using `claude -p "<prompt>" --dangerously-skip-permissions`.
   - For Claude auth mounts, ensure host has `~/.claude/.credentials.json`; if auth still stalls, also verify `~/.claude.json` exists (runtime mounts it automatically when present).
   - Runtime now syncs only those Claude auth files before launch, avoiding recursive copy of all `.claude` state.
+  - For Gemini auth mounts, ensure host has `~/.gemini/settings.json` plus the expected auth files such as `oauth_creds.json`; runtime now syncs only those stable files and intentionally skips `.gemini/tmp`, `history`, and other mutable runtime trees.
   - If auth is expected from host login state, is the relevant Docker auth mount enabled and is its mount path valid?
   - Docker mode requires daemon-visible workspace paths. Runtime now prefers repo-scoped worktree paths for Docker sessions.
   - Docker runtime state is stored under `~/.sprint-os/runtime/docker/<repo-hash>/` by default (override with `JULES_DOCKER_RUNTIME_ROOT`).
   - Codex uses per-session container home directories under that runtime root to prevent stale state from previous Codex runs.
   - Runtime cleanup prunes stale `home-codex-*` session homes and stale shared runtime temp directories automatically once those sessions are no longer active.
-  - GitHub/Gemini credential sync copies mount contents into fixed dirs (`~/.config/gh`, `~/.gemini`) to avoid nested auth directories across repeated runs.
+  - GitHub credential sync still copies mount contents into a fixed dir (`~/.config/gh`); Gemini sync is now auth-only to avoid concurrent Docker sessions racing on shared `.gemini/tmp/tool-outputs`.
   - If provider output says "No file changes produced", runtime now still checks for unpushed worker-branch commits and will push/create (or reuse) the feature PR when commits exist.
   - For Docker-in-Docker or remote daemon path mismatches, configure:
     - `JULES_DOCKER_HOST_WORKSPACE_ROOT=<host-visible-repo-root>`

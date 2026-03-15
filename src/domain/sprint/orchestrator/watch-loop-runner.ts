@@ -110,7 +110,14 @@ export class WatchLoopRunner {
         return fullReport;
       }
 
-      const { subtasks, reportText, statusTable, instructions, awaitingMerge } = await this.cycleRunner.run({
+      const {
+        subtasks,
+        reportText,
+        statusTable,
+        instructions,
+        manualMergeTasks,
+        workerEscalatedMergeConflictTasks,
+      } = await this.cycleRunner.run({
         action: args.action as "status" | "orchestrate",
         automationLevel,
         automationInterventions,
@@ -143,14 +150,23 @@ export class WatchLoopRunner {
 
       const runningTasks = subtasks.filter((task) => task.status === "RUNNING");
       const readyTasks = subtasks.filter((task) => task.status === "PENDING");
+      const activeWorkerAttentionItems = typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
+        ? this.deps.projectAttentionService.listActiveProjectItems(scopedExecutionContext.project.id).filter((item) => (
+          item.ownerType === "worker" && (item.status === "open" || item.status === "claimed")
+        ))
+        : [];
+      const activeWorkerMergeConflictAttention = activeWorkerAttentionItems.some((item) => item.attentionType === "merge_conflict");
 
       const allTerminal = subtasks.length > 0 && subtasks.every(
         (task) => (task.status === "COMPLETED" && task.is_merged) || task.status === "FAILED"
       );
       const noMoreActionPossible = runningTasks.length === 0 && readyTasks.length === 0;
-      const needsManualMerge = awaitingMerge.length > 0;
+      const needsManualMerge = manualMergeTasks.length > 0;
+      const waitingOnWorkerAttention = workerEscalatedMergeConflictTasks.length > 0
+        || activeWorkerMergeConflictAttention
+        || activeWorkerAttentionItems.length > 0;
 
-      allFinished = allTerminal || noMoreActionPossible || needsManualMerge;
+      allFinished = allTerminal || needsManualMerge || (noMoreActionPossible && !waitingOnWorkerAttention);
       const elapsedMs = Date.now() - checkpointWindowStartedAt;
       const outputIntervalReached = elapsedMs >= watchLoopOutputIntervalMs;
 
@@ -173,8 +189,8 @@ export class WatchLoopRunner {
 
           if (needsManualMerge) {
             this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_merge_required", "system", {
-              awaitingMergeCount: awaitingMerge.length,
-              taskIds: awaitingMerge.map((task) => task.record_id || task.id),
+              awaitingMergeCount: manualMergeTasks.length,
+              taskIds: manualMergeTasks.map((task) => task.record_id || task.id),
             }, {
               sourceEventKey: `sprint-merge-required:${sprintRunId}`,
             });
@@ -226,12 +242,50 @@ export class WatchLoopRunner {
                   state: mergeFeedback.state,
                   prNumber: mergeFeedback.prNumber,
                   prUrl: mergeFeedback.prUrl,
+                  hasMergeConflict: mergeFeedback.hasMergeConflict,
+                  mergeStateStatus: mergeFeedback.mergeStateStatus,
                   hasFailedChecks: mergeFeedback.hasFailedChecks,
                   hasPendingChecks: mergeFeedback.hasPendingChecks,
                   hasReviewBlockers: mergeFeedback.hasReviewBlockers,
                   failedChecks: mergeFeedback.failedChecks,
                 }, {
                   sourceEventKey: `main-merge-gate:${sprintRunId}:${mergeFeedback.state}:${mergeFeedback.prNumber || "none"}`,
+                });
+              }
+              if (ciIntelligence.resolveMainMergeConflicts && mergeFeedback.hasMergeConflict) {
+                this.deps.projectAttentionService.openItem({
+                  projectId: scopedExecutionContext.project.id,
+                  sprintId: scopedExecutionContext.sprint.id,
+                  sprintRunId,
+                  attentionType: "merge_conflict",
+                  severity: "high",
+                  ownerType: "worker",
+                  title: `Main merge conflict for ${scopedExecutionContext.sprint.name}`,
+                  summaryMarkdown: buildMainMergeConflictSummary({
+                    repoPath,
+                    featureBranch: defaultFeatureBranch,
+                    defaultBranch,
+                    prNumber: mergeFeedback.prNumber,
+                    prUrl: mergeFeedback.prUrl,
+                    mergedTaskContexts: selectMergedTaskContexts(subtasks),
+                  }),
+                  payload: {
+                    repoPath,
+                    workingDirectoryHint: `cd ${repoPath}`,
+                    featureBranch: defaultFeatureBranch,
+                    defaultBranch,
+                    mergeStage: "main",
+                    prNumber: mergeFeedback.prNumber,
+                    prUrl: mergeFeedback.prUrl,
+                    mergeStateStatus: mergeFeedback.mergeStateStatus,
+                    conflictingBranches: {
+                      source: defaultFeatureBranch,
+                      target: defaultBranch,
+                    },
+                    sprintNumber: scopedExecutionContext.sprintNumber,
+                    sprintName: scopedExecutionContext.sprint.name,
+                    featureBranchTaskContexts: selectMergedTaskContexts(subtasks),
+                  },
                 });
               }
               fullReport += mergeFeedback.text;
@@ -253,14 +307,14 @@ export class WatchLoopRunner {
               sourceEventKey: `sprint-failed:${sprintRunId}`,
             });
             fullReport += await this.deps.renderInstruction("cleanupFailed", { planning_target: scopedExecutionContext.sprint.name }, repoPath);
-          } else if (subtasks.some((task) => task.status === "COMPLETED" && !task.is_merged)) {
+          } else if (manualMergeTasks.length > 0) {
             this.deps.executionRepository.updateSprintRun(sprintRunId, {
               status: "paused",
               lastHeartbeatAt: new Date().toISOString(),
             });
             this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_paused", "system", {
               reason: "awaiting_merge",
-              awaitingMergeCount: subtasks.filter((task) => task.status === "COMPLETED" && !task.is_merged).length,
+              awaitingMergeCount: manualMergeTasks.length,
             }, {
               sourceEventKey: `sprint-paused:${sprintRunId}:awaiting-merge`,
             });
@@ -371,4 +425,66 @@ export class WatchLoopRunner {
       });
     }
   }
+}
+
+function selectMergedTaskContexts(subtasks: Array<{
+  id: string;
+  title: string;
+  prompt: string;
+  worker_branch?: string | null;
+  pr_url?: string | null;
+  is_merged?: boolean;
+}>): Array<{
+  taskKey: string;
+  taskTitle: string;
+  taskPrompt: string;
+  workerBranch: string | null;
+  prUrl: string | null;
+}> {
+  return subtasks
+    .filter((task) => task.is_merged)
+    .slice(0, 8)
+    .map((task) => ({
+      taskKey: task.id,
+      taskTitle: task.title,
+      taskPrompt: task.prompt,
+      workerBranch: task.worker_branch || null,
+      prUrl: task.pr_url || null,
+    }));
+}
+
+function buildMainMergeConflictSummary(args: {
+  repoPath: string;
+  featureBranch: string;
+  defaultBranch: string;
+  prNumber: number | null;
+  prUrl: string | null;
+  mergedTaskContexts: Array<{
+    taskKey: string;
+    taskTitle: string;
+    taskPrompt: string;
+    workerBranch: string | null;
+    prUrl: string | null;
+  }>;
+}): string {
+  const lines = [
+    `Main-branch merge conflict detected for \`${args.featureBranch} -> ${args.defaultBranch}\`.`,
+    `Repo path: \`${args.repoPath}\``,
+    `Working directory: \`cd ${args.repoPath}\``,
+  ];
+
+  if (args.prNumber) {
+    lines.push(`PR: #${args.prNumber}${args.prUrl ? ` (${args.prUrl})` : ""}`);
+  } else if (args.prUrl) {
+    lines.push(`PR: ${args.prUrl}`);
+  }
+
+  if (args.mergedTaskContexts.length > 0) {
+    lines.push("", "Merged task prompts already on the feature branch:");
+    for (const task of args.mergedTaskContexts) {
+      lines.push(`- \`${task.taskKey}\` ${task.taskTitle}: ${task.taskPrompt}`);
+    }
+  }
+
+  return lines.join("\n");
 }

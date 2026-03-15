@@ -50,6 +50,17 @@ describe("DockerBootstrapBuilder", () => {
     expect(script).toMatchSnapshot();
   });
 
+  it("syncs only Gemini auth artifacts instead of recursively copying Gemini runtime state", () => {
+    const script = builder.build({
+      runtimeNpmPrefix: "/runtime/npm-global",
+      runtimeNpmCache: "/runtime/npm-cache",
+    });
+
+    expect(script).toContain("if [ \"$1\" = \"gemini\" ]; then");
+    expect(script).toContain("oauth_creds.json");
+    expect(script).not.toContain(`sync_dir_contents "${GEMINI_CREDENTIALS_MOUNT}" "$HOME/.gemini"`);
+  });
+
   it("should not include fallback install if no providers specified", () => {
     const options = {
       runtimeNpmPrefix: "/runtime/npm-global",

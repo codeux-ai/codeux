@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -12,14 +12,21 @@ async function createRepositories(): Promise<{
   storage: AppDbStorage;
   projectRepository: ProjectManagementRepository;
   runtimeRepository: ProjectRuntimeRepository;
+  realtimeNotifier: {
+    scheduleProjectRuntimeStatusRefresh: ReturnType<typeof vi.fn>;
+  };
 }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-runtime-repo-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
+  const realtimeNotifier = {
+    scheduleProjectRuntimeStatusRefresh: vi.fn(),
+  };
   return {
     storage,
     projectRepository: new ProjectManagementRepository(storage),
-    runtimeRepository: new ProjectRuntimeRepository(storage),
+    runtimeRepository: new ProjectRuntimeRepository(storage, realtimeNotifier as any),
+    realtimeNotifier,
   };
 }
 
@@ -29,7 +36,7 @@ afterEach(async () => {
 
 describe("ProjectRuntimeRepository", () => {
   it("persists orchestration context and task runs for the selected project", async () => {
-    const { storage, projectRepository, runtimeRepository } = await createRepositories();
+    const { storage, projectRepository, runtimeRepository, realtimeNotifier } = await createRepositories();
 
     const project = projectRepository.createProject({
       name: "Runtime Project",
@@ -135,6 +142,7 @@ describe("ProjectRuntimeRepository", () => {
 
     const storedProject = projectRepository.getProject(project.id);
     expect(storedProject?.status).toBe("running");
+    expect(realtimeNotifier.scheduleProjectRuntimeStatusRefresh).toHaveBeenCalledWith(project.id);
   });
 
   it("returns the selected project's planned tasks even without runtime context", async () => {

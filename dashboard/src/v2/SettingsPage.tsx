@@ -998,6 +998,18 @@ export const SettingsPage: FunctionComponent = () => {
               }))}
             />
           </Row>
+          <Row label="Resolve main merge conflicts" description="Escalate `feature -> main` merge conflicts to the connected worker with sprint context.">
+            <Toggle
+              value={editableSettings.ciIntelligence.resolveMainMergeConflicts}
+              onChange={() => updateEditableSettings((current) => ({
+                ...current,
+                ciIntelligence: {
+                  ...current.ciIntelligence,
+                  resolveMainMergeConflicts: !current.ciIntelligence.resolveMainMergeConflicts,
+                },
+              }))}
+            />
+          </Row>
           <Row label="Wait for CI before feature merge" description="Require green CI before merging feature branches back into sprint or main flow.">
             <Toggle
               value={editableSettings.ciIntelligence.waitForCiBeforeFeatureMerge}
@@ -1025,6 +1037,18 @@ export const SettingsPage: FunctionComponent = () => {
         </SectionCard>
 
         <SectionCard title="Autofix Policy" watermark="FIX" badge={getBadge("ciIntelligence")}>
+          <Row label="Resolve feature merge conflicts" description="Escalate feature-branch merge conflicts to the connected worker with full branch and task context.">
+            <Toggle
+              value={editableSettings.ciIntelligence.resolveMergeConflicts}
+              onChange={() => updateEditableSettings((current) => ({
+                ...current,
+                ciIntelligence: {
+                  ...current.ciIntelligence,
+                  resolveMergeConflicts: !current.ciIntelligence.resolveMergeConflicts,
+                },
+              }))}
+            />
+          </Row>
           <Row label="Jules CI autofix" description="Allow Jules to attempt CI autofixes before escalating to a worker.">
             <Toggle
               value={editableSettings.ciIntelligence.waitForJulesCiAutofix}

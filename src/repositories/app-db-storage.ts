@@ -359,6 +359,7 @@ export class AppDbStorage {
         task_run_id TEXT,
         connection_id TEXT,
         correlation_id TEXT,
+        is_replayable INTEGER NOT NULL DEFAULT 1,
         payload_json TEXT,
         created_at TEXT NOT NULL
       );
@@ -375,15 +376,24 @@ export class AppDbStorage {
     this.ensureColumn("agent_presets", "source_imported_at", "TEXT");
     this.ensureColumn("connection_project_bindings", "last_attention_cursor", "TEXT");
     this.ensureColumn("connection_project_bindings", "last_assignment_cursor", "TEXT");
+    this.ensureColumn("dashboard_realtime_events", "is_replayable", "INTEGER NOT NULL DEFAULT 1");
     this.ensureIndex("idx_sprint_runs_project_sprint", "sprint_runs", "project_id, sprint_id, created_at DESC");
+    this.ensureIndex("idx_tasks_project_sprint_sort", "tasks", "project_id, sprint_id, sort_order ASC, created_at ASC, task_key ASC");
+    this.ensureIndex("idx_task_runs_project_started", "task_runs", "project_id, started_at DESC");
+    this.ensureIndex("idx_task_runs_dispatch", "task_runs", "dispatch_id");
+    this.ensureIndex("idx_task_runs_task_session_id", "task_runs", "task_id, session_id");
+    this.ensureIndex("idx_task_runs_task_session_name", "task_runs", "task_id, session_name");
+    this.ensureIndex("idx_task_runs_task_finished", "task_runs", "task_id, finished_at");
+    this.ensureIndex("idx_task_runs_sprint_run_started", "task_runs", "sprint_run_id, started_at DESC");
     this.ensureIndex("idx_task_dispatches_sprint_run", "task_dispatches", "sprint_run_id, status, queued_at ASC");
+    this.ensureIndex("idx_task_dispatches_project_status", "task_dispatches", "project_id, status, priority DESC, queued_at ASC");
     this.ensureIndex("idx_task_dispatches_task", "task_dispatches", "task_id, created_at DESC");
     this.ensureIndex("idx_execution_leases_scope", "execution_leases", "scope_type, scope_id");
     this.ensureIndex("idx_task_run_events_task_run_created", "task_run_events", "task_run_id, created_at DESC");
     this.ensureUniqueIndex("idx_task_run_events_source_event", "task_run_events", "task_run_id, source_event_key");
     this.ensureIndex("idx_sprint_run_events_sprint_run_created", "sprint_run_events", "sprint_run_id, created_at DESC");
     this.ensureUniqueIndex("idx_sprint_run_events_source_event", "sprint_run_events", "sprint_run_id, source_event_key");
-    this.ensureIndex("idx_dashboard_realtime_events_scope_sequence", "dashboard_realtime_events", "scope_type, scope_id, sequence DESC");
+    this.ensureIndex("idx_dashboard_realtime_events_scope_sequence", "dashboard_realtime_events", "scope_type, scope_id, is_replayable, sequence DESC");
     this.ensureIndex("idx_agent_presets_project_updated", "agent_presets", "project_id, updated_at DESC");
     this.ensureIndex("idx_agent_presets_project_name", "agent_presets", "project_id, name");
     this.ensureUniqueIndex("idx_worker_endpoints_connection", "worker_endpoints", "connection_id");
@@ -391,6 +401,7 @@ export class AppDbStorage {
     this.ensureIndex("idx_project_worker_assignments_project_status", "project_worker_assignments", "project_id, status, assignment_role, last_affinity_at DESC");
     this.ensureIndex("idx_project_worker_assignments_worker_status", "project_worker_assignments", "worker_endpoint_id, status, last_affinity_at DESC");
     this.ensureIndex("idx_project_attention_items_project_status", "project_attention_items", "project_id, status, opened_at DESC");
+    this.ensureIndex("idx_project_attention_items_sprint_run_status", "project_attention_items", "sprint_run_id, status, opened_at DESC");
     this.ensureIndex("idx_project_attention_items_dispatch_status", "project_attention_items", "dispatch_id, status, opened_at DESC");
   }
 

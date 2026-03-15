@@ -197,8 +197,13 @@ Legacy runtime:
 - The execution runtime panel can now start or resume sprint orchestration, pause or cancel sprint runs, cancel queued dispatches, and retry terminal dispatches
 - The execution runtime panel now also exposes the active attention queue, including worker claim, resolve, and dismiss controls for open project blockers
 - Live Session now shows a clear paused-for-human-intervention banner, repeats the reason/instructions in the hero state, and surfaces the same guidance inside paused sprint run cards
+- worker-owned merge conflicts are now excluded from that human-intervention projection; they remain visible in the attention queue and realtime runtime feed, but they no longer tell the operator to merge or resume while the worker is handling them
+- that exclusion is now sticky while the worker-owned conflict item remains active, so transient PR metadata gaps no longer flip the same task back into a manual merge warning
+- the same suppression now applies to any active worker-owned supervision item, so agent-managed blocked dispatches and worker-owned action-required recovery no longer trigger the generic `Manual attention required` pause banner while the worker still has actionable queue work
+- merge conflicts are now first-class task indicators in the live UI, including dedicated task badges and a realtime `Conflicts` metric in the runtime stats row
 - Worker escalations now also create project chat threads with a system-authored handoff message, so operator follow-up lives in the same project conversation model as the rest of dashboard chat
 - The execution runtime panel now also shows live project connections with transport, role, listening metadata, inbox load, dispatch load, and heartbeat-derived status
+- stale and offline connection rows now disappear much faster in practice: cold start prunes disconnected connections with no active dispatches, and live heartbeat aging promotes dead workers to `stale` or `offline` quickly enough that new worker-owned merge conflicts route to the live connected worker instead of lingering on an older listener
 - The Overview page telemetry now renders a consolidated runtime timeline across all currently active projects instead of a static placeholder
 - Running dispatch cancel is now request-based instead of instant-terminal:
   - local CLI runs move to `cancel_requested` and abort through the process runner
@@ -235,8 +240,8 @@ Runtime scoping:
 ## Polling Behavior
 
 From `dashboard/src/hooks/use-dashboard-runtime-data.ts`:
-- Status and execution snapshot poll every 30 seconds.
-- Git status polls every 30 seconds.
+- Status and execution snapshot now use websocket-first updates with a `5s` fallback poll for degraded transport cases.
+- Git status keeps a `30s` fallback poll and also refreshes opportunistically from project realtime events with internal rate limiting, so the live view no longer waits for the next full poll cycle after sprint activity.
 
 From `dashboard/src/hooks/use-overview-telemetry.ts` and `dashboard/src/v2/hooks/use-project-execution.ts`:
 - Overview telemetry and project execution are now websocket-first through `/api/realtime`.
@@ -262,6 +267,13 @@ Chat-specific behavior:
 
 - The Chat refresh button is now manual-only.
 - Background realtime sync and fallback refreshes no longer drive the refresh button spinner state.
+
+Live view behavior:
+
+- `project.execution.updated` replaces the execution snapshot immediately
+- `project.runtime_status.updated` replaces the runtime task state immediately
+- `project.structure.updated` triggers a silent background reload for structural changes that are not already embedded in the execution payload
+- attention queue changes now flow through the same realtime execution snapshot path, so merge-conflict escalation, worker claims, and resolution actions appear without waiting for a poll tick
 
 The old legacy settings hook remains outside the active v2 flow; the live dashboard now uses the scoped settings API above.
 

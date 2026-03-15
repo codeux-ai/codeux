@@ -23,12 +23,15 @@ export interface MergeFeedbackResult {
     | "disabled"
     | "unavailable"
     | "missing_pr"
+    | "merge_conflict"
     | "failed_checks"
     | "pending_checks"
     | "review_blocked"
     | "ready_for_merge";
   prNumber: number | null;
   prUrl: string | null;
+  hasMergeConflict: boolean;
+  mergeStateStatus: string | null;
   hasFailedChecks: boolean;
   hasPendingChecks: boolean;
   hasReviewBlockers: boolean;
@@ -59,6 +62,8 @@ export class MainMergeGateService {
         state: "disabled",
         prNumber: null,
         prUrl: null,
+        hasMergeConflict: false,
+        mergeStateStatus: null,
         hasFailedChecks: false,
         hasPendingChecks: false,
         hasReviewBlockers: false,
@@ -72,6 +77,8 @@ export class MainMergeGateService {
         state: "unavailable",
         prNumber: null,
         prUrl: null,
+        hasMergeConflict: false,
+        mergeStateStatus: null,
         hasFailedChecks: false,
         hasPendingChecks: false,
         hasReviewBlockers: false,
@@ -89,6 +96,8 @@ export class MainMergeGateService {
         state: "missing_pr",
         prNumber: null,
         prUrl: null,
+        hasMergeConflict: false,
+        mergeStateStatus: null,
         hasFailedChecks: false,
         hasPendingChecks: false,
         hasReviewBlockers: false,
@@ -100,18 +109,25 @@ export class MainMergeGateService {
     const failedChecks = checks
       .filter((check) => isCiFailure(check.status, check.conclusion))
       .map((check) => check.name);
+    const hasMergeConflict = mainMergePr.mergeStateStatus === "DIRTY";
     const hasFailedChecks = failedChecks.length > 0;
     const hasPendingChecks = checks.length === 0 || checks.some((check) => isCiPending(check.status, check.conclusion));
     const hasReviewBlockers = mainMergePr.reviewDecision === "CHANGES_REQUESTED" || mainMergePr.comments > 0;
 
     let text = `\n### Main Merge CI Gate\n`;
     text += `- PR: ${mainMergePr.url}\n`;
-    text += `- Check Status: \`${hasFailedChecks ? "FAILED" : hasPendingChecks ? "PENDING" : "SUCCESS"}\`\n`;
+    text += `- Check Status: \`${hasMergeConflict ? "DIRTY" : hasFailedChecks ? "FAILED" : hasPendingChecks ? "PENDING" : "SUCCESS"}\`\n`;
     text += `- Review Status: \`reviewDecision=${mainMergePr.reviewDecision || "NONE"}\`, comments=${mainMergePr.comments}\n`;
     text += `- Check live: \`gh pr checks ${mainMergePr.number} --watch\`\n`;
+    if (mainMergePr.mergeStateStatus) {
+      text += `- Merge State: \`${mainMergePr.mergeStateStatus}\`\n`;
+    }
 
     let state: MergeFeedbackResult["state"] = "ready_for_merge";
-    if (hasFailedChecks) {
+    if (hasMergeConflict) {
+      text += `- Merge into \`${defaultBranch}\` is blocked until the conflict is resolved.\n`;
+      state = "merge_conflict";
+    } else if (hasFailedChecks) {
       text += `- Failed checks: ${failedChecks.join(", ")}\n`;
       text += `- Logs: \`gh run list --branch ${featureBranch} --event pull_request --limit 5\` and \`gh run view <run-id> --log-failed\`\n`;
       text += `- Only approve merge into \`${defaultBranch}\` after checks are green.\n`;
@@ -136,6 +152,8 @@ export class MainMergeGateService {
       state,
       prNumber: mainMergePr.number,
       prUrl: mainMergePr.url,
+      hasMergeConflict,
+      mergeStateStatus: mainMergePr.mergeStateStatus || null,
       hasFailedChecks,
       hasPendingChecks,
       hasReviewBlockers,

@@ -75,4 +75,50 @@ describe("DashboardRealtimeEventRepository", () => {
       eventType: "overview.telemetry.updated",
     });
   });
+
+  it("tracks non-replayable snapshot events without including them in replay payloads", async () => {
+    const repository = await createRepository();
+
+    const first = repository.appendEvent({
+      scopeType: "project",
+      scopeId: "project-1",
+      eventType: "project.execution.updated",
+      entityType: "project",
+      entityId: "project-1",
+      projectId: "project-1",
+      replayable: false,
+      payload: {
+        projectId: "project-1",
+        sprintRuns: [{ id: "run-1" }],
+      },
+    });
+    const second = repository.appendEvent({
+      scopeType: "project",
+      scopeId: "project-1",
+      eventType: "project.runtime_status.updated",
+      entityType: "project_status",
+      entityId: "project-1",
+      projectId: "project-1",
+      payload: {
+        project_id: "project-1",
+        subtasks: [],
+      },
+    });
+
+    expect(first.sequence).toBe(1);
+    expect(first.payload).toMatchObject({
+      projectId: "project-1",
+    });
+    expect(second.sequence).toBe(2);
+    expect(repository.getLatestSequence()).toBe(2);
+    expect(repository.getLatestSequenceForScopes(["project:project-1"])).toBe(2);
+    expect(repository.hasNonReplayableEventsSince(["project:project-1"], 0)).toBe(true);
+
+    const replay = repository.listEventsSince(["project:project-1"], 0);
+    expect(replay).toHaveLength(1);
+    expect(replay[0]).toMatchObject({
+      sequence: 2,
+      eventType: "project.runtime_status.updated",
+    });
+  });
 });

@@ -110,14 +110,14 @@ export function createCoreDependencies(
     logger.child({ component: "dashboard-realtime-service" }),
   );
   const projectManagementRepository = new ProjectManagementRepository(appDbStorage, dashboardRealtimeService);
-  const projectRuntimeRepository = new ProjectRuntimeRepository(appDbStorage);
+  const projectRuntimeRepository = new ProjectRuntimeRepository(appDbStorage, dashboardRealtimeService);
   const workerEndpointRepository = new WorkerEndpointRepository(appDbStorage);
   const projectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(appDbStorage);
   const projectWorkerAssignmentService = new ProjectWorkerAssignmentService(
     projectWorkerAssignmentRepository,
     workerEndpointRepository,
   );
-  const projectAttentionRepository = new ProjectAttentionRepository(appDbStorage);
+  const projectAttentionRepository = new ProjectAttentionRepository(appDbStorage, dashboardRealtimeService);
   const projectAttentionService = new ProjectAttentionService(
     projectAttentionRepository,
     projectWorkerAssignmentRepository,

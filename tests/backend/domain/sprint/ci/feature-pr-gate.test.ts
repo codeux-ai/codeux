@@ -36,8 +36,10 @@ describe("FeaturePrGateService", () => {
         enableLivePrMonitoring: true,
         waitForCiBeforeMainMerge: true,
         resolveAllCommentsBeforeMainMerge: true,
+        resolveMainMergeConflicts: false,
         waitForCiBeforeFeatureMerge: true,
         resolveAllCommentsBeforeFeatureMerge: true,
+        resolveMergeConflicts: false,
         waitForJulesCiAutofix: true,
         julesCiAutofixMaxRetries: 3,
         featurePrAutoMergeMode: "OFF",
@@ -62,6 +64,7 @@ describe("FeaturePrGateService", () => {
           }
         ],
         ciRuns: [],
+        mergedPullRequests: [],
       } as unknown as GitTrackingStatus,
       ciAutofixRetryCounts: new Map(),
       isJulesApiConfigured: vi.fn().mockReturnValue(true),
@@ -78,6 +81,11 @@ describe("FeaturePrGateService", () => {
 
   it("updates task to MERGED when green and auto-merge is ON", async () => {
     context.ciIntelligence.featurePrAutoMergeMode = "WHEN_GREEN";
+    context.autoMergeFeaturePr = vi.fn().mockResolvedValue({
+      ok: true,
+      merged: true,
+      autoMergeScheduled: false,
+    });
 
     const result = await service.evaluateCiGate(subtasks, context);
 
@@ -90,6 +98,53 @@ describe("FeaturePrGateService", () => {
       "ci_gate_status",
       "system",
       expect.objectContaining({ state: "automerge_succeeded", prNumber: 101 }),
+      expect.any(Object),
+    );
+  });
+
+  it("keeps task in RUNNING while GitHub has only armed auto-merge", async () => {
+    context.ciIntelligence.featurePrAutoMergeMode = "WHEN_GREEN";
+    context.autoMergeFeaturePr = vi.fn().mockResolvedValue({
+      ok: true,
+      merged: false,
+      autoMergeScheduled: true,
+      message: "Auto-merge is enabled and waiting for branch protection.",
+    });
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("RUNNING");
+    expect(result.subtasks[0].is_merged).toBe(false);
+    expect(result.subtasks[0].merge_indicator).toBe("CI");
+    expect(result.reportText).toContain("Auto-Merge Armed");
+    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({ state: "automerge_scheduled", prNumber: 101 }),
+      expect.any(Object),
+    );
+  });
+
+  it("keeps task awaiting merge and marks a merge conflict when auto-merge fails with a conflict", async () => {
+    context.ciIntelligence.featurePrAutoMergeMode = "WHEN_GREEN";
+    context.autoMergeFeaturePr = vi.fn().mockResolvedValue({
+      ok: false,
+      mergeConflict: true,
+      message: "Merge conflict detected while merging PR.",
+    });
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].is_merged).toBe(false);
+    expect(result.subtasks[0].merge_indicator).toBe("MERGE_CONFLICT");
+    expect(result.reportText).toContain("Auto-Merge Failed");
+    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({ state: "automerge_conflict", prNumber: 101 }),
       expect.any(Object),
     );
   });
@@ -173,5 +228,28 @@ describe("FeaturePrGateService", () => {
       expect.objectContaining({ state: "waiting_for_pr", featureBranch: "feature/sprint1" }),
       expect.any(Object),
     );
+  });
+
+  it("confirms the task as merged when the PR has already landed", async () => {
+    context.gitStatus.openPullRequests = [];
+    context.gitStatus.mergedPullRequests = [
+      {
+        number: 101,
+        title: "PR 101",
+        url: "https://github.com/repo/pull/101",
+        headRefName: "feat/T1",
+        baseRefName: "feature/sprint1",
+        mergedAt: "2026-03-15T08:00:00.000Z",
+        mergedBy: "octocat",
+      },
+    ] as any;
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].is_merged).toBe(true);
+    expect(result.subtasks[0].merge_indicator).toBe("MERGED");
+    expect(context.persistMergedTask).toHaveBeenCalledWith(expect.objectContaining({ id: "T1", is_merged: true }));
+    expect(result.reportText).toContain("Feature PR Merged");
   });
 });

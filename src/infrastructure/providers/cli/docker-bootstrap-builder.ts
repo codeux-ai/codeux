@@ -42,6 +42,7 @@ export class DockerBootstrapBuilder {
       "set -euo pipefail",
       "mkdir -p \"$HOME/.config\" \"$HOME/.codex\" \"$HOME/.claude\" \"$HOME/.gemini\"",
       "sync_dir_contents() { local source=\"$1\"; local destination=\"$2\"; local label=\"$3\"; mkdir -p \"$destination\"; if ! cp -r \"$source/.\" \"$destination/\"; then echo \"provider-runner: warning: failed to copy $label credentials\" >&2; fi; }",
+      "copy_if_present() { local source=\"$1\"; local destination=\"$2\"; local label=\"$3\"; if [ -e \"$source\" ]; then mkdir -p \"$(dirname \"$destination\")\"; if ! cp -f \"$source\" \"$destination\"; then echo \"provider-runner: warning: failed to copy $label\" >&2; fi; fi; }",
     ].join("\n");
   }
 
@@ -50,7 +51,6 @@ export class DockerBootstrapBuilder {
       `if [ -e "${GITCONFIG_CREDENTIALS_MOUNT}" ]; then cp -f "${GITCONFIG_CREDENTIALS_MOUNT}" "$HOME/.gitconfig" || echo "provider-runner: warning: failed to copy .gitconfig" >&2; fi`,
       `if [ -d "${CODEX_CREDENTIALS_MOUNT}" ]; then [ -f "${CODEX_CREDENTIALS_MOUNT}/auth.json" ] && cp -f "${CODEX_CREDENTIALS_MOUNT}/auth.json" "$HOME/.codex/auth.json"; [ -f "${CODEX_CREDENTIALS_MOUNT}/config.toml" ] && cp -f "${CODEX_CREDENTIALS_MOUNT}/config.toml" "$HOME/.codex/config.toml"; fi`,
       `if [ -d "${GITHUB_CREDENTIALS_MOUNT}" ]; then sync_dir_contents "${GITHUB_CREDENTIALS_MOUNT}" "$HOME/.config/gh" "gh"; fi`,
-      `if [ -d "${GEMINI_CREDENTIALS_MOUNT}" ]; then sync_dir_contents "${GEMINI_CREDENTIALS_MOUNT}" "$HOME/.gemini" "gemini"; fi`,
     ].join("\n");
   }
 
@@ -84,6 +84,14 @@ export class DockerBootstrapBuilder {
 
   private claudeAuth(): string {
     return [
+      "if [ \"$1\" = \"gemini\" ]; then",
+      `  copy_if_present "${GEMINI_CREDENTIALS_MOUNT}/settings.json" "$HOME/.gemini/settings.json" "gemini settings.json"`,
+      `  copy_if_present "${GEMINI_CREDENTIALS_MOUNT}/oauth_creds.json" "$HOME/.gemini/oauth_creds.json" "gemini oauth_creds.json"`,
+      `  copy_if_present "${GEMINI_CREDENTIALS_MOUNT}/google_accounts.json" "$HOME/.gemini/google_accounts.json" "gemini google_accounts.json"`,
+      `  copy_if_present "${GEMINI_CREDENTIALS_MOUNT}/installation_id" "$HOME/.gemini/installation_id" "gemini installation_id"`,
+      `  copy_if_present "${GEMINI_CREDENTIALS_MOUNT}/state.json" "$HOME/.gemini/state.json" "gemini state.json"`,
+      `  copy_if_present "${GEMINI_CREDENTIALS_MOUNT}/trustedFolders.json" "$HOME/.gemini/trustedFolders.json" "gemini trustedFolders.json"`,
+      "fi",
       "if [ \"$1\" = \"claude\" ]; then",
       `  if [ -f "${CLAUDE_CODE_CREDENTIALS_MOUNT}/.credentials.json" ]; then cp -f "${CLAUDE_CODE_CREDENTIALS_MOUNT}/.credentials.json" "$HOME/.claude/.credentials.json"; fi`,
       `  if [ -f "${CLAUDE_CODE_AUTH_JSON_MOUNT}" ]; then cp -f "${CLAUDE_CODE_AUTH_JSON_MOUNT}" "$HOME/.claude.json"; fi`,

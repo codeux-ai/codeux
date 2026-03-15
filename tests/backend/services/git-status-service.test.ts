@@ -253,14 +253,49 @@ describe("GitStatusService", () => {
   });
 
   it("merges a pull request", async () => {
-    runner.mockResolvedValue({ ok: true, stdout: "merged", stderr: "" });
+    runner.mockImplementation(async (command, args) => {
+      const fullCmd = `${command} ${args.join(" ")}`;
+      const responses: Record<string, any> = {
+        "gh pr merge 123 --merge --delete-branch": { ok: true, stdout: "merged", stderr: "" },
+        "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup": { ok: true, stdout: "[]" },
+        "gh pr list --state merged --limit 100 --json number,title,url,headRefName,baseRefName,mergedAt,mergedBy": {
+          ok: true,
+          stdout: JSON.stringify([{ number: 123, title: "PR", url: "https://example/pr/123", headRefName: "feat", baseRefName: "feature", mergedAt: "2026-03-15T08:00:00.000Z", mergedBy: { login: "octocat" } }]),
+        },
+      };
+      return responses[fullCmd] || { ok: true, stdout: "", stderr: "" };
+    });
     const result = await service.mergePullRequest(123);
     expect(result.ok).toBe(true);
+    expect(result.merged).toBe(true);
     expect(runner).toHaveBeenCalledWith(
       "gh",
       ["pr", "merge", "123", "--merge", "--delete-branch"],
       { cwd: "/repo", ghToken: undefined }
     );
+  });
+
+  it("treats an open PR after merge command as auto-merge armed, not merged", async () => {
+    runner.mockImplementation(async (command, args) => {
+      const fullCmd = `${command} ${args.join(" ")}`;
+      const responses: Record<string, any> = {
+        "gh pr merge 123 --merge --delete-branch": { ok: true, stdout: "auto-merge enabled", stderr: "" },
+        "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup": {
+          ok: true,
+          stdout: JSON.stringify([{ number: 123, title: "PR", url: "https://example/pr/123", state: "OPEN", headRefName: "feat", baseRefName: "feature" }]),
+        },
+        "gh pr list --state merged --limit 100 --json number,title,url,headRefName,baseRefName,mergedAt,mergedBy": { ok: true, stdout: "[]" },
+      };
+      return responses[fullCmd] || { ok: true, stdout: "", stderr: "" };
+    });
+
+    const result = await service.mergePullRequest(123);
+
+    expect(result).toMatchObject({
+      ok: true,
+      merged: false,
+      autoMergeScheduled: true,
+    });
   });
 
   it("returns error message if merge fails", async () => {
@@ -317,7 +352,7 @@ describe("GitStatusService", () => {
         "gh pr list --state open --limit 50 --json number,title,url,state,isDraft,headRefName,baseRefName,mergeStateStatus,reviewDecision,updatedAt,comments,statusCheckRollup": { ok: true, stdout: "[]" },
         "gh run list --limit 50 --json databaseId,name,workflowName,status,conclusion,event,headBranch,url,updatedAt": { ok: true, stdout: "[]" },
         "gh pr list --state merged --limit 100 --json number,title,url,headRefName,baseRefName,mergedAt,mergedBy": { ok: true, stdout: "[]" },
-        "gh pr merge 1 --merge": { ok: true, stdout: "merged" }
+        "gh pr merge 1 --merge --delete-branch": { ok: true, stdout: "merged" }
       };
       return responses[fullCmd] || { ok: true, stdout: "" };
     });

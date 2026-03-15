@@ -4,6 +4,7 @@ import type {
   GitCiFailedJob,
   GitCiRunStatus,
   GitMergeStatus,
+  AutoMergeFeaturePrResult,
 } from "../contracts/app-types.js";
 import {
   GitStatusQueryClient,
@@ -34,6 +35,17 @@ export type { GitTrackingRequest };
 
 const FAILED_RUN_DETAILS_LIMIT = 3;
 const FAILED_JOBS_PER_RUN_LIMIT = 3;
+
+function detectMergeConflictMessage(message: string | null | undefined): boolean {
+  const normalized = String(message || "").trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return normalized.includes("merge conflict")
+    || normalized.includes("not mergeable")
+    || normalized.includes("cannot be cleanly created")
+    || normalized.includes("dirty");
+}
 
 export class GitStatusService {
   private static statusCache = new Map<string, { timestamp: number; promise: Promise<GitTrackingStatus> }>();
@@ -332,17 +344,49 @@ export class GitStatusService {
     return fetchPromise;
   }
 
-  async mergePullRequest(prNumber: number, ghToken?: string): Promise<{ ok: boolean; message?: string }> {
+  async mergePullRequest(prNumber: number, ghToken?: string): Promise<AutoMergeFeaturePrResult> {
     const effectiveToken = ghToken && ghToken.trim().length > 0 ? ghToken.trim() : undefined;
     const result = await this.queryClient.ghPrMerge(prNumber, effectiveToken);
     if (!result.ok) {
+      const message = result.stderr.trim() || result.stdout.trim() || "Failed to merge PR via gh CLI.";
       return {
         ok: false,
-        message: result.stderr.trim() || result.stdout.trim() || "Failed to merge PR via gh CLI.",
+        message,
+        mergeConflict: detectMergeConflictMessage(message),
       };
     }
     GitStatusService.invalidateCache(this.repoPath);
-    return { ok: true };
+
+    const [openPrs, mergedPrs] = await Promise.all([
+      this.fetchOpenPrs(effectiveToken),
+      this.fetchMergedPrs(effectiveToken),
+    ]);
+    const merged = mergedPrs.data.some((pr) => pr.number === prNumber);
+    if (merged) {
+      return { ok: true, merged: true, autoMergeScheduled: false };
+    }
+
+    const openPr = openPrs.data.find((pr) => pr.number === prNumber);
+    if (openPr) {
+      return {
+        ok: true,
+        merged: false,
+        autoMergeScheduled: true,
+        message: "The PR is still open after the merge command. Auto-merge is likely armed or waiting on branch protection.",
+      };
+    }
+
+    const confirmationWarnings = [openPrs.warning, mergedPrs.warning].filter((warning): warning is string => Boolean(warning));
+    const commandOutput = [
+      typeof result.stdout === "string" ? result.stdout.trim() : "",
+      typeof result.stderr === "string" ? result.stderr.trim() : "",
+    ].filter(Boolean).join(" ").trim();
+    return {
+      ok: true,
+      merged: false,
+      autoMergeScheduled: false,
+      message: confirmationWarnings[0] || commandOutput || "Merge command completed, but Sprint OS could not confirm the PR merge yet.",
+    };
   }
 
   private async fetchOpenPrs(ghToken?: string): Promise<{ data: GitPullRequestStatus[]; warning?: string }> {

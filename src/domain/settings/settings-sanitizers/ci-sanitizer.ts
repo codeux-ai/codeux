@@ -36,6 +36,10 @@ export const sanitizeCiIntelligence = (
       ciInput.resolveAllCommentsBeforeMainMerge,
       DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.resolveAllCommentsBeforeMainMerge
     ),
+    resolveMainMergeConflicts: readBoolean(
+      ciInput.resolveMainMergeConflicts,
+      DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.resolveMainMergeConflicts
+    ),
     waitForCiBeforeFeatureMerge: readBoolean(
       ciInput.waitForCiBeforeFeatureMerge,
       DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.waitForCiBeforeFeatureMerge
@@ -43,6 +47,10 @@ export const sanitizeCiIntelligence = (
     resolveAllCommentsBeforeFeatureMerge: readBoolean(
       ciInput.resolveAllCommentsBeforeFeatureMerge,
       DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.resolveAllCommentsBeforeFeatureMerge
+    ),
+    resolveMergeConflicts: readBoolean(
+      ciInput.resolveMergeConflicts,
+      DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.resolveMergeConflicts
     ),
     waitForJulesCiAutofix: readBoolean(
       ciInput.waitForJulesCiAutofix,

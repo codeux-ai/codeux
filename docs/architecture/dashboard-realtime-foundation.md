@@ -33,6 +33,12 @@ Sprint OS now persists dashboard realtime events in:
 
 This creates sequence-backed replay for reconnecting browser clients.
 
+Production refinement shipped on March 15, 2026:
+
+- large snapshot events such as `project.execution.updated`, `project.runtime_status.updated`, `projects.updated`, `project.structure.updated`, and `overview.telemetry.updated` now persist as lightweight sequence markers with `is_replayable = 0`
+- reconnecting websocket clients still get correct gap detection, but missed heavy snapshots now trigger `snapshot_required` instead of replaying bulky payloads from sqlite
+- replay decisions are now scope-aware instead of comparing against the global event sequence, which avoids false snapshot reloads when unrelated projects are active
+
 ### Coalescing realtime publisher
 
 Sprint OS now coalesces runtime writes before broadcasting them.
@@ -45,6 +51,12 @@ The current publisher schedules:
 - `overview.telemetry.updated`
 
 This avoids emitting one websocket message for every low-level DB mutation while still keeping the dashboard near realtime.
+
+Production refinement shipped on March 15, 2026:
+
+- project execution snapshots are now throttled per project instead of being rebuilt on every task-run event burst
+- runtime-status, structure, projects, and overview snapshots each have their own cadence limits
+- project execution refresh no longer implies a `projects.updated` snapshot by default, which removes a major source of redundant dashboard work during active sprints
 
 ### Dashboard websocket endpoint
 
@@ -65,6 +77,12 @@ Current subscription scopes:
 - `overview`
 - `project:<projectId>`
 - `thread:<threadId>`
+
+Reconnect behavior:
+
+- replay uses only replayable events for the subscribed scopes
+- if a client missed a non-replayable live snapshot or the replay window is incomplete for that scope, the server returns `snapshot_required`
+- the browser then falls back to the REST snapshot for that surface
 
 ### Websocket-first dashboard consumers
 
@@ -91,10 +109,17 @@ Realtime refresh scheduling is currently wired from:
 
 - `src/repositories/execution-repository.ts`
 - `src/repositories/connection-chat-repository.ts`
+- `src/repositories/project-attention-repository.ts`
 
 That means the browser is refreshed when execution state or live connection state changes in the DB-native runtime path.
 
 The publisher intentionally ignores heartbeat-only execution writes where possible to avoid noisy event spam.
+
+Additional March 15, 2026 tuning:
+
+- noisy task-run updates and task-run event appends no longer force overview telemetry refresh on every mutation
+- lease updates still refresh the project execution surface, but they no longer churn overview telemetry
+- attention queue open/claim/resolve mutations now notify the live execution snapshot directly instead of waiting for a nearby side-effect refresh
 
 ## What This Improves
 

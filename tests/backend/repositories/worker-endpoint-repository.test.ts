@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -10,6 +10,7 @@ import { WorkerEndpointRepository } from "../../../src/repositories/worker-endpo
 const tempDirs: string[] = [];
 
 async function createRepositories(): Promise<{
+  storage: AppDbStorage;
   projectRepository: ProjectManagementRepository;
   connectionRepository: ConnectionChatRepository;
   workerEndpointRepository: WorkerEndpointRepository;
@@ -20,6 +21,7 @@ async function createRepositories(): Promise<{
   const workerEndpointRepository = new WorkerEndpointRepository(storage);
 
   return {
+    storage,
     projectRepository: new ProjectManagementRepository(storage),
     connectionRepository: new ConnectionChatRepository(storage, undefined, workerEndpointRepository),
     workerEndpointRepository,
@@ -27,10 +29,16 @@ async function createRepositories(): Promise<{
 }
 
 afterEach(async () => {
+  vi.useRealTimers();
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
 describe("WorkerEndpointRepository", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-15T12:00:00.000Z"));
+  });
+
   it("syncs MCP worker registrations into worker endpoints", async () => {
     const { projectRepository, connectionRepository, workerEndpointRepository } = await createRepositories();
     const project = projectRepository.createProject({
@@ -93,5 +101,36 @@ describe("WorkerEndpointRepository", () => {
     });
 
     expect(workerEndpointRepository.getWorkerEndpointByConnectionId(worker.id)).toBeNull();
+  });
+
+  it("derives stale worker endpoint status from heartbeat age", async () => {
+    const { storage, projectRepository, connectionRepository, workerEndpointRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Endpoint Staleness Project",
+      sourceType: "local",
+      sourceRef: "/workspace/endpoint-staleness-project",
+    });
+
+    const worker = connectionRepository.upsertConnection({
+      connectionKey: "worker-endpoint-stale",
+      displayName: "Worker Endpoint Stale",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+
+    const endpoint = workerEndpointRepository.getWorkerEndpointByConnectionId(worker.id);
+    expect(endpoint?.status).toBe("connected");
+
+    const staleAt = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+    storage.getDatabase().prepare(`
+      UPDATE worker_endpoints
+      SET status = 'connected', last_heartbeat_at = ?
+      WHERE connection_id = ?
+    `).run(staleAt, worker.id);
+
+    expect(workerEndpointRepository.getWorkerEndpointByConnectionId(worker.id)?.status).toBe("stale");
   });
 });

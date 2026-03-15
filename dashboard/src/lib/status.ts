@@ -20,4 +20,5 @@ export const computeStats = (tasks: Subtask[]): DashboardStats => ({
   automerge: tasks.filter((task) => task.merge_indicator === "AUTOMERGE").length,
   merged: tasks.filter((task) => task.merge_indicator === "MERGED" || task.is_merged).length,
   mergeBlocked: tasks.filter((task) => task.merge_indicator === "MERGE_BLOCKED").length,
+  mergeConflicts: tasks.filter((task) => task.merge_indicator === "MERGE_CONFLICT").length,
 });

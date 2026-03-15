@@ -15,6 +15,14 @@ function makeCursor(updatedAt: string, id: string): string {
   return `${updatedAt}::${id}`;
 }
 
+function compareCursor(left: { updatedAt: string; id: string }, right: { updatedAt: string; id: string }): number {
+  return makeCursor(left.updatedAt, left.id).localeCompare(makeCursor(right.updatedAt, right.id));
+}
+
+function isAssignableWorkerStatus(status: string | null | undefined): boolean {
+  return status !== null && status !== "stale" && status !== "offline";
+}
+
 export class WorkerListenEventService {
   constructor(
     private readonly connectionChatRepository: ConnectionChatRepository,
@@ -89,18 +97,20 @@ export class WorkerListenEventService {
     const assignments = this.projectWorkerAssignmentRepository.listAssignmentsForProject(projectId);
     const workerAssignment = assignments
       .filter((assignment) => assignment.workerEndpointId === workerEndpointId)
-      .sort((left, right) => makeCursor(right.updatedAt, right.id).localeCompare(makeCursor(left.updatedAt, left.id)))[0];
+      .filter((assignment) => !lastCursor || makeCursor(assignment.updatedAt, assignment.id) > lastCursor)
+      .sort(compareCursor)[0];
 
     if (!workerAssignment) {
       return null;
     }
 
     const nextCursor = makeCursor(workerAssignment.updatedAt, workerAssignment.id);
-    if (lastCursor && nextCursor <= lastCursor) {
-      return null;
-    }
 
-    const activeAssignments = assignments.filter((assignment) => assignment.status === "active");
+    const activeAssignments = assignments.filter((assignment) => (
+      assignment.status === "active"
+      && assignment.capabilities.canSuperviseProjects
+      && isAssignableWorkerStatus(assignment.workerStatus)
+    ));
     const primary = activeAssignments.find((assignment) => assignment.assignmentRole === "primary") || null;
     const project = this.buildProjectPayload(projectId);
     return {
@@ -133,7 +143,7 @@ export class WorkerListenEventService {
   private pullAttentionItemEvent(
     workerEndpointId: string,
     projectId: string,
-    lastCursor: string | null,
+    _lastCursor: string | null,
   ): ListenAttentionItemEvent | null {
     const activeAssignments = this.projectWorkerAssignmentRepository.listAssignmentsForProject(projectId, {
       activeOnly: true,
@@ -145,12 +155,11 @@ export class WorkerListenEventService {
 
     const item = this.projectAttentionRepository.listProjectAttentionItems(projectId, {
       statuses: ["open"],
-      limit: 20,
-    }).find((candidate) => (
+      limit: 200,
+    }).filter((candidate) => (
       candidate.ownerType === "worker"
       && (candidate.assignedWorkerEndpointId === workerEndpointId || candidate.assignedWorkerEndpointId === null)
-      && (!lastCursor || makeCursor(candidate.updatedAt, candidate.id) > lastCursor)
-    ));
+    )).sort(compareCursor)[0];
 
     if (!item) {
       return null;
@@ -182,7 +191,7 @@ export class WorkerListenEventService {
       contextDigest: this.buildContextDigest(projectId),
       continuation: {
         nextTool: "listen",
-        instruction: "Review the attention item in the provided project context, handle the blocker using your available tools, then call listen again with the same connection_key to keep supervising work.",
+        instruction: this.buildAttentionContinuationInstruction(project.repoPath, item),
       },
     };
   }
@@ -227,5 +236,37 @@ export class WorkerListenEventService {
       unresolvedAttentionTitles: unresolvedAttention.slice(0, 3).map((item) => item.title),
       recentEventTypes: snapshot.recentEvents.slice(0, 5).map((event) => event.eventType),
     };
+  }
+
+  private buildAttentionContinuationInstruction(
+    repoPath: string,
+    item: { attentionType: string; payload: Record<string, unknown> | null },
+  ): string {
+    if (item.attentionType === "merge_conflict") {
+      const conflictingBranches = this.asRecord(item.payload?.conflictingBranches);
+      const sourceBranch = this.readPayloadString(conflictingBranches, "source")
+        || this.readPayloadString(item.payload, "workerBranch")
+        || "the task branch";
+      const targetBranch = this.readPayloadString(conflictingBranches, "target")
+        || this.readPayloadString(item.payload, "featureBranch")
+        || "the sprint feature branch";
+      return `Change into ${repoPath}, inspect the merge conflict between ${sourceBranch} and ${targetBranch}, use the task prompt context in the attention payload to resolve it, then call listen again with the same connection_key to keep supervising work.`;
+    }
+
+    return "Review the attention item in the provided project context, handle the blocker using your available tools, then call listen again with the same connection_key to keep supervising work.";
+  }
+
+  private readPayloadString(
+    payload: Record<string, unknown> | null | undefined,
+    key: string,
+  ): string | null {
+    const value = payload?.[key];
+    return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null;
   }
 }

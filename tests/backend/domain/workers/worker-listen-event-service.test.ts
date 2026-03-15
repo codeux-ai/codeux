@@ -33,6 +33,7 @@ async function createFixture() {
   );
 
   return {
+    storage,
     projectRepository,
     connectionRepository,
     workerEndpointRepository,
@@ -198,5 +199,214 @@ describe("WorkerListenEventService", () => {
 
     expect(firstEvent?.kind).toBe("attention_item");
     expect(secondEvent).toBeNull();
+  });
+
+  it("includes branch-aware continuation guidance for merge_conflict attention items", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionRepository,
+      service,
+    } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Merge Conflict Project",
+      sourceType: "local",
+      sourceRef: "/repo/merge-conflict-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      number: 1,
+      featureBranch: "feature/sprint-1",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T9",
+      title: "Resolve conflict",
+      promptMarkdown: "Handle the conflicting API updates.",
+      status: "pending",
+      isIndependent: true,
+    });
+    connectionRepository.startListen({
+      connectionKey: "worker-delta",
+      displayName: "Worker Delta",
+      role: "worker",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+    const connection = connectionRepository.getConnectionByKey("worker-delta");
+    const workerEndpoint = workerEndpointRepository.getWorkerEndpointByConnectionId(connection!.id);
+    projectWorkerAssignmentRepository.createAssignment(project.id, workerEndpoint!, "primary");
+    service.pullNextEvent({ connectionKey: "worker-delta" });
+
+    projectAttentionRepository.openOrRefreshItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      assignedWorkerEndpointId: workerEndpoint!.id,
+      title: "Merge conflict for T9",
+      summaryMarkdown: "Conflict needs worker resolution.",
+      payload: {
+        workerBranch: "worker/T9",
+        featureBranch: "feature/sprint-1",
+        conflictingBranches: {
+          source: "worker/T9",
+          target: "feature/sprint-1",
+        },
+      },
+    });
+
+    const event = service.pullNextEvent({
+      connectionKey: "worker-delta",
+    });
+
+    expect(event?.kind).toBe("attention_item");
+    expect(event?.continuation.instruction).toContain("worker/T9");
+    expect(event?.continuation.instruction).toContain("feature/sprint-1");
+    expect(event?.continuation.instruction).toContain("/repo/merge-conflict-project");
+  });
+
+  it("delivers sibling open attention items even when they share the same updated timestamp", async () => {
+    const {
+      storage,
+      projectRepository,
+      connectionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionRepository,
+      service,
+    } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Timestamp Collision Project",
+      sourceType: "local",
+      sourceRef: "/repo/timestamp-collision-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      number: 1,
+      featureBranch: "feature/sprint-1",
+    });
+    const firstTask = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Task 1",
+      promptMarkdown: "First task",
+      status: "pending",
+      isIndependent: true,
+    });
+    const secondTask = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T2",
+      title: "Task 2",
+      promptMarkdown: "Second task",
+      status: "pending",
+      isIndependent: true,
+    });
+    connectionRepository.startListen({
+      connectionKey: "worker-epsilon",
+      displayName: "Worker Epsilon",
+      role: "worker",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+    const connection = connectionRepository.getConnectionByKey("worker-epsilon");
+    const workerEndpoint = workerEndpointRepository.getWorkerEndpointByConnectionId(connection!.id);
+    projectWorkerAssignmentRepository.createAssignment(project.id, workerEndpoint!, "primary");
+    service.pullNextEvent({ connectionKey: "worker-epsilon" });
+
+    const first = projectAttentionRepository.openOrRefreshItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: firstTask.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      assignedWorkerEndpointId: workerEndpoint!.id,
+      title: "Merge conflict for T1",
+      summaryMarkdown: "First conflict.",
+    });
+    const second = projectAttentionRepository.openOrRefreshItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: secondTask.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      assignedWorkerEndpointId: workerEndpoint!.id,
+      title: "Merge conflict for T2",
+      summaryMarkdown: "Second conflict.",
+    });
+    const sameTimestamp = "2026-03-15T11:34:00.000Z";
+    storage.getDatabase().prepare(`
+      UPDATE project_attention_items
+      SET opened_at = ?, updated_at = ?
+      WHERE id IN (?, ?)
+    `).run(sameTimestamp, sameTimestamp, first.id, second.id);
+
+    const firstEvent = service.pullNextEvent({ connectionKey: "worker-epsilon" });
+    const firstDeliveredItemId = firstEvent && "item" in firstEvent ? firstEvent.item.id : null;
+    projectAttentionRepository.claimAttentionItem(firstDeliveredItemId!, {
+      assignedWorkerEndpointId: workerEndpoint!.id,
+      claimReason: "worker_started_investigation",
+    });
+    const secondEvent = service.pullNextEvent({ connectionKey: "worker-epsilon" });
+
+    expect(firstEvent?.kind).toBe("attention_item");
+    expect(secondEvent?.kind).toBe("attention_item");
+    expect(firstEvent && "item" in firstEvent ? firstEvent.item.id : null).not.toBe(
+      secondEvent && "item" in secondEvent ? secondEvent.item.id : null,
+    );
+  });
+
+  it("re-delivers an open attention item even when the stored cursor has already advanced past it", async () => {
+    const {
+      storage,
+      projectRepository,
+      connectionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionRepository,
+      service,
+    } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Stale Cursor Project",
+      sourceType: "local",
+      sourceRef: "/repo/stale-cursor-project",
+    });
+    connectionRepository.startListen({
+      connectionKey: "worker-zeta",
+      displayName: "Worker Zeta",
+      role: "worker",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+    const connection = connectionRepository.getConnectionByKey("worker-zeta");
+    const workerEndpoint = workerEndpointRepository.getWorkerEndpointByConnectionId(connection!.id);
+    projectWorkerAssignmentRepository.createAssignment(project.id, workerEndpoint!, "primary");
+    service.pullNextEvent({ connectionKey: "worker-zeta" });
+
+    const item = projectAttentionRepository.openOrRefreshItem({
+      projectId: project.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      assignedWorkerEndpointId: workerEndpoint!.id,
+      title: "Merge conflict for T1",
+      summaryMarkdown: "Conflict still open.",
+    });
+    storage.getDatabase().prepare(`
+      UPDATE connection_project_bindings
+      SET last_attention_cursor = ?
+      WHERE connection_id = ? AND project_id = ?
+    `).run("9999-12-31T23:59:59.999Z::zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz", connection!.id, project.id);
+
+    const event = service.pullNextEvent({ connectionKey: "worker-zeta" });
+
+    expect(event?.kind).toBe("attention_item");
+    expect(event && "item" in event ? event.item.id : null).toBe(item.id);
   });
 });

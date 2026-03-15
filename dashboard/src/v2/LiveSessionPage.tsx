@@ -47,6 +47,7 @@ const MERGE_INDICATOR_CFG: Record<string, { label: string; text: string; bg: str
     AUTOMERGE:     { label: "Automerge",     text: "text-ember-400",      bg: "bg-ember-500/8",       border: "border-ember-500/15" },
     MERGED:        { label: "Merged",        text: "text-status-green",   bg: "bg-status-green/8",    border: "border-status-green/15" },
     MERGE_BLOCKED: { label: "Merge Blocked", text: "text-status-amber",   bg: "bg-status-amber/8",    border: "border-status-amber/15" },
+    MERGE_CONFLICT:{ label: "Merge Conflict",text: "text-status-red",     bg: "bg-status-red/8",      border: "border-status-red/15" },
 };
 
 const ORIGINATOR_CFG: Record<string, { border: string; text: string; label: string }> = {
@@ -70,6 +71,7 @@ const EMPTY_RUNTIME_STATS = {
     automerge: 0,
     merged: 0,
     mergeBlocked: 0,
+    mergeConflicts: 0,
 };
 
 /* ─── Stat Metric ────────────────────────────────────────────────────────── */
@@ -560,6 +562,7 @@ const ATTENTION_TYPE_LABELS: Record<string, string> = {
     worker_dispatch_blocked: "Worker Dispatch Blocked",
     dispatch_cancel_stalled: "Dispatch Cancel Stalled",
     merge_required: "Merge Required",
+    merge_conflict: "Merge Conflict",
     action_required: "Action Required",
     manual_attention: "Manual Attention",
 };
@@ -1680,7 +1683,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             )}
 
             {/* ── Stats Row ───────────────────────────────────────────── */}
-            <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 xl:grid-cols-9 gap-4">
                 <StatMetric label="Total"        value={visibleStats.total}        accentHex="#00E0A0" icon={Layers}        delay={0.1} />
                 <StatMetric label="Running"      value={visibleStats.running}      accentHex="#00E0A0" icon={Activity}      delay={0.15} />
                 <StatMetric label="Completed"    value={visibleStats.completed}    accentHex="#00AB84" icon={CheckCircle2}  delay={0.2} />
@@ -1689,6 +1692,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 <StatMetric label="Automerge"    value={visibleStats.automerge}    accentHex="#FFB800" icon={GitMerge}      delay={0.35} />
                 <StatMetric label="Merged"       value={visibleStats.merged}       accentHex="#00AB84" icon={GitPullRequest} delay={0.4} />
                 <StatMetric label="Blocked"      value={visibleStats.mergeBlocked} accentHex="#F59E0B" icon={AlertTriangle} delay={0.45} />
+                <StatMetric label="Conflicts"    value={visibleStats.mergeConflicts} accentHex="#E3000F" icon={GitPullRequest} delay={0.5} />
             </div>
 
             {/* ── Section Divider ─────────────────────────────────────── */}

@@ -451,7 +451,7 @@ describe("JulesAgentServer", () => {
         const getEffectiveGithubTokenSpy = vi.spyOn(server as any, "getEffectiveGithubToken").mockReturnValue("token");
 
         const result = await (server as any).autoMergeFeaturePr({ repoPath: "/repo", prNumber: 123 });
-        expect(result).toEqual({ ok: false, message: "Merge Conflict" });
+        expect(result).toEqual({ ok: false, message: "Merge Conflict", mergeConflict: true });
 
         getEffectiveGithubTokenSpy.mockRestore();
         vi.restoreAllMocks();
@@ -464,7 +464,7 @@ describe("JulesAgentServer", () => {
         const getEffectiveGithubTokenSpy = vi.spyOn(server as any, "getEffectiveGithubToken").mockReturnValue("token");
 
         const result = await (server as any).autoMergeFeaturePr({ repoPath: "/repo", prNumber: 123 });
-        expect(result).toEqual({ ok: false, message: "Some String Error" });
+        expect(result).toEqual({ ok: false, message: "Some String Error", mergeConflict: false });
 
         getEffectiveGithubTokenSpy.mockRestore();
         vi.restoreAllMocks();

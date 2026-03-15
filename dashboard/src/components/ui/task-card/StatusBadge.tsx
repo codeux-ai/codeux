@@ -30,6 +30,8 @@ const getIndicatorColor = (indicator?: SubtaskMergeIndicator): string => {
       return "bg-emerald-500/10 text-emerald-300 border-emerald-500/20";
     case "MERGE_BLOCKED":
       return "bg-amber-500/10 text-amber-300 border-amber-500/20";
+    case "MERGE_CONFLICT":
+      return "bg-red-500/10 text-red-300 border-red-500/20";
     default:
       return "bg-slate-800/50 text-slate-400 border-slate-700";
   }
@@ -40,13 +42,14 @@ export const StatusBadge: FunctionComponent<StatusBadgeProps> = ({ status, indic
   if (!value) {
     return null;
   }
+  const label = value.replaceAll("_", " ");
 
   const colorClasses = indicator ? getIndicatorColor(indicator) : getStatusColor(status);
   const transitionClasses = indicator ? "" : " transition-all duration-500";
 
   return (
     <span className={`px-3 py-1 rounded-full text-[10px] font-bold border${transitionClasses} ${colorClasses}`}>
-      {value}
+      {label}
     </span>
   );
 };

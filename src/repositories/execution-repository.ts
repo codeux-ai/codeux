@@ -514,7 +514,7 @@ export class ExecutionRepository {
     );
 
     const created = this.requireTaskRun(id);
-    this.notifyRealtime(created.projectId, true);
+    this.notifyRealtime(created.projectId, false);
     return created;
   }
 
@@ -965,7 +965,7 @@ export class ExecutionRepository {
       taskRunId
     );
     const updated = this.requireTaskRun(taskRunId);
-    this.notifyRealtime(updated.projectId, true);
+    this.notifyRealtime(updated.projectId, false);
     return updated;
   }
 
@@ -1021,7 +1021,7 @@ export class ExecutionRepository {
     const inserted = Number((result as { changes?: number }).changes || 0) > 0;
     if (inserted) {
       const taskRun = this.requireTaskRun(taskRunId);
-      this.notifyRealtime(taskRun.projectId, true);
+      this.notifyRealtime(taskRun.projectId, false);
     }
     return inserted;
   }
@@ -1191,7 +1191,7 @@ export class ExecutionRepository {
         WHERE scope_type = ? AND scope_id = ? AND lease_token = ?
       `).run(scopeType, scopeId, leaseToken);
       if (projectId) {
-        this.notifyRealtime(projectId, true);
+        this.notifyRealtime(projectId, false);
       }
       return;
     }
@@ -1201,7 +1201,7 @@ export class ExecutionRepository {
       WHERE scope_type = ? AND scope_id = ?
     `).run(scopeType, scopeId);
     if (projectId) {
-      this.notifyRealtime(projectId, true);
+      this.notifyRealtime(projectId, false);
     }
   }
 
@@ -1695,6 +1695,19 @@ export class ExecutionRepository {
           : `Merge${taskKey ? ` ${taskKey}` : " the completed task"}${workerBranch ? ` from ${workerBranch}` : ""}${featureBranch ? ` into ${featureBranch}` : ""}, then resume the sprint. You can enable feature PR automerge later to avoid manual merges.`;
         return this.createHumanInterventionSummary(bestRow, title, reason, instructions);
       }
+      case "merge_conflict": {
+        const featureBranch = asNonEmptyString(payload?.featureBranch);
+        const workerBranch = asNonEmptyString(payload?.workerBranch);
+        const prUrl = asNonEmptyString(payload?.prUrl);
+        return this.createHumanInterventionSummary(
+          bestRow,
+          title,
+          reason,
+          prUrl
+            ? `Ask the connected worker to resolve the merge conflict on ${workerBranch || "the task branch"} against ${featureBranch || "the sprint feature branch"}, then resume the sprint after the PR is clean. (${prUrl})`
+            : `Ask the connected worker to resolve the merge conflict on ${workerBranch || "the task branch"} against ${featureBranch || "the sprint feature branch"}, then resume the sprint after the branches merge cleanly.`,
+        );
+      }
       case "action_required": {
         const interventionOwner = String(payload?.interventionOwner || "").toUpperCase();
         const sessionState = asNonEmptyString(payload?.sessionState);
@@ -1846,6 +1859,10 @@ export class ExecutionRepository {
       return true;
     }
 
+    if (row.attention_type === "merge_conflict") {
+      return row.owner_type !== "worker";
+    }
+
     if (row.attention_type !== "action_required") {
       return row.owner_type !== "worker";
     }
@@ -1861,20 +1878,22 @@ export class ExecutionRepository {
           return 0;
         case "dashboard_reply_required":
           return 1;
-        case "merge_required":
+        case "merge_conflict":
           return 2;
-        case "action_required":
+        case "merge_required":
           return 3;
-        case "manual_attention":
+        case "action_required":
           return 4;
-        case "worker_dispatch_blocked":
+        case "manual_attention":
           return 5;
-        case "worker_lease_expired":
+        case "worker_dispatch_blocked":
           return 6;
-        case "dispatch_cancel_stalled":
+        case "worker_lease_expired":
           return 7;
-        default:
+        case "dispatch_cancel_stalled":
           return 8;
+        default:
+          return 9;
       }
     };
     const severityPriority = (value: string): number => {
@@ -1935,7 +1954,7 @@ export class ExecutionRepository {
   private notifyRealtimeForLease(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string): void {
     const projectId = this.resolveLeaseProjectId(scopeType, scopeId);
     if (projectId) {
-      this.notifyRealtime(projectId, true);
+      this.notifyRealtime(projectId, false);
     }
   }
 

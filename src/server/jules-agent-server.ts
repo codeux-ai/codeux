@@ -15,6 +15,7 @@ import type {
   DashboardStatus,
   GetCiStatusForScopeArgs,
   AutoMergeFeaturePrArgs,
+  AutoMergeFeaturePrResult,
   PersistTaskMergedFlagArgs,
   ReadinessProbeStatus,
 } from "../contracts/app-types.js";
@@ -58,6 +59,17 @@ import { bootMcpHttpTransport, bootMcpTransport, type McpHttpTransportHandle } f
 import { getSprintSubtasksDir, SPRINT_OS_SERVICE_NAME } from "../shared/config/sprint-os-paths.js";
 import { SprintMarkdownService } from "../services/sprint-markdown-service.js";
 
+function detectMergeConflictMessage(message: string | null | undefined): boolean {
+  const normalized = String(message || "").trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return normalized.includes("merge conflict")
+    || normalized.includes("not mergeable")
+    || normalized.includes("cannot be cleanly created")
+    || normalized.includes("dirty");
+}
+
 export interface JulesAgentServerOptions {
   projectRoot: string;
   appConfig: AppConfig;
@@ -67,7 +79,7 @@ export class JulesAgentServer {
   private static readonly DASHBOARD_ACTIVITY_PAGE_SIZE = 20;
   private static readonly LIVE_ACTIVITY_CACHE_MS = 10_000;
   private static readonly GIT_STATUS_CACHE_MS = 10_000;
-  private static readonly RUNTIME_CLEANUP_INTERVAL_MS = 60_000;
+  private static readonly RUNTIME_CLEANUP_INTERVAL_MS = 15_000;
   private readonly projectRoot: string;
   private readonly appConfig: AppConfig;
   private server: Server;
@@ -208,7 +220,8 @@ export class JulesAgentServer {
       }
     };
 
-    runCleanup();
+    const initialTimer = setTimeout(runCleanup, 0);
+    initialTimer.unref?.();
     this.runtimeCleanupInterval = setInterval(runCleanup, JulesAgentServer.RUNTIME_CLEANUP_INTERVAL_MS);
     this.runtimeCleanupInterval.unref?.();
   }
@@ -506,29 +519,41 @@ export class JulesAgentServer {
   private async getCiStatusForScope(args: GetCiStatusForScopeArgs): Promise<GitTrackingStatus | null> {
     const gitStatusService = new GitStatusService(args.repoPath);
     try {
-      return await gitStatusService.getStatus(
-        "REMOTE",
-        this.getEffectiveGithubToken(),
-        {
-          scope: args.scope,
-          featureBranch: args.featureBranch,
-          defaultBranch: args.defaultBranch,
-          featureBranchPrefix: args.featureBranchPrefix,
-        }
-      );
+      const trackingRequest = {
+        scope: args.scope,
+        featureBranch: args.featureBranch,
+        defaultBranch: args.defaultBranch,
+        featureBranchPrefix: args.featureBranchPrefix,
+      };
+      return typeof args.cacheTtlMs === "number"
+        ? await gitStatusService.getStatus(
+            "REMOTE",
+            this.getEffectiveGithubToken(),
+            trackingRequest,
+            args.cacheTtlMs,
+          )
+        : await gitStatusService.getStatus(
+            "REMOTE",
+            this.getEffectiveGithubToken(),
+            trackingRequest,
+          );
     } catch {
       return null;
     }
   }
 
-  private async autoMergeFeaturePr(args: AutoMergeFeaturePrArgs): Promise<{ ok: boolean; message?: string }> {
+  private async autoMergeFeaturePr(args: AutoMergeFeaturePrArgs): Promise<AutoMergeFeaturePrResult> {
     const gitStatusService = new GitStatusService(args.repoPath);
     try {
       const result = await gitStatusService.mergePullRequest(args.prNumber, this.getEffectiveGithubToken());
       return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return { ok: false, message };
+      return {
+        ok: false,
+        message,
+        mergeConflict: detectMergeConflictMessage(message),
+      };
     }
   }
 
@@ -555,6 +580,16 @@ export class JulesAgentServer {
       }
     } catch (error) {
       this.logger.error("Failed to recover interrupted CLI sessions on startup", { error });
+    }
+    try {
+      const startupPrune = this.connectionChatRepository.pruneDisconnectedConnectionsOnStartup();
+      if (startupPrune.prunedConnectionIds.length > 0) {
+        this.logger.info("Pruned disconnected MCP connections on startup", {
+          prunedCount: startupPrune.prunedConnectionIds.length,
+        });
+      }
+    } catch (error) {
+      this.logger.error("Failed to prune disconnected MCP connections on startup", { error });
     }
 
     if (this.isDashboardEnabled()) {

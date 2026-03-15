@@ -124,11 +124,23 @@ The worker listener contract now also supports:
 - `resolve_attention_item` so a worker can close or dismiss a blocker after handling it
 - `report_attention_outcome` so a worker can hand supervision off to the operator side without leaving the original item claimed forever
 
+Worker supervision assignment rules:
+
+- entering `listen` as a worker now ensures project-supervision assignment for the worker's active project scope even before any task dispatch is claimed
+- this makes worker-owned attention items, including merge-conflict escalations, deliverable to a listen-only connected worker
+- worker `listen` registrations now default to full capabilities (`workerCanSuperviseProjects = true`, `workerCanExecuteTasks = true`); those capabilities only narrow when a client explicitly disables them
+- repeated `listen` calls now preserve per-project attention and assignment cursors when the project scope is unchanged, so long-poll re-registration does not replay the same assignment event forever
+- worker attention replay now advances in deterministic cursor order, so multiple open items created in the same second no longer allow one item to advance the cursor past its sibling and leave it undelivered
+- worker assignment and attention routing now treat heartbeat-aged endpoints as effectively `stale` or `offline` even before the slower cleanup sweep rewrites stored status, so a dead primary worker cannot keep absorbing new merge-conflict items while a live overflow worker is listening
+- when a preferred worker endpoint is stale or offline, attention assignment now falls back to the current live supervising worker instead of preserving the stale endpoint id
+
 Operational behavior:
 
 - the blocking call still polls sqlite-backed inbox and dispatch state internally
 - the default internal poll cadence now targets `3000ms`, not `1000ms`
 - idle listener heartbeat writes are throttled, so a waiting listener does not churn connection state every second
+- worker long-poll now defaults to a shorter `30s` timeout with a `1000ms` poll interval, which keeps connected workers responsive without adding another client-side delay layer
+- stale/offline connection cleanup is more aggressive now: heartbeat-derived status flips happen within roughly `90s`/`3m`, runtime cleanup runs every `15s`, and a cold server start prunes disconnected MCP connections with no active dispatches before the dashboard comes up
 
 Transport notes:
 

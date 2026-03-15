@@ -16,6 +16,7 @@ import type {
   Settings,
   SprintLoopStepSettings,
   Subtask,
+  AutoMergeFeaturePrResult,
 } from "../contracts/app-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
@@ -69,8 +70,9 @@ export interface SprintOrchestratorDependencies {
     featureBranch: string;
     defaultBranch: string;
     featureBranchPrefix: string;
+    cacheTtlMs?: number;
   }) => Promise<GitTrackingStatus | null>;
-  autoMergeFeaturePr?: (args: { repoPath: string; prNumber: number }) => Promise<{ ok: boolean; message?: string }>;
+  autoMergeFeaturePr?: (args: { repoPath: string; prNumber: number }) => Promise<AutoMergeFeaturePrResult>;
   renderInstruction: (templateId: InstructionTemplateId, variables: Record<string, unknown>, repoPath?: string) => Promise<string>;
   logger: Logger;
 }
@@ -192,6 +194,8 @@ export class SprintOrchestrator {
         state: "unavailable",
         prNumber: null,
         prUrl: null,
+        hasMergeConflict: false,
+        mergeStateStatus: null,
         hasFailedChecks: false,
         hasPendingChecks: false,
         hasReviewBlockers: false,

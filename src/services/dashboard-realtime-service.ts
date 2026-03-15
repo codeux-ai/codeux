@@ -1,6 +1,7 @@
 import type {
   DashboardRealtimeEvent,
   DashboardRealtimeScopeType,
+  DashboardStatus,
   ExecutionDashboardSnapshot,
   OverviewTelemetrySnapshot,
 } from "../contracts/app-types.js";
@@ -14,32 +15,49 @@ import {
 export interface DashboardRealtimeSnapshotLoaders {
   getProjectsSnapshot: () => ProjectCollectionResponse;
   getProjectExecutionSnapshot: (projectId: string) => ExecutionDashboardSnapshot;
+  getProjectStatusSnapshot: (projectId: string) => DashboardStatus;
   getOverviewTelemetrySnapshot: () => OverviewTelemetrySnapshot;
 }
 
 export interface DashboardRealtimeMutationNotifier {
   scheduleProjectsRefresh: () => void;
-  scheduleProjectExecutionRefresh: (projectId: string, options?: { includeOverview?: boolean }) => void;
+  scheduleProjectExecutionRefresh: (projectId: string, options?: { includeOverview?: boolean; includeProjects?: boolean }) => void;
+  scheduleProjectRuntimeStatusRefresh: (projectId: string) => void;
   scheduleProjectStructureRefresh: (projectId: string, options?: { includeProjects?: boolean }) => void;
 }
 
 type DashboardRealtimeListener = (event: DashboardRealtimeEvent) => void;
 
-const DEFAULT_FLUSH_DELAY_MS = 50;
+const DEFAULT_FLUSH_DELAY_MS = 75;
+const PROJECT_EXECUTION_MIN_INTERVAL_MS = 300;
+const PROJECT_RUNTIME_STATUS_MIN_INTERVAL_MS = 250;
+const PROJECT_STRUCTURE_MIN_INTERVAL_MS = 250;
+const PROJECTS_MIN_INTERVAL_MS = 750;
+const OVERVIEW_MIN_INTERVAL_MS = 1_000;
 
 export class DashboardRealtimeService implements DashboardRealtimeMutationNotifier {
   private readonly listeners = new Set<DashboardRealtimeListener>();
   private readonly pendingProjectIds = new Set<string>();
+  private readonly pendingProjectStatusIds = new Set<string>();
   private readonly pendingProjectStructureIds = new Set<string>();
+  private readonly projectExecutionPublishedAt = new Map<string, number>();
+  private readonly projectRuntimeStatusPublishedAt = new Map<string, number>();
+  private readonly projectStructurePublishedAt = new Map<string, number>();
   private pendingProjects = false;
   private pendingOverview = false;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private flushDueAt: number | null = null;
+  private latestSequence: number;
+  private projectsPublishedAt = 0;
+  private overviewPublishedAt = 0;
   private snapshotLoaders: DashboardRealtimeSnapshotLoaders | null = null;
 
   constructor(
     private readonly eventRepository: DashboardRealtimeEventRepository,
     private readonly logger: Logger,
-  ) {}
+  ) {
+    this.latestSequence = this.eventRepository.getLatestSequence() ?? 0;
+  }
 
   setSnapshotLoaders(loaders: DashboardRealtimeSnapshotLoaders): void {
     this.snapshotLoaders = loaders;
@@ -53,7 +71,15 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
   }
 
   getLatestSequence(): number | null {
-    return this.eventRepository.getLatestSequence();
+    return this.latestSequence > 0 ? this.latestSequence : null;
+  }
+
+  getLatestSequenceForScopes(scopes: string[]): number | null {
+    return this.eventRepository.getLatestSequenceForScopes(scopes);
+  }
+
+  hasNonReplayableEventsSince(scopes: string[], afterSequence: number): boolean {
+    return this.eventRepository.hasNonReplayableEventsSince(scopes, afterSequence);
   }
 
   replay(scopes: string[], afterSequence: number, limit: number = 200): DashboardRealtimeEvent[] {
@@ -70,12 +96,22 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
     }
 
     this.pendingProjectIds.add(normalizedProjectId);
-    if (options?.includeProjects !== false) {
+    if (options?.includeProjects === true) {
       this.pendingProjects = true;
     }
     if (options?.includeOverview !== false) {
       this.pendingOverview = true;
     }
+    this.scheduleFlush();
+  }
+
+  scheduleProjectRuntimeStatusRefresh(projectId: string): void {
+    const normalizedProjectId = String(projectId || "").trim();
+    if (!normalizedProjectId) {
+      return;
+    }
+
+    this.pendingProjectStatusIds.add(normalizedProjectId);
     this.scheduleFlush();
   }
 
@@ -104,59 +140,88 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
 
   publishRawEvent(input: AppendDashboardRealtimeEventInput): DashboardRealtimeEvent {
     const event = this.eventRepository.appendEvent(input);
+    this.latestSequence = Math.max(this.latestSequence, event.sequence);
     this.broadcast(event);
     return event;
   }
 
-  private scheduleFlush(): void {
-    if (this.flushTimer) {
+  private scheduleFlush(delayMs: number = DEFAULT_FLUSH_DELAY_MS): void {
+    const dueAt = Date.now() + Math.max(0, delayMs);
+    if (this.flushTimer && this.flushDueAt !== null && this.flushDueAt <= dueAt) {
       return;
     }
 
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+    }
+
+    this.flushDueAt = dueAt;
     this.flushTimer = setTimeout(() => {
       this.flushTimer = null;
+      this.flushDueAt = null;
       this.flushScheduledSnapshots();
-    }, DEFAULT_FLUSH_DELAY_MS);
+    }, Math.max(0, dueAt - Date.now()));
   }
 
   private flushScheduledSnapshots(): void {
     const loaders = this.snapshotLoaders;
     if (!loaders) {
       this.pendingProjectIds.clear();
+      this.pendingProjectStatusIds.clear();
       this.pendingProjectStructureIds.clear();
       this.pendingProjects = false;
       this.pendingOverview = false;
       return;
     }
 
+    const now = Date.now();
+    let nextDelayMs: number | null = null;
     const projectIds = [...this.pendingProjectIds];
+    const projectStatusIds = [...this.pendingProjectStatusIds];
     const projectStructureIds = [...this.pendingProjectStructureIds];
     const shouldPublishProjects = this.pendingProjects;
     const shouldPublishOverview = this.pendingOverview;
     this.pendingProjectIds.clear();
+    this.pendingProjectStatusIds.clear();
     this.pendingProjectStructureIds.clear();
     this.pendingProjects = false;
     this.pendingOverview = false;
 
     if (shouldPublishProjects) {
-      try {
-        const projects = loaders.getProjectsSnapshot();
-        this.publishRawEvent({
-          scopeType: "projects",
-          scopeId: "projects",
-          eventType: "projects.updated",
-          entityType: "project_collection",
-          entityId: "projects",
-          payload: projects,
-        });
-      } catch (error) {
-        this.logger.error("Failed to publish projects realtime snapshot", {
-          error,
-        });
+      const waitMs = this.getThrottleDelay(this.projectsPublishedAt, PROJECTS_MIN_INTERVAL_MS, now);
+      if (waitMs > 0) {
+        this.pendingProjects = true;
+        nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
+      } else {
+        try {
+          const projects = loaders.getProjectsSnapshot();
+          this.publishRawEvent({
+            scopeType: "projects",
+            scopeId: "projects",
+            eventType: "projects.updated",
+            entityType: "project_collection",
+            entityId: "projects",
+            payload: projects,
+            replayable: false,
+          });
+          this.projectsPublishedAt = now;
+        } catch (error) {
+          this.logger.error("Failed to publish projects realtime snapshot", {
+            error,
+          });
+        }
       }
     }
 
     for (const projectId of projectIds) {
+      const lastPublishedAt = this.projectExecutionPublishedAt.get(projectId) ?? 0;
+      const waitMs = this.getThrottleDelay(lastPublishedAt, PROJECT_EXECUTION_MIN_INTERVAL_MS, now);
+      if (waitMs > 0) {
+        this.pendingProjectIds.add(projectId);
+        nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
+        continue;
+      }
+
       try {
         const snapshot = loaders.getProjectExecutionSnapshot(projectId);
         this.publishRawEvent({
@@ -167,7 +232,9 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
           entityId: projectId,
           projectId,
           payload: snapshot,
+          replayable: false,
         });
+        this.projectExecutionPublishedAt.set(projectId, now);
       } catch (error) {
         this.logger.error("Failed to publish project execution realtime snapshot", {
           projectId,
@@ -176,7 +243,45 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
       }
     }
 
+    for (const projectId of projectStatusIds) {
+      const lastPublishedAt = this.projectRuntimeStatusPublishedAt.get(projectId) ?? 0;
+      const waitMs = this.getThrottleDelay(lastPublishedAt, PROJECT_RUNTIME_STATUS_MIN_INTERVAL_MS, now);
+      if (waitMs > 0) {
+        this.pendingProjectStatusIds.add(projectId);
+        nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
+        continue;
+      }
+
+      try {
+        const snapshot = loaders.getProjectStatusSnapshot(projectId);
+        this.publishRawEvent({
+          scopeType: "project",
+          scopeId: projectId,
+          eventType: "project.runtime_status.updated",
+          entityType: "project_status",
+          entityId: projectId,
+          projectId,
+          payload: snapshot,
+          replayable: false,
+        });
+        this.projectRuntimeStatusPublishedAt.set(projectId, now);
+      } catch (error) {
+        this.logger.error("Failed to publish project runtime status realtime snapshot", {
+          projectId,
+          error,
+        });
+      }
+    }
+
     for (const projectId of projectStructureIds) {
+      const lastPublishedAt = this.projectStructurePublishedAt.get(projectId) ?? 0;
+      const waitMs = this.getThrottleDelay(lastPublishedAt, PROJECT_STRUCTURE_MIN_INTERVAL_MS, now);
+      if (waitMs > 0) {
+        this.pendingProjectStructureIds.add(projectId);
+        nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
+        continue;
+      }
+
       try {
         this.publishRawEvent({
           scopeType: "project",
@@ -189,7 +294,9 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
             projectId,
             updatedAt: new Date().toISOString(),
           },
+          replayable: false,
         });
+        this.projectStructurePublishedAt.set(projectId, now);
       } catch (error) {
         this.logger.error("Failed to publish project structure realtime snapshot", {
           projectId,
@@ -198,25 +305,49 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
       }
     }
 
-    if (!shouldPublishOverview) {
-      return;
+    if (shouldPublishOverview) {
+      const waitMs = this.getThrottleDelay(this.overviewPublishedAt, OVERVIEW_MIN_INTERVAL_MS, now);
+      if (waitMs > 0) {
+        this.pendingOverview = true;
+        nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
+      } else {
+        try {
+          const telemetry = loaders.getOverviewTelemetrySnapshot();
+          this.publishRawEvent({
+            scopeType: "overview",
+            scopeId: "overview",
+            eventType: "overview.telemetry.updated",
+            entityType: "overview",
+            entityId: "overview",
+            payload: telemetry,
+            replayable: false,
+          });
+          this.overviewPublishedAt = now;
+        } catch (error) {
+          this.logger.error("Failed to publish overview telemetry realtime snapshot", {
+            error,
+          });
+        }
+      }
     }
 
-    try {
-      const telemetry = loaders.getOverviewTelemetrySnapshot();
-      this.publishRawEvent({
-        scopeType: "overview",
-        scopeId: "overview",
-        eventType: "overview.telemetry.updated",
-        entityType: "overview",
-        entityId: "overview",
-        payload: telemetry,
-      });
-    } catch (error) {
-      this.logger.error("Failed to publish overview telemetry realtime snapshot", {
-        error,
-      });
+    if (nextDelayMs !== null) {
+      this.scheduleFlush(nextDelayMs);
     }
+  }
+
+  private getThrottleDelay(lastPublishedAt: number, minIntervalMs: number, now: number): number {
+    if (lastPublishedAt <= 0) {
+      return 0;
+    }
+    return Math.max(0, minIntervalMs - (now - lastPublishedAt));
+  }
+
+  private getNextDelay(currentDelayMs: number | null, candidateDelayMs: number): number {
+    if (currentDelayMs === null) {
+      return candidateDelayMs;
+    }
+    return Math.min(currentDelayMs, candidateDelayMs);
   }
 
   private broadcast(event: DashboardRealtimeEvent): void {

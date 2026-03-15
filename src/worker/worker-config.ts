@@ -9,6 +9,8 @@ export interface WorkerConfig {
   projectIds?: string[];
   activeProjectIds?: string[];
   sprintId?: string;
+  listenTimeoutSeconds: number;
+  listenPollIntervalMs: number;
   dispatchPollIntervalMs: number;
   sessionPollIntervalMs: number;
   controlPlaneUrl?: string;
@@ -20,6 +22,8 @@ export interface WorkerConfig {
 
 const DEFAULT_DISPATCH_POLL_INTERVAL_MS = 5_000;
 const DEFAULT_SESSION_POLL_INTERVAL_MS = 10_000;
+const DEFAULT_LISTEN_TIMEOUT_SECONDS = 30;
+const DEFAULT_LISTEN_POLL_INTERVAL_MS = 1_000;
 
 const parseStringFlag = (argv: string[], flagName: string): string | null => {
   const args = argv.slice(2);
@@ -87,6 +91,8 @@ export function loadWorkerConfig(argv: string[] = process.argv): WorkerConfig {
     projectIds: parseRepeatedStringFlag(argv, "--project-id"),
     activeProjectIds: parseRepeatedStringFlag(argv, "--active-project-id"),
     sprintId: parseStringFlag(argv, "--sprint-id")?.trim() || undefined,
+    listenTimeoutSeconds: parseIntegerFlag(argv, "--listen-timeout-seconds", DEFAULT_LISTEN_TIMEOUT_SECONDS),
+    listenPollIntervalMs: parseIntegerFlag(argv, "--listen-poll-interval-ms", DEFAULT_LISTEN_POLL_INTERVAL_MS),
     dispatchPollIntervalMs: parseIntegerFlag(argv, "--dispatch-poll-interval-ms", DEFAULT_DISPATCH_POLL_INTERVAL_MS),
     sessionPollIntervalMs: parseIntegerFlag(argv, "--session-poll-interval-ms", DEFAULT_SESSION_POLL_INTERVAL_MS),
     controlPlaneUrl: parseStringFlag(argv, "--server-url")?.trim() || undefined,

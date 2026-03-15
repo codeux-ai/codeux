@@ -19,6 +19,7 @@ async function createRepositories() {
   const projectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(storage);
 
   return {
+    storage,
     projectRepository: new ProjectManagementRepository(storage),
     connectionRepository: new ConnectionChatRepository(storage, undefined, workerEndpointRepository),
     workerEndpointRepository,
@@ -125,6 +126,86 @@ describe("ProjectWorkerAssignmentRepository", () => {
     projectWorkerAssignmentRepository.releaseAssignment(primary!.id, "worker disconnected");
 
     const promoted = projectWorkerAssignmentService.noteWorkerActivity(project.id, endpointB.id);
+    expect(promoted.assignmentRole).toBe("primary");
+  });
+
+  it("does not churn an existing assignment when ensuring the same worker/project binding", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentService,
+    } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Ensure Project",
+      sourceType: "local",
+      sourceRef: "/workspace/ensure-project",
+    });
+
+    const worker = connectionRepository.upsertConnection({
+      connectionKey: "worker-ensure-1",
+      displayName: "Worker Ensure 1",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+    const workerEndpoint = workerEndpointRepository.getWorkerEndpointByConnectionId(worker.id)!;
+
+    const first = projectWorkerAssignmentService.ensureWorkerAssignment(project.id, workerEndpoint.id);
+    const second = projectWorkerAssignmentService.ensureWorkerAssignment(project.id, workerEndpoint.id);
+
+    expect(second.id).toBe(first.id);
+    expect(second.updatedAt).toBe(first.updatedAt);
+    expect(second.lastAffinityAt).toBe(first.lastAffinityAt);
+  });
+
+  it("promotes a live worker to primary when the older primary has gone stale", async () => {
+    const {
+      storage,
+      projectRepository,
+      connectionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService,
+    } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Stale Primary Project",
+      sourceType: "local",
+      sourceRef: "/workspace/stale-primary-project",
+    });
+
+    const staleWorker = connectionRepository.upsertConnection({
+      connectionKey: "worker-stale-primary",
+      displayName: "Stale Primary",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+    const liveWorker = connectionRepository.upsertConnection({
+      connectionKey: "worker-live-primary",
+      displayName: "Live Primary",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+
+    const staleEndpoint = workerEndpointRepository.getWorkerEndpointByConnectionId(staleWorker.id)!;
+    const liveEndpoint = workerEndpointRepository.getWorkerEndpointByConnectionId(liveWorker.id)!;
+    storage.getDatabase().prepare(`
+      UPDATE worker_endpoints
+      SET status = 'connected', last_heartbeat_at = ?
+      WHERE id = ?
+    `).run(new Date(Date.now() - 2 * 60 * 1000).toISOString(), staleEndpoint.id);
+
+    projectWorkerAssignmentRepository.createAssignment(project.id, staleEndpoint, "primary");
+    const promoted = projectWorkerAssignmentService.ensureWorkerAssignment(project.id, liveEndpoint.id);
+
     expect(promoted.assignmentRole).toBe("primary");
   });
 });

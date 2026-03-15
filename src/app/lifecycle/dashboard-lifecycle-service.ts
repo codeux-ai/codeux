@@ -207,14 +207,20 @@ function resolveAttentionClaimWorkerEndpointId(
     activeOnly: true,
   });
   const primary = assignments.find((assignment) => (
-    assignment.assignmentRole === "primary" && assignment.capabilities.canSuperviseProjects
+    assignment.assignmentRole === "primary"
+    && assignment.capabilities.canSuperviseProjects
+    && assignment.workerStatus !== "stale"
+    && assignment.workerStatus !== "offline"
   ));
   if (primary?.workerEndpointId) {
     return primary.workerEndpointId;
   }
 
   const overflow = assignments.find((assignment) => (
-    assignment.assignmentRole === "overflow" && assignment.capabilities.canSuperviseProjects
+    assignment.assignmentRole === "overflow"
+    && assignment.capabilities.canSuperviseProjects
+    && assignment.workerStatus !== "stale"
+    && assignment.workerStatus !== "offline"
   ));
   if (overflow?.workerEndpointId) {
     return overflow.workerEndpointId;
@@ -226,15 +232,52 @@ function resolveAttentionClaimWorkerEndpointId(
 export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
   const dashboardDir = `${deps.projectRoot}/dashboard`;
   const port = deps.getDashboardPort();
+  const PROJECT_EXECUTION_CACHE_TTL_MS = 250;
+  const OVERVIEW_CACHE_TTL_MS = 500;
+  const PROJECTS_CACHE_TTL_MS = 500;
 
-  const getOverviewTelemetrySnapshot = () => deps.executionRepository.getOverviewTelemetrySnapshot();
-  const getProjectsSnapshot = () => deps.projectManagementRepository.listProjects();
+  const projectExecutionSnapshotCache = new Map<string, { snapshot: ReturnType<typeof deps.executionRepository.getProjectExecutionSnapshot>; expiresAt: number }>();
+  let overviewTelemetryCache: { snapshot: ReturnType<typeof deps.executionRepository.getOverviewTelemetrySnapshot>; expiresAt: number } | null = null;
+  let projectsSnapshotCache: { snapshot: ReturnType<typeof deps.projectManagementRepository.listProjects>; expiresAt: number } | null = null;
+
+  const getProjectsSnapshot = () => {
+    const now = Date.now();
+    if (projectsSnapshotCache && projectsSnapshotCache.expiresAt > now) {
+      return projectsSnapshotCache.snapshot;
+    }
+    const snapshot = deps.projectManagementRepository.listProjects();
+    projectsSnapshotCache = {
+      snapshot,
+      expiresAt: now + PROJECTS_CACHE_TTL_MS,
+    };
+    return snapshot;
+  };
+
+  const getOverviewTelemetrySnapshot = () => {
+    const now = Date.now();
+    if (overviewTelemetryCache && overviewTelemetryCache.expiresAt > now) {
+      return overviewTelemetryCache.snapshot;
+    }
+    const snapshot = deps.executionRepository.getOverviewTelemetrySnapshot();
+    overviewTelemetryCache = {
+      snapshot,
+      expiresAt: now + OVERVIEW_CACHE_TTL_MS,
+    };
+    return snapshot;
+  };
+
   const getProjectExecutionSnapshot = (projectId: string) => {
+    const now = Date.now();
+    const cached = projectExecutionSnapshotCache.get(projectId);
+    if (cached && cached.expiresAt > now) {
+      return cached.snapshot;
+    }
+
     const assignedWorkers = mapAssignedWorkers(
       deps.projectWorkerAssignmentRepository.listAssignmentsForProject(projectId, { activeOnly: true }),
     );
 
-    return {
+    const snapshot = {
       ...deps.executionRepository.getProjectExecutionSnapshot(projectId),
       connections: mapExecutionConnections(deps.connectionChatRepository.listConnections(projectId)),
       ...assignedWorkers,
@@ -245,11 +288,17 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
         }),
       ),
     };
+    projectExecutionSnapshotCache.set(projectId, {
+      snapshot,
+      expiresAt: now + PROJECT_EXECUTION_CACHE_TTL_MS,
+    });
+    return snapshot;
   };
 
   deps.dashboardRealtimeService.setSnapshotLoaders({
     getProjectsSnapshot,
     getProjectExecutionSnapshot,
+    getProjectStatusSnapshot: (projectId) => deps.projectRuntimeRepository.getProjectStatus(projectId),
     getOverviewTelemetrySnapshot,
   });
 

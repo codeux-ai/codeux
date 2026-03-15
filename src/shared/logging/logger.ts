@@ -31,6 +31,8 @@ interface StructuredLogRecord {
   metadata?: LogMetadata;
 }
 
+const logFileStreams = new Map<string, fs.WriteStream>();
+
 const LOG_LEVEL_PRIORITY: Record<LogLevel, number> = {
   debug: 10,
   info: 20,
@@ -106,6 +108,20 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
   const environment = options.environment ?? (process.env.NODE_ENV === "production" ? "production" : "development");
   const bindings = { ...(options.bindings || {}) };
   const logFilePath = options.logFilePath;
+  const logFileStream = logFilePath
+    ? (() => {
+        const existing = logFileStreams.get(logFilePath);
+        if (existing) {
+          return existing;
+        }
+        const stream = fs.createWriteStream(logFilePath, { flags: "a" });
+        stream.on("error", () => {
+          logFileStreams.delete(logFilePath);
+        });
+        logFileStreams.set(logFilePath, stream);
+        return stream;
+      })()
+    : null;
 
   const shouldLog = (level: LogLevel): boolean => LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[minLevel];
 
@@ -115,9 +131,9 @@ export const createLogger = (options: StructuredLoggerOptions = {}): Logger => {
     // We must redirect ALL logs to stderr.
     process.stderr.write(text + "\n");
 
-    if (logFilePath) {
+    if (logFileStream) {
       try {
-        fs.appendFileSync(logFilePath, text + "\n");
+        logFileStream.write(text + "\n");
       } catch {
         // Silently ignore log file write errors to avoid crashing
       }

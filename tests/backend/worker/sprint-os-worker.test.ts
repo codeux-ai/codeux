@@ -122,4 +122,31 @@ describe("SprintOsWorker", () => {
     });
     expect((worker as any).resolveActiveProjectIds()).toBeUndefined();
   });
+
+  it("holds merge_conflict attention items for worker-side handling after claim", async () => {
+    const worker = new SprintOsWorker(baseConfig);
+    const callJsonTool = vi.fn().mockResolvedValue({
+      itemId: "attention-1",
+      status: "claimed",
+      assignedWorkerEndpointId: "worker-endpoint-1",
+      claimedAt: "2026-03-13T00:02:00.000Z",
+    });
+    (worker as any).callJsonTool = callJsonTool;
+
+    await (worker as any).processAttentionItem({} as any, {
+      ...openAttentionEvent,
+      item: {
+        ...openAttentionEvent.item,
+        attentionType: "merge_conflict",
+        title: "Merge conflict",
+      },
+    });
+
+    expect(callJsonTool).toHaveBeenCalledTimes(1);
+    expect(callJsonTool).toHaveBeenCalledWith({} as any, "claim_attention_item", {
+      connection_key: "worker-1",
+      attention_item_id: "attention-1",
+      claim_reason: "worker_listen_claimed",
+    });
+  });
 });

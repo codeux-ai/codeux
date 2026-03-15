@@ -3,6 +3,7 @@ export type ProjectAttentionType =
   | "worker_dispatch_blocked"
   | "dispatch_cancel_stalled"
   | "merge_required"
+  | "merge_conflict"
   | "action_required"
   | "manual_attention"
   | "dashboard_reply_required"

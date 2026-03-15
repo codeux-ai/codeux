@@ -9,6 +9,7 @@ import type {
   DashboardStatus,
   GetCiStatusForScopeArgs,
   AutoMergeFeaturePrArgs,
+  AutoMergeFeaturePrResult,
   PersistTaskMergedFlagArgs,
 } from "../contracts/app-types.js";
 import { createCoreDependencies, type CoreDependencies } from "./dependency-factory/core-factory.js";
@@ -34,7 +35,7 @@ export interface ServerContext {
   fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<JulesActivity[]>;
   listSessionsForSync: () => Promise<{ sessions?: JulesSession[] }>;
   getCiStatusForScope: (args: GetCiStatusForScopeArgs) => Promise<GitTrackingStatus | null>;
-  autoMergeFeaturePr: (args: AutoMergeFeaturePrArgs) => Promise<{ ok: boolean; message?: string }>;
+  autoMergeFeaturePr: (args: AutoMergeFeaturePrArgs) => Promise<AutoMergeFeaturePrResult>;
   resolveSessionNameFromTask: (task: Subtask) => string | undefined;
   resolveGitStatusRepoPath: () => string;
   fetchGitStatusForRepo: (repoPath: string, cacheTtlMs?: number) => Promise<GitTrackingStatus>;

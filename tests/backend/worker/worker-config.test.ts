@@ -46,6 +46,8 @@ describe("loadWorkerConfig", () => {
     expect(config.projectIds).toEqual(["project-1"]);
     expect(config.activeProjectIds).toEqual([]);
     expect(config.sprintId).toBe("sprint-1");
+    expect(config.listenTimeoutSeconds).toBe(30);
+    expect(config.listenPollIntervalMs).toBe(1000);
     expect(config.dispatchPollIntervalMs).toBe(2000);
     expect(config.sessionPollIntervalMs).toBe(3000);
     expect(config.serverCommand).toBe("node");

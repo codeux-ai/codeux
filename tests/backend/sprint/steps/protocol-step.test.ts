@@ -8,8 +8,10 @@ describe("protocol-step", () => {
         enableLivePrMonitoring: false,
         waitForCiBeforeMainMerge: false,
         resolveAllCommentsBeforeMainMerge: false,
+        resolveMainMergeConflicts: false,
         waitForCiBeforeFeatureMerge: true,
         resolveAllCommentsBeforeFeatureMerge: true,
+        resolveMergeConflicts: false,
         waitForJulesCiAutofix: false,
         julesCiAutofixMaxRetries: 0,
         featurePrAutoMergeMode: "OFF",
@@ -46,6 +48,28 @@ describe("protocol-step", () => {
         expect(onTaskEvent).toHaveBeenCalledWith(expect.objectContaining({
             eventType: "protocol_action_required",
         }));
+    });
+
+    it("suppresses manual merge instructions for worker-escalated merge conflicts", async () => {
+        const subtasks: Subtask[] = [
+            { id: "1", title: "t", prompt: "p", depends_on: [], is_independent: false, status: "COMPLETED", is_merged: false },
+        ];
+
+        const renderInstruction = vi.fn(async (t, v) => `${t}:${JSON.stringify(v)}`);
+        const res = await runProtocolStep(subtasks, {
+            featureBranch: "fb",
+            githubMode: "REMOTE",
+            ciIntelligence,
+            enableMergeProtocol: true,
+            enableActionRequiredProtocol: true,
+            isActionRequiredState: () => true,
+            isWorkerEscalatedMergeConflictTask: () => true,
+            renderInstruction,
+        });
+
+        expect(res.instructions).toBe("");
+        expect(res.manualMergeTasks).toEqual([]);
+        expect(res.workerEscalatedMergeConflictTasks).toHaveLength(1);
     });
 
     it("disables lines when CI intelligence is off", async () => {

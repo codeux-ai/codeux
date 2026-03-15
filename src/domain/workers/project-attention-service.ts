@@ -2,6 +2,10 @@ import { ProjectAttentionRepository, type OpenProjectAttentionItemInput } from "
 import { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
 import type { ProjectAttentionItemRecord, ProjectAttentionOwnerType, ProjectAttentionType } from "../../contracts/project-attention-types.js";
 
+function isAssignableWorkerStatus(status: string | null | undefined): boolean {
+  return status !== null && status !== "stale" && status !== "offline";
+}
+
 export class ProjectAttentionService {
   constructor(
     private readonly projectAttentionRepository: ProjectAttentionRepository,
@@ -122,22 +126,33 @@ export class ProjectAttentionService {
     if (ownerType !== "worker") {
       return null;
     }
-    if (preferredWorkerEndpointId) {
-      return preferredWorkerEndpointId;
-    }
-
     const assignments = this.projectWorkerAssignmentRepository.listAssignmentsForProject(projectId, {
       activeOnly: true,
     });
+    if (preferredWorkerEndpointId) {
+      const preferred = assignments.find((assignment) => (
+        assignment.workerEndpointId === preferredWorkerEndpointId
+        && assignment.capabilities.canSuperviseProjects
+        && isAssignableWorkerStatus(assignment.workerStatus)
+      ));
+      if (preferred?.workerEndpointId) {
+        return preferred.workerEndpointId;
+      }
+    }
+
     const primary = assignments.find((assignment) => (
-      assignment.assignmentRole === "primary" && assignment.capabilities.canSuperviseProjects
+      assignment.assignmentRole === "primary"
+      && assignment.capabilities.canSuperviseProjects
+      && isAssignableWorkerStatus(assignment.workerStatus)
     ));
     if (primary?.workerEndpointId) {
       return primary.workerEndpointId;
     }
 
     const overflow = assignments.find((assignment) => (
-      assignment.assignmentRole === "overflow" && assignment.capabilities.canSuperviseProjects
+      assignment.assignmentRole === "overflow"
+      && assignment.capabilities.canSuperviseProjects
+      && isAssignableWorkerStatus(assignment.workerStatus)
     ));
     return overflow?.workerEndpointId || null;
   }

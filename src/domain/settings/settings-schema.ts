@@ -145,8 +145,10 @@ const validateCiIntelligence = (
   if (typeof value.enableLivePrMonitoring !== "boolean") issues.push({ path: `${path}.enableLivePrMonitoring`, message: "Expected a boolean" });
   if (typeof value.waitForCiBeforeMainMerge !== "boolean") issues.push({ path: `${path}.waitForCiBeforeMainMerge`, message: "Expected a boolean" });
   if (typeof value.resolveAllCommentsBeforeMainMerge !== "boolean") issues.push({ path: `${path}.resolveAllCommentsBeforeMainMerge`, message: "Expected a boolean" });
+  if (typeof value.resolveMainMergeConflicts !== "boolean") issues.push({ path: `${path}.resolveMainMergeConflicts`, message: "Expected a boolean" });
   if (typeof value.waitForCiBeforeFeatureMerge !== "boolean") issues.push({ path: `${path}.waitForCiBeforeFeatureMerge`, message: "Expected a boolean" });
   if (typeof value.resolveAllCommentsBeforeFeatureMerge !== "boolean") issues.push({ path: `${path}.resolveAllCommentsBeforeFeatureMerge`, message: "Expected a boolean" });
+  if (typeof value.resolveMergeConflicts !== "boolean") issues.push({ path: `${path}.resolveMergeConflicts`, message: "Expected a boolean" });
   if (typeof value.waitForJulesCiAutofix !== "boolean") issues.push({ path: `${path}.waitForJulesCiAutofix`, message: "Expected a boolean" });
   if (typeof value.julesCiAutofixMaxRetries !== "number") issues.push({ path: `${path}.julesCiAutofixMaxRetries`, message: "Expected a number" });
   if (typeof value.featurePrAutoMergeMode !== "string" || !FEATURE_PR_AUTOMERGE_MODES.includes(value.featurePrAutoMergeMode as FeaturePrAutoMergeMode)) {

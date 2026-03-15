@@ -36,6 +36,9 @@ describe("CoreToolHandler coverage", () => {
                         : null
                 )),
             },
+            projectWorkerAssignmentService: {
+                ensureWorkerAssignment: vi.fn(),
+            },
             projectAttentionService: {
                 claimItem: vi.fn().mockReturnValue({
                     id: "attention-1",
@@ -112,6 +115,31 @@ describe("CoreToolHandler coverage", () => {
             capabilities: undefined,
             maxMessages: undefined,
         });
+    });
+
+    it("handleStartListen ensures worker assignments for worker listeners", async () => {
+        defaultDeps.connectionChatRepository.startListen.mockReturnValue({
+            connection: {
+                id: "conn-worker-1",
+                connectionKey: "worker-1",
+                role: "worker",
+                projectIds: ["project-1"],
+                activeProjectIds: ["project-1"],
+            },
+            inbox: [],
+        });
+
+        const handler = new CoreToolHandler(defaultDeps);
+        await handler.handleStartListen({
+            connection_key: "worker-1",
+            project_id: "project-1",
+            role: "worker",
+        });
+
+        expect(defaultDeps.projectWorkerAssignmentService.ensureWorkerAssignment).toHaveBeenCalledWith(
+            "project-1",
+            "worker-endpoint-1",
+        );
     });
 
     it("handleListen returns a dashboard message event", async () => {

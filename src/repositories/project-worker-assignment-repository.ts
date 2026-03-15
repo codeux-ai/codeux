@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { AppDbStorage } from "./app-db-storage.js";
+import { deriveWorkerEndpointStatus } from "./connection-lifecycle.js";
 import type {
   ProjectWorkerAssignmentRecord,
   ProjectWorkerAssignmentRole,
@@ -29,6 +30,7 @@ interface ProjectWorkerAssignmentRow {
   created_at: string;
   updated_at: string;
   worker_status: string | null;
+  worker_last_heartbeat_at: string | null;
   capabilities_json: string | null;
 }
 
@@ -65,6 +67,7 @@ export class ProjectWorkerAssignmentRepository {
       SELECT
         a.*,
         we.status AS worker_status,
+        we.last_heartbeat_at AS worker_last_heartbeat_at,
         we.capabilities_json
       FROM project_worker_assignments a
       LEFT JOIN worker_endpoints we ON we.id = a.worker_endpoint_id
@@ -84,6 +87,7 @@ export class ProjectWorkerAssignmentRepository {
       SELECT
         a.*,
         we.status AS worker_status,
+        we.last_heartbeat_at AS worker_last_heartbeat_at,
         we.capabilities_json
       FROM project_worker_assignments a
       LEFT JOIN worker_endpoints we ON we.id = a.worker_endpoint_id
@@ -103,6 +107,7 @@ export class ProjectWorkerAssignmentRepository {
       SELECT
         a.*,
         we.status AS worker_status,
+        we.last_heartbeat_at AS worker_last_heartbeat_at,
         we.capabilities_json
       FROM project_worker_assignments a
       LEFT JOIN worker_endpoints we ON we.id = a.worker_endpoint_id
@@ -192,6 +197,7 @@ export class ProjectWorkerAssignmentRepository {
       SELECT
         a.*,
         we.status AS worker_status,
+        we.last_heartbeat_at AS worker_last_heartbeat_at,
         we.capabilities_json
       FROM project_worker_assignments a
       LEFT JOIN worker_endpoints we ON we.id = a.worker_endpoint_id
@@ -222,7 +228,9 @@ export class ProjectWorkerAssignmentRepository {
       releasedAt: row.released_at,
       releaseReason: row.release_reason,
       lastAffinityAt: row.last_affinity_at,
-      workerStatus: row.worker_status as WorkerEndpointStatus | null,
+      workerStatus: row.worker_status
+        ? deriveWorkerEndpointStatus(row.worker_status as WorkerEndpointStatus, row.worker_last_heartbeat_at)
+        : null,
       capabilities: parseCapabilities(row.capabilities_json),
       createdAt: row.created_at,
       updatedAt: row.updated_at,

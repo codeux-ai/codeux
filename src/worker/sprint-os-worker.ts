@@ -188,6 +188,8 @@ export class SprintOsWorker {
         project_id: this.config.projectId,
         project_ids: this.config.projectIds,
         active_project_ids: this.resolveActiveProjectIds(),
+        timeout_seconds: this.config.listenTimeoutSeconds,
+        poll_interval_ms: this.config.listenPollIntervalMs,
         transport: this.config.controlPlaneUrl ? "streamable_http" : "stdio",
         include_task_dispatch: true,
         include_attention_items: true,
@@ -196,6 +198,8 @@ export class SprintOsWorker {
             ? "Claims Sprint OS worker dispatches from the remote control plane and executes them on the local worker host."
             : "Claims Sprint OS worker dispatches and executes them locally through the worker-host runtime.",
           listenMode: true,
+          workerCanSuperviseProjects: true,
+          workerCanExecuteTasks: true,
           labels: ["worker"],
           machineName: os.hostname(),
           platform: os.platform(),
@@ -225,7 +229,6 @@ export class SprintOsWorker {
       }
 
       if (response.kind === "noop_timeout") {
-        await delay(this.config.dispatchPollIntervalMs, signal).catch(() => undefined);
         continue;
       }
     }
@@ -384,7 +387,11 @@ export class SprintOsWorker {
           assignedWorkerEndpointId: claimed.assignedWorkerEndpointId,
           claimedAt: claimed.claimedAt,
         });
-        await this.reportAttentionOutcome(controlPlaneClient, event);
+        if (this.shouldAutoReportAttentionOutcome(event)) {
+          await this.reportAttentionOutcome(controlPlaneClient, event);
+        } else {
+          console.info("[sprint-os-worker] Holding claimed attention item for worker-side handling", logPayload);
+        }
       } catch (error) {
         console.error("[sprint-os-worker] Failed to claim attention item", {
           ...logPayload,
@@ -396,7 +403,11 @@ export class SprintOsWorker {
 
     if (event.item.status === "claimed") {
       this.supervisionState.markAttentionItemClaimed(event.project.id, event.item.id);
-      await this.reportAttentionOutcome(controlPlaneClient, event);
+      if (this.shouldAutoReportAttentionOutcome(event)) {
+        await this.reportAttentionOutcome(controlPlaneClient, event);
+      } else {
+        console.info("[sprint-os-worker] Attention item remains claimed for worker-side handling", logPayload);
+      }
     }
 
     console.warn("[sprint-os-worker] Attention item requires worker supervision", logPayload);
@@ -447,12 +458,17 @@ export class SprintOsWorker {
   ): "needs_dashboard_reply" | "needs_human_escalation" {
     switch (event.item.attentionType) {
       case "merge_required":
+      case "merge_conflict":
       case "action_required":
       case "manual_attention":
         return "needs_human_escalation";
       default:
         return "needs_dashboard_reply";
     }
+  }
+
+  private shouldAutoReportAttentionOutcome(event: ListenAttentionItemEvent): boolean {
+    return event.item.attentionType !== "merge_conflict";
   }
 
   private buildAttentionOutcomeSummary(

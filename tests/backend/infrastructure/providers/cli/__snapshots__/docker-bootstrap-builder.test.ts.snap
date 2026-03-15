@@ -4,10 +4,10 @@ exports[`DockerBootstrapBuilder > should build a complete script with default op
 "set -euo pipefail
 mkdir -p "$HOME/.config" "$HOME/.codex" "$HOME/.claude" "$HOME/.gemini"
 sync_dir_contents() { local source="$1"; local destination="$2"; local label="$3"; mkdir -p "$destination"; if ! cp -r "$source/." "$destination/"; then echo "provider-runner: warning: failed to copy $label credentials" >&2; fi; }
+copy_if_present() { local source="$1"; local destination="$2"; local label="$3"; if [ -e "$source" ]; then mkdir -p "$(dirname "$destination")"; if ! cp -f "$source" "$destination"; then echo "provider-runner: warning: failed to copy $label" >&2; fi; fi; }
 if [ -e "/opt/credentials/gitconfig" ]; then cp -f "/opt/credentials/gitconfig" "$HOME/.gitconfig" || echo "provider-runner: warning: failed to copy .gitconfig" >&2; fi
 if [ -d "/opt/credentials/codex" ]; then [ -f "/opt/credentials/codex/auth.json" ] && cp -f "/opt/credentials/codex/auth.json" "$HOME/.codex/auth.json"; [ -f "/opt/credentials/codex/config.toml" ] && cp -f "/opt/credentials/codex/config.toml" "$HOME/.codex/config.toml"; fi
 if [ -d "/opt/credentials/gh" ]; then sync_dir_contents "/opt/credentials/gh" "$HOME/.config/gh" "gh"; fi
-if [ -d "/opt/credentials/gemini" ]; then sync_dir_contents "/opt/credentials/gemini" "$HOME/.gemini" "gemini"; fi
 export NPM_CONFIG_PREFIX="/runtime/npm-global"
 export NPM_CONFIG_CACHE="/runtime/npm-cache"
 export npm_config_cache="$NPM_CONFIG_CACHE"
@@ -15,6 +15,14 @@ mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 if [ -f "/opt/jules/setup.sh" ]; then bash "/opt/jules/setup.sh" || echo "provider-runner: setup script failed" >&2; fi
 if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;;     codex) npm install -g @openai/codex ;;     claude) if command -v curl >/dev/null 2>&1; then curl -fsSL https://claude.ai/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl not found; cannot install claude" >&2; fi ;; esac; fi
+if [ "$1" = "gemini" ]; then
+  copy_if_present "/opt/credentials/gemini/settings.json" "$HOME/.gemini/settings.json" "gemini settings.json"
+  copy_if_present "/opt/credentials/gemini/oauth_creds.json" "$HOME/.gemini/oauth_creds.json" "gemini oauth_creds.json"
+  copy_if_present "/opt/credentials/gemini/google_accounts.json" "$HOME/.gemini/google_accounts.json" "gemini google_accounts.json"
+  copy_if_present "/opt/credentials/gemini/installation_id" "$HOME/.gemini/installation_id" "gemini installation_id"
+  copy_if_present "/opt/credentials/gemini/state.json" "$HOME/.gemini/state.json" "gemini state.json"
+  copy_if_present "/opt/credentials/gemini/trustedFolders.json" "$HOME/.gemini/trustedFolders.json" "gemini trustedFolders.json"
+fi
 if [ "$1" = "claude" ]; then
   if [ -f "/opt/credentials/claude-code/.credentials.json" ]; then cp -f "/opt/credentials/claude-code/.credentials.json" "$HOME/.claude/.credentials.json"; fi
   if [ -f "/opt/credentials/claude-code-auth.json" ]; then cp -f "/opt/credentials/claude-code-auth.json" "$HOME/.claude.json"; fi
@@ -26,10 +34,10 @@ exports[`DockerBootstrapBuilder > should handle claude specific auth 1`] = `
 "set -euo pipefail
 mkdir -p "$HOME/.config" "$HOME/.codex" "$HOME/.claude" "$HOME/.gemini"
 sync_dir_contents() { local source="$1"; local destination="$2"; local label="$3"; mkdir -p "$destination"; if ! cp -r "$source/." "$destination/"; then echo "provider-runner: warning: failed to copy $label credentials" >&2; fi; }
+copy_if_present() { local source="$1"; local destination="$2"; local label="$3"; if [ -e "$source" ]; then mkdir -p "$(dirname "$destination")"; if ! cp -f "$source" "$destination"; then echo "provider-runner: warning: failed to copy $label" >&2; fi; fi; }
 if [ -e "/opt/credentials/gitconfig" ]; then cp -f "/opt/credentials/gitconfig" "$HOME/.gitconfig" || echo "provider-runner: warning: failed to copy .gitconfig" >&2; fi
 if [ -d "/opt/credentials/codex" ]; then [ -f "/opt/credentials/codex/auth.json" ] && cp -f "/opt/credentials/codex/auth.json" "$HOME/.codex/auth.json"; [ -f "/opt/credentials/codex/config.toml" ] && cp -f "/opt/credentials/codex/config.toml" "$HOME/.codex/config.toml"; fi
 if [ -d "/opt/credentials/gh" ]; then sync_dir_contents "/opt/credentials/gh" "$HOME/.config/gh" "gh"; fi
-if [ -d "/opt/credentials/gemini" ]; then sync_dir_contents "/opt/credentials/gemini" "$HOME/.gemini" "gemini"; fi
 export NPM_CONFIG_PREFIX="/runtime/npm-global"
 export NPM_CONFIG_CACHE="/runtime/npm-cache"
 export npm_config_cache="$NPM_CONFIG_CACHE"
@@ -37,6 +45,14 @@ mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 if [ -f "/opt/jules/setup.sh" ]; then bash "/opt/jules/setup.sh" || echo "provider-runner: setup script failed" >&2; fi
 if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;;     codex) npm install -g @openai/codex ;;     claude) if command -v curl >/dev/null 2>&1; then curl -fsSL https://claude.ai/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl not found; cannot install claude" >&2; fi ;; esac; fi
+if [ "$1" = "gemini" ]; then
+  copy_if_present "/opt/credentials/gemini/settings.json" "$HOME/.gemini/settings.json" "gemini settings.json"
+  copy_if_present "/opt/credentials/gemini/oauth_creds.json" "$HOME/.gemini/oauth_creds.json" "gemini oauth_creds.json"
+  copy_if_present "/opt/credentials/gemini/google_accounts.json" "$HOME/.gemini/google_accounts.json" "gemini google_accounts.json"
+  copy_if_present "/opt/credentials/gemini/installation_id" "$HOME/.gemini/installation_id" "gemini installation_id"
+  copy_if_present "/opt/credentials/gemini/state.json" "$HOME/.gemini/state.json" "gemini state.json"
+  copy_if_present "/opt/credentials/gemini/trustedFolders.json" "$HOME/.gemini/trustedFolders.json" "gemini trustedFolders.json"
+fi
 if [ "$1" = "claude" ]; then
   if [ -f "/opt/credentials/claude-code/.credentials.json" ]; then cp -f "/opt/credentials/claude-code/.credentials.json" "$HOME/.claude/.credentials.json"; fi
   if [ -f "/opt/credentials/claude-code-auth.json" ]; then cp -f "/opt/credentials/claude-code-auth.json" "$HOME/.claude.json"; fi
@@ -48,10 +64,10 @@ exports[`DockerBootstrapBuilder > should include fallback install cases for spec
 "set -euo pipefail
 mkdir -p "$HOME/.config" "$HOME/.codex" "$HOME/.claude" "$HOME/.gemini"
 sync_dir_contents() { local source="$1"; local destination="$2"; local label="$3"; mkdir -p "$destination"; if ! cp -r "$source/." "$destination/"; then echo "provider-runner: warning: failed to copy $label credentials" >&2; fi; }
+copy_if_present() { local source="$1"; local destination="$2"; local label="$3"; if [ -e "$source" ]; then mkdir -p "$(dirname "$destination")"; if ! cp -f "$source" "$destination"; then echo "provider-runner: warning: failed to copy $label" >&2; fi; fi; }
 if [ -e "/opt/credentials/gitconfig" ]; then cp -f "/opt/credentials/gitconfig" "$HOME/.gitconfig" || echo "provider-runner: warning: failed to copy .gitconfig" >&2; fi
 if [ -d "/opt/credentials/codex" ]; then [ -f "/opt/credentials/codex/auth.json" ] && cp -f "/opt/credentials/codex/auth.json" "$HOME/.codex/auth.json"; [ -f "/opt/credentials/codex/config.toml" ] && cp -f "/opt/credentials/codex/config.toml" "$HOME/.codex/config.toml"; fi
 if [ -d "/opt/credentials/gh" ]; then sync_dir_contents "/opt/credentials/gh" "$HOME/.config/gh" "gh"; fi
-if [ -d "/opt/credentials/gemini" ]; then sync_dir_contents "/opt/credentials/gemini" "$HOME/.gemini" "gemini"; fi
 export NPM_CONFIG_PREFIX="/runtime/npm-global"
 export NPM_CONFIG_CACHE="/runtime/npm-cache"
 export npm_config_cache="$NPM_CONFIG_CACHE"
@@ -59,6 +75,14 @@ mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 if [ -f "/opt/jules/setup.sh" ]; then bash "/opt/jules/setup.sh" || echo "provider-runner: setup script failed" >&2; fi
 if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;; esac; fi
+if [ "$1" = "gemini" ]; then
+  copy_if_present "/opt/credentials/gemini/settings.json" "$HOME/.gemini/settings.json" "gemini settings.json"
+  copy_if_present "/opt/credentials/gemini/oauth_creds.json" "$HOME/.gemini/oauth_creds.json" "gemini oauth_creds.json"
+  copy_if_present "/opt/credentials/gemini/google_accounts.json" "$HOME/.gemini/google_accounts.json" "gemini google_accounts.json"
+  copy_if_present "/opt/credentials/gemini/installation_id" "$HOME/.gemini/installation_id" "gemini installation_id"
+  copy_if_present "/opt/credentials/gemini/state.json" "$HOME/.gemini/state.json" "gemini state.json"
+  copy_if_present "/opt/credentials/gemini/trustedFolders.json" "$HOME/.gemini/trustedFolders.json" "gemini trustedFolders.json"
+fi
 if [ "$1" = "claude" ]; then
   if [ -f "/opt/credentials/claude-code/.credentials.json" ]; then cp -f "/opt/credentials/claude-code/.credentials.json" "$HOME/.claude/.credentials.json"; fi
   if [ -f "/opt/credentials/claude-code-auth.json" ]; then cp -f "/opt/credentials/claude-code-auth.json" "$HOME/.claude.json"; fi
@@ -70,16 +94,24 @@ exports[`DockerBootstrapBuilder > should not include fallback install if no prov
 "set -euo pipefail
 mkdir -p "$HOME/.config" "$HOME/.codex" "$HOME/.claude" "$HOME/.gemini"
 sync_dir_contents() { local source="$1"; local destination="$2"; local label="$3"; mkdir -p "$destination"; if ! cp -r "$source/." "$destination/"; then echo "provider-runner: warning: failed to copy $label credentials" >&2; fi; }
+copy_if_present() { local source="$1"; local destination="$2"; local label="$3"; if [ -e "$source" ]; then mkdir -p "$(dirname "$destination")"; if ! cp -f "$source" "$destination"; then echo "provider-runner: warning: failed to copy $label" >&2; fi; fi; }
 if [ -e "/opt/credentials/gitconfig" ]; then cp -f "/opt/credentials/gitconfig" "$HOME/.gitconfig" || echo "provider-runner: warning: failed to copy .gitconfig" >&2; fi
 if [ -d "/opt/credentials/codex" ]; then [ -f "/opt/credentials/codex/auth.json" ] && cp -f "/opt/credentials/codex/auth.json" "$HOME/.codex/auth.json"; [ -f "/opt/credentials/codex/config.toml" ] && cp -f "/opt/credentials/codex/config.toml" "$HOME/.codex/config.toml"; fi
 if [ -d "/opt/credentials/gh" ]; then sync_dir_contents "/opt/credentials/gh" "$HOME/.config/gh" "gh"; fi
-if [ -d "/opt/credentials/gemini" ]; then sync_dir_contents "/opt/credentials/gemini" "$HOME/.gemini" "gemini"; fi
 export NPM_CONFIG_PREFIX="/runtime/npm-global"
 export NPM_CONFIG_CACHE="/runtime/npm-cache"
 export npm_config_cache="$NPM_CONFIG_CACHE"
 mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 if [ -f "/opt/jules/setup.sh" ]; then bash "/opt/jules/setup.sh" || echo "provider-runner: setup script failed" >&2; fi
+if [ "$1" = "gemini" ]; then
+  copy_if_present "/opt/credentials/gemini/settings.json" "$HOME/.gemini/settings.json" "gemini settings.json"
+  copy_if_present "/opt/credentials/gemini/oauth_creds.json" "$HOME/.gemini/oauth_creds.json" "gemini oauth_creds.json"
+  copy_if_present "/opt/credentials/gemini/google_accounts.json" "$HOME/.gemini/google_accounts.json" "gemini google_accounts.json"
+  copy_if_present "/opt/credentials/gemini/installation_id" "$HOME/.gemini/installation_id" "gemini installation_id"
+  copy_if_present "/opt/credentials/gemini/state.json" "$HOME/.gemini/state.json" "gemini state.json"
+  copy_if_present "/opt/credentials/gemini/trustedFolders.json" "$HOME/.gemini/trustedFolders.json" "gemini trustedFolders.json"
+fi
 if [ "$1" = "claude" ]; then
   if [ -f "/opt/credentials/claude-code/.credentials.json" ]; then cp -f "/opt/credentials/claude-code/.credentials.json" "$HOME/.claude/.credentials.json"; fi
   if [ -f "/opt/credentials/claude-code-auth.json" ]; then cp -f "/opt/credentials/claude-code-auth.json" "$HOME/.claude.json"; fi

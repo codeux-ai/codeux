@@ -11,12 +11,23 @@ export function buildAutoMergeSuccessText(taskId: string, prNumber: number, mode
   return `🤖 **Auto-Merged:** Task \`${taskId}\` was merged automatically (PR #${prNumber}${mode ? `, mode: ${mode}` : ""}).\n`;
 }
 
+export function buildAutoMergeScheduledText(taskId: string, prNumber: number, message: string, mode?: string): string {
+  let text = `⏳ **Auto-Merge Armed:** Task \`${taskId}\` is still in progress because PR #${prNumber}${mode ? `, mode: ${mode}` : ""} has not merged into the feature branch yet.\n`;
+  text += `   - ${message}\n`;
+  text += `   - Check merge progress: \`gh pr view ${prNumber}\`\n`;
+  return text;
+}
+
 export function buildAutoMergeFailedText(taskId: string, prNumber: number, message: string, mode?: string): string {
   let text = `⚠️ **Auto-Merge Failed:** Task \`${taskId}\` (PR #${prNumber}${mode ? `, mode: ${mode}` : ""}) - ${message}\n`;
   if (!mode) {
     text += `   - Manual check: \`gh pr merge ${prNumber} --merge --delete-branch\`\n`;
   }
   return text;
+}
+
+export function buildMergeConfirmedText(taskId: string, prNumber: number, featureBranch: string): string {
+  return `✅ **Feature PR Merged:** Task \`${taskId}\` has been merged into \`${featureBranch}\` (PR #${prNumber}).\n`;
 }
 
 export function buildMergeReadyText(taskId: string, prNumber: number, featureBranch: string): string {

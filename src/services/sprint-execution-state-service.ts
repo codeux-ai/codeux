@@ -39,6 +39,7 @@ function toMergeIndicator(value: string | null): SubtaskMergeIndicator | undefin
     case "AUTOMERGE":
     case "MERGED":
     case "MERGE_BLOCKED":
+    case "MERGE_CONFLICT":
       return value;
     default:
       return undefined;

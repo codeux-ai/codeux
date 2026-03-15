@@ -8,8 +8,10 @@ describe("MainMergeGateService", () => {
     enableLivePrMonitoring: true,
     waitForCiBeforeMainMerge: true,
     resolveAllCommentsBeforeMainMerge: true,
+    resolveMainMergeConflicts: false,
     waitForCiBeforeFeatureMerge: true,
     resolveAllCommentsBeforeFeatureMerge: true,
+    resolveMergeConflicts: false,
     waitForJulesCiAutofix: false,
     julesCiAutofixMaxRetries: 0,
     featurePrAutoMergeMode: "OFF",
@@ -86,6 +88,41 @@ describe("MainMergeGateService", () => {
       prNumber: 101,
       failedChecks: ["test"],
     });
+  });
+
+  it("reports merge conflicts before generic check state", async () => {
+    const context: MergeFeedbackContext = {
+      ...defaultContext,
+      gitStatus: {
+        ...defaultContext.gitStatus!,
+        openPullRequests: [
+          {
+            number: 101,
+            title: "Sprint 1",
+            url: "https://github.com/repo/pull/101",
+            state: "OPEN",
+            isDraft: false,
+            headRefName: "feature/sprint1",
+            baseRefName: "main",
+            mergeStateStatus: "DIRTY",
+            reviewDecision: "APPROVED",
+            comments: 0,
+            checks: [
+              { name: "test", status: "completed", conclusion: "success" },
+            ],
+          } as any,
+        ],
+      },
+    };
+
+    const structured = MainMergeGateService.evaluateMergeFeedback(context);
+    expect(structured).toMatchObject({
+      state: "merge_conflict",
+      hasMergeConflict: true,
+      mergeStateStatus: "DIRTY",
+    });
+    expect(structured.text).toContain("Check Status: `DIRTY`");
+    expect(structured.text).toContain("Merge into `main` is blocked until the conflict is resolved.");
   });
 
   it("reports pending checks", async () => {

@@ -62,6 +62,7 @@ export function createMcpDependencies(
     getDashboardSettings: () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
     connectionChatRepository,
     workerEndpointRepository,
+    projectWorkerAssignmentService,
     projectAttentionService,
     workerAttentionOutcomeService,
     workerTaskDispatchService,
