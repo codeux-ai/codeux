@@ -301,7 +301,7 @@ export class ProjectManagementRepository {
           SELECT sr.status
           FROM sprint_runs sr
           WHERE sr.sprint_id = s.id
-          ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC
+          ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC, sr.rowid DESC
           LIMIT 1
         ) AS latest_run_status
       FROM sprints s
@@ -586,7 +586,7 @@ export class ProjectManagementRepository {
           SELECT sr.status
           FROM sprint_runs sr
           WHERE sr.sprint_id = s.id
-          ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC
+          ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC, sr.rowid DESC
           LIMIT 1
         ) AS latest_run_status
       FROM sprints s
@@ -636,7 +636,7 @@ export class ProjectManagementRepository {
           SELECT sr.status
           FROM sprint_runs sr
           WHERE sr.sprint_id = s.id
-          ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC
+          ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC, sr.rowid DESC
           LIMIT 1
         ) AS latest_run_status
       FROM sprints s

@@ -22,7 +22,7 @@ import { WorkerTaskDispatchService } from "./worker-task-dispatch-service.js";
 import { CliWorkflowService } from "./cli-workflow-service.js";
 
 const VIRTUAL_WORKER_RECONCILE_MS = 3_000;
-const VIRTUAL_WORKER_SESSION_POLL_MS = 5_000;
+const VIRTUAL_WORKER_SESSION_POLL_MS = 2_000;
 
 function sleep(ms: number): Promise<void> {
   if (ms <= 0) {
@@ -577,18 +577,14 @@ export class VirtualWorkerService {
     workspaceGuidance: string,
   ): string {
     const payload = item.payload || {};
-    const mergedTaskPrompts = Array.isArray(payload.mergedTaskPrompts)
-      ? payload.mergedTaskPrompts
-          .map((entry) => this.asRecord(entry))
-          .filter((entry): entry is Record<string, unknown> => Boolean(entry))
-          .map((entry) => {
-            const taskKey = typeof entry.taskKey === "string" ? entry.taskKey : "task";
-            const title = typeof entry.title === "string" ? entry.title : taskKey;
-            const prompt = typeof entry.prompt === "string" ? entry.prompt : "";
-            return `${taskKey} ${title}\n\n${prompt}`.trim();
-          })
-      : [];
-    const currentTaskPrompt = typeof payload.currentTaskPrompt === "string" ? payload.currentTaskPrompt.trim() : "";
+    const mergedTaskPrompts = this.extractMergeConflictTaskPrompts(
+      Array.isArray(payload.mergedTaskPrompts)
+        ? payload.mergedTaskPrompts
+        : Array.isArray(payload.featureBranchTaskContexts)
+          ? payload.featureBranchTaskContexts
+          : [],
+    );
+    const currentTaskPrompt = this.extractCurrentTaskPrompt(payload);
 
     return [
       "Resolve the active Git merge conflict already present in this worktree.",
@@ -611,6 +607,44 @@ export class VirtualWorkerService {
       "",
       workspaceGuidance,
     ].filter(Boolean).join("\n");
+  }
+
+  private extractCurrentTaskPrompt(payload: Record<string, unknown>): string {
+    if (typeof payload.currentTaskPrompt === "string" && payload.currentTaskPrompt.trim()) {
+      return payload.currentTaskPrompt.trim();
+    }
+
+    const currentTask = this.asRecord(payload.currentTask);
+    if (typeof currentTask?.taskPrompt === "string" && currentTask.taskPrompt.trim()) {
+      return currentTask.taskPrompt.trim();
+    }
+
+    if (typeof payload.taskPrompt === "string" && payload.taskPrompt.trim()) {
+      return payload.taskPrompt.trim();
+    }
+
+    return "";
+  }
+
+  private extractMergeConflictTaskPrompts(entries: unknown[]): string[] {
+    return entries
+      .map((entry) => this.asRecord(entry))
+      .filter((entry): entry is Record<string, unknown> => Boolean(entry))
+      .map((entry) => {
+        const taskKey = typeof entry.taskKey === "string" ? entry.taskKey : "task";
+        const title = typeof entry.taskTitle === "string"
+          ? entry.taskTitle
+          : typeof entry.title === "string"
+            ? entry.title
+            : taskKey;
+        const prompt = typeof entry.taskPrompt === "string"
+          ? entry.taskPrompt
+          : typeof entry.prompt === "string"
+            ? entry.prompt
+            : "";
+        return `${taskKey} ${title}\n\n${prompt}`.trim();
+      })
+      .filter(Boolean);
   }
 
   private escalateAttentionToHuman(workerEndpointId: string, item: ProjectAttentionItemRecord, summaryMarkdown: string): void {

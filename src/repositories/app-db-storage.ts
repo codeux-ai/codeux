@@ -1,7 +1,8 @@
 import * as fs from "fs";
 import * as path from "path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import { getHomeSprintOsPath } from "../shared/config/sprint-os-paths.js";
+import { openSqliteDatabase } from "./sqlite-connection.js";
 
 interface TableRow {
   name: string;
@@ -25,10 +26,8 @@ export class AppDbStorage {
   constructor(dbPath?: string) {
     this.dbPath = resolveAppDbPath(dbPath);
     fs.mkdirSync(path.dirname(this.dbPath), { recursive: true });
-    this.db = new DatabaseSync(this.dbPath);
+    this.db = openSqliteDatabase(this.dbPath);
     this.db.exec(`
-      PRAGMA foreign_keys = ON;
-
       CREATE TABLE IF NOT EXISTS schema_migrations (
         version INTEGER PRIMARY KEY,
         name TEXT NOT NULL,

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { computeStats } from "../lib/status.js";
-import { fetchGitTrackingStatus, fetchRuntimeDashboardPayload } from "../lib/api/dashboard-api.js";
+import { fetchExecutionSnapshot, fetchGitTrackingStatus, fetchRuntimeStatus } from "../lib/api/dashboard-api.js";
 import type {
   DashboardStatus,
   ExecutionDashboardSnapshot,
@@ -45,17 +45,38 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
   const [gitStatusError, setGitStatusError] = useState<string | null>(null);
   const gitRefreshTimerRef = useRef<number | null>(null);
 
-  const refreshRuntimeStatusAction = useCallback(async (): Promise<void> => {
+  const refreshStatusAction = useCallback(async (): Promise<void> => {
     try {
-      const data = await fetchRuntimeDashboardPayload();
-      setStatus(data.status);
-      setExecution(data.execution);
-      setError(null);
+      const data = await fetchRuntimeStatus();
+      setStatus(data);
     } catch (err) {
-      setError("Unable to connect to Orchestrator API");
       throw err;
     }
   }, []);
+
+  const refreshExecutionAction = useCallback(async (): Promise<void> => {
+    try {
+      const data = await fetchExecutionSnapshot();
+      setExecution(data);
+    } catch (err) {
+      throw err;
+    }
+  }, []);
+
+  const refreshRuntimeStatusAction = useCallback(async (): Promise<void> => {
+    const [statusResult, executionResult] = await Promise.allSettled([
+      refreshStatusAction(),
+      refreshExecutionAction(),
+    ]);
+
+    if (statusResult.status === "fulfilled" || executionResult.status === "fulfilled") {
+      setError(null);
+      return;
+    }
+
+    setError("Unable to connect to Orchestrator API");
+    throw (statusResult.reason || executionResult.reason || new Error("Unable to connect to Orchestrator API"));
+  }, [refreshExecutionAction, refreshStatusAction]);
 
   const refreshGitStatusAction = useCallback(async (): Promise<void> => {
     try {

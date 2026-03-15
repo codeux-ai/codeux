@@ -201,6 +201,10 @@ Legacy runtime:
 - Worker mode is now explicit in settings:
   - `Connected MCP` keeps worker dispatches and worker-owned attention on live MCP listeners
   - `Virtual on-demand` hands that same work to short-lived internal CLI workers that do not create MCP connection rows
+- The Live view no longer blocks task stats and task cards on the execution snapshot finishing first:
+  - `/api/status` and `/api/execution` now hydrate independently
+  - task stats and the race view can render from the latest runtime status snapshot even when execution metadata is still catching up
+  - the page only shows the full `Waiting for Sprint Start` empty state when neither runtime status nor execution state has sprint context
 - In the active v2 settings UI, these controls live under `Settings -> Sprint Engine -> Worker Runtime`
 - Sprint compose/planning also follows that same worker mode:
   - with `Connected MCP`, the composer looks for a live planning worker/listener
@@ -248,6 +252,7 @@ Runtime scoping:
 
 From `dashboard/src/hooks/use-dashboard-runtime-data.ts`:
 - Status and execution snapshot now use websocket-first updates with a `5s` fallback poll for degraded transport cases.
+- Runtime fallback refresh now applies status and execution results independently instead of waiting for both responses before updating the page, which avoids slow `/api/execution` responses blanking the whole live view.
 - Git status keeps a `30s` fallback poll and also refreshes opportunistically from project realtime events with internal rate limiting, so the live view no longer waits for the next full poll cycle after sprint activity.
 
 From `dashboard/src/hooks/use-overview-telemetry.ts` and `dashboard/src/v2/hooks/use-project-execution.ts`:

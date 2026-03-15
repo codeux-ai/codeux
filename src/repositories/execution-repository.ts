@@ -308,13 +308,13 @@ export class ExecutionRepository {
         SELECT *
         FROM sprint_runs
         WHERE project_id = ? AND sprint_id = ?
-        ORDER BY created_at DESC
+        ORDER BY created_at DESC, rowid DESC
       `).all(projectId, sprintId)
       : this.db.prepare(`
         SELECT *
         FROM sprint_runs
         WHERE project_id = ?
-        ORDER BY created_at DESC
+        ORDER BY created_at DESC, rowid DESC
       `).all(projectId);
     return (rows as unknown as SprintRunRow[]).map((row) => this.mapSprintRunRow(row));
   }
@@ -335,7 +335,7 @@ export class ExecutionRepository {
       SELECT *
       FROM sprint_runs
       WHERE project_id = ? AND sprint_id = ? AND status IN ('queued', 'running', 'paused', 'cancel_requested')
-      ORDER BY created_at DESC
+      ORDER BY created_at DESC, rowid DESC
       LIMIT 1
     `).get(projectId, sprintId) as SprintRunRow | undefined;
     return row ? this.mapSprintRunRow(row) : null;

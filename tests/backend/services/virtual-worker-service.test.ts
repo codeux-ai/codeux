@@ -378,4 +378,77 @@ describe("VirtualWorkerService", () => {
     expect(workerEndpointRepository.listWorkerEndpoints().filter((endpoint) => endpoint.endpointType === "virtual_cli")).toHaveLength(0);
     expect(projectWorkerAssignmentRepository.listAssignmentsForProject(project.id, { activeOnly: true })).toHaveLength(0);
   });
+
+  it("builds merge conflict prompts from both current and legacy attention payload fields", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: {
+        startTask: vi.fn(),
+      } as any,
+    });
+
+    const prompt = (virtualWorkerService as any).buildMergeConflictPrompt(
+      {
+        id: "attention-1",
+        projectId: "project-1",
+        sprintId: "sprint-1",
+        taskId: "task-1",
+        sprintRunId: null,
+        dispatchId: null,
+        attentionType: "merge_conflict",
+        severity: "high",
+        ownerType: "worker",
+        status: "open",
+        assignedWorkerEndpointId: null,
+        title: "Merge conflict",
+        summaryMarkdown: "Summary body",
+        payload: {
+          currentTask: {
+            taskPrompt: "Preserve the current task change.",
+          },
+          featureBranchTaskContexts: [
+            {
+              taskKey: "T01",
+              taskTitle: "Earlier merge",
+              taskPrompt: "Keep the earlier merged edit.",
+            },
+          ],
+        },
+        openedAt: "2026-03-15T10:00:00.000Z",
+        claimedAt: null,
+        resolvedAt: null,
+        updatedAt: "2026-03-15T10:00:00.000Z",
+      },
+      "task/branch",
+      "feature/branch",
+      "Workspace guidance",
+    );
+
+    expect(prompt).toContain("Preserve the current task change.");
+    expect(prompt).toContain("T01 Earlier merge");
+    expect(prompt).toContain("Keep the earlier merged edit.");
+    expect(prompt).toContain("Workspace guidance");
+  });
 });

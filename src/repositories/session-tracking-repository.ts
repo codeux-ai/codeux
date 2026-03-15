@@ -1,9 +1,10 @@
 import * as fs from "fs";
 import * as path from "path";
 import { randomUUID } from "crypto";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
 import type { JulesActivity, JulesSession, ProviderId } from "../contracts/app-types.js";
 import { getHomeSprintOsPath } from "../shared/config/sprint-os-paths.js";
+import { openSqliteDatabase } from "./sqlite-connection.js";
 
 interface SessionRow {
   id: string;
@@ -84,7 +85,7 @@ export class SessionTrackingRepository {
   constructor(dbPath?: string) {
     const resolvedDbPath = resolveDbPath(dbPath);
     fs.mkdirSync(path.dirname(resolvedDbPath), { recursive: true });
-    this.db = new DatabaseSync(resolvedDbPath);
+    this.db = openSqliteDatabase(resolvedDbPath);
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS provider_sessions (
         id TEXT PRIMARY KEY,

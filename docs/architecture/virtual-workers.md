@@ -71,6 +71,8 @@ Each virtual cycle is project-scoped and one-shot:
 
 This is intentionally not an endless watch loop.
 
+The background reconcile loop stays conservative (`3s`) to avoid unnecessary sqlite write contention, while virtual worker session completion polling is tighter (`2s`) because it only checks local session and dispatch state.
+
 ## Supported Work
 
 Today virtual workers handle:
@@ -91,6 +93,7 @@ For merge conflicts, Sprint OS:
 - prepares a worktree on the PR source branch
 - merges the target branch into it
 - runs the selected CLI provider against the conflict context
+- accepts both the original merge-conflict prompt payload fields (`currentTaskPrompt`, `mergedTaskPrompts`) and the newer task-context payload fields (`currentTask`, `featureBranchTaskContexts`) when constructing that provider prompt
 - verifies conflicts are resolved
 - commits and pushes the updated source branch
 
