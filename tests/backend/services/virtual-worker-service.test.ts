@@ -81,6 +81,90 @@ describe("VirtualWorkerService", () => {
     vi.useFakeTimers();
   });
 
+  it("reconcile only schedules projects that still need virtual worker execution", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const virtualProject = projectManagementRepository.createProject({
+      name: "Virtual Project",
+      sourceType: "local",
+      sourceRef: "/workspace/virtual-project",
+      defaultBranch: "main",
+    });
+    const connectedProject = projectManagementRepository.createProject({
+      name: "Connected Project",
+      sourceType: "local",
+      sourceRef: "/workspace/connected-project",
+      defaultBranch: "main",
+    });
+
+    settingsRepository.saveProjectSettings(virtualProject.id, {
+      workers: {
+        executionMode: "VIRTUAL",
+        virtualWorkerProvider: "codex",
+      },
+    });
+
+    projectAttentionService.openItem({
+      projectId: virtualProject.id,
+      sprintId: null,
+      taskId: null,
+      sprintRunId: null,
+      dispatchId: null,
+      attentionType: "action_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "Virtual attention",
+      summaryMarkdown: "Needs worker action.",
+      payload: null,
+    });
+    projectAttentionService.openItem({
+      projectId: connectedProject.id,
+      sprintId: null,
+      taskId: null,
+      sprintRunId: null,
+      dispatchId: null,
+      attentionType: "action_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "Connected attention",
+      summaryMarkdown: "Should stay on MCP workers.",
+      payload: null,
+    });
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: {
+        startTask: vi.fn(),
+      } as any,
+    });
+    const scheduleSpy = vi.spyOn(virtualWorkerService, "scheduleProject");
+
+    await virtualWorkerService.reconcile();
+
+    expect(scheduleSpy).toHaveBeenCalledTimes(1);
+    expect(scheduleSpy).toHaveBeenCalledWith(virtualProject.id, "reconcile");
+  });
+
   it("claims queued virtual worker dispatches and cleans up its ephemeral endpoint", async () => {
     const {
       settingsRepository,
@@ -200,6 +284,97 @@ describe("VirtualWorkerService", () => {
     expect(cliWorkflowService.startTask).toHaveBeenCalledTimes(1);
     expect(executionRepository.getTaskDispatch(dispatch.id)?.status).toBe("completed");
     expect(projectManagementRepository.getTask(task.id)?.status).toBe("completed");
+    expect(workerEndpointRepository.listWorkerEndpoints().filter((endpoint) => endpoint.endpointType === "virtual_cli")).toHaveLength(0);
+    expect(projectWorkerAssignmentRepository.listAssignmentsForProject(project.id, { activeOnly: true })).toHaveLength(0);
+  });
+
+  it("escalates unsupported worker attention items to a human attention item", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const project = projectManagementRepository.createProject({
+      name: "Virtual Attention Project",
+      sourceType: "local",
+      sourceRef: "/workspace/virtual-attention-project",
+      defaultBranch: "main",
+    });
+    const sprint = projectManagementRepository.createSprint(project.id, {
+      name: "Virtual Attention Sprint",
+      number: 18,
+      featureBranch: "feature/sprint-18",
+    });
+    const task = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Needs manual review",
+      promptMarkdown: "Investigate the blocked worker condition.",
+      executorType: "mcp_worker",
+      priority: "high",
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: {
+        executionMode: "VIRTUAL",
+        virtualWorkerProvider: "codex",
+      },
+    });
+
+    const originalItem = projectAttentionService.openItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: null,
+      dispatchId: null,
+      attentionType: "action_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "Virtual worker blocked",
+      summaryMarkdown: "The worker needs help with a non-merge blocker.",
+      payload: {
+        reason: "needs_manual_review",
+      },
+    });
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: {
+        startTask: vi.fn(),
+      } as any,
+    });
+
+    virtualWorkerService.scheduleProject(project.id, "test_attention_escalation");
+    await vi.runAllTicks();
+    await vi.advanceTimersByTimeAsync(0);
+
+    const resolvedOriginal = projectAttentionService.getItem(originalItem.id);
+    expect(resolvedOriginal?.status).toBe("resolved");
+
+    const activeItems = projectAttentionService.listActiveProjectItems(project.id);
+    expect(activeItems).toHaveLength(1);
+    expect(activeItems[0]?.ownerType).toBe("human");
+    expect(activeItems[0]?.attentionType).toBe("human_escalation_required");
+    expect(activeItems[0]?.title).toContain("Virtual worker escalation");
+    expect(activeItems[0]?.payload?.sourceAttentionItemId).toBe(originalItem.id);
+    expect(activeItems[0]?.payload?.escalatedBy).toBe("virtual_worker");
+
     expect(workerEndpointRepository.listWorkerEndpoints().filter((endpoint) => endpoint.endpointType === "virtual_cli")).toHaveLength(0);
     expect(projectWorkerAssignmentRepository.listAssignmentsForProject(project.id, { activeOnly: true })).toHaveLength(0);
   });
