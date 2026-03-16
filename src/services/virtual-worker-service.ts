@@ -221,6 +221,7 @@ export class VirtualWorkerService {
     return this.deps.projectAttentionService.listActiveProjectItems(projectId)
       .find((item) => (
         item.ownerType === "worker"
+        && item.attentionType !== "merge_required"
         && (item.status === "open" || (item.status === "claimed" && !item.assignedWorkerEndpointId))
       )) || null;
   }
@@ -454,9 +455,11 @@ export class VirtualWorkerService {
         item.summaryMarkdown.trim(),
       ].join("\n"));
     } finally {
+      // Virtual merge worktrees are ephemeral — always clean up to prevent
+      // stale worktree references from poisoning subsequent git fetch operations.
       const shouldCleanup = succeeded
         ? workflowSettings.cleanupWorktreeOnSuccess
-        : workflowSettings.cleanupWorktreeOnFailure;
+        : true;
       if (shouldCleanup) {
         await this.workspaceManager.removeWorktree(repoPath, worktreePath).catch(() => undefined);
         cleanedUp = true;

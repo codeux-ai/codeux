@@ -52,7 +52,15 @@ export class WorkspaceManager implements IWorkspaceManager {
 
     await this.withRepoLock(repoPath, async () => {
       await fs.mkdir(path.dirname(finalWorktreePath), { recursive: true });
-      await runCommandStrict("git", ["fetch", "origin"], repoPath);
+      await runCommandStrict("git", ["worktree", "prune"], repoPath);
+      try {
+        await runCommandStrict("git", ["fetch", "origin"], repoPath);
+      } catch {
+        // Fetch can fail when stale worktrees or dangling branch refs
+        // reference bad objects. Clean up and retry.
+        await this.repairStaleGitState(repoPath);
+        await runCommandStrict("git", ["fetch", "origin"], repoPath);
+      }
 
       if (resumeSessionId) {
         const resumablePath = await this.resolveResumableWorktreePath(repoPath, workerBranch, finalWorktreePath);
@@ -192,6 +200,59 @@ export class WorkspaceManager implements IWorkspaceManager {
       if (line.length === 0) currentPath = undefined;
     }
     return undefined;
+  }
+
+  private async repairStaleGitState(repoPath: string): Promise<void> {
+    // 1. Remove stale worktree registrations whose physical dirs are gone.
+    const gitWorktreesDir = path.join(repoPath, ".git", "worktrees");
+    try {
+      const entries = await fs.readdir(gitWorktreesDir);
+      for (const entry of entries) {
+        const entryPath = path.join(gitWorktreesDir, entry);
+        const gitdirFile = path.join(entryPath, "gitdir");
+        try {
+          const gitdir = (await fs.readFile(gitdirFile, "utf-8")).trim();
+          await fs.access(gitdir);
+        } catch {
+          await fs.rm(entryPath, { recursive: true, force: true }).catch(() => undefined);
+        }
+      }
+    } catch { /* worktrees dir may not exist */ }
+    try {
+      await runCommandStrict("git", ["worktree", "prune"], repoPath);
+    } catch { /* ignore */ }
+
+    // 2. Remove broken local branch refs by scanning the filesystem directly.
+    //    git for-each-ref silently skips refs it can't parse (e.g. empty files),
+    //    so we must walk refs/heads/ ourselves.
+    await this.removeCorruptRefsInDir(repoPath, path.join(repoPath, ".git", "refs", "heads"));
+  }
+
+  private async removeCorruptRefsInDir(repoPath: string, dirPath: string): Promise<void> {
+    let entries: Array<{ name: string; isDirectory: () => boolean }>;
+    try {
+      entries = await fs.readdir(dirPath, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        await this.removeCorruptRefsInDir(repoPath, fullPath);
+        continue;
+      }
+      try {
+        const content = (await fs.readFile(fullPath, "utf-8")).trim();
+        if (!content || !/^[0-9a-f]{40}$/.test(content)) {
+          // Empty or malformed ref file — remove it.
+          await fs.rm(fullPath, { force: true }).catch(() => undefined);
+          continue;
+        }
+        await runCommandStrict("git", ["cat-file", "-t", content], repoPath);
+      } catch {
+        await fs.rm(fullPath, { force: true }).catch(() => undefined);
+      }
+    }
   }
 
   private async removeStaleWorktreeRegistration(repoPath: string, worktreePath: string): Promise<void> {

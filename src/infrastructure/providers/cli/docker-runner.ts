@@ -100,11 +100,14 @@ export class DockerRunner implements IDockerRunner {
 
     if (worktreeIsInsideRepo) {
       const worktreeSource = this.mapDockerSourcePathForDaemon(cwd, repoPath, sessionId, "worktree", onActivity);
-      const gitWorktreesDir = path.join(repoPath, ".git", "worktrees");
-      const gitWorktreesDirSource = this.mapDockerSourcePathForDaemon(gitWorktreesDir, repoPath, sessionId, "git-worktrees", onActivity);
+      // Mount .git/ read-write so all git internals (objects, refs, worktrees,
+      // logs, packed-refs, etc.) remain fully functional. The repo working tree
+      // stays read-only — only the worktree directory is writable for source files.
+      const gitDir = path.join(repoPath, ".git");
+      const gitDirSource = this.mapDockerSourcePathForDaemon(gitDir, repoPath, sessionId, "git-dir", onActivity);
       dockerArgs.push(
         "--mount", toDockerMountArg({ source: worktreeSource, destination: cwd, readonly: false }),
-        "--mount", toDockerMountArg({ source: gitWorktreesDirSource, destination: gitWorktreesDir, readonly: false }),
+        "--mount", toDockerMountArg({ source: gitDirSource, destination: gitDir, readonly: false }),
       );
     }
 

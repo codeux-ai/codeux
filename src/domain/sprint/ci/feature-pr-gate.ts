@@ -172,7 +172,11 @@ export class FeaturePrGateService {
           continue;
         }
 
-        task.merge_indicator = task.is_merged ? "MERGED" : undefined;
+        task.merge_indicator = task.is_merged
+          ? "MERGED"
+          : task.merge_indicator === "MERGE_CONFLICT"
+            ? "MERGE_CONFLICT"
+            : undefined;
         this.appendCiGateEvent(task, context, "ready_for_merge", {
           prNumber: pr.number,
           prUrl: pr.url,

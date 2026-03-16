@@ -167,7 +167,7 @@ export class WatchLoopRunner {
         || activeWorkerMergeConflictAttention
         || activeWorkerAttentionItems.length > 0;
 
-      allFinished = allTerminal || needsManualMerge || (noMoreActionPossible && !waitingOnWorkerAttention);
+      allFinished = allTerminal || ((needsManualMerge || noMoreActionPossible) && !waitingOnWorkerAttention);
       const elapsedMs = Date.now() - checkpointWindowStartedAt;
       const outputIntervalReached = elapsedMs >= watchLoopOutputIntervalMs;
 
