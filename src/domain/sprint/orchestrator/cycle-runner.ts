@@ -20,6 +20,7 @@ import type { SprintExecutionContext } from "../../../services/sprint-execution-
 import { FeaturePrGateService } from "../ci/feature-pr-gate.js";
 import { matchPrForTask } from "../ci/feature-pr/pr-matcher.js";
 
+
 export interface CycleRunnerArgs {
   action: "status" | "orchestrate";
   automationLevel: AutomationLevel;
@@ -54,16 +55,6 @@ export class CycleRunner {
   private readonly featurePrGate = new FeaturePrGateService();
 
   constructor(private readonly deps: SprintOrchestratorDependencies) {}
-
-  private getTaskErrorMessage = (task: Subtask): string | null => {
-    if (!task.record_id || !task.project_id) return null;
-    const dispatches = this.deps.executionRepository.listTaskDispatches({
-      projectId: task.project_id,
-      taskId: task.record_id,
-    });
-    const withError = dispatches.filter((d) => d.errorMessage);
-    return withError.length > 0 ? withError[withError.length - 1].errorMessage : null;
-  };
 
   async run(args: CycleRunnerArgs): Promise<SprintCycleResult & {
     awaitingMerge: Subtask[];
@@ -122,7 +113,6 @@ export class CycleRunner {
       subtasks = runStatusDerivationStep(subtasks, {
         retryFailed: args.retryFailed,
         isActionRequiredState: this.deps.isActionRequiredState,
-        getTaskErrorMessage: this.getTaskErrorMessage,
       });
     }
 

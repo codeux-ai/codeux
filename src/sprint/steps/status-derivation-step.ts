@@ -1,10 +1,8 @@
 import type { Subtask } from "../../contracts/app-types.js";
-import { isQuotaCooldownActive } from "../../shared/providers/provider-error-classifier.js";
 
 interface DeriveStatusOptions {
   retryFailed: boolean;
   isActionRequiredState: (state?: string) => boolean;
-  getTaskErrorMessage?: (task: Subtask) => string | null | undefined;
 }
 
 const areDependenciesMet = (subtasks: Subtask[], task: Subtask): boolean => {
@@ -16,14 +14,8 @@ const areDependenciesMet = (subtasks: Subtask[], task: Subtask): boolean => {
 
 export const runStatusDerivationStep = (subtasks: Subtask[], options: DeriveStatusOptions): Subtask[] => {
   for (const task of subtasks) {
-    if (task.session_state === "QUOTA") {
-      const errorMsg = options.getTaskErrorMessage?.(task);
-      if (!isQuotaCooldownActive(errorMsg)) {
-        task.status = areDependenciesMet(subtasks, task) ? "PENDING" : "BLOCKED";
-        task.session_state = undefined;
-      } else {
-        task.status = "QUOTA";
-      }
+    if (task.session_state === "QUOTA" || task.status === "QUOTA") {
+      task.status = "QUOTA";
       continue;
     }
 
@@ -37,7 +29,7 @@ export const runStatusDerivationStep = (subtasks: Subtask[], options: DeriveStat
       continue;
     }
 
-    if (task.status === "RUNNING" || task.status === "COMPLETED" || task.status === "FAILED" || task.status === "QUOTA") {
+    if (task.status === "RUNNING" || task.status === "COMPLETED" || task.status === "FAILED") {
       continue;
     }
 
