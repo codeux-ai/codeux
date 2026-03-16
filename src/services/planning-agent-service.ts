@@ -13,6 +13,7 @@ import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workfl
 import { buildReadFileRetryPrompt, isReadFileNotFoundToolError } from "./cli-workflow-text-utils.js";
 import { ProviderRunner, type IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
+import { classifyProviderError, ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
 
 interface PlanningAgentServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -297,6 +298,9 @@ export class PlanningAgentService {
   }): Promise<{ bodyMarkdown: string }> {
     const provider = args.settings.workers.virtualWorkerProvider;
     const providerSettings = args.settings.aiProvider.providers[provider];
+    if (!providerSettings) {
+      throw new Error(`Virtual worker provider "${provider}" is not configured. Check AI Provider settings.`);
+    }
     const workflowSettings = {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...args.settings.cliWorkflow,
@@ -360,7 +364,20 @@ export class PlanningAgentService {
 
     const bodyMarkdown = result.text.trim();
     if (!result.ok) {
-      throw new Error(bodyMarkdown || result.stderr || result.stdout || `${provider} planning request failed`);
+      const classification = classifyProviderError(provider, result);
+      this.deps.logger?.error("Virtual planning provider failed", {
+        projectId: args.projectId,
+        provider,
+        exitCode: result.code,
+        errorCategory: classification.category,
+        resetAfter: classification.resetAfter,
+        stderr: result.stderr?.slice(0, 500),
+        stdout: result.stdout?.slice(0, 500),
+      });
+      if (classification.category !== "UNKNOWN") {
+        throw new ProviderQuotaError(classification);
+      }
+      throw new Error(classification.userMessage);
     }
     if (!bodyMarkdown) {
       throw new Error(`Virtual ${this.getProviderLabel(provider)} worker returned an empty Planning agent reply.`);

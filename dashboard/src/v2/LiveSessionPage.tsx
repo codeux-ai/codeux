@@ -6,7 +6,7 @@ import {
     Activity, ChevronDown, ChevronRight, Radio, Terminal, RefreshCw,
     GitPullRequest, GitMerge, CircleDot, ExternalLink, Eye, EyeOff,
     Play, FileText, RotateCcw, Layers, Bot, Workflow, PauseCircle,
-    Ship, BarChart3, Anchor,
+    Ship, BarChart3, Anchor, Timer,
 } from "lucide-preact";
 import { SprintBoatRace } from "./components/SprintBoatRace.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
@@ -38,6 +38,7 @@ const TASK_STATUS_CFG = {
     FAILED:    { label: "Failed",    hex: "#E3000F", dot: "bg-status-red shadow-[0_0_10px_rgba(227,0,15,0.7)]",                  text: "text-status-red",   bg: "bg-status-red/8",   border: "border-status-red/20", icon: XCircle },
     BLOCKED:   { label: "Blocked",   hex: "#F59E0B", dot: "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.5)]",               text: "text-status-amber", bg: "bg-status-amber/8", border: "border-status-amber/20", icon: AlertTriangle },
     PENDING:   { label: "Pending",   hex: "#64748b", dot: "bg-slate-400 dark:bg-slate-600",                                      text: "text-slate-400",    bg: "bg-slate-500/8",    border: "border-slate-500/20", icon: Clock },
+    QUOTA:     { label: "Quota",     hex: "#F59E0B", dot: "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.5)] animate-pulse",  text: "text-status-amber", bg: "bg-status-amber/8", border: "border-status-amber/20", icon: PauseCircle },
 } as const;
 
 type TaskStatusKey = keyof typeof TASK_STATUS_CFG;
@@ -333,7 +334,10 @@ const LiveTaskCard: FunctionComponent<{
     events?: ExecutionRuntimeEventSummary[];
     onRerun: (id: string) => void;
     isRerunning: boolean;
-}> = ({ task, events, onRerun, isRerunning }) => {
+    dispatchError?: string | null;
+    dispatchStartedAt?: string | null;
+    dispatchFinishedAt?: string | null;
+}> = ({ task, events, onRerun, isRerunning, dispatchError, dispatchStartedAt, dispatchFinishedAt }) => {
     const [expanded, setExpanded] = useState(false);
     const [showFeed, setShowFeed] = useState(false);
     const cardRef = useRef<HTMLDivElement>(null);
@@ -417,6 +421,7 @@ const LiveTaskCard: FunctionComponent<{
                                 {task.provider}
                             </span>
                         )}
+                        <TaskDuration startedAt={dispatchStartedAt ?? null} finishedAt={dispatchFinishedAt ?? null} status={task.status ?? ""} />
                         {(hasEventFeed || task.session_id || task.session_name) && (
                             <span className="text-[9px] font-mono text-slate-400 dark:text-slate-600 max-w-[100px] truncate" title={sessionLabel}>
                                 {sessionLabel.substring(0, 16)}
@@ -466,6 +471,13 @@ const LiveTaskCard: FunctionComponent<{
                             <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Runtime Feed</span>
                         </div>
                         <RuntimeEventFeed events={events} />
+                    </div>
+                )}
+
+                {/* Dispatch error / quota countdown */}
+                {dispatchError && (
+                    <div className="mb-4 rounded-xl border border-status-amber/15 bg-status-amber/[0.04] px-4 py-2.5">
+                        <QuotaCountdown errorMessage={dispatchError} />
                     </div>
                 )}
 
@@ -539,7 +551,7 @@ const statusTone = (value: string | null): string => {
     const n = value.toUpperCase();
     if (n === "SUCCESS" || n === "COMPLETED" || n === "MERGED") return "text-status-green";
     if (n === "CANCEL_REQUESTED") return "text-status-amber";
-    if (n === "IN_PROGRESS" || n === "QUEUED" || n === "PENDING") return "text-status-amber";
+    if (n === "IN_PROGRESS" || n === "QUEUED" || n === "PENDING" || n === "QUOTA") return "text-status-amber";
     if (n === "FAILURE" || n === "FAILED" || n === "ERROR" || n === "CANCELLED") return "text-status-red";
     return "text-slate-400";
 };
@@ -555,6 +567,83 @@ const CONNECTION_ROLE_LABELS: Record<string, string> = {
     listener: "Listener",
     worker: "Worker",
     project_manager: "Manager",
+};
+
+function extractRetryAfterIso(errorMessage: string): string | null {
+    const match = errorMessage.match(/\[RETRY_AFTER:(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\]/);
+    return match?.[1] ?? null;
+}
+
+function formatDuration(totalSeconds: number): string {
+    if (totalSeconds <= 0) return "0s";
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+}
+
+const QuotaCountdown: FunctionComponent<{ errorMessage: string }> = ({ errorMessage }) => {
+    const retryIso = extractRetryAfterIso(errorMessage);
+    const [remaining, setRemaining] = useState(() =>
+        retryIso ? Math.max(0, Math.floor((new Date(retryIso).getTime() - Date.now()) / 1000)) : null
+    );
+
+    useEffect(() => {
+        if (!retryIso) { setRemaining(null); return; }
+        const update = () => Math.max(0, Math.floor((new Date(retryIso).getTime() - Date.now()) / 1000));
+        setRemaining(update());
+        const timer = window.setInterval(() => {
+            const left = update();
+            setRemaining(left);
+            if (left <= 0) window.clearInterval(timer);
+        }, 1000);
+        return () => window.clearInterval(timer);
+    }, [retryIso]);
+
+    if (remaining == null) {
+        return <div className="text-status-red">{errorMessage}</div>;
+    }
+
+    return (
+        <div className="flex items-center gap-2 text-status-amber">
+            <Clock className="w-3 h-3 flex-shrink-0" strokeWidth={2} />
+            <span>
+                {remaining <= 0
+                    ? "Quota should be available now — retry the task."
+                    : `Quota exhausted — resets in ${formatDuration(remaining)}`}
+            </span>
+        </div>
+    );
+};
+
+const TaskDuration: FunctionComponent<{ startedAt: string | null; finishedAt: string | null; status: string }> = ({ startedAt, finishedAt, status }) => {
+    const [elapsed, setElapsed] = useState(0);
+    const isRunning = status === "RUNNING" || status === "running";
+
+    useEffect(() => {
+        if (!startedAt) { setElapsed(0); return; }
+        const start = new Date(startedAt).getTime();
+        const compute = () => {
+            const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
+            return Math.max(0, Math.floor((end - start) / 1000));
+        };
+        setElapsed(compute());
+        if (!finishedAt && isRunning) {
+            const timer = window.setInterval(() => setElapsed(compute()), 1000);
+            return () => window.clearInterval(timer);
+        }
+    }, [startedAt, finishedAt, isRunning]);
+
+    if (!startedAt || elapsed === 0) return null;
+
+    return (
+        <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
+            <Timer className="w-3 h-3" strokeWidth={2} />
+            <span>{formatDuration(elapsed)}</span>
+        </div>
+    );
 };
 
 const ATTENTION_SEVERITY_TONE: Record<string, string> = {
@@ -1137,6 +1226,7 @@ const ExecutionRuntimePanel: FunctionComponent<{
                                                     {dispatch.taskRunState}
                                                 </div>
                                             )}
+                                            <TaskDuration startedAt={dispatch.startedAt} finishedAt={dispatch.finishedAt} status={dispatch.status} />
                                         </div>
                                     </div>
                                     {(dispatch.sessionId || dispatch.workerBranch || dispatch.errorMessage || dispatch.activeLeaseOwnerKey) && (
@@ -1144,7 +1234,7 @@ const ExecutionRuntimePanel: FunctionComponent<{
                                             {dispatch.sessionId && <div>session {dispatch.sessionId}</div>}
                                             {dispatch.workerBranch && <div>branch {dispatch.workerBranch}</div>}
                                             {dispatch.activeLeaseOwnerKey && <div>lease {dispatch.activeLeaseOwnerKey}</div>}
-                                            {dispatch.errorMessage && <div className="text-status-red">{dispatch.errorMessage}</div>}
+                                            {dispatch.errorMessage && <QuotaCountdown errorMessage={dispatch.errorMessage} />}
                                         </div>
                                     )}
                                     <div className="mt-3 flex flex-wrap gap-2">
@@ -1631,6 +1721,7 @@ export const LiveSessionPage: FunctionComponent = () => {
 
     const filtered = useMemo(() => {
         if (activeFilter === "All") return visibleTasksWithLiveActivities;
+        if (activeFilter === "Pending") return visibleTasksWithLiveActivities.filter(t => t.status === "PENDING" || t.status === "BLOCKED" || t.status === "QUOTA");
         const target = FILTER_STATUS_MAP[activeFilter];
         return visibleTasksWithLiveActivities.filter(t => t.status === target);
     }, [visibleTasksWithLiveActivities, activeFilter]);
@@ -1653,12 +1744,29 @@ export const LiveSessionPage: FunctionComponent = () => {
         return { byRecordId, byTaskKey };
     }, [execution.recentEvents]);
 
+    const dispatchInfoByTaskId = useMemo(() => {
+        const map = new Map<string, { errorMessage: string | null; startedAt: string | null; finishedAt: string | null }>();
+        for (const dispatch of execution.taskDispatches) {
+            if (!dispatch.taskId) continue;
+            const existing = map.get(dispatch.taskId);
+            // Keep the most recent dispatch (last in list), but prefer one with error if present
+            if (!existing || dispatch.errorMessage || (!existing.errorMessage && dispatch.startedAt)) {
+                map.set(dispatch.taskId, {
+                    errorMessage: dispatch.errorMessage,
+                    startedAt: dispatch.startedAt,
+                    finishedAt: dispatch.finishedAt,
+                });
+            }
+        }
+        return map;
+    }, [execution.taskDispatches]);
+
     const counts: Record<TaskFilter, number> = useMemo(() => ({
         All:       visibleTasksWithLiveActivities.length,
         Running:   visibleStats.running,
         Completed: visibleStats.completed,
         Failed:    visibleStats.failed,
-        Pending:   visibleTasksWithLiveActivities.filter(t => t.status === "PENDING" || t.status === "BLOCKED").length,
+        Pending:   visibleTasksWithLiveActivities.filter(t => t.status === "PENDING" || t.status === "BLOCKED" || t.status === "QUOTA").length,
     }), [visibleStats, visibleTasksWithLiveActivities]);
 
     /* Connection error */
@@ -1906,6 +2014,9 @@ export const LiveSessionPage: FunctionComponent = () => {
                                     || []}
                                 onRerun={handleRerun}
                                 isRerunning={rerunningIds.has(task.id)}
+                                dispatchError={task.record_id ? dispatchInfoByTaskId.get(task.record_id)?.errorMessage : null}
+                                dispatchStartedAt={task.record_id ? dispatchInfoByTaskId.get(task.record_id)?.startedAt : null}
+                                dispatchFinishedAt={task.record_id ? dispatchInfoByTaskId.get(task.record_id)?.finishedAt : null}
                             />
                         ))
                     )}

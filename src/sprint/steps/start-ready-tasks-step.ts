@@ -10,6 +10,7 @@ interface StartReadyTasksOptions {
   resolveSessionName: (session: { id?: string; name?: string }) => string | undefined;
   extractSessionId: (session: { id?: string; name?: string }) => string | undefined;
   logger: Logger;
+  shouldSkipTask?: (task: Subtask) => boolean;
 }
 
 export const runStartReadyTasksStep = async (
@@ -30,6 +31,10 @@ export const runStartReadyTasksStep = async (
 
   const readyTasks = subtasks.filter((task) => task.status === "PENDING");
   for (const task of readyTasks) {
+    if (options.shouldSkipTask?.(task)) {
+      options.logger.info("Skipping task due to active quota cooldown", { taskId: task.id });
+      continue;
+    }
     try {
       const session = await options.startTask(task);
       task.status = "RUNNING";

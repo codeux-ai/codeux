@@ -12,6 +12,7 @@ import type { Logger } from "../shared/logging/logger.js";
 import { buildTaskRunKey } from "./task-run-key.js";
 import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS, sanitizeToken } from "./cli-workflow-utils.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
+import { classifyProviderError, ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
 import { ProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
@@ -32,7 +33,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 function isTerminalSessionState(state: string | undefined): boolean {
-  return state === "COMPLETED" || state === "FAILED" || state === "CANCELLED";
+  return state === "COMPLETED" || state === "FAILED" || state === "CANCELLED" || state === "QUOTA";
 }
 
 function extractPullRequest(session: JulesSession): { url?: string; workerBranch?: string } | null {
@@ -42,9 +43,12 @@ function extractPullRequest(session: JulesSession): { url?: string; workerBranch
   return output || null;
 }
 
-function resolveTerminalDispatchState(session: JulesSession): "COMPLETED" | "FAILED" | null {
+function resolveTerminalDispatchState(session: JulesSession): "COMPLETED" | "FAILED" | "QUOTA" | null {
   if (extractPullRequest(session) || session.state === "COMPLETED") {
     return "COMPLETED";
+  }
+  if (session.state === "QUOTA") {
+    return "QUOTA";
   }
   if (session.state === "FAILED" || session.state === "CANCELLED") {
     return "FAILED";
@@ -273,9 +277,11 @@ export class VirtualWorkerService {
         ? "COMPLETED"
         : persistedTaskRun?.state === "FAILED"
           ? "FAILED"
-          : persistedTaskRun?.state === "BLOCKED"
-            ? "BLOCKED"
-            : resolveTerminalDispatchState(currentSession);
+          : persistedTaskRun?.state === "QUOTA"
+            ? "QUOTA"
+            : persistedTaskRun?.state === "BLOCKED"
+              ? "BLOCKED"
+              : resolveTerminalDispatchState(currentSession);
       const currentPullRequest = extractPullRequest(currentSession);
       const update = this.deps.workerTaskDispatchService.updateDispatchForWorker({
         workerEndpointId,
@@ -523,7 +529,11 @@ export class VirtualWorkerService {
       result = await runProvider(buildReadFileRetryPrompt(args.providerPrompt));
     }
     if (!result.ok) {
-      throw new Error(result.stderr || result.stdout || `${args.provider} failed`);
+      const classification = classifyProviderError(args.provider, result);
+      if (classification.category !== "UNKNOWN") {
+        throw new ProviderQuotaError(classification);
+      }
+      throw new Error(classification.userMessage);
     }
   }
 

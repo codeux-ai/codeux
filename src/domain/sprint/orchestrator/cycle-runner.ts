@@ -55,6 +55,16 @@ export class CycleRunner {
 
   constructor(private readonly deps: SprintOrchestratorDependencies) {}
 
+  private getTaskErrorMessage = (task: Subtask): string | null => {
+    if (!task.record_id || !task.project_id) return null;
+    const dispatches = this.deps.executionRepository.listTaskDispatches({
+      projectId: task.project_id,
+      taskId: task.record_id,
+    });
+    const withError = dispatches.filter((d) => d.errorMessage);
+    return withError.length > 0 ? withError[withError.length - 1].errorMessage : null;
+  };
+
   async run(args: CycleRunnerArgs): Promise<SprintCycleResult & {
     awaitingMerge: Subtask[];
     manualMergeTasks: Subtask[];
@@ -103,7 +113,7 @@ export class CycleRunner {
         {
           repoPath: args.repoPath,
           sprintNumber: args.executionContext.sprintNumber,
-        }
+        },
       );
       subtasks = syncResult.subtasks;
     }
@@ -112,6 +122,7 @@ export class CycleRunner {
       subtasks = runStatusDerivationStep(subtasks, {
         retryFailed: args.retryFailed,
         isActionRequiredState: this.deps.isActionRequiredState,
+        getTaskErrorMessage: this.getTaskErrorMessage,
       });
     }
 
@@ -263,6 +274,7 @@ export class CycleRunner {
       resolveSessionName: this.deps.resolveSessionName,
       extractSessionId: this.deps.extractSessionId,
       logger: this.deps.logger.child({ component: "start-ready-tasks-step" }),
+      shouldSkipTask: (task) => task.status === "QUOTA",
     });
   }
 

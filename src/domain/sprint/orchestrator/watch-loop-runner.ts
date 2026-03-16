@@ -160,7 +160,8 @@ export class WatchLoopRunner {
       const allTerminal = subtasks.length > 0 && subtasks.every(
         (task) => (task.status === "COMPLETED" && task.is_merged) || task.status === "FAILED"
       );
-      const noMoreActionPossible = runningTasks.length === 0 && readyTasks.length === 0;
+      const quotaTasks = subtasks.filter((task) => task.status === "QUOTA");
+      const noMoreActionPossible = runningTasks.length === 0 && readyTasks.length === 0 && quotaTasks.length === 0;
       const needsManualMerge = manualMergeTasks.length > 0;
       const waitingOnWorkerAttention = workerEscalatedMergeConflictTasks.length > 0
         || activeWorkerMergeConflictAttention

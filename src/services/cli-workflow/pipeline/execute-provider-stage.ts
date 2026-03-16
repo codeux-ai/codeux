@@ -1,5 +1,6 @@
 import type { PipelineContext } from "./pipeline-context.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "../../cli-workflow-text-utils.js";
+import { classifyProviderError, ProviderQuotaError } from "../../../shared/providers/provider-error-classifier.js";
 
 export async function executeProviderStage(ctx: PipelineContext, providerPrompt: string): Promise<void> {
   const providerSettings = ctx.settings.aiProvider.providers[ctx.provider];
@@ -34,6 +35,10 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
   }
 
   if (!providerResult.ok) {
-    throw new Error(providerResult.stderr || providerResult.stdout || `${ctx.provider} failed`);
+    const classification = classifyProviderError(ctx.provider, providerResult);
+    if (classification.category !== "UNKNOWN") {
+      throw new ProviderQuotaError(classification);
+    }
+    throw new Error(classification.userMessage);
   }
 }

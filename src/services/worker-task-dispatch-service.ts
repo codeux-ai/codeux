@@ -22,7 +22,7 @@ export interface UpdateWorkerTaskDispatchArgs {
   connectionKey: string;
   dispatchId: string;
   leaseToken: string;
-  state: Extract<TaskRunState, "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED">;
+  state: Extract<TaskRunState, "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED" | "QUOTA">;
   provider?: string;
   sessionId?: string;
   sessionName?: string;
@@ -236,7 +236,9 @@ export class WorkerTaskDispatchService {
         ? "completed"
         : args.state === "RUNNING"
           ? "in_progress"
-          : "pending";
+          : args.state === "QUOTA"
+            ? "in_progress"
+            : "pending";
 
     const nextDispatch = this.executionRepository.updateTaskDispatch(dispatch.id, {
       connectionId: args.connectionId ?? dispatch.connectionId ?? null,
@@ -485,6 +487,8 @@ export class WorkerTaskDispatchService {
         return "failed";
       case "BLOCKED":
         return "blocked";
+      case "QUOTA":
+        return "quota";
       case "RUNNING":
       default:
         return "running";
@@ -505,6 +509,8 @@ export class WorkerTaskDispatchService {
         return "worker_failed";
       case "BLOCKED":
         return "worker_blocked";
+      case "QUOTA":
+        return "worker_quota";
       case "RUNNING":
       default:
         return "worker_heartbeat";

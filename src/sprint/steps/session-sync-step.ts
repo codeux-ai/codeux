@@ -13,6 +13,9 @@ const mapSessionStateToTaskRunState = (
   if (sessionState === "FAILED") {
     return "FAILED";
   }
+  if (sessionState === "QUOTA") {
+    return "QUOTA";
+  }
   if (isActionRequiredState(sessionState)) {
     return "BLOCKED";
   }
@@ -25,6 +28,8 @@ const mapTaskRunStateToDispatchStatus = (state: TaskRunState): TaskDispatchStatu
       return "completed";
     case "FAILED":
       return "failed";
+    case "QUOTA":
+      return "quota";
     case "BLOCKED":
       return "blocked";
     case "RUNNING":
@@ -213,7 +218,7 @@ export const runSessionSyncStep = async (
   subtasks: Subtask[],
   deps: SessionSyncDependencies,
   retryFailed: boolean,
-  context: { repoPath: string; sprintNumber: number }
+  context: { repoPath: string; sprintNumber: number },
 ): Promise<{ subtasks: Subtask[]; sessions: JulesSession[] }> => {
   const sessionsResponse = await deps.listSessions();
   const sessions = sessionsResponse.sessions || [];
@@ -314,6 +319,11 @@ export const runSessionSyncStep = async (
       } else {
         task.status = "FAILED";
       }
+      continue;
+    }
+
+    if (match.state === "QUOTA") {
+      task.status = "QUOTA";
       continue;
     }
 

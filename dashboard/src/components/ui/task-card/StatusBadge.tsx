@@ -15,6 +15,8 @@ const getStatusColor = (status?: string): string => {
       return "bg-red-500/10 text-red-400 border-red-500/20";
     case "BLOCKED":
       return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+    case "QUOTA":
+      return "bg-amber-500/10 text-amber-400 border-amber-500/20";
     default:
       return "bg-slate-800/50 text-slate-400 border-slate-700";
   }

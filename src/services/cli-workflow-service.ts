@@ -30,6 +30,7 @@ import { executePrFinalizeStage } from "./cli-workflow/pipeline/pr-finalize-stag
 import { executeCleanupStage } from "./cli-workflow/pipeline/cleanup-stage.js";
 import type { ActiveDispatchRegistry } from "./active-dispatch-registry.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
+import { ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
 
 interface CliWorkflowServiceDependencies {
   sessionTracking: SessionTrackingRepository;
@@ -274,6 +275,31 @@ export class CliWorkflowService {
           provider: args.provider,
           reason: abortController.signal.reason || "dashboard_cancel",
         }, `cli:cancelled:${args.sessionId}`);
+      } else if (error instanceof ProviderQuotaError && error.category !== "UNKNOWN") {
+        this.deps.sessionTracking.updateSession(args.sessionId, { state: "QUOTA" });
+        this.deps.sessionTracking.appendActivity(args.sessionId, {
+          originator: "system",
+          description: `Provider quota: ${message}`,
+        });
+        this.updateExecutionState(args, {
+          state: "QUOTA",
+          finishedAt,
+          dispatchStatus: "quota",
+          errorMessage: message,
+        });
+        this.appendExecutionEvent(args, "cli_workflow_quota", {
+          provider: args.provider,
+          errorMessage: message,
+          category: error.category,
+          retryAfterIso: error.retryAfterIso,
+        });
+        this.deps.logger?.warn("CLI workflow hit provider quota", {
+          sessionId: args.sessionId,
+          provider: args.provider,
+          category: error.category,
+          retryAfterIso: error.retryAfterIso,
+          message,
+        });
       } else {
         this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
         this.deps.sessionTracking.appendActivity(args.sessionId, {
@@ -348,7 +374,7 @@ export class CliWorkflowService {
   private updateExecutionState(
     args: { taskRunId?: string; sessionId: string; workerBranch: string },
     input: {
-      state: "COMPLETED" | "FAILED";
+      state: "COMPLETED" | "FAILED" | "QUOTA";
       finishedAt: string;
       prUrl?: string;
       workerBranch?: string;

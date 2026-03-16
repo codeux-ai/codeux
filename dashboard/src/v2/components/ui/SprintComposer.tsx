@@ -118,6 +118,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     }
   };
 
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
     if (!name.trim()) {
@@ -125,6 +127,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     }
 
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       await onSubmit({
         name: name.trim(),
@@ -132,6 +135,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         submitMode: isEditing ? "draft" : submitMode,
       });
       onClose();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : String(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -276,6 +281,11 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
           )}
 
           <div data-composer-stagger className="mt-auto flex flex-col gap-3 pt-2">
+            {submitError && (
+              <div className="rounded-xl border border-status-red/20 bg-status-red/[0.06] px-4 py-3 text-xs leading-relaxed text-status-red">
+                {submitError}
+              </div>
+            )}
             <button
               type="submit"
               disabled={isSubmitting || !name.trim()}

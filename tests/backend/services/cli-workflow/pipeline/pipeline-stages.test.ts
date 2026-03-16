@@ -100,9 +100,9 @@ describe("executeProviderStage", () => {
   it("throws an error if provider run fails without retry conditions", async () => {
     const ctx = createMockContext();
     ctx.workflowSettings.retryOnReadFileNotFound = false;
-    vi.mocked(ctx.providerRunner.runProvider).mockResolvedValueOnce({ ok: false, stdout: "", stderr: "fatal provider error" });
+    vi.mocked(ctx.providerRunner.runProvider).mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "fatal provider error" });
 
-    await expect(executeProviderStage(ctx, "prompt")).rejects.toThrow("fatal provider error");
+    await expect(executeProviderStage(ctx, "prompt")).rejects.toThrow("Gemini failed with an unexpected error.");
   });
 
   it("retries if retryOnReadFileNotFound is true and error is a read file not found error", async () => {

@@ -64,6 +64,12 @@ export class WorkspaceManager implements IWorkspaceManager {
       }
 
       await this.removeWorktreeInternal(repoPath, finalWorktreePath);
+      // Remove any existing worktree that has the target branch checked out
+      // (e.g. from a previous failed merge attempt with a different session ID)
+      const existingWorktree = await this.findWorktreePathForBranch(repoPath, workerBranch);
+      if (existingWorktree) {
+        await this.removeWorktreeInternal(repoPath, existingWorktree);
+      }
       await runCommandStrict("git", ["worktree", "prune"], repoPath);
       await runCommandStrict(
         "git",

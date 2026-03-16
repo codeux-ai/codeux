@@ -5,6 +5,7 @@ const resolveStatusIcon = (task: Subtask): string => {
   if (task.status === "RUNNING") return "⏳";
   if (task.status === "BLOCKED") return "🚫";
   if (task.status === "FAILED") return "❌";
+  if (task.status === "QUOTA") return "⏸️";
   return "💤";
 };
 
