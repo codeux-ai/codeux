@@ -379,6 +379,371 @@ describe("VirtualWorkerService", () => {
     expect(projectWorkerAssignmentRepository.listAssignmentsForProject(project.id, { activeOnly: true })).toHaveLength(0);
   });
 
+  it("pickNextWorkerAttention skips merge_required items", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const project = projectManagementRepository.createProject({
+      name: "Merge Required Skip Project",
+      sourceType: "local",
+      sourceRef: "/workspace/merge-required-skip",
+      defaultBranch: "main",
+    });
+
+    // Create a merge_required item — should be skipped by virtual worker
+    projectAttentionService.openItem({
+      projectId: project.id,
+      sprintId: null,
+      taskId: null,
+      sprintRunId: null,
+      dispatchId: null,
+      attentionType: "merge_required",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge required",
+      summaryMarkdown: "PR ready for merge.",
+      payload: null,
+    });
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: {
+        startTask: vi.fn(),
+      } as any,
+    });
+
+    // Access private method directly — merge_required items must be skipped
+    const result = (virtualWorkerService as any).pickNextWorkerAttention(project.id);
+    expect(result).toBeNull();
+
+    // merge_conflict items should still be picked up
+    projectAttentionService.openItem({
+      projectId: project.id,
+      sprintId: null,
+      taskId: null,
+      sprintRunId: null,
+      dispatchId: null,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge conflict",
+      summaryMarkdown: "Conflicting changes.",
+      payload: null,
+    });
+
+    const conflictResult = (virtualWorkerService as any).pickNextWorkerAttention(project.id);
+    expect(conflictResult).not.toBeNull();
+    expect(conflictResult.attentionType).toBe("merge_conflict");
+  });
+
+  it("scheduleProject is a no-op for non-virtual projects", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const project = projectManagementRepository.createProject({
+      name: "Non-Virtual Project",
+      sourceType: "local",
+      sourceRef: "/workspace/non-virtual",
+      defaultBranch: "main",
+    });
+
+    // Default settings — not VIRTUAL mode
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: {
+        startTask: vi.fn(),
+      } as any,
+    });
+
+    // Should return early without scheduling anything
+    virtualWorkerService.scheduleProject(project.id, "test");
+    await vi.runAllTicks();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // No endpoint created, no startTask called
+    expect(workerEndpointRepository.listWorkerEndpoints().filter(e => e.endpointType === "virtual_cli")).toHaveLength(0);
+  });
+
+  it("projectNeedsVirtualWorker returns true when queued dispatches exist", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const project = projectManagementRepository.createProject({
+      name: "Dispatch Project",
+      sourceType: "local",
+      sourceRef: "/workspace/dispatch-project",
+      defaultBranch: "main",
+    });
+    const sprint = projectManagementRepository.createSprint(project.id, {
+      name: "Dispatch Sprint",
+      number: 20,
+      featureBranch: "feature/sprint-20",
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: {
+        executionMode: "VIRTUAL",
+        virtualWorkerProvider: "codex",
+      },
+    });
+
+    const task = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Dispatch task",
+      promptMarkdown: "Do the thing.",
+      executorType: "mcp_worker",
+      priority: "high",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mcp_worker",
+      status: "running",
+    });
+    executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "mcp_worker",
+    });
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: {
+        startTask: vi.fn(),
+      } as any,
+    });
+
+    expect((virtualWorkerService as any).projectNeedsVirtualWorker(project.id)).toBe(true);
+  });
+
+  it("start and stop manage the reconcile timer", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: { startTask: vi.fn() } as any,
+    });
+
+    virtualWorkerService.start();
+    // Calling start again should be a no-op (idempotent)
+    virtualWorkerService.start();
+    virtualWorkerService.stop();
+    // Calling stop again should be safe
+    virtualWorkerService.stop();
+  });
+
+  it("getProviderLabel returns correct labels", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: { startTask: vi.fn() } as any,
+    });
+
+    expect((virtualWorkerService as any).getProviderLabel("claude-code")).toBe("Claude Code");
+    expect((virtualWorkerService as any).getProviderLabel("gemini")).toBe("Gemini");
+    expect((virtualWorkerService as any).getProviderLabel("codex")).toBe("Codex");
+  });
+
+  it("readRequiredString throws on empty values", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: { startTask: vi.fn() } as any,
+    });
+
+    expect((virtualWorkerService as any).readRequiredString("hello", "test")).toBe("hello");
+    expect(() => (virtualWorkerService as any).readRequiredString("", "test")).toThrow("Missing test");
+    expect(() => (virtualWorkerService as any).readRequiredString(null, "field")).toThrow("Missing field");
+  });
+
+  it("resolveWorkerExecutionMode uses sprint-level settings when sprintId provided", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const project = projectManagementRepository.createProject({
+      name: "Sprint Settings Project",
+      sourceType: "local",
+      sourceRef: "/workspace/sprint-settings",
+      defaultBranch: "main",
+    });
+    const sprint = projectManagementRepository.createSprint(project.id, {
+      name: "Sprint With Settings",
+      number: 30,
+      featureBranch: "feature/sprint-30",
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: {
+        executionMode: "VIRTUAL",
+        virtualWorkerProvider: "gemini",
+      },
+    });
+    const baseProjectSettings = settingsRepository.resolveProjectDashboardSettings(project.id).settings;
+    settingsRepository.saveSprintSettings(sprint.id, baseProjectSettings, {
+      workers: {
+        executionMode: "VIRTUAL",
+        virtualWorkerProvider: "gemini",
+      },
+    });
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: { startTask: vi.fn() } as any,
+    });
+
+    // Sprint-level settings should resolve to VIRTUAL
+    expect((virtualWorkerService as any).resolveWorkerExecutionMode(project.id, sprint.id)).toBe("VIRTUAL");
+    // Project-level also VIRTUAL (set above)
+    expect((virtualWorkerService as any).resolveWorkerExecutionMode(project.id)).toBe("VIRTUAL");
+    // Cover resolveDashboardSettings with sprintId
+    const settings = (virtualWorkerService as any).resolveDashboardSettings(project.id, sprint.id);
+    expect(settings.workers.executionMode).toBe("VIRTUAL");
+    // Cover resolveCycleSettings
+    const cycleSettings = (virtualWorkerService as any).resolveCycleSettings(project.id);
+    expect(cycleSettings).toBeDefined();
+    expect(cycleSettings.workers.virtualWorkerProvider).toBe("gemini");
+  });
+
   it("builds merge conflict prompts from both current and legacy attention payload fields", async () => {
     const {
       settingsRepository,

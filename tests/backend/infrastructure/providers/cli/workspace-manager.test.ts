@@ -81,7 +81,28 @@ describe("WorkspaceManager", () => {
       );
     });
 
-it("should resume session if resumable path is found", async () => {
+it("should retry fetch after repairing stale git state on first failure", async () => {
+      vi.mocked(fs.access).mockRejectedValue(new Error("not found"));
+      vi.mocked(fs.readdir as any).mockResolvedValue([]); // no worktree entries to clean
+      let fetchCallCount = 0;
+      vi.mocked(runCommandStrict).mockImplementation(async (_cmd, args) => {
+        if (args.includes("fetch") && args.includes("origin")) {
+          fetchCallCount++;
+          if (fetchCallCount === 1) throw new Error("fatal: bad object");
+          return { ok: true, stdout: "", stderr: "" };
+        }
+        if (args.includes("list") && args.includes("--porcelain")) {
+          return { ok: true, stdout: "", stderr: "" };
+        }
+        return { ok: true, stdout: "", stderr: "" };
+      });
+
+      const result = await manager.prepareWorktree("/repo", "/final", "worker", "feature");
+      expect(result).toEqual({ worktreePath: "/final", resumed: false });
+      expect(fetchCallCount).toBe(2); // first failed, second succeeded after repair
+    });
+
+    it("should resume session if resumable path is found", async () => {
       vi.mocked(fs.access).mockResolvedValue(undefined);
       vi.mocked(runCommandStrict).mockImplementation(async (cmd, args) => {
         if (args.includes("--is-inside-work-tree")) return { ok: true, stdout: "true\n", stderr: "" };
@@ -211,6 +232,92 @@ branch refs/heads/other-branch`;
       const res = await (manager as any).resolveResumableWorktreePath("/repo", "branch", "/preferred");
       expect(res).toBeUndefined();
       expect(manager.removeStaleWorktreeRegistration).toHaveBeenCalledWith("/repo", "/branch-path");
+    });
+  });
+
+  describe("repairStaleGitState", () => {
+    it("should remove stale worktree entries whose gitdir targets are missing", async () => {
+      vi.mocked(fs.readdir as any).mockResolvedValueOnce(["stale-wt", "ok-wt"]);
+      vi.mocked(fs.readFile as any)
+        .mockResolvedValueOnce("/missing/path/.git\n")   // stale-wt/gitdir
+        .mockResolvedValueOnce("/existing/path/.git\n"); // ok-wt/gitdir
+      vi.mocked(fs.access)
+        .mockRejectedValueOnce(new Error("missing"))  // stale-wt gitdir target missing
+        .mockResolvedValueOnce(undefined);              // ok-wt gitdir target exists
+      vi.mocked(fs.rm).mockResolvedValue(undefined);
+
+      await (manager as any).repairStaleGitState("/repo");
+
+      expect(fs.rm).toHaveBeenCalledWith(
+        path.join("/repo", ".git", "worktrees", "stale-wt"),
+        { recursive: true, force: true },
+      );
+    });
+
+    it("should survive if .git/worktrees dir does not exist", async () => {
+      vi.mocked(fs.readdir as any).mockRejectedValueOnce(new Error("ENOENT"));
+      await expect((manager as any).repairStaleGitState("/repo")).resolves.not.toThrow();
+    });
+  });
+
+  describe("removeCorruptRefsInDir", () => {
+    it("should remove empty ref files", async () => {
+      vi.mocked(fs.readdir as any).mockResolvedValueOnce([
+        { name: "good-ref", isDirectory: () => false },
+        { name: "empty-ref", isDirectory: () => false },
+      ]);
+      vi.mocked(fs.readFile as any)
+        .mockResolvedValueOnce("abcdef1234567890abcdef1234567890abcdef12")  // good-ref: valid sha
+        .mockResolvedValueOnce("");  // empty-ref
+      vi.mocked(fs.rm).mockResolvedValue(undefined);
+      vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: "commit\n", stderr: "" });
+
+      await (manager as any).removeCorruptRefsInDir("/repo", "/repo/.git/refs/heads");
+
+      // empty-ref should be removed
+      expect(fs.rm).toHaveBeenCalledWith(
+        path.join("/repo/.git/refs/heads", "empty-ref"),
+        { force: true },
+      );
+    });
+
+    it("should remove refs pointing to bad objects", async () => {
+      vi.mocked(fs.readdir as any).mockResolvedValueOnce([
+        { name: "bad-ref", isDirectory: () => false },
+      ]);
+      vi.mocked(fs.readFile as any)
+        .mockResolvedValueOnce("abcdef1234567890abcdef1234567890abcdef12");
+      vi.mocked(runCommandStrict).mockRejectedValueOnce(new Error("bad object"));
+      vi.mocked(fs.rm).mockResolvedValue(undefined);
+
+      await (manager as any).removeCorruptRefsInDir("/repo", "/repo/.git/refs/heads");
+
+      expect(fs.rm).toHaveBeenCalledWith(
+        path.join("/repo/.git/refs/heads", "bad-ref"),
+        { force: true },
+      );
+    });
+
+    it("should recurse into subdirectories", async () => {
+      vi.mocked(fs.readdir as any)
+        .mockResolvedValueOnce([
+          { name: "subdir", isDirectory: () => true },
+        ])
+        .mockResolvedValueOnce([]); // subdir contents
+
+      await (manager as any).removeCorruptRefsInDir("/repo", "/repo/.git/refs/heads");
+
+      expect(fs.readdir).toHaveBeenCalledWith(
+        path.join("/repo/.git/refs/heads", "subdir"),
+        { withFileTypes: true },
+      );
+    });
+
+    it("should handle readdir failure gracefully", async () => {
+      vi.mocked(fs.readdir as any).mockRejectedValueOnce(new Error("ENOENT"));
+      await expect(
+        (manager as any).removeCorruptRefsInDir("/repo", "/repo/.git/refs/heads"),
+      ).resolves.not.toThrow();
     });
   });
 
