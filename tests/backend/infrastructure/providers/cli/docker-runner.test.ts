@@ -336,6 +336,68 @@ describe("DockerRunner", () => {
     }));
   });
 
+  it("should mount worktree and .git read-write when cwd is inside repo", async () => {
+    const onActivity = vi.fn();
+
+    await runner.runProviderInDocker({
+      command: "test-cmd",
+      args: [],
+      cwd: "/repo/path/.sprint-os/worktrees/session-1",
+      providerEnv: {},
+      sessionId: "session-123",
+      providerLabel: "claude-code",
+      workflowSettings: defaultWorkflowSettings,
+      repoPath: "/repo/path",
+      onActivity,
+    });
+
+    // Repo should be mounted read-only
+    expect(toDockerMountArg).toHaveBeenCalledWith(expect.objectContaining({
+      source: "/repo/path",
+      destination: "/repo/path",
+      readonly: true,
+    }));
+    // Worktree directory should be mounted read-write
+    expect(toDockerMountArg).toHaveBeenCalledWith(expect.objectContaining({
+      source: "/repo/path/.sprint-os/worktrees/session-1",
+      destination: "/repo/path/.sprint-os/worktrees/session-1",
+      readonly: false,
+    }));
+    // .git dir should be mounted read-write
+    expect(toDockerMountArg).toHaveBeenCalledWith(expect.objectContaining({
+      source: "/repo/path/.git",
+      destination: "/repo/path/.git",
+      readonly: false,
+    }));
+  });
+
+  it("should not add worktree mounts when cwd equals repo path", async () => {
+    const onActivity = vi.fn();
+
+    await runner.runProviderInDocker({
+      command: "test-cmd",
+      args: [],
+      cwd: "/repo/path",
+      providerEnv: {},
+      sessionId: "session-123",
+      providerLabel: "claude-code",
+      workflowSettings: defaultWorkflowSettings,
+      repoPath: "/repo/path",
+      onActivity,
+    });
+
+    // Repo should be mounted read-write (not readonly since cwd === repoPath)
+    expect(toDockerMountArg).toHaveBeenCalledWith(expect.objectContaining({
+      source: "/repo/path",
+      destination: "/repo/path",
+      readonly: false,
+    }));
+    // .git should NOT have a separate mount
+    expect(toDockerMountArg).not.toHaveBeenCalledWith(expect.objectContaining({
+      destination: "/repo/path/.git",
+    }));
+  });
+
   it("should handle JULES_DOCKER_RUNTIME_ROOT and JULES_DOCKER_HOST_WORKSPACE_ROOT config", async () => {
     const onActivity = vi.fn();
     process.env.JULES_DOCKER_RUNTIME_ROOT = "/custom/runtime/root";
