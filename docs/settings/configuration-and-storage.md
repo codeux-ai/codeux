@@ -180,7 +180,7 @@ The effective endpoints return:
 - `featurePrAutoMergeMode` (default `"OFF"`):
   - `"OFF"`: no feature PR auto-merge
   - `"WHEN_GREEN"`: auto-merge when merge gates are clear. If `waitForCiBeforeFeatureMerge` is enabled, this requires green checks; if disabled, CI status is not waited on.
-  - `"ALWAYS"`: always attempt feature PR auto-merge (still subject to repository merge protection/rules)
+  - `"ALWAYS"`: bypass CI waiting only when `waitForCiBeforeFeatureMerge` is disabled. If CI waiting is enabled, Sprint OS still waits for green checks before attempting auto-merge.
 
 `mcpTools` contains:
 - `name` (MCP tool name from `src/contracts/mcp-tool-definitions.ts`)

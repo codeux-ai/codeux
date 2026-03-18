@@ -117,8 +117,8 @@ export class FeaturePrGateService {
       );
 
       const autoMergeMode = context.ciIntelligence.featurePrAutoMergeMode;
-      const shouldAutoMergeAlways = autoMergeMode === "ALWAYS";
-      const shouldAutoMergeWhenGreen = autoMergeMode === "WHEN_GREEN";
+      const shouldAutoMergeAlways = autoMergeMode === "ALWAYS" && !waitForFeatureCi;
+      const shouldAutoMergeWhenGreen = autoMergeMode === "WHEN_GREEN" || (autoMergeMode === "ALWAYS" && waitForFeatureCi);
 
       if (shouldAutoMergeAlways && !hasReviewBlockers && context.autoMergeFeaturePr) {
         const mergeAttempt = await attemptAutoMerge({

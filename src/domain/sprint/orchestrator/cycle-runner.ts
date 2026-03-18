@@ -14,6 +14,7 @@ import type {
   SprintLoopStepSettings,
   Subtask,
 } from "../../../contracts/app-types.js";
+import type { TaskStatus as PlanningTaskStatus } from "../../../contracts/project-management-types.js";
 import type { ProjectAttentionOwnerType } from "../../../contracts/project-attention-types.js";
 import type { SprintOrchestratorDependencies } from "../../../sprint/sprint-orchestrator.js";
 import type { SprintExecutionContext } from "../../../services/sprint-execution-state-service.js";
@@ -39,7 +40,9 @@ export interface CycleRunnerArgs {
 
 interface TaskStateSnapshot {
   id: string;
+  status: Subtask["status"];
   isMerged: boolean;
+  mergeIndicator: Subtask["merge_indicator"];
 }
 
 interface MergeConflictTaskContext {
@@ -184,6 +187,8 @@ export class CycleRunner {
       subtasks = ciAutofixResult.subtasks;
       reportText += ciAutofixResult.reportText;
 
+      this.persistCiGateTaskStateChanges(taskStateBeforeCiGate, subtasks);
+
       const ciGateRefreshNeeded = hasMergeStateChanges(taskStateBeforeCiGate, subtasks);
       if (ciGateRefreshNeeded && args.loopSteps.statusDerivation) {
         subtasks = runStatusDerivationStep(subtasks, {
@@ -266,6 +271,31 @@ export class CycleRunner {
       logger: this.deps.logger.child({ component: "start-ready-tasks-step" }),
       shouldSkipTask: (task) => task.status === "QUOTA",
     });
+  }
+
+  private persistCiGateTaskStateChanges(
+    previous: Map<string, TaskStateSnapshot>,
+    subtasks: Subtask[],
+  ): void {
+    for (const task of subtasks) {
+      const earlier = previous.get(task.id);
+      if (!earlier || !task.record_id) {
+        continue;
+      }
+
+      const statusChanged = earlier.status !== task.status;
+      const mergeChanged = earlier.isMerged !== Boolean(task.is_merged);
+      const mergeIndicatorChanged = earlier.mergeIndicator !== task.merge_indicator;
+      if (!statusChanged && !mergeChanged && !mergeIndicatorChanged) {
+        continue;
+      }
+
+      this.deps.projectManagementRepository.updateTask(task.record_id, {
+        status: mapSubtaskStatusToPlanningStatus(task.status),
+        isMerged: Boolean(task.is_merged),
+        mergeIndicator: task.merge_indicator || null,
+      });
+    }
   }
 
   private syncProtocolAttentionItems(
@@ -440,7 +470,9 @@ function collectActiveWorkerMergeConflictTaskIds(subtasks: Array<{
 function snapshotTaskState(subtasks: Subtask[]): Map<string, TaskStateSnapshot> {
   return new Map(subtasks.map((task) => [task.id, {
     id: task.id,
+    status: task.status,
     isMerged: Boolean(task.is_merged),
+    mergeIndicator: task.merge_indicator,
   }]));
 }
 
@@ -457,6 +489,21 @@ function hasMergeStateChanges(previous: Map<string, TaskStateSnapshot>, subtasks
 function resolveCiStatusCacheTtlMs(watchLoopIntervalSeconds: number | undefined): number {
   const watchLoopIntervalMs = Math.max(1, Number(watchLoopIntervalSeconds || 0)) * 1000;
   return Math.min(15_000, Math.max(3_000, watchLoopIntervalMs));
+}
+
+function mapSubtaskStatusToPlanningStatus(status: Subtask["status"]): PlanningTaskStatus {
+  switch (status) {
+    case "RUNNING":
+      return "in_progress";
+    case "COMPLETED":
+      return "completed";
+    case "PENDING":
+    case "FAILED":
+    case "BLOCKED":
+    case "QUOTA":
+    default:
+      return "pending";
+  }
 }
 
 function buildTaskContext(task: Subtask): MergeConflictTaskContext {

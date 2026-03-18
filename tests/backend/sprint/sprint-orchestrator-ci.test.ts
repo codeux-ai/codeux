@@ -303,7 +303,7 @@ describe("SprintOrchestrator CI logic", () => {
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });
 
-  it("auto merges feature PR in always mode even when checks are pending", async () => {
+  it("keeps waiting in always mode when feature CI wait is enabled and checks are pending", async () => {
     const { deps, listSessions, subtaskRepository } = buildDeps();
     deps.getDashboardSettings = () => ({
       ...DEFAULT_DASHBOARD_SETTINGS,
@@ -387,12 +387,12 @@ describe("SprintOrchestrator CI logic", () => {
     });
 
     const text = result.content[0].text as string;
-    expect(text).toContain("Auto-Merged");
-    expect(text).toContain("mode: always");
-    expect(deps.autoMergeFeaturePr).toHaveBeenCalledWith({ repoPath: tmpRoot, prNumber: 22 });
+    expect(text).toContain("CI/Review Merge Gate");
+    expect(text).toContain("CI Status: `PENDING`");
+    expect(deps.autoMergeFeaturePr).not.toHaveBeenCalled();
     expect(deps.projectManagementRepository.updateTask).toHaveBeenCalledWith(
       "task-record-1",
-      expect.objectContaining({ isMerged: true, mergeIndicator: "AUTOMERGE" }),
+      expect.objectContaining({ status: "in_progress", isMerged: false, mergeIndicator: "CI" }),
     );
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });

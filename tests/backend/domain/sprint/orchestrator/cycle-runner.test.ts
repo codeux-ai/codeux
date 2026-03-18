@@ -592,4 +592,89 @@ describe("CycleRunner attention sync", () => {
     });
     expect(deps.startTask).toHaveBeenCalledWith(expect.objectContaining({ id: "T2" }), expect.anything());
   });
+
+  it("persists CI wait status back to task records while checks are still pending", async () => {
+    const deps = buildDeps();
+    const runner = new CycleRunner(deps);
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockResolvedValue([
+      {
+        id: "T1",
+        record_id: "task-1",
+        title: "Waiting task",
+        prompt: "wait for CI",
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        is_merged: false,
+        worker_branch: "worker/T1",
+        pr_url: "https://example.com/pr/101",
+      },
+    ] as any);
+    deps.getCiStatusForScope = vi.fn().mockResolvedValue({
+      available: true,
+      openPullRequests: [
+        {
+          number: 101,
+          title: "Task PR",
+          url: "https://example.com/pr/101",
+          state: "OPEN",
+          isDraft: false,
+          headRefName: "worker/T1",
+          baseRefName: "feature/sprint-1",
+          checks: [{ name: "ci", status: "in_progress", conclusion: null }],
+          comments: 0,
+          reviewDecision: "APPROVED",
+        },
+      ],
+      ciRuns: [],
+      mergedPullRequests: [],
+    });
+
+    const result = await runner.run({
+      action: "status",
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: false,
+        startReadyTasks: false,
+        statusTable: false,
+        mergeProtocol: true,
+        actionRequiredProtocol: true,
+        watchLoopIntervalSeconds: 2,
+      } as any,
+      ciIntelligence: {
+        ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
+        enabled: true,
+        waitForCiBeforeFeatureMerge: true,
+      },
+      githubMode: "REMOTE",
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    });
+
+    expect(result.subtasks[0]).toMatchObject({
+      status: "RUNNING",
+      merge_indicator: "CI",
+      is_merged: false,
+    });
+    expect(deps.projectManagementRepository.updateTask).toHaveBeenCalledWith("task-1", {
+      status: "in_progress",
+      isMerged: false,
+      mergeIndicator: "CI",
+    });
+  });
 });
