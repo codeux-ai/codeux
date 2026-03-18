@@ -1075,7 +1075,7 @@ export const SettingsPage: FunctionComponent = () => {
               max={20}
             />
           </Row>
-          <Row label="Feature PR auto-merge mode" description="Controls whether feature PRs auto-merge immediately, only when green, or never." last>
+          <Row label="Feature PR auto-merge mode" description="Controls whether feature PRs auto-merge immediately, only when green, or never.">
             <SelectInput
               value={editableSettings.ciIntelligence.featurePrAutoMergeMode}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -1083,6 +1083,23 @@ export const SettingsPage: FunctionComponent = () => {
                 ciIntelligence: {
                   ...current.ciIntelligence,
                   featurePrAutoMergeMode: value as ProjectSettings["ciIntelligence"]["featurePrAutoMergeMode"],
+                },
+              }))}
+              options={[
+                { value: "OFF", label: "Off" },
+                { value: "WHEN_GREEN", label: "When green" },
+                { value: "ALWAYS", label: "Always" },
+              ]}
+            />
+          </Row>
+          <Row label="Main branch auto-merge mode" description="Controls whether the main branch PR auto-merges immediately, only when green, or never." last>
+            <SelectInput
+              value={editableSettings.ciIntelligence.mainBranchAutoMergeMode}
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                ciIntelligence: {
+                  ...current.ciIntelligence,
+                  mainBranchAutoMergeMode: value as ProjectSettings["ciIntelligence"]["mainBranchAutoMergeMode"],
                 },
               }))}
               options={[

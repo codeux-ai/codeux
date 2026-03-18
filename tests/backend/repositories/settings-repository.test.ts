@@ -96,6 +96,7 @@ describe("SettingsRepository", () => {
           waitForJulesCiAutofix: false,
           julesCiAutofixMaxRetries: 3,
           featurePrAutoMergeMode: "OFF",
+          mainBranchAutoMergeMode: "OFF",
         },
         sprintLoopSteps: {
           branchPreflight: true,
@@ -301,6 +302,7 @@ describe("SettingsRepository", () => {
         waitForJulesCiAutofix: true,
         julesCiAutofixMaxRetries: 2,
         featurePrAutoMergeMode: "WHEN_GREEN",
+        mainBranchAutoMergeMode: "OFF",
       },
       sprintLoopSteps: {
         branchPreflight: true,

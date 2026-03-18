@@ -470,6 +470,22 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               ]}
             />
           </Row>
+          <Row label="Main branch auto-merge" description="Policy for merging the main branch PR after checks and comments are satisfied.">
+            <SelectField
+              value={settings.ciIntelligence.mainBranchAutoMergeMode}
+              onChange={(value) => update({
+                ciIntelligence: {
+                  ...settings.ciIntelligence,
+                  mainBranchAutoMergeMode: value as ProjectSettings["ciIntelligence"]["mainBranchAutoMergeMode"],
+                },
+              })}
+              options={[
+                { value: "OFF", label: "Off" },
+                { value: "WHEN_GREEN", label: "When green" },
+                { value: "ALWAYS", label: "Always" },
+              ]}
+            />
+          </Row>
         </div>
       </Card>
 

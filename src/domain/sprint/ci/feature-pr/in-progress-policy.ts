@@ -1,7 +1,14 @@
 import type { GitTrackingStatus, Subtask, CiIntelligenceSettings, AutomationLevel } from "../../../../contracts/app-types.js";
 import { isCiFailure, selectFailedCiRuns, getFailedJobLabels } from "../../../../sprint/ci-status-utils.js";
 import { handleCiAutofixEscalation } from "./ci-autofix-policy.js";
+import type { WorkerCiFixPayload } from "./ci-autofix-policy.js";
 import { buildInProgressText, buildFailedChecksText, buildReviewBlockersText } from "./ci-notification-builder.js";
+
+export interface InProgressResult {
+  reportText: string;
+  workerCiFixRequired: boolean;
+  workerCiFixPayload: WorkerCiFixPayload | null;
+}
 
 export async function evaluateInProgressState(args: {
   task: Subtask;
@@ -18,7 +25,9 @@ export async function evaluateInProgressState(args: {
   ciAutofixRetryCounts: Map<string, number>;
   isJulesApiConfigured: () => boolean;
   sendSessionMessage: (sessionId: string, message: string) => Promise<void>;
-}): Promise<string> {
+  repoPath: string;
+  defaultBranch: string;
+}): Promise<InProgressResult> {
   args.task.status = "RUNNING";
   args.task.merge_indicator = args.hasReviewBlockers && !args.hasFailedChecks && !args.hasPendingChecks ? "MERGE_BLOCKED" : "CI";
   const ciStateLabel = args.hasFailedChecks ? "failed" : args.hasPendingChecks ? "pending" : "green";
@@ -26,6 +35,8 @@ export async function evaluateInProgressState(args: {
   const branchName = args.workerBranch || args.featureBranch;
 
   let reportText = buildInProgressText(args.task.id, args.pr.number, args.pr.url, branchName, ciStateLabel, header);
+  let workerCiFixRequired = false;
+  let workerCiFixPayload: WorkerCiFixPayload | null = null;
 
   if (args.hasFailedChecks) {
     const failedChecks = args.checks
@@ -37,7 +48,7 @@ export async function evaluateInProgressState(args: {
     reportText += buildFailedChecksText(branchName, failedChecks, failedRuns, failedJobLabels);
 
     if (args.ciIntelligence.waitForJulesCiAutofix) {
-      const { reportTextAddition } = await handleCiAutofixEscalation({
+      const escalation = await handleCiAutofixEscalation({
         task: args.task,
         prNumber: args.pr.number,
         prUrl: args.pr.url,
@@ -50,8 +61,13 @@ export async function evaluateInProgressState(args: {
         ciAutofixRetryCounts: args.ciAutofixRetryCounts,
         isJulesApiConfigured: args.isJulesApiConfigured,
         sendSessionMessage: args.sendSessionMessage,
+        repoPath: args.repoPath,
+        featureBranch: args.featureBranch,
+        defaultBranch: args.defaultBranch,
       });
-      reportText += reportTextAddition;
+      reportText += escalation.reportTextAddition;
+      workerCiFixRequired = escalation.workerCiFixRequired;
+      workerCiFixPayload = escalation.workerCiFixPayload;
     }
   }
 
@@ -59,5 +75,5 @@ export async function evaluateInProgressState(args: {
     reportText += buildReviewBlockersText(args.pr.number, args.pr.reviewDecision, args.pr.comments);
   }
 
-  return reportText;
+  return { reportText, workerCiFixRequired, workerCiFixPayload };
 }

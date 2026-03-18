@@ -211,9 +211,15 @@ export class SprintOrchestrator {
       featureBranchPrefix: args.featureBranchPrefix,
     });
 
-    return MainMergeGateService.evaluateMergeFeedback({
+    const feedback = MainMergeGateService.evaluateMergeFeedback({
       ...args,
       gitStatus,
+      autoMergeMainBranchPr: this.deps.autoMergeFeaturePr,
+    });
+    return MainMergeGateService.attemptMainAutoMerge(feedback, {
+      ...args,
+      gitStatus,
+      autoMergeMainBranchPr: this.deps.autoMergeFeaturePr,
     });
   }
 

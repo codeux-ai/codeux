@@ -7,7 +7,8 @@ export type ProjectAttentionType =
   | "action_required"
   | "manual_attention"
   | "dashboard_reply_required"
-  | "human_escalation_required";
+  | "human_escalation_required"
+  | "ci_fix_required";
 
 export type ProjectAttentionSeverity = "low" | "medium" | "high" | "critical";
 export type ProjectAttentionOwnerType = "worker" | "human" | "system";

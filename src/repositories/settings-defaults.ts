@@ -115,6 +115,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     waitForJulesCiAutofix: false,
     julesCiAutofixMaxRetries: 3,
     featurePrAutoMergeMode: "OFF",
+    mainBranchAutoMergeMode: "OFF",
   },
   sprintLoopSteps: {
     branchPreflight: true,

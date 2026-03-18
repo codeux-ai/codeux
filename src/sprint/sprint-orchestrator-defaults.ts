@@ -31,6 +31,7 @@ export const DEFAULT_CI_INTELLIGENCE_SETTINGS: CiIntelligenceSettings = {
   waitForJulesCiAutofix: false,
   julesCiAutofixMaxRetries: 3,
   featurePrAutoMergeMode: "OFF",
+  mainBranchAutoMergeMode: "OFF",
 };
 
 export const DEFAULT_AUTOMATION_INTERVENTIONS_SETTINGS: AutomationInterventionsSettings = {

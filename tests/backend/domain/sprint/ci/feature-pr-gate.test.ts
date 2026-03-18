@@ -43,6 +43,7 @@ describe("FeaturePrGateService", () => {
         waitForJulesCiAutofix: true,
         julesCiAutofixMaxRetries: 3,
         featurePrAutoMergeMode: "OFF",
+        mainBranchAutoMergeMode: "OFF",
       },
       githubMode: "REMOTE",
       gitStatus: {
@@ -243,6 +244,35 @@ describe("FeaturePrGateService", () => {
       expect.objectContaining({ state: "waiting_for_pr", featureBranch: "feature/sprint1" }),
       expect.any(Object),
     );
+  });
+
+  it("calls openCiFixAttention for non-Jules tasks with failed CI", async () => {
+    subtasks[0].session_id = undefined;
+    subtasks[0].provider = "gemini" as any;
+    context.gitStatus.openPullRequests[0].checks = [
+      { name: "build", status: "completed", conclusion: "failure" }
+    ];
+    context.openCiFixAttention = vi.fn();
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("RUNNING");
+    expect(context.openCiFixAttention).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "T1" }),
+      expect.objectContaining({ prNumber: 101, branchName: "feat/T1" }),
+    );
+  });
+
+  it("does not call openCiFixAttention for Jules-managed tasks", async () => {
+    context.gitStatus.openPullRequests[0].checks = [
+      { name: "build", status: "completed", conclusion: "failure" }
+    ];
+    context.openCiFixAttention = vi.fn();
+
+    await service.evaluateCiGate(subtasks, context);
+
+    expect(context.openCiFixAttention).not.toHaveBeenCalled();
+    expect(context.sendSessionMessage).toHaveBeenCalled();
   });
 
   it("confirms the task as merged when the PR has already landed", async () => {

@@ -56,6 +56,52 @@ export async function notifyJulesAboutFailedCi(args: {
   return { sent: true };
 }
 
+export interface WorkerCiFixPayload {
+  repoPath: string;
+  featureBranch: string;
+  defaultBranch: string;
+  taskKey: string;
+  taskTitle: string;
+  taskPrompt: string;
+  workerBranch: string | null;
+  prUrl: string;
+  prNumber: number;
+  branchName: string;
+  failedChecks: string[];
+  failedRuns: GitCiRunStatus[];
+  failedJobLabels: string[];
+  failedLogSnippets: string[];
+}
+
+export function buildWorkerCiFixPayload(args: {
+  task: Subtask;
+  prNumber: number;
+  prUrl: string;
+  branchName: string;
+  failedChecks: string[];
+  failedRuns: GitCiRunStatus[];
+  repoPath: string;
+  featureBranch: string;
+  defaultBranch: string;
+}): WorkerCiFixPayload {
+  return {
+    repoPath: args.repoPath,
+    featureBranch: args.featureBranch,
+    defaultBranch: args.defaultBranch,
+    taskKey: args.task.id,
+    taskTitle: args.task.title,
+    taskPrompt: args.task.prompt,
+    workerBranch: args.task.worker_branch || null,
+    prUrl: args.prUrl,
+    prNumber: args.prNumber,
+    branchName: args.branchName,
+    failedChecks: args.failedChecks,
+    failedRuns: args.failedRuns,
+    failedJobLabels: getFailedJobLabels(args.failedRuns),
+    failedLogSnippets: getFailedLogSnippets(args.failedRuns),
+  };
+}
+
 export interface CiAutofixEscalationArgs {
   task: Subtask;
   prNumber: number;
@@ -69,9 +115,18 @@ export interface CiAutofixEscalationArgs {
   ciAutofixRetryCounts: Map<string, number>;
   isJulesApiConfigured: () => boolean;
   sendSessionMessage: (sessionId: string, message: string) => Promise<void>;
+  repoPath: string;
+  featureBranch: string;
+  defaultBranch: string;
 }
 
-export async function handleCiAutofixEscalation(args: CiAutofixEscalationArgs): Promise<{ reportTextAddition: string }> {
+export interface CiAutofixEscalationResult {
+  reportTextAddition: string;
+  workerCiFixRequired: boolean;
+  workerCiFixPayload: WorkerCiFixPayload | null;
+}
+
+export async function handleCiAutofixEscalation(args: CiAutofixEscalationArgs): Promise<CiAutofixEscalationResult> {
   let reportTextAddition = "";
   const retryKey = getCiAutofixRetryKey(args.task, args.prNumber);
   const maxRetries = Math.max(0, args.maxRetries);
@@ -90,9 +145,10 @@ export async function handleCiAutofixEscalation(args: CiAutofixEscalationArgs): 
     reportTextAddition += `   - Escalation (${owner}): Task \`${args.task.id}\` has failing CI and cannot be merged yet.\n`;
     reportTextAddition += `   - PR Link: ${args.prUrl}\n`;
     reportTextAddition += `   - Required next action: fix failing checks, then continue merge flow.\n`;
-    return { reportTextAddition };
+    return { reportTextAddition, workerCiFixRequired: false, workerCiFixPayload: null };
   }
 
+  // For Jules-managed tasks, try the Jules session notification path first.
   const notifyResult = await notifyJulesAboutFailedCi({
     task: args.task,
     prNumber: args.prNumber,
@@ -106,13 +162,27 @@ export async function handleCiAutofixEscalation(args: CiAutofixEscalationArgs): 
     sendSessionMessage: args.sendSessionMessage,
   });
   args.ciAutofixRetryCounts.set(retryKey, currentRetries + 1);
+
   if (notifyResult.sent) {
     reportTextAddition += `   - Jules session notified to fix CI and continue work (attempt ${
       currentRetries + 1
     }/${maxRetries}).\n`;
-  } else if (notifyResult.reason) {
-    reportTextAddition += `   - CI autofix notify skipped: ${notifyResult.reason}\n`;
+    return { reportTextAddition, workerCiFixRequired: false, workerCiFixPayload: null };
   }
 
-  return { reportTextAddition };
+  // Task is not Jules-managed or notification failed — dispatch to a worker.
+  const payload = buildWorkerCiFixPayload({
+    task: args.task,
+    prNumber: args.prNumber,
+    prUrl: args.prUrl,
+    branchName: args.branchName,
+    failedChecks: args.failedChecks,
+    failedRuns: args.failedRuns,
+    repoPath: args.repoPath,
+    featureBranch: args.featureBranch,
+    defaultBranch: args.defaultBranch,
+  });
+  reportTextAddition += `   - Worker CI fix dispatched (attempt ${currentRetries + 1}/${maxRetries}).\n`;
+
+  return { reportTextAddition, workerCiFixRequired: true, workerCiFixPayload: payload };
 }

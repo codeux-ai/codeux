@@ -407,6 +407,7 @@ export interface CiIntelligenceSettings {
   waitForJulesCiAutofix: boolean;
   julesCiAutofixMaxRetries: number;
   featurePrAutoMergeMode: FeaturePrAutoMergeMode;
+  mainBranchAutoMergeMode: FeaturePrAutoMergeMode;
 }
 
 export interface SprintLoopStepSettings {

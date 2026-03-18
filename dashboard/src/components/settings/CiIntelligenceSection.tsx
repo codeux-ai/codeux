@@ -106,6 +106,20 @@ const ciDescriptors: FieldDescriptor<DashboardSettings>[] = [
     getValue: (settings) => settings.ciIntelligence.featurePrAutoMergeMode,
     onChange: (settings, value) => updateCiIntelligence(settings, { featurePrAutoMergeMode: value as typeof settings.ciIntelligence.featurePrAutoMergeMode }),
   },
+  {
+    id: "mainBranchAutoMergeMode",
+    type: "select",
+    label: "Main Branch Auto-merge Policy",
+    description: "Choose whether the main branch PR auto-merge is disabled, gated on green checks, or always attempted.",
+    disabled: (settings) => !settings.ciIntelligence.enabled,
+    options: [
+      { value: "OFF", label: "Disabled" },
+      { value: "WHEN_GREEN", label: "When CI and review are clear" },
+      { value: "ALWAYS", label: "Always attempt auto-merge" },
+    ],
+    getValue: (settings) => settings.ciIntelligence.mainBranchAutoMergeMode,
+    onChange: (settings, value) => updateCiIntelligence(settings, { mainBranchAutoMergeMode: value as typeof settings.ciIntelligence.mainBranchAutoMergeMode }),
+  },
 ];
 
 export const CiIntelligenceSection: FunctionComponent<SettingsSectionProps> = ({ settings, onChange }) => (

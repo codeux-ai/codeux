@@ -3,7 +3,9 @@ import {
   isCiPending,
 } from "../../../sprint/ci-status-utils.js";
 import type {
+  AutoMergeFeaturePrResult,
   CiIntelligenceSettings,
+  FeaturePrAutoMergeMode,
   GitTrackingStatus,
 } from "../../../contracts/app-types.js";
 
@@ -15,6 +17,7 @@ export interface MergeFeedbackContext {
   ciIntelligence: CiIntelligenceSettings;
   githubMode: "REMOTE" | "LOCAL";
   gitStatus: GitTrackingStatus | null;
+  autoMergeMainBranchPr?: (args: { repoPath: string; prNumber: number }) => Promise<AutoMergeFeaturePrResult>;
 }
 
 export interface MergeFeedbackResult {
@@ -27,7 +30,10 @@ export interface MergeFeedbackResult {
     | "failed_checks"
     | "pending_checks"
     | "review_blocked"
-    | "ready_for_merge";
+    | "ready_for_merge"
+    | "automerge_succeeded"
+    | "automerge_scheduled"
+    | "automerge_failed";
   prNumber: number | null;
   prUrl: string | null;
   hasMergeConflict: boolean;
@@ -162,9 +168,76 @@ export class MainMergeGateService {
   }
 
   /**
+   * Attempts auto-merge of the main branch PR based on the configured mode.
+   */
+  public static async attemptMainAutoMerge(
+    feedback: MergeFeedbackResult,
+    context: MergeFeedbackContext,
+  ): Promise<MergeFeedbackResult> {
+    const mode: FeaturePrAutoMergeMode = context.ciIntelligence.mainBranchAutoMergeMode;
+    if (mode === "OFF" || !feedback.prNumber || !context.autoMergeMainBranchPr) {
+      return feedback;
+    }
+
+    const waitForCi = context.ciIntelligence.waitForCiBeforeMainMerge;
+    const shouldAutoMergeAlways = mode === "ALWAYS" && !waitForCi;
+    const shouldAutoMergeWhenGreen = mode === "WHEN_GREEN" || (mode === "ALWAYS" && waitForCi);
+
+    if (shouldAutoMergeAlways && !feedback.hasReviewBlockers && !feedback.hasMergeConflict) {
+      return this.executeMainAutoMerge(feedback, context, "always");
+    }
+
+    if (shouldAutoMergeWhenGreen && feedback.state === "ready_for_merge") {
+      return this.executeMainAutoMerge(feedback, context, "when_green");
+    }
+
+    return feedback;
+  }
+
+  private static async executeMainAutoMerge(
+    feedback: MergeFeedbackResult,
+    context: MergeFeedbackContext,
+    mode: "always" | "when_green",
+  ): Promise<MergeFeedbackResult> {
+    const mergeResult = await context.autoMergeMainBranchPr!({
+      repoPath: context.repoPath,
+      prNumber: feedback.prNumber!,
+    });
+
+    const merged = mergeResult.ok
+      && mergeResult.autoMergeScheduled !== true
+      && mergeResult.merged !== false;
+    const autoMergeScheduled = mergeResult.ok && !merged && mergeResult.autoMergeScheduled === true;
+
+    if (merged) {
+      return {
+        ...feedback,
+        text: feedback.text + `- 🤖 **Auto-Merged:** Main branch PR #${feedback.prNumber} merged automatically (mode: ${mode}).\n`,
+        state: "automerge_succeeded",
+      };
+    }
+
+    if (autoMergeScheduled) {
+      return {
+        ...feedback,
+        text: feedback.text + `- ⏳ **Auto-Merge Armed:** Main branch PR #${feedback.prNumber} auto-merge scheduled (mode: ${mode}). ${mergeResult.message || ""}\n`,
+        state: "automerge_scheduled",
+      };
+    }
+
+    return {
+      ...feedback,
+      text: feedback.text + `- ⚠️ **Auto-Merge Failed:** Main branch PR #${feedback.prNumber} (mode: ${mode}) - ${mergeResult.message || "unknown error"}\n`,
+      state: "automerge_failed",
+    };
+  }
+
+  /**
    * Renders a feedback report for the main merge PR status.
    */
   public static async renderMergeFeedback(context: MergeFeedbackContext): Promise<string> {
-    return this.evaluateMergeFeedback(context).text;
+    const feedback = this.evaluateMergeFeedback(context);
+    const result = await this.attemptMainAutoMerge(feedback, context);
+    return result.text;
   }
 }

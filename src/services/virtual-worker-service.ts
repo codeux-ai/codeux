@@ -347,6 +347,11 @@ export class VirtualWorkerService {
       return;
     }
 
+    if (claimed.attentionType === "ci_fix_required") {
+      await this.resolveCiFixAttention(workerEndpointId, claimed);
+      return;
+    }
+
     this.escalateAttentionToHuman(workerEndpointId, claimed, [
       "Virtual worker cannot handle this worker-owned attention item automatically.",
       "",
@@ -471,6 +476,158 @@ export class VirtualWorkerService {
         });
       }
     }
+  }
+
+  private async resolveCiFixAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
+    const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
+    const provider = settings.workers.virtualWorkerProvider;
+    const providerSettings = settings.aiProvider.providers[provider];
+    const workflowSettings = {
+      ...DEFAULT_CLI_WORKFLOW_SETTINGS,
+      ...settings.cliWorkflow,
+    };
+    const payload = item.payload || {};
+    const repoPath = this.readRequiredString(payload.repoPath, "repoPath");
+    const branchName = this.readRequiredString(
+      payload.workerBranch ?? payload.branchName,
+      "branchName",
+    );
+    const sessionId = `virtual-cifix-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+    let worktreePath = this.workspaceManager.buildWorktreePath(repoPath, sessionId, workflowSettings.executionMode);
+    const title = item.title;
+    let succeeded = false;
+
+    this.deps.sessionTracking.createSession({
+      id: sessionId,
+      provider,
+      taskId: buildTaskRunKey(repoPath, 0, `attention-${item.id}`),
+      title,
+      prompt: item.summaryMarkdown,
+      state: "RUNNING",
+      featureBranch: branchName,
+      workerBranch: branchName,
+      repoPath,
+    });
+    this.deps.sessionTracking.appendActivity(sessionId, {
+      originator: "system",
+      description: `Virtual worker claimed CI fix for branch ${branchName}.`,
+    });
+
+    let cleanedUp = false;
+    try {
+      const prepared = await this.workspaceManager.prepareWorktree(repoPath, worktreePath, branchName, branchName);
+      const finalWorktreePath = prepared.worktreePath;
+      worktreePath = finalWorktreePath;
+
+      const workspaceGuidance = await this.workspaceManager.buildWorkspaceGuidance(item.summaryMarkdown, finalWorktreePath);
+      const providerPrompt = buildProviderPrompt(this.buildCiFixPrompt(item, branchName, workspaceGuidance), providerSettings.thinkingMode);
+      await this.runProviderWithRetry({
+        provider,
+        providerPrompt,
+        workflowSettings,
+        repoPath,
+        worktreePath: finalWorktreePath,
+        sessionId,
+        model: providerSettings.model,
+        apiKey: providerSettings.apiKey,
+        githubToken: settings.git.githubToken,
+      });
+
+      await runCommandStrict("git", ["push", "origin", `HEAD:${branchName}`], finalWorktreePath);
+
+      const headSha = (await runCommandStrict("git", ["rev-parse", "HEAD"], finalWorktreePath)).stdout.trim();
+      this.deps.sessionTracking.updateSession(sessionId, { state: "COMPLETED" });
+      this.deps.sessionTracking.appendActivity(sessionId, {
+        originator: "system",
+        description: `Pushed CI fix to ${branchName} at ${headSha}.`,
+      });
+      this.deps.projectAttentionService.resolveItem(item.id, {
+        status: "resolved",
+        reason: "virtual_worker_ci_fix_resolved",
+        resolutionSummaryMarkdown: [
+          item.summaryMarkdown.trim(),
+          "",
+          `Virtual ${this.getProviderLabel(provider)} worker fixed CI issues and pushed the updated branch.`,
+          `Branch: ${branchName}`,
+          `Head SHA: ${headSha}`,
+        ].join("\n"),
+        workerEndpointId,
+        payloadPatch: {
+          handledBy: "virtual_worker",
+          provider,
+          branchName,
+          headSha,
+        },
+      });
+      succeeded = true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.deps.sessionTracking.updateSession(sessionId, { state: "FAILED" });
+      this.deps.sessionTracking.appendActivity(sessionId, {
+        originator: "system",
+        description: `Virtual worker failed to fix CI issues: ${message}`,
+      });
+      this.escalateAttentionToHuman(workerEndpointId, item, [
+        `Virtual ${this.getProviderLabel(provider)} worker failed to fix CI issues automatically.`,
+        "",
+        `Error: ${message}`,
+        "",
+        item.summaryMarkdown.trim(),
+      ].join("\n"));
+    } finally {
+      const shouldCleanup = succeeded
+        ? workflowSettings.cleanupWorktreeOnSuccess
+        : true;
+      if (shouldCleanup) {
+        await this.workspaceManager.removeWorktree(repoPath, worktreePath).catch(() => undefined);
+        cleanedUp = true;
+      }
+      if (!cleanedUp) {
+        this.deps.sessionTracking.appendActivity(sessionId, {
+          originator: "system",
+          description: `Preserved CI-fix worktree at ${worktreePath}.`,
+        });
+      }
+    }
+  }
+
+  private buildCiFixPrompt(
+    item: ProjectAttentionItemRecord,
+    branchName: string,
+    workspaceGuidance: string,
+  ): string {
+    const payload = item.payload || {};
+    const failedChecks = Array.isArray(payload.failedChecks) ? payload.failedChecks as string[] : [];
+    const failedJobLabels = Array.isArray(payload.failedJobLabels) ? payload.failedJobLabels as string[] : [];
+    const failedLogSnippets = Array.isArray(payload.failedLogSnippets) ? payload.failedLogSnippets as string[] : [];
+    const prUrl = typeof payload.prUrl === "string" ? payload.prUrl : "";
+    const prNumber = typeof payload.prNumber === "number" ? payload.prNumber : 0;
+    const taskPrompt = typeof payload.taskPrompt === "string" ? payload.taskPrompt.trim() : "";
+
+    return [
+      `CI checks have failed for PR #${prNumber} on branch \`${branchName}\`.`,
+      prUrl ? `PR URL: ${prUrl}` : null,
+      "",
+      "Failed checks: " + (failedChecks.length > 0 ? failedChecks.join(", ") : "unknown"),
+      failedJobLabels.length > 0 ? "Failed jobs: " + failedJobLabels.join(", ") : null,
+      "",
+      "Requirements:",
+      "- Investigate the CI failures and fix the root cause.",
+      "- Commit the necessary changes and leave the branch in a pushable state.",
+      "- Do not open a new pull request or rewrite history.",
+      "- Continue until the issues causing CI failures are resolved.",
+      "",
+      failedLogSnippets.length > 0
+        ? "Failed job logs (excerpt):\n" + failedLogSnippets.join("\n\n")
+        : "Failed job logs were not available from CI metadata. Use `gh run view <run-id> --log-failed` to fetch logs.",
+      "",
+      taskPrompt ? "Original task prompt:\n" + taskPrompt : null,
+      "",
+      "Original attention summary:",
+      item.summaryMarkdown.trim(),
+      "",
+      workspaceGuidance,
+    ].filter(Boolean).join("\n");
   }
 
   private async runMergeIntoSource(worktreePath: string, targetBranch: string, sessionId: string): Promise<boolean> {

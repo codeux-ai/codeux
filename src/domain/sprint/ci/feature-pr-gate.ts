@@ -16,6 +16,7 @@ import type {
   AutoMergeFeaturePrResult,
 } from "../../../contracts/app-types.js";
 import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
+import type { WorkerCiFixPayload } from "./feature-pr/ci-autofix-policy.js";
 
 export interface CiGateContext {
   automationLevel: AutomationLevel;
@@ -33,6 +34,7 @@ export interface CiGateContext {
   persistMergedTask: (task: Subtask) => Promise<void>;
   executionRepository?: ExecutionRepository;
   sprintRunId?: string;
+  openCiFixAttention?: (task: Subtask, payload: WorkerCiFixPayload) => void;
 }
 
 export interface CiGateResult {
@@ -185,7 +187,7 @@ export class FeaturePrGateService {
         continue;
       }
 
-      reportText += await evaluateInProgressState({
+      const inProgressResult = await evaluateInProgressState({
         task,
         pr,
         checks,
@@ -200,7 +202,15 @@ export class FeaturePrGateService {
         ciAutofixRetryCounts: context.ciAutofixRetryCounts,
         isJulesApiConfigured: context.isJulesApiConfigured,
         sendSessionMessage: context.sendSessionMessage,
+        repoPath: context.repoPath,
+        defaultBranch: context.defaultBranch,
       });
+      reportText += inProgressResult.reportText;
+
+      if (inProgressResult.workerCiFixRequired && inProgressResult.workerCiFixPayload && context.openCiFixAttention) {
+        context.openCiFixAttention(task, inProgressResult.workerCiFixPayload);
+      }
+
       this.appendCiGateEvent(task, context, task.status === "BLOCKED" ? "blocked" : "waiting_checks", {
         prNumber: pr.number,
         prUrl: pr.url,

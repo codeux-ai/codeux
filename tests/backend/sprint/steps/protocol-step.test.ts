@@ -15,6 +15,7 @@ describe("protocol-step", () => {
         waitForJulesCiAutofix: false,
         julesCiAutofixMaxRetries: 0,
         featurePrAutoMergeMode: "OFF",
+        mainBranchAutoMergeMode: "OFF",
     };
 
     it("renders lines correctly", async () => {

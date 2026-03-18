@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MainMergeGateService, type MergeFeedbackContext } from "../../../../../src/domain/sprint/ci/main-merge-gate.js";
 import type { GitTrackingStatus, CiIntelligenceSettings } from "../../../../../src/contracts/app-types.js";
 
@@ -15,6 +15,7 @@ describe("MainMergeGateService", () => {
     waitForJulesCiAutofix: false,
     julesCiAutofixMaxRetries: 0,
     featurePrAutoMergeMode: "OFF",
+    mainBranchAutoMergeMode: "OFF",
   };
 
   const defaultContext: MergeFeedbackContext = {
@@ -207,5 +208,122 @@ describe("MainMergeGateService", () => {
     const result = await MainMergeGateService.renderMergeFeedback(context);
     expect(result).toContain("reviewDecision=CHANGES_REQUESTED");
     expect(result).toContain("Merge into `main` is blocked until open reviews/comments are resolved.");
+  });
+
+  describe("attemptMainAutoMerge", () => {
+    const greenPrContext: MergeFeedbackContext = {
+      ...defaultContext,
+      gitStatus: {
+        ...defaultContext.gitStatus!,
+        openPullRequests: [
+          {
+            number: 101,
+            title: "Sprint 1",
+            url: "https://github.com/repo/pull/101",
+            state: "OPEN",
+            isDraft: false,
+            headRefName: "feature/sprint1",
+            baseRefName: "main",
+            reviewDecision: "APPROVED",
+            comments: 0,
+            checks: [
+              { name: "test", status: "completed", conclusion: "success" },
+            ],
+          } as any,
+        ],
+      },
+    };
+
+    it("does not auto-merge when mainBranchAutoMergeMode is OFF", async () => {
+      const feedback = MainMergeGateService.evaluateMergeFeedback(greenPrContext);
+      const autoMergePr = vi.fn();
+      const result = await MainMergeGateService.attemptMainAutoMerge(feedback, {
+        ...greenPrContext,
+        ciIntelligence: { ...defaultCiSettings, mainBranchAutoMergeMode: "OFF" },
+        autoMergeMainBranchPr: autoMergePr,
+      });
+
+      expect(autoMergePr).not.toHaveBeenCalled();
+      expect(result.state).toBe("ready_for_merge");
+    });
+
+    it("auto-merges when WHEN_GREEN and state is ready_for_merge", async () => {
+      const feedback = MainMergeGateService.evaluateMergeFeedback(greenPrContext);
+      const autoMergePr = vi.fn().mockResolvedValue({ ok: true, merged: true });
+      const result = await MainMergeGateService.attemptMainAutoMerge(feedback, {
+        ...greenPrContext,
+        ciIntelligence: { ...defaultCiSettings, mainBranchAutoMergeMode: "WHEN_GREEN" },
+        autoMergeMainBranchPr: autoMergePr,
+      });
+
+      expect(autoMergePr).toHaveBeenCalledWith({ repoPath: "/repo", prNumber: 101 });
+      expect(result.state).toBe("automerge_succeeded");
+      expect(result.text).toContain("Auto-Merged");
+    });
+
+    it("does not auto-merge when WHEN_GREEN and checks are pending", async () => {
+      const pendingContext: MergeFeedbackContext = {
+        ...greenPrContext,
+        gitStatus: {
+          ...greenPrContext.gitStatus!,
+          openPullRequests: [
+            {
+              ...greenPrContext.gitStatus!.openPullRequests[0],
+              checks: [{ name: "test", status: "in_progress", conclusion: null }],
+            } as any,
+          ],
+        },
+      };
+      const feedback = MainMergeGateService.evaluateMergeFeedback(pendingContext);
+      const autoMergePr = vi.fn();
+      const result = await MainMergeGateService.attemptMainAutoMerge(feedback, {
+        ...pendingContext,
+        ciIntelligence: { ...defaultCiSettings, mainBranchAutoMergeMode: "WHEN_GREEN" },
+        autoMergeMainBranchPr: autoMergePr,
+      });
+
+      expect(autoMergePr).not.toHaveBeenCalled();
+      expect(result.state).toBe("pending_checks");
+    });
+
+    it("auto-merges when ALWAYS and no review blockers, ignoring CI", async () => {
+      const feedback = MainMergeGateService.evaluateMergeFeedback(greenPrContext);
+      const autoMergePr = vi.fn().mockResolvedValue({ ok: true, merged: true });
+      const result = await MainMergeGateService.attemptMainAutoMerge(feedback, {
+        ...greenPrContext,
+        ciIntelligence: { ...defaultCiSettings, mainBranchAutoMergeMode: "ALWAYS", waitForCiBeforeMainMerge: false },
+        autoMergeMainBranchPr: autoMergePr,
+      });
+
+      expect(autoMergePr).toHaveBeenCalled();
+      expect(result.state).toBe("automerge_succeeded");
+    });
+
+    it("handles auto-merge failure gracefully", async () => {
+      const feedback = MainMergeGateService.evaluateMergeFeedback(greenPrContext);
+      const autoMergePr = vi.fn().mockResolvedValue({ ok: false, message: "branch protection" });
+      const result = await MainMergeGateService.attemptMainAutoMerge(feedback, {
+        ...greenPrContext,
+        ciIntelligence: { ...defaultCiSettings, mainBranchAutoMergeMode: "WHEN_GREEN" },
+        autoMergeMainBranchPr: autoMergePr,
+      });
+
+      expect(result.state).toBe("automerge_failed");
+      expect(result.text).toContain("Auto-Merge Failed");
+      expect(result.text).toContain("branch protection");
+    });
+
+    it("reports auto-merge scheduled state", async () => {
+      const feedback = MainMergeGateService.evaluateMergeFeedback(greenPrContext);
+      const autoMergePr = vi.fn().mockResolvedValue({ ok: true, autoMergeScheduled: true, message: "Waiting for branch protection." });
+      const result = await MainMergeGateService.attemptMainAutoMerge(feedback, {
+        ...greenPrContext,
+        ciIntelligence: { ...defaultCiSettings, mainBranchAutoMergeMode: "WHEN_GREEN" },
+        autoMergeMainBranchPr: autoMergePr,
+      });
+
+      expect(result.state).toBe("automerge_scheduled");
+      expect(result.text).toContain("Auto-Merge Armed");
+    });
   });
 });

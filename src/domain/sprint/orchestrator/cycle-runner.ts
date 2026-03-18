@@ -171,6 +171,31 @@ export class CycleRunner {
           await this.deps.sendSessionMessage(sessionId, message);
         },
         autoMergeFeaturePr: this.deps.autoMergeFeaturePr,
+        openCiFixAttention: (task, payload) => {
+          const taskId = task.record_id?.trim();
+          if (!taskId || !this.deps.projectAttentionService) {
+            return;
+          }
+          const summaryLines = [
+            `CI failed for task \`${task.id}\` on branch \`${payload.branchName}\`.`,
+            `PR: ${payload.prUrl}`,
+            `Failed checks: ${payload.failedChecks.join(", ")}`,
+            payload.failedJobLabels.length > 0 ? `Failed jobs: ${payload.failedJobLabels.join(", ")}` : null,
+          ].filter(Boolean).join("\n");
+
+          this.deps.projectAttentionService.openItem({
+            projectId: args.executionContext.project.id,
+            sprintId: args.executionContext.sprint.id,
+            taskId,
+            sprintRunId: args.sprintRunId,
+            attentionType: "ci_fix_required",
+            severity: "high",
+            ownerType: "worker",
+            title: `CI fix required for ${task.id}`,
+            summaryMarkdown: summaryLines,
+            payload: { ...payload },
+          });
+        },
         persistMergedTask: async (task) => {
           if (typeof task.record_id !== "string" || task.record_id.trim().length === 0) {
             return;
@@ -406,6 +431,14 @@ export class CycleRunner {
       });
     }
 
+    const ciFixTaskIds = new Set<string>();
+    for (const task of subtasks) {
+      const taskId = task.record_id?.trim();
+      if (taskId && task.merge_indicator === "CI" && task.status === "RUNNING") {
+        ciFixTaskIds.add(taskId);
+      }
+    }
+
     for (const taskId of knownTaskIds) {
       if (!mergeTaskIds.has(taskId)) {
         this.deps.projectAttentionService.resolveItemsForTask(
@@ -421,6 +454,14 @@ export class CycleRunner {
           taskId,
           ["action_required"],
           "action_required_cleared",
+        );
+      }
+      if (!ciFixTaskIds.has(taskId)) {
+        this.deps.projectAttentionService.resolveItemsForTask(
+          projectId,
+          taskId,
+          ["ci_fix_required"],
+          "ci_fix_attention_cleared",
         );
       }
     }

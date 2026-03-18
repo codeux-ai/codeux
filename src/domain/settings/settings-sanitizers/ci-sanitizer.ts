@@ -75,6 +75,10 @@ export const sanitizeCiIntelligence = (
         ? "WHEN_GREEN"
         : DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.featurePrAutoMergeMode
     ),
+    mainBranchAutoMergeMode: readFeaturePrAutoMergeMode(
+      ciInput.mainBranchAutoMergeMode,
+      DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.mainBranchAutoMergeMode
+    ),
   };
 
   if (githubMode === "LOCAL") {
