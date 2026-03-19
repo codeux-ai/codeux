@@ -7,7 +7,7 @@ import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-re
 
 const RUNTIME_CONTEXT_PREFIX = "runtime_context:";
 
-type PlanningTaskStatus = "pending" | "in_progress" | "completed";
+type PlanningTaskStatus = "pending" | "in_progress" | "coding_completed" | "completed";
 type ProjectStatus = "running" | "failed" | "intervention" | "idle";
 type TaskRunState = Exclude<SubtaskStatus, undefined>;
 
@@ -76,7 +76,7 @@ interface MappedTask {
   dependsOnTaskIds: string[];
 }
 
-const TERMINAL_TASK_STATES = new Set<TaskRunState>(["COMPLETED", "FAILED", "BLOCKED"]);
+const TERMINAL_TASK_STATES = new Set<TaskRunState>(["CODING_COMPLETED", "COMPLETED", "FAILED", "BLOCKED"]);
 
 function toBoolean(value: number | string | null | undefined): boolean {
   return value === 1 || value === "1";
@@ -95,6 +95,8 @@ function runtimeContextKey(projectId: string): string {
 
 function mapPlanningStatusToRuntimeStatus(status: PlanningTaskStatus): TaskRunState {
   switch (status) {
+    case "coding_completed":
+      return "CODING_COMPLETED";
     case "completed":
       return "COMPLETED";
     case "in_progress":
@@ -107,6 +109,8 @@ function mapPlanningStatusToRuntimeStatus(status: PlanningTaskStatus): TaskRunSt
 
 function mapRuntimeStatusToPlanningStatus(status: TaskRunState): PlanningTaskStatus | null {
   switch (status) {
+    case "CODING_COMPLETED":
+      return "coding_completed";
     case "RUNNING":
       return "in_progress";
     case "COMPLETED":
@@ -140,6 +144,10 @@ function subtaskSignature(subtask: Subtask): string {
     isMerged: Boolean(subtask.is_merged),
     mergeIndicator: subtask.merge_indicator || null,
   });
+}
+
+function toPersistedTaskRunState(status: TaskRunState): Exclude<TaskRunState, "CODING_COMPLETED"> {
+  return status === "CODING_COMPLETED" ? "COMPLETED" : status;
 }
 
 function toMergeIndicator(value: string | null | undefined): SubtaskMergeIndicator | undefined {
@@ -289,7 +297,9 @@ export class ProjectRuntimeRepository {
         title: task.row.title,
         prompt: task.row.prompt_markdown || task.row.description || "",
         depends_on: task.dependsOnTaskIds.map((dependencyId) => taskKeyByRecordId.get(dependencyId) || dependencyId),
-        status: run?.state || mapPlanningStatusToRuntimeStatus(task.row.status),
+        status: run?.state && run.state !== "COMPLETED"
+          ? run.state
+          : mapPlanningStatusToRuntimeStatus(task.row.status),
         session_id: run?.session_id || undefined,
         session_name: run?.session_name || undefined,
         provider: run?.provider ? run.provider as Subtask["provider"] : undefined,
@@ -553,6 +563,7 @@ export class ProjectRuntimeRepository {
 
   private syncTaskRun(task: TaskRow, subtask: Subtask, now: string): void {
     const runtimeState = subtask.status || "PENDING";
+    const persistedRunState = toPersistedTaskRunState(runtimeState);
     const existing = this.findCandidateRun(task.id, subtask);
     const signature = subtaskSignature(subtask);
 
@@ -577,10 +588,10 @@ export class ProjectRuntimeRepository {
         "legacy-orchestrator",
         subtask.session_id || null,
         subtask.session_name || null,
-        runtimeState,
+        persistedRunState,
         subtask.worker_branch || null,
         subtask.pr_url || null,
-        runtimeState === "PENDING" ? null : now,
+        persistedRunState === "PENDING" ? null : now,
         TERMINAL_TASK_STATES.has(runtimeState) ? now : null,
         null
       );
@@ -616,7 +627,7 @@ export class ProjectRuntimeRepository {
       existing.mode || "legacy-orchestrator",
       subtask.session_id || existing.session_id || null,
       subtask.session_name || existing.session_name || null,
-      runtimeState,
+      persistedRunState,
       subtask.worker_branch || null,
       subtask.pr_url || null,
       startedAt,

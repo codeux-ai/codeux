@@ -16,7 +16,7 @@ export const TaskRow: FunctionComponent<{ task: Task }> = ({ task }) => (
 
             {/* Title */}
             <div className="col-span-5 flex items-center">
-                <span className={`text-lg font-bold tracking-tight text-slate-900 dark:text-white truncate group-hover:translate-x-1.5 transition-transform duration-300 ease-out ${task.status === 'completed' ? 'opacity-40' : ''}`}>
+                <span className={`text-lg font-bold tracking-tight text-slate-900 dark:text-white truncate group-hover:translate-x-1.5 transition-transform duration-300 ease-out ${task.status === 'completed' ? 'opacity-40' : task.status === 'coding_completed' ? 'opacity-70' : ''}`}>
                     {task.title}
                 </span>
             </div>
@@ -30,6 +30,7 @@ export const TaskRow: FunctionComponent<{ task: Task }> = ({ task }) => (
             {/* Status */}
             <div className="col-span-2 flex items-center gap-2">
                 {task.status === 'completed' && <CheckCircle2 className="w-4 h-4 text-status-green" strokeWidth={2} />}
+                {task.status === 'coding_completed' && <CheckCircle2 className="w-4 h-4 text-cyan-500" strokeWidth={2} />}
                 {task.status === 'in_progress' && (
                     <div className="relative flex items-center justify-center w-4 h-4">
                         <div className="absolute inset-0 rounded-full bg-signal-500 animate-[spin_3s_linear_infinite] opacity-30 shadow-[0_0_10px_rgba(0,224,160,0.6)] pointer-events-none" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%', clipPath: 'inset(-2px)' }} />
@@ -40,6 +41,7 @@ export const TaskRow: FunctionComponent<{ task: Task }> = ({ task }) => (
 
                 <span className={`text-[10px] font-bold uppercase tracking-widest ${
                     task.status === 'completed'   ? 'text-status-green' :
+                    task.status === 'coding_completed' ? 'text-cyan-500' :
                     task.status === 'in_progress' ? 'text-signal-500' :
                     'text-slate-400 dark:text-slate-600'
                 }`}>

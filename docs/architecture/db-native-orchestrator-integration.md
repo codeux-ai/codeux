@@ -117,12 +117,25 @@ Worktree safety rule:
 Watch-loop execution now updates `sprint_runs` directly:
 
 - `running` while polling
-- `completed` when all tasks are completed and merged
+- `completed` when all tasks reach their final settled state and the main merge gate is clear
 - `failed` when execution ends with failed tasks
 - `paused` when execution stops for manual merge or no-more-action conditions
 - `cancelled` when the sprint is empty
 
 The old subtask-directory cleanup behavior is removed from the execution path.
+
+Task lifecycle is now four-stage at the planning/runtime seam:
+
+- `pending`
+- `in_progress`
+- `coding_completed`
+- `completed`
+
+`coding_completed` means task execution finished successfully and code is ready, but Sprint OS still has to settle the merge outcome. The task only advances to final `completed` when one of these is true:
+
+- the feature PR was merged
+- merge state is otherwise marked settled
+- the task produced no branch/PR output, so there is no merge work to wait for
 
 When all sprint tasks are settled, the same completion path now also handles the final `feature -> default` merge gate:
 
@@ -160,13 +173,13 @@ Instead it persists:
 
 through the project repository.
 
-Feature PR merge waiting now only applies to completed tasks that have merge evidence recorded on the task runtime state:
+Feature PR merge waiting now only applies to code-complete tasks that have merge evidence recorded on the task runtime state:
 
 - `task.worker_branch`
 - `task.pr_url`
 
-This keeps no-output tasks, such as validation-only or test-only runs, in `COMPLETED` instead of pushing them back into the CI/PR wait path.
-The same merge-evidence rule is now used by dependency unlocking, the merge protocol, and the final watch-loop completion check so a sprint can finish cleanly when a completed task never opened a branch or PR.
+This keeps no-output tasks, such as validation-only or test-only runs, moving from `CODING_COMPLETED` to final `COMPLETED` instead of pushing them into the CI/PR wait path.
+The same merge-evidence rule is now used by dependency unlocking, the merge protocol, live dashboard status projection, and the final watch-loop completion check so a sprint can finish cleanly when a successful task never opened a branch or PR.
 
 ## Dashboard Reruns
 

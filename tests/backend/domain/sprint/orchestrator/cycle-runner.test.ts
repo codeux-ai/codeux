@@ -136,7 +136,7 @@ describe("CycleRunner attention sync", () => {
       taskId: "task-1",
       sprintRunId: "run-1",
       attentionType: "merge_required",
-      severity: "medium",
+      severity: "high",
       ownerType: "worker",
       payload: expect.objectContaining({
         repoPath: "/repo/project-1",

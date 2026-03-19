@@ -29,11 +29,13 @@ import { formatTime } from "../lib/time.js";
 import { renderMarkdown } from "../lib/markdown.js";
 import type { Subtask, GitTrackingStatus, ExecutionDashboardSnapshot, ExecutionRuntimeEventSummary } from "../types.js";
 import { deriveLiveSessionRuntimeState } from "./lib/live-session-runtime.js";
+import { getTaskProgressPhase } from "../lib/task-progress.js";
 
 /* ─── Status Maps ────────────────────────────────────────────────────────── */
 
 const TASK_STATUS_CFG = {
     RUNNING:   { label: "Running",   hex: "#00E0A0", dot: "bg-status-green shadow-[0_0_10px_rgba(0,171,132,0.7)] animate-pulse", text: "text-signal-500",  bg: "bg-signal-500/8",  border: "border-signal-500/20", icon: Activity },
+    CODING_COMPLETED: { label: "Coding Completed", hex: "#0F9FA8", dot: "bg-cyan-500 shadow-[0_0_8px_rgba(15,159,168,0.45)]", text: "text-cyan-500", bg: "bg-cyan-500/8", border: "border-cyan-500/20", icon: CheckCircle2 },
     COMPLETED: { label: "Completed", hex: "#00AB84", dot: "bg-status-green shadow-[0_0_8px_rgba(0,171,132,0.5)]",                text: "text-status-green", bg: "bg-status-green/8", border: "border-status-green/20", icon: CheckCircle2 },
     FAILED:    { label: "Failed",    hex: "#E3000F", dot: "bg-status-red shadow-[0_0_10px_rgba(227,0,15,0.7)]",                  text: "text-status-red",   bg: "bg-status-red/8",   border: "border-status-red/20", icon: XCircle },
     BLOCKED:   { label: "Blocked",   hex: "#F59E0B", dot: "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.5)]",               text: "text-status-amber", bg: "bg-status-amber/8", border: "border-status-amber/20", icon: AlertTriangle },
@@ -68,6 +70,7 @@ const getOriginatorCfg = (originator?: string) => {
 const EMPTY_RUNTIME_STATS = {
     total: 0,
     running: 0,
+    codingCompleted: 0,
     completed: 0,
     failed: 0,
     ci: 0,
@@ -341,7 +344,8 @@ const LiveTaskCard: FunctionComponent<{
     const [expanded, setExpanded] = useState(false);
     const [showFeed, setShowFeed] = useState(false);
     const cardRef = useRef<HTMLDivElement>(null);
-    const cfg = getTaskCfg(task.status);
+    const taskPhase = getTaskProgressPhase(task);
+    const cfg = getTaskCfg(taskPhase);
     const StatusIcon = cfg.icon;
     const hasEventFeed = Boolean(events && events.length > 0);
     const mergeCfg = task.merge_indicator ? MERGE_INDICATOR_CFG[task.merge_indicator] : null;
@@ -421,7 +425,7 @@ const LiveTaskCard: FunctionComponent<{
                                 {task.provider}
                             </span>
                         )}
-                        <TaskDuration startedAt={dispatchStartedAt ?? null} finishedAt={dispatchFinishedAt ?? null} status={task.status ?? ""} />
+                        <TaskDuration startedAt={dispatchStartedAt ?? null} finishedAt={dispatchFinishedAt ?? null} status={taskPhase} />
                         {(hasEventFeed || task.session_id || task.session_name) && (
                             <span className="text-[9px] font-mono text-slate-400 dark:text-slate-600 max-w-[100px] truncate" title={sessionLabel}>
                                 {sessionLabel.substring(0, 16)}
@@ -1721,9 +1725,12 @@ export const LiveSessionPage: FunctionComponent = () => {
 
     const filtered = useMemo(() => {
         if (activeFilter === "All") return visibleTasksWithLiveActivities;
-        if (activeFilter === "Pending") return visibleTasksWithLiveActivities.filter(t => t.status === "PENDING" || t.status === "BLOCKED" || t.status === "QUOTA");
+        if (activeFilter === "Pending") return visibleTasksWithLiveActivities.filter(t => {
+            const phase = getTaskProgressPhase(t);
+            return phase === "PENDING" || phase === "BLOCKED" || phase === "QUOTA";
+        });
         const target = FILTER_STATUS_MAP[activeFilter];
-        return visibleTasksWithLiveActivities.filter(t => t.status === target);
+        return visibleTasksWithLiveActivities.filter(t => getTaskProgressPhase(t) === target);
     }, [visibleTasksWithLiveActivities, activeFilter]);
 
     const taskEventsByRecordId = useMemo(() => {
@@ -1766,7 +1773,10 @@ export const LiveSessionPage: FunctionComponent = () => {
         Running:   visibleStats.running,
         Completed: visibleStats.completed,
         Failed:    visibleStats.failed,
-        Pending:   visibleTasksWithLiveActivities.filter(t => t.status === "PENDING" || t.status === "BLOCKED" || t.status === "QUOTA").length,
+        Pending:   visibleTasksWithLiveActivities.filter(t => {
+            const phase = getTaskProgressPhase(t);
+            return phase === "PENDING" || phase === "BLOCKED" || phase === "QUOTA";
+        }).length,
     }), [visibleStats, visibleTasksWithLiveActivities]);
 
     /* Connection error */
@@ -1930,13 +1940,14 @@ export const LiveSessionPage: FunctionComponent = () => {
                 <div className="grid grid-cols-2 md:grid-cols-5 xl:grid-cols-9 gap-4">
                     <StatMetric label="Total"        value={visibleStats.total}        accentHex="#00E0A0" icon={Layers}        delay={0.1} />
                     <StatMetric label="Running"      value={visibleStats.running}      accentHex="#00E0A0" icon={Activity}      delay={0.15} />
-                    <StatMetric label="Completed"    value={visibleStats.completed}    accentHex="#00AB84" icon={CheckCircle2}  delay={0.2} />
-                    <StatMetric label="Failed"       value={visibleStats.failed}       accentHex="#E3000F" icon={XCircle}       delay={0.25} />
-                    <StatMetric label="CI"           value={visibleStats.ci}           accentHex="#00E0A0" icon={CircleDot}     delay={0.3} />
-                    <StatMetric label="Automerge"    value={visibleStats.automerge}    accentHex="#FFB800" icon={GitMerge}      delay={0.35} />
-                    <StatMetric label="Merged"       value={visibleStats.merged}       accentHex="#00AB84" icon={GitPullRequest} delay={0.4} />
-                    <StatMetric label="Blocked"      value={visibleStats.mergeBlocked} accentHex="#F59E0B" icon={AlertTriangle} delay={0.45} />
-                    <StatMetric label="Conflicts"    value={visibleStats.mergeConflicts} accentHex="#E3000F" icon={GitPullRequest} delay={0.5} />
+                    <StatMetric label="Code Done"    value={visibleStats.codingCompleted} accentHex="#0F9FA8" icon={CheckCircle2}  delay={0.2} />
+                    <StatMetric label="Completed"    value={visibleStats.completed}       accentHex="#00AB84" icon={CheckCircle2}  delay={0.25} />
+                    <StatMetric label="Failed"       value={visibleStats.failed}          accentHex="#E3000F" icon={XCircle}       delay={0.3} />
+                    <StatMetric label="CI"           value={visibleStats.ci}              accentHex="#00E0A0" icon={CircleDot}     delay={0.35} />
+                    <StatMetric label="Automerge"    value={visibleStats.automerge}       accentHex="#FFB800" icon={GitMerge}      delay={0.4} />
+                    <StatMetric label="Merged"       value={visibleStats.merged}          accentHex="#00AB84" icon={GitPullRequest} delay={0.45} />
+                    <StatMetric label="Blocked"      value={visibleStats.mergeBlocked}    accentHex="#F59E0B" icon={AlertTriangle} delay={0.5} />
+                    <StatMetric label="Conflicts"    value={visibleStats.mergeConflicts}  accentHex="#E3000F" icon={GitPullRequest} delay={0.55} />
                 </div>
             ) : (
                 /* ── Boat Race View ───────────────────────────────── */

@@ -9,6 +9,8 @@ const getStatusColor = (status?: string): string => {
   switch (status) {
     case "RUNNING":
       return "bg-sky-500/10 text-sky-400 border-sky-500/20";
+    case "CODING_COMPLETED":
+      return "bg-cyan-500/10 text-cyan-400 border-cyan-500/20";
     case "COMPLETED":
       return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
     case "FAILED":
@@ -44,7 +46,7 @@ export const StatusBadge: FunctionComponent<StatusBadgeProps> = ({ status, indic
   if (!value) {
     return null;
   }
-  const label = value.replaceAll("_", " ");
+  const label = value === "CODING_COMPLETED" ? "CODING COMPLETED" : value.replaceAll("_", " ");
 
   const colorClasses = indicator ? getIndicatorColor(indicator) : getStatusColor(status);
   const transitionClasses = indicator ? "" : " transition-all duration-500";

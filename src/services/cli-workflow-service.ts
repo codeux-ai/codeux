@@ -406,7 +406,7 @@ export class CliWorkflowService {
     };
     this.deps.executionRepository.updateTaskRun(taskRun.id, taskRunUpdate);
     this.deps.projectManagementRepository?.updateTask(taskRun.taskId, {
-      status: input.state === "COMPLETED" ? "completed" : input.state === "FAILED" ? "pending" : "in_progress",
+      status: input.state === "COMPLETED" ? "coding_completed" : input.state === "FAILED" ? "pending" : "in_progress",
     });
 
     if (taskRun.dispatchId) {

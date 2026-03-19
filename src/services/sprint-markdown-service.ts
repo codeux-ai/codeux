@@ -164,7 +164,10 @@ function serializeSprintMarkdown(sprint: SprintRecord): string {
   return lines.join("\n");
 }
 
-function normalizeImportedTaskStatus(status: string | undefined): "pending" | "in_progress" | "completed" {
+function normalizeImportedTaskStatus(status: string | undefined): "pending" | "in_progress" | "coding_completed" | "completed" {
+  if (status === "CODING_COMPLETED") {
+    return "coding_completed";
+  }
   if (status === "COMPLETED") {
     return "completed";
   }

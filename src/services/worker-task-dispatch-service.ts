@@ -237,7 +237,7 @@ export class WorkerTaskDispatchService {
     const taskUpdateStatus = cancelRequested
       ? "pending"
       : args.state === "COMPLETED"
-        ? "completed"
+        ? "coding_completed"
         : args.state === "RUNNING"
           ? "in_progress"
           : args.state === "QUOTA"
