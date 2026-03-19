@@ -31,6 +31,8 @@ import {
   cloneProjectSettings,
   cloneSystemSettings,
   dashboardSettingsToProjectSettings,
+  getFieldSource,
+  getFieldSourceLabel,
 } from "./lib/settings-view-models.js";
 
 type SettingsScope = "system" | "project";
@@ -214,13 +216,24 @@ const Row: FunctionComponent<{
   description?: string;
   children: ComponentChildren;
   last?: boolean;
-}> = ({ label, description, children, last }) => (
+  badge?: string;
+}> = ({ label, description, children, last, badge }) => (
   <div
     className={`flex items-center justify-between gap-6 py-4.5 ${!last ? "border-b border-black/[0.05] dark:border-white/[0.04]" : ""}`}
     style={{ paddingTop: "1.125rem", paddingBottom: "1.125rem" }}
   >
     <div className="min-w-0 flex-1">
-      <div className="text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">{label}</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">{label}</div>
+        {badge ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
+            <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black leading-none text-white dark:bg-amber-300 dark:text-void-900">
+              !
+            </span>
+            {badge}
+          </span>
+        ) : null}
+      </div>
       {description ? (
         <div className="mt-0.5 text-xs font-medium leading-relaxed text-slate-400">{description}</div>
       ) : null}
@@ -698,6 +711,13 @@ export const SettingsPage: FunctionComponent = () => {
     return sourceLabel(getCombinedSource(projectSources, prefixes));
   };
 
+  const getFieldBadge = (path: string): string | undefined => {
+    if (activeScope !== "project") {
+      return undefined;
+    }
+    return getFieldSourceLabel(getFieldSource(projectSources, path), "project") ?? undefined;
+  };
+
   const renderGeneralSection = (): ComponentChildren => {
     if (activeScope === "system") {
       return (
@@ -768,7 +788,7 @@ export const SettingsPage: FunctionComponent = () => {
         />
 
         <SectionCard title="Automation" watermark="AUTO" badge={getBadge("automationLevel", "automationInterventions")}>
-          <Row label="Automation level" description="Choose how much the project should proceed without a worker stepping in.">
+          <Row label="Automation level" description="Choose how much the project should proceed without a worker stepping in." badge={getFieldBadge("automationLevel")}>
             <SelectInput
               value={projectSettings.automationLevel}
               onChange={(value) => updateProject((current) => ({ ...current, automationLevel: value as ProjectSettings["automationLevel"] }))}
@@ -779,7 +799,7 @@ export const SettingsPage: FunctionComponent = () => {
               ]}
             />
           </Row>
-          <Row label="Auto-approve plans" description="Use the orchestrator path for routine plan confirmations.">
+          <Row label="Auto-approve plans" description="Use the orchestrator path for routine plan confirmations." badge={getFieldBadge("automationInterventions.autoApprovePlan")}>
             <Toggle
               value={projectSettings.automationInterventions.autoApprovePlan}
               onChange={() => updateProject((current) => ({
@@ -791,7 +811,7 @@ export const SettingsPage: FunctionComponent = () => {
               }))}
             />
           </Row>
-          <Row label="Auto-answer clarifications" description="Answer routine clarification requests automatically when the configured template is sufficient.">
+          <Row label="Auto-answer clarifications" description="Answer routine clarification requests automatically when the configured template is sufficient." badge={getFieldBadge("automationInterventions.autoAnswerClarification")}>
             <Toggle
               value={projectSettings.automationInterventions.autoAnswerClarification}
               onChange={() => updateProject((current) => ({
@@ -803,7 +823,7 @@ export const SettingsPage: FunctionComponent = () => {
               }))}
             />
           </Row>
-          <Row label="Auto-resume paused runs" description="Resume a project automatically when a transient pause clears." >
+          <Row label="Auto-resume paused runs" description="Resume a project automatically when a transient pause clears." badge={getFieldBadge("automationInterventions.autoResumePaused")}>
             <Toggle
               value={projectSettings.automationInterventions.autoResumePaused}
               onChange={() => updateProject((current) => ({
@@ -815,7 +835,7 @@ export const SettingsPage: FunctionComponent = () => {
               }))}
             />
           </Row>
-          <Row label="Clarification answer template" description="Template used when project automation answers a clarification request." last>
+          <Row label="Clarification answer template" description="Template used when project automation answers a clarification request." badge={getFieldBadge("automationInterventions.clarificationAnswerTemplate")} last>
             <TextInput
               value={projectSettings.automationInterventions.clarificationAnswerTemplate}
               onChange={(value) => updateProject((current) => ({
@@ -841,7 +861,7 @@ export const SettingsPage: FunctionComponent = () => {
     return (
       <div className="flex flex-col gap-5">
         <SectionCard title="Provider Routing" watermark="MDL" badge={getBadge("aiProvider")}>
-          <Row label="Primary provider" description="Default provider when routing strategy is manual.">
+          <Row label="Primary provider" description="Default provider when routing strategy is manual." badge={getFieldBadge("aiProvider.provider")}>
             <SelectInput
               value={editableSettings.aiProvider.provider}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -859,7 +879,7 @@ export const SettingsPage: FunctionComponent = () => {
               ]}
             />
           </Row>
-          <Row label="Routing strategy" description="Manual pins one provider, weighted distributes tasks, orchestrator can decide at runtime." last>
+          <Row label="Routing strategy" description="Manual pins one provider, weighted distributes tasks, orchestrator can decide at runtime." badge={getFieldBadge("aiProvider.strategy")} last>
             <SelectInput
               value={editableSettings.aiProvider.strategy}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -887,8 +907,18 @@ export const SettingsPage: FunctionComponent = () => {
               >
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-                      {providerLabels[providerId as keyof typeof providerLabels]}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                        {providerLabels[providerId as keyof typeof providerLabels]}
+                      </div>
+                      {getFieldBadge(`aiProvider.providers.${providerId}.enabled`) ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
+                          <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black leading-none text-white dark:bg-amber-300 dark:text-void-900">
+                            !
+                          </span>
+                          {getFieldBadge(`aiProvider.providers.${providerId}.enabled`)}
+                        </span>
+                      ) : null}
                     </div>
                     <div className="mt-0.5 text-xs font-medium text-slate-400">
                       Enabled state, pinned model, weighting, and thinking mode.
@@ -903,7 +933,17 @@ export const SettingsPage: FunctionComponent = () => {
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
-                    <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Model</div>
+                    <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                      <span>Model</span>
+                      {getFieldBadge(`aiProvider.providers.${providerId}.model`) ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
+                          <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black leading-none text-white dark:bg-amber-300 dark:text-void-900">
+                            !
+                          </span>
+                          {getFieldBadge(`aiProvider.providers.${providerId}.model`)}
+                        </span>
+                      ) : null}
+                    </div>
                     <TextInput
                       value={provider.model}
                       onChange={(value) => updateEditableSettings((current) => updateProviderSettings(current, providerId as keyof ProjectSettings["aiProvider"]["providers"], {
@@ -913,7 +953,17 @@ export const SettingsPage: FunctionComponent = () => {
                     />
                   </div>
                   <div>
-                    <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Thinking mode</div>
+                    <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                      <span>Thinking mode</span>
+                      {getFieldBadge(`aiProvider.providers.${providerId}.thinkingMode`) ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
+                          <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black leading-none text-white dark:bg-amber-300 dark:text-void-900">
+                            !
+                          </span>
+                          {getFieldBadge(`aiProvider.providers.${providerId}.thinkingMode`)}
+                        </span>
+                      ) : null}
+                    </div>
                     <SelectInput
                       value={provider.thinkingMode}
                       onChange={(value) => updateEditableSettings((current) => updateProviderSettings(current, providerId as keyof ProjectSettings["aiProvider"]["providers"], {
@@ -923,7 +973,17 @@ export const SettingsPage: FunctionComponent = () => {
                     />
                   </div>
                   <div>
-                    <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Weight</div>
+                    <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                      <span>Weight</span>
+                      {getFieldBadge(`aiProvider.providers.${providerId}.weight`) ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
+                          <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black leading-none text-white dark:bg-amber-300 dark:text-void-900">
+                            !
+                          </span>
+                          {getFieldBadge(`aiProvider.providers.${providerId}.weight`)}
+                        </span>
+                      ) : null}
+                    </div>
                     <NumberInput
                       value={provider.weight}
                       onChange={(value) => updateEditableSettings((current) => updateProviderSettings(current, providerId as keyof ProjectSettings["aiProvider"]["providers"], {
@@ -950,7 +1010,7 @@ export const SettingsPage: FunctionComponent = () => {
     return (
       <div className="flex flex-col gap-5">
         <SectionCard title="Merge Gates" watermark="CI" badge={getBadge("ciIntelligence")}>
-          <Row label="CI intelligence enabled" description="Let orchestration react to CI state instead of treating CI as passive metadata.">
+          <Row label="CI intelligence enabled" description="Let orchestration react to CI state instead of treating CI as passive metadata." badge={getFieldBadge("ciIntelligence.enabled")}>
             <Toggle
               value={editableSettings.ciIntelligence.enabled}
               onChange={() => updateEditableSettings((current) => ({
@@ -962,7 +1022,7 @@ export const SettingsPage: FunctionComponent = () => {
               }))}
             />
           </Row>
-          <Row label="Live PR monitoring" description="Poll and interpret PR state while feature work is in progress.">
+          <Row label="Live PR monitoring" description="Poll and interpret PR state while feature work is in progress." badge={getFieldBadge("ciIntelligence.enableLivePrMonitoring")}>
             <Toggle
               value={editableSettings.ciIntelligence.enableLivePrMonitoring}
               onChange={() => updateEditableSettings((current) => ({
@@ -974,7 +1034,7 @@ export const SettingsPage: FunctionComponent = () => {
               }))}
             />
           </Row>
-          <Row label="Wait for CI before main merge" description="Hold main-branch merge completion until CI is green.">
+          <Row label="Wait for CI before main merge" description="Hold main-branch merge completion until CI is green." badge={getFieldBadge("ciIntelligence.waitForCiBeforeMainMerge")}>
             <Toggle
               value={editableSettings.ciIntelligence.waitForCiBeforeMainMerge}
               onChange={() => updateEditableSettings((current) => ({
@@ -986,7 +1046,7 @@ export const SettingsPage: FunctionComponent = () => {
               }))}
             />
           </Row>
-          <Row label="Resolve comments before main merge" description="Require review comments to be resolved before finishing the main merge.">
+          <Row label="Resolve comments before main merge" description="Require review comments to be resolved before finishing the main merge." badge={getFieldBadge("ciIntelligence.resolveAllCommentsBeforeMainMerge")}>
             <Toggle
               value={editableSettings.ciIntelligence.resolveAllCommentsBeforeMainMerge}
               onChange={() => updateEditableSettings((current) => ({
@@ -998,7 +1058,7 @@ export const SettingsPage: FunctionComponent = () => {
               }))}
             />
           </Row>
-          <Row label="Resolve main merge conflicts" description="Escalate `feature -> main` merge conflicts to the connected worker with sprint context.">
+          <Row label="Resolve main merge conflicts" description="Escalate `feature -> main` merge conflicts to the connected worker with sprint context." badge={getFieldBadge("ciIntelligence.resolveMainMergeConflicts")}>
             <Toggle
               value={editableSettings.ciIntelligence.resolveMainMergeConflicts}
               onChange={() => updateEditableSettings((current) => ({
@@ -1010,7 +1070,7 @@ export const SettingsPage: FunctionComponent = () => {
               }))}
             />
           </Row>
-          <Row label="Wait for CI before feature merge" description="Require green CI before merging feature branches back into sprint or main flow.">
+          <Row label="Wait for CI before feature merge" description="Require green CI before merging feature branches back into sprint or main flow." badge={getFieldBadge("ciIntelligence.waitForCiBeforeFeatureMerge")}>
             <Toggle
               value={editableSettings.ciIntelligence.waitForCiBeforeFeatureMerge}
               onChange={() => updateEditableSettings((current) => ({
@@ -1022,7 +1082,7 @@ export const SettingsPage: FunctionComponent = () => {
               }))}
             />
           </Row>
-          <Row label="Resolve comments before feature merge" description="Do not auto-merge a feature branch until review comments are closed." last>
+          <Row label="Resolve comments before feature merge" description="Do not auto-merge a feature branch until review comments are closed." badge={getFieldBadge("ciIntelligence.resolveAllCommentsBeforeFeatureMerge")} last>
             <Toggle
               value={editableSettings.ciIntelligence.resolveAllCommentsBeforeFeatureMerge}
               onChange={() => updateEditableSettings((current) => ({
@@ -1037,7 +1097,7 @@ export const SettingsPage: FunctionComponent = () => {
         </SectionCard>
 
         <SectionCard title="Autofix Policy" watermark="FIX" badge={getBadge("ciIntelligence")}>
-          <Row label="Resolve feature merge conflicts" description="Escalate feature-branch merge conflicts to the connected worker with full branch and task context.">
+          <Row label="Resolve feature merge conflicts" description="Escalate feature-branch merge conflicts to the connected worker with full branch and task context." badge={getFieldBadge("ciIntelligence.resolveMergeConflicts")}>
             <Toggle
               value={editableSettings.ciIntelligence.resolveMergeConflicts}
               onChange={() => updateEditableSettings((current) => ({
@@ -1049,7 +1109,7 @@ export const SettingsPage: FunctionComponent = () => {
               }))}
             />
           </Row>
-          <Row label="Jules CI autofix" description="Allow Jules to attempt CI autofixes before escalating to a worker.">
+          <Row label="Jules CI autofix" description="Allow Jules to attempt CI autofixes before escalating to a worker." badge={getFieldBadge("ciIntelligence.waitForJulesCiAutofix")}>
             <Toggle
               value={editableSettings.ciIntelligence.waitForJulesCiAutofix}
               onChange={() => updateEditableSettings((current) => ({
@@ -1061,7 +1121,7 @@ export const SettingsPage: FunctionComponent = () => {
               }))}
             />
           </Row>
-          <Row label="Autofix retries" description="Maximum retries for the Jules CI autofix path.">
+          <Row label="Autofix retries" description="Maximum retries for the Jules CI autofix path." badge={getFieldBadge("ciIntelligence.julesCiAutofixMaxRetries")}>
             <NumberInput
               value={editableSettings.ciIntelligence.julesCiAutofixMaxRetries}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -1075,7 +1135,7 @@ export const SettingsPage: FunctionComponent = () => {
               max={20}
             />
           </Row>
-          <Row label="Feature PR auto-merge mode" description="Controls whether feature PRs auto-merge immediately, only when green, or never.">
+          <Row label="Feature PR auto-merge mode" description="Controls whether feature PRs auto-merge immediately, only when green, or never." badge={getFieldBadge("ciIntelligence.featurePrAutoMergeMode")}>
             <SelectInput
               value={editableSettings.ciIntelligence.featurePrAutoMergeMode}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -1092,7 +1152,7 @@ export const SettingsPage: FunctionComponent = () => {
               ]}
             />
           </Row>
-          <Row label="Main branch auto-merge mode" description="Controls whether the main branch PR auto-merges immediately, only when green, or never." last>
+          <Row label="Main branch auto-merge mode" description="Controls whether the main branch PR auto-merges immediately, only when green, or never." badge={getFieldBadge("ciIntelligence.mainBranchAutoMergeMode")} last>
             <SelectInput
               value={editableSettings.ciIntelligence.mainBranchAutoMergeMode}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -1112,7 +1172,7 @@ export const SettingsPage: FunctionComponent = () => {
         </SectionCard>
 
         <SectionCard title="Worker Runtime" watermark="WRK" badge={getBadge("workers")}>
-          <Row label="Worker execution mode" description="Choose whether worker-owned dispatches and supervision run through connected MCP listeners or a short-lived internal virtual worker.">
+          <Row label="Worker execution mode" description="Choose whether worker-owned dispatches and supervision run through connected MCP listeners or a short-lived internal virtual worker." badge={getFieldBadge("workers.executionMode")}>
             <SelectInput
               value={editableSettings.workers.executionMode}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -1128,7 +1188,7 @@ export const SettingsPage: FunctionComponent = () => {
               ]}
             />
           </Row>
-          <Row label="Virtual worker CLI" description="Preferred CLI provider for virtual workers. They start only when worker work exists, handle one cycle, then shut down. Jules is intentionally excluded." last>
+          <Row label="Virtual worker CLI" description="Preferred CLI provider for virtual workers. They start only when worker work exists, handle one cycle, then shut down. Jules is intentionally excluded." badge={getFieldBadge("workers.virtualWorkerProvider")} last>
             <SelectInput
               value={editableSettings.workers.virtualWorkerProvider}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -1148,7 +1208,7 @@ export const SettingsPage: FunctionComponent = () => {
         </SectionCard>
 
         <SectionCard title="Execution Pipeline" watermark="RUN" badge={getBadge("sprintLoopSteps")}>
-          <Row label="Branch preflight" description="Verify branch state before the orchestration loop starts." >
+          <Row label="Branch preflight" description="Verify branch state before the orchestration loop starts." badge={getFieldBadge("sprintLoopSteps.branchPreflight")}>
             <Toggle value={editableSettings.sprintLoopSteps.branchPreflight} onChange={() => updateEditableSettings((current) => ({
               ...current,
               sprintLoopSteps: {
@@ -1157,7 +1217,7 @@ export const SettingsPage: FunctionComponent = () => {
               },
             }))} />
           </Row>
-          <Row label="Planning preflight" description="Validate the planning phase before worker or automated execution begins." >
+          <Row label="Planning preflight" description="Validate the planning phase before worker or automated execution begins." badge={getFieldBadge("sprintLoopSteps.planningPreflight")}>
             <Toggle value={editableSettings.sprintLoopSteps.planningPreflight} onChange={() => updateEditableSettings((current) => ({
               ...current,
               sprintLoopSteps: {
@@ -1166,7 +1226,7 @@ export const SettingsPage: FunctionComponent = () => {
               },
             }))} />
           </Row>
-          <Row label="Session sync" description="Keep provider session state synchronized into the orchestration model." >
+          <Row label="Session sync" description="Keep provider session state synchronized into the orchestration model." badge={getFieldBadge("sprintLoopSteps.sessionSync")}>
             <Toggle value={editableSettings.sprintLoopSteps.sessionSync} onChange={() => updateEditableSettings((current) => ({
               ...current,
               sprintLoopSteps: {
@@ -1175,7 +1235,7 @@ export const SettingsPage: FunctionComponent = () => {
               },
             }))} />
           </Row>
-          <Row label="Load subtasks" description="Refresh task state from persisted sprint records before orchestration decisions are made." >
+          <Row label="Load subtasks" description="Refresh task state from persisted sprint records before orchestration decisions are made." badge={getFieldBadge("sprintLoopSteps.loadSubtasks")}>
             <Toggle value={editableSettings.sprintLoopSteps.loadSubtasks} onChange={() => updateEditableSettings((current) => ({
               ...current,
               sprintLoopSteps: {
@@ -1184,7 +1244,7 @@ export const SettingsPage: FunctionComponent = () => {
               },
             }))} />
           </Row>
-          <Row label="Status derivation" description="Derive task runtime status from session, merge, and CI state during each loop." >
+          <Row label="Status derivation" description="Derive task runtime status from session, merge, and CI state during each loop." badge={getFieldBadge("sprintLoopSteps.statusDerivation")}>
             <Toggle value={editableSettings.sprintLoopSteps.statusDerivation} onChange={() => updateEditableSettings((current) => ({
               ...current,
               sprintLoopSteps: {
@@ -1193,7 +1253,7 @@ export const SettingsPage: FunctionComponent = () => {
               },
             }))} />
           </Row>
-          <Row label="Start ready tasks" description="Dispatch work automatically once dependency and merge gates are clear." >
+          <Row label="Start ready tasks" description="Dispatch work automatically once dependency and merge gates are clear." badge={getFieldBadge("sprintLoopSteps.startReadyTasks")}>
             <Toggle value={editableSettings.sprintLoopSteps.startReadyTasks} onChange={() => updateEditableSettings((current) => ({
               ...current,
               sprintLoopSteps: {
@@ -1202,7 +1262,7 @@ export const SettingsPage: FunctionComponent = () => {
               },
             }))} />
           </Row>
-          <Row label="Merge protocol" description="Run merge-state checks and PR integration logic as part of each loop." >
+          <Row label="Merge protocol" description="Run merge-state checks and PR integration logic as part of each loop." badge={getFieldBadge("sprintLoopSteps.mergeProtocol")}>
             <Toggle value={editableSettings.sprintLoopSteps.mergeProtocol} onChange={() => updateEditableSettings((current) => ({
               ...current,
               sprintLoopSteps: {
@@ -1211,7 +1271,7 @@ export const SettingsPage: FunctionComponent = () => {
               },
             }))} />
           </Row>
-          <Row label="Action-required protocol" description="Pause and surface manual intervention when automated resolution is not possible." >
+          <Row label="Action-required protocol" description="Pause and surface manual intervention when automated resolution is not possible." badge={getFieldBadge("sprintLoopSteps.actionRequiredProtocol")}>
             <Toggle value={editableSettings.sprintLoopSteps.actionRequiredProtocol} onChange={() => updateEditableSettings((current) => ({
               ...current,
               sprintLoopSteps: {
@@ -1220,7 +1280,7 @@ export const SettingsPage: FunctionComponent = () => {
               },
             }))} />
           </Row>
-          <Row label="Status table output" description="Emit the orchestration status table as part of the loop output." last>
+          <Row label="Status table output" description="Emit the orchestration status table as part of the loop output." badge={getFieldBadge("sprintLoopSteps.statusTable")} last>
             <Toggle value={editableSettings.sprintLoopSteps.statusTable} onChange={() => updateEditableSettings((current) => ({
               ...current,
               sprintLoopSteps: {
@@ -1232,7 +1292,7 @@ export const SettingsPage: FunctionComponent = () => {
         </SectionCard>
 
         <SectionCard title="Watch Loop" watermark="LOOP" badge={getBadge("sprintLoopSteps")}>
-          <Row label="Watch loop" description="Keep the live watch loop running between orchestration ticks." >
+          <Row label="Watch loop" description="Keep the live watch loop running between orchestration ticks." badge={getFieldBadge("sprintLoopSteps.watchLoop")}>
             <Toggle value={editableSettings.sprintLoopSteps.watchLoop} onChange={() => updateEditableSettings((current) => ({
               ...current,
               sprintLoopSteps: {
@@ -1241,7 +1301,7 @@ export const SettingsPage: FunctionComponent = () => {
               },
             }))} />
           </Row>
-          <Row label="Watch loop interval" description="Seconds between watch loop evaluation cycles." >
+          <Row label="Watch loop interval" description="Seconds between watch loop evaluation cycles." badge={getFieldBadge("sprintLoopSteps.watchLoopIntervalSeconds")}>
             <NumberInput
               value={editableSettings.sprintLoopSteps.watchLoopIntervalSeconds}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -1255,7 +1315,7 @@ export const SettingsPage: FunctionComponent = () => {
               max={3600}
             />
           </Row>
-          <Row label="Watch output interval" description="Seconds between watch loop output emissions." last>
+          <Row label="Watch output interval" description="Seconds between watch loop output emissions." badge={getFieldBadge("sprintLoopSteps.watchLoopOutputIntervalSeconds")} last>
             <NumberInput
               value={editableSettings.sprintLoopSteps.watchLoopOutputIntervalSeconds}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -1272,7 +1332,7 @@ export const SettingsPage: FunctionComponent = () => {
         </SectionCard>
 
         <SectionCard title="Workspace Hygiene" watermark="CLI" badge={getBadge("cliWorkflow")}>
-          <Row label="Cleanup worktree on success" description="Remove temporary worktree state after successful CLI execution.">
+          <Row label="Cleanup worktree on success" description="Remove temporary worktree state after successful CLI execution." badge={getFieldBadge("cliWorkflow.cleanupWorktreeOnSuccess")}>
             <Toggle value={editableSettings.cliWorkflow.cleanupWorktreeOnSuccess} onChange={() => updateEditableSettings((current) => ({
               ...current,
               cliWorkflow: {
@@ -1281,7 +1341,7 @@ export const SettingsPage: FunctionComponent = () => {
               },
             }))} />
           </Row>
-          <Row label="Cleanup worktree on failure" description="Clean up failed workspaces after execution terminates unsuccessfully.">
+          <Row label="Cleanup worktree on failure" description="Clean up failed workspaces after execution terminates unsuccessfully." badge={getFieldBadge("cliWorkflow.cleanupWorktreeOnFailure")}>
             <Toggle value={editableSettings.cliWorkflow.cleanupWorktreeOnFailure} onChange={() => updateEditableSettings((current) => ({
               ...current,
               cliWorkflow: {
@@ -1290,7 +1350,7 @@ export const SettingsPage: FunctionComponent = () => {
               },
             }))} />
           </Row>
-          <Row label="Retry on read-file errors" description="Retry when a CLI agent fails on a transient file read issue.">
+          <Row label="Retry on read-file errors" description="Retry when a CLI agent fails on a transient file read issue." badge={getFieldBadge("cliWorkflow.retryOnReadFileNotFound")}>
             <Toggle value={editableSettings.cliWorkflow.retryOnReadFileNotFound} onChange={() => updateEditableSettings((current) => ({
               ...current,
               cliWorkflow: {
@@ -1299,7 +1359,7 @@ export const SettingsPage: FunctionComponent = () => {
               },
             }))} />
           </Row>
-          <Row label="Resume failed task in same workspace" description="Reuse the same workspace for a retry instead of provisioning a fresh one." last>
+          <Row label="Resume failed task in same workspace" description="Reuse the same workspace for a retry instead of provisioning a fresh one." badge={getFieldBadge("cliWorkflow.resumeFailedTaskInSameWorkspace")} last>
             <Toggle value={editableSettings.cliWorkflow.resumeFailedTaskInSameWorkspace} onChange={() => updateEditableSettings((current) => ({
               ...current,
               cliWorkflow: {
@@ -1311,7 +1371,7 @@ export const SettingsPage: FunctionComponent = () => {
         </SectionCard>
 
         <SectionCard title="Execution Runtime" watermark="RT" badge={getBadge("cliWorkflow")}>
-          <Row label="Execution mode" description="Run worker CLI processes directly on the host or inside a container.">
+          <Row label="Execution mode" description="Run worker CLI processes directly on the host or inside a container." badge={getFieldBadge("cliWorkflow.executionMode")}>
             <SelectInput
               value={editableSettings.cliWorkflow.executionMode}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -1327,7 +1387,7 @@ export const SettingsPage: FunctionComponent = () => {
               ]}
             />
           </Row>
-          <Row label="Container image" description="Default container image when execution mode is Docker.">
+          <Row label="Container image" description="Default container image when execution mode is Docker." badge={getFieldBadge("cliWorkflow.containerImage")}>
             <TextInput
               value={editableSettings.cliWorkflow.containerImage}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -1340,7 +1400,7 @@ export const SettingsPage: FunctionComponent = () => {
               mono
             />
           </Row>
-          <Row label="Container setup script" description="Optional setup script run inside the container before task execution." >
+          <Row label="Container setup script" description="Optional setup script run inside the container before task execution." badge={getFieldBadge("cliWorkflow.containerSetupScriptPath")}>
             <TextInput
               value={editableSettings.cliWorkflow.containerSetupScriptPath}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -1353,7 +1413,7 @@ export const SettingsPage: FunctionComponent = () => {
               mono
             />
           </Row>
-          <Row label="Cache setup as image" description="Build and reuse a derived Docker image from the base image plus setup script contents.">
+          <Row label="Cache setup as image" description="Build and reuse a derived Docker image from the base image plus setup script contents." badge={getFieldBadge("cliWorkflow.containerCacheSetupScriptImage")}>
             <Toggle value={editableSettings.cliWorkflow.containerCacheSetupScriptImage} onChange={() => updateEditableSettings((current) => ({
               ...current,
               cliWorkflow: {
@@ -1362,7 +1422,7 @@ export const SettingsPage: FunctionComponent = () => {
               },
             }))} />
           </Row>
-          <Row label="Mount git config" description="Share host git config with the task container." last>
+          <Row label="Mount git config" description="Share host git config with the task container." badge={getFieldBadge("cliWorkflow.containerMountGitConfig")} last>
             <Toggle value={editableSettings.cliWorkflow.containerMountGitConfig} onChange={() => updateEditableSettings((current) => ({
               ...current,
               cliWorkflow: {
@@ -1426,7 +1486,7 @@ export const SettingsPage: FunctionComponent = () => {
                 <NoticePanel title="System-owned credential">
                   The Gemini API key is shared at system scope so hosted worker integrations can reuse it across projects.
                 </NoticePanel>
-                <Row label="Mount Gemini auth" description="Copy Gemini CLI auth into Docker for this scope.">
+                <Row label="Mount Gemini auth" description="Copy Gemini CLI auth into Docker for this scope." badge={getFieldBadge("cliWorkflow.containerMountGeminiAuth")}>
                   <Toggle value={editableSettings.cliWorkflow.containerMountGeminiAuth} onChange={() => updateEditableSettings((current) => ({
                     ...current,
                     cliWorkflow: {
@@ -1435,7 +1495,7 @@ export const SettingsPage: FunctionComponent = () => {
                     },
                   }))} />
                 </Row>
-                <Row label="Gemini auth path" description="Host path copied into the Docker runtime for Gemini auth." last>
+                <Row label="Gemini auth path" description="Host path copied into the Docker runtime for Gemini auth." badge={getFieldBadge("cliWorkflow.containerGeminiAuthPath")} last>
                   <TextInput
                     value={editableSettings.cliWorkflow.containerGeminiAuthPath}
                     onChange={(value) => updateEditableSettings((current) => ({
@@ -1468,7 +1528,7 @@ export const SettingsPage: FunctionComponent = () => {
                   mono
                 />
               </Row>
-              <Row label="Mount Gemini auth" description="Copy Gemini CLI auth into Docker instead of passing the API key.">
+              <Row label="Mount Gemini auth" description="Copy Gemini CLI auth into Docker instead of passing the API key." badge={getFieldBadge("cliWorkflow.containerMountGeminiAuth")}>
                 <Toggle value={editableSettings.cliWorkflow.containerMountGeminiAuth} onChange={() => updateEditableSettings((current) => ({
                   ...current,
                   cliWorkflow: {
@@ -1477,7 +1537,7 @@ export const SettingsPage: FunctionComponent = () => {
                   },
                 }))} />
               </Row>
-              <Row label="Gemini auth path" description="Host path copied into the Docker runtime for Gemini auth." last>
+              <Row label="Gemini auth path" description="Host path copied into the Docker runtime for Gemini auth." badge={getFieldBadge("cliWorkflow.containerGeminiAuthPath")} last>
                 <TextInput
                   value={editableSettings.cliWorkflow.containerGeminiAuthPath}
                   onChange={(value) => updateEditableSettings((current) => ({
@@ -1500,7 +1560,7 @@ export const SettingsPage: FunctionComponent = () => {
                 <NoticePanel title="System-owned credential">
                   The Codex API key is managed once at system scope and then reused by projects and future worker providers.
                 </NoticePanel>
-                <Row label="Mount Codex auth" description="Copy Codex auth into Docker for this scope.">
+                <Row label="Mount Codex auth" description="Copy Codex auth into Docker for this scope." badge={getFieldBadge("cliWorkflow.containerMountCodexAuth")}>
                   <Toggle value={editableSettings.cliWorkflow.containerMountCodexAuth} onChange={() => updateEditableSettings((current) => ({
                     ...current,
                     cliWorkflow: {
@@ -1509,7 +1569,7 @@ export const SettingsPage: FunctionComponent = () => {
                     },
                   }))} />
                 </Row>
-                <Row label="Codex auth path" description="Host path copied into the Docker runtime for Codex auth." last>
+                <Row label="Codex auth path" description="Host path copied into the Docker runtime for Codex auth." badge={getFieldBadge("cliWorkflow.containerCodexAuthPath")} last>
                   <TextInput
                     value={editableSettings.cliWorkflow.containerCodexAuthPath}
                     onChange={(value) => updateEditableSettings((current) => ({
@@ -1542,7 +1602,7 @@ export const SettingsPage: FunctionComponent = () => {
                   mono
                 />
               </Row>
-              <Row label="Mount Codex auth" description="Copy Codex auth into Docker instead of passing the API key.">
+              <Row label="Mount Codex auth" description="Copy Codex auth into Docker instead of passing the API key." badge={getFieldBadge("cliWorkflow.containerMountCodexAuth")}>
                 <Toggle value={editableSettings.cliWorkflow.containerMountCodexAuth} onChange={() => updateEditableSettings((current) => ({
                   ...current,
                   cliWorkflow: {
@@ -1551,7 +1611,7 @@ export const SettingsPage: FunctionComponent = () => {
                   },
                 }))} />
               </Row>
-              <Row label="Codex auth path" description="Host path copied into the Docker runtime for Codex auth." last>
+              <Row label="Codex auth path" description="Host path copied into the Docker runtime for Codex auth." badge={getFieldBadge("cliWorkflow.containerCodexAuthPath")} last>
                 <TextInput
                   value={editableSettings.cliWorkflow.containerCodexAuthPath}
                   onChange={(value) => updateEditableSettings((current) => ({
@@ -1574,7 +1634,7 @@ export const SettingsPage: FunctionComponent = () => {
                 <NoticePanel title="System-owned credential">
                   The Claude Code API key is shared system-wide. Project-level provider selection still lives under AI Models.
                 </NoticePanel>
-                <Row label="Mount Claude Code auth" description="Copy Claude Code auth into Docker for this scope.">
+                <Row label="Mount Claude Code auth" description="Copy Claude Code auth into Docker for this scope." badge={getFieldBadge("cliWorkflow.containerMountClaudeCodeAuth")}>
                   <Toggle value={editableSettings.cliWorkflow.containerMountClaudeCodeAuth} onChange={() => updateEditableSettings((current) => ({
                     ...current,
                     cliWorkflow: {
@@ -1583,7 +1643,7 @@ export const SettingsPage: FunctionComponent = () => {
                     },
                   }))} />
                 </Row>
-                <Row label="Claude Code auth path" description="Host path copied into the Docker runtime for Claude Code auth." last>
+                <Row label="Claude Code auth path" description="Host path copied into the Docker runtime for Claude Code auth." badge={getFieldBadge("cliWorkflow.containerClaudeCodeAuthPath")} last>
                   <TextInput
                     value={editableSettings.cliWorkflow.containerClaudeCodeAuthPath}
                     onChange={(value) => updateEditableSettings((current) => ({
@@ -1616,7 +1676,7 @@ export const SettingsPage: FunctionComponent = () => {
                   mono
                 />
               </Row>
-              <Row label="Mount Claude Code auth" description="Copy Claude Code auth into Docker instead of passing the API key.">
+              <Row label="Mount Claude Code auth" description="Copy Claude Code auth into Docker instead of passing the API key." badge={getFieldBadge("cliWorkflow.containerMountClaudeCodeAuth")}>
                 <Toggle value={editableSettings.cliWorkflow.containerMountClaudeCodeAuth} onChange={() => updateEditableSettings((current) => ({
                   ...current,
                   cliWorkflow: {
@@ -1625,7 +1685,7 @@ export const SettingsPage: FunctionComponent = () => {
                   },
                 }))} />
               </Row>
-              <Row label="Claude Code auth path" description="Host path copied into the Docker runtime for Claude Code auth." last>
+              <Row label="Claude Code auth path" description="Host path copied into the Docker runtime for Claude Code auth." badge={getFieldBadge("cliWorkflow.containerClaudeCodeAuthPath")} last>
                 <TextInput
                   value={editableSettings.cliWorkflow.containerClaudeCodeAuthPath}
                   onChange={(value) => updateEditableSettings((current) => ({
@@ -1661,7 +1721,7 @@ export const SettingsPage: FunctionComponent = () => {
                   />
                 </Row>
               ) : null}
-              <Row label="Mount GitHub auth" description="Copy GitHub CLI auth into Docker instead of passing the token.">
+              <Row label="Mount GitHub auth" description="Copy GitHub CLI auth into Docker instead of passing the token." badge={getFieldBadge("cliWorkflow.containerMountGithubAuth")}>
                 <Toggle value={editableSettings.cliWorkflow.containerMountGithubAuth} onChange={() => updateEditableSettings((current) => ({
                   ...current,
                   cliWorkflow: {
@@ -1670,7 +1730,7 @@ export const SettingsPage: FunctionComponent = () => {
                   },
                 }))} />
               </Row>
-              <Row label="GitHub auth path" description="Host path copied into the Docker runtime for GitHub CLI auth.">
+              <Row label="GitHub auth path" description="Host path copied into the Docker runtime for GitHub CLI auth." badge={getFieldBadge("cliWorkflow.containerGithubAuthPath")}>
                 <TextInput
                   value={editableSettings.cliWorkflow.containerGithubAuthPath}
                   onChange={(value) => updateEditableSettings((current) => ({
@@ -1684,7 +1744,7 @@ export const SettingsPage: FunctionComponent = () => {
                   mono
                 />
               </Row>
-              <Row label="GitHub mode" description="Remote uses GitHub APIs; local keeps workflow on the local repository only.">
+              <Row label="GitHub mode" description="Remote uses GitHub APIs; local keeps workflow on the local repository only." badge={getFieldBadge("git.githubMode")}>
                 <SelectInput
                   value={editableSettings.git.githubMode}
                   onChange={(value) => updateEditableSettings((current) => ({
@@ -1700,7 +1760,7 @@ export const SettingsPage: FunctionComponent = () => {
                   ]}
                 />
               </Row>
-              <Row label="Default branch" description="Main GitHub integration branch used for merge and release flow.">
+              <Row label="Default branch" description="Main GitHub integration branch used for merge and release flow." badge={getFieldBadge("git.defaultBranch")}>
                 <TextInput
                   value={editableSettings.git.defaultBranch}
                   onChange={(value) => updateEditableSettings((current) => ({
@@ -1713,7 +1773,7 @@ export const SettingsPage: FunctionComponent = () => {
                   mono
                 />
               </Row>
-              <Row label="Feature branch prefix" description="Prefix used when workers or automation create GitHub feature branches.">
+              <Row label="Feature branch prefix" description="Prefix used when workers or automation create GitHub feature branches." badge={getFieldBadge("git.featureBranchPrefix")}>
                 <TextInput
                   value={editableSettings.git.featureBranchPrefix}
                   onChange={(value) => updateEditableSettings((current) => ({
@@ -1726,7 +1786,7 @@ export const SettingsPage: FunctionComponent = () => {
                   mono
                 />
               </Row>
-              <Row label="Sprint branch scheme" description="Naming scheme for sprint-level GitHub branches and aggregation flow.">
+              <Row label="Sprint branch scheme" description="Naming scheme for sprint-level GitHub branches and aggregation flow." badge={getFieldBadge("git.sprintBranchScheme")}>
                 <TextInput
                   value={editableSettings.git.sprintBranchScheme}
                   onChange={(value) => updateEditableSettings((current) => ({
@@ -1739,7 +1799,7 @@ export const SettingsPage: FunctionComponent = () => {
                   mono
                 />
               </Row>
-              <Row label="Auto-create pull requests" description="Open GitHub pull requests automatically when work completes and the flow supports it." last>
+              <Row label="Auto-create pull requests" description="Open GitHub pull requests automatically when work completes and the flow supports it." badge={getFieldBadge("git.autoCreatePr")} last>
                 <Toggle
                   value={editableSettings.git.autoCreatePr}
                   onChange={() => updateEditableSettings((current) => ({
@@ -1801,7 +1861,7 @@ export const SettingsPage: FunctionComponent = () => {
     return (
       <div className="flex flex-col gap-5">
         <SectionCard title="Project Markdown Mirror" watermark="AGT" badge={getBadge("agents")}>
-          <Row label="Save agent markdown to project directory" description="When enabled, dashboard edits write a companion markdown file under `.sprint-os/agents` for the selected project. Default and home agent files are never modified.">
+          <Row label="Save agent markdown to project directory" description="When enabled, dashboard edits write a companion markdown file under `.sprint-os/agents` for the selected project. Default and home agent files are never modified." badge={getFieldBadge("agents.saveToProjectDirectory")}>
             <Toggle
               value={editableSettings.agents.saveToProjectDirectory}
               onChange={() => updateEditableSettings((current) => ({
@@ -1829,8 +1889,18 @@ export const SettingsPage: FunctionComponent = () => {
             />
           </Row>
           <div className="py-4">
-            <div className="mb-3 text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">
-              {selectedTemplateConfig.label}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <div className="text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">
+                {selectedTemplateConfig.label}
+              </div>
+              {getFieldBadge(`agents.instructionTemplates.${selectedAgentTemplate}`) ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
+                  <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black leading-none text-white dark:bg-amber-300 dark:text-void-900">
+                    !
+                  </span>
+                  {getFieldBadge(`agents.instructionTemplates.${selectedAgentTemplate}`)}
+                </span>
+              ) : null}
             </div>
             <div className="mb-4 text-xs font-medium leading-relaxed text-slate-400">
               {selectedTemplateConfig.description}

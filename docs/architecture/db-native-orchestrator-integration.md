@@ -146,6 +146,13 @@ Instead it persists:
 
 through the project repository.
 
+Feature PR merge waiting now only applies to completed tasks that have merge evidence recorded on the task runtime state:
+
+- `task.worker_branch`
+- `task.pr_url`
+
+This keeps no-output tasks, such as validation-only or test-only runs, in `COMPLETED` instead of pushing them back into the CI/PR wait path.
+
 ## Dashboard Reruns
 
 The dashboard rerun endpoint now uses the same DB-native dispatch path:

@@ -246,6 +246,19 @@ describe("FeaturePrGateService", () => {
     );
   });
 
+  it("keeps completed no-output tasks completed when there is no PR evidence to merge", async () => {
+    subtasks[0].worker_branch = undefined;
+    subtasks[0].pr_url = undefined;
+    context.gitStatus.openPullRequests = [];
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].merge_indicator).toBeUndefined();
+    expect(result.reportText).toBe("");
+    expect(context.executionRepository?.appendTaskRunEvent).not.toHaveBeenCalled();
+  });
+
   it("calls openCiFixAttention for non-Jules tasks with failed CI", async () => {
     subtasks[0].session_id = undefined;
     subtasks[0].provider = "gemini" as any;

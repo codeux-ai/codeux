@@ -152,3 +152,27 @@ export const getSectionSource = (
   }
   return "mixed";
 };
+
+export type SettingsEditorScope = "project" | "sprint";
+
+export const getFieldSource = (
+  sources: Record<string, SettingsValueSource>,
+  path: string,
+): SettingsValueSource | "mixed" => {
+  const directSource = sources[path];
+  if (directSource) {
+    return directSource;
+  }
+  return getSectionSource(sources, path);
+};
+
+export const getFieldSourceLabel = (
+  source: SettingsValueSource | "mixed",
+  scope: SettingsEditorScope,
+): string | null => {
+  if (scope === "project") {
+    return source === "project" ? "Project override" : null;
+  }
+
+  return source === "sprint" ? "Sprint override" : null;
+};

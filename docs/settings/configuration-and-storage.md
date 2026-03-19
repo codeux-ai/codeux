@@ -114,6 +114,10 @@ The effective endpoints return:
 - resolved `DashboardSettings`
 - per-field source metadata (`system`, `project`, or `sprint`)
 
+Dashboard behavior:
+- project settings now render a per-setting override badge only when a control is actually overridden at project scope
+- sprint override dialogs use the same field-level source metadata and show override badges only for sprint-local overrides
+
 `aiProvider` contains:
 - `provider` (`jules|gemini|codex|claude-code`)
 - `strategy` (`MANUAL|WEIGHTED|ORCHESTRATOR`)
