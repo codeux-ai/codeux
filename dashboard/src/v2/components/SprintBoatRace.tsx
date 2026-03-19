@@ -4,6 +4,7 @@ import gsap from "gsap";
 import { Anchor } from "lucide-preact";
 import type { Subtask, ExecutionTaskDispatchSummary } from "../../types.js";
 import { getTaskProgressPhase } from "../../lib/task-progress.js";
+import { getBoatRaceHeightPx, getBoatRaceTaskKey } from "../lib/boat-race.js";
 
 /* ─── Props ──────────────────────────────────────────────────────────────── */
 
@@ -75,10 +76,11 @@ interface ProgressTarget {
 }
 
 const getProgressTarget = (task: Subtask): ProgressTarget => {
+    const raceKey = getBoatRaceTaskKey(task);
     switch (getTaskProgressPhase(task)) {
         case "PENDING":  return { confirmed: CP.HARBOUR, target: CP.HARBOUR, stopped: true };
         case "BLOCKED":  return { confirmed: CP.HARBOUR, target: CP.HARBOUR, stopped: true };
-        case "FAILED":   return { confirmed: CP.DEPARTURE + stableRand(task.id, 30) * 0.12, target: CP.DEPARTURE + stableRand(task.id, 30) * 0.12, stopped: true };
+        case "FAILED":   return { confirmed: CP.DEPARTURE + stableRand(raceKey, 30) * 0.12, target: CP.DEPARTURE + stableRand(raceKey, 30) * 0.12, stopped: true };
         case "RUNNING":  return { confirmed: CP.DEPARTURE, target: CP.RUNNING, stopped: false };
         case "CODING_COMPLETED": {
             const mi = task.merge_indicator;
@@ -126,12 +128,11 @@ const FINISH_X = 1320;
 const RACE_LEN = FINISH_X - HARBOUR_X - 40;
 const LANE_TOP = 100;
 const LANE_BOT = SVG_H - 60;
-const MAX_SHIPS = 10;
 
 /* ─── Ship data ──────────────────────────────────────────────────────────── */
 
 interface ShipDatum {
-    id: string;
+    key: string;
     task: Subtask;
     shipType: "container" | "wooden";
     progress: ProgressTarget;
@@ -141,6 +142,18 @@ interface ShipDatum {
 
 // Center Y where all ships spawn before spreading
 const SPAWN_Y = (LANE_TOP + LANE_BOT) / 2;
+
+const createInitialShipAnimationState = (shipKey: string, now: number) => {
+    const initial = CP.DEPARTURE * 0.5;
+    const spawnXOffset = (stableRand(shipKey, 40) - 0.5) * 0.02;
+    return {
+        currentProgress: initial + spawnXOffset,
+        currentY: SPAWN_Y + (stableRand(shipKey, 41) - 0.5) * 20,
+        lastTime: now,
+        yWobbleOffset: (stableRand(shipKey, 42) - 0.5) * 6,
+        yWobblePhase: stableRand(shipKey, 43) * Math.PI * 2,
+    };
+};
 
 /* ─── SVG: Container Ship ────────────────────────────────────────────────── */
 
@@ -705,7 +718,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
 
         // PENDING + BLOCKED = waiting in harbour
         const waiting = tasks.filter(t => t.status === "PENDING" || t.status === "BLOCKED");
-        const active = tasks.filter(t => t.status !== "PENDING" && t.status !== "BLOCKED").slice(0, MAX_SHIPS);
+        const active = tasks.filter(t => t.status !== "PENDING" && t.status !== "BLOCKED");
 
         // Dynamic lanes based on active ship count
         const count = active.length;
@@ -715,12 +728,13 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
         const offsetY = LANE_TOP + (usable - totalH) / 2;
 
         const ships: ShipDatum[] = active.map((task, i) => {
+            const raceKey = getBoatRaceTaskKey(task);
             const progress = getProgressTarget(task);
             const style = getStyle(task);
             // Subtle vertical jitter within lane for natural look
-            const yJitter = (stableRand(task.id, 20) - 0.5) * laneH * 0.2;
+            const yJitter = (stableRand(raceKey, 20) - 0.5) * laneH * 0.2;
             return {
-                id: task.id,
+                key: raceKey,
                 task,
                 shipType: getShipType(task, dispatches),
                 progress,
@@ -731,6 +745,14 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
 
         return { activeShips: ships, harbourCount: waiting.length };
     }, [tasks, dispatches, hasLiveSprint]);
+
+    const raceHeightPx = useMemo(() => getBoatRaceHeightPx(activeShips.length), [activeShips.length]);
+
+    useEffect(() => {
+        if (!hasLiveSprint || activeShips.length === 0) {
+            animStateRef.current.clear();
+        }
+    }, [activeShips.length, hasLiveSprint]);
 
     /* ── Continuous Zeno's paradox animation via GSAP ticker ─────── */
     const updatePositions = useCallback(() => {
@@ -744,23 +766,14 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
             const ship = activeShips[i];
             if (!ship) return;
 
-            const state = animStateRef.current.get(ship.id);
+            const state = animStateRef.current.get(ship.key);
             const target = ship.progress.target;
             const confirmed = ship.progress.confirmed;
 
             if (!state) {
-                // First appearance — spawn at centre of start line
-                const initial = CP.DEPARTURE * 0.5;
-                // Small horizontal offset so ships don't stack perfectly
-                const spawnXOffset = (stableRand(ship.id, 40) - 0.5) * 0.02;
-                animStateRef.current.set(ship.id, {
-                    currentProgress: initial + spawnXOffset,
-                    currentY: SPAWN_Y + (stableRand(ship.id, 41) - 0.5) * 20, // cluster near center with slight spread
-                    lastTime: now,
-                    yWobbleOffset: (stableRand(ship.id, 42) - 0.5) * 6,
-                    yWobblePhase: stableRand(ship.id, 43) * Math.PI * 2,
-                });
-                const x = HARBOUR_X + 20 + (initial + spawnXOffset) * RACE_LEN;
+                const initialState = createInitialShipAnimationState(ship.key, now);
+                animStateRef.current.set(ship.key, initialState);
+                const x = HARBOUR_X + 20 + initialState.currentProgress * RACE_LEN;
                 gsap.set(el, { x, y: SPAWN_Y, opacity: 0, scale: 0.6 });
                 gsap.to(el, {
                     opacity: 1,
@@ -770,6 +783,15 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                     delay: i * 0.12,
                 });
                 return;
+            }
+
+            if (getTaskProgressPhase(ship.task) === "RUNNING" && state.currentProgress > CP.CODING_COMPLETED) {
+                const resetState = createInitialShipAnimationState(ship.key, now);
+                state.currentProgress = resetState.currentProgress;
+                state.currentY = resetState.currentY;
+                state.lastTime = resetState.lastTime;
+                state.yWobbleOffset = resetState.yWobbleOffset;
+                state.yWobblePhase = resetState.yWobblePhase;
             }
 
             const dt = now - state.lastTime;
@@ -814,7 +836,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
         if (activeShips.length === 0) return;
 
         // Clean up departed ships from animation state
-        const currentIds = new Set(activeShips.map(s => s.id));
+        const currentIds = new Set(activeShips.map(s => s.key));
         for (const key of animStateRef.current.keys()) {
             if (!currentIds.has(key)) animStateRef.current.delete(key);
         }
@@ -832,7 +854,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
     }, [activeShips, updatePositions]);
 
     /* ── Bobbing & sway animation ────────────────────────────────── */
-    const shipIdLineup = useMemo(() => activeShips.map(s => s.id).join(","), [activeShips]);
+    const shipIdLineup = useMemo(() => activeShips.map(s => s.key).join(","), [activeShips]);
     useEffect(() => {
         const group = shipsGroupRef.current;
         if (!group || activeShips.length === 0) return;
@@ -845,22 +867,22 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
             const ship = activeShips[i];
             if (!ship) return;
             const isMoving = !ship.progress.stopped;
-            const bobAmp = isMoving ? 2.5 + stableRand(ship.id, 2) * 2 : 1 + stableRand(ship.id, 2) * 0.8;
-            const bobDur = 3 + stableRand(ship.id, 3) * 2;
+            const bobAmp = isMoving ? 2.5 + stableRand(ship.key, 2) * 2 : 1 + stableRand(ship.key, 2) * 0.8;
+            const bobDur = 3 + stableRand(ship.key, 3) * 2;
 
             bobTweensRef.current.push(
                 gsap.to(el, {
                     y: `+=${bobAmp}`,
-                    rotation: (stableRand(ship.id, 4) - 0.5) * (isMoving ? 3 : 1),
+                    rotation: (stableRand(ship.key, 4) - 0.5) * (isMoving ? 3 : 1),
                     duration: bobDur,
                     ease: "sine.inOut",
                     repeat: -1,
                     yoyo: true,
-                    delay: stableRand(ship.id, 1) * 4,
+                    delay: stableRand(ship.key, 1) * 4,
                 }),
                 gsap.to(el, {
-                    x: `+=${isMoving ? 3 + stableRand(ship.id, 5) * 4 : 1}`,
-                    duration: 5 + stableRand(ship.id, 6) * 3,
+                    x: `+=${isMoving ? 3 + stableRand(ship.key, 5) * 4 : 1}`,
+                    duration: 5 + stableRand(ship.key, 6) * 3,
                     ease: "sine.inOut",
                     repeat: -1,
                     yoyo: true,
@@ -959,7 +981,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                     ref={svgRef}
                     viewBox={`0 0 ${SVG_W} ${SVG_H}`}
                     className="w-full"
-                    style={{ height: "400px" }}
+                    style={{ height: `${raceHeightPx}px` }}
                     preserveAspectRatio="xMidYMid meet"
                     onMouseMove={handleMouseMove as any}
                 >
@@ -1029,7 +1051,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
 
                     {/* ── Lane guides ───────────────────────────────────── */}
                     {activeShips.map(s => (
-                        <line key={`ln-${s.id}`}
+                        <line key={`ln-${s.key}`}
                             x1={HARBOUR_X + 40} y1={s.laneY + 16} x2={FINISH_X - 20} y2={s.laneY + 16}
                             stroke={isDark ? "white" : "black"} strokeWidth={0.2} strokeDasharray="2,24" opacity={0.025} />
                     ))}
@@ -1041,7 +1063,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                             const isMoving = !s.progress.stopped;
                             const isFailed = s.task.status === "FAILED";
                             return (
-                                <g key={s.id} className="race-ship">
+                                <g key={s.key} className="race-ship">
                                     {/* Wake trail */}
                                     <ellipse cx={-45} cy={14} rx={isMoving ? 60 : 25} ry={isMoving ? 4.5 : 2}
                                         fill="url(#br-wake)" opacity={isMoving ? 0.3 : 0.06}>
