@@ -352,7 +352,7 @@ export class JulesAgentServer {
   }
 
   private resolveGitTrackingRequest(): GitTrackingRequest {
-    const settings = this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
+    const settings = this.getSelectedProjectDashboardSettings();
     const ci = settings.ciIntelligence;
     const runtimeStatus = this.projectRuntimeRepository.getSelectedProjectStatus();
     const subtasks: Subtask[] = Array.isArray(runtimeStatus.subtasks) ? runtimeStatus.subtasks : [];
@@ -378,6 +378,15 @@ export class JulesAgentServer {
       featureBranch,
       featureBranchPrefix,
     };
+  }
+
+  private getSelectedProjectDashboardSettings(): DashboardSettings {
+    const selectedProjectId = this.projectManagementRepository.getSelectedProjectId();
+    if (selectedProjectId) {
+      return this.settingsRepository.resolveProjectDashboardSettings(selectedProjectId).settings;
+    }
+
+    return this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
   }
 
   private resolveGitStatusRepoPath(): string {

@@ -1,6 +1,6 @@
 import type { JulesApiClient, JulesCreateSessionRequest } from "../integrations/jules-api-client.js";
 import { chooseProviderForTask } from "./provider-routing.js";
-import type { DashboardSettings, JulesSession, ProviderId, Subtask } from "../contracts/app-types.js";
+import type { DashboardSettings, DashboardSettingsScope, JulesSession, ProviderId, Subtask } from "../contracts/app-types.js";
 import type { CliWorkflowService } from "./cli-workflow-service.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import { buildTaskRunTag } from "./task-run-key.js";
@@ -10,7 +10,7 @@ export interface TaskServiceDependencies {
   julesApi: JulesApiClient;
   agentPresetSyncService: AgentPresetSyncService;
   resolveJulesSourceId: (args: { repoPath: string; sourceId?: string }) => Promise<string>;
-  getDashboardSettings: () => DashboardSettings;
+  getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
   isJulesApiConfigured: () => boolean;
   cliWorkflowService: CliWorkflowService;
   logger?: Logger;
@@ -27,8 +27,8 @@ export interface TaskAgentSessionArgs {
 export class TaskService {
   constructor(private readonly deps: TaskServiceDependencies) {}
 
-  selectProviderForTask(task: Subtask): ProviderId {
-    const settings = this.deps.getDashboardSettings();
+  selectProviderForTask(task: Subtask, scope?: DashboardSettingsScope): ProviderId {
+    const settings = this.deps.getDashboardSettings(scope);
     const chosen = chooseProviderForTask(settings, task);
     if (chosen === "jules" && !this.deps.isJulesApiConfigured()) {
       const fallback = (["gemini", "codex", "claude-code"] as const).find((provider) => settings.aiProvider.providers[provider].enabled);
@@ -39,13 +39,13 @@ export class TaskService {
     return chosen;
   }
 
-  selectCliProviderForTask(task: Subtask): Exclude<ProviderId, "jules"> {
-    const selected = this.selectProviderForTask(task);
+  selectCliProviderForTask(task: Subtask, scope?: DashboardSettingsScope): Exclude<ProviderId, "jules"> {
+    const selected = this.selectProviderForTask(task, scope);
     if (selected !== "jules") {
       return selected;
     }
 
-    const settings = this.deps.getDashboardSettings();
+    const settings = this.deps.getDashboardSettings(scope);
     const fallback = (["gemini", "codex", "claude-code"] as const).find((provider) => settings.aiProvider.providers[provider].enabled);
     return fallback || "codex";
   }
@@ -115,10 +115,11 @@ export class TaskService {
     baseBranch: string,
     repoPath: string,
     sprintNumber: number,
+    settingsScope?: DashboardSettingsScope,
     dispatchId?: string,
     taskRunId?: string,
   ): Promise<JulesSession> {
-    const provider = this.selectProviderForTask(task);
+    const provider = this.selectProviderForTask(task, settingsScope);
 
     if (provider !== "jules") {
       const session = await this.deps.cliWorkflowService.startTask({
@@ -127,6 +128,7 @@ export class TaskService {
         repoPath,
         featureBranch: baseBranch,
         sprintNumber,
+        settingsScope,
         dispatchId,
         taskRunId,
       });

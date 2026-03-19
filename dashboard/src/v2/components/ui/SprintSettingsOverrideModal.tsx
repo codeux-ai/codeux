@@ -202,7 +202,7 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
               Loading sprint overrides...
             </div>
           ) : (
-            <ProjectSettingsEditor settings={settings} onChange={setSettings} sources={sources} />
+            <ProjectSettingsEditor settings={settings} onChange={setSettings} sources={sources} editingScope="sprint" />
           )}
         </div>
       </div>

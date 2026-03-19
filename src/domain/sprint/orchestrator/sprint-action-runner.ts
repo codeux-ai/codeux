@@ -23,6 +23,7 @@ export class SprintActionRunner {
     repoPath: string;
     defaultFeatureBranch: string;
     defaultBranch: string;
+    featureBranchPrefix: string;
     githubMode: "REMOTE" | "LOCAL";
     retryFailed: boolean;
     loopSteps: SprintLoopStepSettings;
@@ -42,6 +43,7 @@ export class SprintActionRunner {
         repoPath: options.repoPath,
         defaultFeatureBranch: options.defaultFeatureBranch,
         defaultBranch: options.defaultBranch,
+        featureBranchPrefix: options.featureBranchPrefix,
         githubMode: options.githubMode,
         retryFailed: options.retryFailed,
         loopSteps: options.loopSteps,
@@ -67,7 +69,7 @@ export class SprintActionRunner {
       ciIntelligence: options.ciIntelligence,
       githubMode: options.githubMode,
       defaultBranch: options.defaultBranch,
-      featureBranchPrefix: this.deps.getDashboardSettings().git.featureBranchPrefix,
+      featureBranchPrefix: options.featureBranchPrefix,
       sprintRunId: options.sprintRunId,
     });
 
@@ -88,6 +90,7 @@ export class SprintActionRunner {
     repoPath: string;
     defaultFeatureBranch: string;
     defaultBranch: string;
+    featureBranchPrefix: string;
     githubMode: "REMOTE" | "LOCAL";
     retryFailed: boolean;
     loopSteps: SprintLoopStepSettings;
@@ -110,7 +113,7 @@ export class SprintActionRunner {
       ciIntelligence: options.ciIntelligence,
       githubMode: options.githubMode,
       defaultBranch: options.defaultBranch,
-      featureBranchPrefix: this.deps.getDashboardSettings().git.featureBranchPrefix,
+      featureBranchPrefix: options.featureBranchPrefix,
     });
 
     return await this.composeReport({

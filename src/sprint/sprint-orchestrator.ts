@@ -11,6 +11,7 @@ import type {
   AutomationInterventionsSettings,
   CiIntelligenceSettings,
   DashboardSettings,
+  DashboardSettingsScope,
   GitTrackingStatus,
   JulesSession,
   Settings,
@@ -60,7 +61,7 @@ export interface SprintOrchestratorDependencies {
     },
   ) => Promise<StartSprintDispatchResult>;
   updateLastStatus: (status: any) => void;
-  getDashboardSettings: () => DashboardSettings;
+  getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
   isJulesApiConfigured: () => boolean;
   approveSessionPlan: (sessionId: string) => Promise<unknown>;
   sendSessionMessage: (sessionId: string, prompt: string) => Promise<unknown>;
@@ -101,24 +102,24 @@ export class SprintOrchestrator {
     return this.deps.getDashboardPort?.() || (this.deps.settings.dashboardPort as number) || this.deps.dashboardPort;
   }
 
-  private getLoopStepSettings(): SprintLoopStepSettings {
+  private getLoopStepSettings(dashboardSettings: DashboardSettings): SprintLoopStepSettings {
     return {
       ...DEFAULT_SPRINT_LOOP_STEP_SETTINGS,
-      ...this.deps.getDashboardSettings().sprintLoopSteps,
+      ...dashboardSettings.sprintLoopSteps,
     };
   }
 
-  private getCiIntelligenceSettings(): CiIntelligenceSettings {
+  private getCiIntelligenceSettings(dashboardSettings: DashboardSettings): CiIntelligenceSettings {
     return {
       ...DEFAULT_CI_INTELLIGENCE_SETTINGS,
-      ...this.deps.getDashboardSettings().ciIntelligence,
+      ...dashboardSettings.ciIntelligence,
     };
   }
 
-  private getAutomationInterventionsSettings(): AutomationInterventionsSettings {
+  private getAutomationInterventionsSettings(dashboardSettings: DashboardSettings): AutomationInterventionsSettings {
     return {
       ...DEFAULT_AUTOMATION_INTERVENTIONS_SETTINGS,
-      ...this.deps.getDashboardSettings().automationInterventions,
+      ...dashboardSettings.automationInterventions,
     };
   }
 
@@ -254,7 +255,12 @@ export class SprintOrchestrator {
   }
 
   async execute(args: SprintAgentArgs): Promise<any> {
-    const dashboardSettings = this.deps.getDashboardSettings();
+    const fallbackDashboardSettings = this.deps.getDashboardSettings();
+    const initialExecutionContext = this.deps.sprintExecutionStateService.resolveContext(args, fallbackDashboardSettings);
+    const dashboardSettings = this.deps.getDashboardSettings({
+      projectId: initialExecutionContext.project.id,
+      sprintId: initialExecutionContext.sprint.id,
+    });
     const executionContext = this.deps.sprintExecutionStateService.resolveContext(args, dashboardSettings);
     const repoPath = executionContext.repoPath;
     const planningTarget = `${executionContext.project.name} / ${executionContext.sprint.name}`;
@@ -263,10 +269,11 @@ export class SprintOrchestrator {
     const defaultBranch = executionContext.defaultBranch;
     const githubMode = this.deps.settings.githubMode === "LOCAL" ? "LOCAL" : "REMOTE";
     const retryFailed = args.retry_failed !== false;
-    const loopSteps = this.getLoopStepSettings();
-    const ciIntelligence = this.getCiIntelligenceSettings();
+    const loopSteps = this.getLoopStepSettings(dashboardSettings);
+    const ciIntelligence = this.getCiIntelligenceSettings(dashboardSettings);
     const automationLevel = dashboardSettings.automationLevel;
-    const automationInterventions = this.getAutomationInterventionsSettings();
+    const automationInterventions = this.getAutomationInterventionsSettings(dashboardSettings);
+    const featureBranchPrefix = dashboardSettings.git.featureBranchPrefix;
 
     const enabledProviders = Object.entries(dashboardSettings.aiProvider.providers)
       .filter(([, provider]) => provider.enabled)
@@ -358,6 +365,7 @@ export class SprintOrchestrator {
           repoPath,
           defaultFeatureBranch,
           defaultBranch,
+          featureBranchPrefix,
           githubMode,
           retryFailed,
           loopSteps,
@@ -449,6 +457,7 @@ export class SprintOrchestrator {
               repoPath,
               defaultFeatureBranch,
               defaultBranch,
+              featureBranchPrefix,
               githubMode,
               retryFailed,
               loopSteps,

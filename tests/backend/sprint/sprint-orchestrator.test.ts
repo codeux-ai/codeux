@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { SprintOrchestrator } from "../../../src/sprint/sprint-orchestrator.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 describe("sprint-orchestrator", () => {
     it("handles renderMainMergeCiFeedback when getCiStatusForScope is not provided", async () => {
@@ -20,7 +21,12 @@ describe("sprint-orchestrator", () => {
                 hasPlannedTasks: vi.fn().mockReturnValue(true),
                 loadSubtasks: vi.fn().mockResolvedValue([]),
             },
-            getDashboardSettings: vi.fn().mockReturnValue({ sprintLoopSteps: { planningPreflight: false }, ciIntelligence: {}, aiProvider: { providers: {} } }),
+            getDashboardSettings: vi.fn().mockReturnValue({
+                ...DEFAULT_DASHBOARD_SETTINGS,
+                sprintLoopSteps: { ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps, planningPreflight: false },
+                ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence },
+                aiProvider: { ...DEFAULT_DASHBOARD_SETTINGS.aiProvider, providers: {} as any },
+            }),
         };
         const orch = new SprintOrchestrator(deps as any);
 
@@ -50,7 +56,21 @@ describe("sprint-orchestrator", () => {
                 hasPlannedTasks: vi.fn().mockReturnValue(true),
                 loadSubtasks: vi.fn().mockResolvedValue([]),
             },
-            getDashboardSettings: vi.fn().mockReturnValue({ sprintLoopSteps: { planningPreflight: false }, ciIntelligence: {}, aiProvider: { providers: { gemini: { enabled: true } } } }),
+            getDashboardSettings: vi.fn().mockReturnValue({
+                ...DEFAULT_DASHBOARD_SETTINGS,
+                sprintLoopSteps: { ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps, planningPreflight: false },
+                ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence },
+                aiProvider: {
+                    ...DEFAULT_DASHBOARD_SETTINGS.aiProvider,
+                    providers: {
+                        ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers,
+                        gemini: {
+                            ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.gemini,
+                            enabled: true,
+                        },
+                    },
+                },
+            }),
         };
         const orch = new SprintOrchestrator(deps as any);
 

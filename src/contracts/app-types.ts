@@ -483,6 +483,11 @@ export interface DashboardSettings {
   mcpTools: McpToolToggle[];
 }
 
+export interface DashboardSettingsScope {
+  projectId?: string;
+  sprintId?: string | null;
+}
+
 export interface GitStatusCheck {
   name: string;
   status: string;

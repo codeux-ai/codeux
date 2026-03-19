@@ -40,13 +40,17 @@ export class SprintTaskDispatchService {
     }
 
     const preferredExecutor = taskRecord.executorType;
+    const settingsScope = {
+      projectId: args.projectId,
+      sprintId: args.sprintId,
+    };
     const provider = preferredExecutor === "mcp_worker"
       ? null
       : preferredExecutor === "jules"
       ? "jules"
       : preferredExecutor === "docker_cli"
-        ? this.taskService.selectCliProviderForTask(args.task)
-        : this.taskService.selectProviderForTask(args.task);
+        ? this.taskService.selectCliProviderForTask(args.task, settingsScope)
+        : this.taskService.selectProviderForTask(args.task, settingsScope);
     const executorType: TaskDispatchExecutorType = preferredExecutor === "mcp_worker"
       ? "mcp_worker"
       : preferredExecutor === "jules"
@@ -108,6 +112,7 @@ export class SprintTaskDispatchService {
         args.featureBranch,
         args.repoPath,
         args.sprintNumber,
+        settingsScope,
         dispatch.id,
         taskRun.id,
       );

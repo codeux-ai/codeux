@@ -134,6 +134,7 @@ describe("JulesAgentServer", () => {
         ...DEFAULT_DASHBOARD_SETTINGS,
         ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence, enabled: true, waitForCiBeforeFeatureMerge: true }
       };
+      vi.spyOn((server as any).projectManagementRepository, "getSelectedProjectId").mockReturnValue(null);
       vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectStatus").mockReturnValue({
         subtasks: [{ id: "T1", status: "RUNNING" } as any],
         feature_branch: "feat/test",
@@ -144,7 +145,38 @@ describe("JulesAgentServer", () => {
       expect(request.featureBranch).toBe("feat/test");
     });
 
+    it("should respect selected project overrides when deciding feature PR tracking", () => {
+      const runtimeContext = (server as any).runtimeContext;
+      runtimeContext.dashboardSettings = {
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence, enabled: true, waitForCiBeforeFeatureMerge: true }
+      };
+      vi.spyOn((server as any).projectManagementRepository, "getSelectedProjectId").mockReturnValue("project-1");
+      vi.spyOn((server as any).settingsRepository, "resolveProjectDashboardSettings").mockReturnValue({
+        settings: {
+          ...DEFAULT_DASHBOARD_SETTINGS,
+          ciIntelligence: {
+            ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
+            enabled: true,
+            waitForCiBeforeFeatureMerge: false,
+          },
+        },
+        sources: {},
+      });
+      vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectStatus").mockReturnValue({
+        subtasks: [{ id: "T1", status: "RUNNING" } as any],
+        feature_branch: "feat/test",
+        timestamp: "2026-03-09T00:00:00.000Z",
+      });
+
+      const request = (server as any).resolveGitTrackingRequest();
+
+      expect(request.scope).toBe("MAIN_BRANCH_CI");
+      expect((server as any).settingsRepository.resolveProjectDashboardSettings).toHaveBeenCalledWith("project-1");
+    });
+
     it("should return MAIN_BRANCH_CI otherwise", () => {
+      vi.spyOn((server as any).projectManagementRepository, "getSelectedProjectId").mockReturnValue(null);
       vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectStatus").mockReturnValue({
         subtasks: [],
         feature_branch: undefined,

@@ -8,6 +8,7 @@ import { SprintTaskDispatchService } from "../../services/sprint-task-dispatch-s
 import { WorkerTaskDispatchService } from "../../services/worker-task-dispatch-service.js";
 import { VirtualWorkerService } from "../../services/virtual-worker-service.js";
 import { SprintOrchestrator } from "../../sprint/sprint-orchestrator.js";
+import type { DashboardSettings, DashboardSettingsScope } from "../../contracts/app-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 
 export interface SprintDependencies {
@@ -38,12 +39,25 @@ export function createSprintDependencies(
     activeDispatchRegistry,
   } = coreDeps;
 
+  const resolveDashboardSettings = (scope?: DashboardSettingsScope): DashboardSettings => {
+    const projectId = scope?.projectId?.trim();
+    const sprintId = scope?.sprintId?.trim();
+
+    if (projectId) {
+      return sprintId
+        ? coreDeps.settingsRepository.resolveSprintDashboardSettings(projectId, sprintId).settings
+        : coreDeps.settingsRepository.resolveProjectDashboardSettings(projectId).settings;
+    }
+
+    return context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
+  };
+
   const cliWorkflowService = new CliWorkflowService({
     sessionTracking,
     executionRepository,
     projectManagementRepository,
     activeDispatchRegistry,
-    getDashboardSettings: () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
+    getDashboardSettings: resolveDashboardSettings,
     agentPresetSyncService,
     getGithubToken: () => context.getEffectiveGithubToken(),
     logger: logger.child({ component: "cli-workflow-service" }),
@@ -57,7 +71,7 @@ export function createSprintDependencies(
         repoPath: args.repoPath,
         requestedSourceId: args.sourceId,
       }),
-    getDashboardSettings: () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
+    getDashboardSettings: resolveDashboardSettings,
     isJulesApiConfigured: () => context.isJulesApiConfigured(),
     cliWorkflowService,
     logger: logger.child({ component: "task-service" }),
@@ -84,7 +98,7 @@ export function createSprintDependencies(
       coreDeps.workerEndpointRepository,
       coreDeps.projectWorkerAssignmentService,
       projectAttentionService,
-      () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
+      resolveDashboardSettings,
       (projectId, sprintId) => (
         sprintId
           ? coreDeps.settingsRepository.resolveSprintDashboardSettings(projectId, sprintId).settings.workers.executionMode
@@ -133,7 +147,7 @@ export function createSprintDependencies(
       projectRuntimeRepository.syncDashboardStatus(status);
       context.runtimeContext.lastStatus = status;
     },
-    getDashboardSettings: () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
+    getDashboardSettings: resolveDashboardSettings,
     isJulesApiConfigured: () => context.isJulesApiConfigured(),
     approveSessionPlan: (sessionId) => julesApi.approveSessionPlan(sessionId),
     sendSessionMessage: (sessionId, prompt) => julesApi.sendSessionMessage(sessionId, prompt),

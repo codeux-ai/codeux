@@ -1,11 +1,17 @@
 import type { FunctionComponent, ComponentChildren } from "preact";
 import type { ProjectSettings, SettingsValueSource, ThinkingMode } from "../../../types.js";
-import { getSectionSource } from "../../lib/settings-view-models.js";
+import {
+  getFieldSource,
+  getFieldSourceLabel,
+  getSectionSource,
+  type SettingsEditorScope,
+} from "../../lib/settings-view-models.js";
 
 interface ProjectSettingsEditorProps {
   settings: ProjectSettings;
   onChange: (next: ProjectSettings) => void;
   sources?: Record<string, SettingsValueSource>;
+  editingScope?: SettingsEditorScope;
 }
 
 const Card: FunctionComponent<{ title: string; description: string; badge?: string; children: ComponentChildren }> = ({
@@ -30,10 +36,27 @@ const Card: FunctionComponent<{ title: string; description: string; badge?: stri
   </section>
 );
 
-const Row: FunctionComponent<{ label: string; description: string; children: ComponentChildren }> = ({ label, description, children }) => (
+const OverrideBadge: FunctionComponent<{ label: string }> = ({ label }) => (
+  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
+    <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black leading-none text-white dark:bg-amber-300 dark:text-void-900">
+      !
+    </span>
+    {label}
+  </span>
+);
+
+const Row: FunctionComponent<{ label: string; description: string; children: ComponentChildren; badge?: string }> = ({
+  label,
+  description,
+  children,
+  badge,
+}) => (
   <div className="flex flex-col gap-3 rounded-[1.35rem] border border-black/[0.05] bg-black/[0.015] px-4 py-4 dark:border-white/[0.05] dark:bg-white/[0.02] lg:flex-row lg:items-center lg:justify-between">
     <div className="max-w-2xl">
-      <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label}</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label}</div>
+        {badge ? <OverrideBadge label={badge} /> : null}
+      </div>
       <div className="mt-1 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">{description}</div>
     </div>
     <div className="flex shrink-0 items-center gap-3">{children}</div>
@@ -132,8 +155,15 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
   settings,
   onChange,
   sources,
+  editingScope = "project",
 }) => {
   const update = (patch: Partial<ProjectSettings>) => onChange({ ...settings, ...patch });
+  const getBadge = (path: string): string | undefined => {
+    if (!sources) {
+      return undefined;
+    }
+    return getFieldSourceLabel(getFieldSource(sources, path), editingScope) ?? undefined;
+  };
 
   const automationSource = sources ? getSectionSource(sources, "automationLevel") : undefined;
   const providerSource = sources ? getSectionSource(sources, "aiProvider") : undefined;
@@ -151,7 +181,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         description="Project-level operating posture and intervention policy."
         badge={automationSource ? sourceLabel(automationSource) : undefined}
       >
-        <Row label="Automation level" description="Choose whether the system runs autonomously or pauses for operator approval.">
+        <Row label="Automation level" description="Choose whether the system runs autonomously or pauses for operator approval." badge={getBadge("automationLevel")}>
           <SelectField
             value={settings.automationLevel}
             onChange={(value) => update({ automationLevel: value as ProjectSettings["automationLevel"] })}
@@ -162,7 +192,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             ]}
           />
         </Row>
-        <Row label="Auto-approve plans" description="Approve planning checkpoints automatically when the sprint asks for plan confirmation.">
+        <Row label="Auto-approve plans" description="Approve planning checkpoints automatically when the sprint asks for plan confirmation." badge={getBadge("automationInterventions.autoApprovePlan")}>
           <ToggleField
             checked={settings.automationInterventions.autoApprovePlan}
             onChange={(value) => update({
@@ -173,7 +203,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             })}
           />
         </Row>
-        <Row label="Auto-answer clarifications" description="Use the clarification template when a task asks for routine clarification.">
+        <Row label="Auto-answer clarifications" description="Use the clarification template when a task asks for routine clarification." badge={getBadge("automationInterventions.autoAnswerClarification")}>
           <ToggleField
             checked={settings.automationInterventions.autoAnswerClarification}
             onChange={(value) => update({
@@ -184,7 +214,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             })}
           />
         </Row>
-        <Row label="Auto-resume paused runs" description="Resume paused sessions automatically after a transient pause condition clears.">
+        <Row label="Auto-resume paused runs" description="Resume paused sessions automatically after a transient pause condition clears." badge={getBadge("automationInterventions.autoResumePaused")}>
           <ToggleField
             checked={settings.automationInterventions.autoResumePaused}
             onChange={(value) => update({
@@ -196,7 +226,10 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           />
         </Row>
         <div>
-          <div className="mb-2 text-sm font-semibold text-slate-800 dark:text-slate-100">Clarification answer template</div>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">Clarification answer template</div>
+            {getBadge("automationInterventions.clarificationAnswerTemplate") ? <OverrideBadge label={getBadge("automationInterventions.clarificationAnswerTemplate")!} /> : null}
+          </div>
           <TextAreaField
             value={settings.automationInterventions.clarificationAnswerTemplate}
             onChange={(value) => update({
@@ -215,7 +248,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         badge={providerSource ? sourceLabel(providerSource) : undefined}
       >
         <div className="grid gap-4 lg:grid-cols-2">
-          <Row label="Primary provider" description="Default provider when the strategy is manual.">
+          <Row label="Primary provider" description="Default provider when the strategy is manual." badge={getBadge("aiProvider.provider")}>
             <SelectField
               value={settings.aiProvider.provider}
               onChange={(value) => update({
@@ -232,7 +265,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               ]}
             />
           </Row>
-          <Row label="Routing strategy" description="Manual pins one provider, weighted spreads work, orchestrator can make routing decisions.">
+          <Row label="Routing strategy" description="Manual pins one provider, weighted spreads work, orchestrator can make routing decisions." badge={getBadge("aiProvider.strategy")}>
             <SelectField
               value={settings.aiProvider.strategy}
               onChange={(value) => update({
@@ -255,11 +288,14 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               key={providerId}
               className="rounded-[1.5rem] border border-black/[0.06] bg-black/[0.015] p-4 dark:border-white/[0.06] dark:bg-white/[0.02]"
             >
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{providerLabels[providerId as keyof typeof providerLabels]}</div>
-                  <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Model choice, weight, and thinking mode.</div>
-                </div>
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{providerLabels[providerId as keyof typeof providerLabels]}</div>
+                      {getBadge(`aiProvider.providers.${providerId}.enabled`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.enabled`)!} /> : null}
+                    </div>
+                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Model choice, weight, and thinking mode.</div>
+                  </div>
                 <ToggleField
                   checked={provider.enabled}
                   onChange={(value) => update({
@@ -278,7 +314,10 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
-                  <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Model</div>
+                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                    <span>Model</span>
+                    {getBadge(`aiProvider.providers.${providerId}.model`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.model`)!} /> : null}
+                  </div>
                   <TextField
                     value={provider.model}
                     onChange={(value) => update({
@@ -297,7 +336,10 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                   />
                 </div>
                 <div>
-                  <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Thinking mode</div>
+                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                    <span>Thinking mode</span>
+                    {getBadge(`aiProvider.providers.${providerId}.thinkingMode`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.thinkingMode`)!} /> : null}
+                  </div>
                   <SelectField
                     value={provider.thinkingMode}
                     onChange={(value) => update({
@@ -316,7 +358,10 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                   />
                 </div>
                 <div>
-                  <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Weight</div>
+                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                    <span>Weight</span>
+                    {getBadge(`aiProvider.providers.${providerId}.weight`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.weight`)!} /> : null}
+                  </div>
                   <NumberField
                     value={provider.weight}
                     min={0}
@@ -347,7 +392,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         badge={gitSource ? sourceLabel(gitSource) : undefined}
       >
         <div className="grid gap-4 lg:grid-cols-2">
-          <Row label="GitHub mode" description="Local disables PR intelligence, remote enables PR and CI awareness.">
+          <Row label="GitHub mode" description="Local disables PR intelligence, remote enables PR and CI awareness." badge={getBadge("git.githubMode")}>
             <SelectField
               value={settings.git.githubMode}
               onChange={(value) => update({
@@ -362,7 +407,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               ]}
             />
           </Row>
-          <Row label="Default branch" description="Base branch used for sprint creation and merge targets.">
+          <Row label="Default branch" description="Base branch used for sprint creation and merge targets." badge={getBadge("git.defaultBranch")}>
             <TextField
               value={settings.git.defaultBranch}
               onChange={(value) => update({
@@ -374,7 +419,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               mono
             />
           </Row>
-          <Row label="Feature branch prefix" description="Prefix used when feature branches are generated automatically.">
+          <Row label="Feature branch prefix" description="Prefix used when feature branches are generated automatically." badge={getBadge("git.featureBranchPrefix")}>
             <TextField
               value={settings.git.featureBranchPrefix}
               onChange={(value) => update({
@@ -386,7 +431,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               mono
             />
           </Row>
-          <Row label="Sprint branch scheme" description="Template used when naming sprint branches.">
+          <Row label="Sprint branch scheme" description="Template used when naming sprint branches." badge={getBadge("git.sprintBranchScheme")}>
             <TextField
               value={settings.git.sprintBranchScheme}
               onChange={(value) => update({
@@ -399,7 +444,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             />
           </Row>
         </div>
-        <Row label="Auto-create PRs" description="Open pull requests automatically for remote git workflows.">
+        <Row label="Auto-create PRs" description="Open pull requests automatically for remote git workflows." badge={getBadge("git.autoCreatePr")}>
           <ToggleField
             checked={settings.git.autoCreatePr}
             onChange={(value) => update({
@@ -428,7 +473,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           ["resolveMergeConflicts", "Resolve feature merge conflicts", "Escalate feature-branch merge conflicts to the connected worker with branch and prompt context."],
           ["waitForJulesCiAutofix", "Wait for Jules autofix", "Allow Jules to attempt CI autofix before escalating."],
         ].map(([field, label, description]) => (
-          <Row key={field} label={label} description={description}>
+          <Row key={field} label={label} description={description} badge={getBadge(`ciIntelligence.${field}`)}>
             <ToggleField
               checked={settings.ciIntelligence[field as keyof ProjectSettings["ciIntelligence"]] as boolean}
               onChange={(value) => update({
@@ -441,7 +486,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           </Row>
         ))}
         <div className="grid gap-4 lg:grid-cols-2">
-          <Row label="Autofix max retries" description="Maximum retries before CI autofix escalates to supervision.">
+          <Row label="Autofix max retries" description="Maximum retries before CI autofix escalates to supervision." badge={getBadge("ciIntelligence.julesCiAutofixMaxRetries")}>
             <NumberField
               value={settings.ciIntelligence.julesCiAutofixMaxRetries}
               min={0}
@@ -454,7 +499,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
             />
           </Row>
-          <Row label="Feature PR auto-merge" description="Policy for merging feature PRs after checks and comments are satisfied.">
+          <Row label="Feature PR auto-merge" description="Policy for merging feature PRs after checks and comments are satisfied." badge={getBadge("ciIntelligence.featurePrAutoMergeMode")}>
             <SelectField
               value={settings.ciIntelligence.featurePrAutoMergeMode}
               onChange={(value) => update({
@@ -470,7 +515,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               ]}
             />
           </Row>
-          <Row label="Main branch auto-merge" description="Policy for merging the main branch PR after checks and comments are satisfied.">
+          <Row label="Main branch auto-merge" description="Policy for merging the main branch PR after checks and comments are satisfied." badge={getBadge("ciIntelligence.mainBranchAutoMergeMode")}>
             <SelectField
               value={settings.ciIntelligence.mainBranchAutoMergeMode}
               onChange={(value) => update({
@@ -495,7 +540,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         badge={workerSource ? sourceLabel(workerSource) : undefined}
       >
         <div className="grid gap-4 lg:grid-cols-2">
-          <Row label="Worker mode" description="Connected workers stay in listen mode. Virtual workers wake only when worker work exists, run one unit of work, then shut down.">
+          <Row label="Worker mode" description="Connected workers stay in listen mode. Virtual workers wake only when worker work exists, run one unit of work, then shut down." badge={getBadge("workers.executionMode")}>
             <SelectField
               value={settings.workers.executionMode}
               onChange={(value) => update({
@@ -510,7 +555,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               ]}
             />
           </Row>
-          <Row label="Virtual worker CLI" description="Preferred provider when worker mode is virtual. Jules is intentionally excluded from worker execution.">
+          <Row label="Virtual worker CLI" description="Preferred provider when worker mode is virtual. Jules is intentionally excluded from worker execution." badge={getBadge("workers.virtualWorkerProvider")}>
             <SelectField
               value={settings.workers.virtualWorkerProvider}
               onChange={(value) => update({
@@ -547,7 +592,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             ["statusTable", "Status table"],
             ["watchLoop", "Watch loop"],
           ].map(([field, label]) => (
-            <Row key={field} label={label} description={`Toggle the ${label.toLowerCase()} phase for this scope.`}>
+            <Row key={field} label={label} description={`Toggle the ${label.toLowerCase()} phase for this scope.`} badge={getBadge(`sprintLoopSteps.${field}`)}>
               <ToggleField
                 checked={settings.sprintLoopSteps[field as keyof ProjectSettings["sprintLoopSteps"]] as boolean}
                 onChange={(value) => update({
@@ -561,7 +606,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           ))}
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
-          <Row label="Watch loop interval" description="Polling interval in seconds for the orchestration watch loop.">
+          <Row label="Watch loop interval" description="Polling interval in seconds for the orchestration watch loop." badge={getBadge("sprintLoopSteps.watchLoopIntervalSeconds")}>
             <NumberField
               value={settings.sprintLoopSteps.watchLoopIntervalSeconds}
               min={1}
@@ -574,7 +619,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
             />
           </Row>
-          <Row label="Watch output interval" description="Maximum watch-loop runtime before the server returns progress and rerun guidance.">
+          <Row label="Watch output interval" description="Maximum watch-loop runtime before the server returns progress and rerun guidance." badge={getBadge("sprintLoopSteps.watchLoopOutputIntervalSeconds")}>
             <NumberField
               value={settings.sprintLoopSteps.watchLoopOutputIntervalSeconds}
               min={60}
@@ -596,7 +641,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         badge={cliSource ? sourceLabel(cliSource) : undefined}
       >
         <div className="grid gap-4 lg:grid-cols-2">
-          <Row label="Execution mode" description="Run provider CLIs on the host or inside a containerized runtime.">
+          <Row label="Execution mode" description="Run provider CLIs on the host or inside a containerized runtime." badge={getBadge("cliWorkflow.executionMode")}>
             <SelectField
               value={settings.cliWorkflow.executionMode}
               onChange={(value) => update({
@@ -611,7 +656,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               ]}
             />
           </Row>
-          <Row label="Container image" description="Container image used when execution mode is Docker.">
+          <Row label="Container image" description="Container image used when execution mode is Docker." badge={getBadge("cliWorkflow.containerImage")}>
             <TextField
               value={settings.cliWorkflow.containerImage}
               onChange={(value) => update({
@@ -623,7 +668,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               mono
             />
           </Row>
-          <Row label="Setup script path" description="Optional bootstrap script relative to the repo or runtime root.">
+          <Row label="Setup script path" description="Optional bootstrap script relative to the repo or runtime root." badge={getBadge("cliWorkflow.containerSetupScriptPath")}>
             <TextField
               value={settings.cliWorkflow.containerSetupScriptPath}
               onChange={(value) => update({
@@ -635,7 +680,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               mono
             />
           </Row>
-          <Row label="Cache setup as image" description="Build and reuse a derived Docker image keyed by the base image and setup script contents.">
+          <Row label="Cache setup as image" description="Build and reuse a derived Docker image keyed by the base image and setup script contents." badge={getBadge("cliWorkflow.containerCacheSetupScriptImage")}>
             <ToggleField
               checked={settings.cliWorkflow.containerCacheSetupScriptImage}
               onChange={(value) => update({
@@ -659,7 +704,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             ["containerMountCodexAuth", "Mount Codex auth"],
             ["containerMountClaudeCodeAuth", "Mount Claude Code auth"],
           ].map(([field, label]) => (
-            <Row key={field} label={label} description={`Enable ${label.toLowerCase()} for this scope.`}>
+            <Row key={field} label={label} description={`Enable ${label.toLowerCase()} for this scope.`} badge={getBadge(`cliWorkflow.${field}`)}>
               <ToggleField
                 checked={settings.cliWorkflow[field as keyof ProjectSettings["cliWorkflow"]] as boolean}
                 onChange={(value) => update({
@@ -679,7 +724,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             ["containerCodexAuthPath", "Codex auth path"],
             ["containerClaudeCodeAuthPath", "Claude Code auth path"],
           ].map(([field, label]) => (
-            <Row key={field} label={label} description={`Runtime path mounted for ${label.toLowerCase()}.`}>
+            <Row key={field} label={label} description={`Runtime path mounted for ${label.toLowerCase()}.`} badge={getBadge(`cliWorkflow.${field}`)}>
               <TextField
                 value={settings.cliWorkflow[field as keyof ProjectSettings["cliWorkflow"]] as string}
                 onChange={(value) => update({
@@ -706,6 +751,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               key={skill.name}
               label={skill.name}
               description={skill.isInternal ? "Built-in skill managed by Sprint OS." : "Project skill discovered from local configuration."}
+              badge={getBadge("skills")}
             >
               <ToggleField
                 checked={skill.enabled}

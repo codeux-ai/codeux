@@ -52,6 +52,7 @@ Runtime resolution:
 - project settings inherit live system defaults; they do not snapshot them
 - project saves are diffed against the current system defaults, not hardcoded app defaults
 - sprint settings are sparse temporary overrides on top of resolved project settings
+- orchestration, worker dispatch, and selected-project CI tracking resolve effective settings for the active project or sprint at runtime instead of using only the startup system snapshot
 - the old global `/api/settings` contract is removed in favor of explicit scoped endpoints
 
 ## Persisted Scoped Settings Model
@@ -113,6 +114,10 @@ Effective settings APIs:
 The effective endpoints return:
 - resolved `DashboardSettings`
 - per-field source metadata (`system`, `project`, or `sprint`)
+
+Dashboard behavior:
+- project settings now render a per-setting override badge only when a control is actually overridden at project scope
+- sprint override dialogs use the same field-level source metadata and show override badges only for sprint-local overrides
 
 `aiProvider` contains:
 - `provider` (`jules|gemini|codex|claude-code`)

@@ -64,7 +64,7 @@ describe("WorkerDispatchExecutionService", () => {
       title: "Implement worker",
       prompt: "Build the worker client",
       depends_on: ["task-0"],
-    }), undefined, "feature/sprint-4", "/repo", 4, "dispatch-1", "task-run-1");
+    }), undefined, "feature/sprint-4", "/repo", 4, { projectId: "project-1", sprintId: "sprint-1" }, "dispatch-1", "task-run-1");
     expect(result.session.provider).toBe("codex");
   });
 
