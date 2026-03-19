@@ -117,6 +117,33 @@ it("should retry fetch after repairing stale git state on first failure", async 
       const addCalls = calls.filter(c => c[1][0] === "worktree" && c[1][1] === "add");
       expect(addCalls).toHaveLength(0);
     });
+
+    it("should never remove the primary repo when the branch is checked out there", async () => {
+      vi.mocked(fs.access).mockRejectedValue(new Error("not found"));
+      vi.mocked(runCommandStrict).mockImplementation(async (_cmd, args) => {
+        if (args[0] === "worktree" && args[1] === "list") {
+          return {
+            ok: true,
+            stdout: [
+              "worktree /repo",
+              "branch refs/heads/worker",
+              "",
+              "worktree /linked",
+              "branch refs/heads/other",
+              "",
+            ].join("\n"),
+            stderr: "",
+          };
+        }
+        return { ok: true, stdout: "", stderr: "" };
+      });
+
+      const result = await manager.prepareWorktree("/repo", "/final", "worker", "feature");
+
+      expect(result).toEqual({ worktreePath: "/final", resumed: false });
+      expect(runCommandStrict).not.toHaveBeenCalledWith("git", ["worktree", "remove", "--force", "/repo"], "/repo");
+      expect(fs.rm).not.toHaveBeenCalledWith("/repo", { recursive: true, force: true });
+    });
   });
 
   describe("pathExists", () => {
@@ -136,6 +163,14 @@ it("should retry fetch after repairing stale git state on first failure", async 
       await (manager as any).removeWorktreeInternal("/repo", "/worktree");
       expect(runCommandStrict).toHaveBeenCalledWith("git", ["worktree", "remove", "--force", "/worktree"], "/repo");
       expect(fs.rm).toHaveBeenCalledWith("/worktree", { recursive: true, force: true });
+    });
+
+    it("should refuse to remove the primary repo path", async () => {
+      await expect((manager as any).removeWorktreeInternal("/repo", "/repo")).rejects.toThrow(
+        "Refusing to remove worktree at /repo: path resolves to the protected repository root /repo.",
+      );
+      expect(runCommandStrict).not.toHaveBeenCalled();
+      expect(fs.rm).not.toHaveBeenCalled();
     });
   });
 
@@ -191,6 +226,19 @@ branch refs/heads/other-branch`;
 
     it("should return undefined if branch not found", async () => {
       const gitOutput = `worktree /path/to/other
+branch refs/heads/other-branch`;
+
+      vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: gitOutput, stderr: "" });
+
+      const res = await (manager as any).findWorktreePathForBranch("/repo", "expected-branch");
+      expect(res).toBeUndefined();
+    });
+
+    it("should ignore the primary repo checkout when scanning worktrees", async () => {
+      const gitOutput = `worktree /repo
+branch refs/heads/expected-branch
+
+worktree /path/to/other
 branch refs/heads/other-branch`;
 
       vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: gitOutput, stderr: "" });

@@ -171,6 +171,11 @@ When the watch loop finishes in any state other than manual-attention pause:
 
 - sprint-level `manual_attention` items for that sprint run resolve automatically
 
+When dashboard GitHub polling later observes that a merge-conflict-derived attention item now points at a PR that is merged or no longer `DIRTY`:
+
+- the matching `merge_conflict`, `human_escalation_required`, or `dashboard_reply_required` item resolves automatically
+- this applies even after the sprint run is already completed, so stale main-merge conflict escalations do not persist forever once GitHub state has moved on
+
 This prevents stale queue entries after the system has been told to attempt recovery.
 
 ## Worker Action Tools

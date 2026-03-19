@@ -414,12 +414,175 @@ describe("JulesAgentServer", () => {
 
     describe("getGitStatus", () => {
       it("should call activityCacheService.getGitStatus", async () => {
+        vi.spyOn((server as any).projectManagementRepository, "getSelectedProjectId").mockReturnValue(null);
         (server as any).activityCacheService = {
-          getGitStatus: vi.fn().mockResolvedValue({ status: "cached" })
+          getGitStatus: vi.fn().mockResolvedValue({
+            mode: "LOCAL",
+            available: true,
+            repositoryRoot: "/repo",
+            branch: "main",
+            hasRemote: true,
+            dirty: false,
+            openPullRequests: [],
+            ciRuns: [],
+            mergedPullRequests: [],
+            tracking: { scope: "MAIN_BRANCH_CI", label: "Main Branch CI (main)", branch: "main" },
+            warnings: [],
+            lastUpdated: "2026-03-19T00:00:00.000Z",
+          })
         };
         const result = await (server as any).getGitStatus();
-        expect(result).toEqual({ status: "cached" });
+        expect(result.mode).toBe("LOCAL");
         expect((server as any).activityCacheService.getGitStatus).toHaveBeenCalled();
+      });
+
+      it("resolves main-merge conflict handoffs after GitHub shows the PR merged", async () => {
+        const trackedStatus = {
+          mode: "REMOTE",
+          available: true,
+          repositoryRoot: "/repo",
+          branch: "main",
+          hasRemote: true,
+          dirty: false,
+          openPullRequests: [],
+          ciRuns: [],
+          mergedPullRequests: [],
+          tracking: { scope: "MAIN_BRANCH_CI", label: "Main Branch CI (main)", branch: "main" },
+          warnings: [],
+          lastUpdated: "2026-03-19T00:00:00.000Z",
+        };
+        (server as any).activityCacheService = {
+          getGitStatus: vi.fn().mockResolvedValue(trackedStatus),
+        };
+
+        vi.spyOn((server as any).projectManagementRepository, "getSelectedProjectId").mockReturnValue("project-1");
+        vi.spyOn((server as any).projectAttentionRepository, "listProjectAttentionItems").mockReturnValue([
+          {
+            id: "attention-1",
+            projectId: "project-1",
+            sprintId: "sprint-1",
+            taskId: null,
+            sprintRunId: "run-1",
+            dispatchId: null,
+            attentionType: "human_escalation_required",
+            severity: "high",
+            ownerType: "human",
+            status: "open",
+            assignedWorkerEndpointId: null,
+            title: "Virtual worker escalation: Main merge conflict",
+            summaryMarkdown: "summary",
+            payload: {
+              mergeStage: "main",
+              sourceAttentionType: "merge_conflict",
+              prNumber: 268,
+              prUrl: "https://github.com/numnx/test2/pull/268",
+              featureBranch: "feature/sprint104-implementation",
+              defaultBranch: "main",
+            },
+            openedAt: "2026-03-19T00:00:00.000Z",
+            claimedAt: null,
+            resolvedAt: null,
+            updatedAt: "2026-03-19T00:00:00.000Z",
+          },
+        ]);
+        const resolveAttentionItemSpy = vi.spyOn((server as any).projectAttentionRepository, "resolveAttentionItem").mockImplementation(() => ({
+          id: "attention-1",
+        } as any));
+
+        const { GitStatusService } = await import("../../../src/services/git-status-service.js");
+        vi.spyOn(GitStatusService.prototype, "getStatus").mockResolvedValue({
+          ...trackedStatus,
+          tracking: { scope: "REPOSITORY", label: "Repository-wide", branch: null },
+          mergedPullRequests: [
+            {
+              number: 268,
+              title: "Sprint 104",
+              url: "https://github.com/numnx/test2/pull/268",
+              headRefName: "feature/sprint104-implementation",
+              baseRefName: "main",
+              mergedAt: "2026-03-19T00:05:00.000Z",
+              mergedBy: "numnx",
+            },
+          ],
+        });
+
+        await (server as any).getGitStatus();
+
+        expect(resolveAttentionItemSpy).toHaveBeenCalledWith("attention-1", {
+          status: "resolved",
+          reason: "main_merge_conflict_cleared",
+        });
+        vi.restoreAllMocks();
+      });
+
+      it("keeps main-merge conflict handoffs open while GitHub still reports DIRTY", async () => {
+        const trackedStatus = {
+          mode: "REMOTE",
+          available: true,
+          repositoryRoot: "/repo",
+          branch: "main",
+          hasRemote: true,
+          dirty: false,
+          openPullRequests: [
+            {
+              number: 268,
+              title: "Sprint 104",
+              url: "https://github.com/numnx/test2/pull/268",
+              headRefName: "feature/sprint104-implementation",
+              baseRefName: "main",
+              state: "OPEN",
+              isDraft: false,
+              author: "numnx",
+              updatedAt: "2026-03-19T00:05:00.000Z",
+              mergeStateStatus: "DIRTY",
+            },
+          ],
+          ciRuns: [],
+          mergedPullRequests: [],
+          tracking: { scope: "REPOSITORY", label: "Repository-wide", branch: null },
+          warnings: [],
+          lastUpdated: "2026-03-19T00:00:00.000Z",
+        };
+        (server as any).activityCacheService = {
+          getGitStatus: vi.fn().mockResolvedValue(trackedStatus),
+        };
+
+        vi.spyOn((server as any).projectManagementRepository, "getSelectedProjectId").mockReturnValue("project-1");
+        vi.spyOn((server as any).projectAttentionRepository, "listProjectAttentionItems").mockReturnValue([
+          {
+            id: "attention-1",
+            projectId: "project-1",
+            sprintId: "sprint-1",
+            taskId: null,
+            sprintRunId: "run-1",
+            dispatchId: null,
+            attentionType: "human_escalation_required",
+            severity: "high",
+            ownerType: "human",
+            status: "open",
+            assignedWorkerEndpointId: null,
+            title: "Virtual worker escalation: Main merge conflict",
+            summaryMarkdown: "summary",
+            payload: {
+              mergeStage: "main",
+              sourceAttentionType: "merge_conflict",
+              prNumber: 268,
+              prUrl: "https://github.com/numnx/test2/pull/268",
+              featureBranch: "feature/sprint104-implementation",
+              defaultBranch: "main",
+            },
+            openedAt: "2026-03-19T00:00:00.000Z",
+            claimedAt: null,
+            resolvedAt: null,
+            updatedAt: "2026-03-19T00:00:00.000Z",
+          },
+        ]);
+        const resolveAttentionItemSpy = vi.spyOn((server as any).projectAttentionRepository, "resolveAttentionItem");
+
+        await (server as any).getGitStatus();
+
+        expect(resolveAttentionItemSpy).not.toHaveBeenCalled();
+        vi.restoreAllMocks();
       });
     });
 

@@ -107,6 +107,11 @@ Executor mapping in this slice:
 
 That keeps the old Docker/worktree flow alive, but under DB-native dispatch records, and adds worker routing without introducing a second runtime.
 
+Worktree safety rule:
+- Sprint OS never treats the primary repository checkout as a disposable worktree
+- linked-worktree discovery now ignores the main repo path even when that checkout is on the same branch as the worker or merge-resolution branch
+- cleanup refuses to remove any path that resolves to the project repo root, or to an ancestor of that repo root
+
 ## Watch Loop
 
 Watch-loop execution now updates `sprint_runs` directly:
@@ -125,6 +130,8 @@ When all sprint tasks are settled, the same completion path now also handles the
 - it then re-checks the main merge gate and applies the configured auto-merge policy
 - `WHEN_GREEN` waits for green checks when main-CI waiting is enabled
 - `ALWAYS` can proceed without CI waiting when `waitForCiBeforeMainMerge = false`
+- Sprint OS now emits `sprint_completed` only after the main merge gate no longer reports an unresolved main-merge conflict
+- if the main merge gate is still `DIRTY`, or an open main-merge conflict handoff item for the same sprint run still exists, the sprint run pauses instead of completing
 
 ## Active Ownership
 
