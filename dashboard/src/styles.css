@@ -240,6 +240,50 @@
     border-radius: inherit;
   }
 
+  @keyframes stats-delta-pop {
+    0% {
+      opacity: 0;
+      transform: translateY(8px) scale(0.92);
+    }
+    18% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    84% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.94);
+    }
+  }
+
+  .stats-delta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 9999px;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    animation: stats-delta-pop 1.6s ease forwards;
+  }
+
+  .stats-delta-chip-positive {
+    border: 1px solid rgba(0, 224, 160, 0.18);
+    background: rgba(0, 224, 160, 0.12);
+    color: rgb(0, 171, 132);
+  }
+
+  .stats-delta-chip-negative {
+    border: 1px solid rgba(227, 0, 15, 0.18);
+    background: rgba(227, 0, 15, 0.1);
+    color: rgb(227, 0, 15);
+  }
+
   /* DAG view ambient motion */
   @keyframes dag-aurora-drift {
     0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.65; }

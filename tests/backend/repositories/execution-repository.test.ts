@@ -507,6 +507,108 @@ describe("ExecutionRepository", () => {
     });
   });
 
+  it("keeps full current sprint-run dispatch and event history for completed tasks", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Current Sprint History Project",
+      sourceType: "local",
+      sourceRef: "/workspace/current-sprint-history-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "History Sprint",
+      number: 8,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      triggerType: "dashboard",
+    });
+
+    const earlyTask = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Early completed task",
+    });
+    const earlyDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: earlyTask.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "completed",
+    });
+    const earlyRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: earlyTask.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: earlyDispatch.id,
+      provider: "codex",
+      state: "COMPLETED",
+      startedAt: "2026-03-19T10:00:00.000Z",
+      finishedAt: "2026-03-19T10:01:00.000Z",
+    });
+    executionRepository.appendTaskRunEvent(earlyRun.id, "dispatch_started", "system", null, {
+      createdAt: "2026-03-19T10:00:00.000Z",
+    });
+    executionRepository.appendTaskRunEvent(earlyRun.id, "cli_git_no_changes", "system", null, {
+      createdAt: "2026-03-19T10:01:00.000Z",
+    });
+    executionRepository.updateTaskDispatch(earlyDispatch.id, {
+      status: "completed",
+      startedAt: "2026-03-19T10:00:00.000Z",
+      finishedAt: "2026-03-19T10:01:00.000Z",
+    });
+
+    for (let index = 1; index <= 25; index += 1) {
+      const task = projectRepository.createTask(project.id, {
+        sprintId: sprint.id,
+        title: `Later task ${index}`,
+      });
+      const dispatch = executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        executorType: "docker_cli",
+        status: "completed",
+      });
+      const run = executionRepository.createTaskRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        dispatchId: dispatch.id,
+        provider: "codex",
+        state: "COMPLETED",
+        startedAt: `2026-03-19T10:${String(index).padStart(2, "0")}:00.000Z`,
+        finishedAt: `2026-03-19T10:${String(index).padStart(2, "0")}:59.000Z`,
+      });
+      executionRepository.updateTaskDispatch(dispatch.id, {
+        status: "completed",
+        startedAt: `2026-03-19T10:${String(index).padStart(2, "0")}:00.000Z`,
+        finishedAt: `2026-03-19T10:${String(index).padStart(2, "0")}:59.000Z`,
+      });
+      for (let eventIndex = 0; eventIndex < 10; eventIndex += 1) {
+        executionRepository.appendTaskRunEvent(run.id, "provider_activity", "agent", {
+          preview: `Later event ${index}-${eventIndex}`,
+        }, {
+          createdAt: `2026-03-19T11:${String(index).padStart(2, "0")}:${String(eventIndex).padStart(2, "0")}.000Z`,
+          sourceEventKey: `later-${index}-${eventIndex}`,
+        });
+      }
+    }
+
+    const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
+
+    expect(snapshot.taskDispatches).toHaveLength(26);
+    expect(snapshot.taskDispatches.some((dispatch) => dispatch.id === earlyDispatch.id)).toBe(true);
+    expect(snapshot.recentEvents.length).toBeGreaterThan(240);
+    expect(snapshot.recentEvents.some((event) => (
+      event.taskId === earlyTask.id && event.eventType === "cli_git_no_changes"
+    ))).toBe(true);
+  });
+
   it("projects human intervention summaries for paused sprint runs", async () => {
     const { projectRepository, executionRepository, projectAttentionRepository } = await createRepositories();
     const project = projectRepository.createProject({

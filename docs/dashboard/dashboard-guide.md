@@ -198,6 +198,7 @@ Legacy runtime:
 - Task cards now open a DB-backed runtime feed sourced from `task_run_events`
 - The runtime feed now includes direct CLI stage events, action-required and protocol events, sprint-run lifecycle events, and CI/merge-gate state changes in addition to provider session activity
 - `recentEvents` is now a unified runtime timeline spanning both `task_run_events` and `sprint_run_events`
+- The selected-project execution snapshot now keeps the full task-dispatch and task-run event history for the active or most recent sprint run, so completed tasks in Live view keep their runtime feed and stage timings visible even after later tasks start
 - The execution runtime panel can now start or resume sprint orchestration, pause or cancel sprint runs, cancel queued dispatches, and retry terminal dispatches
 - The execution runtime panel now also exposes the active attention queue, including worker claim, resolve, and dismiss controls for open project blockers
 - Live Session now shows a clear paused-for-human-intervention banner, repeats the reason/instructions in the hero state, and surfaces the same guidance inside paused sprint run cards
@@ -210,9 +211,25 @@ Legacy runtime:
   - task stats and the race view can render from the latest runtime status snapshot even when execution metadata is still catching up
   - the page only shows the full `Waiting for Sprint Start` empty state when neither runtime status nor execution state has sprint context
 - The Live view hero now has three interchangeable visualizations:
-  - `Stats` for compact pipeline counts
+  - `Stats` for a compact asymmetric telemetry deck with one dominant sprint-time panel, a slimmer runtime intelligence rail, live flow-state deltas, merge pressure, and accumulated stage timing
   - `Race` for stage-based progress across the execution course
   - `DAG` for an animated dependency graph of the current sprint using real `depends_on` edges, live task phases, and merge-stage state
+- The Stats deck no longer uses the old shimmer card treatment; count changes now surface as short-lived `+1` / `-1` indicators instead of flashing the entire card
+- Sprint timing in the Stats deck now includes:
+  - total sprint elapsed time
+  - average completed-task duration
+  - longest task duration
+  - accumulated task time split into `Queued`, `Coding`, `CI / Review`, `Autofix`, and `Merge`
+- Task cards in Live view now show per-stage timing pills, so a task can separately expose coding time, CI wait time, autofix time, merge time, and final total duration once it settles
+- Stage timing is scoped to the current task identity and active sprint run, so reused task keys or stale task history from older attempts no longer leak durations into blocked or freshly restarted tasks
+- Completed task timing now stops at the task's terminal runtime event or dispatch finish time, so later provider/session sync noise does not keep increasing a finished task's total
+- Coding-complete tasks also freeze at coding completion until a real `CI / Review`, `Autofix`, or `Merge` runtime stage begins, so post-execution tasks do not keep counting as active coding time just because merge metadata exists
+- Stage attribution now follows the task runtime event stream more strictly:
+  - `run_completed` and `cli_workflow_completed` mark the end of coding for PR-backed tasks
+  - `ci_gate_status` drives later `CI / Review`, `Autofix`, and `Merge` buckets
+  - auto-merge conflicts and merge-confirmation windows are counted under `Merge`, not `Code`
+  - successful merge events such as `merge_confirmed` and `automerge_succeeded` stop the merge timer immediately, even if later sync events still arrive
+- The selected-project execution snapshot now ships a deeper recent runtime event window so stage timing remains accurate across larger sprints and reruns
 - In the active v2 settings UI, these controls live under `Settings -> Sprint Engine -> Worker Runtime`
 - Sprint compose/planning also follows that same worker mode:
   - with `Connected MCP`, the composer looks for a live planning worker/listener

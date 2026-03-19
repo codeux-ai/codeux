@@ -612,8 +612,9 @@ export class ExecutionRepository {
         COALESCE(sr.last_heartbeat_at, sr.updated_at, sr.created_at) DESC
       LIMIT 12
     `).all(projectId) as unknown as ExecutionSprintRunSummaryRow[];
+    const focusSprintRunId = sprintRuns[0]?.id ?? null;
 
-    const taskDispatches = this.db.prepare(`
+    const recentTaskDispatches = this.db.prepare(`
       SELECT
         td.id,
         td.project_id,
@@ -667,6 +668,65 @@ export class ExecutionRepository {
         COALESCE(td.last_heartbeat_at, td.started_at, td.claimed_at, td.queued_at) DESC
       LIMIT 24
     `).all(projectId) as unknown as ExecutionTaskDispatchSummaryRow[];
+
+    const focusSprintTaskDispatches = focusSprintRunId
+      ? this.db.prepare(`
+        SELECT
+          td.id,
+          td.project_id,
+          td.sprint_id,
+          td.sprint_run_id,
+          s.name AS sprint_name,
+          s.number AS sprint_number,
+          td.task_id,
+          t.task_key,
+          t.title AS task_title,
+          td.status,
+          td.executor_type,
+          td.priority,
+          td.connection_id,
+          c.display_name AS connection_display_name,
+          c.role AS connection_role,
+          tr.id AS task_run_id,
+          tr.state AS task_run_state,
+          tr.provider,
+          tr.session_id,
+          tr.session_name,
+          tr.worker_branch,
+          tr.pr_url,
+          td.queued_at,
+          td.claimed_at,
+          td.started_at,
+          td.finished_at,
+          td.last_heartbeat_at,
+          td.error_message,
+          el.owner_key AS active_lease_owner_key,
+          el.expires_at AS active_lease_expires_at
+        FROM task_dispatches td
+        INNER JOIN sprints s ON s.id = td.sprint_id
+        INNER JOIN tasks t ON t.id = td.task_id
+        LEFT JOIN mcp_connections c ON c.id = td.connection_id
+        LEFT JOIN task_runs tr
+          ON tr.id = (
+            SELECT tr2.id
+            FROM task_runs tr2
+            WHERE tr2.dispatch_id = td.id
+            ORDER BY tr2.rowid DESC
+            LIMIT 1
+          )
+        LEFT JOIN execution_leases el
+          ON el.scope_type = 'task_dispatch'
+         AND el.scope_id = td.id
+        WHERE td.project_id = ?
+          AND td.sprint_run_id = ?
+      `).all(projectId, focusSprintRunId) as unknown as ExecutionTaskDispatchSummaryRow[]
+      : [];
+
+    const taskDispatchById = new Map<string, ExecutionTaskDispatchSummaryRow>();
+    for (const row of [...focusSprintTaskDispatches, ...recentTaskDispatches]) {
+      taskDispatchById.set(row.id, row);
+    }
+    const taskDispatches = [...taskDispatchById.values()].sort((left, right) => this.compareExecutionTaskDispatchSummaryRows(left, right));
 
     const recentEvents = this.db.prepare(`
       SELECT *
@@ -743,14 +803,62 @@ export class ExecutionRepository {
         WHERE sr.project_id = ?
       )
       ORDER BY created_at DESC, id DESC
-      LIMIT 60
+      LIMIT 240
     `).all(projectId, projectId) as unknown as ExecutionRuntimeEventSummaryRow[];
+
+    const focusSprintTaskEvents = focusSprintRunId
+      ? this.db.prepare(`
+        SELECT
+          tre.id,
+          'task_run' AS scope_type,
+          tre.task_run_id,
+          tr.sprint_run_id,
+          tr.dispatch_id,
+          tr.project_id,
+          tr.sprint_id,
+          s.name AS sprint_name,
+          s.number AS sprint_number,
+          sr.status AS sprint_run_status,
+          tr.task_id,
+          t.task_key,
+          t.title AS task_title,
+          tr.state AS task_run_state,
+          tre.event_type,
+          tre.originator,
+          tre.source_event_key,
+          tr.provider,
+          tr.session_id,
+          tr.session_name,
+          tr.worker_branch,
+          tr.pr_url,
+          tr.connection_id,
+          c.display_name AS connection_display_name,
+          c.role AS connection_role,
+          tre.created_at,
+          tre.payload_json
+        FROM task_run_events tre
+        INNER JOIN task_runs tr ON tr.id = tre.task_run_id
+        INNER JOIN sprints s ON s.id = tr.sprint_id
+        INNER JOIN tasks t ON t.id = tr.task_id
+        LEFT JOIN sprint_runs sr ON sr.id = tr.sprint_run_id
+        LEFT JOIN mcp_connections c ON c.id = tr.connection_id
+        WHERE tr.project_id = ?
+          AND tr.sprint_run_id = ?
+        ORDER BY tre.created_at DESC, tre.id DESC
+      `).all(projectId, focusSprintRunId) as unknown as ExecutionRuntimeEventSummaryRow[]
+      : [];
+
+    const recentEventById = new Map<string, ExecutionRuntimeEventSummaryRow>();
+    for (const row of [...focusSprintTaskEvents, ...recentEvents]) {
+      recentEventById.set(row.id, row);
+    }
+    const runtimeEvents = [...recentEventById.values()].sort((left, right) => this.compareExecutionRuntimeEventSummaryRows(left, right));
 
     const activeAttentionItems = this.listActiveAttentionRowsForProject(projectId);
     const humanInterventionBySprintRunId = this.buildHumanInterventionSummaryBySprintRun(
       sprintRuns,
       activeAttentionItems,
-      recentEvents,
+      runtimeEvents,
     );
 
     return {
@@ -765,7 +873,7 @@ export class ExecutionRepository {
       primaryAssignedWorker: null,
       overflowAssignedWorkers: [],
       attentionItems: [],
-      recentEvents: recentEvents.map((row) => this.mapExecutionRuntimeEventSummaryRow(row)),
+      recentEvents: runtimeEvents.map((row) => this.mapExecutionRuntimeEventSummaryRow(row)),
       updatedAt: new Date().toISOString(),
     };
   }
@@ -1929,6 +2037,47 @@ export class ExecutionRepository {
       severity: row.severity,
       ownerType: row.owner_type,
     };
+  }
+
+  private compareExecutionTaskDispatchSummaryRows(
+    left: ExecutionTaskDispatchSummaryRow,
+    right: ExecutionTaskDispatchSummaryRow,
+  ): number {
+    const leftRecency = left.last_heartbeat_at || left.started_at || left.claimed_at || left.queued_at;
+    const rightRecency = right.last_heartbeat_at || right.started_at || right.claimed_at || right.queued_at;
+
+    return this.executionTaskDispatchStatusRank(left.status) - this.executionTaskDispatchStatusRank(right.status)
+      || toNumber(right.priority) - toNumber(left.priority)
+      || rightRecency.localeCompare(leftRecency)
+      || right.id.localeCompare(left.id);
+  }
+
+  private executionTaskDispatchStatusRank(status: string): number {
+    switch (status) {
+      case "running":
+        return 0;
+      case "cancel_requested":
+        return 1;
+      case "claimed":
+        return 2;
+      case "queued":
+        return 3;
+      case "blocked":
+        return 4;
+      case "failed":
+        return 5;
+      case "completed":
+        return 6;
+      default:
+        return 7;
+    }
+  }
+
+  private compareExecutionRuntimeEventSummaryRows(
+    left: ExecutionRuntimeEventSummaryRow,
+    right: ExecutionRuntimeEventSummaryRow,
+  ): number {
+    return right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id);
   }
 
   private notifyRealtime(projectId: string, includeOverview: boolean): void {
