@@ -236,7 +236,7 @@ export class WatchLoopRunner {
                 repoPath,
                 featureBranch: defaultFeatureBranch,
                 defaultBranch,
-                featureBranchPrefix: this.deps.getDashboardSettings().git.featureBranchPrefix,
+                featureBranchPrefix,
                 ciIntelligence,
                 githubMode,
               });
