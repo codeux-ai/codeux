@@ -20,7 +20,7 @@ describe("protocol-step", () => {
 
     it("renders lines correctly", async () => {
         const subtasks: Subtask[] = [
-            { id: "1", title: "t", prompt: "p", depends_on: [], is_independent: false, status: "COMPLETED", is_merged: false },
+            { id: "1", title: "t", prompt: "p", depends_on: [], is_independent: false, status: "COMPLETED", is_merged: false, worker_branch: "worker/1" },
             { id: "2", title: "t", prompt: "p", depends_on: [], is_independent: false, status: "BLOCKED", intervention_owner: "AGENT", intervention_hint: "hint 2" },
             { id: "3", title: "t", prompt: "p", depends_on: [], is_independent: false, status: "BLOCKED", intervention_owner: "HUMAN", intervention_hint: "" },
         ];
@@ -53,7 +53,7 @@ describe("protocol-step", () => {
 
     it("suppresses manual merge instructions for worker-escalated merge conflicts", async () => {
         const subtasks: Subtask[] = [
-            { id: "1", title: "t", prompt: "p", depends_on: [], is_independent: false, status: "COMPLETED", is_merged: false },
+            { id: "1", title: "t", prompt: "p", depends_on: [], is_independent: false, status: "COMPLETED", is_merged: false, worker_branch: "worker/1" },
         ];
 
         const renderInstruction = vi.fn(async (t, v) => `${t}:${JSON.stringify(v)}`);
@@ -75,7 +75,7 @@ describe("protocol-step", () => {
 
     it("disables lines when CI intelligence is off", async () => {
         const subtasks: Subtask[] = [
-            { id: "1", title: "t", prompt: "p", depends_on: [], is_independent: false, status: "COMPLETED", is_merged: false },
+            { id: "1", title: "t", prompt: "p", depends_on: [], is_independent: false, status: "COMPLETED", is_merged: false, worker_branch: "worker/1" },
         ];
 
         const renderInstruction = vi.fn(async (t, v) => JSON.stringify(v));
@@ -92,5 +92,30 @@ describe("protocol-step", () => {
 
         expect(res.instructions).toContain('"feature_ci_wait_line":""');
         expect(res.instructions).toContain('"feature_comments_line":""');
+    });
+
+    it("does not require a merge protocol for completed tasks with no branch or PR output", async () => {
+        const subtasks: Subtask[] = [
+            { id: "1", title: "t", prompt: "p", depends_on: [], is_independent: false, status: "COMPLETED", is_merged: false },
+        ];
+
+        const renderInstruction = vi.fn(async (t, v) => `${t}:${JSON.stringify(v)}`);
+        const onTaskEvent = vi.fn();
+
+        const res = await runProtocolStep(subtasks, {
+            featureBranch: "fb",
+            githubMode: "REMOTE",
+            ciIntelligence,
+            enableMergeProtocol: true,
+            enableActionRequiredProtocol: true,
+            isActionRequiredState: () => false,
+            renderInstruction,
+            onTaskEvent,
+        });
+
+        expect(res.awaitingMerge).toEqual([]);
+        expect(res.manualMergeTasks).toEqual([]);
+        expect(res.instructions).toBe("");
+        expect(onTaskEvent).not.toHaveBeenCalled();
     });
 });

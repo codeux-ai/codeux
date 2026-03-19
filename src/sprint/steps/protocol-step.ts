@@ -1,5 +1,6 @@
 import type { CiIntelligenceSettings, Subtask } from "../../contracts/app-types.js";
 import type { InstructionTemplateId } from "../../instructions/instruction-template-catalog.js";
+import { isCompletedTaskAwaitingMerge } from "../../domain/sprint/task-merge-state.js";
 
 interface ProtocolStepOptions {
   featureBranch: string;
@@ -43,7 +44,7 @@ const buildFeatureCommentsLine = (settings: CiIntelligenceSettings): string => {
 };
 
 export const runProtocolStep = async (subtasks: Subtask[], options: ProtocolStepOptions): Promise<ProtocolStepResult> => {
-  const awaitingMerge = subtasks.filter((task) => task.status === "COMPLETED" && !task.is_merged);
+  const awaitingMerge = subtasks.filter((task) => isCompletedTaskAwaitingMerge(task));
   const workerEscalatedMergeConflictTasks = awaitingMerge.filter((task) => options.isWorkerEscalatedMergeConflictTask?.(task) === true);
   const manualMergeTasks = awaitingMerge.filter((task) => !workerEscalatedMergeConflictTasks.includes(task));
   const actionRequiredTasks = subtasks.filter(

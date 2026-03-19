@@ -234,7 +234,8 @@ export class RuntimeCleanupService {
         if (sprintRun.status !== "running") {
           continue;
         }
-        if (this.executionRepository.getLease("sprint", sprintRun.sprintId)) {
+        const sprintLease = this.executionRepository.getLease("sprint", sprintRun.sprintId);
+        if (sprintLease && sprintLease.expiresAt > nowIso) {
           continue;
         }
         if (this.executionRepository.hasActiveTaskDispatches(sprintRun.id)) {
@@ -246,6 +247,9 @@ export class RuntimeCleanupService {
           continue;
         }
 
+        if (sprintLease) {
+          this.executionRepository.releaseLease("sprint", sprintRun.sprintId, sprintLease.leaseToken);
+        }
         this.executionRepository.updateSprintRun(sprintRun.id, {
           status: "failed",
           finishedAt: nowIso,

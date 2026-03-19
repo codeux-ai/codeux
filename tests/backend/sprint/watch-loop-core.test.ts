@@ -305,6 +305,82 @@ describe("WatchLoopRunner", () => {
     nowSpy.mockRestore();
   });
 
+  it("completes the sprint when the only completed task produced no merge output", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const nowSpy = vi.spyOn(Date, "now");
+
+    nowSpy.mockReturnValueOnce(0).mockReturnValue(1000);
+
+    deps.renderInstruction.mockImplementation(async (id) => {
+      if (id === "watchHeader") return "HEADER";
+      if (id === "cleanupAllMerged") return "CLEANUP_MERGED";
+      return "";
+    });
+
+    const renderMergeFeedbackMock = vi.fn().mockResolvedValue({
+      text: "",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    });
+
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, renderMergeFeedbackMock);
+
+    const result = await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(result).toContain("Sprint Execution Finished");
+    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({ status: "completed" }),
+    );
+    expect(deps.executionRepository.appendSprintRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "sprint_completed",
+      "system",
+      expect.objectContaining({ taskCount: 1 }),
+      expect.any(Object),
+    );
+    nowSpy.mockRestore();
+  });
+
   it("keeps the watch loop running while a worker-owned merge conflict is being supervised", async () => {
     const deps = buildDeps();
     const cycleRunner = buildCycleRunner();
@@ -320,22 +396,22 @@ describe("WatchLoopRunner", () => {
 
     cycleRunner.run
       .mockResolvedValueOnce({
-        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
+        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false, worker_branch: "worker/task-1" })],
         reportText: "REPORT_CONFLICT",
         statusTable: "TABLE_CONFLICT",
         instructions: "INST_CONFLICT",
-        awaitingMerge: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
+        awaitingMerge: [buildMockSubtask({ status: "COMPLETED", is_merged: false, worker_branch: "worker/task-1" })],
         manualMergeTasks: [],
-        workerEscalatedMergeConflictTasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
+        workerEscalatedMergeConflictTasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false, worker_branch: "worker/task-1" })],
       })
       .mockResolvedValueOnce({
-        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
+        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false, worker_branch: "worker/task-1" })],
         reportText: "REPORT_CONFLICT_2",
         statusTable: "TABLE_CONFLICT_2",
         instructions: "INST_CONFLICT_2",
-        awaitingMerge: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
+        awaitingMerge: [buildMockSubtask({ status: "COMPLETED", is_merged: false, worker_branch: "worker/task-1" })],
         manualMergeTasks: [],
-        workerEscalatedMergeConflictTasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
+        workerEscalatedMergeConflictTasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false, worker_branch: "worker/task-1" })],
       });
 
     const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn());
@@ -411,20 +487,20 @@ describe("WatchLoopRunner", () => {
 
     cycleRunner.run
       .mockResolvedValueOnce({
-        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
+        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false, worker_branch: "worker/task-1" })],
         reportText: "REPORT_CONFLICT",
         statusTable: "TABLE_CONFLICT",
         instructions: "INST_CONFLICT",
-        awaitingMerge: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
+        awaitingMerge: [buildMockSubtask({ status: "COMPLETED", is_merged: false, worker_branch: "worker/task-1" })],
         manualMergeTasks: [],
         workerEscalatedMergeConflictTasks: [],
       })
       .mockResolvedValueOnce({
-        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
+        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false, worker_branch: "worker/task-1" })],
         reportText: "REPORT_CONFLICT_2",
         statusTable: "TABLE_CONFLICT_2",
         instructions: "INST_CONFLICT_2",
-        awaitingMerge: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
+        awaitingMerge: [buildMockSubtask({ status: "COMPLETED", is_merged: false, worker_branch: "worker/task-1" })],
         manualMergeTasks: [],
         workerEscalatedMergeConflictTasks: [],
       });

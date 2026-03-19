@@ -80,7 +80,8 @@ This means `cancel_requested` is a real stop-pending state, not a terminal state
 The runtime cleanup sweep now reconciles stale execution records before they block the dashboard:
 
 - if a `task_run` is already terminal but its linked `task_dispatch` is still `queued`, `claimed`, `running`, or `cancel_requested`, the dispatch is reconciled to the same terminal outcome
-- if a `running` sprint run has no active sprint lease, no active dispatches, and its heartbeat is stale, Sprint OS marks it `failed` with reason `orchestration_heartbeat_stalled`
+- if a `running` sprint run has no unexpired sprint lease, no active dispatches, and its heartbeat is stale, Sprint OS marks it `failed` with reason `orchestration_heartbeat_stalled`
+- expired sprint leases attached to those stale runs are released during cleanup so restart does not stay wedged behind dead ownership rows
 
 This prevents dead background orchestration attempts from leaving the dashboard permanently stuck in a fake active state.
 

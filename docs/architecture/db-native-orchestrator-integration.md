@@ -152,6 +152,7 @@ Feature PR merge waiting now only applies to completed tasks that have merge evi
 - `task.pr_url`
 
 This keeps no-output tasks, such as validation-only or test-only runs, in `COMPLETED` instead of pushing them back into the CI/PR wait path.
+The same merge-evidence rule is now used by dependency unlocking, the merge protocol, and the final watch-loop completion check so a sprint can finish cleanly when a completed task never opened a branch or PR.
 
 ## Dashboard Reruns
 

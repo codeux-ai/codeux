@@ -11,6 +11,7 @@ import type { SprintOrchestratorDependencies } from "../../../sprint/sprint-orch
 import type { CycleRunner } from "./cycle-runner.js";
 import type { SprintExecutionContext } from "../../../services/sprint-execution-state-service.js";
 import type { MergeFeedbackResult } from "../ci/main-merge-gate.js";
+import { isCompletedTaskSettled } from "../task-merge-state.js";
 
 export interface WatchLoopRunnerArgs {
   args: SprintAgentArgs;
@@ -160,7 +161,7 @@ export class WatchLoopRunner {
       const activeWorkerMergeConflictAttention = activeWorkerAttentionItems.some((item) => item.attentionType === "merge_conflict");
 
       const allTerminal = subtasks.length > 0 && subtasks.every(
-        (task) => (task.status === "COMPLETED" && task.is_merged) || task.status === "FAILED"
+        (task) => isCompletedTaskSettled(task) || task.status === "FAILED"
       );
       const quotaTasks = subtasks.filter((task) => task.status === "QUOTA");
       const noMoreActionPossible = runningTasks.length === 0 && readyTasks.length === 0 && quotaTasks.length === 0;
@@ -209,7 +210,7 @@ export class WatchLoopRunner {
             fullReport += await this.deps.renderInstruction("watchNoMoreActions", {}, repoPath);
           }
 
-          if (subtasks.length > 0 && subtasks.every((task) => task.status === "COMPLETED" && task.is_merged)) {
+          if (subtasks.length > 0 && subtasks.every((task) => isCompletedTaskSettled(task))) {
             try {
               this.deps.completedSprints.add(`${scopedExecutionContext.project.id}:${scopedExecutionContext.sprint.id}`);
               this.deps.executionRepository.updateSprintRun(sprintRunId, {

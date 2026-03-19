@@ -214,6 +214,13 @@ describe("RuntimeCleanupService", () => {
       startedAt: "2026-03-13T04:12:11.559Z",
       lastHeartbeatAt: "2026-03-13T04:16:36.944Z",
     });
+    executionRepository.acquireLease({
+      scopeType: "sprint",
+      scopeId: sprint.id,
+      ownerKey: "sprint_orchestrator",
+      leaseToken: "expired-sprint-lease",
+      expiresAt: "2026-03-13T04:20:00.000Z",
+    });
     const dispatch = executionRepository.createTaskDispatch({
       projectId: project.id,
       sprintId: sprint.id,
@@ -263,6 +270,7 @@ describe("RuntimeCleanupService", () => {
       finishedAt: "2026-03-13T04:40:00.000Z",
       lastHeartbeatAt: "2026-03-13T04:40:00.000Z",
     });
+    expect(executionRepository.getLease("sprint", sprint.id)).toBeNull();
 
     const sprintEvents = executionRepository.listSprintRunEvents(sprintRun.id);
     expect(sprintEvents[0]).toMatchObject({

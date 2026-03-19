@@ -17,6 +17,7 @@ import type {
 } from "../../../contracts/app-types.js";
 import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
 import type { WorkerCiFixPayload } from "./feature-pr/ci-autofix-policy.js";
+import { isCompletedTaskAwaitingMerge } from "../task-merge-state.js";
 
 export interface CiGateContext {
   automationLevel: AutomationLevel;
@@ -65,14 +66,7 @@ export class FeaturePrGateService {
       return { subtasks: updatedSubtasks, reportText: "" };
     }
 
-    const completedAwaitingMerge = updatedSubtasks.filter((task) => (
-      task.status === "COMPLETED"
-      && !task.is_merged
-      && (
-        (typeof task.worker_branch === "string" && task.worker_branch.trim().length > 0)
-        || (typeof task.pr_url === "string" && task.pr_url.trim().length > 0)
-      )
-    ));
+    const completedAwaitingMerge = updatedSubtasks.filter((task) => isCompletedTaskAwaitingMerge(task));
     if (completedAwaitingMerge.length === 0) {
       return { subtasks: updatedSubtasks, reportText: "" };
     }

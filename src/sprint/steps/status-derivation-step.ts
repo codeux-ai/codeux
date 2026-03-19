@@ -1,4 +1,5 @@
 import type { Subtask } from "../../contracts/app-types.js";
+import { isCompletedTaskSettled } from "../../domain/sprint/task-merge-state.js";
 
 interface DeriveStatusOptions {
   retryFailed: boolean;
@@ -8,7 +9,7 @@ interface DeriveStatusOptions {
 const areDependenciesMet = (subtasks: Subtask[], task: Subtask): boolean => {
   return task.depends_on.every((depId) => {
     const dep = subtasks.find((candidate) => candidate.id === depId);
-    return dep?.status === "COMPLETED" && dep?.is_merged;
+    return dep ? isCompletedTaskSettled(dep) : false;
   });
 };
 
