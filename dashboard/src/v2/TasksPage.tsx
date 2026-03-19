@@ -36,10 +36,11 @@ const PRIORITY_CFG: Record<TaskPriority, { label: string; color: string; dot: st
 const STATUS_CFG: Record<TaskStatus, { label: string; color: string; hex: string; icon: typeof Circle }> = {
   pending: { label: "Queued", color: "text-slate-400 dark:text-slate-500", hex: "#64748b", icon: Circle },
   in_progress: { label: "In Progress", color: "text-signal-500", hex: "#00E0A0", icon: PlayCircle as typeof Circle },
+  coding_completed: { label: "Coding Completed", color: "text-cyan-500", hex: "#0F9FA8", icon: CheckCircle2 as typeof Circle },
   completed: { label: "Completed", color: "text-status-green", hex: "#00AB84", icon: CheckCircle2 as typeof Circle },
 };
 
-const STATUS_ORDER: TaskStatus[] = ["pending", "in_progress", "completed"];
+const STATUS_ORDER: TaskStatus[] = ["pending", "in_progress", "coding_completed", "completed"];
 const EXECUTOR_LABEL: Record<Task["executorType"], string> = {
   auto: "Auto",
   docker_cli: "CLI",

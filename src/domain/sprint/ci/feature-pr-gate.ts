@@ -17,7 +17,7 @@ import type {
 } from "../../../contracts/app-types.js";
 import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
 import type { WorkerCiFixPayload } from "./feature-pr/ci-autofix-policy.js";
-import { isCompletedTaskAwaitingMerge } from "../task-merge-state.js";
+import { isCompletedTaskAwaitingMerge, isCompletedTaskSettled, taskHasMergeEvidence } from "../task-merge-state.js";
 
 export interface CiGateContext {
   automationLevel: AutomationLevel;
@@ -47,14 +47,27 @@ export class FeaturePrGateService {
   async evaluateCiGate(subtasks: Subtask[], context: CiGateContext): Promise<CiGateResult> {
     const updatedSubtasks = [...subtasks];
     for (const task of updatedSubtasks) {
+      const previousStatus = task.status;
+      const previousMergeIndicator = task.merge_indicator;
       task.merge_indicator = task.is_merged
-        ? "MERGED"
+        ? (task.merge_indicator === "AUTOMERGE" ? "AUTOMERGE" : "MERGED")
         : task.merge_indicator === "MERGE_CONFLICT"
           ? "MERGE_CONFLICT"
-          : undefined;
-      if (task.status === "COMPLETED") {
+          : taskHasMergeEvidence(task)
+            ? task.merge_indicator
+            : undefined;
+      if (task.status === "COMPLETED" && taskHasMergeEvidence(task) && !task.is_merged) {
+        task.status = "CODING_COMPLETED";
+      }
+      if (task.status === "CODING_COMPLETED" && isCompletedTaskSettled(task)) {
+        task.status = "COMPLETED";
+      }
+      if (task.status === "CODING_COMPLETED" || task.status === "COMPLETED") {
         task.intervention_owner = undefined;
         task.intervention_hint = undefined;
+      }
+      if (task.record_id && (task.status !== previousStatus || task.merge_indicator !== previousMergeIndicator)) {
+        await context.persistMergedTask(task);
       }
     }
 

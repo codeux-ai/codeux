@@ -40,10 +40,10 @@ const mapTaskRunStateToDispatchStatus = (state: TaskRunState): TaskDispatchStatu
   }
 };
 
-const mapTaskRunStateToPlanningStatus = (state: TaskRunState): "pending" | "in_progress" | "completed" => {
+const mapTaskRunStateToPlanningStatus = (state: TaskRunState): "pending" | "in_progress" | "coding_completed" => {
   switch (state) {
     case "COMPLETED":
-      return "completed";
+      return "coding_completed";
     case "RUNNING":
       return "in_progress";
     case "FAILED":
@@ -310,7 +310,7 @@ export const runSessionSyncStep = async (
     );
 
     if (match.state === "COMPLETED") {
-      task.status = "COMPLETED";
+      task.status = "CODING_COMPLETED";
       continue;
     }
 

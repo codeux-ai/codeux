@@ -70,7 +70,7 @@ describe("runSessionSyncStep", () => {
     );
 
     expect(result.subtasks[0].session_id).toBe("correct-sprint");
-    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].status).toBe("CODING_COMPLETED");
   });
 
   it("picks the most recent session when multiple sessions exist for the same task", async () => {
@@ -121,7 +121,7 @@ describe("runSessionSyncStep", () => {
     );
 
     expect(result.subtasks[0].session_id).toBe("new-session");
-    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].status).toBe("CODING_COMPLETED");
   });
 
   it("deduplicates activity fetches when multiple tasks map to the same session", async () => {
@@ -311,7 +311,7 @@ describe("runSessionSyncStep", () => {
       }
     );
 
-    expect(result.subtasks[0]?.status).toBe("COMPLETED");
+    expect(result.subtasks[0]?.status).toBe("CODING_COMPLETED");
     const syncedRun = executionRepository.getTaskRun(run.id);
     expect(syncedRun).toMatchObject({
       sessionId: "session-sync-1",

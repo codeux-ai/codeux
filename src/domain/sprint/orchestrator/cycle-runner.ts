@@ -203,7 +203,11 @@ export class CycleRunner {
           this.deps.projectManagementRepository.updateTask(task.record_id, {
             isMerged: Boolean(task.is_merged),
             mergeIndicator: task.merge_indicator || null,
-            status: task.status === "COMPLETED" ? "completed" : undefined,
+            status: task.status === "COMPLETED"
+              ? "completed"
+              : task.status === "CODING_COMPLETED"
+                ? "coding_completed"
+                : undefined,
           });
         },
         executionRepository: this.deps.executionRepository,

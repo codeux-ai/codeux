@@ -3,6 +3,7 @@ import { useRef, useMemo, useEffect, useCallback, useState } from "preact/hooks"
 import gsap from "gsap";
 import { Anchor } from "lucide-preact";
 import type { Subtask, ExecutionTaskDispatchSummary } from "../../types.js";
+import { getTaskProgressPhase } from "../../lib/task-progress.js";
 
 /* ─── Props ──────────────────────────────────────────────────────────────── */
 
@@ -54,14 +55,14 @@ const CP = {
     HARBOUR:    0.00,
     DEPARTURE:  0.04,
     RUNNING:    0.25,   // target for running ships — 1/4 into the race
-    COMPLETED:  0.48,
+    CODING_COMPLETED:  0.48,
     COMP_TARGET: 0.56,
     CI:         0.62,
     CI_TARGET:  0.72,
     AUTOMERGE:  0.78,
     AM_TARGET:  0.90,
-    MERGED:     0.96,
-    FINISH:     1.06,   // past finish line so merged ships visually cross it
+    COMPLETED:  0.96,
+    FINISH:     1.06,   // past finish line so settled ships visually cross it
 } as const;
 
 // Half-life for Zeno's paradox: ship covers half remaining distance in this many ms
@@ -74,20 +75,21 @@ interface ProgressTarget {
 }
 
 const getProgressTarget = (task: Subtask): ProgressTarget => {
-    switch (task.status) {
+    switch (getTaskProgressPhase(task)) {
         case "PENDING":  return { confirmed: CP.HARBOUR, target: CP.HARBOUR, stopped: true };
         case "BLOCKED":  return { confirmed: CP.HARBOUR, target: CP.HARBOUR, stopped: true };
         case "FAILED":   return { confirmed: CP.DEPARTURE + stableRand(task.id, 30) * 0.12, target: CP.DEPARTURE + stableRand(task.id, 30) * 0.12, stopped: true };
         case "RUNNING":  return { confirmed: CP.DEPARTURE, target: CP.RUNNING, stopped: false };
-        case "COMPLETED": {
+        case "CODING_COMPLETED": {
             const mi = task.merge_indicator;
-            if (mi === "MERGED")         return { confirmed: CP.MERGED, target: CP.FINISH, stopped: false };
             if (mi === "AUTOMERGE")      return { confirmed: CP.AUTOMERGE, target: CP.AM_TARGET, stopped: false };
             if (mi === "CI")             return { confirmed: CP.CI, target: CP.CI_TARGET, stopped: false };
-            if (mi === "MERGE_BLOCKED")  return { confirmed: CP.COMPLETED, target: CP.COMPLETED, stopped: true };
-            if (mi === "MERGE_CONFLICT") return { confirmed: CP.COMPLETED, target: CP.COMPLETED, stopped: true };
-            return { confirmed: CP.COMPLETED, target: CP.COMP_TARGET, stopped: false };
+            if (mi === "MERGE_BLOCKED")  return { confirmed: CP.CODING_COMPLETED, target: CP.CODING_COMPLETED, stopped: true };
+            if (mi === "MERGE_CONFLICT") return { confirmed: CP.CODING_COMPLETED, target: CP.CODING_COMPLETED, stopped: true };
+            return { confirmed: CP.CODING_COMPLETED, target: CP.COMP_TARGET, stopped: false };
         }
+        case "COMPLETED":
+            return { confirmed: CP.COMPLETED, target: CP.FINISH, stopped: false };
         default: return { confirmed: CP.HARBOUR, target: CP.HARBOUR, stopped: true };
     }
 };
@@ -97,17 +99,17 @@ const getProgressTarget = (task: Subtask): ProgressTarget => {
 interface StatusStyle { color: string; label: string; dim: boolean }
 
 const getStyle = (task: Subtask): StatusStyle => {
-    switch (task.status) {
+    switch (getTaskProgressPhase(task)) {
         case "RUNNING":   return { color: "#00E0A0", label: "Racing",    dim: false };
-        case "COMPLETED": {
+        case "CODING_COMPLETED": {
             const mi = task.merge_indicator;
-            if (mi === "MERGED")         return { color: "#00E0A0", label: "Merged",     dim: false };
             if (mi === "AUTOMERGE")      return { color: "#FFB800", label: "Automerge",  dim: false };
             if (mi === "CI")             return { color: "#5dade2", label: "CI",         dim: false };
             if (mi === "MERGE_BLOCKED")  return { color: "#F59E0B", label: "Blocked",    dim: false };
             if (mi === "MERGE_CONFLICT") return { color: "#E3000F", label: "Conflict",   dim: false };
-            return { color: "#00AB84", label: "Completed", dim: false };
+            return { color: "#0F9FA8", label: "Coding Done", dim: false };
         }
+        case "COMPLETED": return { color: "#00AB84", label: "Completed", dim: false };
         case "FAILED":  return { color: "#E3000F", label: "Failed",  dim: true };
         case "BLOCKED": return { color: "#F59E0B", label: "Blocked", dim: true };
         case "PENDING": return { color: "#475569", label: "Queued",  dim: true };
@@ -882,9 +884,10 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
     /* ─── Checkpoint buoy data ───────────────────────────────────── */
     const buoys = useMemo(() => [
         { progress: CP.RUNNING, label: "CODING", color: "#00E0A0" },
-        { progress: CP.COMPLETED, label: "DONE", color: "#00AB84" },
+        { progress: CP.CODING_COMPLETED, label: "CODE DONE", color: "#0F9FA8" },
         { progress: CP.CI, label: "CI", color: "#5dade2" },
         { progress: CP.AUTOMERGE, label: "MERGE", color: "#FFB800" },
+        { progress: CP.COMPLETED, label: "COMPLETED", color: "#00AB84" },
     ], []);
 
     /* ─── Idle state ─────────────────────────────────────────────── */

@@ -137,7 +137,7 @@ describe("FeaturePrGateService", () => {
 
     const result = await service.evaluateCiGate(subtasks, context);
 
-    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].status).toBe("CODING_COMPLETED");
     expect(result.subtasks[0].is_merged).toBeFalsy();
     expect(result.subtasks[0].merge_indicator).toBe("MERGE_CONFLICT");
     expect(result.reportText).toContain("Auto-Merge Failed");

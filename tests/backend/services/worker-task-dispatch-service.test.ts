@@ -158,7 +158,7 @@ describe("WorkerTaskDispatchService", () => {
     });
 
     const updatedTask = projectRepository.getTask(task.id);
-    expect(updatedTask?.status).toBe("completed");
+    expect(updatedTask?.status).toBe("coding_completed");
 
     const updatedRun = executionRepository.getTaskRunByDispatchId(dispatch.id);
     expect(updatedRun).toMatchObject({

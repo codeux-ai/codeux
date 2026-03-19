@@ -44,7 +44,7 @@ export interface JulesActivity {
   [key: string]: unknown;
 }
 
-export type SubtaskStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED" | "QUOTA";
+export type SubtaskStatus = "PENDING" | "RUNNING" | "CODING_COMPLETED" | "COMPLETED" | "FAILED" | "BLOCKED" | "QUOTA";
 export type SubtaskMergeIndicator = "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCKED" | "MERGE_CONFLICT";
 export type ProviderId = "jules" | "gemini" | "codex" | "claude-code";
 export type ProviderStrategy = "MANUAL" | "WEIGHTED" | "ORCHESTRATOR";
@@ -347,6 +347,7 @@ export type DashboardRealtimeClientMessage = DashboardRealtimeSetSubscriptionsMe
 export interface DashboardStats {
   total: number;
   running: number;
+  codingCompleted: number;
   completed: number;
   failed: number;
   ci: number;

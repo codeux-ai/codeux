@@ -55,7 +55,7 @@ export async function attemptAutoMerge(args: {
 
   if (mergeResult.mergeConflict) {
     args.task.is_merged = false;
-    args.task.status = "COMPLETED";
+    args.task.status = "CODING_COMPLETED";
     args.task.merge_indicator = "MERGE_CONFLICT";
     return {
       reportText: buildAutoMergeFailedText(

@@ -283,7 +283,7 @@ describe("VirtualWorkerService", () => {
 
     expect(cliWorkflowService.startTask).toHaveBeenCalledTimes(1);
     expect(executionRepository.getTaskDispatch(dispatch.id)?.status).toBe("completed");
-    expect(projectManagementRepository.getTask(task.id)?.status).toBe("completed");
+    expect(projectManagementRepository.getTask(task.id)?.status).toBe("coding_completed");
     expect(workerEndpointRepository.listWorkerEndpoints().filter((endpoint) => endpoint.endpointType === "virtual_cli")).toHaveLength(0);
     expect(projectWorkerAssignmentRepository.listAssignmentsForProject(project.id, { activeOnly: true })).toHaveLength(0);
   });

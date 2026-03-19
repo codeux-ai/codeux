@@ -14,7 +14,7 @@ export interface TaskRerunContext {
 
 export interface TaskRerunServiceDependencies {
   resolveTaskContext: (taskId: string) => TaskRerunContext | null;
-  updateTaskPlanningStatus: (taskId: string, status: "pending" | "in_progress" | "completed") => void;
+  updateTaskPlanningStatus: (taskId: string, status: "pending" | "in_progress" | "coding_completed" | "completed") => void;
   resolveSprintRunId: (args: {
     projectId: string;
     sprintId: string;

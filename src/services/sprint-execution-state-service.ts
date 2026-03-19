@@ -18,11 +18,13 @@ export interface SprintExecutionContext {
 }
 
 function mapTaskStatusToSubtaskStatus(task: TaskRecord, latestRun?: TaskRunRecord): Subtask["status"] {
-  if (latestRun?.state) {
+  if (latestRun?.state && latestRun.state !== "COMPLETED") {
     return latestRun.state;
   }
 
   switch (task.status) {
+    case "coding_completed":
+      return "CODING_COMPLETED";
     case "completed":
       return "COMPLETED";
     case "in_progress":

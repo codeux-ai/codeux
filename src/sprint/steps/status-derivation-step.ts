@@ -30,7 +30,7 @@ export const runStatusDerivationStep = (subtasks: Subtask[], options: DeriveStat
       continue;
     }
 
-    if (task.status === "RUNNING" || task.status === "COMPLETED" || task.status === "FAILED") {
+    if (task.status === "RUNNING" || task.status === "CODING_COMPLETED" || task.status === "COMPLETED" || task.status === "FAILED") {
       continue;
     }
 

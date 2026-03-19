@@ -109,15 +109,15 @@ Checks:
 
 ### 5. Orchestration stuck with blocked tasks
 Checks:
-- Dependencies completed and merged?
+- Are dependencies in final `completed`, or in `coding_completed` with no remaining merge work?
 - Any action-required session states (`AWAITING_*`, `PAUSED`)?
 - Is merge protocol disabled in step toggles?
 
 ### 6. Tasks completed but pipeline not progressing
 Checks:
-- `merged: true` updated in subtask markdown files?
-- Merge actually integrated into feature branch?
-- CI policy gates reflected in protocol text?
+- Does the DB task record still show `coding_completed` because a feature PR or worker branch is still unresolved?
+- Did the merge settle on the feature branch, or was this a no-output task that should auto-promote to final `completed`?
+- Are CI / review gates still intentionally holding the task before final completion?
 
 ### 7. Tasks show RUNNING after MCP was interrupted
 Symptoms:

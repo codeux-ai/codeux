@@ -59,6 +59,9 @@ function inferAssignee(task: TaskRecord): string {
   if (task.status === "completed") {
     return "Finisher";
   }
+  if (task.status === "coding_completed") {
+    return "Closer";
+  }
   if (task.status === "in_progress") {
     return "Runner";
   }
@@ -74,6 +77,9 @@ function inferTime(task: TaskRecord): string {
   }
   if (task.status === "completed") {
     return "Done";
+  }
+  if (task.status === "coding_completed") {
+    return "Review";
   }
   if (task.status === "in_progress") {
     return "Active";
