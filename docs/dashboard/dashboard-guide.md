@@ -254,6 +254,8 @@ From `dashboard/src/hooks/use-dashboard-runtime-data.ts`:
 - Status and execution snapshot now use websocket-first updates with a `5s` fallback poll for degraded transport cases.
 - Runtime fallback refresh now applies status and execution results independently instead of waiting for both responses before updating the page, which avoids slow `/api/execution` responses blanking the whole live view.
 - Git status keeps a `30s` fallback poll and also refreshes opportunistically from project realtime events with internal rate limiting, so the live view no longer waits for the next full poll cycle after sprint activity.
+- The sprint boat-race animation now resets cached vessel positions whenever the live sprint goes idle, and it keys each vessel by persisted task identity instead of raw task key so a new sprint starts from harbour rather than drifting backward from the previous finish line.
+- The boat race no longer caps the visible fleet at ten vessels, and the race canvas now renders at a fixed `800px` height instead of scaling per-boat.
 
 From `dashboard/src/hooks/use-overview-telemetry.ts` and `dashboard/src/v2/hooks/use-project-execution.ts`:
 - Overview telemetry and project execution are now websocket-first through `/api/realtime`.
