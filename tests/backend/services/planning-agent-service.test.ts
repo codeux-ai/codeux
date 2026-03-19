@@ -310,6 +310,12 @@ describe("PlanningAgentService", () => {
     expect(executionControlService.orchestrateSprint).toHaveBeenCalledWith(project.id, sprint.id);
 
     expect(providerRunner.runProviderForText).toHaveBeenCalledTimes(2);
+    const planPrompt = vi.mocked(providerRunner.runProviderForText).mock.calls[1]?.[0]?.prompt ?? "";
+    expect(planPrompt).toContain("Plan as a DAG, not as a flat checklist.");
+    expect(planPrompt).toContain("Each task key must use `T01`, `T02`, `T03`, ... in topological order.");
+    expect(planPrompt).toContain("## Example Output A");
+    expect(planPrompt).toContain("## Example Output B");
+    expect(planPrompt).toContain("## Objective\\n...\\n\\n## Scope");
     const createdTasks = projectRepository.listTasks(project.id, sprint.id);
     expect(createdTasks).toHaveLength(1);
     expect(createdTasks[0]?.title).toBe("Plan via virtual worker");

@@ -239,4 +239,33 @@
     pointer-events: none;
     border-radius: inherit;
   }
+
+  /* DAG view ambient motion */
+  @keyframes dag-aurora-drift {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.65; }
+    33%      { transform: translate3d(20px, -18px, 0) scale(1.08); opacity: 0.85; }
+    66%      { transform: translate3d(-16px, 14px, 0) scale(0.94); opacity: 0.6; }
+  }
+
+  @keyframes dag-grid-drift {
+    0%   { transform: translate3d(0, 0, 0); }
+    100% { transform: translate3d(26px, 26px, 0); }
+  }
+
+  @keyframes dag-running-ring {
+    0%, 100% { opacity: 0.5; transform: scale(1); }
+    50%      { opacity: 1; transform: scale(1.02); }
+  }
+
+  .dag-aurora {
+    animation: dag-aurora-drift 14s ease-in-out infinite;
+  }
+
+  .dag-grid-pan {
+    animation: dag-grid-drift 22s linear infinite;
+  }
+
+  .dag-running-ring {
+    animation: dag-running-ring 2.4s ease-in-out infinite;
+  }
 }

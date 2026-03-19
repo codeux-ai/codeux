@@ -9,6 +9,7 @@ import {
     Ship, BarChart3, Anchor, Timer,
 } from "lucide-preact";
 import { SprintBoatRace } from "./components/SprintBoatRace.js";
+import { SprintDag } from "./components/SprintDag.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { HumanInterventionBadge } from "./components/ui/HumanInterventionBadge.js";
@@ -1560,7 +1561,7 @@ const CollapsiblePanel: FunctionComponent<{
 
 /* ─── Header View Type ──────────────────────────────────────────────────── */
 
-type HeaderView = "stats" | "race";
+type HeaderView = "stats" | "race" | "dag";
 
 /* ─── Filter Type ────────────────────────────────────────────────────────── */
 
@@ -1579,7 +1580,7 @@ export const LiveSessionPage: FunctionComponent = () => {
     const [rerunningIds, setRerunningIds] = useState<Set<string>>(new Set());
     const [pendingActionIds, setPendingActionIds] = useState<Set<string>>(new Set());
     const [activeFilter, setFilter] = useState<TaskFilter>("All");
-    const [headerView, setHeaderView] = useState<HeaderView>("race");
+    const [headerView, setHeaderView] = useState<HeaderView>("dag");
 
     /* GSAP entrance */
     useLayoutEffect(() => {
@@ -1871,6 +1872,18 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 <Ship className="w-3 h-3" strokeWidth={2} />
                                 Race
                             </button>
+                            <button
+                                type="button"
+                                onClick={() => setHeaderView("dag")}
+                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[10px] font-bold uppercase tracking-[0.12em] transition-all duration-300 ${
+                                    headerView === "dag"
+                                        ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_2px_10px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]"
+                                        : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                                }`}
+                            >
+                                <Workflow className="w-3 h-3" strokeWidth={2} />
+                                DAG
+                            </button>
                         </div>
 
                         <div className={`px-4 py-2.5 text-xs font-bold uppercase tracking-widest rounded-full border flex items-center gap-2.5 backdrop-blur-md ${
@@ -1949,12 +1962,18 @@ export const LiveSessionPage: FunctionComponent = () => {
                     <StatMetric label="Blocked"      value={visibleStats.mergeBlocked}    accentHex="#F59E0B" icon={AlertTriangle} delay={0.5} />
                     <StatMetric label="Conflicts"    value={visibleStats.mergeConflicts}  accentHex="#E3000F" icon={GitPullRequest} delay={0.55} />
                 </div>
-            ) : (
+            ) : headerView === "race" ? (
                 /* ── Boat Race View ───────────────────────────────── */
                 <SprintBoatRace
                     tasks={visibleTasksWithLiveActivities}
                     dispatches={execution.taskDispatches}
                     hasLiveSprint={hasSprintContext}
+                />
+            ) : (
+                <SprintDag
+                    tasks={visibleTasksWithLiveActivities}
+                    dispatches={execution.taskDispatches}
+                    hasSprintContext={hasSprintContext}
                 />
             )}
 
