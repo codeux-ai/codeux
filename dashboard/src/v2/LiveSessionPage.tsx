@@ -5,11 +5,12 @@ import {
     Zap, GitBranch, Clock, CheckCircle2, XCircle, AlertTriangle,
     Activity, ChevronDown, ChevronRight, Radio, Terminal, RefreshCw,
     GitPullRequest, GitMerge, CircleDot, ExternalLink, Eye, EyeOff,
-    Play, FileText, RotateCcw, Layers, Bot, Workflow, PauseCircle,
+    Play, FileText, RotateCcw, Bot, Workflow, PauseCircle,
     Ship, BarChart3, Anchor, Timer,
 } from "lucide-preact";
 import { SprintBoatRace } from "./components/SprintBoatRace.js";
 import { SprintDag } from "./components/SprintDag.js";
+import { SprintStatsDeck, TaskStagePills, useLiveTaskTimingSummaries } from "./components/SprintStatsDeck.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { HumanInterventionBadge } from "./components/ui/HumanInterventionBadge.js";
@@ -31,6 +32,7 @@ import { renderMarkdown } from "../lib/markdown.js";
 import type { Subtask, GitTrackingStatus, ExecutionDashboardSnapshot, ExecutionRuntimeEventSummary } from "../types.js";
 import { deriveLiveSessionRuntimeState } from "./lib/live-session-runtime.js";
 import { getTaskProgressPhase } from "../lib/task-progress.js";
+import type { LiveTaskTimingSummary } from "./lib/live-stats.js";
 
 /* ─── Status Maps ────────────────────────────────────────────────────────── */
 
@@ -79,70 +81,6 @@ const EMPTY_RUNTIME_STATS = {
     merged: 0,
     mergeBlocked: 0,
     mergeConflicts: 0,
-};
-
-/* ─── Stat Metric ────────────────────────────────────────────────────────── */
-
-const StatMetric: FunctionComponent<{
-    label: string;
-    value: number;
-    accentHex: string;
-    icon: any;
-    delay?: number;
-}> = ({ label, value, accentHex, icon: Icon, delay = 0 }) => {
-    const ref = useRef<HTMLDivElement>(null);
-
-    useLayoutEffect(() => {
-        if (ref.current) {
-            gsap.fromTo(ref.current,
-                { opacity: 0, y: 30, scale: 0.95 },
-                { opacity: 1, y: 0, scale: 1, duration: 0.8, ease: "power3.out", delay },
-            );
-        }
-    }, [delay]);
-
-    return (
-        <div
-            ref={ref}
-            className="group relative overflow-hidden
-                       bg-white/70 dark:bg-void-800/60
-                       backdrop-blur-2xl
-                       border border-black/[0.06] dark:border-white/[0.06]
-                       rounded-[1.75rem] p-6
-                       shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
-                       stat-card-premium
-                       hover:shadow-[0_4px_30px_rgba(0,0,0,0.08)] dark:hover:shadow-[0_8px_36px_rgba(0,0,0,0.35)]
-                       hover:border-black/[0.08] dark:hover:border-white/[0.08]
-                       transition-shadow duration-500"
-        >
-            <WaveFluid accentHex={accentHex} />
-            <BorderTrace accentHex={accentHex} />
-
-            {/* Accent glow dot */}
-            <div
-                className="absolute top-4 right-4 w-2 h-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                style={{ backgroundColor: accentHex, boxShadow: `0 0 12px ${accentHex}60` }}
-            />
-
-            <div className="relative z-10 flex items-center gap-4">
-                <div
-                    className="w-10 h-10 rounded-[0.875rem] flex items-center justify-center shrink-0
-                               group-hover:scale-110 transition-transform duration-400 ease-out"
-                    style={{ backgroundColor: `${accentHex}14` }}
-                >
-                    <span style={{ color: accentHex }}><Icon className="w-5 h-5" strokeWidth={1.5} /></span>
-                </div>
-                <div>
-                    <span className="text-[2rem] font-black font-mono tracking-tighter text-slate-900 dark:text-white leading-none">
-                        {value}
-                    </span>
-                    <span className="block text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400 mt-1">
-                        {label}
-                    </span>
-                </div>
-            </div>
-        </div>
-    );
 };
 
 /* ─── Runtime Event Feed ─────────────────────────────────────────────────── */
@@ -335,13 +273,14 @@ const IdleRuntimeState: FunctionComponent<{
 
 const LiveTaskCard: FunctionComponent<{
     task: Subtask;
+    taskTiming?: LiveTaskTimingSummary | null;
     events?: ExecutionRuntimeEventSummary[];
     onRerun: (id: string) => void;
     isRerunning: boolean;
     dispatchError?: string | null;
     dispatchStartedAt?: string | null;
     dispatchFinishedAt?: string | null;
-}> = ({ task, events, onRerun, isRerunning, dispatchError, dispatchStartedAt, dispatchFinishedAt }) => {
+}> = ({ task, taskTiming, events, onRerun, isRerunning, dispatchError, dispatchStartedAt, dispatchFinishedAt }) => {
     const [expanded, setExpanded] = useState(false);
     const [showFeed, setShowFeed] = useState(false);
     const cardRef = useRef<HTMLDivElement>(null);
@@ -426,7 +365,14 @@ const LiveTaskCard: FunctionComponent<{
                                 {task.provider}
                             </span>
                         )}
-                        <TaskDuration startedAt={dispatchStartedAt ?? null} finishedAt={dispatchFinishedAt ?? null} status={taskPhase} />
+                        {taskTiming && taskTiming.totalSeconds > 0 ? (
+                            <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
+                                <Timer className="w-3 h-3" strokeWidth={2} />
+                                <span>{formatDuration(taskTiming.totalSeconds)}</span>
+                            </div>
+                        ) : (
+                            <TaskDuration startedAt={dispatchStartedAt ?? null} finishedAt={dispatchFinishedAt ?? null} status={taskPhase} />
+                        )}
                         {(hasEventFeed || task.session_id || task.session_name) && (
                             <span className="text-[9px] font-mono text-slate-400 dark:text-slate-600 max-w-[100px] truncate" title={sessionLabel}>
                                 {sessionLabel.substring(0, 16)}
@@ -434,6 +380,8 @@ const LiveTaskCard: FunctionComponent<{
                         )}
                     </div>
                 </div>
+
+                <TaskStagePills timing={taskTiming} />
 
                 {/* Prompt preview — collapsed */}
                 {!expanded && !showFeed && (
@@ -1721,8 +1669,28 @@ export const LiveSessionPage: FunctionComponent = () => {
     const pausedIntervention = pausedInterventionRun?.humanIntervention || null;
     const hasLiveSprint = runtimeState.hasActiveSprint;
     const hasSprintContext = runtimeState.hasSprintContext;
+    const [nowIso, setNowIso] = useState(() => new Date().toISOString());
     const visibleTasksWithLiveActivities = hasSprintContext ? tasksWithLiveActivities : [];
     const visibleStats = hasSprintContext ? stats : EMPTY_RUNTIME_STATS;
+
+    useEffect(() => {
+        setNowIso(new Date().toISOString());
+        if (!hasSprintContext) {
+            return;
+        }
+        const timer = window.setInterval(() => {
+            setNowIso(new Date().toISOString());
+        }, 1000);
+        return () => window.clearInterval(timer);
+    }, [hasSprintContext]);
+
+    const { sprintTiming, taskTimingMap } = useLiveTaskTimingSummaries({
+        tasks: visibleTasksWithLiveActivities,
+        dispatches: execution.taskDispatches,
+        events: execution.recentEvents,
+        sprintRuns: execution.sprintRuns,
+        nowIso,
+    });
 
     const filtered = useMemo(() => {
         if (activeFilter === "All") return visibleTasksWithLiveActivities;
@@ -1950,18 +1918,12 @@ export const LiveSessionPage: FunctionComponent = () => {
 
             {/* ── Header View: Stats or Boat Race ─────────────────────── */}
             {headerView === "stats" ? (
-                <div className="grid grid-cols-2 md:grid-cols-5 xl:grid-cols-9 gap-4">
-                    <StatMetric label="Total"        value={visibleStats.total}        accentHex="#00E0A0" icon={Layers}        delay={0.1} />
-                    <StatMetric label="Running"      value={visibleStats.running}      accentHex="#00E0A0" icon={Activity}      delay={0.15} />
-                    <StatMetric label="Code Done"    value={visibleStats.codingCompleted} accentHex="#0F9FA8" icon={CheckCircle2}  delay={0.2} />
-                    <StatMetric label="Completed"    value={visibleStats.completed}       accentHex="#00AB84" icon={CheckCircle2}  delay={0.25} />
-                    <StatMetric label="Failed"       value={visibleStats.failed}          accentHex="#E3000F" icon={XCircle}       delay={0.3} />
-                    <StatMetric label="CI"           value={visibleStats.ci}              accentHex="#00E0A0" icon={CircleDot}     delay={0.35} />
-                    <StatMetric label="Automerge"    value={visibleStats.automerge}       accentHex="#FFB800" icon={GitMerge}      delay={0.4} />
-                    <StatMetric label="Merged"       value={visibleStats.merged}          accentHex="#00AB84" icon={GitPullRequest} delay={0.45} />
-                    <StatMetric label="Blocked"      value={visibleStats.mergeBlocked}    accentHex="#F59E0B" icon={AlertTriangle} delay={0.5} />
-                    <StatMetric label="Conflicts"    value={visibleStats.mergeConflicts}  accentHex="#E3000F" icon={GitPullRequest} delay={0.55} />
-                </div>
+                <SprintStatsDeck
+                    hasSprintContext={hasSprintContext}
+                    stats={visibleStats}
+                    tasks={visibleTasksWithLiveActivities}
+                    sprintTiming={sprintTiming}
+                />
             ) : headerView === "race" ? (
                 /* ── Boat Race View ───────────────────────────────── */
                 <SprintBoatRace
@@ -2039,6 +2001,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                             <LiveTaskCard
                                 key={task.id}
                                 task={task}
+                                taskTiming={taskTimingMap.get(task.record_id || task.id) || taskTimingMap.get(task.id) || null}
                                 events={(task.record_id && taskEventsByRecordId.byRecordId.get(task.record_id))
                                     || taskEventsByRecordId.byTaskKey.get(task.id)
                                     || []}

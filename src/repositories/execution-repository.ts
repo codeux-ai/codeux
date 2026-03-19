@@ -743,7 +743,7 @@ export class ExecutionRepository {
         WHERE sr.project_id = ?
       )
       ORDER BY created_at DESC, id DESC
-      LIMIT 60
+      LIMIT 240
     `).all(projectId, projectId) as unknown as ExecutionRuntimeEventSummaryRow[];
 
     const activeAttentionItems = this.listActiveAttentionRowsForProject(projectId);

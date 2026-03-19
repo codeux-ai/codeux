@@ -210,9 +210,17 @@ Legacy runtime:
   - task stats and the race view can render from the latest runtime status snapshot even when execution metadata is still catching up
   - the page only shows the full `Waiting for Sprint Start` empty state when neither runtime status nor execution state has sprint context
 - The Live view hero now has three interchangeable visualizations:
-  - `Stats` for compact pipeline counts
+  - `Stats` for a compact asymmetric telemetry deck with one dominant sprint-time panel, a slimmer runtime intelligence rail, live flow-state deltas, merge pressure, and accumulated stage timing
   - `Race` for stage-based progress across the execution course
   - `DAG` for an animated dependency graph of the current sprint using real `depends_on` edges, live task phases, and merge-stage state
+- The Stats deck no longer uses the old shimmer card treatment; count changes now surface as short-lived `+1` / `-1` indicators instead of flashing the entire card
+- Sprint timing in the Stats deck now includes:
+  - total sprint elapsed time
+  - average completed-task duration
+  - longest task duration
+  - accumulated task time split into `Queued`, `Coding`, `CI / Review`, `Autofix`, and `Merge`
+- Task cards in Live view now show per-stage timing pills, so a task can separately expose coding time, CI wait time, autofix time, merge time, and final total duration once it settles
+- The selected-project execution snapshot now ships a deeper recent runtime event window so stage timing remains accurate across larger sprints and reruns
 - In the active v2 settings UI, these controls live under `Settings -> Sprint Engine -> Worker Runtime`
 - Sprint compose/planning also follows that same worker mode:
   - with `Connected MCP`, the composer looks for a live planning worker/listener
