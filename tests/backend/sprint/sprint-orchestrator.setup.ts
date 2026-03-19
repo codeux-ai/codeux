@@ -83,6 +83,8 @@ export const buildDeps = () => {
     },
     projectAttentionService: {
       openItem: vi.fn(),
+      listActiveProjectItems: vi.fn().mockReturnValue([]),
+      resolveItem: vi.fn(),
       resolveItemsForTask: vi.fn(),
       resolveItemsForSprintRun: vi.fn(),
     },

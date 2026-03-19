@@ -51,6 +51,7 @@ export class WorkspaceManager implements IWorkspaceManager {
     let finalWorktreePath = worktreePath;
 
     await this.withRepoLock(repoPath, async () => {
+      this.assertSafeWorktreePath(repoPath, finalWorktreePath, "prepare");
       await fs.mkdir(path.dirname(finalWorktreePath), { recursive: true });
       await runCommandStrict("git", ["worktree", "prune"], repoPath);
       try {
@@ -96,6 +97,7 @@ export class WorkspaceManager implements IWorkspaceManager {
   }
 
   private async removeWorktreeInternal(repoPath: string, worktreePath: string): Promise<void> {
+    this.assertSafeWorktreePath(repoPath, worktreePath, "remove");
     try {
       await runCommandStrict("git", ["worktree", "remove", "--force", worktreePath], repoPath);
     } catch {
@@ -154,7 +156,7 @@ export class WorkspaceManager implements IWorkspaceManager {
   }
 
   private async resolveResumableWorktreePath(repoPath: string, expectedBranch: string, preferredPath: string): Promise<string | undefined> {
-    if (await this.canResumeExistingWorktree(preferredPath, expectedBranch)) {
+    if (this.isSafeWorktreePath(repoPath, preferredPath) && await this.canResumeExistingWorktree(preferredPath, expectedBranch)) {
       return preferredPath;
     }
     const branchWorktreePath = await this.findWorktreePathForBranch(repoPath, expectedBranch);
@@ -185,6 +187,7 @@ export class WorkspaceManager implements IWorkspaceManager {
   private async findWorktreePathForBranch(repoPath: string, branch: string): Promise<string | undefined> {
     const listing = await runCommandStrict("git", ["worktree", "list", "--porcelain"], repoPath);
     const targetRef = `refs/heads/${branch}`;
+    const normalizedRepoPath = path.resolve(repoPath);
     let currentPath: string | undefined;
 
     for (const rawLine of listing.stdout.split("\n")) {
@@ -195,7 +198,11 @@ export class WorkspaceManager implements IWorkspaceManager {
       }
       if (line.startsWith("branch ")) {
         const ref = line.slice("branch ".length).trim();
-        if (ref === targetRef && currentPath) return currentPath;
+        if (ref === targetRef && currentPath) {
+          if (path.resolve(currentPath) !== normalizedRepoPath) {
+            return currentPath;
+          }
+        }
       }
       if (line.length === 0) currentPath = undefined;
     }
@@ -256,6 +263,9 @@ export class WorkspaceManager implements IWorkspaceManager {
   }
 
   private async removeStaleWorktreeRegistration(repoPath: string, worktreePath: string): Promise<void> {
+    if (!this.isSafeWorktreePath(repoPath, worktreePath)) {
+      return;
+    }
     try {
       await runCommandStrict("git", ["worktree", "remove", "--force", worktreePath], repoPath);
     } catch { /* ignore */ }
@@ -277,5 +287,25 @@ export class WorkspaceManager implements IWorkspaceManager {
       releaseLock();
       if (this.repoLocks.get(repoPath) === queueEntry) this.repoLocks.delete(repoPath);
     }
+  }
+
+  private isSafeWorktreePath(repoPath: string, worktreePath: string): boolean {
+    const normalizedRepoPath = path.resolve(repoPath);
+    const normalizedWorktreePath = path.resolve(worktreePath);
+    return normalizedWorktreePath !== normalizedRepoPath
+      && !normalizedRepoPath.startsWith(`${normalizedWorktreePath}${path.sep}`);
+  }
+
+  private assertSafeWorktreePath(repoPath: string, worktreePath: string, operation: "prepare" | "remove"): void {
+    if (this.isSafeWorktreePath(repoPath, worktreePath)) {
+      return;
+    }
+
+    const normalizedRepoPath = path.resolve(repoPath);
+    const normalizedWorktreePath = path.resolve(worktreePath);
+    const targetDescription = normalizedWorktreePath === normalizedRepoPath
+      ? "repository root"
+      : "repository ancestor";
+    throw new Error(`Refusing to ${operation} worktree at ${normalizedWorktreePath}: path resolves to the protected ${targetDescription} ${normalizedRepoPath}.`);
   }
 }

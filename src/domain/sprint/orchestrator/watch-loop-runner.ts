@@ -153,12 +153,16 @@ export class WatchLoopRunner {
 
       const runningTasks = subtasks.filter((task) => task.status === "RUNNING");
       const readyTasks = subtasks.filter((task) => task.status === "PENDING");
-      const activeWorkerAttentionItems = typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
+      const activeProjectAttentionItems = typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
         ? this.deps.projectAttentionService.listActiveProjectItems(scopedExecutionContext.project.id).filter((item) => (
-          item.ownerType === "worker" && (item.status === "open" || item.status === "claimed")
+          item.status === "open" || item.status === "claimed"
         ))
         : [];
+      const activeWorkerAttentionItems = activeProjectAttentionItems.filter((item) => item.ownerType === "worker");
       const activeWorkerMergeConflictAttention = activeWorkerAttentionItems.some((item) => item.attentionType === "merge_conflict");
+      const activeMainMergeAttentionItems = activeProjectAttentionItems.filter((item) => (
+        item.sprintRunId === sprintRunId && isActiveMainMergeAttentionItem(item)
+      ));
 
       const allTerminal = subtasks.length > 0 && subtasks.every(
         (task) => isCompletedTaskSettled(task) || task.status === "FAILED"
@@ -212,20 +216,7 @@ export class WatchLoopRunner {
 
           if (subtasks.length > 0 && subtasks.every((task) => isCompletedTaskSettled(task))) {
             try {
-              this.deps.completedSprints.add(`${scopedExecutionContext.project.id}:${scopedExecutionContext.sprint.id}`);
-              this.deps.executionRepository.updateSprintRun(sprintRunId, {
-                status: "completed",
-                finishedAt: new Date().toISOString(),
-                lastHeartbeatAt: new Date().toISOString(),
-              });
-              this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_completed", "system", {
-                sprintNumber: scopedExecutionContext.sprintNumber,
-                taskCount: subtasks.length,
-              }, {
-                sourceEventKey: `sprint-completed:${sprintRunId}`,
-              });
-              fullReport += await this.deps.renderInstruction("cleanupAllMerged", { planning_target: scopedExecutionContext.sprint.name }, repoPath);
-              fullReport += await runCompletionStep({
+              const completionGuidance = await runCompletionStep({
                 defaultBranch,
                 featureBranch: defaultFeatureBranch,
                 sprintNumber: scopedExecutionContext.sprintNumber,
@@ -258,7 +249,11 @@ export class WatchLoopRunner {
                   sourceEventKey: `main-merge-gate:${sprintRunId}:${mergeFeedback.state}:${mergeFeedback.prNumber || "none"}`,
                 });
               }
-              if (ciIntelligence.resolveMainMergeConflicts && mergeFeedback.hasMergeConflict) {
+              if (
+                ciIntelligence.resolveMainMergeConflicts
+                && mergeFeedback.hasMergeConflict
+                && activeMainMergeAttentionItems.length === 0
+              ) {
                 this.deps.projectAttentionService.openItem({
                   projectId: scopedExecutionContext.project.id,
                   sprintId: scopedExecutionContext.sprint.id,
@@ -293,7 +288,45 @@ export class WatchLoopRunner {
                     featureBranchTaskContexts: selectMergedTaskContexts(subtasks),
                   },
                 });
+              } else if (ciIntelligence.resolveMainMergeConflicts && !mergeFeedback.hasMergeConflict) {
+                resolveMainMergeConflictAttentionItems(
+                  this.deps.projectAttentionService,
+                  scopedExecutionContext.project.id,
+                  sprintRunId,
+                );
               }
+              const remainingMainMergeAttentionItems = collectActiveMainMergeAttentionItems(
+                this.deps.projectAttentionService,
+                scopedExecutionContext.project.id,
+                sprintRunId,
+              );
+              if (mergeFeedback.hasMergeConflict || remainingMainMergeAttentionItems.length > 0) {
+                fullReport += completionGuidance;
+                fullReport += mergeFeedback.text;
+                pauseSprintRunForMainMergeBlocker({
+                  executionRepository: this.deps.executionRepository,
+                  sprintRunId,
+                  sprintNumber: scopedExecutionContext.sprintNumber,
+                  mergeFeedback,
+                  attentionItems: remainingMainMergeAttentionItems,
+                });
+                fullReport += "\n⏸️ **Sprint Paused:** Main-branch merge is still blocked. Resolve the active main-merge conflict and resume the sprint.\n";
+                return fullReport;
+              }
+              this.deps.completedSprints.add(`${scopedExecutionContext.project.id}:${scopedExecutionContext.sprint.id}`);
+              this.deps.executionRepository.updateSprintRun(sprintRunId, {
+                status: "completed",
+                finishedAt: new Date().toISOString(),
+                lastHeartbeatAt: new Date().toISOString(),
+              });
+              this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_completed", "system", {
+                sprintNumber: scopedExecutionContext.sprintNumber,
+                taskCount: subtasks.length,
+              }, {
+                sourceEventKey: `sprint-completed:${sprintRunId}`,
+              });
+              fullReport += await this.deps.renderInstruction("cleanupAllMerged", { planning_target: scopedExecutionContext.sprint.name }, repoPath);
+              fullReport += completionGuidance;
               fullReport += mergeFeedback.text;
             } catch (cleanupError) {
               this.deps.logger.warn("Failed to finalize sprint run", {
@@ -431,6 +464,120 @@ export class WatchLoopRunner {
       });
     }
   }
+}
+
+function resolveMainMergeConflictAttentionItems(
+  projectAttentionService: {
+    listActiveProjectItems: (projectId: string) => Array<{
+      id: string;
+      sprintRunId: string | null;
+      attentionType: string;
+      summaryMarkdown: string;
+      payload: Record<string, unknown> | null;
+    }>;
+    resolveItem: (itemId: string, input?: {
+      status?: "resolved" | "dismissed" | "expired";
+      reason?: string;
+      resolutionSummaryMarkdown?: string;
+      workerEndpointId?: string | null;
+      payloadPatch?: Record<string, unknown> | null;
+    }) => unknown;
+  },
+  projectId: string,
+  sprintRunId: string,
+): void {
+  const activeItems = projectAttentionService.listActiveProjectItems(projectId);
+  for (const item of activeItems) {
+    if (item.sprintRunId !== sprintRunId) {
+      continue;
+    }
+    const payload = item.payload || {};
+    const isMainMergeConflict = item.attentionType === "merge_conflict" && payload.mergeStage === "main";
+    const isMainMergeConflictHandoff = (
+      (item.attentionType === "human_escalation_required" || item.attentionType === "dashboard_reply_required")
+      && payload.sourceAttentionType === "merge_conflict"
+      && payload.mergeStage === "main"
+    );
+    if (!isMainMergeConflict && !isMainMergeConflictHandoff) {
+      continue;
+    }
+
+    projectAttentionService.resolveItem(item.id, {
+      status: "resolved",
+      reason: "main_merge_conflict_cleared",
+      resolutionSummaryMarkdown: [
+        item.summaryMarkdown.trim(),
+        "",
+        "Resolved automatically because the main branch merge conflict no longer exists.",
+      ].filter(Boolean).join("\n"),
+    });
+  }
+}
+
+function collectActiveMainMergeAttentionItems(
+  projectAttentionService: {
+    listActiveProjectItems: (projectId: string) => Array<{
+      id: string;
+      sprintRunId: string | null;
+      attentionType: string;
+      ownerType?: string;
+      status?: string;
+      summaryMarkdown: string;
+      payload: Record<string, unknown> | null;
+    }>;
+  },
+  projectId: string,
+  sprintRunId: string,
+): Array<{
+  id: string;
+  sprintRunId: string | null;
+  attentionType: string;
+  summaryMarkdown: string;
+  payload: Record<string, unknown> | null;
+}> {
+  return projectAttentionService.listActiveProjectItems(projectId).filter((item) => (
+    item.sprintRunId === sprintRunId && isActiveMainMergeAttentionItem(item)
+  ));
+}
+
+function isActiveMainMergeAttentionItem(item: {
+  attentionType: string;
+  payload: Record<string, unknown> | null;
+}): boolean {
+  const payload = item.payload || {};
+  const isMainMergeConflict = item.attentionType === "merge_conflict" && payload.mergeStage === "main";
+  const isMainMergeConflictHandoff = (
+    (item.attentionType === "human_escalation_required" || item.attentionType === "dashboard_reply_required")
+    && payload.sourceAttentionType === "merge_conflict"
+    && payload.mergeStage === "main"
+  );
+  return isMainMergeConflict || isMainMergeConflictHandoff;
+}
+
+function pauseSprintRunForMainMergeBlocker(args: {
+  executionRepository: Pick<SprintOrchestratorDependencies["executionRepository"], "updateSprintRun" | "appendSprintRunEvent">;
+  sprintRunId: string;
+  sprintNumber: number;
+  mergeFeedback: MergeFeedbackResult;
+  attentionItems: Array<{ id: string; attentionType: string }>;
+}): void {
+  const now = new Date().toISOString();
+  args.executionRepository.updateSprintRun(args.sprintRunId, {
+    status: "paused",
+    lastHeartbeatAt: now,
+  });
+  args.executionRepository.appendSprintRunEvent(args.sprintRunId, "sprint_paused", "system", {
+    reason: "main_merge_blocked",
+    sprintNumber: args.sprintNumber,
+    mainMergeState: args.mergeFeedback.state,
+    prNumber: args.mergeFeedback.prNumber,
+    prUrl: args.mergeFeedback.prUrl,
+    hasMergeConflict: args.mergeFeedback.hasMergeConflict,
+    attentionItemIds: args.attentionItems.map((item) => item.id),
+    attentionTypes: args.attentionItems.map((item) => item.attentionType),
+  }, {
+    sourceEventKey: `sprint-paused:${args.sprintRunId}:main-merge-blocked:${args.mergeFeedback.state}:${args.mergeFeedback.prNumber || "none"}`,
+  });
 }
 
 function selectMergedTaskContexts(subtasks: Array<{

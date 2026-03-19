@@ -52,6 +52,7 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../repositories/settings-defaults.js
 import { AppDbStorage } from "../repositories/app-db-storage.js";
 import { ProjectWorkerAssignmentRepository } from "../repositories/project-worker-assignment-repository.js";
 import { ProjectAttentionRepository } from "../repositories/project-attention-repository.js";
+import type { ProjectAttentionItemRecord } from "../contracts/project-attention-types.js";
 import { DefaultRuntimeContext, RuntimeContext } from "../app/runtime-context.js";
 import { bootSettings, syncGitSettingsFromDashboard } from "../app/lifecycle/settings-lifecycle-service.js";
 import { bootDashboard } from "../app/lifecycle/dashboard-lifecycle-service.js";
@@ -69,6 +70,20 @@ function detectMergeConflictMessage(message: string | null | undefined): boolean
     || normalized.includes("not mergeable")
     || normalized.includes("cannot be cleanly created")
     || normalized.includes("dirty");
+}
+
+function normalizeBranchName(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function readAttentionPayloadRecord(item: ProjectAttentionItemRecord): Record<string, unknown> | null {
+  return item.payload && typeof item.payload === "object" && !Array.isArray(item.payload)
+    ? item.payload
+    : null;
 }
 
 export interface JulesAgentServerOptions {
@@ -527,7 +542,123 @@ export class JulesAgentServer {
   }
 
   private async getGitStatus(): Promise<GitTrackingStatus> {
-    return await this.activityCacheService.getGitStatus();
+    const status = await this.activityCacheService.getGitStatus();
+    await this.reconcileSelectedProjectMergeConflictAttention(status);
+    return status;
+  }
+
+  private async reconcileSelectedProjectMergeConflictAttention(gitStatus: GitTrackingStatus): Promise<void> {
+    const selectedProjectId = this.projectManagementRepository.getSelectedProjectId();
+    if (!selectedProjectId) {
+      return;
+    }
+
+    const activeItems = this.projectAttentionRepository.listProjectAttentionItems(selectedProjectId, {
+      statuses: ["open", "claimed"],
+      limit: 50,
+    });
+    const mergeConflictItems = activeItems.filter((item) => this.isMergeConflictAttentionItem(item));
+    if (mergeConflictItems.length === 0) {
+      return;
+    }
+
+    const repositoryStatus = await this.loadRepositoryWideGitStatusForAttentionReconciliation(gitStatus);
+    if (!repositoryStatus?.available || repositoryStatus.mode !== "REMOTE") {
+      return;
+    }
+
+    for (const item of mergeConflictItems) {
+      if (!this.shouldResolveMergeConflictAttention(item, repositoryStatus)) {
+        continue;
+      }
+
+      const payload = readAttentionPayloadRecord(item);
+      const mergeStage = payload?.mergeStage === "main" ? "main" : "feature";
+      this.projectAttentionRepository.resolveAttentionItem(item.id, {
+        status: "resolved",
+        reason: mergeStage === "main" ? "main_merge_conflict_cleared" : "merge_conflict_cleared",
+      });
+    }
+  }
+
+  private async loadRepositoryWideGitStatusForAttentionReconciliation(
+    gitStatus: GitTrackingStatus,
+  ): Promise<GitTrackingStatus | null> {
+    if (gitStatus.mode !== "REMOTE" || !gitStatus.available) {
+      return null;
+    }
+
+    if (gitStatus.tracking.scope === "REPOSITORY") {
+      return gitStatus;
+    }
+
+    try {
+      const gitStatusService = new GitStatusService(this.resolveGitStatusRepoPath());
+      return await gitStatusService.getStatus(
+        "REMOTE",
+        this.getEffectiveGithubToken(),
+        { scope: "REPOSITORY" },
+        JulesAgentServer.GIT_STATUS_CACHE_MS,
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  private isMergeConflictAttentionItem(item: ProjectAttentionItemRecord): boolean {
+    const payload = readAttentionPayloadRecord(item);
+    if (item.attentionType === "merge_conflict") {
+      return true;
+    }
+
+    return (
+      (item.attentionType === "human_escalation_required" || item.attentionType === "dashboard_reply_required")
+      && payload?.sourceAttentionType === "merge_conflict"
+    );
+  }
+
+  private shouldResolveMergeConflictAttention(
+    item: ProjectAttentionItemRecord,
+    gitStatus: GitTrackingStatus,
+  ): boolean {
+    const payload = readAttentionPayloadRecord(item);
+    if (!payload) {
+      return false;
+    }
+
+    const prNumber = typeof payload.prNumber === "number" && Number.isFinite(payload.prNumber)
+      ? payload.prNumber
+      : null;
+    const prUrl = typeof payload.prUrl === "string" && payload.prUrl.trim().length > 0
+      ? payload.prUrl.trim()
+      : null;
+    const sourceBranch = normalizeBranchName(payload.conflictingBranches && typeof payload.conflictingBranches === "object"
+      ? (payload.conflictingBranches as Record<string, unknown>).source
+      : payload.mergeStage === "main"
+        ? payload.featureBranch
+        : payload.workerBranch);
+    const targetBranch = normalizeBranchName(payload.conflictingBranches && typeof payload.conflictingBranches === "object"
+      ? (payload.conflictingBranches as Record<string, unknown>).target
+      : payload.mergeStage === "main"
+        ? payload.defaultBranch
+        : payload.featureBranch);
+
+    const matchesPullRequest = (pr: { number: number; url: string; headRefName: string | null; baseRefName: string | null }): boolean => {
+      if (prNumber !== null && pr.number === prNumber) {
+        return true;
+      }
+      if (prUrl && pr.url === prUrl) {
+        return true;
+      }
+      return normalizeBranchName(pr.headRefName) === sourceBranch && normalizeBranchName(pr.baseRefName) === targetBranch;
+    };
+
+    if (gitStatus.mergedPullRequests.some((pr) => matchesPullRequest(pr))) {
+      return true;
+    }
+
+    const openPr = gitStatus.openPullRequests.find((pr) => matchesPullRequest(pr));
+    return Boolean(openPr && String(openPr.mergeStateStatus || "").trim().toUpperCase() !== "DIRTY");
   }
 
   private async getCiStatusForScope(args: GetCiStatusForScopeArgs): Promise<GitTrackingStatus | null> {
