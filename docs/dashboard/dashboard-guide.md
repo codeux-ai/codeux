@@ -145,6 +145,10 @@ Legacy runtime:
 - Sprint data now hydrates cache-first when revisiting the page and refreshes in the background, so the showcase and ledger do not flash empty while the latest data loads
 - `Improve with AI` is worker-backed through the Planning agent and only rewrites the sprint prompt
 - Sprint planning is also worker-backed through the Planning agent and automatically creates task records from the returned plan
+- The built-in Planning agent now expects a strict database task JSON contract:
+  - task keys should use `T01`, `T02`, `T03`, ...
+  - the `tasks` array is returned in DAG order
+  - each task prompt is standardized to `Objective`, `Scope`, `Implementation Requirements`, `Constraints`, and `Verification`
 - The sprint page now shows a visible planning-connection indicator, preferring a listen-mode project `worker` and then a listen-mode project `listener`
 - New sprints are showcased by default, showcased sprints are controlled by the heart toggle, and the showcase gallery is no longer capped to 3 sprint cells
 - Completed sprints are automatically removed from showcase pinning and drop out of the top gallery
@@ -205,6 +209,10 @@ Legacy runtime:
   - `/api/status` and `/api/execution` now hydrate independently
   - task stats and the race view can render from the latest runtime status snapshot even when execution metadata is still catching up
   - the page only shows the full `Waiting for Sprint Start` empty state when neither runtime status nor execution state has sprint context
+- The Live view hero now has three interchangeable visualizations:
+  - `Stats` for compact pipeline counts
+  - `Race` for stage-based progress across the execution course
+  - `DAG` for an animated dependency graph of the current sprint using real `depends_on` edges, live task phases, and merge-stage state
 - In the active v2 settings UI, these controls live under `Settings -> Sprint Engine -> Worker Runtime`
 - Sprint compose/planning also follows that same worker mode:
   - with `Connected MCP`, the composer looks for a live planning worker/listener

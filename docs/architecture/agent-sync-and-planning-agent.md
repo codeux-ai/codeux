@@ -94,6 +94,22 @@ Two request types are currently supported:
 
 Sprint planning expects structured JSON from the worker reply and creates DB task records from it.
 
+The planning contract is now intentionally strict so the planner emits database-ready tasks without improvising formatting:
+
+- task keys should use `T01`, `T02`, `T03`, ... in topological order
+- the `tasks` array itself is the DAG order
+- dependencies may only point backward to earlier task keys
+- every task must include `title`, `description`, `promptMarkdown`, `priority`, `executorType`, and `dependsOn`
+- `promptMarkdown` is standardized to five sections in this order:
+  - `## Objective`
+  - `## Scope`
+  - `## Implementation Requirements`
+  - `## Constraints`
+  - `## Verification`
+- the default built-in Planning agent instructions now include canonical multi-task JSON examples so virtual and connected planning workers follow the same output shape more reliably
+
+This keeps planning quality deterministic across providers and reduces executor ambiguity when Sprint OS converts the plan into DB task records.
+
 If `autoStart` is enabled, Sprint OS starts orchestration after the tasks are created.
 
 ## Worker Agent Flow
