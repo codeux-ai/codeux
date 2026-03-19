@@ -1,7 +1,14 @@
 import { randomUUID } from "crypto";
 import * as fs from "fs/promises";
 import * as path from "path";
-import type { CliWorkflowSettings, DashboardSettings, JulesSession, ProviderId, Subtask } from "../contracts/app-types.js";
+import type {
+  CliWorkflowSettings,
+  DashboardSettings,
+  DashboardSettingsScope,
+  JulesSession,
+  ProviderId,
+  Subtask,
+} from "../contracts/app-types.js";
 import type { UpdateTaskDispatchInput, UpdateTaskRunInput } from "../contracts/execution-types.js";
 import { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
@@ -37,7 +44,7 @@ interface CliWorkflowServiceDependencies {
   executionRepository?: ExecutionRepository;
   projectManagementRepository?: ProjectManagementRepository;
   activeDispatchRegistry?: ActiveDispatchRegistry;
-  getDashboardSettings: () => DashboardSettings;
+  getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
   agentPresetSyncService: AgentPresetSyncService;
   getGithubToken: () => string | undefined;
   logger?: Logger;
@@ -49,6 +56,7 @@ interface StartCliTaskInput {
   repoPath: string;
   featureBranch: string;
   sprintNumber: number;
+  settingsScope?: DashboardSettingsScope;
   dispatchId?: string;
   taskRunId?: string;
 }
@@ -65,7 +73,7 @@ export class CliWorkflowService {
   }
 
   async startTask(input: StartCliTaskInput): Promise<JulesSession> {
-    const settings = this.deps.getDashboardSettings();
+    const settings = this.deps.getDashboardSettings(input.settingsScope);
     const workflowSettings = this.resolveWorkflowSettings(settings);
 
     const sessionId = `cli-${input.provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
@@ -137,7 +145,7 @@ export class CliWorkflowService {
   }): Promise<void> {
     const abortController = new AbortController();
     const workspaceSessionId = args.resumeFromFailedSessionId || args.sessionId;
-    const settings = this.deps.getDashboardSettings();
+    const settings = this.deps.getDashboardSettings(args.settingsScope);
     const workflowSettings = this.resolveWorkflowSettings(settings);
     
     const worktreePath = args.resumeWorktreePath || this.workspaceManager.buildWorktreePath(args.repoPath, workspaceSessionId, workflowSettings.executionMode);

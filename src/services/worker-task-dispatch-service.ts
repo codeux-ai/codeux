@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { formatSprintBranch } from "../git/sprint-branch-scheme.js";
-import type { DashboardSettings } from "../contracts/app-types.js";
+import type { DashboardSettings, DashboardSettingsScope } from "../contracts/app-types.js";
 import type { WorkerTaskDispatchClaim, TaskRunState } from "../contracts/execution-types.js";
 import type { McpConnectionRecord } from "../contracts/connection-chat-types.js";
 import type { WorkerExecutionMode } from "../contracts/app-types.js";
@@ -45,7 +45,7 @@ export class WorkerTaskDispatchService {
     private readonly workerEndpointRepository: WorkerEndpointRepository,
     private readonly projectWorkerAssignmentService: ProjectWorkerAssignmentService,
     private readonly projectAttentionService: ProjectAttentionService,
-    private readonly getDashboardSettings: () => DashboardSettings,
+    private readonly getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings,
     private readonly resolveWorkerExecutionMode: (projectId: string, sprintId?: string | null) => WorkerExecutionMode = () => "CONNECTED_MCP",
     private readonly logger?: Logger,
   ) {}
@@ -134,12 +134,16 @@ export class WorkerTaskDispatchService {
     const project = this.requireProject(dispatch.projectId);
     const sprint = this.requireSprint(dispatch.sprintId);
     const task = this.requireTask(dispatch.taskId);
+    const dashboardSettings = this.getDashboardSettings({
+      projectId: dispatch.projectId,
+      sprintId: dispatch.sprintId,
+    });
     this.projectWorkerAssignmentService.noteWorkerActivity(project.id, workerEndpoint.id);
     const featureBranch = sprint.featureBranch?.trim()
       || (typeof sprint.number === "number"
-        ? formatSprintBranch(this.getDashboardSettings().git.sprintBranchScheme, sprint.number)
-        : this.getDashboardSettings().git.featureBranchPrefix + task.taskKey.toLowerCase());
-    const defaultBranch = project.defaultBranch?.trim() || this.getDashboardSettings().git.defaultBranch || "main";
+        ? formatSprintBranch(dashboardSettings.git.sprintBranchScheme, sprint.number)
+        : dashboardSettings.git.featureBranchPrefix + task.taskKey.toLowerCase());
+    const defaultBranch = project.defaultBranch?.trim() || dashboardSettings.git.defaultBranch || "main";
     const repoPath = project.baseDir;
 
     this.projectManagementRepository.updateTask(task.id, {

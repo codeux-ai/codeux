@@ -68,6 +68,10 @@ export class WorkerDispatchExecutionService {
       sprint.featureBranch?.trim() || project.defaultBranch?.trim() || "main",
       project.baseDir,
       sprint.number ?? 0,
+      {
+        projectId: project.id,
+        sprintId: sprint.id,
+      },
       dispatch.id,
       taskRun.id,
     );

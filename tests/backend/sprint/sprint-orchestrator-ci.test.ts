@@ -480,6 +480,107 @@ describe("SprintOrchestrator CI logic", () => {
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });
 
+  it("respects project-scoped CI wait overrides during orchestration", async () => {
+    const { deps, listSessions, subtaskRepository } = buildDeps();
+    const getDashboardSettings = vi.fn((scope?: { projectId?: string; sprintId?: string }) => (
+      scope?.projectId === "project-1"
+        ? {
+            ...DEFAULT_DASHBOARD_SETTINGS,
+            ciIntelligence: {
+              ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
+              waitForCiBeforeFeatureMerge: false,
+              resolveAllCommentsBeforeFeatureMerge: true,
+              featurePrAutoMergeMode: "WHEN_GREEN",
+            },
+          }
+        : {
+            ...DEFAULT_DASHBOARD_SETTINGS,
+            ciIntelligence: {
+              ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
+              waitForCiBeforeFeatureMerge: true,
+              resolveAllCommentsBeforeFeatureMerge: true,
+              featurePrAutoMergeMode: "WHEN_GREEN",
+            },
+          }
+    ));
+    deps.getDashboardSettings = getDashboardSettings;
+    deps.getCiStatusForScope = vi.fn().mockResolvedValue({
+      mode: "REMOTE",
+      available: true,
+      repositoryRoot: "/tmp/repo",
+      branch: "feature/sprint1-implementation",
+      hasRemote: true,
+      dirty: false,
+      openPullRequests: [
+        {
+          number: 26,
+          title: "Task PR",
+          url: "https://example.com/pr/26",
+          state: "OPEN",
+          isDraft: false,
+          headRefName: "worker/task-26",
+          baseRefName: "feature/sprint1-implementation",
+          mergeStateStatus: null,
+          reviewDecision: "APPROVED",
+          updatedAt: null,
+          comments: 0,
+          checks: [{ name: "ci", status: "in_progress", conclusion: null }],
+        },
+      ],
+      ciRuns: [],
+      mergedPullRequests: [],
+      tracking: { scope: "FEATURE_PR_CI", label: "Feature PR CI", branch: "feature/sprint1-implementation" },
+      warnings: [],
+      lastUpdated: new Date().toISOString(),
+    });
+
+    const orchestrator = new SprintOrchestrator(deps as any);
+    const tmpRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-orch-scoped-ci-override-"));
+    const subtasksDir = path.join(tmpRoot, ".sprint-os", "sprints", "sprint1-subtasks");
+    await fs.mkdir(subtasksDir, { recursive: true });
+    await fs.writeFile(path.join(subtasksDir, "01-task.md"), "title: test\ndepends_on: []\nis_independent: true\nmerged: false\nprompt:\nDo it\n", "utf-8");
+
+    subtaskRepository.loadSubtasks.mockResolvedValue([
+      {
+        id: "01-task",
+        title: "Test task",
+        prompt: "Do it",
+        depends_on: [],
+        is_independent: true,
+      },
+    ]);
+    listSessions.mockResolvedValue({
+      sessions: [
+        {
+          id: "abc123",
+          name: "sessions/abc123",
+          title: `Sprint 1: ${buildTaskRunTag(tmpRoot, 1, "01-task")} [01-task] Test task`,
+          state: "COMPLETED",
+          prompt: "x",
+          outputs: [{ pullRequest: { url: "https://example.com/pr/26", workerBranch: "worker/task-26" } }],
+        },
+      ],
+    });
+
+    const result = await orchestrator.execute({
+      sprint_number: 1,
+      repo_path: tmpRoot,
+      source_id: "sources/123",
+      action: "status",
+      wait: false,
+    });
+
+    const text = result.content[0].text as string;
+    expect(text).toContain("Auto-Merged");
+    expect(deps.autoMergeFeaturePr).toHaveBeenCalledWith({ repoPath: tmpRoot, prNumber: 26 });
+    expect(getDashboardSettings).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      sprintId: "sprint-1",
+    }));
+
+    await fs.rm(tmpRoot, { recursive: true, force: true });
+  });
+
   it("keeps task running when worker branch is missing but PR is matched by pr_url and checks are pending", async () => {
     const { deps, listSessions, subtaskRepository } = buildDeps();
     deps.getDashboardSettings = () => ({

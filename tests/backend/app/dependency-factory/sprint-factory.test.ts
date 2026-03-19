@@ -136,6 +136,8 @@ describe("Sprint Factory", () => {
     const cliArgs = vi.mocked(CliWorkflowService).mock.calls[0][0];
 
     expect(cliArgs.getDashboardSettings()).toEqual({ setting1: true });
+    expect(cliArgs.getDashboardSettings({ projectId: "project-1" })).toEqual({ workers: { executionMode: "VIRTUAL" } });
+    expect(cliArgs.getDashboardSettings({ projectId: "project-1", sprintId: "sprint-1" })).toEqual({ workers: { executionMode: "VIRTUAL" } });
 
     expect(cliArgs.agentPresetSyncService).toBe(mockCoreDeps.agentPresetSyncService);
 
@@ -154,6 +156,8 @@ describe("Sprint Factory", () => {
     });
 
     expect(taskArgs.getDashboardSettings()).toEqual({ setting1: true });
+    expect(taskArgs.getDashboardSettings({ projectId: "project-1" })).toEqual({ workers: { executionMode: "VIRTUAL" } });
+    expect(taskArgs.getDashboardSettings({ projectId: "project-1", sprintId: "sprint-1" })).toEqual({ workers: { executionMode: "VIRTUAL" } });
 
     taskArgs.isJulesApiConfigured();
     expect(mockContext.isJulesApiConfigured).toHaveBeenCalled();
@@ -200,6 +204,8 @@ describe("Sprint Factory", () => {
     expect(mockContext.runtimeContext.lastStatus).toEqual({ test: 1 });
 
     expect(sprintArgs.getDashboardSettings()).toEqual({ setting1: true });
+    expect(sprintArgs.getDashboardSettings({ projectId: "project-1" })).toEqual({ workers: { executionMode: "VIRTUAL" } });
+    expect(sprintArgs.getDashboardSettings({ projectId: "project-1", sprintId: "sprint-1" })).toEqual({ workers: { executionMode: "VIRTUAL" } });
 
     sprintArgs.isJulesApiConfigured();
     expect(mockContext.isJulesApiConfigured).toHaveBeenCalledTimes(2); // once from taskService

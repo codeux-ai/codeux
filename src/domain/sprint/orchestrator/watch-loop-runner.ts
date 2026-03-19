@@ -18,6 +18,7 @@ export interface WatchLoopRunnerArgs {
   repoPath: string;
   defaultFeatureBranch: string;
   defaultBranch: string;
+  featureBranchPrefix: string;
   githubMode: "REMOTE" | "LOCAL";
   retryFailed: boolean;
   loopSteps: SprintLoopStepSettings;
@@ -43,6 +44,7 @@ export class WatchLoopRunner {
       repoPath,
       defaultFeatureBranch,
       defaultBranch,
+      featureBranchPrefix,
       githubMode,
       retryFailed,
       loopSteps,
@@ -129,7 +131,7 @@ export class WatchLoopRunner {
         ciIntelligence,
         githubMode,
         defaultBranch,
-        featureBranchPrefix: this.deps.getDashboardSettings().git.featureBranchPrefix,
+        featureBranchPrefix,
         sprintRunId,
       });
 
