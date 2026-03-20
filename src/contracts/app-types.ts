@@ -450,6 +450,8 @@ export interface WorkerSettings {
   executionMode: WorkerExecutionMode;
   virtualWorkerProvider: VirtualWorkerProvider;
   model: string;
+  maxConcurrency: number;
+  timeoutSeconds: number;
 }
 
 export interface AgentSettings {

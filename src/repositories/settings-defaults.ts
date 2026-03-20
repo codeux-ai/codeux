@@ -207,6 +207,8 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     executionMode: "CONNECTED_MCP",
     virtualWorkerProvider: "codex",
     model: "gpt-5.3-codex",
+    maxConcurrency: 1,
+    timeoutSeconds: 300,
   },
   agents: {
     saveToProjectDirectory: true,

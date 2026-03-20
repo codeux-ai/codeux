@@ -4,6 +4,7 @@ import {
   getFieldSource,
   getFieldSourceLabel,
   getSectionSource,
+  AI_MODEL_CATALOG,
   type SettingsEditorScope,
 } from "../../lib/settings-view-models.js";
 
@@ -243,9 +244,9 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
       </Card>
 
       <Card
-        title="Provider Routing"
-        description="Select the provider strategy and model mix this scope should use."
-        badge={providerSource ? sourceLabel(providerSource) : undefined}
+        title="AI Models"
+        description="Select the provider strategy, model mix, and worker runtime settings this scope should use."
+        badge={providerSource || workerSource ? sourceLabel(providerSource === workerSource ? (providerSource || "system") : "mixed") : undefined}
       >
         <div className="grid gap-4 lg:grid-cols-2">
           <Row label="Primary provider" description="Default provider when the strategy is manual." badge={getBadge("aiProvider.provider")}>
@@ -282,6 +283,67 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             />
           </Row>
         </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Row label="Worker mode" description="Connected workers stay in listen mode. Virtual workers wake only when worker work exists, run one unit of work, then shut down." badge={getBadge("workers.executionMode")}>
+            <SelectField
+              value={settings.workers.executionMode}
+              onChange={(value) => update({
+                workers: {
+                  ...settings.workers,
+                  executionMode: value as ProjectSettings["workers"]["executionMode"],
+                },
+              })}
+              options={[
+                { value: "CONNECTED_MCP", label: "Connected MCP" },
+                { value: "VIRTUAL", label: "Virtual on-demand" },
+              ]}
+            />
+          </Row>
+          <Row label="Virtual worker CLI" description="Preferred provider when worker mode is virtual. Jules is intentionally excluded from worker execution." badge={getBadge("workers.virtualWorkerProvider")}>
+            <SelectField
+              value={settings.workers.virtualWorkerProvider}
+              onChange={(value) => update({
+                workers: {
+                  ...settings.workers,
+                  virtualWorkerProvider: value as ProjectSettings["workers"]["virtualWorkerProvider"],
+                },
+              })}
+              options={[
+                { value: "gemini", label: "Gemini" },
+                { value: "codex", label: "Codex" },
+                { value: "claude-code", label: "Claude Code" },
+              ]}
+            />
+          </Row>
+          <Row label="Max concurrency" description="Maximum number of parallel tasks a worker can handle simultaneously." badge={getBadge("workers.maxConcurrency")}>
+            <NumberField
+              value={settings.workers.maxConcurrency}
+              min={1}
+              max={20}
+              onChange={(value) => update({
+                workers: {
+                  ...settings.workers,
+                  maxConcurrency: value,
+                },
+              })}
+            />
+          </Row>
+          <Row label="Dispatch timeout" description="Seconds to wait for a worker to finish a single task dispatch before timing out." badge={getBadge("workers.timeoutSeconds")}>
+            <NumberField
+              value={settings.workers.timeoutSeconds}
+              min={60}
+              max={3600}
+              onChange={(value) => update({
+                workers: {
+                  ...settings.workers,
+                  timeoutSeconds: value,
+                },
+              })}
+            />
+          </Row>
+        </div>
+
         <div className="grid gap-4 xl:grid-cols-2">
           {Object.entries(settings.aiProvider.providers).map(([providerId, provider]) => (
             <div
@@ -318,22 +380,43 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                     <span>Model</span>
                     {getBadge(`aiProvider.providers.${providerId}.model`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.model`)!} /> : null}
                   </div>
-                  <TextField
-                    value={provider.model}
-                    onChange={(value) => update({
-                      aiProvider: {
-                        ...settings.aiProvider,
-                        providers: {
-                          ...settings.aiProvider.providers,
-                          [providerId]: {
-                            ...provider,
-                            model: value,
+                  {AI_MODEL_CATALOG[providerId] ? (
+                    <SelectField
+                      value={provider.model}
+                      onChange={(value) => update({
+                        aiProvider: {
+                          ...settings.aiProvider,
+                          providers: {
+                            ...settings.aiProvider.providers,
+                            [providerId]: {
+                              ...provider,
+                              model: value,
+                            },
                           },
                         },
-                      },
-                    })}
-                    mono
-                  />
+                      })}
+                      options={[
+                        ...AI_MODEL_CATALOG[providerId].map(m => ({ value: m, label: m })),
+                      ]}
+                    />
+                  ) : (
+                    <TextField
+                      value={provider.model}
+                      onChange={(value) => update({
+                        aiProvider: {
+                          ...settings.aiProvider,
+                          providers: {
+                            ...settings.aiProvider.providers,
+                            [providerId]: {
+                              ...provider,
+                              model: value,
+                            },
+                          },
+                        },
+                      })}
+                      mono
+                    />
+                  )}
                 </div>
                 <div>
                   <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
@@ -528,46 +611,6 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                 { value: "OFF", label: "Off" },
                 { value: "WHEN_GREEN", label: "When green" },
                 { value: "ALWAYS", label: "Always" },
-              ]}
-            />
-          </Row>
-        </div>
-      </Card>
-
-      <Card
-        title="Workers"
-        description="Select whether worker-owned execution is handled by connected MCP workers or a short-lived virtual CLI worker."
-        badge={workerSource ? sourceLabel(workerSource) : undefined}
-      >
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Row label="Worker mode" description="Connected workers stay in listen mode. Virtual workers wake only when worker work exists, run one unit of work, then shut down." badge={getBadge("workers.executionMode")}>
-            <SelectField
-              value={settings.workers.executionMode}
-              onChange={(value) => update({
-                workers: {
-                  ...settings.workers,
-                  executionMode: value as ProjectSettings["workers"]["executionMode"],
-                },
-              })}
-              options={[
-                { value: "CONNECTED_MCP", label: "Connected MCP" },
-                { value: "VIRTUAL", label: "Virtual on-demand" },
-              ]}
-            />
-          </Row>
-          <Row label="Virtual worker CLI" description="Preferred provider when worker mode is virtual. Jules is intentionally excluded from worker execution." badge={getBadge("workers.virtualWorkerProvider")}>
-            <SelectField
-              value={settings.workers.virtualWorkerProvider}
-              onChange={(value) => update({
-                workers: {
-                  ...settings.workers,
-                  virtualWorkerProvider: value as ProjectSettings["workers"]["virtualWorkerProvider"],
-                },
-              })}
-              options={[
-                { value: "gemini", label: "Gemini" },
-                { value: "codex", label: "Codex" },
-                { value: "claude-code", label: "Claude Code" },
               ]}
             />
           </Row>

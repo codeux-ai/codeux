@@ -176,3 +176,43 @@ export const getFieldSourceLabel = (
 
   return source === "sprint" ? "Sprint override" : null;
 };
+
+export const AI_MODEL_CATALOG: Record<string, string[]> = {
+  gemini: [
+    "auto",
+    "pro",
+    "flash",
+    "flash-lite",
+    "gemini-3-pro-preview",
+    "gemini-3-flash-preview",
+    "gemini-2.5-pro",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+  ],
+  "claude-code": [
+    "default",
+    "sonnet",
+    "opus",
+    "haiku",
+    "sonnet[1m]",
+    "opus[1m]",
+    "opusplan",
+    "claude-opus-4-6",
+    "claude-sonnet-4-6",
+    "claude-haiku-4-5-20251001",
+  ],
+  codex: [
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.3-codex",
+    "gpt-5.3-codex-spark",
+    "gpt-5.2-codex",
+    "gpt-5.2",
+    "gpt-5.1-codex-max",
+    "gpt-5.1",
+    "gpt-5.1-codex",
+    "gpt-5-codex",
+    "gpt-5-codex-mini",
+    "gpt-5",
+  ],
+};

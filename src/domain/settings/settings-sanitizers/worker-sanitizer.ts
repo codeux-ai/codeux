@@ -1,5 +1,5 @@
 import type { DashboardSettings, VirtualWorkerProvider, WorkerExecutionMode } from "../../../contracts/app-types.js";
-import { readString } from "../../../shared/config/value-readers.js";
+import { readInteger, readString } from "../../../shared/config/value-readers.js";
 import {
   DEFAULT_DASHBOARD_SETTINGS,
   VIRTUAL_WORKER_PROVIDERS,
@@ -25,9 +25,14 @@ export const sanitizeWorkers = (
     ? workerInput.model
     : DEFAULT_DASHBOARD_SETTINGS.workers.model;
 
+  const maxConcurrency = readInteger(workerInput.maxConcurrency, DEFAULT_DASHBOARD_SETTINGS.workers.maxConcurrency);
+  const timeoutSeconds = readInteger(workerInput.timeoutSeconds, DEFAULT_DASHBOARD_SETTINGS.workers.timeoutSeconds);
+
   return {
     executionMode: readString(executionMode, DEFAULT_DASHBOARD_SETTINGS.workers.executionMode) as WorkerExecutionMode,
     virtualWorkerProvider,
     model,
+    maxConcurrency,
+    timeoutSeconds,
   };
 };

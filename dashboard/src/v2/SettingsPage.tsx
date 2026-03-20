@@ -33,6 +33,7 @@ import {
   dashboardSettingsToProjectSettings,
   getFieldSource,
   getFieldSourceLabel,
+  AI_MODEL_CATALOG,
 } from "./lib/settings-view-models.js";
 
 type SettingsScope = "system" | "project";
@@ -961,13 +962,25 @@ export const SettingsPage: FunctionComponent = () => {
                         </span>
                       ) : null}
                     </div>
-                    <TextInput
-                      value={provider.model}
-                      onChange={(value) => updateEditableSettings((current) => updateProviderSettings(current, providerId as keyof ProjectSettings["aiProvider"]["providers"], {
-                        model: value,
-                      }))}
-                      mono
-                    />
+                    {AI_MODEL_CATALOG[providerId] ? (
+                      <SelectInput
+                        value={provider.model}
+                        onChange={(value) => updateEditableSettings((current) => updateProviderSettings(current, providerId as keyof ProjectSettings["aiProvider"]["providers"], {
+                          model: value,
+                        }))}
+                        options={[
+                          ...AI_MODEL_CATALOG[providerId].map(m => ({ value: m, label: m })),
+                        ]}
+                      />
+                    ) : (
+                      <TextInput
+                        value={provider.model}
+                        onChange={(value) => updateEditableSettings((current) => updateProviderSettings(current, providerId as keyof ProjectSettings["aiProvider"]["providers"], {
+                          model: value,
+                        }))}
+                        mono
+                      />
+                    )}
                   </div>
                   <div>
                     <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
@@ -1014,6 +1027,70 @@ export const SettingsPage: FunctionComponent = () => {
               </div>
             ))}
           </div>
+        </SectionCard>
+
+        <SectionCard title="Worker Runtime" watermark="WRK" badge={getBadge("workers")}>
+          <Row label="Worker execution mode" description="Choose whether worker-owned dispatches and supervision run through connected MCP listeners or a short-lived internal virtual worker." badge={getFieldBadge("workers.executionMode")}>
+            <SelectInput
+              value={editableSettings.workers.executionMode}
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                workers: {
+                  ...current.workers,
+                  executionMode: value as ProjectSettings["workers"]["executionMode"],
+                },
+              }))}
+              options={[
+                { value: "CONNECTED_MCP", label: "Connected MCP" },
+                { value: "VIRTUAL", label: "Virtual on-demand" },
+              ]}
+            />
+          </Row>
+          <Row label="Virtual worker CLI" description="Preferred CLI provider for virtual workers. They start only when worker work exists, handle one cycle, then shut down. Jules is intentionally excluded." badge={getFieldBadge("workers.virtualWorkerProvider")}>
+            <SelectInput
+              value={editableSettings.workers.virtualWorkerProvider}
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                workers: {
+                  ...current.workers,
+                  virtualWorkerProvider: value as ProjectSettings["workers"]["virtualWorkerProvider"],
+                },
+              }))}
+              options={[
+                { value: "gemini", label: "Gemini" },
+                { value: "codex", label: "Codex" },
+                { value: "claude-code", label: "Claude Code" },
+              ]}
+            />
+          </Row>
+          <Row label="Max concurrency" description="Maximum number of parallel tasks a worker can handle simultaneously." badge={getFieldBadge("workers.maxConcurrency")}>
+            <NumberInput
+              value={editableSettings.workers.maxConcurrency}
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                workers: {
+                  ...current.workers,
+                  maxConcurrency: value,
+                },
+              }))}
+              min={1}
+              max={20}
+            />
+          </Row>
+          <Row label="Dispatch timeout" description="Seconds to wait for a worker to finish a single task dispatch before timing out." badge={getFieldBadge("workers.timeoutSeconds")} last>
+            <NumberInput
+              value={editableSettings.workers.timeoutSeconds}
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                workers: {
+                  ...current.workers,
+                  timeoutSeconds: value,
+                },
+              }))}
+              min={60}
+              max={3600}
+            />
+          </Row>
         </SectionCard>
       </div>
     );
@@ -1183,42 +1260,6 @@ export const SettingsPage: FunctionComponent = () => {
                 { value: "OFF", label: "Off" },
                 { value: "WHEN_GREEN", label: "When green" },
                 { value: "ALWAYS", label: "Always" },
-              ]}
-            />
-          </Row>
-        </SectionCard>
-
-        <SectionCard title="Worker Runtime" watermark="WRK" badge={getBadge("workers")}>
-          <Row label="Worker execution mode" description="Choose whether worker-owned dispatches and supervision run through connected MCP listeners or a short-lived internal virtual worker." badge={getFieldBadge("workers.executionMode")}>
-            <SelectInput
-              value={editableSettings.workers.executionMode}
-              onChange={(value) => updateEditableSettings((current) => ({
-                ...current,
-                workers: {
-                  ...current.workers,
-                  executionMode: value as ProjectSettings["workers"]["executionMode"],
-                },
-              }))}
-              options={[
-                { value: "CONNECTED_MCP", label: "Connected MCP" },
-                { value: "VIRTUAL", label: "Virtual on-demand" },
-              ]}
-            />
-          </Row>
-          <Row label="Virtual worker CLI" description="Preferred CLI provider for virtual workers. They start only when worker work exists, handle one cycle, then shut down. Jules is intentionally excluded." badge={getFieldBadge("workers.virtualWorkerProvider")} last>
-            <SelectInput
-              value={editableSettings.workers.virtualWorkerProvider}
-              onChange={(value) => updateEditableSettings((current) => ({
-                ...current,
-                workers: {
-                  ...current.workers,
-                  virtualWorkerProvider: value as ProjectSettings["workers"]["virtualWorkerProvider"],
-                },
-              }))}
-              options={[
-                { value: "gemini", label: "Gemini" },
-                { value: "codex", label: "Codex" },
-                { value: "claude-code", label: "Claude Code" },
               ]}
             />
           </Row>
