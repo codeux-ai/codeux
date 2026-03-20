@@ -123,6 +123,7 @@ Dashboard behavior:
 - `provider` (`jules|gemini|codex|claude-code`)
 - `strategy` (`MANUAL|WEIGHTED|ORCHESTRATOR`)
 - `providers` map (enabled/model/weight/thinkingMode)
+- In the dashboard v2 settings editor, provider routing and provider model controls are grouped under `AI Models`.
 
 `automationInterventions` contains:
 - `autoApprovePlan` (default `true`): auto-approve `AWAITING_PLAN_APPROVAL` sessions in `SEMI_AUTO`
@@ -169,7 +170,11 @@ Dashboard behavior:
   - allowed values: `gemini`, `codex`, `claude-code`
   - used only when `executionMode = VIRTUAL`
   - Jules is intentionally excluded from worker mode; virtual workers are CLI-only
-- In the dashboard, these controls are exposed in the active v2 settings page under `Sprint Engine -> Worker Runtime`
+- `virtualWorkerModel` (default `default`)
+  - provider-specific model route used by virtual worker CLI execution
+- In the dashboard v2 settings editor:
+  - `Worker mode` is under `Workers`
+  - `Virtual worker provider` and `Virtual worker model` are under `AI Models`
 
 `sprintLoopSteps` also includes:
 - `watchLoopIntervalSeconds` (default `120`, clamped to `1..3600`)

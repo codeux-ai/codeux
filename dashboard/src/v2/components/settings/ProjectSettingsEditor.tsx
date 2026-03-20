@@ -1,11 +1,13 @@
 import type { FunctionComponent, ComponentChildren } from "preact";
-import type { ProjectSettings, SettingsValueSource, ThinkingMode } from "../../../types.js";
+import type { ProjectSettings, SettingsValueSource } from "../../../types.js";
 import {
   getFieldSource,
   getFieldSourceLabel,
   getSectionSource,
   type SettingsEditorScope,
 } from "../../lib/settings-view-models.js";
+import { AIModelSettingsEditor } from "./AIModelSettingsEditor.js";
+import { WorkerSettingsEditor } from "./WorkerSettingsEditor.js";
 
 interface ProjectSettingsEditorProps {
   settings: ProjectSettings;
@@ -138,17 +140,18 @@ const sourceLabel = (source: SettingsValueSource | "mixed"): string => {
   }
 };
 
-const thinkingModeOptions: Array<{ value: ThinkingMode; label: string }> = [
-  { value: "SMALL", label: "Small" },
-  { value: "MEDIUM", label: "Medium" },
-  { value: "HIGH", label: "High" },
-];
-
-const providerLabels: Record<keyof ProjectSettings["aiProvider"]["providers"], string> = {
-  jules: "Jules",
-  gemini: "Gemini",
-  codex: "Codex",
-  "claude-code": "Claude Code",
+const combineSources = (
+  ...sources: Array<SettingsValueSource | "mixed" | undefined>
+): SettingsValueSource | "mixed" | undefined => {
+  const filteredSources = sources.filter((source): source is SettingsValueSource | "mixed" => source !== undefined);
+  if (filteredSources.length === 0) {
+    return undefined;
+  }
+  const uniqueSources = new Set(filteredSources);
+  if (uniqueSources.size === 1) {
+    return filteredSources[0];
+  }
+  return "mixed";
 };
 
 export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps> = ({
@@ -167,11 +170,14 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
 
   const automationSource = sources ? getSectionSource(sources, "automationLevel") : undefined;
   const providerSource = sources ? getSectionSource(sources, "aiProvider") : undefined;
+  const virtualWorkerProviderSource = sources ? getFieldSource(sources, "workers.virtualWorkerProvider") : undefined;
+  const virtualWorkerModelSource = sources ? getFieldSource(sources, "workers.virtualWorkerModel") : undefined;
+  const aiModelsSource = combineSources(providerSource, virtualWorkerProviderSource, virtualWorkerModelSource);
   const gitSource = sources ? getSectionSource(sources, "git") : undefined;
   const ciSource = sources ? getSectionSource(sources, "ciIntelligence") : undefined;
   const loopSource = sources ? getSectionSource(sources, "sprintLoopSteps") : undefined;
   const cliSource = sources ? getSectionSource(sources, "cliWorkflow") : undefined;
-  const workerSource = sources ? getSectionSource(sources, "workers") : undefined;
+  const workerModeSource = sources ? getFieldSource(sources, "workers.executionMode") : undefined;
   const skillsSource = sources ? getSectionSource(sources, "skills") : undefined;
 
   return (
@@ -242,149 +248,17 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         </div>
       </Card>
 
-      <Card
-        title="Provider Routing"
-        description="Select the provider strategy and model mix this scope should use."
-        badge={providerSource ? sourceLabel(providerSource) : undefined}
-      >
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Row label="Primary provider" description="Default provider when the strategy is manual." badge={getBadge("aiProvider.provider")}>
-            <SelectField
-              value={settings.aiProvider.provider}
-              onChange={(value) => update({
-                aiProvider: {
-                  ...settings.aiProvider,
-                  provider: value as ProjectSettings["aiProvider"]["provider"],
-                },
-              })}
-              options={[
-                { value: "jules", label: "Jules" },
-                { value: "gemini", label: "Gemini" },
-                { value: "codex", label: "Codex" },
-                { value: "claude-code", label: "Claude Code" },
-              ]}
-            />
-          </Row>
-          <Row label="Routing strategy" description="Manual pins one provider, weighted spreads work, orchestrator can make routing decisions." badge={getBadge("aiProvider.strategy")}>
-            <SelectField
-              value={settings.aiProvider.strategy}
-              onChange={(value) => update({
-                aiProvider: {
-                  ...settings.aiProvider,
-                  strategy: value as ProjectSettings["aiProvider"]["strategy"],
-                },
-              })}
-              options={[
-                { value: "MANUAL", label: "Manual" },
-                { value: "WEIGHTED", label: "Weighted" },
-                { value: "ORCHESTRATOR", label: "Orchestrator" },
-              ]}
-            />
-          </Row>
-        </div>
-        <div className="grid gap-4 xl:grid-cols-2">
-          {Object.entries(settings.aiProvider.providers).map(([providerId, provider]) => (
-            <div
-              key={providerId}
-              className="rounded-[1.5rem] border border-black/[0.06] bg-black/[0.015] p-4 dark:border-white/[0.06] dark:bg-white/[0.02]"
-            >
-                <div className="mb-4 flex items-center justify-between">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{providerLabels[providerId as keyof typeof providerLabels]}</div>
-                      {getBadge(`aiProvider.providers.${providerId}.enabled`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.enabled`)!} /> : null}
-                    </div>
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Model choice, weight, and thinking mode.</div>
-                  </div>
-                <ToggleField
-                  checked={provider.enabled}
-                  onChange={(value) => update({
-                    aiProvider: {
-                      ...settings.aiProvider,
-                      providers: {
-                        ...settings.aiProvider.providers,
-                        [providerId]: {
-                          ...provider,
-                          enabled: value,
-                        },
-                      },
-                    },
-                  })}
-                />
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                    <span>Model</span>
-                    {getBadge(`aiProvider.providers.${providerId}.model`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.model`)!} /> : null}
-                  </div>
-                  <TextField
-                    value={provider.model}
-                    onChange={(value) => update({
-                      aiProvider: {
-                        ...settings.aiProvider,
-                        providers: {
-                          ...settings.aiProvider.providers,
-                          [providerId]: {
-                            ...provider,
-                            model: value,
-                          },
-                        },
-                      },
-                    })}
-                    mono
-                  />
-                </div>
-                <div>
-                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                    <span>Thinking mode</span>
-                    {getBadge(`aiProvider.providers.${providerId}.thinkingMode`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.thinkingMode`)!} /> : null}
-                  </div>
-                  <SelectField
-                    value={provider.thinkingMode}
-                    onChange={(value) => update({
-                      aiProvider: {
-                        ...settings.aiProvider,
-                        providers: {
-                          ...settings.aiProvider.providers,
-                          [providerId]: {
-                            ...provider,
-                            thinkingMode: value as ThinkingMode,
-                          },
-                        },
-                      },
-                    })}
-                    options={thinkingModeOptions}
-                  />
-                </div>
-                <div>
-                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                    <span>Weight</span>
-                    {getBadge(`aiProvider.providers.${providerId}.weight`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.weight`)!} /> : null}
-                  </div>
-                  <NumberField
-                    value={provider.weight}
-                    min={0}
-                    max={100}
-                    onChange={(value) => update({
-                      aiProvider: {
-                        ...settings.aiProvider,
-                        providers: {
-                          ...settings.aiProvider.providers,
-                          [providerId]: {
-                            ...provider,
-                            weight: value,
-                          },
-                        },
-                      },
-                    })}
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
+      <AIModelSettingsEditor
+        settings={settings}
+        onChange={onChange}
+        sectionBadge={aiModelsSource ? sourceLabel(aiModelsSource) : undefined}
+        getBadge={getBadge}
+        Card={Card}
+        Row={Row}
+        SelectField={SelectField}
+        NumberField={NumberField}
+        ToggleField={ToggleField}
+      />
 
       <Card
         title="Git Flow"
@@ -534,45 +408,15 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         </div>
       </Card>
 
-      <Card
-        title="Workers"
-        description="Select whether worker-owned execution is handled by connected MCP workers or a short-lived virtual CLI worker."
-        badge={workerSource ? sourceLabel(workerSource) : undefined}
-      >
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Row label="Worker mode" description="Connected workers stay in listen mode. Virtual workers wake only when worker work exists, run one unit of work, then shut down." badge={getBadge("workers.executionMode")}>
-            <SelectField
-              value={settings.workers.executionMode}
-              onChange={(value) => update({
-                workers: {
-                  ...settings.workers,
-                  executionMode: value as ProjectSettings["workers"]["executionMode"],
-                },
-              })}
-              options={[
-                { value: "CONNECTED_MCP", label: "Connected MCP" },
-                { value: "VIRTUAL", label: "Virtual on-demand" },
-              ]}
-            />
-          </Row>
-          <Row label="Virtual worker CLI" description="Preferred provider when worker mode is virtual. Jules is intentionally excluded from worker execution." badge={getBadge("workers.virtualWorkerProvider")}>
-            <SelectField
-              value={settings.workers.virtualWorkerProvider}
-              onChange={(value) => update({
-                workers: {
-                  ...settings.workers,
-                  virtualWorkerProvider: value as ProjectSettings["workers"]["virtualWorkerProvider"],
-                },
-              })}
-              options={[
-                { value: "gemini", label: "Gemini" },
-                { value: "codex", label: "Codex" },
-                { value: "claude-code", label: "Claude Code" },
-              ]}
-            />
-          </Row>
-        </div>
-      </Card>
+      <WorkerSettingsEditor
+        settings={settings}
+        onChange={onChange}
+        sectionBadge={workerModeSource ? sourceLabel(workerModeSource) : undefined}
+        getBadge={getBadge}
+        Card={Card}
+        Row={Row}
+        SelectField={SelectField}
+      />
 
       <Card
         title="Sprint Loop"

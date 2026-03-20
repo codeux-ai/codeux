@@ -230,7 +230,9 @@ Legacy runtime:
   - auto-merge conflicts and merge-confirmation windows are counted under `Merge`, not `Code`
   - successful merge events such as `merge_confirmed` and `automerge_succeeded` stop the merge timer immediately, even if later sync events still arrive
 - The selected-project execution snapshot now ships a deeper recent runtime event window so stage timing remains accurate across larger sprints and reruns
-- In the active v2 settings UI, these controls live under `Settings -> Sprint Engine -> Worker Runtime`
+- In the active v2 settings UI:
+  - `Worker mode` lives under `Settings -> Sprint Engine -> Workers`
+  - `Virtual worker provider` and `Virtual worker model` live under `Settings -> AI Models`
 - Sprint compose/planning also follows that same worker mode:
   - with `Connected MCP`, the composer looks for a live planning worker/listener
   - with `Virtual on-demand`, the composer shows the selected virtual worker route and planning works without any live MCP connection
