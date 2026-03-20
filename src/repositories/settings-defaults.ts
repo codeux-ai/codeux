@@ -36,6 +36,45 @@ export const FEATURE_PR_AUTOMERGE_MODES: FeaturePrAutoMergeMode[] = ["OFF", "WHE
 export const WORKER_EXECUTION_MODES: WorkerExecutionMode[] = ["CONNECTED_MCP", "VIRTUAL"];
 export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code"];
 
+export const JULES_MODEL_OPTIONS: string[] = ["default"];
+
+export const GEMINI_MODEL_OPTIONS: string[] = [
+  "default",
+  "gemini-1.5-pro",
+  "gemini-1.5-flash",
+  "gemini-2.0-flash",
+];
+
+export const CLAUDE_CODE_MODEL_OPTIONS: string[] = [
+  "default",
+  "claude-3-5-sonnet-20241022",
+  "claude-3-opus-20240229",
+  "claude-3-haiku-20240307",
+  "claude-sonnet-4-6",
+  "claude-opus-4-6",
+  "claude-haiku-4-5-20251001",
+];
+
+export const CODEX_MODEL_OPTIONS: string[] = [
+  "default",
+  "gpt-4o",
+  "gpt-4-turbo",
+];
+
+export const PROVIDER_MODEL_OPTIONS: Record<ProviderId, string[]> = {
+  jules: JULES_MODEL_OPTIONS,
+  gemini: GEMINI_MODEL_OPTIONS,
+  codex: CODEX_MODEL_OPTIONS,
+  "claude-code": CLAUDE_CODE_MODEL_OPTIONS,
+};
+
+export const VIRTUAL_WORKER_MODEL_OPTIONS: string[] = [
+  "default",
+  ...GEMINI_MODEL_OPTIONS.filter((m) => m !== "default"),
+  ...CODEX_MODEL_OPTIONS.filter((m) => m !== "default"),
+  ...CLAUDE_CODE_MODEL_OPTIONS.filter((m) => m !== "default"),
+];
+
 export const MIN_WATCH_LOOP_INTERVAL_SECONDS = 1;
 export const MAX_WATCH_LOOP_INTERVAL_SECONDS = 3600;
 export const MIN_WATCH_LOOP_OUTPUT_INTERVAL_SECONDS = 60;
@@ -60,7 +99,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
   },
   codex: {
     enabled: true,
-    model: "gpt-5.3-codex",
+    model: "gpt-4o",
     weight: 20,
     thinkingMode: "HIGH",
     apiKey: "",
@@ -153,6 +192,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   workers: {
     executionMode: "CONNECTED_MCP",
     virtualWorkerProvider: "codex",
+    virtualWorkerModel: "default",
   },
   agents: {
     saveToProjectDirectory: true,

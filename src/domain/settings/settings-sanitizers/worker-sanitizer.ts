@@ -21,8 +21,14 @@ export const sanitizeWorkers = (
     ? workerInput.virtualWorkerProvider as VirtualWorkerProvider
     : DEFAULT_DASHBOARD_SETTINGS.workers.virtualWorkerProvider;
 
+  const rawModel = typeof workerInput.virtualWorkerModel === "string" ? workerInput.virtualWorkerModel.trim() : "";
+  const virtualWorkerModel = rawModel.length > 0
+    ? rawModel
+    : DEFAULT_DASHBOARD_SETTINGS.workers.virtualWorkerModel;
+
   return {
     executionMode: readString(executionMode, DEFAULT_DASHBOARD_SETTINGS.workers.executionMode) as WorkerExecutionMode,
     virtualWorkerProvider,
+    virtualWorkerModel,
   };
 };

@@ -231,6 +231,9 @@ const validateWorkers = (
   ) {
     issues.push({ path: `${path}.virtualWorkerProvider`, message: `Expected one of: ${VIRTUAL_WORKER_PROVIDERS.join(", ")}` });
   }
+  if (typeof value.virtualWorkerModel !== "string") {
+    issues.push({ path: `${path}.virtualWorkerModel`, message: "Expected a string" });
+  }
 };
 
 const validateAgents = (
