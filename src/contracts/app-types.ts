@@ -449,6 +449,7 @@ export interface CliWorkflowSettings {
 export interface WorkerSettings {
   executionMode: WorkerExecutionMode;
   virtualWorkerProvider: VirtualWorkerProvider;
+  model: string;
 }
 
 export interface AgentSettings {
