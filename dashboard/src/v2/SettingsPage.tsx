@@ -1937,9 +1937,11 @@ export const SettingsPage: FunctionComponent = () => {
     <div className="flex flex-col gap-5">
       {activeScope === "project" ? (
         <SectionCard title="Project Danger Zone" watermark="RST" danger>
-          <NoticePanel title="Reset behavior" tone="warning">
-            Project scope can clear only overrides or remove the entire project. Both actions are destructive.
-          </NoticePanel>
+          <div className="pt-5 pb-2">
+            <NoticePanel title="Reset behavior" tone="warning">
+              Project scope can clear only overrides or remove the entire project. Both actions are destructive.
+            </NoticePanel>
+          </div>
           <Row label="Reset project overrides" description="Use this when a project should return to pure inheritance instead of keeping stale overrides.">
             <ActionButton
               label="Reset Overrides"
@@ -1961,9 +1963,11 @@ export const SettingsPage: FunctionComponent = () => {
         </SectionCard>
       ) : (
         <SectionCard title="System Danger Zone" watermark="SYS" danger>
-          <NoticePanel title="Development-only reset" tone="warning">
-            Reset Database wipes the app database and scoped settings storage back to a clean state. Use it only when you really want to start fresh.
-          </NoticePanel>
+          <div className="pt-5 pb-2">
+            <NoticePanel title="Development-only reset" tone="warning">
+              Reset Database wipes the app database and scoped settings storage back to a clean state. Use it only when you really want to start fresh.
+            </NoticePanel>
+          </div>
           <Row label="Reset database" description="Delete all projects, sprints, tasks, chats, runtime state, and stored settings across the system." last>
             <ActionButton
               label="Reset Database"
