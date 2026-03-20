@@ -439,7 +439,11 @@ const updateProviderSettings = (
 export const SettingsPage: FunctionComponent = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const { deleteProject, selectedProject } = useProjectData();
+  const { deleteProject, selectedProject, selectedProjectId } = useProjectData();
+
+  // Tracks whether user has unsaved edits. Used as a guard in loadSettings so that
+  // background realtime refreshes cannot clobber in-progress user changes.
+  const isDirtyRef = useRef(false);
 
   const [activeCategory, setActiveCategory] = useState<CategoryId>("general");
   const [activeScope, setActiveScope] = useState<SettingsScope>("system");
@@ -472,14 +476,18 @@ export const SettingsPage: FunctionComponent = () => {
   }, []);
 
   const loadSettings = useCallback(async (): Promise<void> => {
+    // Do not overwrite in-progress user edits with a background refresh.
+    if (isDirtyRef.current) {
+      return;
+    }
     setLoading(true);
     try {
       const nextSystem = await fetchSystemSettings();
       setSystemSettings(cloneSystemSettings(nextSystem));
       setSavedSystemSettings(cloneSystemSettings(nextSystem));
 
-      if (selectedProject) {
-        const effectiveProject = await fetchProjectEffectiveSettings(selectedProject.id);
+      if (selectedProjectId) {
+        const effectiveProject = await fetchProjectEffectiveSettings(selectedProjectId);
         const nextProject = dashboardSettingsToProjectSettings(effectiveProject.settings);
         setProjectSettings(cloneProjectSettings(nextProject));
         setSavedProjectSettings(cloneProjectSettings(nextProject));
@@ -496,7 +504,11 @@ export const SettingsPage: FunctionComponent = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedProject]);
+  // Depend on the stable project ID string, not the selectedProject object reference.
+  // The project-data context recreates selectedProject on every realtime broadcast even
+  // when the selected project has not actually changed, which previously caused this
+  // callback to get a new reference → useEffect re-ran → settings reloaded → edits lost.
+  }, [selectedProjectId]);
 
   useEffect(() => {
     void loadSettings();
@@ -527,6 +539,11 @@ export const SettingsPage: FunctionComponent = () => {
       ? JSON.stringify(projectSettings) !== JSON.stringify(savedProjectSettings)
       : false
   ), [projectSettings, savedProjectSettings]);
+
+  // Keep isDirtyRef in sync so the loadSettings guard always reflects current edit state.
+  useEffect(() => {
+    isDirtyRef.current = systemDirty || projectDirty;
+  }, [systemDirty, projectDirty]);
 
   const editableSettings = activeScope === "system" ? systemSettings?.defaults ?? null : projectSettings;
   const activeCategoryConfig = CATEGORIES.find((category) => category.id === activeCategory) ?? CATEGORIES[0];
