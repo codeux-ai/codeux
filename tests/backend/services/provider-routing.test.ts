@@ -18,7 +18,7 @@ const mockSettings = (
     providers: {
       jules: { enabled: !!enabledProviders.jules, weight: 50, thinkingMode: "MEDIUM", model: "default", apiKey: "" },
       gemini: { enabled: !!enabledProviders.gemini, weight: 25, thinkingMode: "MEDIUM", model: "default", apiKey: "" },
-      codex: { enabled: !!enabledProviders.codex, weight: 25, thinkingMode: "HIGH", model: "gpt-5.3-codex", apiKey: "" },
+      codex: { enabled: !!enabledProviders.codex, weight: 25, thinkingMode: "HIGH", model: "gpt-4o", apiKey: "" },
       "claude-code": { enabled: !!enabledProviders["claude-code"], weight: 0, thinkingMode: "HIGH", model: "default", apiKey: "" },
     },
   },

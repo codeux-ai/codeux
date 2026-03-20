@@ -37,9 +37,9 @@ describe("dashboard settings updater helpers", () => {
   it("updates individual provider config without mutating siblings", () => {
     const settings = cloneDefaultSettings();
 
-    const next = updateProviderConfig(settings, "gemini", { model: "gemini-2.5-pro", weight: 35 });
+    const next = updateProviderConfig(settings, "gemini", { model: "gemini-2.0-flash", weight: 35 });
 
-    expect(next.aiProvider.providers.gemini.model).toBe("gemini-2.5-pro");
+    expect(next.aiProvider.providers.gemini.model).toBe("gemini-2.0-flash");
     expect(next.aiProvider.providers.gemini.weight).toBe(35);
     expect(settings.aiProvider.providers.gemini.model).toBe("default");
     expect(settings.aiProvider.providers.gemini.weight).toBe(20);

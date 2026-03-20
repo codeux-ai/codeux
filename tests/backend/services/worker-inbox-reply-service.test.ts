@@ -12,8 +12,8 @@ describe("WorkerInboxReplyService", () => {
     aiProvider: {
       providers: {
         jules: { enabled: true, model: "default", weight: 0, thinkingMode: "MEDIUM", apiKey: "" },
-        gemini: { enabled: true, model: "gemini-2.5-pro", weight: 10, thinkingMode: "SMALL", apiKey: "g-key" },
-        codex: { enabled: true, model: "gpt-5.3-codex", weight: 10, thinkingMode: "HIGH", apiKey: "o-key" },
+        gemini: { enabled: true, model: "gemini-2.0-flash", weight: 10, thinkingMode: "SMALL", apiKey: "g-key" },
+        codex: { enabled: true, model: "gpt-4o", weight: 10, thinkingMode: "HIGH", apiKey: "o-key" },
         "claude-code": { enabled: false, model: "default", weight: 0, thinkingMode: "MEDIUM", apiKey: "" },
       },
     },
@@ -66,7 +66,7 @@ describe("WorkerInboxReplyService", () => {
       "/repo",
       expect.objectContaining({
         GEMINI_API_KEY: "g-key",
-        GEMINI_MODEL: "gemini-2.5-pro",
+        GEMINI_MODEL: "gemini-2.0-flash",
         GITHUB_TOKEN: "gh-token",
       }),
     );

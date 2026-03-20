@@ -32,19 +32,25 @@ export const executionModeOptions: Array<{ value: DashboardSettings["cliWorkflow
 
 export const geminiModelOptions = [
   "default",
-  "gemini-3.1-pro-preview",
-  "gemini-3.0-pro-preview",
-  "gemini-3-pro-preview",
-  "gemini-3-flash-preview",
-  "gemini-2.5-pro",
-  "gemini-2.5-flash",
+  "gemini-1.5-pro",
+  "gemini-1.5-flash",
+  "gemini-2.0-flash",
 ] as const;
 
 export const claudeCodeModelOptions = [
   "default",
-  "claude-opus-4-6",
+  "claude-3-5-sonnet-20241022",
+  "claude-3-opus-20240229",
+  "claude-3-haiku-20240307",
   "claude-sonnet-4-6",
-  "claude-haiku-4-5",
+  "claude-opus-4-6",
+  "claude-haiku-4-5-20251001",
+] as const;
+
+export const codexModelOptions = [
+  "default",
+  "gpt-4o",
+  "gpt-4-turbo",
 ] as const;
 
 type SprintLoopToggleKey = Exclude<

@@ -27,7 +27,7 @@ describe("SettingsRepository", () => {
     expect(system.runtime.enableDebugLogFile).toBe(false);
     expect(system.defaults.automationLevel).toBe("SEMI_AUTO");
     expect(system.defaults.aiProvider.provider).toBe("jules");
-    expect(system.defaults.aiProvider.providers.codex.model).toBe("gpt-5.3-codex");
+    expect(system.defaults.aiProvider.providers.codex.model).toBe("gpt-4o");
     expect(system.defaults.git.defaultBranch).toBe("main");
     expect(system.defaults.agents.saveToProjectDirectory).toBe(true);
     expect(system.defaults.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
@@ -72,8 +72,8 @@ describe("SettingsRepository", () => {
           strategy: "WEIGHTED",
           providers: {
             jules: { enabled: true, model: "default", weight: 50, thinkingMode: "MEDIUM" },
-            gemini: { enabled: true, model: "gemini-2.5-pro", weight: 30, thinkingMode: "MEDIUM" },
-            codex: { enabled: true, model: "gpt-5.3-codex", weight: 20, thinkingMode: "HIGH" },
+            gemini: { enabled: true, model: "gemini-2.0-flash", weight: 30, thinkingMode: "MEDIUM" },
+            codex: { enabled: true, model: "gpt-4o", weight: 20, thinkingMode: "HIGH" },
             "claude-code": { enabled: false, model: "default", weight: 0, thinkingMode: "HIGH" },
           },
         },
@@ -277,7 +277,7 @@ describe("SettingsRepository", () => {
         providers: {
           jules: { enabled: true, model: "default", weight: 50, thinkingMode: "MEDIUM", apiKey: "legacy-jules" },
           gemini: { enabled: true, model: "default", weight: 20, thinkingMode: "MEDIUM", apiKey: "legacy-gemini" },
-          codex: { enabled: true, model: "gpt-5.3-codex", weight: 30, thinkingMode: "HIGH", apiKey: "legacy-codex" },
+          codex: { enabled: true, model: "gpt-4o", weight: 30, thinkingMode: "HIGH", apiKey: "legacy-codex" },
           "claude-code": { enabled: false, model: "default", weight: 0, thinkingMode: "HIGH", apiKey: "" },
         },
         julesApiKey: "legacy-jules",

@@ -19,7 +19,7 @@ describe("TaskService", () => {
         providers: {
           jules: { enabled: true, model: "default", weight: 60, thinkingMode: "MEDIUM", apiKey: "" },
           gemini: { enabled: true, model: "default", weight: 20, thinkingMode: "MEDIUM", apiKey: "" },
-          codex: { enabled: true, model: "gpt-5.3-codex", weight: 20, thinkingMode: "HIGH", apiKey: "" },
+          codex: { enabled: true, model: "gpt-4o", weight: 20, thinkingMode: "HIGH", apiKey: "" },
         },
       },
       git: { defaultBranch: "main" },
@@ -129,7 +129,7 @@ describe("TaskService", () => {
           providers: {
             jules: { enabled: true, model: "default", weight: 60, thinkingMode: "MEDIUM", apiKey: "" },
             gemini: { enabled: true, model: "default", weight: 20, thinkingMode: "MEDIUM", apiKey: "" },
-            codex: { enabled: true, model: "gpt-5.3-codex", weight: 20, thinkingMode: "HIGH", apiKey: "" },
+            codex: { enabled: true, model: "gpt-4o", weight: 20, thinkingMode: "HIGH", apiKey: "" },
           },
         },
         git: { defaultBranch: "main" },

@@ -4,6 +4,7 @@ import { updateProviderConfig } from "../../../lib/settings-updaters.js";
 import {
   claudeCodeModelOptions,
   geminiModelOptions,
+  codexModelOptions,
   thinkingModeOptions,
 } from "../../settings/settings-options.js";
 import type { FieldDescriptor } from "../../settings/field-descriptors.js";
@@ -18,6 +19,7 @@ interface ProviderConfigRowProps {
 const getModelDescriptor = (providerValue: DashboardSettings["aiProvider"]["provider"]): FieldDescriptor<DashboardSettings> => {
   const isGemini = providerValue === "gemini";
   const isClaudeCode = providerValue === "claude-code";
+  const isCodex = providerValue === "codex";
 
   if (isGemini) {
     return {
@@ -41,11 +43,22 @@ const getModelDescriptor = (providerValue: DashboardSettings["aiProvider"]["prov
     };
   }
 
+  if (isCodex) {
+    return {
+      id: "model",
+      type: "select",
+      label: "Model",
+      options: codexModelOptions.map(m => ({ value: m, label: m })),
+      getValue: (settings) => settings.aiProvider.providers[providerValue].model,
+      onChange: (settings, value) => updateProviderConfig(settings, providerValue, { model: value }),
+    };
+  }
+
   return {
     id: "model",
     type: "input",
     label: "Model",
-    placeholder: providerValue === "codex" ? "gpt-5.3-codex" : "default",
+    placeholder: providerValue === "codex" ? "gpt-4o" : "default",
     getValue: (settings) => settings.aiProvider.providers[providerValue].model,
     onInput: (settings, value) => updateProviderConfig(settings, providerValue, { model: value }),
   };
