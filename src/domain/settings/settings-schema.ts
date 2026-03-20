@@ -20,6 +20,7 @@ import {
   FEATURE_PR_AUTOMERGE_MODES,
   VIRTUAL_WORKER_PROVIDERS,
   WORKER_EXECUTION_MODES,
+  VIRTUAL_WORKER_MODELS,
 } from "../../repositories/settings-defaults.js";
 import { INSTRUCTION_TEMPLATE_IDS } from "../../instructions/instruction-template-catalog.js";
 
@@ -230,6 +231,9 @@ const validateWorkers = (
     || !VIRTUAL_WORKER_PROVIDERS.includes(value.virtualWorkerProvider as VirtualWorkerProvider)
   ) {
     issues.push({ path: `${path}.virtualWorkerProvider`, message: `Expected one of: ${VIRTUAL_WORKER_PROVIDERS.join(", ")}` });
+  }
+  if (typeof value.virtualWorkerModel !== "string") {
+    issues.push({ path: `${path}.virtualWorkerModel`, message: "Expected a string" });
   }
 };
 

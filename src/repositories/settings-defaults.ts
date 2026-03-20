@@ -36,6 +36,37 @@ export const FEATURE_PR_AUTOMERGE_MODES: FeaturePrAutoMergeMode[] = ["OFF", "WHE
 export const WORKER_EXECUTION_MODES: WorkerExecutionMode[] = ["CONNECTED_MCP", "VIRTUAL"];
 export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code"];
 
+export const JULES_MODELS: string[] = ["default"];
+
+export const GEMINI_MODELS: string[] = [
+  "default",
+  "gemini-1.5-pro",
+  "gemini-1.5-flash",
+  "gemini-2.0-flash",
+  "gemini-2.5-pro",
+];
+
+export const CLAUDE_MODELS: string[] = [
+  "default",
+  "claude-sonnet-4-6",
+  "claude-opus-4-6",
+  "claude-haiku-4-5-20251001",
+  "claude-3-5-sonnet-20241022",
+  "claude-3-opus-20240229",
+  "claude-3-haiku-20240307",
+];
+
+export const CODEX_MODELS: string[] = [
+  "default",
+  "gpt-4o",
+  "gpt-4-turbo",
+  "gpt-5.3-codex",
+];
+
+export const VIRTUAL_WORKER_MODELS: string[] = [
+  ...new Set([...GEMINI_MODELS, ...CLAUDE_MODELS, ...CODEX_MODELS]),
+];
+
 export const MIN_WATCH_LOOP_INTERVAL_SECONDS = 1;
 export const MAX_WATCH_LOOP_INTERVAL_SECONDS = 3600;
 export const MIN_WATCH_LOOP_OUTPUT_INTERVAL_SECONDS = 60;
@@ -153,6 +184,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   workers: {
     executionMode: "CONNECTED_MCP",
     virtualWorkerProvider: "codex",
+    virtualWorkerModel: "default",
   },
   agents: {
     saveToProjectDirectory: true,
