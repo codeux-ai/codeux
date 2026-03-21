@@ -23,167 +23,20 @@ import { deriveLiveSessionRuntimeState } from "./lib/live-session-runtime.js";
 import { getTaskProgressPhase } from "../lib/task-progress.js";
 import type { LiveTaskTimingSummary } from "./lib/live-stats.js";
 
-/* ─── Status Maps ────────────────────────────────────────────────────────── */
-
-const TASK_STATUS_CFG = {
-    RUNNING:   { label: "Running",   hex: "#00E0A0", dot: "bg-status-green shadow-[0_0_10px_rgba(0,171,132,0.7)] animate-pulse", text: "text-signal-500",  bg: "bg-signal-500/8",  border: "border-signal-500/20", icon: Activity },
-    CODING_COMPLETED: { label: "Coding Completed", hex: "#0F9FA8", dot: "bg-cyan-500 shadow-[0_0_8px_rgba(15,159,168,0.45)]", text: "text-cyan-500", bg: "bg-cyan-500/8", border: "border-cyan-500/20", icon: CheckCircle2 },
-    COMPLETED: { label: "Completed", hex: "#00AB84", dot: "bg-status-green shadow-[0_0_8px_rgba(0,171,132,0.5)]",                text: "text-status-green", bg: "bg-status-green/8", border: "border-status-green/20", icon: CheckCircle2 },
-    FAILED:    { label: "Failed",    hex: "#E3000F", dot: "bg-status-red shadow-[0_0_10px_rgba(227,0,15,0.7)]",                  text: "text-status-red",   bg: "bg-status-red/8",   border: "border-status-red/20", icon: XCircle },
-    BLOCKED:   { label: "Blocked",   hex: "#F59E0B", dot: "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.5)]",               text: "text-status-amber", bg: "bg-status-amber/8", border: "border-status-amber/20", icon: AlertTriangle },
-    PENDING:   { label: "Pending",   hex: "#64748b", dot: "bg-slate-400 dark:bg-slate-600",                                      text: "text-slate-400",    bg: "bg-slate-500/8",    border: "border-slate-500/20", icon: Clock },
-    QUOTA:     { label: "Quota",     hex: "#F59E0B", dot: "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.5)] animate-pulse",  text: "text-status-amber", bg: "bg-status-amber/8", border: "border-status-amber/20", icon: PauseCircle },
-} as const;
-
-type TaskStatusKey = keyof typeof TASK_STATUS_CFG;
-
-const getTaskCfg = (status?: string) => TASK_STATUS_CFG[(status as TaskStatusKey) ?? "PENDING"] ?? TASK_STATUS_CFG.PENDING;
-
-const MERGE_INDICATOR_CFG: Record<string, { label: string; text: string; bg: string; border: string }> = {
-    CI:            { label: "CI",            text: "text-signal-400",     bg: "bg-signal-500/8",      border: "border-signal-500/15" },
-    AUTOMERGE:     { label: "Automerge",     text: "text-ember-400",      bg: "bg-ember-500/8",       border: "border-ember-500/15" },
-    MERGED:        { label: "Merged",        text: "text-status-green",   bg: "bg-status-green/8",    border: "border-status-green/15" },
-    MERGE_BLOCKED: { label: "Merge Blocked", text: "text-status-amber",   bg: "bg-status-amber/8",    border: "border-status-amber/15" },
-    MERGE_CONFLICT:{ label: "Merge Conflict",text: "text-status-red",     bg: "bg-status-red/8",      border: "border-status-red/15" },
-};
-
-const ORIGINATOR_CFG: Record<string, { border: string; text: string; label: string }> = {
-    agent:    { border: "border-signal-500/30", text: "text-signal-400", label: "Agent" },
-    user:     { border: "border-ember-500/30",  text: "text-ember-400",  label: "User" },
-    provider: { border: "border-status-amber/30", text: "text-status-amber", label: "Provider" },
-    system:   { border: "border-white/[0.06]",  text: "text-slate-500",  label: "System" },
-};
-
-const getOriginatorCfg = (originator?: string) => {
-    const key = (originator || "system").toLowerCase();
-    return ORIGINATOR_CFG[key] ?? ORIGINATOR_CFG.system;
-};
-
-const EMPTY_RUNTIME_STATS = {
-    total: 0,
-    running: 0,
-    codingCompleted: 0,
-    completed: 0,
-    failed: 0,
-    ci: 0,
-    automerge: 0,
-    merged: 0,
-    mergeBlocked: 0,
-    mergeConflicts: 0,
-};
+import { IntelPanel } from "./components/ui/IntelPanel.js";
+import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
+import { IdleRuntimeState } from "./components/ui/IdleRuntimeState.js";
+import {
+    TASK_STATUS_CFG,
+    getTaskCfg,
+    MERGE_INDICATOR_CFG,
+    ORIGINATOR_CFG,
+    getOriginatorCfg,
+    EMPTY_RUNTIME_STATS,
+    getExecutionEventText,
+} from "./lib/live-session-config.js";
 
 /* ─── Runtime Event Feed ─────────────────────────────────────────────────── */
-
-const getExecutionEventText = (event: ExecutionRuntimeEventSummary): string => {
-    const payload = event.payload || {};
-
-    switch (event.eventType) {
-        case "dispatch_queued":
-            return `Queued for ${String(payload.executorType || event.provider || "execution")}`;
-        case "dispatch_started":
-            return `Started ${String(payload.executorType || event.provider || "execution")} dispatch`;
-        case "session_created":
-            return `Session created ${String(payload.sessionId || event.sessionId || "")}`.trim();
-        case "worker_claimed":
-            return `Claimed by ${String(payload.connectionKey || event.connectionDisplayName || "worker")}`;
-        case "run_running":
-            return String(payload.summaryMarkdown || "Worker heartbeat received");
-        case "run_completed":
-            return String(payload.summaryMarkdown || "Run completed");
-        case "run_failed":
-            return String(payload.errorMessage || payload.summaryMarkdown || "Run failed");
-        case "run_blocked":
-            return String(payload.errorMessage || payload.summaryMarkdown || "Run blocked");
-        case "session_state_synced":
-            return `Session ${String(payload.sessionState || event.taskRunState || "updated").toLowerCase()}`;
-        case "provider_activity":
-            return String(payload.preview || payload.description || "Provider activity");
-        case "dispatch_failed":
-            return String(payload.error || "Dispatch failed");
-        case "cli_prepare_started":
-            return `Preparing ${String(payload.workerBranch || "workspace")}`;
-        case "cli_prepare_completed":
-            return `Workspace ready ${String(payload.worktreePath || "")}`.trim();
-        case "cli_provider_started":
-            return `Running ${String(payload.provider || event.provider || "provider")} in workspace`;
-        case "cli_provider_completed":
-            return `${String(payload.provider || event.provider || "provider")} stage completed`;
-        case "cli_git_no_changes":
-            return "No file changes produced";
-        case "cli_git_pushed":
-            return `Pushed ${String(payload.pushedBranch || event.workerBranch || "worker branch")} to origin`;
-        case "cli_pr_finalized":
-            return payload.prUrl ? `Feature PR ready ${String(payload.prUrl)}` : "Workflow completed without PR";
-        case "cli_workflow_completed":
-            return payload.outcome === "no_changes" ? "Workflow completed with no changes" : "Workflow completed";
-        case "cli_workflow_failed":
-            return String(payload.errorMessage || "CLI workflow failed");
-        case "cli_worktree_cleaned":
-            return `Removed worktree ${String(payload.worktreePath || "")}`.trim();
-        case "cli_worktree_preserved":
-            return `Preserved worktree ${String(payload.worktreePath || "")}`.trim();
-        case "ci_gate_status":
-            return `CI gate ${String(payload.state || "updated").replace(/_/g, " ")}`;
-        case "action_required_manual_intervention":
-            return `${String(payload.owner || "Manual")} intervention required${payload.reason ? `: ${String(payload.reason)}` : ""}`;
-        case "action_required_auto_approved":
-            return "Auto-approved session plan";
-        case "action_required_auto_replied":
-            return "Auto-answered clarification request";
-        case "action_required_auto_resumed":
-            return "Auto-resumed paused session";
-        case "action_required_auto_failed":
-            return String(payload.reason || "Auto-intervention failed");
-        case "protocol_merge_required":
-            return "Task completed and is awaiting merge";
-        case "protocol_action_required":
-            return `${String(payload.owner || "Manual")} action required${payload.interventionHint ? `: ${String(payload.interventionHint)}` : ""}`;
-        case "watch_loop_started":
-            return `Watch loop started for sprint ${String(payload.sprintNumber || "")}`.trim();
-        case "branch_preflight_blocked":
-            return `Branch preflight blocked for ${String(payload.featureBranch || "feature branch")}`;
-        case "planning_preflight_blocked":
-            return `Planning required before orchestration for ${String(payload.planningTarget || "selected sprint")}`;
-        case "sprint_merge_required":
-            return `Sprint paused for manual merge (${String(payload.awaitingMergeCount || 0)} task${Number(payload.awaitingMergeCount || 0) === 1 ? "" : "s"})`;
-        case "sprint_no_more_actions":
-            return "Sprint paused because no more executable work was available";
-        case "sprint_completed":
-            return "Sprint execution completed";
-        case "sprint_failed":
-            return `Sprint execution failed (${String(payload.failedTaskCount || 0)} failed task${Number(payload.failedTaskCount || 0) === 1 ? "" : "s"})`;
-        case "sprint_paused":
-            return `Sprint paused: ${String(payload.reason || "manual attention").replace(/_/g, " ")}`;
-        case "sprint_cancelled":
-            return `Sprint cancelled: ${String(payload.reason || "empty").replace(/_/g, " ")}`;
-        case "main_merge_gate_status":
-            return `Main merge gate ${String(payload.state || "updated").replace(/_/g, " ")}`;
-        case "sprint_pause_requested":
-            return "Dashboard requested a sprint pause";
-        case "sprint_cancel_requested":
-            return "Dashboard requested sprint cancellation";
-        case "dispatch_cancel_requested":
-            return String(payload.reason || "Dashboard requested dispatch cancellation");
-        case "cli_workflow_cancel_requested":
-            return "CLI workflow received a cancellation request";
-        case "cli_workflow_cancelled":
-            return "CLI workflow stopped due to dashboard cancellation";
-        case "jules_stop_requested":
-            return "Sent a stop request to the Jules session";
-        case "jules_stop_request_failed":
-            return String(payload.errorMessage || "Could not send stop request to Jules");
-        case "worker_cancel_pending":
-            return "Worker acknowledged cancellation request and is stopping";
-        case "worker_cancelled":
-            return "Worker dispatch cancelled";
-        case "dispatch_cancelled":
-            return String(payload.reason || "Dispatch cancelled from dashboard");
-        case "dispatch_retry_requested":
-            return "Dashboard requested a dispatch retry";
-        default:
-            return event.eventType.replace(/_/g, " ");
-    }
-};
 
 const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummary[] }> = ({ events }) => {
     const feedRef = useRef<HTMLDivElement>(null);
@@ -237,26 +90,7 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
     );
 };
 
-const IdleRuntimeState: FunctionComponent<{
-    title: string;
-    subtitle: string;
-}> = ({ title, subtitle }) => (
-    <div className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] dark:border-white/[0.06] bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl p-10 min-h-[18rem] flex items-center justify-center">
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-44 h-44 rounded-full border border-black/[0.06] dark:border-white/[0.07] animate-[ping_4s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
-            <div className="absolute w-64 h-64 rounded-full border border-black/[0.04] dark:border-white/[0.05] animate-[ping_7s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
-            <div className="absolute w-[22rem] h-[22rem] rounded-full border border-black/[0.02] dark:border-white/[0.03] animate-[ping_10s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
-        </div>
-        <div className="relative z-10 text-center">
-            <div className="relative flex items-center justify-center w-16 h-16 mx-auto mb-5">
-                <div className="absolute inset-0 rounded-full blur-[12px] bg-signal-500/30 animate-pulse" />
-                <div className="relative w-4 h-4 rounded-full bg-signal-500" />
-            </div>
-            <div className="text-xs font-bold uppercase tracking-[0.22em] text-signal-500">{title}</div>
-            <div className="mt-3 text-sm text-slate-500 dark:text-slate-500 font-medium">{subtitle}</div>
-        </div>
-    </div>
-);
+
 
 /* ─── Task Card (V2) ─────────────────────────────────────────────────────── */
 
@@ -1418,83 +1252,11 @@ const GitCiPanel: FunctionComponent<{ status: GitTrackingStatus | null; error: s
 
 /* ─── Protocol / Activity Panels ─────────────────────────────────────────── */
 
-const IntelPanel: FunctionComponent<{
-    title: string;
-    icon: any;
-    accentHex: string;
-    content?: string;
-    fallback: string;
-}> = ({ title, icon: Icon, accentHex, content, fallback }) => (
-    <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-        <WaveFluid accentHex={accentHex} />
-        <BorderTrace accentHex={accentHex} />
 
-        <div className="relative z-10">
-            <div className="flex items-center gap-2.5 mb-5">
-                <span style={{ color: accentHex }}><Icon className="w-4 h-4" strokeWidth={1.5} /></span>
-                <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">{title}</span>
-            </div>
-            <div
-                className="prose prose-sm max-w-none text-slate-600 dark:text-slate-400
-                           prose-headings:text-slate-800 dark:prose-headings:text-slate-200
-                           prose-code:text-signal-600 dark:prose-code:text-signal-400
-                           prose-code:bg-signal-500/[0.06] prose-code:px-1 prose-code:rounded-md
-                           font-mono text-[12px] leading-relaxed max-h-64 overflow-y-auto dashboard-scrollbar"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(content) || `<p class="text-slate-400 dark:text-slate-600 italic">${fallback}</p>` }}
-            />
-        </div>
-    </div>
-);
 
 /* ─── Collapsible Panel Wrapper ──────────────────────────────────────────── */
 
-const CollapsiblePanel: FunctionComponent<{
-    title: string;
-    icon: any;
-    accentHex: string;
-    defaultOpen?: boolean;
-    badge?: string | number;
-    children: any;
-}> = ({ title, icon: Icon, accentHex, defaultOpen = false, badge, children }) => {
-    const [open, setOpen] = useState(defaultOpen);
 
-    return (
-        <div className="group/collapse relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-            <WaveFluid accentHex={accentHex} />
-            <BorderTrace accentHex={accentHex} />
-
-            {/* Header — always visible, clickable */}
-            <button
-                type="button"
-                onClick={() => setOpen(!open)}
-                className="relative z-10 w-full flex items-center justify-between gap-3 p-5 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors duration-200"
-            >
-                <div className="flex items-center gap-2.5">
-                    <span style={{ color: accentHex }}><Icon className="w-4 h-4" strokeWidth={1.5} /></span>
-                    <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">{title}</span>
-                    {badge != null && (
-                        <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-md bg-black/[0.04] dark:bg-white/[0.04] text-slate-400">
-                            {badge}
-                        </span>
-                    )}
-                </div>
-                <ChevronDown
-                    className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${open ? "rotate-0" : "-rotate-90"}`}
-                    strokeWidth={2}
-                />
-            </button>
-
-            {/* Collapsible body */}
-            <div className={`collapsible-section ${open ? "open" : ""}`}>
-                <div className="collapsible-content">
-                    <div className="relative z-10 px-5 pb-5 pt-0">
-                        {children}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
 
 /* ─── Header View Type ──────────────────────────────────────────────────── */
 
