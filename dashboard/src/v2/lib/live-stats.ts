@@ -481,6 +481,7 @@ function deriveTaskEndAt(args: {
     codingCompletedAt,
     args.dispatch,
   );
+  const hasMergeEvidence = taskHasMergeEvidence(args.task) || dispatchHasMergeEvidence(args.dispatch);
 
   if (args.phase === "RUNNING") {
     return runtimeTerminalAt ?? args.nowIso;
@@ -507,6 +508,10 @@ function deriveTaskEndAt(args: {
       return args.nowIso;
     }
     return latestEventAt;
+  }
+
+  if (args.phase === "COMPLETED" && hasMergeEvidence) {
+    return codingCompletedAt ?? runtimeTerminalAt ?? latestEventAt;
   }
 
   return runtimeTerminalAt ?? latestEventAt;

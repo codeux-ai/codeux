@@ -1,6 +1,6 @@
 import type { Subtask } from "../../contracts/app-types.js";
 
-type MergeStateTask = Pick<Subtask, "status" | "is_merged" | "worker_branch" | "pr_url">;
+type MergeStateTask = Pick<Subtask, "status" | "is_merged" | "merge_indicator" | "worker_branch" | "pr_url">;
 
 export function isTaskCodeComplete(task: Pick<Subtask, "status">): boolean {
   return task.status === "CODING_COMPLETED" || task.status === "COMPLETED";
@@ -12,10 +12,14 @@ export function taskHasMergeEvidence(task: Pick<Subtask, "worker_branch" | "pr_u
   return workerBranch.length > 0 || prUrl.length > 0;
 }
 
+function isMergeSettled(task: Pick<Subtask, "is_merged" | "merge_indicator">): boolean {
+  return Boolean(task.is_merged) || task.merge_indicator === "MERGED" || task.merge_indicator === "AUTOMERGE";
+}
+
 export function isCompletedTaskAwaitingMerge(task: MergeStateTask): boolean {
-  return isTaskCodeComplete(task) && !Boolean(task.is_merged) && taskHasMergeEvidence(task);
+  return isTaskCodeComplete(task) && !isMergeSettled(task) && taskHasMergeEvidence(task);
 }
 
 export function isCompletedTaskSettled(task: MergeStateTask): boolean {
-  return isTaskCodeComplete(task) && (Boolean(task.is_merged) || !taskHasMergeEvidence(task));
+  return isTaskCodeComplete(task) && (isMergeSettled(task) || !taskHasMergeEvidence(task));
 }

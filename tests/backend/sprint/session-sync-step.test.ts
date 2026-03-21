@@ -333,4 +333,107 @@ describe("runSessionSyncStep", () => {
     ]);
     expect(events[1]?.sourceEventKey).toBe("activity:activity-1");
   });
+
+  it("preserves the first terminal finishedAt during later completed-session syncs", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-session-sync-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Session Sync Project",
+      sourceType: "local",
+      sourceRef: "/tmp/my-repo",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Session Sync Sprint",
+      number: 6,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Keep first completion timestamp",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "completed",
+      startedAt: "2026-03-09T10:00:00.000Z",
+      finishedAt: "2026-03-09T10:05:00.000Z",
+    });
+    const run = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "codex",
+      state: "COMPLETED",
+      startedAt: "2026-03-09T10:00:00.000Z",
+      finishedAt: "2026-03-09T10:05:00.000Z",
+      durationMs: 300_000,
+    });
+
+    const subtasks: Subtask[] = [
+      {
+        id: task.taskKey,
+        record_id: task.id,
+        title: task.title,
+        prompt: task.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "CODING_COMPLETED",
+      },
+    ];
+
+    const deps = {
+      listSessions: vi.fn().mockResolvedValue({
+        sessions: [
+          {
+            id: "session-sync-2",
+            name: "sessions/session-sync-2",
+            title: "Sprint 6: [run:my-repo/s6/t01] [t01] Keep first completion timestamp",
+            state: "COMPLETED",
+            provider: "codex",
+            outputs: [{ pullRequest: { url: "https://example.com/pr/2", workerBranch: "feature/sprint-6" } }],
+          },
+        ],
+      }),
+      resolveSessionName: (session: { name?: string }) => session.name,
+      extractSessionId: (session: { id?: string }) => session.id,
+      fetchRecentActivities: vi.fn().mockResolvedValue([]),
+      isActionRequiredState: vi.fn().mockReturnValue(false),
+      executionRepository,
+      sprintRunId: sprintRun.id,
+      logger: {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        child: vi.fn().mockReturnThis(),
+      },
+    };
+
+    await runSessionSyncStep(
+      subtasks,
+      deps,
+      false,
+      {
+        repoPath: "/tmp/my-repo",
+        sprintNumber: 6,
+      }
+    );
+
+    expect(executionRepository.getTaskRun(run.id)?.finishedAt).toBe("2026-03-09T10:05:00.000Z");
+    expect(executionRepository.getTaskDispatch(dispatch.id)?.finishedAt).toBe("2026-03-09T10:05:00.000Z");
+  });
 });

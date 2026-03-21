@@ -1,7 +1,11 @@
 import type { Subtask } from "../../contracts/app-types.js";
 
+function isMergeSettled(task: Pick<Subtask, "is_merged" | "merge_indicator">): boolean {
+  return Boolean(task.is_merged) || task.merge_indicator === "MERGED" || task.merge_indicator === "AUTOMERGE";
+}
+
 const resolveStatusIcon = (task: Subtask): string => {
-  if (task.status === "CODING_COMPLETED") return task.is_merged ? "✅" : "🛠️";
+  if (task.status === "CODING_COMPLETED") return isMergeSettled(task) ? "✅" : "🛠️";
   if (task.status === "COMPLETED") return "✅";
   if (task.status === "RUNNING") return "⏳";
   if (task.status === "BLOCKED") return "🚫";
@@ -14,7 +18,7 @@ export const runStatusTableStep = (subtasks: Subtask[]): string => {
   let table = "#### Task Status:\n";
 
   for (const task of subtasks) {
-    const mergeInfo = task.status === "CODING_COMPLETED" && !task.is_merged ? " **(Awaiting Merge)**" : "";
+    const mergeInfo = task.status === "CODING_COMPLETED" && !isMergeSettled(task) ? " **(Awaiting Merge)**" : "";
     const providerInfo = task.provider ? ` [${task.provider}]` : "";
     table += `- ${resolveStatusIcon(task)} **${task.id}**: \`${task.status}\`${mergeInfo}${providerInfo} - ${task.title}\n`;
   }

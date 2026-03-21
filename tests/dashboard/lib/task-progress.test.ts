@@ -49,6 +49,22 @@ describe("task progress phase", () => {
     ).toBe("COMPLETED");
   });
 
+  it("treats automerged tasks as completed even if is_merged has not caught up yet", () => {
+    expect(
+      getTaskProgressPhase({
+        id: "3a",
+        title: "Task",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        worker_branch: "worker/task-3a",
+        merge_indicator: "AUTOMERGE",
+        is_merged: false,
+      }),
+    ).toBe("COMPLETED");
+  });
+
   it("keeps shared task phase unchanged while live phase honors terminal dispatch completion", () => {
     const task = {
       id: "4",

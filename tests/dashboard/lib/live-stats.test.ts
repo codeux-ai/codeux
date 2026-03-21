@@ -303,11 +303,11 @@ describe("live stats timing model", () => {
       nowIso: "2026-03-19T10:15:00.000Z",
     });
 
-    expect(summary.totalSeconds).toBe(720);
+    expect(summary.totalSeconds).toBe(300);
     expect(summary.stageTotals.coding).toBe(300);
-    expect(summary.stageTotals.ci).toBe(180);
-    expect(summary.stageTotals.autofix).toBe(180);
-    expect(summary.stageTotals.merge).toBe(60);
+    expect(summary.stageTotals.ci).toBe(0);
+    expect(summary.stageTotals.autofix).toBe(0);
+    expect(summary.stageTotals.merge).toBe(0);
     expect(summary.activeStage).toBeNull();
   });
 
@@ -389,10 +389,10 @@ describe("live stats timing model", () => {
       nowIso: "2026-03-19T10:15:00.000Z",
     });
 
-    expect(summary.totalSeconds).toBe(720);
+    expect(summary.totalSeconds).toBe(300);
     expect(summary.stageTotals.coding).toBe(300);
-    expect(summary.stageTotals.merge).toBe(360);
-    expect(summary.stageTotals.ci).toBe(60);
+    expect(summary.stageTotals.merge).toBe(0);
+    expect(summary.stageTotals.ci).toBe(0);
     expect(summary.activeStage).toBeNull();
   });
 
@@ -483,11 +483,11 @@ describe("live stats timing model", () => {
       nowIso: "2026-03-19T10:15:00.000Z",
     });
 
-    expect(summary.endedAt).toBe("2026-03-19T10:07:00.000Z");
-    expect(summary.totalSeconds).toBe(420);
+    expect(summary.endedAt).toBe("2026-03-19T10:05:00.000Z");
+    expect(summary.totalSeconds).toBe(300);
     expect(summary.stageTotals.coding).toBe(300);
-    expect(summary.stageTotals.ci).toBe(60);
-    expect(summary.stageTotals.merge).toBe(60);
+    expect(summary.stageTotals.ci).toBe(0);
+    expect(summary.stageTotals.merge).toBe(0);
     expect(summary.activeStage).toBeNull();
   });
 
@@ -549,7 +549,7 @@ describe("live stats timing model", () => {
     expect(summary.activeStage).toBeNull();
   });
 
-  it("stops coding-complete task timing until a real ci or merge stage begins", () => {
+  it("treats automerged tasks as terminal even if is_merged has not caught up yet", () => {
     const task = makeTask({
       id: "T02B",
       title: "Awaiting merge orchestration",
@@ -607,7 +607,7 @@ describe("live stats timing model", () => {
       nowIso: "2026-03-19T10:10:00.000Z",
     });
 
-    expect(summary.phase).toBe("CODING_COMPLETED");
+    expect(summary.phase).toBe("COMPLETED");
     expect(summary.endedAt).toBe("2026-03-19T10:05:00.000Z");
     expect(summary.totalSeconds).toBe(300);
     expect(summary.stageTotals.coding).toBe(300);

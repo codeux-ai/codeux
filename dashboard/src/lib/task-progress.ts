@@ -9,7 +9,7 @@ function taskHasMergeEvidence(task: Pick<Subtask, "worker_branch" | "pr_url">): 
 }
 
 function isMergeSettled(task: Pick<Subtask, "is_merged" | "merge_indicator">): boolean {
-  return Boolean(task.is_merged) || task.merge_indicator === "MERGED";
+  return Boolean(task.is_merged) || task.merge_indicator === "MERGED" || task.merge_indicator === "AUTOMERGE";
 }
 
 function resolveTaskProgressPhase(

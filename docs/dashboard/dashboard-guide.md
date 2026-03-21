@@ -226,7 +226,9 @@ Legacy runtime:
 - Completed task cards retain their final elapsed duration: once a task reaches a terminal state the elapsed-time badge freezes at the finish time and remains visible; only truly active work continues ticking once per second
 - Stage timing is scoped to the current task identity and active sprint run, so reused task keys or stale task history from older attempts no longer leak durations into blocked or freshly restarted tasks
 - Completed task timing stops at the task's terminal runtime event or dispatch finish time, so later provider/session sync noise does not keep increasing a finished task's total
+- Once a merge-backed task is actually settled, Live view freezes that task back at coding completion instead of preserving later PR/merge wait as task runtime
 - Coding-complete tasks freeze at coding completion until a real `CI / Review`, `Autofix`, or `Merge` runtime stage begins, so post-execution tasks do not keep counting as active coding time just because merge metadata exists
+- `merge_indicator: AUTOMERGE` is treated as a settled merge state for live timing and sprint completion, so brief lag on the persisted `is_merged` flag does not reopen merge timers for already-merged tasks
 - Stage attribution now follows the task runtime event stream more strictly:
   - `run_completed` and `cli_workflow_completed` mark the end of coding for PR-backed tasks
   - `ci_gate_status` drives later `CI / Review`, `Autofix`, and `Merge` buckets

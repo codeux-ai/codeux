@@ -136,7 +136,12 @@ const syncExecutionRunState = (
   const prUrl = resolvePrUrl(session) || taskRun.prUrl;
   const nextRunState = mapSessionStateToTaskRunState(session.state, deps.isActionRequiredState);
   const now = new Date().toISOString();
-  const nextFinishedAt = nextRunState === "RUNNING" ? null : now;
+  const currentDispatch = taskRun.dispatchId
+    ? deps.executionRepository.getTaskDispatch(taskRun.dispatchId)
+    : null;
+  const nextFinishedAt = nextRunState === "RUNNING"
+    ? null
+    : (taskRun.finishedAt || currentDispatch?.finishedAt || now);
   const nextDurationMs = nextRunState === "RUNNING" || !taskRun.startedAt
     ? null
     : Math.max(0, new Date(nextFinishedAt || now).getTime() - new Date(taskRun.startedAt).getTime());
@@ -154,11 +159,10 @@ const syncExecutionRunState = (
   });
 
   if (taskRun.dispatchId) {
-    const currentDispatch = deps.executionRepository.getTaskDispatch(taskRun.dispatchId);
     deps.executionRepository.updateTaskDispatch(taskRun.dispatchId, {
       status: mergeDispatchStatus(currentDispatch?.status || null, nextRunState),
       startedAt: taskRun.startedAt || now,
-      finishedAt: nextRunState === "RUNNING" ? null : now,
+      finishedAt: nextRunState === "RUNNING" ? null : (currentDispatch?.finishedAt || nextFinishedAt),
       lastHeartbeatAt: now,
       errorMessage: nextRunState === "FAILED"
         ? `Provider session ${session.state || "FAILED"}`
