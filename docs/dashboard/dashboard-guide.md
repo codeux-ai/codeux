@@ -221,7 +221,7 @@ Legacy runtime:
   - total sprint elapsed time
   - average completed-task duration
   - longest task duration
-  - accumulated task time split into `Queued`, `Coding`, `CI / Review`, `Autofix`, and `Merge`
+  - accumulated task time split into `Coding`, `CI / Review`, `Autofix`, and `Merge`
 - Task cards in Live view now show per-stage timing pills, so a task can separately expose coding time, CI wait time, autofix time, merge time, and final total duration once it settles
 - Stage timing is scoped to the current task identity and active sprint run, so reused task keys or stale task history from older attempts no longer leak durations into blocked or freshly restarted tasks
 - Completed task timing now stops at the task's terminal runtime event or dispatch finish time, so later provider/session sync noise does not keep increasing a finished task's total

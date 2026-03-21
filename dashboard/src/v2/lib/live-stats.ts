@@ -8,6 +8,17 @@ import { getTaskProgressPhase } from "../../lib/task-progress.js";
 
 export const LIVE_TASK_STAGE_ORDER = ["queued", "coding", "ci", "autofix", "merge"] as const;
 
+/**
+ * Dedicated stage order for the Live Session stats deck.
+ * Excludes 'queued' as it's not considered a 'live' execution stage for this view.
+ */
+export const STATS_DECK_VISIBLE_STAGES: ReadonlyArray<LiveTaskStageKey> = [
+  "coding",
+  "ci",
+  "autofix",
+  "merge",
+];
+
 export type LiveTaskStageKey = (typeof LIVE_TASK_STAGE_ORDER)[number];
 
 export interface LiveTaskStageSegment {

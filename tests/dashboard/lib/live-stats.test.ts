@@ -6,6 +6,7 @@ import type {
   Subtask,
 } from "../../../dashboard/src/types.js";
 import {
+  STATS_DECK_VISIBLE_STAGES,
   buildLiveSprintTimingSummary,
   buildLiveTaskTimingSummary,
   buildLiveTaskTimingSummaries,
@@ -48,8 +49,8 @@ function makeDispatch(overrides: Partial<ExecutionTaskDispatchSummary> & Pick<Ex
     workerBranch: overrides.workerBranch ?? null,
     prUrl: overrides.prUrl ?? null,
     queuedAt: overrides.queuedAt || "2026-03-19T10:00:00.000Z",
-    claimedAt: overrides.claimedAt ?? overrides.queuedAt ?? "2026-03-19T10:00:00.000Z",
-    startedAt: overrides.startedAt ?? overrides.queuedAt ?? "2026-03-19T10:00:00.000Z",
+    claimedAt: "claimedAt" in overrides ? overrides.claimedAt : (overrides.queuedAt || "2026-03-19T10:00:00.000Z"),
+    startedAt: "startedAt" in overrides ? overrides.startedAt : (overrides.queuedAt || "2026-03-19T10:00:00.000Z"),
     finishedAt: overrides.finishedAt ?? null,
     lastHeartbeatAt: overrides.lastHeartbeatAt ?? overrides.finishedAt ?? overrides.startedAt ?? null,
     errorMessage: overrides.errorMessage ?? null,
@@ -898,5 +899,38 @@ describe("live stats timing model", () => {
     expect(summary.stageTotals.coding).toBe(480);
     expect(summary.stageTotals.ci).toBe(120);
     expect(summary.longestTask?.totalSeconds).toBe(300);
+  });
+
+  it("omits 'queued' from STATS_DECK_VISIBLE_STAGES while it remains in timing totals", () => {
+    expect(STATS_DECK_VISIBLE_STAGES).not.toContain("queued");
+    expect(STATS_DECK_VISIBLE_STAGES).toEqual(["coding", "ci", "autofix", "merge"]);
+
+    const tasks = [makeTask({ id: "T01", title: "Queued", status: "RUNNING" })];
+    const dispatches = [
+      makeDispatch({
+        id: "dispatch-1",
+        taskId: "task-1",
+        taskKey: "T01",
+        taskTitle: "Queued",
+        status: "queued",
+        queuedAt: "2026-03-19T10:00:00.000Z",
+        claimedAt: null,
+        startedAt: null,
+      }),
+    ];
+
+    const summary = buildLiveSprintTimingSummary({
+      tasks,
+      dispatches,
+      events: [],
+      sprintRuns: [makeSprintRun({ startedAt: "2026-03-19T10:00:00.000Z" })],
+      nowIso: "2026-03-19T10:01:00.000Z",
+    });
+
+    // Queued time should still exist in the model
+    expect(summary.stageTotals.queued).toBe(60);
+
+    // But the stats deck order should not include it
+    expect(STATS_DECK_VISIBLE_STAGES).not.toContain("queued");
   });
 });

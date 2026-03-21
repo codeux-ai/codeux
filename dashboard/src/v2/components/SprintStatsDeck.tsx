@@ -23,6 +23,7 @@ import type {
 } from "../../types.js";
 import {
   LIVE_TASK_STAGE_ORDER,
+  STATS_DECK_VISIBLE_STAGES,
   buildLiveSprintTimingSummary,
   buildLiveTaskTimingSummaries,
   type LiveSprintTimingSummary,
@@ -472,8 +473,8 @@ export const SprintStatsDeck: FunctionComponent<{
                 Split from runtime milestones
               </div>
             </div>
-            <div className="grid gap-3 xl:grid-cols-5">
-              {LIVE_TASK_STAGE_ORDER.map((stage) => (
+            <div className="grid gap-3 xl:grid-cols-4">
+              {STATS_DECK_VISIBLE_STAGES.map((stage) => (
                 <StageBand
                   key={stage}
                   stage={stage}
