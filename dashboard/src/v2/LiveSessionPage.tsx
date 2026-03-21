@@ -30,6 +30,7 @@ import {
     EMPTY_RUNTIME_STATS,
 } from "./lib/live-session-config.js";
 import { LiveTaskCard, TaskDuration, QuotaCountdown } from "./components/LiveTaskCard.js";
+import { RuntimeEventFeed } from "./components/RuntimeEventFeed.js";
 
 
 /* ─── Git/CI Panel ───────────────────────────────────────────────────────── */
