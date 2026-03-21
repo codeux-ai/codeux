@@ -7,11 +7,13 @@ import type {
   ExecutionAttentionItemSummary,
   ExecutionDashboardSnapshot,
   ExternalSettingsHints,
-  GitTrackingStatus,
-  JulesActivity,
-  OverviewTelemetrySnapshot,
-  ReadinessProbeStatus,
-} from "../contracts/app-types.js";
+    GitTrackingStatus,
+    JulesActivity,
+    OverviewTelemetrySnapshot,
+    ProjectExecutionStatsSnapshot,
+    ProjectStatsWindow,
+    ReadinessProbeStatus,
+  } from "../contracts/app-types.js";
 import type {
   EffectiveSettingsResponse,
   ProjectSettings,
@@ -60,6 +62,7 @@ export interface DashboardServerOptions {
   getStatus: () => unknown;
   getExecutionSnapshot: () => ExecutionDashboardSnapshot;
   getProjectExecutionSnapshot: (projectId: string) => ExecutionDashboardSnapshot;
+  getProjectStatsSnapshot: (projectId: string, window?: ProjectStatsWindow) => ProjectExecutionStatsSnapshot;
   claimAttentionItem?: (
     projectId: string,
     attentionItemId: string,
@@ -263,6 +266,15 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       res.json(options.getProjectExecutionSnapshot(String(req.params.projectId || "").trim()));
     } catch (error) {
       res.status(400).json({ error: toErrorMessage(error, "Failed to load execution snapshot") });
+    }
+  });
+
+  app.get("/api/projects/:projectId/stats", (req, res) => {
+    try {
+      const window = req.query.window === "24h" ? "24h" : "7d";
+      res.json(options.getProjectStatsSnapshot(String(req.params.projectId || "").trim(), window));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to load project stats snapshot") });
     }
   });
 

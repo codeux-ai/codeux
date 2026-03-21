@@ -1,0 +1,154 @@
+# Usage Telemetry And Stats
+
+This page describes the provider-usage telemetry model that powers token and time statistics across tasks, sprints, and projects.
+
+## Purpose
+
+Sprint OS now tracks CLI-provider execution usage in a DB-native form so the dashboard can answer:
+
+- how many tokens were used
+- how much active provider time was spent
+- which provider and model produced that usage
+- whether counts were provider-reported or estimated
+- how usage rolls up by task, sprint, project, provider, purpose, day, and week
+
+This telemetry currently covers:
+
+- CLI task coding runs
+- virtual worker CI-fix runs
+- virtual worker merge-conflict runs
+
+`jules` is intentionally excluded for now because it does not expose a compatible token contract.
+
+## Storage Model
+
+Usage is persisted in the `provider_invocations` table.
+
+Each row represents one provider invocation and stores:
+
+- project, sprint, task, sprint-run, dispatch, task-run, attention-item, and session scope
+- provider, purpose, model, native session id
+- started/finished timestamps and active duration
+- prompt and transcript character counts
+- normalized token counts
+- `usage_source`
+- provider-native raw usage payload when available
+
+This makes usage first-class instead of trying to infer it from task status rows after the fact.
+
+## Normalized Usage Fields
+
+The shared usage shape is:
+
+- `inputTokens`
+- `cachedInputTokens`
+- `outputTokens`
+- `reasoningOutputTokens`
+- `totalTokens`
+- `activeTimeMs`
+- `wallTimeMs`
+- `invocationCount`
+- usage-source counters for `reported`, `estimated`, `unavailable`, and `unsupported`
+
+Rollups are exposed in:
+
+- task summaries
+- sprint-run summaries
+- project statistics snapshots
+
+## Provider Collection Rules
+
+### Gemini
+
+Gemini CLI runs with structured JSON output enabled.
+
+Sprint OS reads provider-reported token counts directly from the JSON response stats block and treats them as `reported`.
+
+### Codex
+
+Codex runs with `codex exec --json`.
+
+Sprint OS first looks for `token_count` JSONL events. If those are missing, it falls back to token estimation using `js-tiktoken` over the prompt plus captured transcript.
+
+### Claude Code
+
+Claude Code runs with a generated native `--session-id`.
+
+Sprint OS reads usage from the persisted Claude session JSONL artifact under `~/.claude/projects/...`. If usage is absent, it falls back to token estimation using `@anthropic-ai/tokenizer` over the prompt plus recovered transcript text.
+
+## Usage Source Semantics
+
+`usage_source` is one of:
+
+- `reported`
+  - provider gave authoritative counts
+- `estimated`
+  - Sprint OS calculated counts from the conversation text
+- `unavailable`
+  - the provider ran but no counts could be derived
+- `unsupported`
+  - provider intentionally does not participate in token telemetry
+
+The dashboard must show these states explicitly and must not invent fake precision.
+
+## Dashboard API Surface
+
+Usage data now appears in two read models:
+
+- `GET /api/projects/:projectId/execution`
+  - task and sprint execution summaries now include usage rollups
+- `GET /api/projects/:projectId/stats?window=24h|7d`
+  - project-scoped statistics snapshot for the Stats page
+
+The stats snapshot includes:
+
+- project totals
+- active sprint metadata
+- hourly buckets for `24h`
+- daily buckets for `7d`
+- task rankings
+- sprint rankings
+- provider split
+- execution-purpose split
+- token-source mix
+
+## UI Surface
+
+The dashboard now has a dedicated `/stats` page.
+
+It focuses on:
+
+- total tokens
+- active AI time
+- wall runtime
+- telemetry confidence
+- token anatomy
+- source mix
+- animated token/time trend lines for `24h` and `7d`
+- task, sprint, provider, and purpose leaderboards
+
+This page is intentionally separate from the live execution view so the live dashboard can stay optimized for orchestration while the Stats page handles historical analysis.
+
+## Realtime And Refresh
+
+Project stats refresh on:
+
+- project execution websocket invalidation
+- project structure websocket invalidation
+- polling fallback
+
+That keeps the stats page current without coupling it to the high-frequency live timeline renderer.
+
+## Design Constraints
+
+The telemetry model is designed for future exact reporting across:
+
+- per task
+- per sprint
+- per project
+- per provider
+- per execution purpose
+- per day
+- per week
+
+Because the canonical source is per invocation, additional reporting surfaces can be added later without changing how usage is recorded.

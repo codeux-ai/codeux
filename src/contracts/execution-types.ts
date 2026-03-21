@@ -5,6 +5,9 @@ export type SprintRunExecutorMode = "mixed" | "docker_cli" | "jules" | "mcp_work
 export type TaskDispatchExecutorType = "docker_cli" | "jules" | "mcp_worker";
 export type TaskDispatchStatus = "queued" | "claimed" | "running" | "cancel_requested" | "completed" | "failed" | "cancelled" | "blocked" | "quota";
 export type TaskRunState = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED" | "QUOTA";
+export type ProviderInvocationPurpose = "task_coding" | "ci_fix" | "merge_conflict" | "planning" | "worker_reply";
+export type ProviderInvocationStatus = "running" | "completed" | "failed" | "cancelled";
+export type TokenUsageSource = "reported" | "estimated" | "unsupported" | "unavailable";
 
 export type ExecutionLeaseScopeType = "project" | "sprint" | "sprint_run" | "task_dispatch";
 
@@ -61,6 +64,37 @@ export interface TaskRunRecord {
   startedAt: string | null;
   finishedAt: string | null;
   durationMs: number | null;
+}
+
+export interface ProviderInvocationUsageRecord {
+  id: string;
+  projectId: string;
+  sprintId: string | null;
+  taskId: string | null;
+  sprintRunId: string | null;
+  dispatchId: string | null;
+  taskRunId: string | null;
+  attentionItemId: string | null;
+  sessionId: string;
+  provider: string;
+  purpose: ProviderInvocationPurpose;
+  status: ProviderInvocationStatus;
+  model: string | null;
+  nativeSessionId: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  promptChars: number;
+  transcriptChars: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  totalTokens: number;
+  usageSource: TokenUsageSource;
+  rawUsageJson: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface TaskRunEventRecord {
@@ -152,6 +186,24 @@ export interface CreateTaskRunInput {
   durationMs?: number | null;
 }
 
+export interface CreateProviderInvocationUsageInput {
+  projectId: string;
+  sprintId?: string | null;
+  taskId?: string | null;
+  sprintRunId?: string | null;
+  dispatchId?: string | null;
+  taskRunId?: string | null;
+  attentionItemId?: string | null;
+  sessionId: string;
+  provider: string;
+  purpose: ProviderInvocationPurpose;
+  status?: ProviderInvocationStatus;
+  model?: string | null;
+  nativeSessionId?: string | null;
+  startedAt?: string;
+  promptChars?: number;
+}
+
 export interface UpdateTaskRunInput {
   connectionId?: string | null;
   provider?: string | null;
@@ -164,6 +216,22 @@ export interface UpdateTaskRunInput {
   startedAt?: string | null;
   finishedAt?: string | null;
   durationMs?: number | null;
+}
+
+export interface UpdateProviderInvocationUsageInput {
+  status?: ProviderInvocationStatus;
+  model?: string | null;
+  nativeSessionId?: string | null;
+  finishedAt?: string | null;
+  durationMs?: number | null;
+  transcriptChars?: number;
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  outputTokens?: number;
+  reasoningOutputTokens?: number;
+  totalTokens?: number;
+  usageSource?: TokenUsageSource;
+  rawUsageJson?: Record<string, unknown> | null;
 }
 
 export interface WorkerTaskDispatchClaim {

@@ -7,9 +7,30 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
   const model = ctx.provider === ctx.settings.workers.virtualWorkerProvider && ctx.settings.workers.model && ctx.settings.workers.model !== "default"
     ? ctx.settings.workers.model
     : providerSettings.model;
+  const taskRun = ctx.taskRunId && ctx.deps.executionRepository
+    ? ctx.deps.executionRepository.getTaskRun(ctx.taskRunId)
+    : null;
 
-  const runProvider = (p: string) =>
-    ctx.providerRunner.runProvider({
+  const runProvider = async (p: string) => {
+    const startedAt = new Date().toISOString();
+    const invocation = taskRun && ctx.deps.executionRepository
+      ? ctx.deps.executionRepository.createProviderInvocationUsage({
+        projectId: taskRun.projectId,
+        sprintId: taskRun.sprintId,
+        taskId: taskRun.taskId,
+        sprintRunId: taskRun.sprintRunId,
+        dispatchId: taskRun.dispatchId,
+        taskRunId: taskRun.id,
+        sessionId: ctx.sessionId,
+        provider: ctx.provider,
+        purpose: "task_coding",
+        model,
+        startedAt,
+        promptChars: p.length,
+      })
+      : null;
+    const startedMs = Date.now();
+    const result = await ctx.providerRunner.runProvider({
       provider: ctx.provider,
       prompt: p,
       cwd: ctx.worktreePath,
@@ -26,6 +47,40 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
           originator: originator || "system",
         }),
     });
+    if (invocation && ctx.deps.executionRepository) {
+      const finishedAt = new Date().toISOString();
+      ctx.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
+        status: result.ok ? "completed" : "failed",
+        model,
+        nativeSessionId: result.nativeSessionId,
+        finishedAt,
+        durationMs: Date.now() - startedMs,
+        transcriptChars: result.usageTelemetry.transcriptText.length,
+        inputTokens: result.usageTelemetry.inputTokens,
+        cachedInputTokens: result.usageTelemetry.cachedInputTokens,
+        outputTokens: result.usageTelemetry.outputTokens,
+        reasoningOutputTokens: result.usageTelemetry.reasoningOutputTokens,
+        totalTokens: result.usageTelemetry.totalTokens,
+        usageSource: result.usageTelemetry.usageSource,
+        rawUsageJson: result.usageTelemetry.rawUsageJson,
+      });
+      ctx.deps.executionRepository.appendTaskRunEvent(taskRun!.id, "cli_provider_usage_reported", "system", {
+        provider: ctx.provider,
+        model,
+        purpose: "task_coding",
+        inputTokens: result.usageTelemetry.inputTokens,
+        cachedInputTokens: result.usageTelemetry.cachedInputTokens,
+        outputTokens: result.usageTelemetry.outputTokens,
+        reasoningOutputTokens: result.usageTelemetry.reasoningOutputTokens,
+        totalTokens: result.usageTelemetry.totalTokens,
+        usageSource: result.usageTelemetry.usageSource,
+        durationMs: Date.now() - startedMs,
+      }, {
+        sourceEventKey: `cli:provider:usage:${invocation.id}`,
+      });
+    }
+    return result;
+  };
 
   let providerResult = await runProvider(providerPrompt);
 

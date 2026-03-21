@@ -4,14 +4,21 @@ import { IDockerRunner } from "./docker-runner.js";
 import { isDockerWorkspaceMountError } from "../../../services/cli-docker-utils.js";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { randomUUID } from "crypto";
 import { getRepoSprintOsPath } from "../../../shared/config/sprint-os-paths.js";
+import { collectProviderUsageTelemetry, type ProviderUsageTelemetry } from "./provider-usage.js";
 
 export type ProviderCommandSpec = (model: string, prompt: string) => { command: string; args: string[] };
+
+export interface ProviderRunResult extends CommandResult {
+  usageTelemetry: ProviderUsageTelemetry;
+  nativeSessionId: string | null;
+}
 
 export const providerSpecs: Record<Extract<ProviderId, "gemini" | "codex" | "claude-code">, ProviderCommandSpec> = {
   "gemini": (model: string, prompt: string) => ({
     command: "gemini",
-    args: ["--yolo", "--p", prompt]
+    args: ["--yolo", "--output-format", "json", "--p", prompt]
   }),
   "claude-code": (model: string, prompt: string) => {
     const args = ["--dangerously-skip-permissions"];
@@ -20,7 +27,7 @@ export const providerSpecs: Record<Extract<ProviderId, "gemini" | "codex" | "cla
     return { command: "claude", args };
   },
   "codex": (model: string, prompt: string) => {
-    const args = ["exec", "--yolo", "--output-last-message", "/tmp/codex-last-message.txt"];
+    const args = ["exec", "--yolo", "--json", "--output-last-message", "/tmp/codex-last-message.txt"];
     if (model && model !== "default") args.push("--model", model);
     args.push(prompt);
     return { command: "codex", args };
@@ -40,7 +47,7 @@ export interface IProviderRunner {
     githubToken?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
-  }): Promise<CommandResult>;
+  }): Promise<ProviderRunResult>;
   runProviderForText(input: {
     provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
     prompt: string;
@@ -53,7 +60,7 @@ export interface IProviderRunner {
     githubToken?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
-  }): Promise<CommandResult & { text: string }>;
+  }): Promise<ProviderRunResult & { text: string }>;
 }
 
 export class ProviderRunner implements IProviderRunner {
@@ -71,7 +78,7 @@ export class ProviderRunner implements IProviderRunner {
     githubToken?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
-  }): Promise<CommandResult> {
+  }): Promise<ProviderRunResult> {
     return await this.runProviderInternal(input);
   }
 
@@ -87,7 +94,7 @@ export class ProviderRunner implements IProviderRunner {
     githubToken?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
-  }): Promise<CommandResult & { text: string }> {
+  }): Promise<ProviderRunResult & { text: string }> {
     const outputPath = input.provider === "codex"
       ? path.join(getRepoSprintOsPath(input.repoPath, "tmp"), `provider-last-message-${input.sessionId}.txt`)
       : null;
@@ -108,7 +115,7 @@ export class ProviderRunner implements IProviderRunner {
 
       return {
         ...result,
-        text: capturedText || result.stdout || result.stderr,
+        text: capturedText || result.usageTelemetry.transcriptText || result.stdout || result.stderr,
       };
     } finally {
       if (outputPath) {
@@ -130,11 +137,12 @@ export class ProviderRunner implements IProviderRunner {
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
     codexOutputPath?: string | null;
-  }): Promise<CommandResult> {
+  }): Promise<ProviderRunResult> {
     const { provider, prompt, cwd, model, apiKey, sessionId, workflowSettings, repoPath, githubToken, signal, onActivity } = input;
     const providerEnv = this.withProviderEnv(provider, model, apiKey, workflowSettings, githubToken);
+    const nativeSessionId = provider === "claude-code" ? randomUUID() : null;
 
-    const spec = this.buildCommandSpec(provider, model, prompt, input.codexOutputPath);
+    const spec = this.buildCommandSpec(provider, model, prompt, input.codexOutputPath, nativeSessionId);
     const { command, args } = spec;
 
     const runCmd = async () => {
@@ -150,7 +158,12 @@ export class ProviderRunner implements IProviderRunner {
       }
       return await runStreamingCommand(command, args, cwd, providerEnv, {
         signal,
-        onStdoutLine: (line) => onActivity(line, "agent"),
+        onStdoutLine: (line) => {
+          if (this.shouldSuppressStructuredStdout(provider, line)) {
+            return;
+          }
+          onActivity(line, "agent");
+        },
         onStderrLine: (line) => onActivity(`[${provider}] ${line}`, "provider"),
       });
     };
@@ -161,7 +174,24 @@ export class ProviderRunner implements IProviderRunner {
       await new Promise(r => setTimeout(r, 1500));
       result = await runCmd();
     }
-    return result;
+    const capturedText = input.codexOutputPath
+      ? (await fs.readFile(input.codexOutputPath, "utf8").catch(() => "")).trim()
+      : "";
+    const usageTelemetry = await collectProviderUsageTelemetry({
+      provider,
+      model,
+      prompt,
+      cwd,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      capturedText,
+      nativeSessionId,
+    });
+    return {
+      ...result,
+      usageTelemetry,
+      nativeSessionId: usageTelemetry.nativeSessionId || nativeSessionId,
+    };
   }
 
   private buildCommandSpec(
@@ -169,14 +199,24 @@ export class ProviderRunner implements IProviderRunner {
     model: string,
     prompt: string,
     codexOutputPath?: string | null,
+    nativeSessionId?: string | null,
   ): { command: string; args: string[] } {
     if (provider === "codex" && codexOutputPath) {
-      const args = ["exec", "--yolo", "--output-last-message", codexOutputPath];
+      const args = ["exec", "--yolo", "--json", "--output-last-message", codexOutputPath];
       if (model && model !== "default") {
         args.push("--model", model);
       }
       args.push(prompt);
       return { command: "codex", args };
+    }
+
+    if (provider === "claude-code" && nativeSessionId) {
+      const args = ["--dangerously-skip-permissions", "--session-id", nativeSessionId];
+      if (model && model !== "default") {
+        args.push("--model", model);
+      }
+      args.push("-p", prompt);
+      return { command: "claude", args };
     }
 
     return providerSpecs[provider](model, prompt);
@@ -216,5 +256,21 @@ export class ProviderRunner implements IProviderRunner {
   private isTransientCodexTransportError(result: CommandResult): boolean {
     const text = `${result.stdout}\n${result.stderr}`.toLowerCase();
     return text.includes("stream disconnected before completion") || text.includes("error sending request for url") || text.includes("channel closed");
+  }
+
+  private shouldSuppressStructuredStdout(provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">, line: string): boolean {
+    if (provider !== "gemini" && provider !== "codex") {
+      return false;
+    }
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+      return false;
+    }
+    try {
+      JSON.parse(trimmed);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

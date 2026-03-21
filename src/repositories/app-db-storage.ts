@@ -236,6 +236,44 @@ export class AppDbStorage {
         FOREIGN KEY (task_run_id) REFERENCES task_runs(id) ON DELETE CASCADE
       );
 
+      CREATE TABLE IF NOT EXISTS provider_invocations (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id TEXT,
+        task_id TEXT,
+        sprint_run_id TEXT,
+        dispatch_id TEXT,
+        task_run_id TEXT,
+        attention_item_id TEXT,
+        session_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        status TEXT NOT NULL,
+        model TEXT,
+        native_session_id TEXT,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        duration_ms INTEGER,
+        prompt_chars INTEGER NOT NULL DEFAULT 0,
+        transcript_chars INTEGER NOT NULL DEFAULT 0,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        cached_input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        reasoning_output_tokens INTEGER NOT NULL DEFAULT 0,
+        total_tokens INTEGER NOT NULL DEFAULT 0,
+        usage_source TEXT NOT NULL DEFAULT 'unavailable',
+        raw_usage_json TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_run_id) REFERENCES sprint_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY (dispatch_id) REFERENCES task_dispatches(id) ON DELETE CASCADE,
+        FOREIGN KEY (task_run_id) REFERENCES task_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY (attention_item_id) REFERENCES project_attention_items(id) ON DELETE CASCADE
+      );
+
       CREATE TABLE IF NOT EXISTS sprint_run_events (
         id TEXT PRIMARY KEY,
         sprint_run_id TEXT NOT NULL,
@@ -384,6 +422,12 @@ export class AppDbStorage {
     this.ensureIndex("idx_task_runs_task_session_name", "task_runs", "task_id, session_name");
     this.ensureIndex("idx_task_runs_task_finished", "task_runs", "task_id, finished_at");
     this.ensureIndex("idx_task_runs_sprint_run_started", "task_runs", "sprint_run_id, started_at DESC");
+    this.ensureIndex("idx_provider_invocations_project_started", "provider_invocations", "project_id, started_at DESC");
+    this.ensureIndex("idx_provider_invocations_sprint_started", "provider_invocations", "sprint_id, started_at DESC");
+    this.ensureIndex("idx_provider_invocations_task_started", "provider_invocations", "task_id, started_at DESC");
+    this.ensureIndex("idx_provider_invocations_task_run", "provider_invocations", "task_run_id, started_at DESC");
+    this.ensureIndex("idx_provider_invocations_attention", "provider_invocations", "attention_item_id, started_at DESC");
+    this.ensureIndex("idx_provider_invocations_session", "provider_invocations", "session_id, started_at DESC");
     this.ensureIndex("idx_task_dispatches_sprint_run", "task_dispatches", "sprint_run_id, status, queued_at ASC");
     this.ensureIndex("idx_task_dispatches_project_status", "task_dispatches", "project_id, status, priority DESC, queued_at ASC");
     this.ensureIndex("idx_task_dispatches_task", "task_dispatches", "task_id, created_at DESC");

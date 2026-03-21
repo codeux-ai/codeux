@@ -14,6 +14,7 @@
 - [Dashboard Realtime Transport Plan](./architecture/dashboard-realtime-transport-plan.md)
 - [Dashboard Realtime Foundation](./architecture/dashboard-realtime-foundation.md)
 - [Execution Runtime Event Timeline](./architecture/execution-runtime-event-timeline.md)
+- [Usage Telemetry And Stats](./architecture/usage-telemetry-and-stats.md)
 - [Unified Runtime Event Stream](./architecture/unified-runtime-event-stream.md)
 - [Execution Dashboard Controls](./architecture/execution-dashboard-controls.md)
 - [Project Management Implementation](./architecture/project-management-implementation.md)

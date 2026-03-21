@@ -34,6 +34,7 @@ Primary event types now written into `task_run_events`:
 - `cli_prepare_completed`
 - `cli_provider_started`
 - `cli_provider_completed`
+- `cli_provider_usage_reported`
 - `cli_git_no_changes`
 - `cli_git_pushed`
 - `cli_pr_finalized`
@@ -112,6 +113,10 @@ Docker/CLI-backed execution no longer waits for a later poll to become visible i
 
 It also updates the current `task_run` and `task_dispatch` state immediately on terminal success or failure so the execution snapshot reflects the pipeline outcome before the next session-sync pass.
 
+When a CLI-backed coding invocation completes, the pipeline also writes `cli_provider_usage_reported` with normalized token/time data for that provider call.
+
+The actual per-invocation usage record is stored in `provider_invocations`, which is the canonical source for historical token/time reporting.
+
 ## CI Gate Events
 
 `FeaturePrGateService` now writes `ci_gate_status` events into the current sprint run timeline.
@@ -125,6 +130,8 @@ These events cover:
 - automerge success or failure
 
 This means merge gating is now part of the same DB-native runtime history as dispatch, worker execution, and provider activity.
+
+Virtual worker CI-fix and merge-conflict runs also persist their provider usage into `provider_invocations`, even when they do not emit task-run timeline events.
 
 ## Dashboard Projection
 

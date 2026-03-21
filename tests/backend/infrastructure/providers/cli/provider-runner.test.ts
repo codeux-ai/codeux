@@ -79,7 +79,7 @@ describe("ProviderRunner", () => {
     const [cmd, args, cwd, env] = vi.mocked(runStreamingCommand).mock.calls[0];
 
     expect(cmd).toBe("gemini");
-    expect(args).toEqual(["--yolo", "--p", "test prompt"]);
+    expect(args).toEqual(["--yolo", "--output-format", "json", "--p", "test prompt"]);
     expect(env.GEMINI_MODEL).toBe("test-model");
     expect(env.GEMINI_API_KEY).toBe("test-api-key");
   });
@@ -103,7 +103,15 @@ describe("ProviderRunner", () => {
     const [cmd, args, cwd, env] = vi.mocked(runStreamingCommand).mock.calls[0];
 
     expect(cmd).toBe("claude");
-    expect(args).toEqual(["--dangerously-skip-permissions", "--model", "test-model", "-p", "test prompt"]);
+    expect(args).toEqual([
+      "--dangerously-skip-permissions",
+      "--session-id",
+      expect.any(String),
+      "--model",
+      "test-model",
+      "-p",
+      "test prompt",
+    ]);
     expect(env.ANTHROPIC_API_KEY).toBe("test-api-key");
   });
 
@@ -126,7 +134,7 @@ describe("ProviderRunner", () => {
     const [cmd, args, cwd, env] = vi.mocked(runStreamingCommand).mock.calls[0];
 
     expect(cmd).toBe("codex");
-    expect(args).toEqual(["exec", "--yolo", "--output-last-message", "/tmp/codex-last-message.txt", "--model", "test-model", "test prompt"]);
+    expect(args).toEqual(["exec", "--yolo", "--json", "--output-last-message", "/tmp/codex-last-message.txt", "--model", "test-model", "test prompt"]);
     expect(env.CODEX_MODEL).toBe("test-model");
     expect(env.OPENAI_API_KEY).toBe("test-api-key");
   });
@@ -149,8 +157,9 @@ describe("ProviderRunner", () => {
     expect(runStreamingCommand).toHaveBeenCalled();
     const [cmd, args] = vi.mocked(runStreamingCommand).mock.calls[0];
     expect(cmd).toBe("codex");
-    expect(args[2]).toBe("--output-last-message");
-    expect(String(args[3])).toContain(".sprint-os/tmp/provider-last-message-session-1.txt");
+    expect(args[2]).toBe("--json");
+    expect(args[3]).toBe("--output-last-message");
+    expect(String(args[4])).toContain(".sprint-os/tmp/provider-last-message-session-1.txt");
     expect(result.text).toBe("captured response");
     expect(fs.readFile).toHaveBeenCalled();
     expect(fs.rm).toHaveBeenCalled();
@@ -220,7 +229,7 @@ describe("ProviderRunner", () => {
 
     const [geminiInput] = vi.mocked(mockDockerRunner.runProviderInDocker).mock.calls[0];
     expect(geminiInput.command).toBe("gemini");
-    expect(geminiInput.args).toEqual(["--yolo", "--p", "gemini prompt"]);
+    expect(geminiInput.args).toEqual(["--yolo", "--output-format", "json", "--p", "gemini prompt"]);
     expect(geminiInput.providerEnv.GEMINI_MODEL).toBe("gemini-2.5-pro");
     expect(geminiInput.providerEnv.GEMINI_API_KEY).toBe("gemini-key");
 
@@ -229,6 +238,7 @@ describe("ProviderRunner", () => {
     expect(codexInput.args).toEqual([
       "exec",
       "--yolo",
+      "--json",
       "--output-last-message",
       "/tmp/codex-last-message.txt",
       "--model",
@@ -242,6 +252,8 @@ describe("ProviderRunner", () => {
     expect(claudeInput.command).toBe("claude");
     expect(claudeInput.args).toEqual([
       "--dangerously-skip-permissions",
+      "--session-id",
+      expect.any(String),
       "--model",
       "claude-sonnet-4-6",
       "-p",

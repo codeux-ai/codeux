@@ -211,6 +211,7 @@ async function createServerHandle(): Promise<{
       ...mapAssignedWorkers(projectWorkerAssignmentRepository, projectId),
       attentionItems: mapAttentionItems(projectAttentionRepository, projectId),
     }),
+    getProjectStatsSnapshot: (projectId, window) => executionRepository.getProjectStatsSnapshot(projectId, window),
     claimAttentionItem: (projectId, attentionItemId, input) => {
       const current = projectAttentionRepository.getAttentionItem(attentionItemId);
       if (!current || current.projectId !== projectId) {
@@ -717,6 +718,77 @@ describe("dashboard project management API", () => {
       projectId: project.id,
       sprintRunId: telemetryRun.id,
       runningDispatchCount: 1,
+    });
+
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: firstTask.id,
+      sprintRunId: telemetryRun.id,
+      dispatchId: executionRepository.listTaskDispatches({ projectId: project.id, sprintRunId: telemetryRun.id })[0]!.id,
+      provider: "codex",
+      state: "completed",
+      sessionId: "stats-session-1",
+      startedAt: new Date(Date.now() - 120_000).toISOString(),
+      finishedAt: new Date(Date.now() - 30_000).toISOString(),
+      durationMs: 90_000,
+    });
+    const invocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: firstTask.id,
+      sprintRunId: telemetryRun.id,
+      dispatchId: taskRun.dispatchId,
+      taskRunId: taskRun.id,
+      sessionId: "stats-session-1",
+      provider: "codex",
+      purpose: "task_coding",
+      model: "gpt-5.3-codex",
+      startedAt: new Date(Date.now() - 120_000).toISOString(),
+      promptChars: 128,
+    });
+    executionRepository.updateProviderInvocationUsage(invocation.id, {
+      status: "completed",
+      finishedAt: new Date(Date.now() - 30_000).toISOString(),
+      durationMs: 90_000,
+      transcriptChars: 84,
+      inputTokens: 320,
+      cachedInputTokens: 40,
+      outputTokens: 110,
+      reasoningOutputTokens: 20,
+      totalTokens: 490,
+      usageSource: "reported",
+      rawUsageJson: { provider: "codex" },
+    });
+
+    const statsSnapshot = await fetch(`${baseUrl}/api/projects/${project.id}/stats?window=24h`)
+      .then(async (response) => response.json()) as {
+        projectId: string;
+        window: string;
+        usage: { totalTokens: number; activeTimeMs: number; wallTimeMs: number };
+        tasks: Array<{ label: string; usage: { totalTokens: number } }>;
+        providers: Array<{ id: string; usage: { totalTokens: number } }>;
+      };
+    expect(statsSnapshot).toMatchObject({
+      projectId: project.id,
+      window: "24h",
+      usage: {
+        totalTokens: 490,
+        activeTimeMs: 90_000,
+        wallTimeMs: 90_000,
+      },
+    });
+    expect(statsSnapshot.tasks[0]).toMatchObject({
+      label: "T01 Wire selected project state",
+      usage: {
+        totalTokens: 490,
+      },
+    });
+    expect(statsSnapshot.providers[0]).toMatchObject({
+      id: "codex",
+      usage: {
+        totalTokens: 490,
+      },
     });
 
     const startListenResponse = await fetch(`${baseUrl}/api/projects/${project.id}/conversations/threads`, {

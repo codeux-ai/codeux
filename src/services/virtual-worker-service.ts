@@ -409,6 +409,8 @@ export class VirtualWorkerService {
           repoPath,
           worktreePath: finalWorktreePath,
           sessionId,
+          attentionItem: item,
+          purpose: "merge_conflict",
           model: settings.workers.model && settings.workers.model !== "default" ? settings.workers.model : providerSettings.model,
           apiKey: providerSettings.apiKey,
           githubToken: settings.git.githubToken,
@@ -528,6 +530,8 @@ export class VirtualWorkerService {
         repoPath,
         worktreePath: finalWorktreePath,
         sessionId,
+        attentionItem: item,
+        purpose: "ci_fix",
         model: settings.workers.model && settings.workers.model !== "default" ? settings.workers.model : providerSettings.model,
         apiKey: providerSettings.apiKey,
         githubToken: settings.git.githubToken,
@@ -658,27 +662,63 @@ export class VirtualWorkerService {
     repoPath: string;
     worktreePath: string;
     sessionId: string;
+    attentionItem: ProjectAttentionItemRecord;
+    purpose: "ci_fix" | "merge_conflict";
     model: string;
     apiKey: string;
     githubToken: string;
   }): Promise<void> {
-    const runProvider = async (prompt: string) => await this.providerRunner.runProvider({
-      provider: args.provider,
-      prompt,
-      cwd: args.worktreePath,
-      model: args.model,
-      apiKey: args.apiKey,
-      sessionId: args.sessionId,
-      workflowSettings: args.workflowSettings,
-      repoPath: args.repoPath,
-      githubToken: args.githubToken,
-      onActivity: (description, originator) => {
-        this.deps.sessionTracking.appendActivity(args.sessionId, {
-          originator: originator || "system",
-          description,
-        });
-      },
-    });
+    const runProvider = async (prompt: string) => {
+      const startedAt = new Date().toISOString();
+      const invocation = this.deps.executionRepository.createProviderInvocationUsage({
+        projectId: args.attentionItem.projectId,
+        sprintId: args.attentionItem.sprintId,
+        taskId: args.attentionItem.taskId,
+        sprintRunId: args.attentionItem.sprintRunId,
+        dispatchId: args.attentionItem.dispatchId,
+        attentionItemId: args.attentionItem.id,
+        sessionId: args.sessionId,
+        provider: args.provider,
+        purpose: args.purpose,
+        model: args.model,
+        startedAt,
+        promptChars: prompt.length,
+      });
+      const startedMs = Date.now();
+      const result = await this.providerRunner.runProvider({
+        provider: args.provider,
+        prompt,
+        cwd: args.worktreePath,
+        model: args.model,
+        apiKey: args.apiKey,
+        sessionId: args.sessionId,
+        workflowSettings: args.workflowSettings,
+        repoPath: args.repoPath,
+        githubToken: args.githubToken,
+        onActivity: (description, originator) => {
+          this.deps.sessionTracking.appendActivity(args.sessionId, {
+            originator: originator || "system",
+            description,
+          });
+        },
+      });
+      this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
+        status: result.ok ? "completed" : "failed",
+        model: args.model,
+        nativeSessionId: result.nativeSessionId,
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - startedMs,
+        transcriptChars: result.usageTelemetry.transcriptText.length,
+        inputTokens: result.usageTelemetry.inputTokens,
+        cachedInputTokens: result.usageTelemetry.cachedInputTokens,
+        outputTokens: result.usageTelemetry.outputTokens,
+        reasoningOutputTokens: result.usageTelemetry.reasoningOutputTokens,
+        totalTokens: result.usageTelemetry.totalTokens,
+        usageSource: result.usageTelemetry.usageSource,
+        rawUsageJson: result.usageTelemetry.rawUsageJson,
+      });
+      return result;
+    };
 
     let result = await runProvider(args.providerPrompt);
     if (!result.ok && args.workflowSettings.retryOnReadFileNotFound && isReadFileNotFoundToolError(result)) {

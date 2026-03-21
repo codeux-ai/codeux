@@ -95,6 +95,8 @@ Legacy runtime:
   - websocket upgrade endpoint for dashboard realtime subscriptions (`projects`, `overview`, `project:<projectId>`, `thread:<threadId>`)
 - `GET /api/projects/:projectId/execution`
   - Project-scoped execution control-plane snapshot for the v2 runtime
+- `GET /api/projects/:projectId/stats?window=24h|7d`
+  - Project-scoped token/time statistics snapshot with hourly or daily buckets, task/sprint/provider/purpose rollups, and telemetry-source mix
 - `POST /api/projects/:projectId/attention-items/:attentionItemId/claim`
   - Claims an active worker-owned attention item on behalf of the assigned project worker
 - `POST /api/projects/:projectId/attention-items/:attentionItemId/resolve`
@@ -169,6 +171,8 @@ Legacy runtime:
 - Tasks and sprints now refresh silently on background realtime invalidation, so opening the Tasks page no longer repeatedly flashes loading state when project metadata or structure updates arrive
 - Tasks page also stores explicit task executor preference (`auto`, `docker_cli`, `jules`, `mcp_worker`)
 - The Tasks board entrance animation now replays only for project/view/filter changes instead of every background task refresh
+- Stats page is project-scoped and visualizes tracked token/time usage for the selected project with `24h` and `7d` windows
+- The Stats page uses the same project realtime invalidation channels as the rest of the v2 dashboard, then falls back to polling so usage graphs and tables stay current during active sprint execution
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface
 - Agents page is DB-backed and manages project-scoped agents (`name`, `labels`, `instruction markdown`)
 - Agents are auto-imported from project and home `.sprint-os/agents/*.md` when first discovered
@@ -223,6 +227,7 @@ Legacy runtime:
   - longest task duration
   - a Stage Ledger with four columns — `Coding`, `CI / Review`, `Autofix`, and `Merge` — showing accumulated wall-clock time per stage across all tasks; `Queued` time is tracked internally but is not surfaced as a stats column
 - Task cards in Live view show per-stage timing pills so a task can separately expose coding time, CI wait time, autofix time, merge time, and a final total duration
+- Execution summaries now also carry normalized usage rollups, so task, sprint, and project stats can report token/time telemetry without reconstructing it from raw provider output in the browser
 - Completed task cards retain their final elapsed duration: once a task reaches a terminal state the elapsed-time badge freezes at the finish time and remains visible; only truly active work continues ticking once per second
 - Stage timing is scoped to the current task identity and active sprint run, so reused task keys or stale task history from older attempts no longer leak durations into blocked or freshly restarted tasks
 - Completed task timing stops at the task's terminal runtime event or dispatch finish time, so later provider/session sync noise does not keep increasing a finished task's total

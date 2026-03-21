@@ -1,4 +1,5 @@
 import type { InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
+import type { ProviderInvocationPurpose, TokenUsageSource } from "./execution-types.js";
 
 export interface JulesSource {
   name: string;
@@ -114,6 +115,7 @@ export interface ExecutionSprintRunSummary {
   activeLeaseOwnerKey: string | null;
   activeLeaseExpiresAt: string | null;
   humanIntervention: ExecutionHumanInterventionSummary | null;
+  usage?: ExecutionUsageTotals;
 }
 
 export interface ExecutionHumanInterventionSummary {
@@ -156,6 +158,7 @@ export interface ExecutionTaskDispatchSummary {
   errorMessage: string | null;
   activeLeaseOwnerKey: string | null;
   activeLeaseExpiresAt: string | null;
+  usage?: ExecutionUsageTotals;
 }
 
 export interface ExecutionRuntimeEventSummary {
@@ -264,6 +267,63 @@ export interface ExecutionDashboardSnapshot {
   attentionItems: ExecutionAttentionItemSummary[];
   recentEvents: ExecutionRuntimeEventSummary[];
   updatedAt: string | null;
+}
+
+export interface ExecutionUsageTotals {
+  invocationCount: number;
+  activeTimeMs: number;
+  wallTimeMs: number;
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  totalTokens: number;
+  reportedInvocationCount: number;
+  estimatedInvocationCount: number;
+  unavailableInvocationCount: number;
+  unsupportedInvocationCount: number;
+}
+
+export interface ExecutionUsageBucketSummary {
+  bucketStart: string;
+  bucketEnd: string;
+  label: string;
+  usage: ExecutionUsageTotals;
+}
+
+export interface ExecutionStatsEntitySummary {
+  id: string;
+  label: string;
+  secondaryLabel: string | null;
+  status: string | null;
+  purpose: ProviderInvocationPurpose | null;
+  provider: ProviderId | string | null;
+  usage: ExecutionUsageTotals;
+  lastActivityAt: string | null;
+}
+
+export type ProjectStatsWindow = "24h" | "7d";
+
+export interface ProjectExecutionStatsSnapshot {
+  projectId: string;
+  projectName: string;
+  window: ProjectStatsWindow;
+  generatedAt: string;
+  usage: ExecutionUsageTotals;
+  activeSprint: {
+    sprintId: string;
+    sprintName: string;
+    sprintNumber: number | null;
+  } | null;
+  buckets: ExecutionUsageBucketSummary[];
+  sprints: ExecutionStatsEntitySummary[];
+  tasks: ExecutionStatsEntitySummary[];
+  providers: ExecutionStatsEntitySummary[];
+  purposes: ExecutionStatsEntitySummary[];
+  tokenSources: Array<{
+    source: TokenUsageSource;
+    count: number;
+  }>;
 }
 
 export interface OverviewTelemetryProjectSummary {
