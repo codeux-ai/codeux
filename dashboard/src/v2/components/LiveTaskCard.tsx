@@ -9,7 +9,6 @@ import { WaveFluid } from "./ui/WaveFluid.js";
 import { BorderTrace } from "./ui/BorderTrace.js";
 import { TaskStagePills } from "./SprintStatsDeck.js";
 import { RuntimeEventFeed } from "./RuntimeEventFeed.js";
-import { formatTime } from "../../lib/time.js";
 import { renderMarkdown } from "../../lib/markdown.js";
 import type { Subtask, ExecutionRuntimeEventSummary } from "../../types.js";
 import {
@@ -18,6 +17,10 @@ import {
 } from "../lib/live-session-config.js";
 import { getTaskProgressPhase } from "../../lib/task-progress.js";
 import type { LiveTaskTimingSummary } from "../lib/live-stats.js";
+import {
+    deriveLiveDurationDisplay,
+    type LiveDurationDispatchTiming,
+} from "../lib/live-duration-display.js";
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
@@ -70,30 +73,42 @@ export const QuotaCountdown: FunctionComponent<{ errorMessage: string }> = ({ er
     );
 };
 
-export const TaskDuration: FunctionComponent<{ startedAt: string | null; finishedAt: string | null; status: string }> = ({ startedAt, finishedAt, status }) => {
-    const [elapsed, setElapsed] = useState(0);
-    const isRunning = status === "RUNNING" || status === "running";
+export const TaskDuration: FunctionComponent<{
+    taskTiming?: LiveTaskTimingSummary | null;
+    dispatchTiming?: LiveDurationDispatchTiming | null;
+}> = ({ taskTiming, dispatchTiming }) => {
+    const [now, setNow] = useState(() => Date.now());
+    const display = deriveLiveDurationDisplay({
+        taskTiming,
+        dispatchTiming,
+        now,
+    });
 
     useEffect(() => {
-        if (!startedAt) { setElapsed(0); return; }
-        const start = new Date(startedAt).getTime();
-        const compute = () => {
-            const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
-            return Math.max(0, Math.floor((end - start) / 1000));
-        };
-        setElapsed(compute());
-        if (!finishedAt && isRunning) {
-            const timer = window.setInterval(() => setElapsed(compute()), 1000);
-            return () => window.clearInterval(timer);
-        }
-    }, [startedAt, finishedAt, isRunning]);
+        setNow(Date.now());
+    }, [
+        dispatchTiming?.finishedAt,
+        dispatchTiming?.startedAt,
+        dispatchTiming?.status,
+        taskTiming?.activeStage,
+        taskTiming?.startedAt,
+        taskTiming?.totalSeconds,
+    ]);
 
-    if (!startedAt || elapsed === 0) return null;
+    useEffect(() => {
+        if (display.mode !== "live") {
+            return;
+        }
+        const timer = window.setInterval(() => setNow(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, [display.mode]);
+
+    if (!display.visible) return null;
 
     return (
         <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
             <Timer className="w-3 h-3" strokeWidth={2} />
-            <span>{formatDuration(elapsed)}</span>
+            <span>{formatDuration(display.elapsedSeconds)}</span>
         </div>
     );
 };
@@ -109,6 +124,7 @@ export interface LiveTaskCardProps {
     dispatchError?: string | null;
     dispatchStartedAt?: string | null;
     dispatchFinishedAt?: string | null;
+    dispatchStatus?: string | null;
 }
 
 const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
@@ -120,6 +136,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     dispatchError,
     dispatchStartedAt,
     dispatchFinishedAt,
+    dispatchStatus,
 }) => {
     const [expanded, setExpanded] = useState(false);
     const [showFeed, setShowFeed] = useState(false);
@@ -205,14 +222,14 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                 {task.provider}
                             </span>
                         )}
-                        {taskTiming && taskTiming.totalSeconds > 0 ? (
-                            <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
-                                <Timer className="w-3 h-3" strokeWidth={2} />
-                                <span>{formatDuration(taskTiming.totalSeconds)}</span>
-                            </div>
-                        ) : (
-                            <TaskDuration startedAt={dispatchStartedAt ?? null} finishedAt={dispatchFinishedAt ?? null} status={taskPhase} />
-                        )}
+                        <TaskDuration
+                            taskTiming={taskTiming}
+                            dispatchTiming={{
+                                startedAt: dispatchStartedAt ?? null,
+                                finishedAt: dispatchFinishedAt ?? null,
+                                status: dispatchStatus ?? taskPhase,
+                            }}
+                        />
                         {(hasEventFeed || task.session_id || task.session_name) && (
                             <span className="text-[9px] font-mono text-slate-400 dark:text-slate-600 max-w-[100px] truncate" title={sessionLabel}>
                                 {sessionLabel.substring(0, 16)}
