@@ -201,6 +201,8 @@ Legacy runtime:
 - The selected-project execution snapshot now keeps the full task-dispatch and task-run event history for the active or most recent sprint run, so completed tasks in Live view keep their runtime feed and stage timings visible even after later tasks start
 - The execution runtime panel can now start or resume sprint orchestration, pause or cancel sprint runs, cancel queued dispatches, and retry terminal dispatches
 - The execution runtime panel now also exposes the active attention queue, including worker claim, resolve, and dismiss controls for open project blockers
+- The Live page now keeps the Git/CI/PR card in a dedicated `GitCIStatusPanel` component so the page shell stays focused on wiring runtime state, controls, and layout
+- Live task stats, filter counts, the active filtered task list, and per-card runtime payloads are memoized from the selected project's runtime snapshot so high-frequency realtime updates do not repeatedly recompute unchanged projections
 - Live Session now shows a clear paused-for-human-intervention banner, repeats the reason/instructions in the hero state, and surfaces the same guidance inside paused sprint run cards
 - worker-owned merge conflicts are now excluded from that human-intervention projection; they remain visible in the attention queue and realtime runtime feed, but they no longer tell the operator to merge or resume while the worker is handling them
 - Worker mode is now explicit in settings:

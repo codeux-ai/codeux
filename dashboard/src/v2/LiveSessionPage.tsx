@@ -1,12 +1,11 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef, useState, useEffect, useMemo, useCallback } from "preact/hooks";
+import { useLayoutEffect, useRef, useState, useEffect, useMemo } from "preact/hooks";
 import gsap from "gsap";
 import {
-    Zap, GitBranch, Clock, CheckCircle2, XCircle, AlertTriangle,
-    Activity, ChevronDown, Radio, RefreshCw,
-    GitPullRequest, GitMerge, CircleDot, ExternalLink,
+    Zap, Clock, CheckCircle2, XCircle, AlertTriangle,
+    Activity, ChevronDown, Radio,
     Play, RotateCcw, Bot, Workflow, PauseCircle,
-    Ship, BarChart3, Anchor,
+    Ship, BarChart3,
 } from "lucide-preact";
 import { SprintBoatRace } from "./components/SprintBoatRace.js";
 import { SprintDag } from "./components/SprintDag.js";
@@ -18,10 +17,9 @@ import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js"
 import { useLiveSessionActions } from "./hooks/use-live-session-actions.js";
 import { formatTime } from "../lib/time.js";
 import { renderMarkdown } from "../lib/markdown.js";
-import type { Subtask, GitTrackingStatus, ExecutionDashboardSnapshot, ExecutionRuntimeEventSummary } from "../types.js";
+import type { Subtask, ExecutionDashboardSnapshot, ExecutionRuntimeEventSummary } from "../types.js";
 import { deriveLiveSessionRuntimeState } from "./lib/live-session-runtime.js";
 import { getTaskProgressPhase } from "../lib/task-progress.js";
-import type { LiveTaskTimingSummary } from "./lib/live-stats.js";
 
 import { IntelPanel } from "./components/ui/IntelPanel.js";
 import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
@@ -31,9 +29,7 @@ import {
 } from "./lib/live-session-config.js";
 import { LiveTaskCard, TaskDuration, QuotaCountdown } from "./components/LiveTaskCard.js";
 import { RuntimeEventFeed } from "./components/RuntimeEventFeed.js";
-
-
-/* ─── Git/CI Panel ───────────────────────────────────────────────────────── */
+import { GitCIStatusPanel } from "./components/GitCIStatusPanel.js";
 
 const statusTone = (value: string | null): string => {
     if (!value) return "text-slate-400";
@@ -724,177 +720,6 @@ const ExecutionRuntimePanel: FunctionComponent<{
     );
 };
 
-const GitCiPanel: FunctionComponent<{ status: GitTrackingStatus | null; error: string | null }> = ({ status, error }) => {
-    if (error) {
-        return (
-            <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-status-red/20 rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-                <div className="flex items-center gap-3">
-                    <XCircle className="w-5 h-5 text-status-red" strokeWidth={1.5} />
-                    <div>
-                        <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-status-red">Git Tracking Error</span>
-                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{error}</p>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    if (!status) {
-        return (
-            <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-                <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Loading git status...</span>
-            </div>
-        );
-    }
-
-    return (
-        <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-            <WaveFluid accentHex="#00E0A0" />
-            <BorderTrace accentHex="#00E0A0" />
-
-            <div className="relative z-10 space-y-6">
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                        <GitBranch className="w-4 h-4 text-signal-500" strokeWidth={1.5} />
-                        <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Git / CI / PR</span>
-                    </div>
-                    <span className={`text-[9px] font-bold uppercase tracking-[0.12em] px-2.5 py-1 rounded-full ${status.mode === "REMOTE" ? "bg-signal-500/8 text-signal-500 border border-signal-500/15" : "bg-black/[0.04] dark:bg-white/[0.04] text-slate-400"}`}>
-                        {status.mode}
-                    </span>
-                </div>
-
-                {/* Branch info */}
-                <div className="grid grid-cols-2 gap-3">
-                    {[
-                        { label: "Branch", value: status.branch ?? "—" },
-                        { label: "Workspace", value: status.dirty ? "Dirty" : "Clean" },
-                        { label: "Tracking", value: status.tracking.label },
-                        { label: "Updated", value: formatTime(status.lastUpdated) },
-                    ].map(({ label, value }) => (
-                        <div key={label} className="p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.02]">
-                            <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 block mb-1">{label}</span>
-                            <span className="text-xs font-mono font-medium text-slate-700 dark:text-slate-300 truncate block">{value}</span>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Warnings */}
-                {status.warnings.length > 0 && (
-                    <div className="p-4 rounded-xl border border-status-amber/20 bg-status-amber/[0.04]">
-                        <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-status-amber block mb-2">Warnings</span>
-                        {status.warnings.map((w) => (
-                            <p key={w} className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">{w}</p>
-                        ))}
-                    </div>
-                )}
-
-                {/* Open PRs */}
-                <div>
-                    <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 block mb-3">
-                        <GitPullRequest className="w-3 h-3 inline mr-1.5 -mt-px" strokeWidth={2} />
-                        Open PRs
-                    </span>
-                    {status.openPullRequests.length === 0 ? (
-                        <p className="text-[11px] text-slate-400 dark:text-slate-600 font-mono">No open PRs tracked.</p>
-                    ) : (
-                        <div className="space-y-2">
-                            {status.openPullRequests.slice(0, 5).map((pr) => (
-                                <a
-                                    key={pr.url}
-                                    href={pr.url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="block p-3 rounded-xl border border-black/[0.04] dark:border-white/[0.04]
-                                               bg-black/[0.015] dark:bg-white/[0.015]
-                                               hover:border-signal-500/20 hover:bg-signal-500/[0.02]
-                                               transition-all duration-200 group/pr"
-                                >
-                                    <div className="flex items-center justify-between mb-1">
-                                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">#{pr.number} {pr.title}</span>
-                                        <ExternalLink className="w-3 h-3 text-slate-300 dark:text-slate-600 group-hover/pr:text-signal-500 transition-colors duration-200" strokeWidth={2} />
-                                    </div>
-                                    <p className="text-[10px] font-mono text-slate-400">{pr.headRefName ?? "?"} → {pr.baseRefName ?? "?"}</p>
-                                    <p className={`text-[10px] font-mono mt-0.5 ${statusTone(pr.mergeStateStatus)}`}>
-                                        merge: {pr.mergeStateStatus ?? "UNKNOWN"} · comments: {pr.comments}
-                                    </p>
-                                </a>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* CI Runs */}
-                <div>
-                    <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 block mb-3">
-                        <CircleDot className="w-3 h-3 inline mr-1.5 -mt-px" strokeWidth={2} />
-                        CI Runs
-                    </span>
-                    {status.ciRuns.length === 0 ? (
-                        <p className="text-[11px] text-slate-400 dark:text-slate-600 font-mono">No CI runs tracked.</p>
-                    ) : (
-                        <div className="space-y-2">
-                            {status.ciRuns.slice(0, 5).map((run) => (
-                                <a
-                                    key={`${run.id ?? run.url}`}
-                                    href={run.url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="block p-3 rounded-xl border border-black/[0.04] dark:border-white/[0.04]
-                                               bg-black/[0.015] dark:bg-white/[0.015]
-                                               hover:border-signal-500/20 transition-all duration-200"
-                                >
-                                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{run.workflowName || run.name}</span>
-                                    <p className={`text-[10px] font-mono mt-0.5 ${statusTone(run.conclusion || run.status)}`}>
-                                        {run.status}{run.conclusion ? ` / ${run.conclusion}` : ""}
-                                    </p>
-                                </a>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Merged PRs */}
-                <div>
-                    <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 block mb-3">
-                        <GitMerge className="w-3 h-3 inline mr-1.5 -mt-px" strokeWidth={2} />
-                        Recent Merges
-                    </span>
-                    {status.mergedPullRequests.length === 0 ? (
-                        <p className="text-[11px] text-slate-400 dark:text-slate-600 font-mono">No recent merges.</p>
-                    ) : (
-                        <div className="space-y-2 max-h-60 overflow-y-auto dashboard-scrollbar pr-1">
-                            {status.mergedPullRequests.map((merged) => (
-                                <a
-                                    key={merged.url}
-                                    href={merged.url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="block p-3 rounded-xl border border-black/[0.04] dark:border-white/[0.04]
-                                               bg-black/[0.015] dark:bg-white/[0.015]
-                                               hover:border-status-green/20 transition-all duration-200"
-                                >
-                                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">#{merged.number} {merged.title}</span>
-                                    <p className="text-[10px] font-mono text-slate-400 mt-0.5">{merged.headRefName ?? "?"} → {merged.baseRefName ?? "?"}</p>
-                                    <p className="text-[10px] font-mono text-status-green mt-0.5">merged {formatTime(merged.mergedAt ?? undefined)}</p>
-                                </a>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-/* ─── Protocol / Activity Panels ─────────────────────────────────────────── */
-
-
-
-/* ─── Collapsible Panel Wrapper ──────────────────────────────────────────── */
-
-
-
 /* ─── Header View Type ──────────────────────────────────────────────────── */
 
 type HeaderView = "stats" | "race" | "dag";
@@ -906,6 +731,10 @@ type TaskFilter = "All" | "Running" | "Completed" | "Failed" | "Pending";
 const FILTER_STATUS_MAP: Record<TaskFilter, string | null> = {
     All: null, Running: "RUNNING", Completed: "COMPLETED", Failed: "FAILED", Pending: "PENDING",
 };
+
+const TASK_FILTERS: TaskFilter[] = ["All", "Running", "Completed", "Failed", "Pending"];
+const EMPTY_TASKS: Subtask[] = [];
+const EMPTY_RUNTIME_EVENTS: ExecutionRuntimeEventSummary[] = [];
 
 /* ─── Main Page ──────────────────────────────────────────────────────────── */
 
@@ -960,8 +789,14 @@ export const LiveSessionPage: FunctionComponent = () => {
     const hasLiveSprint = runtimeState.hasActiveSprint;
     const hasSprintContext = runtimeState.hasSprintContext;
     const [nowIso, setNowIso] = useState(() => new Date().toISOString());
-    const visibleTasksWithLiveActivities = hasSprintContext ? tasksWithLiveActivities : [];
-    const visibleStats = hasSprintContext ? stats : EMPTY_RUNTIME_STATS;
+    const visibleTasksWithLiveActivities = useMemo(
+        () => (hasSprintContext ? tasksWithLiveActivities : EMPTY_TASKS),
+        [hasSprintContext, tasksWithLiveActivities],
+    );
+    const visibleStats = useMemo(
+        () => (hasSprintContext ? stats : EMPTY_RUNTIME_STATS),
+        [hasSprintContext, stats],
+    );
 
     useEffect(() => {
         setNowIso(new Date().toISOString());
@@ -981,16 +816,6 @@ export const LiveSessionPage: FunctionComponent = () => {
         sprintRuns: execution.sprintRuns,
         nowIso,
     });
-
-    const filtered = useMemo(() => {
-        if (activeFilter === "All") return visibleTasksWithLiveActivities;
-        if (activeFilter === "Pending") return visibleTasksWithLiveActivities.filter(t => {
-            const phase = getTaskProgressPhase(t);
-            return phase === "PENDING" || phase === "BLOCKED" || phase === "QUOTA";
-        });
-        const target = FILTER_STATUS_MAP[activeFilter];
-        return visibleTasksWithLiveActivities.filter(t => getTaskProgressPhase(t) === target);
-    }, [visibleTasksWithLiveActivities, activeFilter]);
 
     const taskEventsByRecordId = useMemo(() => {
         const byRecordId = new Map<string, ExecutionRuntimeEventSummary[]>();
@@ -1027,16 +852,64 @@ export const LiveSessionPage: FunctionComponent = () => {
         return map;
     }, [execution.taskDispatches]);
 
-    const counts: Record<TaskFilter, number> = useMemo(() => ({
-        All:       visibleTasksWithLiveActivities.length,
-        Running:   visibleStats.running,
-        Completed: visibleStats.completed,
-        Failed:    visibleStats.failed,
-        Pending:   visibleTasksWithLiveActivities.filter(t => {
-            const phase = getTaskProgressPhase(t);
-            return phase === "PENDING" || phase === "BLOCKED" || phase === "QUOTA";
-        }).length,
-    }), [visibleStats, visibleTasksWithLiveActivities]);
+    const { filteredTasks, taskCounts } = useMemo(() => {
+        const filteredTasks: Subtask[] = [];
+        const targetStatus = FILTER_STATUS_MAP[activeFilter];
+        let pendingCount = 0;
+
+        for (const task of visibleTasksWithLiveActivities) {
+            const phase = getTaskProgressPhase(task);
+            const isPending = phase === "PENDING" || phase === "BLOCKED" || phase === "QUOTA";
+
+            if (isPending) {
+                pendingCount += 1;
+            }
+
+            if (
+                activeFilter === "All"
+                || (activeFilter === "Pending" && isPending)
+                || (activeFilter !== "Pending" && targetStatus !== null && phase === targetStatus)
+            ) {
+                filteredTasks.push(task);
+            }
+        }
+
+        return {
+            filteredTasks,
+            taskCounts: {
+                All: visibleTasksWithLiveActivities.length,
+                Running: visibleStats.running,
+                Completed: visibleStats.completed,
+                Failed: visibleStats.failed,
+                Pending: pendingCount,
+            } satisfies Record<TaskFilter, number>,
+        };
+    }, [activeFilter, visibleStats, visibleTasksWithLiveActivities]);
+
+    const taskCardItems = useMemo(() => (
+        filteredTasks.map((task) => {
+            const taskRuntimeId = task.record_id || task.id;
+            const dispatchInfo = task.record_id ? dispatchInfoByTaskId.get(task.record_id) : undefined;
+
+            return {
+                key: taskRuntimeId,
+                task,
+                taskTiming: taskTimingMap.get(taskRuntimeId) || taskTimingMap.get(task.id) || null,
+                events: (task.record_id && taskEventsByRecordId.byRecordId.get(task.record_id))
+                    || taskEventsByRecordId.byTaskKey.get(task.id)
+                    || EMPTY_RUNTIME_EVENTS,
+                isRerunning: rerunningIds.has(taskRuntimeId),
+                dispatchError: dispatchInfo?.errorMessage ?? null,
+                dispatchStartedAt: dispatchInfo?.startedAt ?? null,
+                dispatchFinishedAt: dispatchInfo?.finishedAt ?? null,
+            };
+        })
+    ), [dispatchInfoByTaskId, filteredTasks, rerunningIds, taskEventsByRecordId, taskTimingMap]);
+
+    const protocolMarkup = useMemo(() => (
+        renderMarkdown(hasSprintContext ? status.instructions : undefined)
+        || '<p class="text-slate-400 dark:text-slate-600 italic">No active sprint protocol.</p>'
+    ), [hasSprintContext, status.instructions]);
 
     /* Connection error */
     if (error) {
@@ -1239,24 +1112,24 @@ export const LiveSessionPage: FunctionComponent = () => {
 
             {/* ── Filter Strip ────────────────────────────────────────── */}
             <div className="-mt-8 flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl w-fit">
-                {(["All", "Running", "Completed", "Failed", "Pending"] as TaskFilter[]).map(f => (
+                {TASK_FILTERS.map((filter) => (
                     <button
-                        key={f}
-                        onClick={() => setFilter(f)}
+                        key={filter}
+                        onClick={() => setFilter(filter)}
                         className={`text-xs font-semibold tracking-wide px-4 py-1.5 rounded-lg
                                    transition-all duration-200 flex items-center gap-2
-                                   ${activeFilter === f
+                                   ${activeFilter === filter
                                        ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
                                        : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                                    }`}
                     >
-                        {f}
+                        {filter}
                         <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded-md
-                            ${activeFilter === f
+                            ${activeFilter === filter
                                 ? "bg-signal-500/[0.12] text-signal-600 dark:text-signal-400"
                                 : "bg-black/[0.06] dark:bg-white/[0.06] text-slate-400"
                             }`}>
-                            {counts[f]}
+                            {taskCounts[filter]}
                         </span>
                     </button>
                 ))}
@@ -1274,7 +1147,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 ? pausedIntervention.instructions
                                 : "Launch a sprint to activate live task telemetry, protocol output, and runtime activity for this project."}
                         />
-                    ) : filtered.length === 0 ? (
+                    ) : taskCardItems.length === 0 ? (
                         <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border-2 border-dashed border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-16 text-center">
                             <div className="relative z-10">
                                 <Play className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-4" strokeWidth={1} />
@@ -1287,19 +1160,17 @@ export const LiveSessionPage: FunctionComponent = () => {
                             </div>
                         </div>
                     ) : (
-                        filtered.map(task => (
+                        taskCardItems.map(({ key, task, taskTiming, events, isRerunning, dispatchError, dispatchStartedAt, dispatchFinishedAt }) => (
                             <LiveTaskCard
-                                key={task.id}
+                                key={key}
                                 task={task}
-                                taskTiming={taskTimingMap.get(task.record_id || task.id) || taskTimingMap.get(task.id) || null}
-                                events={(task.record_id && taskEventsByRecordId.byRecordId.get(task.record_id))
-                                    || taskEventsByRecordId.byTaskKey.get(task.id)
-                                    || []}
+                                taskTiming={taskTiming}
+                                events={events}
                                 onRerun={handleRerun}
-                                isRerunning={rerunningIds.has(task.id)}
-                                dispatchError={task.record_id ? dispatchInfoByTaskId.get(task.record_id)?.errorMessage : null}
-                                dispatchStartedAt={task.record_id ? dispatchInfoByTaskId.get(task.record_id)?.startedAt : null}
-                                dispatchFinishedAt={task.record_id ? dispatchInfoByTaskId.get(task.record_id)?.finishedAt : null}
+                                isRerunning={isRerunning}
+                                dispatchError={dispatchError}
+                                dispatchStartedAt={dispatchStartedAt}
+                                dispatchFinishedAt={dispatchFinishedAt}
                             />
                         ))
                     )}
@@ -1317,7 +1188,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                     />
 
                     {/* 2. Git/CI — moved to top, always visible */}
-                    <GitCiPanel status={gitStatus} error={gitStatusError} />
+                    <GitCIStatusPanel status={gitStatus} error={gitStatusError} />
 
                     {/* 3. Execution Runtime — collapsible */}
                     <ExecutionRuntimePanel
@@ -1350,7 +1221,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                                        prose-code:text-signal-600 dark:prose-code:text-signal-400
                                        prose-code:bg-signal-500/[0.06] prose-code:px-1 prose-code:rounded-md
                                        font-mono text-[12px] leading-relaxed max-h-64 overflow-y-auto dashboard-scrollbar"
-                            dangerouslySetInnerHTML={{ __html: renderMarkdown(hasSprintContext ? status.instructions : undefined) || '<p class="text-slate-400 dark:text-slate-600 italic">No active sprint protocol.</p>' }}
+                            dangerouslySetInnerHTML={{ __html: protocolMarkup }}
                         />
                     </CollapsiblePanel>
                 </div>
