@@ -4,6 +4,10 @@ import {
   getFieldSource,
   getFieldSourceLabel,
   getSectionSource,
+  getProviderModelOptions,
+  PROVIDER_CARD_TOKENS,
+  providerSupportsModelSelection,
+  providerSupportsThinkingMode,
   type SettingsEditorScope,
 } from "../../lib/settings-view-models.js";
 
@@ -104,13 +108,35 @@ const SelectField: FunctionComponent<{
   <select
     value={value}
     onChange={(event) => onChange((event.currentTarget as HTMLSelectElement).value)}
-    className="h-11 rounded-xl border border-black/[0.08] bg-white px-3 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-void-900 dark:text-slate-200"
+    className="h-11 w-full rounded-xl border border-black/[0.07] bg-white/52 px-3 pr-10 text-sm text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_10px_24px_rgba(15,23,42,0.04)] backdrop-blur-xl outline-none transition-[border-color,background-color,color,box-shadow] focus:border-signal-500/35 focus:bg-white/68 dark:border-white/[0.08] dark:bg-white/[0.045] dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_10px_24px_rgba(0,0,0,0.18)] dark:[color-scheme:dark] dark:focus:border-signal-400/35 dark:focus:bg-white/[0.07]"
   >
     {options.map((option) => (
-      <option key={option.value} value={option.value}>{option.label}</option>
+      <option
+        key={option.value}
+        value={option.value}
+        className="bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100"
+      >
+        {option.label}
+      </option>
     ))}
   </select>
 );
+
+const ProviderLogo: FunctionComponent<{
+  providerId: keyof ProjectSettings["aiProvider"]["providers"];
+  disabled?: boolean;
+}> = ({ providerId, disabled = false }) => {
+  const token = PROVIDER_CARD_TOKENS[providerId];
+
+  return (
+    <div
+      className={`flex h-11 w-11 items-center justify-center rounded-[1rem] border border-black/[0.08] bg-[#F9F8F4] font-display text-sm font-black tracking-[0.16em] text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] dark:border-white/[0.08] dark:bg-void-900 dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${disabled ? "opacity-60" : ""}`}
+      aria-hidden
+    >
+      {token.logoLabel}
+    </div>
+  );
+};
 
 const ToggleField: FunctionComponent<{ checked: boolean; onChange: (checked: boolean) => void }> = ({ checked, onChange }) => (
   <button
@@ -158,6 +184,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
   editingScope = "project",
 }) => {
   const update = (patch: Partial<ProjectSettings>) => onChange({ ...settings, ...patch });
+  const virtualWorkerModeEnabled = settings.workers.executionMode === "VIRTUAL";
   const getBadge = (path: string): string | undefined => {
     if (!sources) {
       return undefined;
@@ -243,28 +270,91 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
       </Card>
 
       <Card
-        title="Provider Routing"
-        description="Select the provider strategy and model mix this scope should use."
-        badge={providerSource ? sourceLabel(providerSource) : undefined}
+        title="AI Models"
+        description="Select the provider strategy, model mix, and worker runtime settings this scope should use."
+        badge={providerSource || workerSource ? sourceLabel(providerSource === workerSource ? (providerSource || "system") : "mixed") : undefined}
       >
         <div className="grid gap-4 lg:grid-cols-2">
-          <Row label="Primary provider" description="Default provider when the strategy is manual." badge={getBadge("aiProvider.provider")}>
+          <Row label="Worker mode" description="Connected workers stay in listen mode. Virtual workers wake only when worker work exists, run one unit of work, then shut down." badge={getBadge("workers.executionMode")}>
             <SelectField
-              value={settings.aiProvider.provider}
+              value={settings.workers.executionMode}
               onChange={(value) => update({
-                aiProvider: {
-                  ...settings.aiProvider,
-                  provider: value as ProjectSettings["aiProvider"]["provider"],
+                workers: {
+                  ...settings.workers,
+                  executionMode: value as ProjectSettings["workers"]["executionMode"],
                 },
               })}
               options={[
-                { value: "jules", label: "Jules" },
-                { value: "gemini", label: "Gemini" },
-                { value: "codex", label: "Codex" },
-                { value: "claude-code", label: "Claude Code" },
+                { value: "CONNECTED_MCP", label: "Connected MCP" },
+                { value: "VIRTUAL", label: "Virtual on-demand" },
               ]}
             />
           </Row>
+          {virtualWorkerModeEnabled ? (
+            <Row label="Virtual worker CLI" description="Preferred provider when worker mode is virtual. Jules is intentionally excluded from worker execution." badge={getBadge("workers.virtualWorkerProvider")}>
+              <SelectField
+                value={settings.workers.virtualWorkerProvider}
+                onChange={(value) => update({
+                  workers: {
+                    ...settings.workers,
+                    virtualWorkerProvider: value as ProjectSettings["workers"]["virtualWorkerProvider"],
+                    model: "default",
+                  },
+                })}
+                options={[
+                  { value: "gemini", label: "Gemini" },
+                  { value: "codex", label: "Codex" },
+                  { value: "claude-code", label: "Claude Code" },
+                ]}
+              />
+            </Row>
+          ) : null}
+          {virtualWorkerModeEnabled ? (
+            <Row label="Worker model" description="Override the global model for virtual workers. If set to 'Default', the global model for the selected CLI provider is used." badge={getBadge("workers.model")}>
+              <SelectField
+                value={settings.workers.model || "default"}
+                onChange={(value) => update({
+                  workers: {
+                    ...settings.workers,
+                    model: value,
+                  },
+                })}
+                options={[
+                  { value: "default", label: `Default (${settings.aiProvider.providers[settings.workers.virtualWorkerProvider].model})` },
+                  ...getProviderModelOptions(settings.workers.virtualWorkerProvider),
+                ]}
+              />
+            </Row>
+          ) : null}
+          <Row label="Max concurrency" description="Maximum number of parallel tasks a worker can handle simultaneously." badge={getBadge("workers.maxConcurrency")}>
+            <NumberField
+              value={settings.workers.maxConcurrency}
+              min={1}
+              max={20}
+              onChange={(value) => update({
+                workers: {
+                  ...settings.workers,
+                  maxConcurrency: value,
+                },
+              })}
+            />
+          </Row>
+          <Row label="Dispatch timeout" description="Seconds to wait for a worker to finish a single task dispatch before timing out." badge={getBadge("workers.timeoutSeconds")}>
+            <NumberField
+              value={settings.workers.timeoutSeconds}
+              min={60}
+              max={3600}
+              onChange={(value) => update({
+                workers: {
+                  ...settings.workers,
+                  timeoutSeconds: value,
+                },
+              })}
+            />
+          </Row>
+        </div>
+
+        <div className={`grid gap-4 ${settings.aiProvider.strategy === "MANUAL" ? "lg:grid-cols-2" : ""}`}>
           <Row label="Routing strategy" description="Manual pins one provider, weighted spreads work, orchestrator can make routing decisions." badge={getBadge("aiProvider.strategy")}>
             <SelectField
               value={settings.aiProvider.strategy}
@@ -281,20 +371,64 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               ]}
             />
           </Row>
+          {settings.aiProvider.strategy === "MANUAL" ? (
+            <Row label="Primary provider" description="Default provider when the strategy is manual." badge={getBadge("aiProvider.provider")}>
+              <SelectField
+                value={settings.aiProvider.provider}
+                onChange={(value) => update({
+                  aiProvider: {
+                    ...settings.aiProvider,
+                    provider: value as ProjectSettings["aiProvider"]["provider"],
+                  },
+                })}
+                options={[
+                  { value: "jules", label: "Jules" },
+                  { value: "gemini", label: "Gemini" },
+                  { value: "codex", label: "Codex" },
+                  { value: "claude-code", label: "Claude Code" },
+                ]}
+              />
+            </Row>
+          ) : null}
         </div>
+
         <div className="grid gap-4 xl:grid-cols-2">
-          {Object.entries(settings.aiProvider.providers).map(([providerId, provider]) => (
+          {Object.entries(settings.aiProvider.providers).map(([providerId, provider]) => {
+            const providerKey = providerId as keyof ProjectSettings["aiProvider"]["providers"];
+            const supportsModelSelection = providerSupportsModelSelection(providerKey);
+            const supportsThinkingMode = providerSupportsThinkingMode(providerKey);
+            const modelOptions = getProviderModelOptions(providerKey);
+            const cardTokens = PROVIDER_CARD_TOKENS[providerKey];
+
+            return (
             <div
               key={providerId}
-              className="rounded-[1.5rem] border border-black/[0.06] bg-black/[0.015] p-4 dark:border-white/[0.06] dark:bg-white/[0.02]"
+              className={`group relative overflow-hidden rounded-[1.6rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_10px_24px_rgba(15,23,42,0.045)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/65 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)] ${provider.enabled ? "" : "opacity-60"}`}
             >
-                <div className="mb-4 flex items-center justify-between">
-                  <div>
+                <div aria-hidden className={`pointer-events-none absolute inset-0 ${cardTokens.glowClassName}`} />
+                <div aria-hidden className={`absolute left-0 top-5 bottom-5 w-1 rounded-r-full ${cardTokens.railClassName}`} />
+                <div aria-hidden className="pointer-events-none absolute -right-2 -top-3 select-none font-display text-[4.75rem] font-black leading-none tracking-tighter text-black/[0.035] dark:text-white/[0.03]">
+                  {cardTokens.watermark}
+                </div>
+                <div className="relative z-10 mb-4 flex items-center justify-between">
+                  <div className="flex items-start gap-3">
+                    <ProviderLogo providerId={providerKey} disabled={!provider.enabled} />
+                    <div>
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] ${cardTokens.badgeClassName}`}>
+                        {cardTokens.badgeLabel}
+                      </span>
+                    </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{providerLabels[providerId as keyof typeof providerLabels]}</div>
                       {getBadge(`aiProvider.providers.${providerId}.enabled`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.enabled`)!} /> : null}
                     </div>
-                    <div className="text-xs font-medium text-slate-500 dark:text-slate-400">Model choice, weight, and thinking mode.</div>
+                    <div className="mt-1 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+                      {providerId === "jules"
+                        ? "Enabled state and routing weight. Jules follows API-managed defaults for model behavior."
+                        : "Model choice, weight, and thinking mode."}
+                    </div>
+                    </div>
                   </div>
                 <ToggleField
                   checked={provider.enabled}
@@ -312,29 +446,56 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                   })}
                 />
               </div>
-              <div className="grid gap-3 md:grid-cols-2">
+              {!supportsModelSelection || !supportsThinkingMode ? (
+                <div className={`relative z-10 mb-3 rounded-2xl border px-4 py-3 text-xs font-medium leading-relaxed ${cardTokens.noteClassName}`}>
+                  Jules API currently does not expose model selection or thinking controls, so this provider uses Jules-managed defaults.
+                </div>
+              ) : null}
+              <div className={`relative z-10 grid gap-3 ${supportsModelSelection && supportsThinkingMode ? "md:grid-cols-2" : "md:grid-cols-1"}`}>
+                {supportsModelSelection ? (
                 <div>
                   <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
                     <span>Model</span>
                     {getBadge(`aiProvider.providers.${providerId}.model`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.model`)!} /> : null}
                   </div>
-                  <TextField
-                    value={provider.model}
-                    onChange={(value) => update({
-                      aiProvider: {
-                        ...settings.aiProvider,
-                        providers: {
-                          ...settings.aiProvider.providers,
-                          [providerId]: {
-                            ...provider,
-                            model: value,
+                  {modelOptions.length > 0 ? (
+                    <SelectField
+                      value={provider.model}
+                      onChange={(value) => update({
+                        aiProvider: {
+                          ...settings.aiProvider,
+                          providers: {
+                            ...settings.aiProvider.providers,
+                            [providerId]: {
+                              ...provider,
+                              model: value,
+                            },
                           },
                         },
-                      },
-                    })}
-                    mono
-                  />
+                      })}
+                      options={modelOptions}
+                    />
+                  ) : (
+                    <TextField
+                      value={provider.model}
+                      onChange={(value) => update({
+                        aiProvider: {
+                          ...settings.aiProvider,
+                          providers: {
+                            ...settings.aiProvider.providers,
+                            [providerId]: {
+                              ...provider,
+                              model: value,
+                            },
+                          },
+                        },
+                      })}
+                      mono
+                    />
+                  )}
                 </div>
+                ) : null}
+                {supportsThinkingMode ? (
                 <div>
                   <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
                     <span>Thinking mode</span>
@@ -357,6 +518,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                     options={thinkingModeOptions}
                   />
                 </div>
+                ) : null}
                 <div>
                   <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
                     <span>Weight</span>
@@ -382,7 +544,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                 </div>
               </div>
             </div>
-          ))}
+          )})}
         </div>
       </Card>
 
@@ -528,46 +690,6 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                 { value: "OFF", label: "Off" },
                 { value: "WHEN_GREEN", label: "When green" },
                 { value: "ALWAYS", label: "Always" },
-              ]}
-            />
-          </Row>
-        </div>
-      </Card>
-
-      <Card
-        title="Workers"
-        description="Select whether worker-owned execution is handled by connected MCP workers or a short-lived virtual CLI worker."
-        badge={workerSource ? sourceLabel(workerSource) : undefined}
-      >
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Row label="Worker mode" description="Connected workers stay in listen mode. Virtual workers wake only when worker work exists, run one unit of work, then shut down." badge={getBadge("workers.executionMode")}>
-            <SelectField
-              value={settings.workers.executionMode}
-              onChange={(value) => update({
-                workers: {
-                  ...settings.workers,
-                  executionMode: value as ProjectSettings["workers"]["executionMode"],
-                },
-              })}
-              options={[
-                { value: "CONNECTED_MCP", label: "Connected MCP" },
-                { value: "VIRTUAL", label: "Virtual on-demand" },
-              ]}
-            />
-          </Row>
-          <Row label="Virtual worker CLI" description="Preferred provider when worker mode is virtual. Jules is intentionally excluded from worker execution." badge={getBadge("workers.virtualWorkerProvider")}>
-            <SelectField
-              value={settings.workers.virtualWorkerProvider}
-              onChange={(value) => update({
-                workers: {
-                  ...settings.workers,
-                  virtualWorkerProvider: value as ProjectSettings["workers"]["virtualWorkerProvider"],
-                },
-              })}
-              options={[
-                { value: "gemini", label: "Gemini" },
-                { value: "codex", label: "Codex" },
-                { value: "claude-code", label: "Claude Code" },
               ]}
             />
           </Row>

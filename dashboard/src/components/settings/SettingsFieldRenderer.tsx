@@ -88,10 +88,14 @@ export const SettingsFieldRenderer = <T,>({
             onChange={(event: JSX.TargetedEvent<HTMLSelectElement>) =>
               onChange(descriptor.onChange(context, event.currentTarget.value))
             }
-            className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50"
+            className="w-full rounded-lg border border-slate-700 bg-[linear-gradient(180deg,rgba(24,20,17,0.94),rgba(14,12,10,0.98))] px-3 py-2 text-sm text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50 [color-scheme:dark]"
           >
             {descriptor.options.map((option) => (
-              <option key={option.value} value={option.value}>
+              <option
+                key={option.value}
+                value={option.value}
+                className="bg-slate-950 text-slate-100"
+              >
                 {option.label}
               </option>
             ))}

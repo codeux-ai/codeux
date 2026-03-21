@@ -11,6 +11,9 @@ import type {
   ThinkingMode,
   WorkerSettings,
 } from "./app-types.js";
+import type { WorkerRuntimeSettings } from "./worker-types.js";
+
+export type { WorkerRuntimeSettings };
 
 export interface ProjectProviderSettings {
   enabled: boolean;

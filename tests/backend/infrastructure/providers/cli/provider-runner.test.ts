@@ -176,6 +176,80 @@ describe("ProviderRunner", () => {
     expect(mockDockerRunner.runProviderInDocker).toHaveBeenCalled();
   });
 
+  it("should forward provider model settings into Docker CLI invocations", async () => {
+    const onActivity = vi.fn();
+    defaultWorkflowSettings.executionMode = "DOCKER";
+
+    await runner.runProvider({
+      provider: "gemini",
+      prompt: "gemini prompt",
+      cwd: "/repo",
+      model: "gemini-2.5-pro",
+      apiKey: "gemini-key",
+      sessionId: "session-gemini",
+      workflowSettings: defaultWorkflowSettings,
+      repoPath: "/repo",
+      onActivity,
+    });
+
+    await runner.runProvider({
+      provider: "codex",
+      prompt: "codex prompt",
+      cwd: "/repo",
+      model: "gpt-5.3-codex",
+      apiKey: "codex-key",
+      sessionId: "session-codex",
+      workflowSettings: defaultWorkflowSettings,
+      repoPath: "/repo",
+      onActivity,
+    });
+
+    await runner.runProvider({
+      provider: "claude-code",
+      prompt: "claude prompt",
+      cwd: "/repo",
+      model: "claude-sonnet-4-6",
+      apiKey: "claude-key",
+      sessionId: "session-claude",
+      workflowSettings: defaultWorkflowSettings,
+      repoPath: "/repo",
+      onActivity,
+    });
+
+    expect(mockDockerRunner.runProviderInDocker).toHaveBeenCalledTimes(3);
+
+    const [geminiInput] = vi.mocked(mockDockerRunner.runProviderInDocker).mock.calls[0];
+    expect(geminiInput.command).toBe("gemini");
+    expect(geminiInput.args).toEqual(["--yolo", "--p", "gemini prompt"]);
+    expect(geminiInput.providerEnv.GEMINI_MODEL).toBe("gemini-2.5-pro");
+    expect(geminiInput.providerEnv.GEMINI_API_KEY).toBe("gemini-key");
+
+    const [codexInput] = vi.mocked(mockDockerRunner.runProviderInDocker).mock.calls[1];
+    expect(codexInput.command).toBe("codex");
+    expect(codexInput.args).toEqual([
+      "exec",
+      "--yolo",
+      "--output-last-message",
+      "/tmp/codex-last-message.txt",
+      "--model",
+      "gpt-5.3-codex",
+      "codex prompt",
+    ]);
+    expect(codexInput.providerEnv.CODEX_MODEL).toBe("gpt-5.3-codex");
+    expect(codexInput.providerEnv.OPENAI_API_KEY).toBe("codex-key");
+
+    const [claudeInput] = vi.mocked(mockDockerRunner.runProviderInDocker).mock.calls[2];
+    expect(claudeInput.command).toBe("claude");
+    expect(claudeInput.args).toEqual([
+      "--dangerously-skip-permissions",
+      "--model",
+      "claude-sonnet-4-6",
+      "-p",
+      "claude prompt",
+    ]);
+    expect(claudeInput.providerEnv.ANTHROPIC_API_KEY).toBe("claude-key");
+  });
+
   it("should not pass mounted Gemini auth or GitHub token env vars into Docker", async () => {
     const onActivity = vi.fn();
     defaultWorkflowSettings = {

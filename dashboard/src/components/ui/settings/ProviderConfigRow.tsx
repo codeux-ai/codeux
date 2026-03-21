@@ -1,13 +1,14 @@
 import type { FunctionComponent } from "preact";
 import type { DashboardSettings } from "../../../types.js";
 import { updateProviderConfig } from "../../../lib/settings-updaters.js";
-import {
-  claudeCodeModelOptions,
-  geminiModelOptions,
-  thinkingModeOptions,
-} from "../../settings/settings-options.js";
+import { thinkingModeOptions } from "../../settings/settings-options.js";
 import type { FieldDescriptor } from "../../settings/field-descriptors.js";
 import { SettingsFieldRenderer } from "../../settings/SettingsFieldRenderer.js";
+import {
+  getProviderModelOptions,
+  providerSupportsModelSelection,
+  providerSupportsThinkingMode,
+} from "../../../v2/lib/settings-view-models.js";
 
 interface ProviderConfigRowProps {
   provider: { value: DashboardSettings["aiProvider"]["provider"]; label: string };
@@ -16,26 +17,14 @@ interface ProviderConfigRowProps {
 }
 
 const getModelDescriptor = (providerValue: DashboardSettings["aiProvider"]["provider"]): FieldDescriptor<DashboardSettings> => {
-  const isGemini = providerValue === "gemini";
-  const isClaudeCode = providerValue === "claude-code";
+  const modelOptions = getProviderModelOptions(providerValue);
 
-  if (isGemini) {
+  if (modelOptions.length > 0) {
     return {
       id: "model",
       type: "select",
       label: "Model",
-      options: geminiModelOptions.map(m => ({ value: m, label: m })),
-      getValue: (settings) => settings.aiProvider.providers[providerValue].model,
-      onChange: (settings, value) => updateProviderConfig(settings, providerValue, { model: value }),
-    };
-  }
-
-  if (isClaudeCode) {
-    return {
-      id: "model",
-      type: "select",
-      label: "Model",
-      options: claudeCodeModelOptions.map(m => ({ value: m, label: m })),
+      options: modelOptions,
       getValue: (settings) => settings.aiProvider.providers[providerValue].model,
       onChange: (settings, value) => updateProviderConfig(settings, providerValue, { model: value }),
     };
@@ -51,17 +40,24 @@ const getModelDescriptor = (providerValue: DashboardSettings["aiProvider"]["prov
   };
 };
 
-const getProviderDescriptors = (providerValue: DashboardSettings["aiProvider"]["provider"]): FieldDescriptor<DashboardSettings>[] => [
-  getModelDescriptor(providerValue),
-  {
+const getProviderDescriptors = (providerValue: DashboardSettings["aiProvider"]["provider"]): FieldDescriptor<DashboardSettings>[] => {
+  const descriptors: FieldDescriptor<DashboardSettings>[] = [];
+
+  if (providerSupportsModelSelection(providerValue)) {
+    descriptors.push(getModelDescriptor(providerValue));
+  }
+  if (providerSupportsThinkingMode(providerValue)) {
+    descriptors.push({
     id: "thinkingMode",
     type: "select",
     label: "Thinking",
     options: thinkingModeOptions,
     getValue: (settings) => settings.aiProvider.providers[providerValue].thinkingMode,
     onChange: (settings, value) => updateProviderConfig(settings, providerValue, { thinkingMode: value as any }),
-  },
-  {
+    });
+  }
+
+  descriptors.push({
     id: "weight",
     type: "range",
     label: "Weight",
@@ -70,8 +66,10 @@ const getProviderDescriptors = (providerValue: DashboardSettings["aiProvider"]["
     getLabelSuffix: (value) => `${value}%`,
     getValue: (settings) => settings.aiProvider.providers[providerValue].weight,
     onInput: (settings, value) => updateProviderConfig(settings, providerValue, { weight: value }),
-  },
-];
+  });
+
+  return descriptors;
+};
 
 const getApiKeyDescriptor = (providerValue: DashboardSettings["aiProvider"]["provider"]): FieldDescriptor<DashboardSettings> => ({
   id: "apiKey",
@@ -87,6 +85,7 @@ export const ProviderConfigRow: FunctionComponent<ProviderConfigRowProps> = ({ p
   const providerConfig = settings.aiProvider.providers[provider.value];
   const gridDescriptors = getProviderDescriptors(provider.value);
   const apiKeyDescriptor = getApiKeyDescriptor(provider.value);
+  const showJulesCapabilityNote = !providerSupportsModelSelection(provider.value) || !providerSupportsThinkingMode(provider.value);
 
   return (
     <div className="rounded-lg border border-slate-700/70 bg-slate-950/50 p-3 space-y-2">
@@ -107,7 +106,13 @@ export const ProviderConfigRow: FunctionComponent<ProviderConfigRowProps> = ({ p
         </label>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+      {showJulesCapabilityNote ? (
+        <p className="rounded-lg border border-slate-800 bg-slate-900/80 px-3 py-2 text-[11px] leading-relaxed text-slate-400">
+          Jules API uses provider-managed defaults. Model selection and thinking controls are hidden here because the current API does not expose them.
+        </p>
+      ) : null}
+
+      <div className={`grid grid-cols-1 gap-2 ${gridDescriptors.length > 1 ? "md:grid-cols-3" : ""}`}>
         {gridDescriptors.map((descriptor) => (
           <SettingsFieldRenderer
             key={descriptor.id}

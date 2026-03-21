@@ -36,6 +36,59 @@ export const FEATURE_PR_AUTOMERGE_MODES: FeaturePrAutoMergeMode[] = ["OFF", "WHE
 export const WORKER_EXECUTION_MODES: WorkerExecutionMode[] = ["CONNECTED_MCP", "VIRTUAL"];
 export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code"];
 
+// AI Models catalog — available model identifiers per virtual worker provider
+export const GEMINI_MODELS: string[] = [
+  "auto",
+  "pro",
+  "flash",
+  "flash-lite",
+  "gemini-3-pro-preview",
+  "gemini-3-flash-preview",
+  "gemini-2.5-pro",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+];
+
+export const CLAUDE_MODELS: string[] = [
+  "default",
+  "sonnet",
+  "opus",
+  "haiku",
+  "sonnet[1m]",
+  "opus[1m]",
+  "opusplan",
+  "claude-opus-4-6",
+  "claude-sonnet-4-6",
+  "claude-haiku-4-5-20251001",
+];
+
+export const CODEX_MODELS: string[] = [
+  "gpt-5.4",
+  "gpt-5.4-mini",
+  "gpt-5.3-codex",
+  "gpt-5.3-codex-spark",
+  "gpt-5.2-codex",
+  "gpt-5.2",
+  "gpt-5.1-codex-max",
+  "gpt-5.1",
+  "gpt-5.1-codex",
+  "gpt-5-codex",
+  "gpt-5-codex-mini",
+  "gpt-5",
+];
+
+export const AI_MODEL_CATALOG: Record<string, string[]> = {
+  gemini: GEMINI_MODELS,
+  "claude-code": CLAUDE_MODELS,
+  codex: CODEX_MODELS,
+};
+
+export const DEFAULT_VIRTUAL_WORKER_MODELS: Record<string, string> = {
+  gemini: "auto",
+  "claude-code": "default",
+  codex: "gpt-5.3-codex",
+};
+
 export const MIN_WATCH_LOOP_INTERVAL_SECONDS = 1;
 export const MAX_WATCH_LOOP_INTERVAL_SECONDS = 3600;
 export const MIN_WATCH_LOOP_OUTPUT_INTERVAL_SECONDS = 60;
@@ -153,6 +206,9 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   workers: {
     executionMode: "CONNECTED_MCP",
     virtualWorkerProvider: "codex",
+    model: "gpt-5.3-codex",
+    maxConcurrency: 1,
+    timeoutSeconds: 300,
   },
   agents: {
     saveToProjectDirectory: true,

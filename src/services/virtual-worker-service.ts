@@ -409,7 +409,7 @@ export class VirtualWorkerService {
           repoPath,
           worktreePath: finalWorktreePath,
           sessionId,
-          model: providerSettings.model,
+          model: settings.workers.model && settings.workers.model !== "default" ? settings.workers.model : providerSettings.model,
           apiKey: providerSettings.apiKey,
           githubToken: settings.git.githubToken,
         });
@@ -528,7 +528,7 @@ export class VirtualWorkerService {
         repoPath,
         worktreePath: finalWorktreePath,
         sessionId,
-        model: providerSettings.model,
+        model: settings.workers.model && settings.workers.model !== "default" ? settings.workers.model : providerSettings.model,
         apiKey: providerSettings.apiKey,
         githubToken: settings.git.githubToken,
       });

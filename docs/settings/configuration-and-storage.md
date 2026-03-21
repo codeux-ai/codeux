@@ -123,6 +123,9 @@ Dashboard behavior:
 - `provider` (`jules|gemini|codex|claude-code`)
 - `strategy` (`MANUAL|WEIGHTED|ORCHESTRATOR`)
 - `providers` map (enabled/model/weight/thinkingMode)
+  - Jules remains routable with `enabled` and `weight`, but the current Jules REST API does not expose model-selection or thinking controls.
+  - Dashboard settings editors therefore hide `model` and `thinkingMode` for Jules and show an informational note instead.
+  - Gemini alias entries `pro`, `flash`, and `flash-lite` are labeled as recent aliases in selects so it is clear they track the latest model target.
 
 `automationInterventions` contains:
 - `autoApprovePlan` (default `true`): auto-approve `AWAITING_PLAN_APPROVAL` sessions in `SEMI_AUTO`
@@ -169,6 +172,7 @@ Dashboard behavior:
   - allowed values: `gemini`, `codex`, `claude-code`
   - used only when `executionMode = VIRTUAL`
   - Jules is intentionally excluded from worker mode; virtual workers are CLI-only
+- Dashboard worker-runtime editors now surface `virtualWorkerProvider` and worker-model override controls only while `executionMode = VIRTUAL`; connected MCP mode hides those virtual-only controls.
 - In the dashboard, these controls are exposed in the active v2 settings page under `Sprint Engine -> Worker Runtime`
 
 `sprintLoopSteps` also includes:
@@ -211,6 +215,10 @@ Repository demo script:
   - Runtime cleanup automatically prunes stale per-session Codex homes and stale shared runtime temp directories after sessions are no longer active.
   - Optional override: `JULES_DOCKER_RUNTIME_ROOT` (absolute path, `~` supported, repo-relative when relative)
 - If setup script is missing or does not provide the requested provider CLI, the runner attempts a provider-specific fallback install (`gemini`, `codex`, or `claude`) before failing.
+  - CLI model settings continue to flow into Docker-backed providers:
+    - Gemini: `GEMINI_MODEL`
+    - Codex: `CODEX_MODEL` plus `--model` when applicable
+    - Claude Code: `--model` when applicable
   - When `containerCacheSetupScriptImage` is enabled and a setup script is present, runtime first tries to reuse a prebuilt `sprint-os-setup-cache:<hash>` image instead of rerunning the setup script on every container launch.
   - An empty `containerSetupScriptPath` still participates in caching because runtime resolves the default script chain automatically, including the bundled Sprint OS setup script.
   - `claude` fallback uses the official installer: `curl -fsSL https://claude.ai/install.sh | bash`

@@ -4,13 +4,16 @@ import { classifyProviderError, ProviderQuotaError } from "../../../shared/provi
 
 export async function executeProviderStage(ctx: PipelineContext, providerPrompt: string): Promise<void> {
   const providerSettings = ctx.settings.aiProvider.providers[ctx.provider];
+  const model = ctx.provider === ctx.settings.workers.virtualWorkerProvider && ctx.settings.workers.model && ctx.settings.workers.model !== "default"
+    ? ctx.settings.workers.model
+    : providerSettings.model;
 
   const runProvider = (p: string) =>
     ctx.providerRunner.runProvider({
       provider: ctx.provider,
       prompt: p,
       cwd: ctx.worktreePath,
-      model: providerSettings.model,
+      model,
       apiKey: providerSettings.apiKey,
       sessionId: ctx.sessionId,
       workflowSettings: ctx.workflowSettings,

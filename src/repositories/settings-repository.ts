@@ -1,4 +1,4 @@
-import type { DashboardSettings, ExternalSettingsHints } from "../contracts/app-types.js";
+import type { DashboardSettings, ExternalSettingsHints, VirtualWorkerProvider } from "../contracts/app-types.js";
 import type {
   EffectiveSettingsResponse,
   ProjectSettings,
@@ -17,6 +17,7 @@ import {
   toProjectSettingsOverride,
   toSprintSettingsOverride,
 } from "../services/settings-resolution-service.js";
+import { DEFAULT_VIRTUAL_WORKER_MODELS } from "./settings-defaults.js";
 
 export class SettingsRepository {
   private readonly storage: SettingsDbStorage;
@@ -191,7 +192,17 @@ export class SettingsRepository {
           ciIntelligence: legacySettings.ciIntelligence,
           sprintLoopSteps: legacySettings.sprintLoopSteps,
           cliWorkflow: legacySettings.cliWorkflow,
-          workers: legacySettings.workers || defaults.workers,
+          workers: (() => {
+            const legacyWorkers = legacySettings.workers || {};
+            const provider = (legacyWorkers.virtualWorkerProvider || defaults.workers.virtualWorkerProvider) as VirtualWorkerProvider;
+            return {
+              ...defaults.workers,
+              ...legacyWorkers,
+              model: (legacyWorkers as { model?: string }).model
+                || DEFAULT_VIRTUAL_WORKER_MODELS[provider]
+                || defaults.workers.model,
+            };
+          })(),
           agents: legacySettings.agents || defaults.agents,
           skills: legacySettings.skills || defaults.skills,
         },
