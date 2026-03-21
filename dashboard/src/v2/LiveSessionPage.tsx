@@ -30,6 +30,7 @@ import {
 import { LiveTaskCard, TaskDuration, QuotaCountdown } from "./components/LiveTaskCard.js";
 import { RuntimeEventFeed } from "./components/RuntimeEventFeed.js";
 import { GitCIStatusPanel } from "./components/GitCIStatusPanel.js";
+import { deriveLiveDurationDisplay } from "./lib/live-duration-display.js";
 
 const statusTone = (value: string | null): string => {
     if (!value) return "text-slate-400";
@@ -635,7 +636,13 @@ const ExecutionRuntimePanel: FunctionComponent<{
                                                     {dispatch.taskRunState}
                                                 </div>
                                             )}
-                                            <TaskDuration startedAt={dispatch.startedAt} finishedAt={dispatch.finishedAt} status={dispatch.status} />
+                                            <TaskDuration
+                                                dispatchTiming={{
+                                                    startedAt: dispatch.startedAt,
+                                                    finishedAt: dispatch.finishedAt,
+                                                    status: dispatch.status,
+                                                }}
+                                            />
                                         </div>
                                     </div>
                                     {(dispatch.sessionId || dispatch.workerBranch || dispatch.errorMessage || dispatch.activeLeaseOwnerKey) && (
@@ -798,24 +805,39 @@ export const LiveSessionPage: FunctionComponent = () => {
         [hasSprintContext, stats],
     );
 
-    useEffect(() => {
-        setNowIso(new Date().toISOString());
-        if (!hasSprintContext) {
-            return;
-        }
-        const timer = window.setInterval(() => {
-            setNowIso(new Date().toISOString());
-        }, 1000);
-        return () => window.clearInterval(timer);
-    }, [hasSprintContext]);
-
-    const { sprintTiming, taskTimingMap } = useLiveTaskTimingSummaries({
+    const { sprintTiming, taskTimings, taskTimingMap } = useLiveTaskTimingSummaries({
         tasks: visibleTasksWithLiveActivities,
         dispatches: execution.taskDispatches,
         events: execution.recentEvents,
         sprintRuns: execution.sprintRuns,
         nowIso,
     });
+
+    const hasLiveDurationTicker = useMemo(() => (
+        taskTimings.some((taskTiming) => (
+            deriveLiveDurationDisplay({ taskTiming }).mode === "live"
+        ))
+        || execution.taskDispatches.some((dispatch) => (
+            deriveLiveDurationDisplay({
+                dispatchTiming: {
+                    startedAt: dispatch.startedAt,
+                    finishedAt: dispatch.finishedAt,
+                    status: dispatch.status,
+                },
+            }).mode === "live"
+        ))
+    ), [execution.taskDispatches, taskTimings]);
+
+    useEffect(() => {
+        setNowIso(new Date().toISOString());
+        if (!hasLiveDurationTicker) {
+            return;
+        }
+        const timer = window.setInterval(() => {
+            setNowIso(new Date().toISOString());
+        }, 1000);
+        return () => window.clearInterval(timer);
+    }, [hasLiveDurationTicker]);
 
     const taskEventsByRecordId = useMemo(() => {
         const byRecordId = new Map<string, ExecutionRuntimeEventSummary[]>();
@@ -836,7 +858,12 @@ export const LiveSessionPage: FunctionComponent = () => {
     }, [execution.recentEvents]);
 
     const dispatchInfoByTaskId = useMemo(() => {
-        const map = new Map<string, { errorMessage: string | null; startedAt: string | null; finishedAt: string | null }>();
+        const map = new Map<string, {
+            errorMessage: string | null;
+            startedAt: string | null;
+            finishedAt: string | null;
+            status: string | null;
+        }>();
         for (const dispatch of execution.taskDispatches) {
             if (!dispatch.taskId) continue;
             const existing = map.get(dispatch.taskId);
@@ -846,6 +873,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                     errorMessage: dispatch.errorMessage,
                     startedAt: dispatch.startedAt,
                     finishedAt: dispatch.finishedAt,
+                    status: dispatch.status,
                 });
             }
         }
@@ -902,6 +930,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 dispatchError: dispatchInfo?.errorMessage ?? null,
                 dispatchStartedAt: dispatchInfo?.startedAt ?? null,
                 dispatchFinishedAt: dispatchInfo?.finishedAt ?? null,
+                dispatchStatus: dispatchInfo?.status ?? null,
             };
         })
     ), [dispatchInfoByTaskId, filteredTasks, rerunningIds, taskEventsByRecordId, taskTimingMap]);
@@ -1160,7 +1189,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                             </div>
                         </div>
                     ) : (
-                        taskCardItems.map(({ key, task, taskTiming, events, isRerunning, dispatchError, dispatchStartedAt, dispatchFinishedAt }) => (
+                        taskCardItems.map(({ key, task, taskTiming, events, isRerunning, dispatchError, dispatchStartedAt, dispatchFinishedAt, dispatchStatus }) => (
                             <LiveTaskCard
                                 key={key}
                                 task={task}
@@ -1171,6 +1200,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 dispatchError={dispatchError}
                                 dispatchStartedAt={dispatchStartedAt}
                                 dispatchFinishedAt={dispatchFinishedAt}
+                                dispatchStatus={dispatchStatus}
                             />
                         ))
                     )}

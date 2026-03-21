@@ -223,6 +223,8 @@ Legacy runtime:
   - longest task duration
   - accumulated task time split into `Coding`, `CI / Review`, `Autofix`, and `Merge`
 - Task cards in Live view now show per-stage timing pills, so a task can separately expose coding time, CI wait time, autofix time, merge time, and final total duration once it settles
+- The elapsed-time badge on Live task cards and execution dispatch rows now uses one shared duration-display model:
+  completed work keeps its final frozen duration visible, while only truly active work keeps ticking once per second
 - Stage timing is scoped to the current task identity and active sprint run, so reused task keys or stale task history from older attempts no longer leak durations into blocked or freshly restarted tasks
 - Completed task timing now stops at the task's terminal runtime event or dispatch finish time, so later provider/session sync noise does not keep increasing a finished task's total
 - Coding-complete tasks also freeze at coding completion until a real `CI / Review`, `Autofix`, or `Merge` runtime stage begins, so post-execution tasks do not keep counting as active coding time just because merge metadata exists
