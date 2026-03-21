@@ -141,6 +141,7 @@ export function createDashboardDependencies(
   const planningAgentService = new PlanningAgentService({
     projectManagementRepository,
     connectionChatRepository,
+    executionRepository,
     settingsRepository,
     agentPresetSyncService,
     executionControlService,

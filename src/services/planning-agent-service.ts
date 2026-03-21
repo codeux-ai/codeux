@@ -5,6 +5,7 @@ import type { TaskExecutorType, TaskPriority } from "../contracts/project-manage
 import type { McpConnectionRecord, McpConnectionRole } from "../contracts/connection-chat-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
+import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { ExecutionControlService } from "./execution-control-service.js";
@@ -18,6 +19,7 @@ import { classifyProviderError, ProviderQuotaError } from "../shared/providers/p
 interface PlanningAgentServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
   connectionChatRepository: ConnectionChatRepository;
+  executionRepository?: ExecutionRepository;
   settingsRepository: SettingsRepository;
   agentPresetSyncService: AgentPresetSyncService;
   executionControlService: ExecutionControlService;
@@ -140,6 +142,7 @@ export class PlanningAgentService {
       ? await this.postRequestAndWaitForReply(projectId, thread.id, worker.id, prompt)
       : await this.runVirtualPlanningRequest({
         projectId,
+        sprintId: null,
         threadId: thread.id,
         repoPath: project.baseDir,
         settings: runtime.settings,
@@ -186,6 +189,7 @@ export class PlanningAgentService {
       ? await this.postRequestAndWaitForReply(projectId, thread.id, worker.id, prompt)
       : await this.runVirtualPlanningRequest({
         projectId,
+        sprintId,
         threadId: thread.id,
         repoPath: project.baseDir,
         settings: runtime.settings,
@@ -291,6 +295,7 @@ export class PlanningAgentService {
 
   private async runVirtualPlanningRequest(args: {
     projectId: string;
+    sprintId: string | null;
     threadId: string;
     repoPath: string;
     settings: DashboardSettings;
@@ -313,45 +318,31 @@ export class PlanningAgentService {
       bodyMarkdown: `Planning request routed through virtual ${this.getProviderLabel(provider)} worker.`,
     });
 
-    let result = await this.providerRunner.runProviderForText({
-      provider,
-      prompt: providerPrompt,
-      cwd: args.repoPath,
-      model: providerSettings.model,
-      apiKey: providerSettings.apiKey,
-      sessionId,
-      workflowSettings,
-      repoPath: args.repoPath,
-      githubToken: args.settings.git.githubToken,
-      onActivity: (description, originator) => {
-        this.deps.logger?.debug("Virtual planning worker activity", {
-          projectId: args.projectId,
-          threadId: args.threadId,
-          provider,
-          originator: originator || "system",
-          description,
-        });
-      },
-    });
-
-    if (!result.ok && workflowSettings.retryOnReadFileNotFound && isReadFileNotFoundToolError(result)) {
-      this.deps.logger?.info("Retrying virtual planning request with file-discovery guidance", {
+    const runProvider = async (prompt: string, currentSessionId: string, retry: boolean) => {
+      const startedAt = new Date().toISOString();
+      const invocation = this.deps.executionRepository?.createProviderInvocationUsage({
         projectId: args.projectId,
-        threadId: args.threadId,
+        sprintId: args.sprintId,
+        sessionId: currentSessionId,
         provider,
-      });
-      result = await this.providerRunner.runProviderForText({
+        purpose: "planning",
+        model: providerSettings.model,
+        startedAt,
+        promptChars: prompt.length,
+      }) || null;
+      const startedMs = Date.now();
+      const result = await this.providerRunner.runProviderForText({
         provider,
-        prompt: buildReadFileRetryPrompt(providerPrompt),
+        prompt,
         cwd: args.repoPath,
         model: providerSettings.model,
         apiKey: providerSettings.apiKey,
-        sessionId: `${sessionId}-retry`,
+        sessionId: currentSessionId,
         workflowSettings,
         repoPath: args.repoPath,
         githubToken: args.settings.git.githubToken,
         onActivity: (description, originator) => {
-          this.deps.logger?.debug("Virtual planning worker retry activity", {
+          this.deps.logger?.debug(retry ? "Virtual planning worker retry activity" : "Virtual planning worker activity", {
             projectId: args.projectId,
             threadId: args.threadId,
             provider,
@@ -360,6 +351,37 @@ export class PlanningAgentService {
           });
         },
       });
+
+      if (invocation && this.deps.executionRepository) {
+        this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
+          status: result.ok ? "completed" : "failed",
+          model: providerSettings.model,
+          nativeSessionId: result.nativeSessionId,
+          finishedAt: new Date().toISOString(),
+          durationMs: Date.now() - startedMs,
+          transcriptChars: result.usageTelemetry.transcriptText.length,
+          inputTokens: result.usageTelemetry.inputTokens,
+          cachedInputTokens: result.usageTelemetry.cachedInputTokens,
+          outputTokens: result.usageTelemetry.outputTokens,
+          reasoningOutputTokens: result.usageTelemetry.reasoningOutputTokens,
+          totalTokens: result.usageTelemetry.totalTokens,
+          usageSource: result.usageTelemetry.usageSource,
+          rawUsageJson: result.usageTelemetry.rawUsageJson,
+        });
+      }
+
+      return result;
+    };
+
+    let result = await runProvider(providerPrompt, sessionId, false);
+
+    if (!result.ok && workflowSettings.retryOnReadFileNotFound && isReadFileNotFoundToolError(result)) {
+      this.deps.logger?.info("Retrying virtual planning request with file-discovery guidance", {
+        projectId: args.projectId,
+        threadId: args.threadId,
+        provider,
+      });
+      result = await runProvider(buildReadFileRetryPrompt(providerPrompt), `${sessionId}-retry`, true);
     }
 
     const bodyMarkdown = result.text.trim();

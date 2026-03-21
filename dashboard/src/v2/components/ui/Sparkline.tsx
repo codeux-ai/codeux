@@ -5,7 +5,7 @@ import gsap from "gsap";
 /**
  * SVG sparkline with smooth cubic bezier curves (tension 0.35).
  * Draws on mount via GSAP stroke-dashoffset animation.
- * On hover (detected via closest `.group`): re-draws from midpoint + adds drop-shadow glow.
+ * On hover (detected via closest `.group`): replays from the start and adds a glow.
  */
 export const Sparkline: FunctionComponent<{ points: number[]; color: string }> = ({ points, color }) => {
     const pathRef = useRef<SVGPathElement>(null);
@@ -17,10 +17,10 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string }> =
 
     // Smooth cubic bezier path (tension 0.35)
     const pathD = points.map((p, i) => {
-        const x = (i / (points.length - 1)) * 100;
+        const x = points.length === 1 ? 50 : (i / (points.length - 1)) * 100;
         const y = 100 - ((p - min) / range) * 80;
         if (i === 0) return `M ${x} ${y}`;
-        const prevX = ((i - 1) / (points.length - 1)) * 100;
+        const prevX = points.length === 1 ? 50 : ((i - 1) / (points.length - 1)) * 100;
         const prevY = 100 - ((points[i - 1] - min) / range) * 80;
         const dx = x - prevX;
         return `C ${prevX + dx * 0.35} ${prevY} ${x - dx * 0.35} ${y} ${x} ${y}`;
@@ -36,7 +36,7 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string }> =
         gsap.to(pathRef.current, { strokeDashoffset: 0, duration: 1.4, ease: "power3.inOut", delay: 0.4 });
     }, []);
 
-    // Hover: re-draw from mid-point + glow the whole SVG
+    // Hover: replay from the start + glow the whole SVG
     useEffect(() => {
         const group = svgRef.current?.closest('.group') as HTMLElement | null;
         if (!group) return;
@@ -45,7 +45,7 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string }> =
             if (!pathRef.current || !svgRef.current) return;
             const len = pathRef.current.getTotalLength();
             gsap.fromTo(pathRef.current,
-                { strokeDashoffset: len * 0.5 },
+                { strokeDasharray: len, strokeDashoffset: len },
                 { strokeDashoffset: 0, duration: 0.85, ease: "power2.out" }
             );
             gsap.to(svgRef.current, {

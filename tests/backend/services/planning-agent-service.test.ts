@@ -6,6 +6,7 @@ import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { AgentPresetRepository } from "../../../src/repositories/agent-preset-repository.js";
 import { ConnectionChatRepository } from "../../../src/repositories/connection-chat-repository.js";
+import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import { SettingsRepository } from "../../../src/repositories/settings-repository.js";
 import { AgentPresetSyncService } from "../../../src/services/agent-preset-sync-service.js";
 import { PlanningAgentService } from "../../../src/services/planning-agent-service.js";
@@ -35,6 +36,7 @@ describe("PlanningAgentService", () => {
     const projectRepository = new ProjectManagementRepository(storage);
     const agentPresetRepository = new AgentPresetRepository(storage);
     const connectionRepository = new ConnectionChatRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
     const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
     const syncService = new AgentPresetSyncService({
       projectManagementRepository: projectRepository,
@@ -49,6 +51,7 @@ describe("PlanningAgentService", () => {
     const service = new PlanningAgentService({
       projectManagementRepository: projectRepository,
       connectionChatRepository: connectionRepository,
+      executionRepository,
       settingsRepository,
       agentPresetSyncService: syncService,
       executionControlService: executionControlService as any,
@@ -153,6 +156,7 @@ describe("PlanningAgentService", () => {
     const projectRepository = new ProjectManagementRepository(storage);
     const agentPresetRepository = new AgentPresetRepository(storage);
     const connectionRepository = new ConnectionChatRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
     const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
     const syncService = new AgentPresetSyncService({
       projectManagementRepository: projectRepository,
@@ -228,6 +232,7 @@ describe("PlanningAgentService", () => {
     const projectRepository = new ProjectManagementRepository(storage);
     const agentPresetRepository = new AgentPresetRepository(storage);
     const connectionRepository = new ConnectionChatRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
     const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
     const syncService = new AgentPresetSyncService({
       projectManagementRepository: projectRepository,
@@ -247,6 +252,18 @@ describe("PlanningAgentService", () => {
           stderr: "",
           code: 0,
           signal: null,
+          nativeSessionId: null,
+          usageTelemetry: {
+            inputTokens: 220,
+            cachedInputTokens: 40,
+            outputTokens: 80,
+            reasoningOutputTokens: 15,
+            totalTokens: 355,
+            usageSource: "reported",
+            rawUsageJson: { provider: "codex", phase: "improve" },
+            transcriptText: '{"goal":"Virtual worker improved sprint prompt."}',
+            nativeSessionId: null,
+          },
           text: '{"goal":"Virtual worker improved sprint prompt."}',
         })
         .mockResolvedValueOnce({
@@ -255,6 +272,31 @@ describe("PlanningAgentService", () => {
           stderr: "",
           code: 0,
           signal: null,
+          nativeSessionId: null,
+          usageTelemetry: {
+            inputTokens: 540,
+            cachedInputTokens: 60,
+            outputTokens: 190,
+            reasoningOutputTokens: 20,
+            totalTokens: 810,
+            usageSource: "reported",
+            rawUsageJson: { provider: "codex", phase: "plan" },
+            transcriptText: JSON.stringify({
+              goal: "Virtual worker improved sprint prompt.",
+              tasks: [
+                {
+                  key: "TASK-1",
+                  title: "Plan via virtual worker",
+                  description: "Ensure planning runs without a connected MCP listener.",
+                  promptMarkdown: "Use the virtual worker runtime to produce sprint tasks.",
+                  priority: "medium",
+                  executorType: "auto",
+                  dependsOn: [],
+                },
+              ],
+            }),
+            nativeSessionId: null,
+          },
           text: JSON.stringify({
             goal: "Virtual worker improved sprint prompt.",
             tasks: [
@@ -275,6 +317,7 @@ describe("PlanningAgentService", () => {
     const service = new PlanningAgentService({
       projectManagementRepository: projectRepository,
       connectionChatRepository: connectionRepository,
+      executionRepository,
       settingsRepository,
       agentPresetSyncService: syncService,
       executionControlService: executionControlService as any,
@@ -319,6 +362,24 @@ describe("PlanningAgentService", () => {
     const createdTasks = projectRepository.listTasks(project.id, sprint.id);
     expect(createdTasks).toHaveLength(1);
     expect(createdTasks[0]?.title).toBe("Plan via virtual worker");
+
+    const statsSnapshot = executionRepository.getProjectStatsSnapshot(project.id, "24h");
+    expect(statsSnapshot.usage.totalTokens).toBe(1_165);
+    expect(statsSnapshot.sprints[0]).toMatchObject({
+      label: "Sprint 1 · Virtual Planning Sprint",
+      usage: expect.objectContaining({
+        totalTokens: 810,
+      }),
+    });
+    expect(statsSnapshot.purposes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "planning",
+        usage: expect.objectContaining({
+          totalTokens: 1_165,
+          invocationCount: 2,
+        }),
+      }),
+    ]));
   });
 
   it("accepts loose virtual planning JSON with prose, subtasks, prompt, and dependencies fields", async () => {

@@ -1837,19 +1837,43 @@ export class ExecutionRepository {
 
   private getSprintMetadata(projectId: string): Map<string, { label: string; secondaryLabel: string | null; status: string | null; provider: null; purpose: null; lastActivityAt: string | null }> {
     const rows = this.db.prepare(`
-      SELECT sr.id, s.name, s.number, sr.status
-      FROM sprint_runs sr
-      INNER JOIN sprints s ON s.id = sr.sprint_id
-      WHERE sr.project_id = ?
-    `).all(projectId) as unknown as Array<{ id: string; name: string; number: number | string | null; status: string }>;
-    return new Map(rows.map((row) => [row.id, {
-      label: row.number === null ? row.name : `Sprint ${toNumber(row.number)} · ${row.name}`,
-      secondaryLabel: null,
-      status: row.status,
-      provider: null,
-      purpose: null,
-      lastActivityAt: null,
-    }] as const));
+      SELECT s.id AS sprint_id, sr.id AS sprint_run_id, s.name, s.number, sr.status
+      FROM sprints s
+      LEFT JOIN sprint_runs sr ON sr.sprint_id = s.id
+      WHERE s.project_id = ?
+    `).all(projectId) as unknown as Array<{
+      sprint_id: string;
+      sprint_run_id: string | null;
+      name: string;
+      number: number | string | null;
+      status: string | null;
+    }>;
+
+    const map = new Map<string, {
+      label: string;
+      secondaryLabel: string | null;
+      status: string | null;
+      provider: null;
+      purpose: null;
+      lastActivityAt: string | null;
+    }>();
+
+    for (const row of rows) {
+      const summary = {
+        label: row.number === null ? row.name : `Sprint ${toNumber(row.number)} · ${row.name}`,
+        secondaryLabel: null,
+        status: row.status,
+        provider: null,
+        purpose: null,
+        lastActivityAt: null,
+      } as const;
+      map.set(row.sprint_id, summary);
+      if (row.sprint_run_id) {
+        map.set(row.sprint_run_id, summary);
+      }
+    }
+
+    return map;
   }
 
   private createUsageBuckets(now: Date, window: ProjectStatsWindow, bucketCount: number, bucketSizeMs: number): Array<ExecutionUsageBucketSummary & { bucketStartMs: number }> {

@@ -14,6 +14,7 @@ Sprint OS now tracks CLI-provider execution usage in a DB-native form so the das
 
 This telemetry currently covers:
 
+- virtual planning runs
 - CLI task coding runs
 - virtual worker CI-fix runs
 - virtual worker merge-conflict runs
@@ -122,10 +123,16 @@ It focuses on:
 - active AI time
 - wall runtime
 - telemetry confidence
+- planning-lane usage
 - token anatomy
 - source mix
 - animated token/time trend lines for `24h` and `7d`
+- alternate composition and reliability views with donut charts
 - task, sprint, provider, and purpose leaderboards
+- scrollable lazy-loaded task and sprint ledgers with token-direction breakdowns
+- a full analysis-studio switcher so trend, composition, and reliability each get a distinct workspace instead of only changing a small subsection
+- an interactive trend graph with hover bucket inspection and a toggleable legend for tokens, active time, and invocation volume
+- redesigned task and sprint ledgers with search, recency, richer token breakdowns, and client-side sorting by date and usage dimensions
 
 This page is intentionally separate from the live execution view so the live dashboard can stay optimized for orchestration while the Stats page handles historical analysis.
 
