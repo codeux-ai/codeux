@@ -1,503 +1,35 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef, useState, useEffect, useMemo, useCallback } from "preact/hooks";
+import { useLayoutEffect, useRef, useState, useEffect, useMemo } from "preact/hooks";
 import gsap from "gsap";
 import {
-    Zap, GitBranch, Clock, CheckCircle2, XCircle, AlertTriangle,
-    Activity, ChevronDown, ChevronRight, Radio, Terminal, RefreshCw,
-    GitPullRequest, GitMerge, CircleDot, ExternalLink, Eye, EyeOff,
-    Play, FileText, RotateCcw, Bot, Workflow, PauseCircle,
-    Ship, BarChart3, Anchor, Timer,
+    Zap, Clock, CheckCircle2, XCircle, AlertTriangle,
+    Activity, ChevronDown, Radio,
+    Play, RotateCcw, Bot, Workflow, PauseCircle,
+    Ship, BarChart3,
 } from "lucide-preact";
 import { SprintBoatRace } from "./components/SprintBoatRace.js";
 import { SprintDag } from "./components/SprintDag.js";
-import { SprintStatsDeck, TaskStagePills, useLiveTaskTimingSummaries } from "./components/SprintStatsDeck.js";
+import { SprintStatsDeck, useLiveTaskTimingSummaries } from "./components/SprintStatsDeck.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { HumanInterventionBadge } from "./components/ui/HumanInterventionBadge.js";
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
-import {
-    cancelSprintRun,
-    cancelTaskDispatch,
-    claimAttentionItem,
-    forceCancelSprintRun,
-    forceCancelTaskDispatch,
-    orchestrateSprint,
-    pauseSprintRun,
-    resolveAttentionItem,
-    rerunTask,
-    retryTaskDispatch,
-} from "../lib/api/dashboard-api.js";
+import { useLiveSessionActions } from "./hooks/use-live-session-actions.js";
 import { formatTime } from "../lib/time.js";
 import { renderMarkdown } from "../lib/markdown.js";
-import type { Subtask, GitTrackingStatus, ExecutionDashboardSnapshot, ExecutionRuntimeEventSummary } from "../types.js";
+import type { Subtask, ExecutionDashboardSnapshot, ExecutionRuntimeEventSummary } from "../types.js";
 import { deriveLiveSessionRuntimeState } from "./lib/live-session-runtime.js";
 import { getTaskProgressPhase } from "../lib/task-progress.js";
-import type { LiveTaskTimingSummary } from "./lib/live-stats.js";
 
-/* ─── Status Maps ────────────────────────────────────────────────────────── */
-
-const TASK_STATUS_CFG = {
-    RUNNING:   { label: "Running",   hex: "#00E0A0", dot: "bg-status-green shadow-[0_0_10px_rgba(0,171,132,0.7)] animate-pulse", text: "text-signal-500",  bg: "bg-signal-500/8",  border: "border-signal-500/20", icon: Activity },
-    CODING_COMPLETED: { label: "Coding Completed", hex: "#0F9FA8", dot: "bg-cyan-500 shadow-[0_0_8px_rgba(15,159,168,0.45)]", text: "text-cyan-500", bg: "bg-cyan-500/8", border: "border-cyan-500/20", icon: CheckCircle2 },
-    COMPLETED: { label: "Completed", hex: "#00AB84", dot: "bg-status-green shadow-[0_0_8px_rgba(0,171,132,0.5)]",                text: "text-status-green", bg: "bg-status-green/8", border: "border-status-green/20", icon: CheckCircle2 },
-    FAILED:    { label: "Failed",    hex: "#E3000F", dot: "bg-status-red shadow-[0_0_10px_rgba(227,0,15,0.7)]",                  text: "text-status-red",   bg: "bg-status-red/8",   border: "border-status-red/20", icon: XCircle },
-    BLOCKED:   { label: "Blocked",   hex: "#F59E0B", dot: "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.5)]",               text: "text-status-amber", bg: "bg-status-amber/8", border: "border-status-amber/20", icon: AlertTriangle },
-    PENDING:   { label: "Pending",   hex: "#64748b", dot: "bg-slate-400 dark:bg-slate-600",                                      text: "text-slate-400",    bg: "bg-slate-500/8",    border: "border-slate-500/20", icon: Clock },
-    QUOTA:     { label: "Quota",     hex: "#F59E0B", dot: "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.5)] animate-pulse",  text: "text-status-amber", bg: "bg-status-amber/8", border: "border-status-amber/20", icon: PauseCircle },
-} as const;
-
-type TaskStatusKey = keyof typeof TASK_STATUS_CFG;
-
-const getTaskCfg = (status?: string) => TASK_STATUS_CFG[(status as TaskStatusKey) ?? "PENDING"] ?? TASK_STATUS_CFG.PENDING;
-
-const MERGE_INDICATOR_CFG: Record<string, { label: string; text: string; bg: string; border: string }> = {
-    CI:            { label: "CI",            text: "text-signal-400",     bg: "bg-signal-500/8",      border: "border-signal-500/15" },
-    AUTOMERGE:     { label: "Automerge",     text: "text-ember-400",      bg: "bg-ember-500/8",       border: "border-ember-500/15" },
-    MERGED:        { label: "Merged",        text: "text-status-green",   bg: "bg-status-green/8",    border: "border-status-green/15" },
-    MERGE_BLOCKED: { label: "Merge Blocked", text: "text-status-amber",   bg: "bg-status-amber/8",    border: "border-status-amber/15" },
-    MERGE_CONFLICT:{ label: "Merge Conflict",text: "text-status-red",     bg: "bg-status-red/8",      border: "border-status-red/15" },
-};
-
-const ORIGINATOR_CFG: Record<string, { border: string; text: string; label: string }> = {
-    agent:    { border: "border-signal-500/30", text: "text-signal-400", label: "Agent" },
-    user:     { border: "border-ember-500/30",  text: "text-ember-400",  label: "User" },
-    provider: { border: "border-status-amber/30", text: "text-status-amber", label: "Provider" },
-    system:   { border: "border-white/[0.06]",  text: "text-slate-500",  label: "System" },
-};
-
-const getOriginatorCfg = (originator?: string) => {
-    const key = (originator || "system").toLowerCase();
-    return ORIGINATOR_CFG[key] ?? ORIGINATOR_CFG.system;
-};
-
-const EMPTY_RUNTIME_STATS = {
-    total: 0,
-    running: 0,
-    codingCompleted: 0,
-    completed: 0,
-    failed: 0,
-    ci: 0,
-    automerge: 0,
-    merged: 0,
-    mergeBlocked: 0,
-    mergeConflicts: 0,
-};
-
-/* ─── Runtime Event Feed ─────────────────────────────────────────────────── */
-
-const getExecutionEventText = (event: ExecutionRuntimeEventSummary): string => {
-    const payload = event.payload || {};
-
-    switch (event.eventType) {
-        case "dispatch_queued":
-            return `Queued for ${String(payload.executorType || event.provider || "execution")}`;
-        case "dispatch_started":
-            return `Started ${String(payload.executorType || event.provider || "execution")} dispatch`;
-        case "session_created":
-            return `Session created ${String(payload.sessionId || event.sessionId || "")}`.trim();
-        case "worker_claimed":
-            return `Claimed by ${String(payload.connectionKey || event.connectionDisplayName || "worker")}`;
-        case "run_running":
-            return String(payload.summaryMarkdown || "Worker heartbeat received");
-        case "run_completed":
-            return String(payload.summaryMarkdown || "Run completed");
-        case "run_failed":
-            return String(payload.errorMessage || payload.summaryMarkdown || "Run failed");
-        case "run_blocked":
-            return String(payload.errorMessage || payload.summaryMarkdown || "Run blocked");
-        case "session_state_synced":
-            return `Session ${String(payload.sessionState || event.taskRunState || "updated").toLowerCase()}`;
-        case "provider_activity":
-            return String(payload.preview || payload.description || "Provider activity");
-        case "dispatch_failed":
-            return String(payload.error || "Dispatch failed");
-        case "cli_prepare_started":
-            return `Preparing ${String(payload.workerBranch || "workspace")}`;
-        case "cli_prepare_completed":
-            return `Workspace ready ${String(payload.worktreePath || "")}`.trim();
-        case "cli_provider_started":
-            return `Running ${String(payload.provider || event.provider || "provider")} in workspace`;
-        case "cli_provider_completed":
-            return `${String(payload.provider || event.provider || "provider")} stage completed`;
-        case "cli_git_no_changes":
-            return "No file changes produced";
-        case "cli_git_pushed":
-            return `Pushed ${String(payload.pushedBranch || event.workerBranch || "worker branch")} to origin`;
-        case "cli_pr_finalized":
-            return payload.prUrl ? `Feature PR ready ${String(payload.prUrl)}` : "Workflow completed without PR";
-        case "cli_workflow_completed":
-            return payload.outcome === "no_changes" ? "Workflow completed with no changes" : "Workflow completed";
-        case "cli_workflow_failed":
-            return String(payload.errorMessage || "CLI workflow failed");
-        case "cli_worktree_cleaned":
-            return `Removed worktree ${String(payload.worktreePath || "")}`.trim();
-        case "cli_worktree_preserved":
-            return `Preserved worktree ${String(payload.worktreePath || "")}`.trim();
-        case "ci_gate_status":
-            return `CI gate ${String(payload.state || "updated").replace(/_/g, " ")}`;
-        case "action_required_manual_intervention":
-            return `${String(payload.owner || "Manual")} intervention required${payload.reason ? `: ${String(payload.reason)}` : ""}`;
-        case "action_required_auto_approved":
-            return "Auto-approved session plan";
-        case "action_required_auto_replied":
-            return "Auto-answered clarification request";
-        case "action_required_auto_resumed":
-            return "Auto-resumed paused session";
-        case "action_required_auto_failed":
-            return String(payload.reason || "Auto-intervention failed");
-        case "protocol_merge_required":
-            return "Task completed and is awaiting merge";
-        case "protocol_action_required":
-            return `${String(payload.owner || "Manual")} action required${payload.interventionHint ? `: ${String(payload.interventionHint)}` : ""}`;
-        case "watch_loop_started":
-            return `Watch loop started for sprint ${String(payload.sprintNumber || "")}`.trim();
-        case "branch_preflight_blocked":
-            return `Branch preflight blocked for ${String(payload.featureBranch || "feature branch")}`;
-        case "planning_preflight_blocked":
-            return `Planning required before orchestration for ${String(payload.planningTarget || "selected sprint")}`;
-        case "sprint_merge_required":
-            return `Sprint paused for manual merge (${String(payload.awaitingMergeCount || 0)} task${Number(payload.awaitingMergeCount || 0) === 1 ? "" : "s"})`;
-        case "sprint_no_more_actions":
-            return "Sprint paused because no more executable work was available";
-        case "sprint_completed":
-            return "Sprint execution completed";
-        case "sprint_failed":
-            return `Sprint execution failed (${String(payload.failedTaskCount || 0)} failed task${Number(payload.failedTaskCount || 0) === 1 ? "" : "s"})`;
-        case "sprint_paused":
-            return `Sprint paused: ${String(payload.reason || "manual attention").replace(/_/g, " ")}`;
-        case "sprint_cancelled":
-            return `Sprint cancelled: ${String(payload.reason || "empty").replace(/_/g, " ")}`;
-        case "main_merge_gate_status":
-            return `Main merge gate ${String(payload.state || "updated").replace(/_/g, " ")}`;
-        case "sprint_pause_requested":
-            return "Dashboard requested a sprint pause";
-        case "sprint_cancel_requested":
-            return "Dashboard requested sprint cancellation";
-        case "dispatch_cancel_requested":
-            return String(payload.reason || "Dashboard requested dispatch cancellation");
-        case "cli_workflow_cancel_requested":
-            return "CLI workflow received a cancellation request";
-        case "cli_workflow_cancelled":
-            return "CLI workflow stopped due to dashboard cancellation";
-        case "jules_stop_requested":
-            return "Sent a stop request to the Jules session";
-        case "jules_stop_request_failed":
-            return String(payload.errorMessage || "Could not send stop request to Jules");
-        case "worker_cancel_pending":
-            return "Worker acknowledged cancellation request and is stopping";
-        case "worker_cancelled":
-            return "Worker dispatch cancelled";
-        case "dispatch_cancelled":
-            return String(payload.reason || "Dispatch cancelled from dashboard");
-        case "dispatch_retry_requested":
-            return "Dashboard requested a dispatch retry";
-        default:
-            return event.eventType.replace(/_/g, " ");
-    }
-};
-
-const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummary[] }> = ({ events }) => {
-    const feedRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const el = feedRef.current;
-        if (!el) return;
-        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-        if (distanceFromBottom < 120) {
-            el.scrollTop = el.scrollHeight;
-        }
-    }, [events]);
-
-    if (!events || events.length === 0) {
-        return (
-            <div className="flex items-center justify-center py-12 text-slate-400 dark:text-slate-600">
-                <div className="text-center">
-                    <Terminal className="w-6 h-6 mx-auto mb-3 opacity-40" strokeWidth={1} />
-                    <p className="text-xs font-mono">Awaiting runtime events...</p>
-                </div>
-            </div>
-        );
-    }
-
-    return (
-        <div ref={feedRef} className="max-h-64 overflow-y-auto pr-2 dashboard-scrollbar space-y-1">
-            {events.map((event) => {
-                const cfg = getOriginatorCfg(event.originator || "system");
-                return (
-                    <div key={event.id} className={`flex gap-3 border-l-2 ${cfg.border} pl-3 py-2 group/entry hover:bg-black/[0.02] dark:hover:bg-white/[0.02] rounded-r-lg transition-colors duration-200`}>
-                        <div className="flex-grow min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
-                                <span className={`text-[9px] font-bold uppercase tracking-[0.12em] ${cfg.text}`}>
-                                    {cfg.label}
-                                </span>
-                                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">
-                                    {event.eventType.replace(/_/g, " ")}
-                                </span>
-                                <span className="text-[9px] text-slate-400 dark:text-slate-600 font-mono">
-                                    {formatTime(event.createdAt)}
-                                </span>
-                            </div>
-                            <div className="text-[12px] text-slate-600 dark:text-slate-400 leading-relaxed font-mono line-clamp-2 group-hover/entry:line-clamp-none transition-all cursor-default">
-                                {getExecutionEventText(event)}
-                            </div>
-                        </div>
-                    </div>
-                );
-            })}
-        </div>
-    );
-};
-
-const IdleRuntimeState: FunctionComponent<{
-    title: string;
-    subtitle: string;
-}> = ({ title, subtitle }) => (
-    <div className="relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] dark:border-white/[0.06] bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl p-10 min-h-[18rem] flex items-center justify-center">
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-44 h-44 rounded-full border border-black/[0.06] dark:border-white/[0.07] animate-[ping_4s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
-            <div className="absolute w-64 h-64 rounded-full border border-black/[0.04] dark:border-white/[0.05] animate-[ping_7s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
-            <div className="absolute w-[22rem] h-[22rem] rounded-full border border-black/[0.02] dark:border-white/[0.03] animate-[ping_10s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
-        </div>
-        <div className="relative z-10 text-center">
-            <div className="relative flex items-center justify-center w-16 h-16 mx-auto mb-5">
-                <div className="absolute inset-0 rounded-full blur-[12px] bg-signal-500/30 animate-pulse" />
-                <div className="relative w-4 h-4 rounded-full bg-signal-500" />
-            </div>
-            <div className="text-xs font-bold uppercase tracking-[0.22em] text-signal-500">{title}</div>
-            <div className="mt-3 text-sm text-slate-500 dark:text-slate-500 font-medium">{subtitle}</div>
-        </div>
-    </div>
-);
-
-/* ─── Task Card (V2) ─────────────────────────────────────────────────────── */
-
-const LiveTaskCard: FunctionComponent<{
-    task: Subtask;
-    taskTiming?: LiveTaskTimingSummary | null;
-    events?: ExecutionRuntimeEventSummary[];
-    onRerun: (id: string) => void;
-    isRerunning: boolean;
-    dispatchError?: string | null;
-    dispatchStartedAt?: string | null;
-    dispatchFinishedAt?: string | null;
-}> = ({ task, taskTiming, events, onRerun, isRerunning, dispatchError, dispatchStartedAt, dispatchFinishedAt }) => {
-    const [expanded, setExpanded] = useState(false);
-    const [showFeed, setShowFeed] = useState(false);
-    const cardRef = useRef<HTMLDivElement>(null);
-    const taskPhase = getTaskProgressPhase(task);
-    const cfg = getTaskCfg(taskPhase);
-    const StatusIcon = cfg.icon;
-    const hasEventFeed = Boolean(events && events.length > 0);
-    const mergeCfg = task.merge_indicator ? MERGE_INDICATOR_CFG[task.merge_indicator] : null;
-    const sessionLabel = (task.session_id || task.session_name || "").replace(/^sessions\//, "");
-
-    const handleRerun = () => {
-        const confirmed = window.confirm(`Rerun task "${task.id}"?\n\nThis resets the task state and discards current progress.`);
-        if (confirmed) onRerun(task.record_id || task.id);
-    };
-
-    return (
-        <div
-            ref={cardRef}
-            className="group relative overflow-hidden
-                       bg-white/70 dark:bg-void-800/60
-                       backdrop-blur-2xl
-                       border border-black/[0.06] dark:border-white/[0.06]
-                       rounded-[1.75rem] p-7
-                       shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
-                       transition-[border-color] duration-300"
-        >
-            <WaveFluid accentHex={cfg.hex} />
-            <BorderTrace accentHex={cfg.hex} />
-
-            {/* Hover tint */}
-            <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-black/[0.01] dark:group-hover:bg-white/[0.01]" />
-
-            {/* Ghost ID watermark */}
-            <div
-                aria-hidden
-                className="absolute -right-3 -top-6 font-black font-display
-                           text-[7rem] leading-none tracking-tighter
-                           text-black/[0.02] dark:text-white/[0.015]
-                           pointer-events-none select-none"
-            >
-                #{task.id}
-            </div>
-
-            <div className="relative z-10">
-                {/* Header row */}
-                <div className="flex items-start justify-between gap-4 mb-4">
-                    <div className="flex items-start gap-3.5 min-w-0 flex-1">
-                        {/* Status icon blob */}
-                        <div
-                            className="w-10 h-10 rounded-[0.875rem] flex items-center justify-center shrink-0 mt-0.5"
-                            style={{ backgroundColor: `${cfg.hex}14` }}
-                        >
-                            <span style={{ color: cfg.hex }}><StatusIcon className="w-5 h-5" strokeWidth={1.5} /></span>
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 mb-1.5">
-                                <span className="font-mono text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.04] text-slate-400">
-                                    #{task.id}
-                                </span>
-                                {/* Status badge */}
-                                <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest ${cfg.bg} ${cfg.text} border ${cfg.border}`}>
-                                    <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${cfg.dot}`} />
-                                    {cfg.label}
-                                </span>
-                                {mergeCfg && (
-                                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest ${mergeCfg.bg} ${mergeCfg.text} border ${mergeCfg.border}`}>
-                                        {mergeCfg.label}
-                                    </span>
-                                )}
-                            </div>
-                            <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-white leading-snug">
-                                {task.title}
-                            </h3>
-                        </div>
-                    </div>
-
-                    {/* Right meta column */}
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                        {task.provider && (
-                            <span className="text-[9px] font-mono font-bold uppercase tracking-[0.1em] text-slate-300 dark:text-slate-600">
-                                {task.provider}
-                            </span>
-                        )}
-                        {taskTiming && taskTiming.totalSeconds > 0 ? (
-                            <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
-                                <Timer className="w-3 h-3" strokeWidth={2} />
-                                <span>{formatDuration(taskTiming.totalSeconds)}</span>
-                            </div>
-                        ) : (
-                            <TaskDuration startedAt={dispatchStartedAt ?? null} finishedAt={dispatchFinishedAt ?? null} status={taskPhase} />
-                        )}
-                        {(hasEventFeed || task.session_id || task.session_name) && (
-                            <span className="text-[9px] font-mono text-slate-400 dark:text-slate-600 max-w-[100px] truncate" title={sessionLabel}>
-                                {sessionLabel.substring(0, 16)}
-                            </span>
-                        )}
-                    </div>
-                </div>
-
-                <TaskStagePills timing={taskTiming} />
-
-                {/* Prompt preview — collapsed */}
-                {!expanded && !showFeed && (
-                    <button
-                        type="button"
-                        onClick={() => setExpanded(true)}
-                        className="text-[13px] text-slate-400 dark:text-slate-500 line-clamp-1 text-left w-full
-                                   hover:text-slate-600 dark:hover:text-slate-300 transition-colors duration-200
-                                   mb-4 font-medium"
-                    >
-                        {task.prompt.substring(0, 140)}...
-                    </button>
-                )}
-
-                {/* Expanded prompt */}
-                {expanded && (
-                    <div className="mb-5 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
-                        <div className="flex items-center gap-2 mb-3">
-                            <FileText className="w-3 h-3 text-slate-400" strokeWidth={2} />
-                            <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Task Prompt</span>
-                        </div>
-                        <div
-                            className="prose prose-sm max-w-none text-slate-600 dark:text-slate-400
-                                       prose-headings:text-slate-800 dark:prose-headings:text-slate-200
-                                       prose-code:text-signal-600 dark:prose-code:text-signal-400
-                                       prose-code:bg-signal-500/[0.06] prose-code:px-1.5 prose-code:rounded-md
-                                       prose-strong:text-slate-800 dark:prose-strong:text-slate-200
-                                       prose-a:text-signal-600 dark:prose-a:text-signal-400
-                                       font-mono text-[12px] leading-relaxed"
-                            dangerouslySetInnerHTML={{ __html: renderMarkdown(task.prompt) }}
-                        />
-                    </div>
-                )}
-
-                {/* Live session feed */}
-                {showFeed && (
-                    <div className="mb-5 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
-                        <div className="flex items-center gap-2 mb-3">
-                            <span className="w-1.5 h-1.5 rounded-full bg-signal-500 animate-pulse" />
-                            <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Runtime Feed</span>
-                        </div>
-                        <RuntimeEventFeed events={events} />
-                    </div>
-                )}
-
-                {/* Dispatch error / quota countdown */}
-                {dispatchError && (
-                    <div className="mb-4 rounded-xl border border-status-amber/15 bg-status-amber/[0.04] px-4 py-2.5">
-                        <QuotaCountdown errorMessage={dispatchError} />
-                    </div>
-                )}
-
-                {/* Action bar */}
-                <div className="flex items-center justify-between pt-4 border-t border-black/[0.04] dark:border-white/[0.04]">
-                    <div className="flex items-center gap-2">
-                        {hasEventFeed && (
-                            <button
-                                type="button"
-                                onClick={() => { setShowFeed(!showFeed); if (expanded) setExpanded(false); }}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.1em]
-                                           transition-all duration-200 border
-                                           ${showFeed
-                                               ? 'bg-signal-500/10 text-signal-500 border-signal-500/20 shadow-[0_0_12px_rgba(0,224,160,0.08)]'
-                                               : 'bg-black/[0.03] dark:bg-white/[0.03] text-slate-400 border-transparent hover:text-signal-500 hover:border-signal-500/15'
-                                           }`}
-                            >
-                                {showFeed ? <EyeOff className="w-3 h-3" strokeWidth={2} /> : <Eye className="w-3 h-3" strokeWidth={2} />}
-                                {showFeed ? "Hide Feed" : "Runtime Feed"}
-                            </button>
-                        )}
-                        <button
-                            type="button"
-                            onClick={() => { setExpanded(!expanded); if (showFeed) setShowFeed(false); }}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.1em]
-                                       transition-all duration-200 border
-                                       ${expanded
-                                           ? 'bg-ember-500/10 text-ember-500 border-ember-500/20'
-                                           : 'bg-black/[0.03] dark:bg-white/[0.03] text-slate-400 border-transparent hover:text-ember-500 hover:border-ember-500/15'
-                                       }`}
-                        >
-                            {expanded ? <ChevronDown className="w-3 h-3" strokeWidth={2.5} /> : <ChevronRight className="w-3 h-3" strokeWidth={2.5} />}
-                            Prompt
-                        </button>
-                        <button
-                            type="button"
-                            onClick={handleRerun}
-                            disabled={isRerunning}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.1em]
-                                       bg-black/[0.03] dark:bg-white/[0.03] text-slate-400 border border-transparent
-                                       hover:text-status-amber hover:border-status-amber/15
-                                       disabled:opacity-40 disabled:pointer-events-none
-                                       transition-all duration-200"
-                        >
-                            <RotateCcw className={`w-3 h-3 ${isRerunning ? 'animate-spin' : ''}`} strokeWidth={2} />
-                            {isRerunning ? "Rerunning" : "Rerun"}
-                        </button>
-                    </div>
-                    {task.pr_url && (
-                        <a
-                            href={task.pr_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-center gap-1.5 text-[10px] font-mono text-signal-500 hover:text-signal-400 transition-colors duration-200"
-                        >
-                            <GitPullRequest className="w-3 h-3" strokeWidth={2} />
-                            PR
-                            <ExternalLink className="w-2.5 h-2.5 opacity-50" strokeWidth={2} />
-                        </a>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-/* ─── Git/CI Panel ───────────────────────────────────────────────────────── */
+import { IntelPanel } from "./components/ui/IntelPanel.js";
+import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
+import { IdleRuntimeState } from "./components/ui/IdleRuntimeState.js";
+import {
+    EMPTY_RUNTIME_STATS,
+} from "./lib/live-session-config.js";
+import { LiveTaskCard, TaskDuration, QuotaCountdown } from "./components/LiveTaskCard.js";
+import { RuntimeEventFeed } from "./components/RuntimeEventFeed.js";
+import { GitCIStatusPanel } from "./components/GitCIStatusPanel.js";
 
 const statusTone = (value: string | null): string => {
     if (!value) return "text-slate-400";
@@ -522,82 +54,6 @@ const CONNECTION_ROLE_LABELS: Record<string, string> = {
     project_manager: "Manager",
 };
 
-function extractRetryAfterIso(errorMessage: string): string | null {
-    const match = errorMessage.match(/\[RETRY_AFTER:(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\]/);
-    return match?.[1] ?? null;
-}
-
-function formatDuration(totalSeconds: number): string {
-    if (totalSeconds <= 0) return "0s";
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = totalSeconds % 60;
-    if (h > 0) return `${h}h ${m}m ${s}s`;
-    if (m > 0) return `${m}m ${s}s`;
-    return `${s}s`;
-}
-
-const QuotaCountdown: FunctionComponent<{ errorMessage: string }> = ({ errorMessage }) => {
-    const retryIso = extractRetryAfterIso(errorMessage);
-    const [remaining, setRemaining] = useState(() =>
-        retryIso ? Math.max(0, Math.floor((new Date(retryIso).getTime() - Date.now()) / 1000)) : null
-    );
-
-    useEffect(() => {
-        if (!retryIso) { setRemaining(null); return; }
-        const update = () => Math.max(0, Math.floor((new Date(retryIso).getTime() - Date.now()) / 1000));
-        setRemaining(update());
-        const timer = window.setInterval(() => {
-            const left = update();
-            setRemaining(left);
-            if (left <= 0) window.clearInterval(timer);
-        }, 1000);
-        return () => window.clearInterval(timer);
-    }, [retryIso]);
-
-    if (remaining == null) {
-        return <div className="text-status-red">{errorMessage}</div>;
-    }
-
-    return (
-        <div className="flex items-center gap-2 text-status-amber">
-            <Clock className="w-3 h-3 flex-shrink-0" strokeWidth={2} />
-            <span>
-                {remaining <= 0
-                    ? "Quota should be available now — retry the task."
-                    : `Quota exhausted — resets in ${formatDuration(remaining)}`}
-            </span>
-        </div>
-    );
-};
-
-const TaskDuration: FunctionComponent<{ startedAt: string | null; finishedAt: string | null; status: string }> = ({ startedAt, finishedAt, status }) => {
-    const [elapsed, setElapsed] = useState(0);
-    const isRunning = status === "RUNNING" || status === "running";
-
-    useEffect(() => {
-        if (!startedAt) { setElapsed(0); return; }
-        const start = new Date(startedAt).getTime();
-        const compute = () => {
-            const end = finishedAt ? new Date(finishedAt).getTime() : Date.now();
-            return Math.max(0, Math.floor((end - start) / 1000));
-        };
-        setElapsed(compute());
-        if (!finishedAt && isRunning) {
-            const timer = window.setInterval(() => setElapsed(compute()), 1000);
-            return () => window.clearInterval(timer);
-        }
-    }, [startedAt, finishedAt, isRunning]);
-
-    if (!startedAt || elapsed === 0) return null;
-
-    return (
-        <div className="flex items-center gap-1.5 text-[10px] font-mono text-slate-400">
-            <Timer className="w-3 h-3" strokeWidth={2} />
-            <span>{formatDuration(elapsed)}</span>
-        </div>
-    );
-};
 
 const ATTENTION_SEVERITY_TONE: Record<string, string> = {
     critical: "border-status-red/20 bg-status-red/10 text-status-red",
@@ -1264,249 +720,6 @@ const ExecutionRuntimePanel: FunctionComponent<{
     );
 };
 
-const GitCiPanel: FunctionComponent<{ status: GitTrackingStatus | null; error: string | null }> = ({ status, error }) => {
-    if (error) {
-        return (
-            <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-status-red/20 rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-                <div className="flex items-center gap-3">
-                    <XCircle className="w-5 h-5 text-status-red" strokeWidth={1.5} />
-                    <div>
-                        <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-status-red">Git Tracking Error</span>
-                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{error}</p>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    if (!status) {
-        return (
-            <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-                <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Loading git status...</span>
-            </div>
-        );
-    }
-
-    return (
-        <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-            <WaveFluid accentHex="#00E0A0" />
-            <BorderTrace accentHex="#00E0A0" />
-
-            <div className="relative z-10 space-y-6">
-                {/* Header */}
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                        <GitBranch className="w-4 h-4 text-signal-500" strokeWidth={1.5} />
-                        <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Git / CI / PR</span>
-                    </div>
-                    <span className={`text-[9px] font-bold uppercase tracking-[0.12em] px-2.5 py-1 rounded-full ${status.mode === "REMOTE" ? "bg-signal-500/8 text-signal-500 border border-signal-500/15" : "bg-black/[0.04] dark:bg-white/[0.04] text-slate-400"}`}>
-                        {status.mode}
-                    </span>
-                </div>
-
-                {/* Branch info */}
-                <div className="grid grid-cols-2 gap-3">
-                    {[
-                        { label: "Branch", value: status.branch ?? "—" },
-                        { label: "Workspace", value: status.dirty ? "Dirty" : "Clean" },
-                        { label: "Tracking", value: status.tracking.label },
-                        { label: "Updated", value: formatTime(status.lastUpdated) },
-                    ].map(({ label, value }) => (
-                        <div key={label} className="p-3 rounded-xl bg-black/[0.02] dark:bg-white/[0.02]">
-                            <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 block mb-1">{label}</span>
-                            <span className="text-xs font-mono font-medium text-slate-700 dark:text-slate-300 truncate block">{value}</span>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Warnings */}
-                {status.warnings.length > 0 && (
-                    <div className="p-4 rounded-xl border border-status-amber/20 bg-status-amber/[0.04]">
-                        <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-status-amber block mb-2">Warnings</span>
-                        {status.warnings.map((w) => (
-                            <p key={w} className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">{w}</p>
-                        ))}
-                    </div>
-                )}
-
-                {/* Open PRs */}
-                <div>
-                    <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 block mb-3">
-                        <GitPullRequest className="w-3 h-3 inline mr-1.5 -mt-px" strokeWidth={2} />
-                        Open PRs
-                    </span>
-                    {status.openPullRequests.length === 0 ? (
-                        <p className="text-[11px] text-slate-400 dark:text-slate-600 font-mono">No open PRs tracked.</p>
-                    ) : (
-                        <div className="space-y-2">
-                            {status.openPullRequests.slice(0, 5).map((pr) => (
-                                <a
-                                    key={pr.url}
-                                    href={pr.url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="block p-3 rounded-xl border border-black/[0.04] dark:border-white/[0.04]
-                                               bg-black/[0.015] dark:bg-white/[0.015]
-                                               hover:border-signal-500/20 hover:bg-signal-500/[0.02]
-                                               transition-all duration-200 group/pr"
-                                >
-                                    <div className="flex items-center justify-between mb-1">
-                                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">#{pr.number} {pr.title}</span>
-                                        <ExternalLink className="w-3 h-3 text-slate-300 dark:text-slate-600 group-hover/pr:text-signal-500 transition-colors duration-200" strokeWidth={2} />
-                                    </div>
-                                    <p className="text-[10px] font-mono text-slate-400">{pr.headRefName ?? "?"} → {pr.baseRefName ?? "?"}</p>
-                                    <p className={`text-[10px] font-mono mt-0.5 ${statusTone(pr.mergeStateStatus)}`}>
-                                        merge: {pr.mergeStateStatus ?? "UNKNOWN"} · comments: {pr.comments}
-                                    </p>
-                                </a>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* CI Runs */}
-                <div>
-                    <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 block mb-3">
-                        <CircleDot className="w-3 h-3 inline mr-1.5 -mt-px" strokeWidth={2} />
-                        CI Runs
-                    </span>
-                    {status.ciRuns.length === 0 ? (
-                        <p className="text-[11px] text-slate-400 dark:text-slate-600 font-mono">No CI runs tracked.</p>
-                    ) : (
-                        <div className="space-y-2">
-                            {status.ciRuns.slice(0, 5).map((run) => (
-                                <a
-                                    key={`${run.id ?? run.url}`}
-                                    href={run.url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="block p-3 rounded-xl border border-black/[0.04] dark:border-white/[0.04]
-                                               bg-black/[0.015] dark:bg-white/[0.015]
-                                               hover:border-signal-500/20 transition-all duration-200"
-                                >
-                                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{run.workflowName || run.name}</span>
-                                    <p className={`text-[10px] font-mono mt-0.5 ${statusTone(run.conclusion || run.status)}`}>
-                                        {run.status}{run.conclusion ? ` / ${run.conclusion}` : ""}
-                                    </p>
-                                </a>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                {/* Merged PRs */}
-                <div>
-                    <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 block mb-3">
-                        <GitMerge className="w-3 h-3 inline mr-1.5 -mt-px" strokeWidth={2} />
-                        Recent Merges
-                    </span>
-                    {status.mergedPullRequests.length === 0 ? (
-                        <p className="text-[11px] text-slate-400 dark:text-slate-600 font-mono">No recent merges.</p>
-                    ) : (
-                        <div className="space-y-2 max-h-60 overflow-y-auto dashboard-scrollbar pr-1">
-                            {status.mergedPullRequests.map((merged) => (
-                                <a
-                                    key={merged.url}
-                                    href={merged.url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="block p-3 rounded-xl border border-black/[0.04] dark:border-white/[0.04]
-                                               bg-black/[0.015] dark:bg-white/[0.015]
-                                               hover:border-status-green/20 transition-all duration-200"
-                                >
-                                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">#{merged.number} {merged.title}</span>
-                                    <p className="text-[10px] font-mono text-slate-400 mt-0.5">{merged.headRefName ?? "?"} → {merged.baseRefName ?? "?"}</p>
-                                    <p className="text-[10px] font-mono text-status-green mt-0.5">merged {formatTime(merged.mergedAt ?? undefined)}</p>
-                                </a>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-/* ─── Protocol / Activity Panels ─────────────────────────────────────────── */
-
-const IntelPanel: FunctionComponent<{
-    title: string;
-    icon: any;
-    accentHex: string;
-    content?: string;
-    fallback: string;
-}> = ({ title, icon: Icon, accentHex, content, fallback }) => (
-    <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-        <WaveFluid accentHex={accentHex} />
-        <BorderTrace accentHex={accentHex} />
-
-        <div className="relative z-10">
-            <div className="flex items-center gap-2.5 mb-5">
-                <span style={{ color: accentHex }}><Icon className="w-4 h-4" strokeWidth={1.5} /></span>
-                <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">{title}</span>
-            </div>
-            <div
-                className="prose prose-sm max-w-none text-slate-600 dark:text-slate-400
-                           prose-headings:text-slate-800 dark:prose-headings:text-slate-200
-                           prose-code:text-signal-600 dark:prose-code:text-signal-400
-                           prose-code:bg-signal-500/[0.06] prose-code:px-1 prose-code:rounded-md
-                           font-mono text-[12px] leading-relaxed max-h-64 overflow-y-auto dashboard-scrollbar"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(content) || `<p class="text-slate-400 dark:text-slate-600 italic">${fallback}</p>` }}
-            />
-        </div>
-    </div>
-);
-
-/* ─── Collapsible Panel Wrapper ──────────────────────────────────────────── */
-
-const CollapsiblePanel: FunctionComponent<{
-    title: string;
-    icon: any;
-    accentHex: string;
-    defaultOpen?: boolean;
-    badge?: string | number;
-    children: any;
-}> = ({ title, icon: Icon, accentHex, defaultOpen = false, badge, children }) => {
-    const [open, setOpen] = useState(defaultOpen);
-
-    return (
-        <div className="group/collapse relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-            <WaveFluid accentHex={accentHex} />
-            <BorderTrace accentHex={accentHex} />
-
-            {/* Header — always visible, clickable */}
-            <button
-                type="button"
-                onClick={() => setOpen(!open)}
-                className="relative z-10 w-full flex items-center justify-between gap-3 p-5 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors duration-200"
-            >
-                <div className="flex items-center gap-2.5">
-                    <span style={{ color: accentHex }}><Icon className="w-4 h-4" strokeWidth={1.5} /></span>
-                    <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">{title}</span>
-                    {badge != null && (
-                        <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-md bg-black/[0.04] dark:bg-white/[0.04] text-slate-400">
-                            {badge}
-                        </span>
-                    )}
-                </div>
-                <ChevronDown
-                    className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${open ? "rotate-0" : "-rotate-90"}`}
-                    strokeWidth={2}
-                />
-            </button>
-
-            {/* Collapsible body */}
-            <div className={`collapsible-section ${open ? "open" : ""}`}>
-                <div className="collapsible-content">
-                    <div className="relative z-10 px-5 pb-5 pt-0">
-                        {children}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
 /* ─── Header View Type ──────────────────────────────────────────────────── */
 
 type HeaderView = "stats" | "race" | "dag";
@@ -1519,14 +732,32 @@ const FILTER_STATUS_MAP: Record<TaskFilter, string | null> = {
     All: null, Running: "RUNNING", Completed: "COMPLETED", Failed: "FAILED", Pending: "PENDING",
 };
 
+const TASK_FILTERS: TaskFilter[] = ["All", "Running", "Completed", "Failed", "Pending"];
+const EMPTY_TASKS: Subtask[] = [];
+const EMPTY_RUNTIME_EVENTS: ExecutionRuntimeEventSummary[] = [];
+
 /* ─── Main Page ──────────────────────────────────────────────────────────── */
 
 export const LiveSessionPage: FunctionComponent = () => {
     const headerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     const { error, execution, gitStatus, gitStatusError, refreshRuntimeStatus, refreshGitStatus, status, stats, tasksWithLiveActivities } = useDashboardRuntimeData();
-    const [rerunningIds, setRerunningIds] = useState<Set<string>>(new Set());
-    const [pendingActionIds, setPendingActionIds] = useState<Set<string>>(new Set());
+    const {
+        rerunningIds,
+        pendingActionIds,
+        handleRerun,
+        handleOrchestrateSprint,
+        handlePauseSprintRun,
+        handleCancelSprintRun,
+        handleForceCancelSprintRun,
+        handleCancelTaskDispatch,
+        handleForceCancelTaskDispatch,
+        handleRetryTaskDispatch,
+        handleClaimAttentionItem,
+        handleResolveAttentionItem,
+        handleDismissAttentionItem,
+    } = useLiveSessionActions(refreshRuntimeStatus, refreshGitStatus);
+
     const [activeFilter, setFilter] = useState<TaskFilter>("All");
     const [headerView, setHeaderView] = useState<HeaderView>("dag");
 
@@ -1548,118 +779,6 @@ export const LiveSessionPage: FunctionComponent = () => {
         }
     }, []);
 
-    const handleRerun = useCallback(async (taskId: string) => {
-        setRerunningIds(prev => new Set(prev).add(taskId));
-        try {
-            await rerunTask(taskId);
-            await refreshRuntimeStatus();
-            await refreshGitStatus();
-        } catch (err) {
-            const message = err instanceof Error ? err.message : "Failed to rerun task.";
-            window.alert(message);
-        } finally {
-            setRerunningIds(prev => { const next = new Set(prev); next.delete(taskId); return next; });
-        }
-    }, [refreshRuntimeStatus, refreshGitStatus]);
-
-    const runControlAction = useCallback(async (actionId: string, operation: () => Promise<void>) => {
-        setPendingActionIds(prev => new Set(prev).add(actionId));
-        try {
-            await operation();
-            await new Promise((resolve) => setTimeout(resolve, 150));
-            await refreshRuntimeStatus();
-            await refreshGitStatus();
-        } catch (err) {
-            const message = err instanceof Error ? err.message : "Failed to execute runtime control.";
-            window.alert(message);
-        } finally {
-            setPendingActionIds(prev => { const next = new Set(prev); next.delete(actionId); return next; });
-        }
-    }, [refreshRuntimeStatus, refreshGitStatus]);
-
-    const handleOrchestrateSprint = useCallback(async (projectId: string, sprintId: string) => {
-        await runControlAction(`sprint-start:${sprintId}`, async () => {
-            await orchestrateSprint(projectId, sprintId);
-        });
-    }, [runControlAction]);
-
-    const handlePauseSprintRun = useCallback(async (sprintRunId: string) => {
-        await runControlAction(`sprint-pause:${sprintRunId}`, async () => {
-            await pauseSprintRun(sprintRunId);
-        });
-    }, [runControlAction]);
-
-    const handleCancelSprintRun = useCallback(async (sprintRunId: string) => {
-        await runControlAction(`sprint-cancel:${sprintRunId}`, async () => {
-            await cancelSprintRun(sprintRunId);
-        });
-    }, [runControlAction]);
-
-    const handleCancelTaskDispatch = useCallback(async (dispatchId: string) => {
-        await runControlAction(`dispatch-cancel:${dispatchId}`, async () => {
-            await cancelTaskDispatch(dispatchId);
-        });
-    }, [runControlAction]);
-
-    const handleForceCancelSprintRun = useCallback(async (sprintRunId: string) => {
-        await runControlAction(`sprint-force-cancel:${sprintRunId}`, async () => {
-            await forceCancelSprintRun(sprintRunId);
-        });
-    }, [runControlAction]);
-
-    const handleForceCancelTaskDispatch = useCallback(async (dispatchId: string) => {
-        await runControlAction(`dispatch-force-cancel:${dispatchId}`, async () => {
-            await forceCancelTaskDispatch(dispatchId);
-        });
-    }, [runControlAction]);
-
-    const handleRetryTaskDispatch = useCallback(async (dispatchId: string) => {
-        await runControlAction(`dispatch-retry:${dispatchId}`, async () => {
-            await retryTaskDispatch(dispatchId);
-        });
-    }, [runControlAction]);
-
-    const handleClaimAttentionItem = useCallback(async (projectId: string, attentionItemId: string) => {
-        const confirmed = window.confirm("Claim this attention item for the assigned project worker?");
-        if (!confirmed) {
-            return;
-        }
-
-        await runControlAction(`attention-claim:${attentionItemId}`, async () => {
-            await claimAttentionItem(projectId, attentionItemId, {
-                claimReason: "dashboard_claimed",
-            });
-        });
-    }, [runControlAction]);
-
-    const handleResolveAttentionItem = useCallback(async (projectId: string, attentionItemId: string) => {
-        const confirmed = window.confirm("Resolve this attention item and remove it from the active queue?");
-        if (!confirmed) {
-            return;
-        }
-
-        await runControlAction(`attention-resolve:${attentionItemId}`, async () => {
-            await resolveAttentionItem(projectId, attentionItemId, {
-                status: "resolved",
-                reason: "dashboard_resolved",
-            });
-        });
-    }, [runControlAction]);
-
-    const handleDismissAttentionItem = useCallback(async (projectId: string, attentionItemId: string) => {
-        const confirmed = window.confirm("Dismiss this attention item from the active queue?");
-        if (!confirmed) {
-            return;
-        }
-
-        await runControlAction(`attention-dismiss:${attentionItemId}`, async () => {
-            await resolveAttentionItem(projectId, attentionItemId, {
-                status: "dismissed",
-                reason: "dashboard_dismissed",
-            });
-        });
-    }, [runControlAction]);
-
     const runtimeState = useMemo(
         () => deriveLiveSessionRuntimeState(status, execution),
         [status, execution],
@@ -1670,8 +789,14 @@ export const LiveSessionPage: FunctionComponent = () => {
     const hasLiveSprint = runtimeState.hasActiveSprint;
     const hasSprintContext = runtimeState.hasSprintContext;
     const [nowIso, setNowIso] = useState(() => new Date().toISOString());
-    const visibleTasksWithLiveActivities = hasSprintContext ? tasksWithLiveActivities : [];
-    const visibleStats = hasSprintContext ? stats : EMPTY_RUNTIME_STATS;
+    const visibleTasksWithLiveActivities = useMemo(
+        () => (hasSprintContext ? tasksWithLiveActivities : EMPTY_TASKS),
+        [hasSprintContext, tasksWithLiveActivities],
+    );
+    const visibleStats = useMemo(
+        () => (hasSprintContext ? stats : EMPTY_RUNTIME_STATS),
+        [hasSprintContext, stats],
+    );
 
     useEffect(() => {
         setNowIso(new Date().toISOString());
@@ -1691,16 +816,6 @@ export const LiveSessionPage: FunctionComponent = () => {
         sprintRuns: execution.sprintRuns,
         nowIso,
     });
-
-    const filtered = useMemo(() => {
-        if (activeFilter === "All") return visibleTasksWithLiveActivities;
-        if (activeFilter === "Pending") return visibleTasksWithLiveActivities.filter(t => {
-            const phase = getTaskProgressPhase(t);
-            return phase === "PENDING" || phase === "BLOCKED" || phase === "QUOTA";
-        });
-        const target = FILTER_STATUS_MAP[activeFilter];
-        return visibleTasksWithLiveActivities.filter(t => getTaskProgressPhase(t) === target);
-    }, [visibleTasksWithLiveActivities, activeFilter]);
 
     const taskEventsByRecordId = useMemo(() => {
         const byRecordId = new Map<string, ExecutionRuntimeEventSummary[]>();
@@ -1737,16 +852,64 @@ export const LiveSessionPage: FunctionComponent = () => {
         return map;
     }, [execution.taskDispatches]);
 
-    const counts: Record<TaskFilter, number> = useMemo(() => ({
-        All:       visibleTasksWithLiveActivities.length,
-        Running:   visibleStats.running,
-        Completed: visibleStats.completed,
-        Failed:    visibleStats.failed,
-        Pending:   visibleTasksWithLiveActivities.filter(t => {
-            const phase = getTaskProgressPhase(t);
-            return phase === "PENDING" || phase === "BLOCKED" || phase === "QUOTA";
-        }).length,
-    }), [visibleStats, visibleTasksWithLiveActivities]);
+    const { filteredTasks, taskCounts } = useMemo(() => {
+        const filteredTasks: Subtask[] = [];
+        const targetStatus = FILTER_STATUS_MAP[activeFilter];
+        let pendingCount = 0;
+
+        for (const task of visibleTasksWithLiveActivities) {
+            const phase = getTaskProgressPhase(task);
+            const isPending = phase === "PENDING" || phase === "BLOCKED" || phase === "QUOTA";
+
+            if (isPending) {
+                pendingCount += 1;
+            }
+
+            if (
+                activeFilter === "All"
+                || (activeFilter === "Pending" && isPending)
+                || (activeFilter !== "Pending" && targetStatus !== null && phase === targetStatus)
+            ) {
+                filteredTasks.push(task);
+            }
+        }
+
+        return {
+            filteredTasks,
+            taskCounts: {
+                All: visibleTasksWithLiveActivities.length,
+                Running: visibleStats.running,
+                Completed: visibleStats.completed,
+                Failed: visibleStats.failed,
+                Pending: pendingCount,
+            } satisfies Record<TaskFilter, number>,
+        };
+    }, [activeFilter, visibleStats, visibleTasksWithLiveActivities]);
+
+    const taskCardItems = useMemo(() => (
+        filteredTasks.map((task) => {
+            const taskRuntimeId = task.record_id || task.id;
+            const dispatchInfo = task.record_id ? dispatchInfoByTaskId.get(task.record_id) : undefined;
+
+            return {
+                key: taskRuntimeId,
+                task,
+                taskTiming: taskTimingMap.get(taskRuntimeId) || taskTimingMap.get(task.id) || null,
+                events: (task.record_id && taskEventsByRecordId.byRecordId.get(task.record_id))
+                    || taskEventsByRecordId.byTaskKey.get(task.id)
+                    || EMPTY_RUNTIME_EVENTS,
+                isRerunning: rerunningIds.has(taskRuntimeId),
+                dispatchError: dispatchInfo?.errorMessage ?? null,
+                dispatchStartedAt: dispatchInfo?.startedAt ?? null,
+                dispatchFinishedAt: dispatchInfo?.finishedAt ?? null,
+            };
+        })
+    ), [dispatchInfoByTaskId, filteredTasks, rerunningIds, taskEventsByRecordId, taskTimingMap]);
+
+    const protocolMarkup = useMemo(() => (
+        renderMarkdown(hasSprintContext ? status.instructions : undefined)
+        || '<p class="text-slate-400 dark:text-slate-600 italic">No active sprint protocol.</p>'
+    ), [hasSprintContext, status.instructions]);
 
     /* Connection error */
     if (error) {
@@ -1949,24 +1112,24 @@ export const LiveSessionPage: FunctionComponent = () => {
 
             {/* ── Filter Strip ────────────────────────────────────────── */}
             <div className="-mt-8 flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl w-fit">
-                {(["All", "Running", "Completed", "Failed", "Pending"] as TaskFilter[]).map(f => (
+                {TASK_FILTERS.map((filter) => (
                     <button
-                        key={f}
-                        onClick={() => setFilter(f)}
+                        key={filter}
+                        onClick={() => setFilter(filter)}
                         className={`text-xs font-semibold tracking-wide px-4 py-1.5 rounded-lg
                                    transition-all duration-200 flex items-center gap-2
-                                   ${activeFilter === f
+                                   ${activeFilter === filter
                                        ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
                                        : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                                    }`}
                     >
-                        {f}
+                        {filter}
                         <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded-md
-                            ${activeFilter === f
+                            ${activeFilter === filter
                                 ? "bg-signal-500/[0.12] text-signal-600 dark:text-signal-400"
                                 : "bg-black/[0.06] dark:bg-white/[0.06] text-slate-400"
                             }`}>
-                            {counts[f]}
+                            {taskCounts[filter]}
                         </span>
                     </button>
                 ))}
@@ -1984,7 +1147,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 ? pausedIntervention.instructions
                                 : "Launch a sprint to activate live task telemetry, protocol output, and runtime activity for this project."}
                         />
-                    ) : filtered.length === 0 ? (
+                    ) : taskCardItems.length === 0 ? (
                         <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border-2 border-dashed border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-16 text-center">
                             <div className="relative z-10">
                                 <Play className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-4" strokeWidth={1} />
@@ -1997,19 +1160,17 @@ export const LiveSessionPage: FunctionComponent = () => {
                             </div>
                         </div>
                     ) : (
-                        filtered.map(task => (
+                        taskCardItems.map(({ key, task, taskTiming, events, isRerunning, dispatchError, dispatchStartedAt, dispatchFinishedAt }) => (
                             <LiveTaskCard
-                                key={task.id}
+                                key={key}
                                 task={task}
-                                taskTiming={taskTimingMap.get(task.record_id || task.id) || taskTimingMap.get(task.id) || null}
-                                events={(task.record_id && taskEventsByRecordId.byRecordId.get(task.record_id))
-                                    || taskEventsByRecordId.byTaskKey.get(task.id)
-                                    || []}
+                                taskTiming={taskTiming}
+                                events={events}
                                 onRerun={handleRerun}
-                                isRerunning={rerunningIds.has(task.id)}
-                                dispatchError={task.record_id ? dispatchInfoByTaskId.get(task.record_id)?.errorMessage : null}
-                                dispatchStartedAt={task.record_id ? dispatchInfoByTaskId.get(task.record_id)?.startedAt : null}
-                                dispatchFinishedAt={task.record_id ? dispatchInfoByTaskId.get(task.record_id)?.finishedAt : null}
+                                isRerunning={isRerunning}
+                                dispatchError={dispatchError}
+                                dispatchStartedAt={dispatchStartedAt}
+                                dispatchFinishedAt={dispatchFinishedAt}
                             />
                         ))
                     )}
@@ -2027,7 +1188,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                     />
 
                     {/* 2. Git/CI — moved to top, always visible */}
-                    <GitCiPanel status={gitStatus} error={gitStatusError} />
+                    <GitCIStatusPanel status={gitStatus} error={gitStatusError} />
 
                     {/* 3. Execution Runtime — collapsible */}
                     <ExecutionRuntimePanel
@@ -2060,7 +1221,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                                        prose-code:text-signal-600 dark:prose-code:text-signal-400
                                        prose-code:bg-signal-500/[0.06] prose-code:px-1 prose-code:rounded-md
                                        font-mono text-[12px] leading-relaxed max-h-64 overflow-y-auto dashboard-scrollbar"
-                            dangerouslySetInnerHTML={{ __html: renderMarkdown(hasSprintContext ? status.instructions : undefined) || '<p class="text-slate-400 dark:text-slate-600 italic">No active sprint protocol.</p>' }}
+                            dangerouslySetInnerHTML={{ __html: protocolMarkup }}
                         />
                     </CollapsiblePanel>
                 </div>

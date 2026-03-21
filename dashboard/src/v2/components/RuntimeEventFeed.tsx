@@ -1,0 +1,61 @@
+import type { FunctionComponent } from "preact";
+import { memo } from "preact/compat";
+import { useEffect, useRef } from "preact/hooks";
+import { Terminal } from "lucide-preact";
+import type { ExecutionRuntimeEventSummary } from "../../types.js";
+import { getOriginatorCfg, getExecutionEventText } from "../lib/live-session-config.js";
+import { formatTime } from "../../lib/time.js";
+
+const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummary[] }> = memo(({ events }) => {
+    const feedRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const el = feedRef.current;
+        if (!el) return;
+        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+        if (distanceFromBottom < 120) {
+            el.scrollTop = el.scrollHeight;
+        }
+    }, [events]);
+
+    if (!events || events.length === 0) {
+        return (
+            <div className="flex items-center justify-center py-12 text-slate-400 dark:text-slate-600">
+                <div className="text-center">
+                    <Terminal className="w-6 h-6 mx-auto mb-3 opacity-40" strokeWidth={1} />
+                    <p className="text-xs font-mono">Awaiting runtime events...</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div ref={feedRef} className="max-h-64 overflow-y-auto pr-2 dashboard-scrollbar space-y-1">
+            {events.map((event) => {
+                const cfg = getOriginatorCfg(event.originator || "system");
+                return (
+                    <div key={event.id} className={`flex gap-3 border-l-2 ${cfg.border} pl-3 py-2 group/entry hover:bg-black/[0.02] dark:hover:bg-white/[0.02] rounded-r-lg transition-colors duration-200`}>
+                        <div className="flex-grow min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                                <span className={`text-[9px] font-bold uppercase tracking-[0.12em] ${cfg.text}`}>
+                                    {cfg.label}
+                                </span>
+                                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                                    {event.eventType.replace(/_/g, " ")}
+                                </span>
+                                <span className="text-[9px] text-slate-400 dark:text-slate-600 font-mono">
+                                    {formatTime(event.createdAt)}
+                                </span>
+                            </div>
+                            <div className="text-[12px] text-slate-600 dark:text-slate-400 leading-relaxed font-mono line-clamp-2 group-hover/entry:line-clamp-none transition-all cursor-default">
+                                {getExecutionEventText(event)}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+});
+
+export { RuntimeEventFeed };
