@@ -16,6 +16,7 @@ import {
 } from "lucide-preact";
 import { SprintBubble } from "./components/ui/SprintBubble.js";
 import { SprintLedger } from "./components/sprints/SprintLedger.js";
+import { AddTaskModal } from "./components/ui/AddTaskModal.js";
 import { SprintComposer } from "./components/ui/SprintComposer.js";
 import { filterShowcaseSprints, sortSprintsByRecency } from "./lib/sprint-gallery.js";
 import {
@@ -25,15 +26,17 @@ import {
 } from "./lib/sprint-composer-state.js";
 import { SprintMarkdownModal } from "./components/ui/SprintMarkdownModal.js";
 import { SprintSettingsOverrideModal } from "./components/ui/SprintSettingsOverrideModal.js";
-import type { ImprovePromptInput, Sprint, SprintStatus, VirtualWorkerProvider } from "./types.js";
+import type { CreateTaskInput, ImprovePromptInput, Sprint, SprintStatus, Task, VirtualWorkerProvider } from "./types.js";
 import { useProjectData } from "./context/project-data.js";
 import { useProjectSprints } from "./hooks/use-project-sprints.js";
 import { useProjectExecution } from "./hooks/use-project-execution.js";
 import {
   createSprint,
+  createTask,
   deleteSprint,
   exportSprintMarkdown,
   fetchProjectExecution,
+  fetchTasks,
   importSprintMarkdown,
   improveSprintPrompt,
   planSprint,
@@ -41,6 +44,7 @@ import {
 } from "./lib/project-api.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import { buildTaskBundle, parseTaskBundle } from "./lib/markdown-transfer.js";
+import { toTaskViewModel } from "./lib/view-models.js";
 import { fetchProjectEffectiveSettings } from "./lib/settings-api.js";
 import { cancelSprintRun, orchestrateSprint } from "../lib/api/dashboard-api.js";
 import { getSprintHumanInterventionBySprintId } from "../lib/execution-intervention.js";
@@ -93,6 +97,8 @@ export const SprintsPage: FunctionComponent = () => {
     tasksMarkdown: string;
   } | null>(null);
   const [overrideSprint, setOverrideSprint] = useState<Sprint | null>(null);
+  const [addTaskForSprint, setAddTaskForSprint] = useState<Sprint | null>(null);
+  const [addTaskSprintTasks, setAddTaskSprintTasks] = useState<Task[]>([]);
   const [workerMode, setWorkerMode] = useState<null | {
     executionMode: "CONNECTED_MCP" | "VIRTUAL";
     virtualWorkerProvider: string;
@@ -494,6 +500,40 @@ export const SprintsPage: FunctionComponent = () => {
     return response.goal;
   };
 
+  const handleOpenAppendTasks = async (sprint: Sprint) => {
+    if (!selectedProject) return;
+    try {
+      const taskRecords = await fetchTasks(selectedProject.id, sprint.id);
+      const sprintsById = new Map(sprints.map((s) => [s.id, s]));
+      const tasks = taskRecords.map((t) => toTaskViewModel(t, new Map(), sprintsById));
+      setAddTaskSprintTasks(tasks);
+      setAddTaskForSprint(sprint);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const handleAppendTask = async (draft: {
+    sprintId: string;
+    title: string;
+    description: string;
+    promptMarkdown: string;
+    status: string;
+    priority: string;
+    executorType: string;
+    dependsOnTaskIds: string[];
+  }) => {
+    if (!selectedProject) return;
+    await createTask(selectedProject.id, draft as CreateTaskInput);
+    await refresh();
+    // Refresh the task list for the modal so new task appears in dependencies
+    if (addTaskForSprint) {
+      const taskRecords = await fetchTasks(selectedProject.id, addTaskForSprint.id);
+      const sprintsById = new Map(sprints.map((s) => [s.id, s]));
+      setAddTaskSprintTasks(taskRecords.map((t) => toTaskViewModel(t, new Map(), sprintsById)));
+    }
+  };
+
   const handleDeleteSprint = async (sprintId: string) => {
     await deleteSprint(sprintId);
     await Promise.all([refresh(), refreshExecution()]);
@@ -735,6 +775,7 @@ export const SprintsPage: FunctionComponent = () => {
                     }}
                     onImprovePrompt={handleImprovePrompt}
                     onSubmit={(payload) => handleSubmitSprint(payload)}
+                    onAppendTasks={editingSprint ? () => { void handleOpenAppendTasks(editingSprint); } : undefined}
                   />
                 </div>
               </div>
@@ -859,6 +900,19 @@ export const SprintsPage: FunctionComponent = () => {
           onSaved={async () => {
             await Promise.all([refresh(), refreshExecution()]);
           }}
+        />
+      )}
+
+      {addTaskForSprint && (
+        <AddTaskModal
+          sprints={[addTaskForSprint]}
+          availableTasks={addTaskSprintTasks}
+          initialSprintId={addTaskForSprint.id}
+          onClose={() => {
+            setAddTaskForSprint(null);
+            setAddTaskSprintTasks([]);
+          }}
+          onSubmit={handleAppendTask}
         />
       )}
     </>

@@ -41,6 +41,7 @@ interface SprintComposerProps {
     modelOverride: string | null;
     planningAgentPresetId: string | null;
   }) => Promise<void> | void;
+  onAppendTasks?: () => void;
 }
 
 export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
@@ -52,6 +53,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   onClose,
   onImprovePrompt,
   onSubmit,
+  onAppendTasks,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const fieldsRef = useRef<HTMLFormElement>(null);
@@ -143,6 +145,11 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
     if (!state.name.trim()) {
+      return;
+    }
+
+    if (state.submitMode === "append_tasks" && onAppendTasks) {
+      onAppendTasks();
       return;
     }
 
