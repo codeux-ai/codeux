@@ -42,27 +42,30 @@ export interface PlanningRouteOption {
 export function toPlanningOverrides(
   routeOverride: PlanningRouteOption | null,
   modelOverride: string | null,
+  planningAgentPresetId: string | null = null,
 ): PlanningOverrides | undefined {
-  if (!routeOverride && !modelOverride) {
+  if (!routeOverride && !modelOverride && !planningAgentPresetId) {
     return undefined;
   }
 
+  const overrides: PlanningOverrides = {};
+
   if (routeOverride?.type === "connected") {
-    return {
-      workerId: routeOverride.id,
-    };
+    overrides.workerId = routeOverride.id;
+  } else if (routeOverride?.type === "virtual") {
+    overrides.virtualProvider = routeOverride.provider;
+    if (modelOverride) {
+      overrides.virtualModel = modelOverride;
+    }
+  } else if (modelOverride) {
+    overrides.virtualModel = modelOverride;
   }
 
-  if (routeOverride?.type === "virtual") {
-    return {
-      virtualProvider: routeOverride.provider,
-      virtualModel: modelOverride || undefined,
-    };
+  if (planningAgentPresetId) {
+    overrides.planningAgentPresetId = planningAgentPresetId;
   }
 
-  return modelOverride
-    ? { virtualModel: modelOverride }
-    : undefined;
+  return Object.keys(overrides).length > 0 ? overrides : undefined;
 }
 
 export interface SprintComposerState {
@@ -78,6 +81,8 @@ export interface SprintComposerState {
   setRouteOverride: (route: PlanningRouteOption | null) => void;
   modelOverride: string | null;
   setModelOverride: (model: string | null) => void;
+  planningAgentPresetId: string | null;
+  setPlanningAgentPresetId: (id: string | null) => void;
   isEditing: boolean;
   hasTasks: boolean;
   availableModes: CreateMode[];
@@ -132,6 +137,7 @@ export const useSprintComposerState = (initialSprint: Sprint | null = null): Spr
   const [submitMode, setSubmitMode] = useState<SprintSubmitMode>("plan_and_start");
   const [routeOverride, setRouteOverride] = useState<PlanningRouteOption | null>(null);
   const [modelOverride, setModelOverride] = useState<string | null>(null);
+  const [planningAgentPresetId, setPlanningAgentPresetId] = useState<string | null>(null);
 
   const isEditing = Boolean(initialSprint);
   const hasTasks = Boolean(initialSprint && initialSprint.tasksCount > 0);
@@ -143,6 +149,7 @@ export const useSprintComposerState = (initialSprint: Sprint | null = null): Spr
     setSubmitMode(initialSprint ? (initialSprint.tasksCount > 0 ? "replan" : "plan_and_start") : "plan_and_start");
     setRouteOverride(null);
     setModelOverride(null);
+    setPlanningAgentPresetId(null);
   }, [initialSprint?.id]);
 
   const availableModes = getAvailableModes(isEditing, hasTasks);
@@ -154,6 +161,7 @@ export const useSprintComposerState = (initialSprint: Sprint | null = null): Spr
     submitMode, setSubmitMode,
     routeOverride, setRouteOverride,
     modelOverride, setModelOverride,
+    planningAgentPresetId, setPlanningAgentPresetId,
     isEditing,
     hasTasks,
     availableModes,

@@ -18,6 +18,7 @@ npm test
 npm run build
 ```
   - The build script intentionally runs toolchain commands directly (`tsc`, dashboard typecheck, `vite build`) instead of nested `npm run` calls to avoid npm env-config warning noise in child npm processes.
+  - The repo-root `vite.config.ts` sets `root: "dashboard"`, so `vite build` and `vite` must keep using that config to resolve `dashboard/index.html`.
 
 - Run dashboard typecheck only
 ```bash

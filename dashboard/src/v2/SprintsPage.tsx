@@ -47,10 +47,12 @@ import {
   planSprint,
   updateSprint,
 } from "./lib/project-api.js";
+import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import { buildTaskBundle, parseTaskBundle } from "./lib/markdown-transfer.js";
 import { fetchProjectEffectiveSettings } from "./lib/settings-api.js";
 import { cancelSprintRun, orchestrateSprint } from "../lib/api/dashboard-api.js";
 import { getSprintHumanInterventionBySprintId } from "../lib/execution-intervention.js";
+import type { AgentPreset } from "./types.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 const TABLE_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
@@ -146,6 +148,7 @@ export const SprintsPage: FunctionComponent = () => {
     executionMode: "CONNECTED_MCP" | "VIRTUAL";
     virtualWorkerProvider: string;
   }>(null);
+  const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
   const [tableSort, setTableSort] = useState<{
     key: SprintTableSortKey;
     direction: SprintTableSortDirection;
@@ -156,6 +159,25 @@ export const SprintsPage: FunctionComponent = () => {
   const { selectedProject } = useProjectData();
   const { sprints, refresh } = useProjectSprints(selectedProject?.id || null);
   const { execution, refresh: refreshExecution } = useProjectExecution(selectedProject?.id || null);
+
+  useEffect(() => {
+    if (!selectedProject) {
+      setAgentPresets([]);
+      return;
+    }
+    void fetchAgentPresets(selectedProject.id)
+      .then(setAgentPresets)
+      .catch((error) => {
+        console.error("Failed to fetch agent presets", error);
+        setAgentPresets([]);
+      });
+  }, [selectedProject?.id]);
+
+  const planningPresets = useMemo(() => {
+    return agentPresets.filter(p => 
+      p.labels.some(label => label.trim().toLowerCase() === "planning")
+    );
+  }, [agentPresets]);
 
   useLayoutEffect(() => {
     if (!headerRef.current) {
@@ -501,12 +523,13 @@ export const SprintsPage: FunctionComponent = () => {
     submitMode: SprintSubmitMode;
     routeOverride: PlanningRouteOption | null;
     modelOverride: string | null;
+    planningAgentPresetId: string | null;
   }): Promise<void> => {
     if (!selectedProject) {
       return;
     }
 
-    const overrides = toPlanningOverrides(payload.routeOverride, payload.modelOverride);
+    const overrides = toPlanningOverrides(payload.routeOverride, payload.modelOverride, payload.planningAgentPresetId);
 
     if (editingSprint) {
       await updateSprint(editingSprint.id, {
@@ -519,12 +542,14 @@ export const SprintsPage: FunctionComponent = () => {
         await planSprint(selectedProject.id, editingSprint.id, { 
           autoStart: false, 
           replan: payload.submitMode === "replan",
+          planningAgentPresetId: payload.planningAgentPresetId || undefined,
           overrides,
         });
       } else if (payload.submitMode === "plan_and_start") {
         await planSprint(selectedProject.id, editingSprint.id, { 
           autoStart: true,
           replan: false,
+          planningAgentPresetId: payload.planningAgentPresetId || undefined,
           overrides,
         });
       }
@@ -546,9 +571,17 @@ export const SprintsPage: FunctionComponent = () => {
     });
 
     if (payload.submitMode === "plan_only") {
-      await planSprint(selectedProject.id, created.id, { autoStart: false, overrides });
+      await planSprint(selectedProject.id, created.id, { 
+        autoStart: false, 
+        planningAgentPresetId: payload.planningAgentPresetId || undefined,
+        overrides,
+      });
     } else if (payload.submitMode === "plan_and_start") {
-      await planSprint(selectedProject.id, created.id, { autoStart: true, overrides });
+      await planSprint(selectedProject.id, created.id, { 
+        autoStart: true, 
+        planningAgentPresetId: payload.planningAgentPresetId || undefined,
+        overrides,
+      });
     }
 
     await Promise.all([refresh(), refreshExecution()]);
@@ -806,6 +839,7 @@ export const SprintsPage: FunctionComponent = () => {
                     initialSprint={editingSprint}
                     connections={execution.connections}
                     virtualProviders={virtualProviders}
+                    planningPresets={planningPresets}
                     onClose={() => {
                       setShowCreateComposer(false);
                       setEditingSprint(null);

@@ -12,7 +12,7 @@ import {
   Target,
   X,
 } from "lucide-preact";
-import type { Sprint, ExecutionConnectionSummary } from "../../types.js";
+import type { Sprint, ExecutionConnectionSummary, AgentPreset } from "../../types.js";
 import {
   useSprintComposerState, 
   type SprintSubmitMode,
@@ -29,6 +29,7 @@ interface SprintComposerProps {
   initialSprint?: Sprint | null;
   connections: ExecutionConnectionSummary[];
   virtualProviders: Array<{ id: VirtualWorkerProvider; label: string }>;
+  planningPresets: AgentPreset[];
   onClose: () => void;
   onImprovePrompt?: (draft: ImprovePromptInput) => Promise<string>;
   onSubmit: (payload: {
@@ -38,6 +39,7 @@ interface SprintComposerProps {
     submitMode: SprintSubmitMode;
     routeOverride: PlanningRouteOption | null;
     modelOverride: string | null;
+    planningAgentPresetId: string | null;
   }) => Promise<void> | void;
 }
 
@@ -46,6 +48,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   initialSprint = null,
   connections,
   virtualProviders,
+  planningPresets,
   onClose,
   onImprovePrompt,
   onSubmit,
@@ -58,6 +61,12 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const [elapsedMs, setElapsedMs] = useState(0);
 
   const state = useSprintComposerState(initialSprint);
+
+  useEffect(() => {
+    if (state.planningAgentPresetId && !planningPresets.find(p => p.id === state.planningAgentPresetId)) {
+      state.setPlanningAgentPresetId(null);
+    }
+  }, [planningPresets, state.planningAgentPresetId]);
 
   const activeMode = state.availableModes.find((mode) => mode.id === state.submitMode) || state.availableModes[0]!;
   const SubmitIcon = activeMode.icon;
@@ -121,7 +130,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       const improvedGoal = await onImprovePrompt({
         name: state.name.trim(),
         goal: rawPrompt,
-        overrides: toPlanningOverrides(state.routeOverride, state.modelOverride),
+        planningAgentPresetId: state.planningAgentPresetId || undefined,
+        overrides: toPlanningOverrides(state.routeOverride, state.modelOverride, state.planningAgentPresetId),
       });
       state.setGoal(improvedGoal);
       state.setOriginalPrompt(rawPrompt);
@@ -146,6 +156,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         submitMode: state.submitMode,
         routeOverride: state.routeOverride,
         modelOverride: state.modelOverride,
+        planningAgentPresetId: state.planningAgentPresetId,
       });
       onClose();
     } catch (error) {
@@ -360,6 +371,23 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         </div>
 
         <aside className="flex flex-col gap-4 p-6 sm:p-8">
+          <div data-composer-stagger>
+            <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Planning Agent</div>
+            <div className="relative mt-3">
+              <select
+                value={state.planningAgentPresetId || ""}
+                onChange={(e) => state.setPlanningAgentPresetId((e.target as HTMLSelectElement).value || null)}
+                className="w-full appearance-none rounded-[1.2rem] border border-black/[0.06] bg-white/66 px-4 py-2.5 pr-10 text-[11px] font-bold uppercase tracking-[0.14em] text-signal-600 outline-none hover:border-black/[0.1] dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-signal-300 dark:hover:border-white/[0.1]"
+              >
+                <option value="">Built-in Planning agent</option>
+                {planningPresets.map((preset) => (
+                  <option key={preset.id} value={preset.id}>{preset.name}</option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </div>
+          </div>
+
           <div data-composer-stagger>
             <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Execution Mode</div>
             <div className="mt-3 grid gap-3">
