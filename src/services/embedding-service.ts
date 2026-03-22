@@ -78,7 +78,7 @@ export class EmbeddingService {
       attention_mask: new ort.Tensor("int64", attentionMask, [1, seqLength]),
     };
 
-    // Some models expect additional inputs
+    // Provide additional inputs based on what the model expects
     const inputNames = this.session.inputNames as string[];
     if (inputNames.includes("token_type_ids")) {
       feeds.token_type_ids = new ort.Tensor("int64", tokenTypeIds, [1, seqLength]);
@@ -87,6 +87,26 @@ export class EmbeddingService {
       const positionIds = new BigInt64Array(seqLength);
       for (let i = 0; i < seqLength; i++) positionIds[i] = BigInt(i);
       feeds.position_ids = new ort.Tensor("int64", positionIds, [1, seqLength]);
+    }
+
+    // Decoder models (e.g. Qwen3) require empty past_key_values for initial pass
+    for (const name of inputNames) {
+      if (name.startsWith("past_key_values") && !feeds[name]) {
+        const meta = this.session.inputMetadata?.[name] ?? (this.session as any)._inputNames;
+        // Shape is typically [batch, num_kv_heads, 0, head_dim] — 0 past tokens
+        // Infer dimensions from the model's input shape metadata
+        const dims = (this.session as any).inputMetadata?.[name]?.dims;
+        if (dims && Array.isArray(dims)) {
+          // Replace dynamic axes with concrete values: batch=1, past_seq_len=0
+          const shape = dims.map((d: number | string) => typeof d === "number" ? d : 0);
+          shape[0] = 1; // batch size
+          const size = shape.reduce((a: number, b: number) => a * b, 1);
+          feeds[name] = new ort.Tensor("float32", new Float32Array(size), shape);
+        } else {
+          // Fallback: create empty [1, 1, 0, 1] tensor (0 past tokens = empty)
+          feeds[name] = new ort.Tensor("float32", new Float32Array(0), [1, 1, 0, 1]);
+        }
+      }
     }
 
     const results = await this.session.run(feeds);

@@ -50,6 +50,7 @@ describe("MemoryService", () => {
     loadEmbeddingsForScope: vi.fn(),
     saveEmbedding: vi.fn(),
     countByScope: vi.fn(),
+    countStaleEmbeddings: vi.fn(),
   };
 
   const mockEmbeddingService = {
@@ -330,6 +331,65 @@ describe("MemoryService", () => {
 
       expect(completed).toBe(1);
       expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining("Failed to re-embed memory mem-fail"));
+    });
+  });
+
+  describe("startReembedProject", () => {
+    it("throws when model not loaded", () => {
+      mockEmbeddingService.isLoaded.mockReturnValue(false);
+      expect(() => service.startReembedProject("proj-1")).toThrow("No embedding model loaded");
+    });
+
+    it("throws when already in progress", () => {
+      mockEmbeddingService.isLoaded.mockReturnValue(true);
+      mockRepo.listByProject.mockReturnValue([makeMemoryRecord()]);
+      mockEmbeddingService.getLoadedModelId.mockReturnValue("bge-small-en-v1.5");
+      mockEmbeddingService.getDimension.mockReturnValue(384);
+      mockEmbeddingService.embed.mockResolvedValue(new Float32Array(384));
+
+      service.startReembedProject("proj-1");
+      expect(() => service.startReembedProject("proj-1")).toThrow("Re-embedding already in progress");
+    });
+
+    it("sets progress state and completes", async () => {
+      mockEmbeddingService.isLoaded.mockReturnValue(true);
+      mockEmbeddingService.getLoadedModelId.mockReturnValue("bge-small-en-v1.5");
+      mockEmbeddingService.getDimension.mockReturnValue(384);
+      mockEmbeddingService.embed.mockResolvedValue(new Float32Array(384));
+      mockRepo.listByProject.mockReturnValue([makeMemoryRecord()]);
+
+      service.startReembedProject("proj-1");
+
+      const progress = service.getReembedProgress();
+      expect(progress).toBeTruthy();
+      expect(progress!.total).toBe(1);
+      expect(progress!.projectId).toBe("proj-1");
+
+      // Wait for async completion
+      await vi.waitFor(() => {
+        expect(service.getReembedProgress()!.active).toBe(false);
+      });
+      expect(service.getReembedProgress()!.completed).toBe(1);
+    });
+  });
+
+  describe("getReembedProgress", () => {
+    it("returns null when no reembed has started", () => {
+      expect(service.getReembedProgress()).toBeNull();
+    });
+  });
+
+  describe("countStaleEmbeddings", () => {
+    it("returns 0 when no model loaded", () => {
+      mockEmbeddingService.getLoadedModelId.mockReturnValue(null);
+      expect(service.countStaleEmbeddings("proj-1")).toBe(0);
+    });
+
+    it("delegates to repository with current model", () => {
+      mockEmbeddingService.getLoadedModelId.mockReturnValue("bge-small-en-v1.5");
+      mockRepo.countStaleEmbeddings.mockReturnValue(5);
+      expect(service.countStaleEmbeddings("proj-1")).toBe(5);
+      expect(mockRepo.countStaleEmbeddings).toHaveBeenCalledWith("proj-1", "bge-small-en-v1.5");
     });
   });
 });
