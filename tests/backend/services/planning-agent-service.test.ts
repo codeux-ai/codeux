@@ -658,4 +658,75 @@ describe("PlanningAgentService", () => {
       model: "plan-model",
     }));
   });
+
+  it("targets a specific planning agent preset via overrides", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-preset-override-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      "Default planning instructions.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const connectionRepository = new ConnectionChatRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn().mockResolvedValue({
+        ok: true,
+        stdout: "",
+        stderr: "",
+        code: 0,
+        signal: null,
+        text: JSON.stringify({
+          goal: "Custom goal",
+          tasks: [{ key: "T01", title: "Custom task", description: "D", promptMarkdown: "P", priority: "medium", executorType: "auto", dependsOn: [] }],
+        }),
+        usageTelemetry: { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, usageSource: "reported", rawUsageJson: {}, transcriptText: "", nativeSessionId: null },
+      }),
+    };
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+      providerRunner,
+    });
+
+    const project = projectRepository.createProject({ name: "P1", sourceType: "local", sourceRef: repoPath });
+    const sprint = projectRepository.createSprint(project.id, { name: "S1", goal: "G1" });
+
+    const customPlanner = agentPresetRepository.createAgentPreset(project.id, {
+      name: "Specialized Planner",
+      instructionMarkdown: "SPECIFIC_INSTRUCTIONS_FOR_PLANNING",
+      labels: ["planning"],
+    });
+
+    await service.planSprint(project.id, sprint.id, {
+      autoStart: false,
+      overrides: {
+        planningAgentPresetId: customPlanner.id,
+        virtualProvider: "gemini",
+      },
+    });
+
+    const calls = vi.mocked(providerRunner.runProviderForText).mock.calls;
+    const lastPrompt = calls[calls.length - 1]?.[0]?.prompt ?? "";
+    expect(lastPrompt).toContain("SPECIFIC_INSTRUCTIONS_FOR_PLANNING");
+    expect(lastPrompt).not.toContain("Default planning instructions.");
+  });
 });

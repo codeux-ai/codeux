@@ -125,7 +125,10 @@ export class PlanningAgentService {
 
   async improveSprintPrompt(projectId: string, input: ImprovePromptInput): Promise<ImprovePromptResult> {
     const project = this.requireProject(projectId);
-    const planningAgent = await this.deps.agentPresetSyncService.getPlanningAgent(projectId);
+    const planningAgent = await this.deps.agentPresetSyncService.resolveTargetedPlanningAgent(
+      projectId,
+      input.overrides?.planningAgentPresetId,
+    );
     const runtime = this.resolvePlanningRuntime(projectId, input.overrides);
     const worker = runtime.mode === "CONNECTED_MCP" ? runtime.connection : null;
     const thread = this.deps.connectionChatRepository.createThread(projectId, {
@@ -167,7 +170,10 @@ export class PlanningAgentService {
   async planSprint(projectId: string, sprintId: string, options: PlanSprintOptions): Promise<PlanSprintResult> {
     const project = this.requireProject(projectId);
     const sprint = this.requireSprint(projectId, sprintId);
-    const planningAgent = await this.deps.agentPresetSyncService.getPlanningAgent(projectId);
+    const planningAgent = await this.deps.agentPresetSyncService.resolveTargetedPlanningAgent(
+      projectId,
+      options.overrides?.planningAgentPresetId,
+    );
     const runtime = this.resolvePlanningRuntime(projectId, options.overrides);
     const worker = runtime.mode === "CONNECTED_MCP" ? runtime.connection : null;
 
