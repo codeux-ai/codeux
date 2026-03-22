@@ -782,6 +782,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       const input: ImprovePromptInput = {
         name: typeof req.body?.name === "string" ? req.body.name.trim() : "",
         goal: typeof req.body?.goal === "string" ? req.body.goal : "",
+        planningAgentPresetId: typeof req.body?.planningAgentPresetId === "string" ? req.body.planningAgentPresetId.trim() : undefined,
         overrides: req.body?.overrides,
       };
       res.status(202).json(await improveSprintPrompt(projectId, input));
@@ -801,6 +802,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       const options: PlanSprintOptions = {
         autoStart: Boolean(req.body?.autoStart),
         replan: Boolean(req.body?.replan),
+        planningAgentPresetId: typeof req.body?.planningAgentPresetId === "string" ? req.body.planningAgentPresetId.trim() : undefined,
         overrides: req.body?.overrides,
       };
       res.status(202).json(await planSprint(projectId, sprintId, options));
