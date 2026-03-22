@@ -83,6 +83,7 @@ describe("MCP Factory", () => {
     mockSprintDeps = {
       sprintOrchestrator: {},
       taskService: {},
+      workerInboxReplyService: {},
     };
   });
 
