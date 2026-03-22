@@ -235,6 +235,7 @@ export class PlanningAgentService {
 
       const created = this.deps.projectManagementRepository.createTask(projectId, {
         sprintId,
+        taskKey: task.key,
         title: task.title.trim(),
         description: task.description.trim(),
         promptMarkdown: task.promptMarkdown.trim(),
@@ -626,6 +627,7 @@ export class PlanningAgentService {
       throw new Error("Planning agent reply did not include any tasks.");
     }
 
+    const seenKeys = new Set<string>();
     const tasks = rawTasks.map((task, index) => {
       const draft = task as PlannedTaskDraft & {
         id?: string;
@@ -636,6 +638,11 @@ export class PlanningAgentService {
         dependencies?: string[];
       };
       const key = String(draft.key || draft.id || "").trim() || `T${String(index + 1).padStart(2, "0")}`;
+      if (seenKeys.has(key)) {
+        throw new Error(`Planning agent returned duplicate task key: ${key}.`);
+      }
+      seenKeys.add(key);
+
       const title = String(draft.title || draft.name || "").trim();
       const description = String(draft.description || "").trim();
       const promptMarkdown = String(draft.promptMarkdown || draft.prompt || draft.instructions || draft.description || "").trim();

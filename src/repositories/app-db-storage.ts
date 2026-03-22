@@ -416,6 +416,7 @@ export class AppDbStorage {
     this.ensureColumn("connection_project_bindings", "last_attention_cursor", "TEXT");
     this.ensureColumn("connection_project_bindings", "last_assignment_cursor", "TEXT");
     this.ensureColumn("dashboard_realtime_events", "is_replayable", "INTEGER NOT NULL DEFAULT 1");
+    this.ensureUniqueIndex("idx_tasks_sprint_key", "tasks", "sprint_id, task_key");
     this.ensureIndex("idx_sprint_runs_project_sprint", "sprint_runs", "project_id, sprint_id, created_at DESC");
     this.ensureIndex("idx_tasks_project_sprint_sort", "tasks", "project_id, sprint_id, sort_order ASC, created_at ASC, task_key ASC");
     this.ensureIndex("idx_task_runs_project_started", "task_runs", "project_id, started_at DESC");

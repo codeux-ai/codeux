@@ -830,21 +830,25 @@ export class ProjectManagementRepository {
   }
 
   private createNextTaskKey(sprintId: string): string {
-    const row = this.db.prepare(`
+    const rows = this.db.prepare(`
       SELECT task_key
       FROM tasks
       WHERE sprint_id = ?
-      ORDER BY created_at DESC
-      LIMIT 1
-    `).get(sprintId) as { task_key: string } | undefined;
+    `).all(sprintId) as { task_key: string }[];
 
-    if (!row?.task_key) {
+    if (rows.length === 0) {
       return "T01";
     }
 
-    const match = row.task_key.match(/(\d+)$/);
-    const nextNumber = match ? Number(match[1]) + 1 : 1;
-    return `T${String(nextNumber).padStart(2, "0")}`;
+    let maxNumber = 0;
+    for (const row of rows) {
+      const match = row.task_key.match(/(\d+)$/);
+      if (match) {
+        maxNumber = Math.max(maxNumber, Number(match[1]));
+      }
+    }
+
+    return `T${String(maxNumber + 1).padStart(2, "0")}`;
   }
 
   private normalizeDependencyIds(dependencyIds: string[] | undefined): string[] {
