@@ -22,12 +22,20 @@ Implemented on March 12, 2026:
   - `overflowAssignedWorkers`
 - worker listen mode now emits `assignment_changed` events with repo context when a worker's project assignment changes
 
+Extended on March 22, 2026:
+
+- added operator-facing preferred worker control at `PUT /api/projects/:projectId/preferred-worker`
+- added project-scoped reassignment flow in `ProjectWorkerAssignmentService`
+- preferred worker selection now resolves either a live worker connection or a worker endpoint reference
+- clearing the preferred worker demotes the current project primary to overflow instead of releasing unrelated worker bindings
+
 Primary files:
 
 - `src/repositories/project-worker-assignment-repository.ts`
 - `src/domain/workers/project-worker-assignment-service.ts`
 - `src/services/worker-task-dispatch-service.ts`
 - `src/app/lifecycle/dashboard-lifecycle-service.ts`
+- `src/server/dashboard-server.ts`
 
 ## Assignment Model
 
@@ -62,6 +70,33 @@ This gives the current runtime the right behavior:
 - allow one worker to cover multiple projects when workers are scarce
 - keep ownership explicit and queryable
 
+## Operator Control Surface
+
+Dashboard operators may now replace or clear the project primary worker through:
+
+- `PUT /api/projects/:projectId/preferred-worker`
+
+Request body:
+
+- `workerConnectionId`: optional live worker MCP connection id
+- `workerEndpointId`: optional worker endpoint id
+- `workerEndpointKey`: optional worker endpoint key
+
+Behavior:
+
+- if a selected target resolves to a live worker that can supervise projects, it is promoted to `primary`
+- any other active `primary` assignments on that same project are demoted to `overflow`
+- active overflow assignments for the same project stay intact
+- assignments on other projects are not changed
+- if no target is provided, the current project primary is cleared by demoting it to `overflow`
+
+Validation rules:
+
+- stale workers are rejected
+- offline workers are rejected
+- non-live configured endpoints are rejected
+- non-worker connection ids do not resolve and are rejected
+
 ## Dashboard Projection
 
 Project execution snapshots now expose assignment state separately from live connections:
@@ -78,7 +113,5 @@ This is still the foundation, not the full scheduling system.
 
 Still pending:
 
-- explicit reassignment policies
-- operator controls to pin/release assignments
 - attention queue integration
 - non-MCP assignment sources

@@ -21,6 +21,7 @@ import type { ProjectManagementRepository } from "../../repositories/project-man
 import type { ProjectRuntimeRepository } from "../../repositories/project-runtime-repository.js";
 import type { ConnectionChatRepository } from "../../repositories/connection-chat-repository.js";
 import type { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
+import type { ProjectWorkerAssignmentService } from "../../domain/workers/project-worker-assignment-service.js";
 import type { ProjectAttentionRepository } from "../../repositories/project-attention-repository.js";
 import type { AgentPresetRepository } from "../../repositories/agent-preset-repository.js";
 import type { AgentPresetSyncService } from "../../services/agent-preset-sync-service.js";
@@ -46,6 +47,7 @@ export interface BootDashboardDeps {
   executionRepository: ExecutionRepository;
   connectionChatRepository: ConnectionChatRepository;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
+  projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   projectAttentionRepository: ProjectAttentionRepository;
   agentPresetRepository: AgentPresetRepository;
   agentPresetSyncService: AgentPresetSyncService;
@@ -193,6 +195,17 @@ function requireProjectAttentionItem(
     throw new Error(`Attention item ${attentionItemId} does not belong to project ${projectId}.`);
   }
   return item;
+}
+
+function requireProject(
+  deps: Pick<BootDashboardDeps, "projectManagementRepository">,
+  projectId: string,
+) {
+  const project = deps.projectManagementRepository.getProject(projectId);
+  if (!project) {
+    throw new Error(`Project not found: ${projectId}`);
+  }
+  return project;
 }
 
 function resolveAttentionClaimWorkerEndpointId(
@@ -346,6 +359,16 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     getOverviewTelemetrySnapshot,
     getProjectExecutionSnapshot,
     getProjectStatsSnapshot,
+    setPreferredWorker: (projectId, input) => {
+      requireProject(deps, projectId);
+      const assignments = deps.projectWorkerAssignmentService.setProjectPreferredWorker(projectId, input);
+      projectExecutionSnapshotCache.delete(projectId);
+      deps.dashboardRealtimeService.scheduleProjectExecutionRefresh(projectId, {
+        includeOverview: false,
+        includeProjects: false,
+      });
+      return mapAssignedWorkers(assignments);
+    },
     claimAttentionItem: (projectId, attentionItemId, input) => {
       const item = requireProjectAttentionItem(deps, projectId, attentionItemId);
       const workerEndpointId = resolveAttentionClaimWorkerEndpointId(

@@ -23,6 +23,7 @@ describe("JulesAgentServer", () => {
   const appConfig = loadAppConfig([], projectRoot);
 
   beforeEach(() => {
+    vi.clearAllMocks();
     server = new JulesAgentServer({ projectRoot, appConfig });
   });
 
@@ -789,8 +790,10 @@ describe("JulesAgentServer", () => {
       await server.run();
 
       expect(bootDashboard).toHaveBeenCalled();
-      const bootDashboardArgs = (bootDashboard as any).mock.calls[0][0];
+      const bootDashboardCalls = (bootDashboard as any).mock.calls;
+      const bootDashboardArgs = bootDashboardCalls[bootDashboardCalls.length - 1]?.[0];
 
+      expect(bootDashboardArgs).toBeDefined();
       expect(bootDashboardArgs.getDashboardPort()).toBeDefined();
 
       try { await bootDashboardArgs.getLiveActivitiesForActiveTasks(); } catch (e) {}

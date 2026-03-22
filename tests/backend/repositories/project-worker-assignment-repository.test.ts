@@ -208,4 +208,171 @@ describe("ProjectWorkerAssignmentRepository", () => {
 
     expect(promoted.assignmentRole).toBe("primary");
   });
+
+  it("promotes the selected worker connection to primary without mutating other project assignments", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService,
+    } = await createRepositories();
+    const projectA = projectRepository.createProject({
+      name: "Preferred Worker Project A",
+      sourceType: "local",
+      sourceRef: "/workspace/preferred-worker-project-a",
+    });
+    const projectB = projectRepository.createProject({
+      name: "Preferred Worker Project B",
+      sourceType: "local",
+      sourceRef: "/workspace/preferred-worker-project-b",
+    });
+
+    const workerA = connectionRepository.upsertConnection({
+      connectionKey: "preferred-worker-a",
+      displayName: "Preferred Worker A",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [projectA.id],
+      activeProjectIds: [projectA.id],
+    });
+    const workerB = connectionRepository.upsertConnection({
+      connectionKey: "preferred-worker-b",
+      displayName: "Preferred Worker B",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [projectA.id],
+      activeProjectIds: [projectA.id],
+    });
+    const workerC = connectionRepository.upsertConnection({
+      connectionKey: "preferred-worker-c",
+      displayName: "Preferred Worker C",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [projectB.id],
+      activeProjectIds: [projectB.id],
+    });
+
+    const endpointA = workerEndpointRepository.getWorkerEndpointByConnectionId(workerA.id)!;
+    const endpointB = workerEndpointRepository.getWorkerEndpointByConnectionId(workerB.id)!;
+    const endpointC = workerEndpointRepository.getWorkerEndpointByConnectionId(workerC.id)!;
+
+    projectWorkerAssignmentService.noteWorkerActivity(projectA.id, endpointA.id);
+    projectWorkerAssignmentService.noteWorkerActivity(projectA.id, endpointB.id);
+    projectWorkerAssignmentService.noteWorkerActivity(projectB.id, endpointC.id);
+
+    const updatedProjectAAssignments = projectWorkerAssignmentService.setProjectPreferredWorker(projectA.id, {
+      workerConnectionId: workerB.id,
+    });
+
+    expect(updatedProjectAAssignments.find((assignment) => assignment.assignmentRole === "primary")).toMatchObject({
+      workerEndpointId: endpointB.id,
+      workerDisplayName: "Preferred Worker B",
+    });
+    expect(updatedProjectAAssignments.filter((assignment) => assignment.assignmentRole === "overflow")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workerEndpointId: endpointA.id,
+          workerDisplayName: "Preferred Worker A",
+        }),
+      ]),
+    );
+
+    const projectBAssignments = projectWorkerAssignmentRepository.listAssignmentsForProject(projectB.id, { activeOnly: true });
+    expect(projectBAssignments).toHaveLength(1);
+    expect(projectBAssignments[0]).toMatchObject({
+      workerEndpointId: endpointC.id,
+      assignmentRole: "primary",
+      workerDisplayName: "Preferred Worker C",
+    });
+
+    const refreshedOverflow = projectWorkerAssignmentService.noteWorkerActivity(projectA.id, endpointA.id);
+    expect(refreshedOverflow.assignmentRole).toBe("overflow");
+  });
+
+  it("rejects selecting an offline worker endpoint as the preferred worker", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentService,
+    } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Offline Preferred Worker Project",
+      sourceType: "local",
+      sourceRef: "/workspace/offline-preferred-worker-project",
+    });
+
+    const worker = connectionRepository.upsertConnection({
+      connectionKey: "preferred-worker-offline",
+      displayName: "Offline Preferred Worker",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+    const endpoint = workerEndpointRepository.getWorkerEndpointByConnectionId(worker.id)!;
+    workerEndpointRepository.updateWorkerEndpoint(endpoint.id, {
+      status: "offline",
+    });
+
+    expect(() => projectWorkerAssignmentService.setProjectPreferredWorker(project.id, {
+      workerEndpointId: endpoint.id,
+    })).toThrow(`Preferred worker target is not live: ${endpoint.id}`);
+  });
+
+  it("clears the preferred worker by demoting the current primary to overflow", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentService,
+    } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Clear Preferred Worker Project",
+      sourceType: "local",
+      sourceRef: "/workspace/clear-preferred-worker-project",
+    });
+
+    const workerA = connectionRepository.upsertConnection({
+      connectionKey: "clear-preferred-worker-a",
+      displayName: "Clear Preferred Worker A",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+    const workerB = connectionRepository.upsertConnection({
+      connectionKey: "clear-preferred-worker-b",
+      displayName: "Clear Preferred Worker B",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+
+    const endpointA = workerEndpointRepository.getWorkerEndpointByConnectionId(workerA.id)!;
+    const endpointB = workerEndpointRepository.getWorkerEndpointByConnectionId(workerB.id)!;
+
+    projectWorkerAssignmentService.noteWorkerActivity(project.id, endpointA.id);
+    projectWorkerAssignmentService.noteWorkerActivity(project.id, endpointB.id);
+
+    const clearedAssignments = projectWorkerAssignmentService.setProjectPreferredWorker(project.id, {
+      workerConnectionId: null,
+    });
+
+    expect(clearedAssignments.find((assignment) => assignment.assignmentRole === "primary") || null).toBeNull();
+    expect(clearedAssignments.filter((assignment) => assignment.assignmentRole === "overflow")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ workerEndpointId: endpointA.id }),
+        expect.objectContaining({ workerEndpointId: endpointB.id }),
+      ]),
+    );
+  });
 });
