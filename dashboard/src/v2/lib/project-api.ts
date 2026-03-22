@@ -13,6 +13,7 @@ import type {
   UpdateTaskInput,
 } from "../types.js";
 import type {
+  ExecutionAssignedWorkerSummary,
   ExecutionDashboardSnapshot,
   ProjectExecutionStatsSnapshot,
   ProjectStatsQuery,
@@ -61,6 +62,27 @@ export const selectProject = async (projectId: string): Promise<string | null> =
     { method: "PUT" }
   );
   return response.selectedProjectId;
+};
+
+export const setProjectPreferredWorker = async (
+  projectId: string,
+  input: {
+    workerConnectionId?: string | null;
+    workerEndpointId?: string | null;
+    workerEndpointKey?: string | null;
+  },
+): Promise<{
+  primaryAssignedWorker: ExecutionAssignedWorkerSummary | null;
+  overflowAssignedWorkers: ExecutionAssignedWorkerSummary[];
+}> => {
+  return fetchJson<{
+    primaryAssignedWorker: ExecutionAssignedWorkerSummary | null;
+    overflowAssignedWorkers: ExecutionAssignedWorkerSummary[];
+  }>(`/api/projects/${encodeURIComponent(projectId)}/preferred-worker`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
 };
 
 export const fetchSprints = async (projectId: string): Promise<SprintRecord[]> => {
