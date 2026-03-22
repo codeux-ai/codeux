@@ -42,6 +42,7 @@ export interface CiGateContext {
   executionRepository?: ExecutionRepository;
   sprintRunId?: string;
   openCiFixAttention?: (task: Subtask, payload: WorkerCiFixPayload) => void;
+  hasActiveWorkerCiFixAttempt?: (task: Subtask, prNumber: number) => boolean;
 }
 
 export interface CiGateResult {
@@ -250,6 +251,7 @@ export class FeaturePrGateService {
         sendSessionMessage: context.sendSessionMessage,
         repoPath: context.repoPath,
         defaultBranch: context.defaultBranch,
+        hasActiveWorkerCiFixAttempt: context.hasActiveWorkerCiFixAttempt,
       });
       reportText += inProgressResult.reportText;
       if (skipCiWait) {

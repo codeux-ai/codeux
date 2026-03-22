@@ -16,6 +16,7 @@ import type {
 } from "../../../contracts/app-types.js";
 import type { TaskStatus as PlanningTaskStatus } from "../../../contracts/project-management-types.js";
 import type { ProjectAttentionOwnerType } from "../../../contracts/project-attention-types.js";
+import type { ProjectAttentionItemRecord } from "../../../contracts/project-attention-types.js";
 import type { SprintOrchestratorDependencies } from "../../../sprint/sprint-orchestrator.js";
 import type { SprintExecutionContext } from "../../../services/sprint-execution-state-service.js";
 import { FeaturePrGateService } from "../ci/feature-pr-gate.js";
@@ -144,6 +145,9 @@ export class CycleRunner {
 
     let gitStatus: GitTrackingStatus | null = null;
     if (subtasks.length > 0) {
+      const activeProjectAttentionItems = typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
+        ? this.deps.projectAttentionService.listActiveProjectItems(args.executionContext.project.id)
+        : [];
       const taskStateBeforeCiGate = snapshotTaskState(subtasks);
       gitStatus = this.deps.getCiStatusForScope
         ? await this.deps.getCiStatusForScope({
@@ -171,6 +175,11 @@ export class CycleRunner {
           await this.deps.sendSessionMessage(sessionId, message);
         },
         autoMergeFeaturePr: this.deps.autoMergeFeaturePr,
+        hasActiveWorkerCiFixAttempt: (task, prNumber) => hasActiveCiFixAttentionAttempt(
+          activeProjectAttentionItems,
+          task,
+          prNumber,
+        ),
         openCiFixAttention: (task, payload) => {
           const taskId = task.record_id?.trim();
           if (!taskId || !this.deps.projectAttentionService) {
@@ -534,6 +543,29 @@ function hasMergeStateChanges(previous: Map<string, TaskStateSnapshot>, subtasks
 function resolveCiStatusCacheTtlMs(watchLoopIntervalSeconds: number | undefined): number {
   const watchLoopIntervalMs = Math.max(1, Number(watchLoopIntervalSeconds || 0)) * 1000;
   return Math.min(15_000, Math.max(3_000, watchLoopIntervalMs));
+}
+
+function hasActiveCiFixAttentionAttempt(
+  attentionItems: ProjectAttentionItemRecord[],
+  task: Subtask,
+  prNumber: number,
+): boolean {
+  const taskRecordId = task.record_id?.trim() || null;
+  return attentionItems.some((item) => {
+    if (item.attentionType !== "ci_fix_required" || item.ownerType !== "worker") {
+      return false;
+    }
+
+    const payload = item.payload || {};
+    const payloadTaskKey = typeof payload.taskKey === "string" ? payload.taskKey.trim() : null;
+    const payloadPrNumber = typeof payload.prNumber === "number" ? payload.prNumber : null;
+    const sameTask = Boolean(
+      (taskRecordId && item.taskId?.trim() === taskRecordId)
+      || (payloadTaskKey && payloadTaskKey === task.id),
+    );
+
+    return sameTask && payloadPrNumber === prNumber;
+  });
 }
 
 function mapSubtaskStatusToPlanningStatus(status: Subtask["status"]): PlanningTaskStatus {

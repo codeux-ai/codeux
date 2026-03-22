@@ -118,6 +118,7 @@ export interface CiAutofixEscalationArgs {
   repoPath: string;
   featureBranch: string;
   defaultBranch: string;
+  hasActiveWorkerCiFixAttempt?: (task: Subtask, prNumber: number) => boolean;
 }
 
 export interface CiAutofixEscalationResult {
@@ -131,6 +132,12 @@ export async function handleCiAutofixEscalation(args: CiAutofixEscalationArgs): 
   const retryKey = getCiAutofixRetryKey(args.task, args.prNumber);
   const maxRetries = Math.max(0, args.maxRetries);
   const currentRetries = args.ciAutofixRetryCounts.get(retryKey) || 0;
+  const activeWorkerCiFixAttempt = args.hasActiveWorkerCiFixAttempt?.(args.task, args.prNumber) || false;
+
+  if (activeWorkerCiFixAttempt) {
+    reportTextAddition += `   - Worker CI fix already running (attempt ${Math.max(1, currentRetries)}/${maxRetries}). Waiting for completion.\n`;
+    return { reportTextAddition, workerCiFixRequired: false, workerCiFixPayload: null };
+  }
 
   if (currentRetries >= maxRetries) {
     const owner = resolveCiEscalationOwner(args.automationLevel);
@@ -161,9 +168,9 @@ export async function handleCiAutofixEscalation(args: CiAutofixEscalationArgs): 
     isJulesApiConfigured: args.isJulesApiConfigured,
     sendSessionMessage: args.sendSessionMessage,
   });
-  args.ciAutofixRetryCounts.set(retryKey, currentRetries + 1);
 
   if (notifyResult.sent) {
+    args.ciAutofixRetryCounts.set(retryKey, currentRetries + 1);
     reportTextAddition += `   - Jules session notified to fix CI and continue work (attempt ${
       currentRetries + 1
     }/${maxRetries}).\n`;
@@ -182,6 +189,7 @@ export async function handleCiAutofixEscalation(args: CiAutofixEscalationArgs): 
     featureBranch: args.featureBranch,
     defaultBranch: args.defaultBranch,
   });
+  args.ciAutofixRetryCounts.set(retryKey, currentRetries + 1);
   reportTextAddition += `   - Worker CI fix dispatched (attempt ${currentRetries + 1}/${maxRetries}).\n`;
 
   return { reportTextAddition, workerCiFixRequired: true, workerCiFixPayload: payload };

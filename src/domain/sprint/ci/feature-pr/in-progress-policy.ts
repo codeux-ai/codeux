@@ -27,6 +27,7 @@ export async function evaluateInProgressState(args: {
   sendSessionMessage: (sessionId: string, message: string) => Promise<void>;
   repoPath: string;
   defaultBranch: string;
+  hasActiveWorkerCiFixAttempt?: (task: Subtask, prNumber: number) => boolean;
 }): Promise<InProgressResult> {
   args.task.status = "RUNNING";
   args.task.merge_indicator = args.hasReviewBlockers && !args.hasFailedChecks && !args.hasPendingChecks ? "MERGE_BLOCKED" : "CI";
@@ -64,6 +65,7 @@ export async function evaluateInProgressState(args: {
         repoPath: args.repoPath,
         featureBranch: args.featureBranch,
         defaultBranch: args.defaultBranch,
+        hasActiveWorkerCiFixAttempt: args.hasActiveWorkerCiFixAttempt,
       });
       reportText += escalation.reportTextAddition;
       workerCiFixRequired = escalation.workerCiFixRequired;

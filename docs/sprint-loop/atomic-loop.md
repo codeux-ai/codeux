@@ -163,6 +163,7 @@ For `action=status`:
 - Feature-PR auto-merge no longer bypasses pending/failed checks when `waitForCiBeforeFeatureMerge` is enabled; in that configuration Sprint OS waits for a green gate before attempting the merge.
 - If `waitForJulesCiAutofix` is enabled and feature PR checks fail, the sprint loop notifies the Jules session with failed-check context, matched failed run ids/URLs, failed job names, and failed-job log excerpts (when available), then keeps the task in work state.
 - CI autofix retries are capped by `julesCiAutofixMaxRetries`; once exhausted, the task is escalated as intervention-needed with exact task id, PR URL, failed check names, failed run summary, and failed job names (focus: fix CI before merge).
+- Worker-owned CI autofix attempts are de-duplicated across watch-loop cycles. While a matching `ci_fix_required` attention item is still open or claimed, Sprint OS treats that attempt as in-flight, keeps the task in `RUNNING`, and does not consume another retry until the worker attempt resolves.
 
 ## Files and Data Used
 

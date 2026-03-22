@@ -76,6 +76,7 @@ describe("handleCiAutofixEscalation", () => {
     expect(result.workerCiFixPayload!.prNumber).toBe(100);
     expect(result.workerCiFixPayload!.taskKey).toBe("T1");
     expect(result.reportTextAddition).toContain("Worker CI fix dispatched");
+    expect(retryCounts.get("s1:100")).toBe(1);
   });
 
   it("should dispatch to worker for non-Jules-managed tasks", async () => {
@@ -94,6 +95,44 @@ describe("handleCiAutofixEscalation", () => {
     expect(result.workerCiFixRequired).toBe(true);
     expect(result.workerCiFixPayload).toBeTruthy();
     expect(result.reportTextAddition).toContain("Worker CI fix dispatched");
+    expect(retryCounts.get("T1:100")).toBe(1);
+  });
+
+  it("waits for an active worker CI fix attempt without incrementing retries", async () => {
+    const task: Subtask = { id: "T1", title: "Task 1", prompt: "Do stuff", status: "RUNNING" } as Subtask;
+    const retryCounts = new Map([["T1:100", 1]]);
+    const sendSessionMessage = vi.fn();
+
+    const result = await handleCiAutofixEscalation({
+      ...baseArgs,
+      task,
+      ciAutofixRetryCounts: retryCounts,
+      sendSessionMessage,
+      hasActiveWorkerCiFixAttempt: () => true,
+    });
+
+    expect(task.status).toBe("RUNNING");
+    expect(retryCounts.get("T1:100")).toBe(1);
+    expect(sendSessionMessage).not.toHaveBeenCalled();
+    expect(result.workerCiFixRequired).toBe(false);
+    expect(result.reportTextAddition).toContain("Worker CI fix already running");
+  });
+
+  it("does not block while the active worker CI fix attempt is still running at the retry limit", async () => {
+    const task: Subtask = { id: "T1", title: "Task 1", prompt: "Do stuff", status: "RUNNING" } as Subtask;
+    const retryCounts = new Map([["T1:100", 3]]);
+
+    const result = await handleCiAutofixEscalation({
+      ...baseArgs,
+      task,
+      ciAutofixRetryCounts: retryCounts,
+      hasActiveWorkerCiFixAttempt: () => true,
+    });
+
+    expect(task.status).toBe("RUNNING");
+    expect(task.intervention_owner).toBeUndefined();
+    expect(result.workerCiFixRequired).toBe(false);
+    expect(result.reportTextAddition).toContain("Worker CI fix already running");
   });
 });
 

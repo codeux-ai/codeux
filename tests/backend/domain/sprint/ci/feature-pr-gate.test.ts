@@ -328,6 +328,42 @@ jobs:
     );
   });
 
+  it("waits for an already active worker CI fix attempt instead of consuming another retry", async () => {
+    subtasks[0].session_id = undefined;
+    subtasks[0].provider = "gemini" as any;
+    context.gitStatus.openPullRequests[0].checks = [
+      { name: "build", status: "completed", conclusion: "failure" }
+    ];
+    context.ciAutofixRetryCounts.set("T1:101", 1);
+    context.openCiFixAttention = vi.fn();
+    context.hasActiveWorkerCiFixAttempt = vi.fn().mockReturnValue(true);
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("RUNNING");
+    expect(context.openCiFixAttention).not.toHaveBeenCalled();
+    expect(context.ciAutofixRetryCounts.get("T1:101")).toBe(1);
+    expect(result.reportText).toContain("Worker CI fix already running");
+  });
+
+  it("does not block a task at the retry limit while the current worker CI fix attempt is still active", async () => {
+    subtasks[0].session_id = undefined;
+    subtasks[0].provider = "gemini" as any;
+    context.gitStatus.openPullRequests[0].checks = [
+      { name: "build", status: "completed", conclusion: "failure" }
+    ];
+    context.ciAutofixRetryCounts.set("T1:101", 3);
+    context.openCiFixAttention = vi.fn();
+    context.hasActiveWorkerCiFixAttempt = vi.fn().mockReturnValue(true);
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("RUNNING");
+    expect(result.subtasks[0].intervention_owner).toBeUndefined();
+    expect(context.openCiFixAttention).not.toHaveBeenCalled();
+    expect(result.reportText).toContain("Worker CI fix already running");
+  });
+
   it("does not call openCiFixAttention for Jules-managed tasks", async () => {
     context.gitStatus.openPullRequests[0].checks = [
       { name: "build", status: "completed", conclusion: "failure" }
