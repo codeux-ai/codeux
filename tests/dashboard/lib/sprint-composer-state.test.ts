@@ -18,12 +18,14 @@ describe("Sprint Composer State Helpers", () => {
       expect(modes[0].label).toBe("Plan & Start");
     });
 
-    it("returns replan action for planned sprints", () => {
+    it("returns replan and append_tasks actions for planned sprints", () => {
       // Planned edit = isEditing(true), hasTasks(true)
       const modes = getAvailableModes(true, true);
-      expect(modes.map(m => m.id)).toEqual(["replan", "draft"]);
+      expect(modes.map(m => m.id)).toEqual(["replan", "append_tasks", "draft"]);
       expect(modes[0].id).toBe("replan");
-      expect(modes[1].label).toBe("Save Changes");
+      expect(modes[1].id).toBe("append_tasks");
+      expect(modes[1].label).toBe("Add Tasks");
+      expect(modes[2].label).toBe("Save Changes");
     });
   });
 

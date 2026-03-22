@@ -1,9 +1,10 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Check, RefreshCw, SlidersHorizontal, X } from "lucide-preact";
+import { Check, RefreshCw, SlidersHorizontal, X, Zap } from "lucide-preact";
 import type { Sprint } from "../../types.js";
 import { ProjectSettingsEditor } from "../settings/ProjectSettingsEditor.js";
+import { ActionButton, SettingsBody, SettingsHeader } from "../settings/SettingsSurface.js";
 import {
   fetchSprintEffectiveSettings,
   resetSprintSettings,
@@ -79,7 +80,7 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
     if (!message) {
       return;
     }
-    const timeoutId = window.setTimeout(() => setMessage(null), 2200);
+    const timeoutId = window.setTimeout(() => setMessage(null), 2400);
     return () => window.clearTimeout(timeoutId);
   }, [message]);
 
@@ -134,76 +135,73 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
         ref={cardRef}
         className="flex max-h-[92vh] w-full max-w-7xl flex-col overflow-hidden rounded-[2.5rem] bg-[#f9f8f4] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:bg-void-900 dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)]"
       >
-        <div className="flex flex-wrap items-start justify-between gap-5 border-b border-black/[0.06] px-8 py-7 dark:border-white/[0.06]">
-          <div>
-            <div className="flex items-center gap-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.15em] text-signal-500">
-              <SlidersHorizontal className="h-4 w-4" strokeWidth={2.3} />
-              Sprint Overrides
-            </div>
-            <h2 className="mt-3 font-display text-4xl font-black tracking-tight text-slate-900 dark:text-white">
-              {sprint.name}
-            </h2>
-            <p className="mt-2 max-w-3xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-              Sprint settings override the resolved project configuration for this sprint only. Saving from this dialog stays sparse on the backend.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => { void loadSettings(); }}
-              className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-slate-600 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} strokeWidth={2.1} />
-              Reload
-            </button>
-            <button
-              type="button"
-              onClick={() => { void handleReset(); }}
-              disabled={resetting}
-              className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/10 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-status-red disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {resetting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} /> : null}
-              Reset
-            </button>
-            <button
-              type="button"
-              onClick={() => { void handleSave(); }}
-              disabled={!dirty || saving}
-              className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.12em] text-void-900 transition-colors hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} /> : <Check className="h-3.5 w-3.5" strokeWidth={2.1} />}
-              Save
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/[0.05] text-slate-500 transition-colors hover:text-slate-900 dark:bg-white/[0.05] dark:text-slate-400 dark:hover:text-white"
-            >
-              <X className="h-4 w-4" strokeWidth={2.1} />
-            </button>
-          </div>
-        </div>
+        <SettingsHeader
+          icon={SlidersHorizontal}
+          eyebrow="Sprint Overrides"
+          title={sprint.name}
+          description="Sprint settings override the resolved project configuration for this sprint only. Saving from this dialog stays sparse on the backend."
+          actions={
+            <>
+              <ActionButton
+                label="Reload"
+                onClick={() => { void loadSettings(); }}
+                busy={loading}
+              />
+              <ActionButton
+                label="Reset"
+                onClick={() => { void handleReset(); }}
+                tone="danger"
+                busy={resetting}
+              />
+              <button
+                type="button"
+                onClick={() => { void handleSave(); }}
+                disabled={!dirty || saving}
+                className={`group inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${
+                  message && !error
+                    ? "bg-status-green text-white shadow-[0_4px_20px_rgba(0,171,132,0.3)]"
+                    : "bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100"
+                }`}
+              >
+                {saving ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} />
+                    Saving
+                  </>
+                ) : message && !error ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" strokeWidth={2.2} />
+                    Saved
+                  </>
+                ) : (
+                  <>
+                    <Zap className="h-3.5 w-3.5 transition-transform duration-200 group-hover:scale-110" strokeWidth={2} />
+                    Save Changes
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/[0.05] text-slate-500 transition-colors hover:text-slate-900 dark:bg-white/[0.05] dark:text-slate-400 dark:hover:text-white"
+              >
+                <X className="h-4 w-4" strokeWidth={2.1} />
+              </button>
+            </>
+          }
+        />
 
-        <div className="overflow-y-auto px-8 py-7">
-          {error ? (
-            <div className="mb-5 rounded-[1.5rem] border border-status-red/20 bg-status-red/10 px-5 py-4 text-sm font-medium text-status-red">
-              {error}
-            </div>
-          ) : null}
-
-          {message ? (
-            <div className="mb-5 rounded-[1.5rem] border border-signal-500/20 bg-signal-500/[0.08] px-5 py-4 text-sm font-medium text-signal-600 dark:text-signal-300">
-              {message}
-            </div>
-          ) : null}
-
-          {loading || !settings ? (
-            <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/72 px-5 py-8 text-sm font-medium text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
-              Loading sprint overrides...
-            </div>
-          ) : (
-            <ProjectSettingsEditor settings={settings} onChange={setSettings} sources={sources} editingScope="sprint" />
-          )}
+        <div className="overflow-y-auto">
+          <SettingsBody
+            error={error}
+            message={message}
+            loading={loading || !settings}
+            loadingLabel="Loading sprint overrides\u2026"
+          >
+            {settings ? (
+              <ProjectSettingsEditor settings={settings} onChange={setSettings} sources={sources} editingScope="sprint" />
+            ) : null}
+          </SettingsBody>
         </div>
       </div>
     </div>

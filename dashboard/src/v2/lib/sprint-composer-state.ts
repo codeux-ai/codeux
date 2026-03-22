@@ -1,8 +1,8 @@
 import { useState, useEffect } from "preact/hooks";
-import { Rocket, ClipboardList, Save, RefreshCw } from "lucide-preact";
+import { Rocket, ClipboardList, Save, RefreshCw, ListPlus } from "lucide-preact";
 import type { PlanningOverrides, Sprint, VirtualWorkerProvider } from "../types.js";
 
-export type SprintSubmitMode = "plan_and_start" | "plan_only" | "draft" | "replan";
+export type SprintSubmitMode = "plan_and_start" | "plan_only" | "draft" | "replan" | "append_tasks";
 
 export interface CreateMode {
   id: SprintSubmitMode;
@@ -98,6 +98,12 @@ export const getAvailableModes = (isEditing: boolean, hasTasks: boolean): Create
         label: "Replan",
         description: "Discard existing subtasks and have the Planning agent generate a new plan.",
         icon: RefreshCw,
+      },
+      {
+        id: "append_tasks",
+        label: "Add Tasks",
+        description: "Append manual tasks to this sprint without affecting existing ones.",
+        icon: ListPlus,
       },
       {
         id: "draft",

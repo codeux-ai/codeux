@@ -123,7 +123,7 @@ export class PlanningAgentService {
     this.providerRunner = deps.providerRunner || new ProviderRunner(new DockerRunner());
   }
 
-  async improveSprintPrompt(projectId: string, input: ImprovePromptInput): Promise<ImprovePromptResult> {
+  async improveSprintPrompt(projectId: string, input: ImprovePromptInput, signal?: AbortSignal): Promise<ImprovePromptResult> {
     const project = this.requireProject(projectId);
     const planningAgent = await this.deps.agentPresetSyncService.resolveTargetedPlanningAgent(
       projectId,
@@ -142,8 +142,9 @@ export class PlanningAgentService {
       sprintName: input.name,
       goal: input.goal,
     });
+    signal?.throwIfAborted();
     const reply = worker
-      ? await this.postRequestAndWaitForReply(projectId, thread.id, worker.id, prompt)
+      ? await this.postRequestAndWaitForReply(projectId, thread.id, worker.id, prompt, signal)
       : await this.runVirtualPlanningRequest({
         projectId,
         sprintId: null,
@@ -152,6 +153,7 @@ export class PlanningAgentService {
         settings: runtime.settings,
         rawPrompt: prompt,
         overrides: input.overrides,
+        signal,
       });
     const payload = this.parseJsonReply<{ goal?: string }>(reply.bodyMarkdown);
     const goal = String(payload.goal || "").trim();
@@ -167,7 +169,7 @@ export class PlanningAgentService {
     };
   }
 
-  async planSprint(projectId: string, sprintId: string, options: PlanSprintOptions): Promise<PlanSprintResult> {
+  async planSprint(projectId: string, sprintId: string, options: PlanSprintOptions, signal?: AbortSignal): Promise<PlanSprintResult> {
     const project = this.requireProject(projectId);
     const sprint = this.requireSprint(projectId, sprintId);
     const planningAgent = await this.deps.agentPresetSyncService.resolveTargetedPlanningAgent(
@@ -187,6 +189,7 @@ export class PlanningAgentService {
       connectionId: worker?.id,
     });
 
+    signal?.throwIfAborted();
     const prompt = this.buildPlanPrompt({
       projectName: project.name,
       planningAgent,
@@ -195,7 +198,7 @@ export class PlanningAgentService {
       goal: sprint.goal,
     });
     const reply = worker
-      ? await this.postRequestAndWaitForReply(projectId, thread.id, worker.id, prompt)
+      ? await this.postRequestAndWaitForReply(projectId, thread.id, worker.id, prompt, signal)
       : await this.runVirtualPlanningRequest({
         projectId,
         sprintId,
@@ -204,6 +207,7 @@ export class PlanningAgentService {
         settings: runtime.settings,
         rawPrompt: prompt,
         overrides: options.overrides,
+        signal,
       });
     const payload = this.parsePlannedSprintReply(reply.bodyMarkdown);
 
@@ -263,7 +267,9 @@ export class PlanningAgentService {
     threadId: string,
     connectionId: string,
     bodyMarkdown: string,
+    signal?: AbortSignal,
   ): Promise<{ bodyMarkdown: string }> {
+    signal?.throwIfAborted();
     const sentMessage = this.deps.connectionChatRepository.postDashboardMessage(projectId, {
       threadId,
       connectionId,
@@ -272,6 +278,7 @@ export class PlanningAgentService {
     const timeoutAt = Date.now() + 60_000;
 
     while (Date.now() < timeoutAt) {
+      signal?.throwIfAborted();
       const reply = this.deps.connectionChatRepository
         .listMessages(threadId)
         .find((message) => (
@@ -344,6 +351,7 @@ export class PlanningAgentService {
     settings: DashboardSettings;
     rawPrompt: string;
     overrides?: PlanningOverrides;
+    signal?: AbortSignal;
   }): Promise<{ bodyMarkdown: string }> {
     const provider = args.overrides?.virtualProvider || args.settings.workers.virtualWorkerProvider;
     const providerSettings = { ...args.settings.aiProvider.providers[provider] };
@@ -368,6 +376,7 @@ export class PlanningAgentService {
     });
 
     const runProvider = async (prompt: string, currentSessionId: string, retry: boolean) => {
+      args.signal?.throwIfAborted();
       const startedAt = new Date().toISOString();
       const invocation = this.deps.executionRepository?.createProviderInvocationUsage({
         projectId: args.projectId,
@@ -390,6 +399,7 @@ export class PlanningAgentService {
         workflowSettings,
         repoPath: args.repoPath,
         githubToken: args.settings.git.githubToken,
+        signal: args.signal,
         onActivity: (description, originator) => {
           this.deps.logger?.debug(retry ? "Virtual planning worker retry activity" : "Virtual planning worker activity", {
             projectId: args.projectId,

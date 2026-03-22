@@ -507,16 +507,16 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
       deps.activityCacheService.invalidateGitStatusCache();
       return task;
     },
-    improveSprintPrompt: async (projectId, input) => {
-      return await deps.planningAgentService.improveSprintPrompt(projectId, input);
+    improveSprintPrompt: async (projectId, input, signal) => {
+      return await deps.planningAgentService.improveSprintPrompt(projectId, input, signal);
     },
     orchestrateSprint: async (projectId, sprintId) => {
       const result = await deps.executionControlService.orchestrateSprint(projectId, sprintId);
       deps.activityCacheService.invalidateGitStatusCache();
       return result;
     },
-    planSprint: async (projectId, sprintId, input) => {
-      const result = await deps.planningAgentService.planSprint(projectId, sprintId, input);
+    planSprint: async (projectId, sprintId, input, signal) => {
+      const result = await deps.planningAgentService.planSprint(projectId, sprintId, input, signal);
       deps.activityCacheService.invalidateGitStatusCache();
       return result;
     },

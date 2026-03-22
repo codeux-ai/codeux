@@ -31,7 +31,7 @@ interface SprintComposerProps {
   virtualProviders: Array<{ id: VirtualWorkerProvider; label: string }>;
   planningPresets: AgentPreset[];
   onClose: () => void;
-  onImprovePrompt?: (draft: ImprovePromptInput) => Promise<string>;
+  onImprovePrompt?: (draft: ImprovePromptInput, signal?: AbortSignal) => Promise<string>;
   onSubmit: (payload: {
     name: string;
     goal: string;
@@ -40,7 +40,9 @@ interface SprintComposerProps {
     routeOverride: PlanningRouteOption | null;
     modelOverride: string | null;
     planningAgentPresetId: string | null;
+    signal?: AbortSignal;
   }) => Promise<void> | void;
+  onAppendTasks?: () => void;
 }
 
 export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
@@ -52,9 +54,11 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   onClose,
   onImprovePrompt,
   onSubmit,
+  onAppendTasks,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const fieldsRef = useRef<HTMLFormElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const [isImproving, setIsImproving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -120,11 +124,23 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     }
   }, [initialSprint?.id]);
 
+  const handleCancel = (): void => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setIsImproving(false);
+    setIsSubmitting(false);
+    setSubmitError(null);
+  };
+
   const handleImprovePrompt = async (): Promise<void> => {
     if (!onImprovePrompt || !state.name.trim() || !state.goal.trim()) {
       return;
     }
     const rawPrompt = state.goal.trim();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setIsImproving(true);
     try {
       const improvedGoal = await onImprovePrompt({
@@ -132,10 +148,14 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         goal: rawPrompt,
         planningAgentPresetId: state.planningAgentPresetId || undefined,
         overrides: toPlanningOverrides(state.routeOverride, state.modelOverride, state.planningAgentPresetId),
-      });
+      }, controller.signal);
       state.setGoal(improvedGoal);
       state.setOriginalPrompt(rawPrompt);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      throw error;
     } finally {
+      abortRef.current = null;
       setIsImproving(false);
     }
   };
@@ -146,6 +166,13 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       return;
     }
 
+    if (state.submitMode === "append_tasks" && onAppendTasks) {
+      onAppendTasks();
+      return;
+    }
+
+    const controller = new AbortController();
+    abortRef.current = controller;
     setIsSubmitting(true);
     setSubmitError(null);
     try {
@@ -157,11 +184,14 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         routeOverride: state.routeOverride,
         modelOverride: state.modelOverride,
         planningAgentPresetId: state.planningAgentPresetId,
+        signal: controller.signal,
       });
       onClose();
     } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
       setSubmitError(error instanceof Error ? error.message : String(error));
     } finally {
+      abortRef.current = null;
       setIsSubmitting(false);
     }
   };
@@ -195,21 +225,21 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
       {isBusy && feedback && (
         <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 p-8 backdrop-blur-xl dark:bg-void-900/80">
-          <div className="relative mb-12 flex h-32 w-full max-w-md items-center justify-center">
+          <div className="relative mb-12 flex h-32 w-full max-w-md items-center justify-center overflow-hidden">
             <div className="absolute inset-x-0 bottom-8 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent dark:via-white/10" />
-            <div 
-              className="absolute transition-all duration-300 ease-out"
-              style={{ left: `${feedback.progress * 100}%`, transform: 'translateX(-50%)' }}
+            <div
+              className="absolute transition-[left] duration-200 ease-linear"
+              style={{ left: `${feedback.shipProgress * 100}%`, transform: 'translateX(-50%)' }}
             >
               <svg width="120" height="60" viewBox="-60 -30 120 60">
-                {feedback.shipType === "container" 
+                {feedback.shipType === "container"
                   ? <ContainerShip accentColor="#00E0A0" isMoving={true} isDark={isDark} />
                   : <WoodenShip accentColor="#FFB800" isMoving={true} isDark={isDark} />
                 }
               </svg>
             </div>
           </div>
-          
+
           <div className="space-y-4 text-center">
             <div className="inline-flex items-center gap-3 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-5 py-2 text-xs font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-300">
               <span className="relative flex h-2 w-2">
@@ -222,11 +252,19 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
               {feedback.text}
             </h3>
             <p className="mx-auto max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-              {busyAction === "improve" 
-                ? "The AI is analyzing your goals to produce a more precise technical definition."
-                : "Orchestrating the planning specialist to decompose your sprint into atomic subtasks."
+              {busyAction === "improve"
+                ? "The Planning agent is researching your codebase to produce a more precise technical definition."
+                : "The Planning agent is researching the codebase to decompose your sprint into grounded, atomic subtasks."
               }
             </p>
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="mt-2 inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/66 px-4 py-2 text-xs font-semibold text-slate-500 transition-colors hover:border-status-red/30 hover:text-status-red dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:border-status-red/30 dark:hover:text-status-red"
+            >
+              <X className="h-3.5 w-3.5" />
+              Cancel
+            </button>
           </div>
         </div>
       )}

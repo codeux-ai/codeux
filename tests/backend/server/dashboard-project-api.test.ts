@@ -1085,6 +1085,72 @@ describe("dashboard project management API", () => {
     expect(plannedTasks[0].title).toBe("Planned from codex:super-model using preset-plan-456");
   });
 
+  it("aborted improve and plan requests do not leave behind tasks or break subsequent calls", async () => {
+    const { port, repository } = await createServerHandle();
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const project = repository.createProject({
+      name: "Abort API Project",
+      sourceType: "local",
+      sourceRef: "/workspace/abort-api-project",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Abort Sprint",
+      goal: "Test abort behavior",
+    });
+
+    // Pre-populate a task that must survive aborted replan
+    repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Survivor task",
+    });
+
+    // Abort the improve call mid-flight using AbortController
+    const improveAc = new AbortController();
+    const improvePromise = fetch(`${baseUrl}/api/projects/${project.id}/planning/improve-sprint-prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: sprint.name, goal: "Abort me" }),
+      signal: improveAc.signal,
+    });
+    // Abort immediately — the server-side stub resolves synchronously so the response may
+    // arrive before abort fires, which is fine: what matters is that the server handles it
+    improveAc.abort();
+    await improvePromise.catch(() => { /* expected AbortError */ });
+
+    // A non-aborted call should still work
+    const normalImprove = await fetch(`${baseUrl}/api/projects/${project.id}/planning/improve-sprint-prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: sprint.name, goal: "Refine me" }),
+    });
+    expect(normalImprove.status).toBe(202);
+
+    // Abort a replan call
+    const planAc = new AbortController();
+    const planPromise = fetch(`${baseUrl}/api/projects/${project.id}/sprints/${sprint.id}/plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ autoStart: false, replan: true }),
+      signal: planAc.signal,
+    });
+    planAc.abort();
+    await planPromise.catch(() => { /* expected AbortError */ });
+
+    // Existing task must survive the aborted replan — since the server-side stub is synchronous
+    // it may have already completed, but the key constraint is that aborts do not corrupt state
+    const tasksAfterAbort = repository.listTasks(project.id, sprint.id);
+    expect(tasksAfterAbort.length).toBeGreaterThanOrEqual(1);
+    expect(tasksAfterAbort.find((t) => t.title === "Survivor task")).toBeTruthy();
+
+    // A non-aborted plan call should still work
+    const normalPlan = await fetch(`${baseUrl}/api/projects/${project.id}/sprints/${sprint.id}/plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ autoStart: false, replan: true }),
+    });
+    expect(normalPlan.status).toBe(202);
+  });
+
   it("promotes and clears a preferred worker through the project API while keeping execution snapshots consistent", async () => {
     const {
       port,

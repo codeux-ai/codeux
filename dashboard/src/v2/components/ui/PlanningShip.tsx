@@ -25,13 +25,13 @@ export const ContainerShip: FunctionComponent<ShipProps> = ({ accentColor, isMov
       <path d="M-44 4 L44 4 L38 18 L-38 18 Z" fill={deckFill} opacity={0.4} />
       <rect x={-12} y={-18} width={28} height={22} rx={2} fill={bridgeFill} stroke={bridgeStroke} strokeWidth={1} />
       <rect x={-8} y={-14} width={20} height={6} rx={1} fill={windowFill} opacity={0.6} />
-      <rect x={18} y={-26} width={10} height={12} rx={1} fill={funnelFill} />
-      <rect x={18} y={-26} width={10} height={3} fill={isDark ? "#ff4d4d" : "#e3000f"} opacity={0.8} />
+      <rect x={-1} y={-28} width={6} height={10} rx={1} fill={funnelFill} />
+      <rect x={-1} y={-28} width={6} height={3} fill={isDark ? "#ff4d4d" : "#e3000f"} opacity={0.8} />
       {isMoving && (
         <g opacity={0.4}>
           {[0, 1, 2, 3, 4].map(j => (
-            <circle key={j} cx={23 + j * 0.8} cy={-28} r={1} fill={smokeFill}>
-              <animate attributeName="cy" values="-28;-50" dur={`${2 + j * 0.5}s`} repeatCount="indefinite" begin={`${j * 0.5}s`} />
+            <circle key={j} cx={2 + j * 0.8} cy={-30} r={1} fill={smokeFill}>
+              <animate attributeName="cy" values="-30;-52" dur={`${2 + j * 0.5}s`} repeatCount="indefinite" begin={`${j * 0.5}s`} />
               <animate attributeName="r" values="1;4" dur={`${2 + j * 0.5}s`} repeatCount="indefinite" begin={`${j * 0.5}s`} />
               <animate attributeName="opacity" values="0.2;0" dur={`${2 + j * 0.5}s`} repeatCount="indefinite" begin={`${j * 0.5}s`} />
             </circle>

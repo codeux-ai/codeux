@@ -17,6 +17,7 @@ import {
 } from "lucide-preact";
 import { fetchExternalSettingsHints } from "../lib/api/dashboard-api.js";
 import type { ProjectSettings, SettingsValueSource, SystemSettings, ThinkingMode } from "../types.js";
+import { ActionButton, NoticePanel } from "./components/settings/SettingsSurface.js";
 import { useProjectData } from "./context/project-data.js";
 import {
   fetchProjectEffectiveSettings,
@@ -302,50 +303,6 @@ const SectionCard: FunctionComponent<{
   </div>
 );
 
-const NoticePanel: FunctionComponent<{
-  tone?: "neutral" | "warning" | "success";
-  title: string;
-  children: ComponentChildren;
-}> = ({ tone = "neutral", title, children }) => {
-  const toneClass = tone === "warning"
-    ? "border-status-red/20 bg-status-red/[0.06] text-status-red"
-    : tone === "success"
-      ? "border-signal-500/20 bg-signal-500/[0.07] text-signal-700 dark:text-signal-300"
-      : "border-black/[0.06] bg-black/[0.03] text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300";
-
-  return (
-    <div className={`rounded-[1.35rem] border px-5 py-4 ${toneClass}`}>
-      <div className="text-[11px] font-bold uppercase tracking-[0.16em]">{title}</div>
-      <div className="mt-2 text-sm font-medium leading-relaxed">{children}</div>
-    </div>
-  );
-};
-
-const ActionButton: FunctionComponent<{
-  label: string;
-  onClick: () => void;
-  tone?: "primary" | "secondary" | "danger";
-  busy?: boolean;
-  disabled?: boolean;
-}> = ({ label, onClick, tone = "secondary", busy = false, disabled = false }) => {
-  const toneClass = tone === "primary"
-    ? "bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100"
-    : tone === "danger"
-      ? "border border-status-red/30 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.12]"
-      : "border border-black/[0.06] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white";
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled || busy}
-      className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-60 ${toneClass}`}
-    >
-      {busy ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.2} /> : null}
-      {label}
-    </button>
-  );
-};
 
 const IntegrationConfigRow: FunctionComponent<{
   label: string;

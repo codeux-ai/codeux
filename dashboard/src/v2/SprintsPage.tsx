@@ -3,27 +3,20 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/ho
 import gsap from "gsap";
 import {
   Activity,
-  AlertTriangle,
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
   CheckCircle2,
   Download,
   Heart,
-  Maximize2,
-  MoreVertical,
   Pencil,
-  Play,
   Plus,
   Radio,
   Sparkles,
-  Square,
   Target,
   X,
   XCircle,
 } from "lucide-preact";
 import { SprintBubble } from "./components/ui/SprintBubble.js";
-import { HumanInterventionBadge } from "./components/ui/HumanInterventionBadge.js";
+import { SprintLedger } from "./components/sprints/SprintLedger.js";
+import { AddTaskModal } from "./components/ui/AddTaskModal.js";
 import { SprintComposer } from "./components/ui/SprintComposer.js";
 import { filterShowcaseSprints, sortSprintsByRecency } from "./lib/sprint-gallery.js";
 import {
@@ -33,15 +26,17 @@ import {
 } from "./lib/sprint-composer-state.js";
 import { SprintMarkdownModal } from "./components/ui/SprintMarkdownModal.js";
 import { SprintSettingsOverrideModal } from "./components/ui/SprintSettingsOverrideModal.js";
-import type { ImprovePromptInput, Sprint, SprintStatus, VirtualWorkerProvider } from "./types.js";
+import type { CreateTaskInput, ImprovePromptInput, Sprint, SprintStatus, Task, VirtualWorkerProvider } from "./types.js";
 import { useProjectData } from "./context/project-data.js";
 import { useProjectSprints } from "./hooks/use-project-sprints.js";
 import { useProjectExecution } from "./hooks/use-project-execution.js";
 import {
   createSprint,
+  createTask,
   deleteSprint,
   exportSprintMarkdown,
   fetchProjectExecution,
+  fetchTasks,
   importSprintMarkdown,
   improveSprintPrompt,
   planSprint,
@@ -49,47 +44,15 @@ import {
 } from "./lib/project-api.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
 import { buildTaskBundle, parseTaskBundle } from "./lib/markdown-transfer.js";
+import { toTaskViewModel } from "./lib/view-models.js";
 import { fetchProjectEffectiveSettings } from "./lib/settings-api.js";
 import { cancelSprintRun, orchestrateSprint } from "../lib/api/dashboard-api.js";
 import { getSprintHumanInterventionBySprintId } from "../lib/execution-intervention.js";
 import type { AgentPreset } from "./types.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
-const TABLE_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-});
-const TABLE_META_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-});
 const ACTIVE_CONNECTION_STATUSES = new Set(["connected", "listening", "idle"]);
 const IN_WORK_STATUSES = new Set<SprintStatus>(["running", "paused"]);
-const STATUS_LABELS: Record<SprintStatus, string> = {
-  running: "Running",
-  paused: "Paused",
-  completed: "Completed",
-  failed: "Failed",
-  cancelled: "Cancelled",
-  idle: "Draft",
-};
-const STATUS_ORDER: Record<SprintStatus, number> = {
-  running: 0,
-  paused: 1,
-  idle: 2,
-  completed: 3,
-  failed: 4,
-  cancelled: 5,
-};
-const STATUS_BADGE_TONES: Record<SprintStatus, string> = {
-  running: "border-status-green/25 bg-status-green/10 text-status-green",
-  paused: "border-ember-500/25 bg-ember-500/10 text-ember-500",
-  completed: "border-black/[0.08] bg-black/[0.04] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300",
-  failed: "border-status-red/20 bg-status-red/10 text-status-red",
-  cancelled: "border-slate-300/40 bg-slate-200/55 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400",
-  idle: "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 dark:text-signal-300",
-};
 const PLANNING_ROLE_PRIORITY: Record<string, number> = {
   worker: 0,
   listener: 1,
@@ -108,16 +71,6 @@ const VIRTUAL_PROVIDER_LABELS: Record<string, string> = {
   "claude-code": "Virtual Claude Code Worker",
 };
 
-type SprintTableSortKey = "showcasePinned" | "sprintKey" | "name" | "status" | "tasksCount" | "completion" | "createdAt";
-type SprintTableSortDirection = "asc" | "desc";
-
-const formatSprintKey = (sprint: Sprint): string => (
-  sprint.number ? `SPR-${sprint.number}` : sprint.slug.toUpperCase()
-);
-
-const shortenId = (value: string): string => value.slice(0, 8);
-const formatTableDate = (value: string): string => TABLE_DATE_FORMATTER.format(new Date(value));
-const formatMetaDate = (value: string): string => TABLE_META_DATE_FORMATTER.format(new Date(value));
 const compareString = (left: string, right: string): number => (
   left.localeCompare(right, undefined, { sensitivity: "base" })
 );
@@ -144,18 +97,13 @@ export const SprintsPage: FunctionComponent = () => {
     tasksMarkdown: string;
   } | null>(null);
   const [overrideSprint, setOverrideSprint] = useState<Sprint | null>(null);
+  const [addTaskForSprint, setAddTaskForSprint] = useState<Sprint | null>(null);
+  const [addTaskSprintTasks, setAddTaskSprintTasks] = useState<Task[]>([]);
   const [workerMode, setWorkerMode] = useState<null | {
     executionMode: "CONNECTED_MCP" | "VIRTUAL";
     virtualWorkerProvider: string;
   }>(null);
   const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
-  const [tableSort, setTableSort] = useState<{
-    key: SprintTableSortKey;
-    direction: SprintTableSortDirection;
-  }>({
-    key: "createdAt",
-    direction: "desc",
-  });
   const { selectedProject } = useProjectData();
   const { sprints, refresh } = useProjectSprints(selectedProject?.id || null);
   const { execution, refresh: refreshExecution } = useProjectExecution(selectedProject?.id || null);
@@ -366,35 +314,6 @@ export const SprintsPage: FunctionComponent = () => {
     };
   }, [planningConnection, workerMode]);
 
-  const tableSprints = useMemo(() => {
-    const ordered = [...sortedSprints].sort((left, right) => {
-      switch (tableSort.key) {
-        case "showcasePinned":
-          return Number(right.showcasePinned) - Number(left.showcasePinned);
-        case "sprintKey":
-          if (left.number !== null && right.number !== null && left.number !== right.number) {
-            return left.number - right.number;
-          }
-          return compareString(formatSprintKey(left), formatSprintKey(right));
-        case "name":
-          return compareString(left.name, right.name);
-        case "status":
-          return STATUS_ORDER[left.status] - STATUS_ORDER[right.status];
-        case "tasksCount":
-          return left.tasksCount - right.tasksCount;
-        case "completion":
-          return left.completion - right.completion;
-        case "createdAt":
-        default:
-          return left.createdAt.localeCompare(right.createdAt);
-      }
-    });
-
-    if (tableSort.direction === "desc") {
-      ordered.reverse();
-    }
-    return ordered;
-  }, [sortedSprints, tableSort]);
 
   const runSprintAction = async (
     actionId: string,
@@ -477,21 +396,6 @@ export const SprintsPage: FunctionComponent = () => {
     }, { waitForActiveRun: true });
   };
 
-  const handleTableSort = (key: SprintTableSortKey) => {
-    setTableSort((current) => {
-      if (current.key === key) {
-        return {
-          key,
-          direction: current.direction === "asc" ? "desc" : "asc",
-        };
-      }
-      return {
-        key,
-        direction: key === "name" || key === "status" || key === "showcasePinned" || key === "sprintKey" ? "asc" : "desc",
-      };
-    });
-  };
-
   const animateLatestCell = () => {
     requestAnimationFrame(() => {
       if (!bubblesRef.current) {
@@ -524,6 +428,7 @@ export const SprintsPage: FunctionComponent = () => {
     routeOverride: PlanningRouteOption | null;
     modelOverride: string | null;
     planningAgentPresetId: string | null;
+    signal?: AbortSignal;
   }): Promise<void> => {
     if (!selectedProject) {
       return;
@@ -539,19 +444,19 @@ export const SprintsPage: FunctionComponent = () => {
       });
 
       if (payload.submitMode === "plan_only" || payload.submitMode === "replan") {
-        await planSprint(selectedProject.id, editingSprint.id, { 
-          autoStart: false, 
+        await planSprint(selectedProject.id, editingSprint.id, {
+          autoStart: false,
           replan: payload.submitMode === "replan",
           planningAgentPresetId: payload.planningAgentPresetId || undefined,
           overrides,
-        });
+        }, payload.signal);
       } else if (payload.submitMode === "plan_and_start") {
-        await planSprint(selectedProject.id, editingSprint.id, { 
+        await planSprint(selectedProject.id, editingSprint.id, {
           autoStart: true,
           replan: false,
           planningAgentPresetId: payload.planningAgentPresetId || undefined,
           overrides,
-        });
+        }, payload.signal);
       }
 
       await refresh();
@@ -571,29 +476,63 @@ export const SprintsPage: FunctionComponent = () => {
     });
 
     if (payload.submitMode === "plan_only") {
-      await planSprint(selectedProject.id, created.id, { 
-        autoStart: false, 
+      await planSprint(selectedProject.id, created.id, {
+        autoStart: false,
         planningAgentPresetId: payload.planningAgentPresetId || undefined,
         overrides,
-      });
+      }, payload.signal);
     } else if (payload.submitMode === "plan_and_start") {
-      await planSprint(selectedProject.id, created.id, { 
-        autoStart: true, 
+      await planSprint(selectedProject.id, created.id, {
+        autoStart: true,
         planningAgentPresetId: payload.planningAgentPresetId || undefined,
         overrides,
-      });
+      }, payload.signal);
     }
 
     await Promise.all([refresh(), refreshExecution()]);
     animateLatestCell();
   };
 
-  const handleImprovePrompt = async (draft: ImprovePromptInput): Promise<string> => {
+  const handleImprovePrompt = async (draft: ImprovePromptInput, signal?: AbortSignal): Promise<string> => {
     if (!selectedProject) {
       throw new Error("Select a project before using Plan ahead with AI.");
     }
-    const response = await improveSprintPrompt(selectedProject.id, draft);
+    const response = await improveSprintPrompt(selectedProject.id, draft, signal);
     return response.goal;
+  };
+
+  const handleOpenAppendTasks = async (sprint: Sprint) => {
+    if (!selectedProject) return;
+    try {
+      const taskRecords = await fetchTasks(selectedProject.id, sprint.id);
+      const sprintsById = new Map(sprints.map((s) => [s.id, s]));
+      const tasks = taskRecords.map((t) => toTaskViewModel(t, new Map(), sprintsById));
+      setAddTaskSprintTasks(tasks);
+      setAddTaskForSprint(sprint);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const handleAppendTask = async (draft: {
+    sprintId: string;
+    title: string;
+    description: string;
+    promptMarkdown: string;
+    status: string;
+    priority: string;
+    executorType: string;
+    dependsOnTaskIds: string[];
+  }) => {
+    if (!selectedProject) return;
+    await createTask(selectedProject.id, draft as CreateTaskInput);
+    await refresh();
+    // Refresh the task list for the modal so new task appears in dependencies
+    if (addTaskForSprint) {
+      const taskRecords = await fetchTasks(selectedProject.id, addTaskForSprint.id);
+      const sprintsById = new Map(sprints.map((s) => [s.id, s]));
+      setAddTaskSprintTasks(taskRecords.map((t) => toTaskViewModel(t, new Map(), sprintsById)));
+    }
   };
 
   const handleDeleteSprint = async (sprintId: string) => {
@@ -646,15 +585,6 @@ export const SprintsPage: FunctionComponent = () => {
     await refresh();
   };
 
-  const renderSortIndicator = (key: SprintTableSortKey) => {
-    if (tableSort.key !== key) {
-      return <ArrowUpDown className="h-3 w-3 text-slate-300 dark:text-slate-600" strokeWidth={2.2} />;
-    }
-    return tableSort.direction === "asc"
-      ? <ArrowUp className="h-3 w-3 text-signal-500" strokeWidth={2.2} />
-      : <ArrowDown className="h-3 w-3 text-signal-500" strokeWidth={2.2} />;
-  };
-
   const openRowActionsMenu = (event: MouseEvent, sprintId: string) => {
     event.stopPropagation();
     const trigger = event.currentTarget as HTMLElement;
@@ -675,7 +605,7 @@ export const SprintsPage: FunctionComponent = () => {
   };
 
   const activeRowMenuSprint = rowMenu
-    ? tableSprints.find((sprint) => sprint.id === rowMenu.sprintId) || null
+    ? displaySprints.find((sprint) => sprint.id === rowMenu.sprintId) || null
     : null;
 
   return (
@@ -846,228 +776,24 @@ export const SprintsPage: FunctionComponent = () => {
                     }}
                     onImprovePrompt={handleImprovePrompt}
                     onSubmit={(payload) => handleSubmitSprint(payload)}
+                    onAppendTasks={editingSprint ? () => { void handleOpenAppendTasks(editingSprint); } : undefined}
                   />
                 </div>
               </div>
             </div>
 
             <div className="rounded-[2.2rem] border border-black/[0.06] bg-white/70 shadow-[0_12px_36px_rgba(15,23,42,0.05)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_14px_40px_rgba(0,0,0,0.22)]">
-              <div className="flex flex-wrap items-center justify-between gap-6 border-b border-black/[0.06] px-6 py-5 dark:border-white/[0.06]">
-                <div>
-                  <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-ember-500">
-                    <Heart className="h-3.5 w-3.5" strokeWidth={2.3} />
-                    Sprint Ledger
-                  </div>
-                  <h2 className="mt-2 font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                    All sprints, fully sortable.
-                  </h2>
-                  <p className="mt-2 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-                    The showcase above reflects the sprints marked with the heart. New sprints are showcased by default. Pin or unpin any sprint using the heart icon.
-                  </p>
-                </div>
-                <div className="text-xs font-mono text-slate-400">{tableSprints.length} total</div>
-              </div>
-
-              {tableSprints.length === 0 ? (
-                <div className="px-6 py-8 text-sm text-slate-400">
-                  No sprints exist yet. Create one above and it will appear in the showcase and in the ledger below.
-                </div>
-              ) : (
-                <div className="overflow-x-auto px-4 pb-5">
-                  <table className="min-w-full border-separate [border-spacing:0_0.55rem] text-left">
-                    <thead>
-                      <tr className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-                        <th className="px-4 py-2">
-                          <button
-                            type="button"
-                            onClick={() => handleTableSort("showcasePinned")}
-                            className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
-                          >
-                            Showcase
-                            {renderSortIndicator("showcasePinned")}
-                          </button>
-                        </th>
-                        <th className="px-4 py-2">
-                          <button
-                            type="button"
-                            onClick={() => handleTableSort("sprintKey")}
-                            className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
-                          >
-                            Sprint ID
-                            {renderSortIndicator("sprintKey")}
-                          </button>
-                        </th>
-                        <th className="px-4 py-2">
-                          <button
-                            type="button"
-                            onClick={() => handleTableSort("name")}
-                            className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
-                          >
-                            Sprint
-                            {renderSortIndicator("name")}
-                          </button>
-                        </th>
-                        <th className="px-4 py-2">
-                          <button
-                            type="button"
-                            onClick={() => handleTableSort("status")}
-                            className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
-                          >
-                            Status
-                            {renderSortIndicator("status")}
-                          </button>
-                        </th>
-                        <th className="px-4 py-2">
-                          <button
-                            type="button"
-                            onClick={() => handleTableSort("tasksCount")}
-                            className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
-                          >
-                            Tasks
-                            {renderSortIndicator("tasksCount")}
-                          </button>
-                        </th>
-                        <th className="px-4 py-2">
-                          <button
-                            type="button"
-                            onClick={() => handleTableSort("completion")}
-                            className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
-                          >
-                            Completion
-                            {renderSortIndicator("completion")}
-                          </button>
-                        </th>
-                        <th className="px-4 py-2">
-                          <button
-                            type="button"
-                            onClick={() => handleTableSort("createdAt")}
-                            className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
-                          >
-                            Created
-                            {renderSortIndicator("createdAt")}
-                          </button>
-                        </th>
-                        <th className="px-4 py-2 text-right">Controls</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {tableSprints.map((sprint) => {
-                        const activeRun = activeRunsBySprintId.get(sprint.id);
-                        const humanIntervention = interventionBySprintId.get(sprint.id) || null;
-                        const pendingActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
-                        const pinActionId = `sprint-showcase:${sprint.id}`;
-                        const isCompleted = sprint.status === "completed";
-                        const cellClass = `border-y border-black/[0.05] bg-white/82 px-4 py-3 align-top dark:border-white/[0.05] dark:bg-white/[0.035] ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""}`;
-                        return (
-                          <tr key={sprint.id} className="group">
-                            <td className={`${cellClass} rounded-l-[1.4rem] border-l`}>
-                              <button
-                                type="button"
-                                onClick={() => { void handleToggleShowcase(sprint); }}
-                                disabled={pendingActionIds.has(pinActionId)}
-                                className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition-colors ${
-                                  sprint.showcasePinned
-                                    ? "border-status-red/20 bg-status-red/10 text-status-red"
-                                    : "border-black/[0.06] bg-black/[0.03] text-slate-400 hover:text-status-red dark:border-white/[0.06] dark:bg-white/[0.03]"
-                                } disabled:cursor-not-allowed disabled:opacity-50`}
-                              >
-                                <Heart className="h-3.5 w-3.5" fill={sprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
-                              </button>
-                            </td>
-                            <td className={`${cellClass} min-w-[8rem]`}>
-                              <div className="font-mono text-sm font-bold text-slate-700 dark:text-white">{formatSprintKey(sprint)}</div>
-                              <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                                {shortenId(sprint.id)}
-                              </div>
-                            </td>
-                            <td className={`${cellClass} min-w-[22rem]`}>
-                              <div className={`font-display text-lg font-black tracking-tight ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-slate-900 dark:text-white"}`}>{sprint.name}</div>
-                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
-                                <span>Updated {formatMetaDate(sprint.updatedAt)}</span>
-                                <span>·</span>
-                                <span>{formatTableDate(sprint.createdAt)}</span>
-                              </div>
-                              {humanIntervention && (
-                                <div className="mt-3">
-                                  <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="left" />
-                                </div>
-                              )}
-                              {sprint.goal ? (
-                                <p className={`mt-2 max-w-xl text-sm leading-relaxed ${isCompleted ? "text-slate-400 dark:text-slate-500" : "text-slate-500 dark:text-slate-400"}`}>
-                                  {sprint.goal}
-                                </p>
-                              ) : null}
-                            </td>
-                            <td className={cellClass}>
-                              <div className="flex flex-col items-start gap-2">
-                                <span className={`inline-flex rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] ${STATUS_BADGE_TONES[sprint.status]}`}>
-                                  {STATUS_LABELS[sprint.status]}
-                                </span>
-                                {humanIntervention && (
-                                  <div className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber">
-                                    <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2.2} />
-                                    Intervention
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                            <td className={cellClass}>
-                              <div className="font-mono text-lg font-bold text-slate-700 dark:text-white">{sprint.tasksCount}</div>
-                              <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">planned tasks</div>
-                            </td>
-                            <td className={`${cellClass} min-w-[11rem]`}>
-                              <div className="flex items-center gap-3">
-                                <div className="h-2 flex-1 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.06]">
-                                  <div
-                                    className="h-full rounded-full bg-signal-500 transition-[width]"
-                                    style={{ width: `${sprint.completion}%` }}
-                                  />
-                                </div>
-                                <span className="font-mono text-sm font-bold text-slate-700 dark:text-white">{sprint.completion}%</span>
-                              </div>
-                            </td>
-                            <td className={cellClass}>
-                              <div className="font-medium text-slate-700 dark:text-slate-200">{formatTableDate(sprint.createdAt)}</div>
-                              <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-400">created</div>
-                            </td>
-                            <td className={`${cellClass} rounded-r-[1.4rem] border-r`}>
-                              <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                                <button
-                                  type="button"
-                                  onClick={() => { handleSprintToggle(sprint.id); }}
-                                  disabled={pendingActionIds.has(pendingActionId)}
-                                  className={`inline-flex h-10 min-w-[5.5rem] items-center justify-center gap-2 rounded-full border px-4 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${
-                                    activeRun
-                                      ? "border-status-red/20 bg-status-red/[0.1] text-status-red hover:bg-status-red/[0.14]"
-                                      : "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 hover:bg-signal-500/[0.12] dark:text-signal-300"
-                                  } disabled:cursor-not-allowed disabled:opacity-50`}
-                                >
-                                  {activeRun ? <Square className="h-3.5 w-3.5" fill="currentColor" /> : <Play className="h-3.5 w-3.5" fill="currentColor" />}
-                                  {activeRun ? "Stop" : "Start"}
-                                </button>
-                                <a
-                                  href={`/tasks?sprint=${encodeURIComponent(sprint.id)}`}
-                                  className="inline-flex h-10 min-w-[4.8rem] items-center justify-center gap-2 rounded-full border border-black/[0.06] bg-white/80 px-4 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
-                                >
-                                  Open
-                                  <Maximize2 className="h-3.5 w-3.5" />
-                                </a>
-                                <button
-                                  type="button"
-                                  onClick={(event) => openRowActionsMenu(event, sprint.id)}
-                                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
-                                >
-                                  <MoreVertical className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              <SprintLedger
+                sprints={displaySprints}
+                activeRunsBySprintId={activeRunsBySprintId}
+                interventionBySprintId={interventionBySprintId}
+                pendingActionIds={pendingActionIds}
+                onToggleShowcase={(sprint) => { void handleToggleShowcase(sprint); }}
+                onSprintToggle={handleSprintToggle}
+                onOpenRowMenu={openRowActionsMenu}
+                onBulkStart={(ids) => { for (const id of ids) handleSprintToggle(id); }}
+                onBulkDelete={(ids) => { for (const id of ids) void handleDeleteSprint(id); }}
+              />
             </div>
           </>
         ) : (
@@ -1175,6 +901,19 @@ export const SprintsPage: FunctionComponent = () => {
           onSaved={async () => {
             await Promise.all([refresh(), refreshExecution()]);
           }}
+        />
+      )}
+
+      {addTaskForSprint && (
+        <AddTaskModal
+          sprints={[addTaskForSprint]}
+          availableTasks={addTaskSprintTasks}
+          initialSprintId={addTaskForSprint.id}
+          onClose={() => {
+            setAddTaskForSprint(null);
+            setAddTaskSprintTasks([]);
+          }}
+          onSubmit={handleAppendTask}
         />
       )}
     </>
