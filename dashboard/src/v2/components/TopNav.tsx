@@ -1,11 +1,14 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Bell, Command, Search, Moon, Sun, ChevronDown, Activity, FolderOpen, ArrowRight } from "lucide-preact";
+import { Bell, Command, Search, Moon, Sun, ChevronDown, Activity, FolderOpen, ArrowRight, Cpu, Zap } from "lucide-preact";
 import { Link } from "@tanstack/react-router";
 import { StatusDot } from "./ui/StatusDot.js";
 import { AddProjectModal } from "./ui/AddProjectModal.js";
 import { useProjectData } from "../context/project-data.js";
+import { useProjectExecution } from "../hooks/use-project-execution.js";
+import { getProjectWorkerOptions } from "../lib/project-worker-options.js";
+import { setProjectPreferredWorker } from "../lib/project-api.js";
 
 interface TopNavProps {
     isDark: boolean;
@@ -15,7 +18,9 @@ interface TopNavProps {
 export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) => {
     const navRef = useRef<HTMLElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const workerDropdownRef = useRef<HTMLDivElement>(null);
     const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [workerDropdownOpen, setWorkerDropdownOpen] = useState(false);
     const [showAddProject, setShowAddProject] = useState(false);
     const {
         projects,
@@ -25,17 +30,23 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
         loading,
     } = useProjectData();
 
+    const { execution, loading: executionLoading, refresh: refreshExecution } = useProjectExecution(selectedProject?.id || null);
+    const { options: workerOptions, selectedOption: selectedWorker, hasConnections } = getProjectWorkerOptions(execution, executionLoading);
+
     useLayoutEffect(() => {
         if (navRef.current) {
             gsap.fromTo(navRef.current, { y: -20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.9, ease: "power3.out" });
         }
     }, []);
 
-    // Close dropdown on outside click
+    // Close dropdowns on outside click
     useEffect(() => {
         const handler = (e: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
                 setDropdownOpen(false);
+            }
+            if (workerDropdownRef.current && !workerDropdownRef.current.contains(e.target as Node)) {
+                setWorkerDropdownOpen(false);
             }
         };
         document.addEventListener("mousedown", handler);
@@ -49,6 +60,21 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
             sourceRef: project.path,
             cloneDir: project.cloneDir,
         });
+    };
+
+    const handleWorkerSelect = async (option: typeof workerOptions[0]) => {
+        if (!selectedProject) return;
+        setWorkerDropdownOpen(false);
+        try {
+            await setProjectPreferredWorker(selectedProject.id, {
+                workerConnectionId: option.connectionId,
+                workerEndpointId: option.workerEndpointId,
+                workerEndpointKey: option.workerEndpointKey,
+            });
+            await refreshExecution();
+        } catch (err) {
+            console.error("Failed to update preferred worker:", err);
+        }
     };
 
     return (
@@ -101,7 +127,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                         <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${dropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
 
-                    {/* Dropdown */}
+                    {/* Project Dropdown */}
                     {dropdownOpen && (
                         <div className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
                             <div className="px-3 pt-3 pb-1.5">
@@ -150,6 +176,80 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                         </div>
                     )}
                 </div>
+
+                {/* Worker Selector */}
+                {selectedProject && (
+                    <div className="relative hidden lg:block" ref={workerDropdownRef}>
+                        <button
+                            onClick={() => setWorkerDropdownOpen(!workerDropdownOpen)}
+                            className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group"
+                        >
+                            <div className="flex items-center justify-center w-4 h-4 rounded-md bg-signal-500/10 text-signal-500">
+                                <Cpu className="w-3 h-3" strokeWidth={2.5} />
+                            </div>
+                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">
+                                {selectedWorker?.label || (executionLoading ? "Loading..." : "Assign Worker")}
+                            </span>
+                            <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${workerDropdownOpen ? 'rotate-180' : ''}`} />
+                        </button>
+
+                        {/* Worker Dropdown */}
+                        {workerDropdownOpen && (
+                            <div className="absolute right-0 top-full mt-2 w-64 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
+                                <div className="px-3 pt-3 pb-1.5">
+                                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Available Workers</span>
+                                </div>
+                                <div className="max-h-64 overflow-y-auto">
+                                    {workerOptions.map((option) => (
+                                        <button
+                                            key={option.id}
+                                            onClick={() => handleWorkerSelect(option)}
+                                            className={`w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-signal-500/5 transition-colors group ${option.isPrimary ? 'bg-signal-500/8' : ''}`}
+                                        >
+                                            <div className="relative">
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${option.isPrimary ? 'bg-signal-500/20 text-signal-500' : 'bg-slate-100 dark:bg-white/5 text-slate-400'}`}>
+                                                    <Cpu className="w-4 h-4" />
+                                                </div>
+                                                <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-void-800 ${option.status === 'online' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                            </div>
+                                            <div className="flex flex-col min-w-0">
+                                                <span className={`text-sm font-bold truncate transition-colors ${option.isPrimary ? 'text-signal-600 dark:text-signal-400' : 'text-slate-700 dark:text-slate-200'}`}>
+                                                    {option.label}
+                                                </span>
+                                                <span className="text-[10px] font-medium text-slate-400 truncate uppercase tracking-wider">
+                                                    {option.subLabel}
+                                                </span>
+                                            </div>
+                                            {option.isPrimary && (
+                                                <Zap className="ml-auto w-3 h-3 text-signal-500 fill-signal-500" />
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                                {!executionLoading && workerOptions.length === 0 && (
+                                    <div className="px-4 py-6 text-center">
+                                        <div className="w-10 h-10 rounded-full bg-slate-50 dark:bg-white/5 flex items-center justify-center mx-auto mb-2">
+                                            <Cpu className="w-5 h-5 text-slate-300" />
+                                        </div>
+                                        <p className="text-xs text-slate-400 font-medium">
+                                            No connected workers available.
+                                        </p>
+                                    </div>
+                                )}
+                                <div className="p-2 border-t border-black/[0.04] dark:border-white/[0.04] mt-1">
+                                    <Link
+                                        to="/agents"
+                                        onClick={() => setWorkerDropdownOpen(false)}
+                                        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-xl transition-colors"
+                                    >
+                                        <span>Worker Management</span>
+                                        <ArrowRight className="w-3 h-3" strokeWidth={2} />
+                                    </Link>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 <div className="w-px h-5 bg-black/10 dark:bg-white/10 hidden md:block" />
 
