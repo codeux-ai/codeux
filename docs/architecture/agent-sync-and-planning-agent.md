@@ -108,8 +108,11 @@ The `Improve with AI` flow now encourages the Planning agent to scan the reposit
 
 The sprint composer can provide request-scoped overrides for the planning process:
 
+- `planningAgentPresetId`: Select a specific agent preset to use for planning. Only presets with a `planning` label are eligible for selection. If omitted or invalid, the system falls back to the default built-in `Planning agent`.
 - `workerId`: Explicitly route the planning request to a specific connected MCP worker.
 - `virtualModel`: Override the default virtual worker model (e.g., using a more capable model for complex planning) without changing project-wide settings.
+
+These overrides are honored by all planning-related actions, including `Improve with AI` (Plan ahead with AI), `Plan Only`, `Plan & Start`, and `Replan`. Selecting an alternate planning preset allows operators to use specialized instructions for a single sprint without changing the project's default worker routing or virtual model overrides.
 
 ### Replanning
 
