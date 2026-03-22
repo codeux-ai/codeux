@@ -89,24 +89,19 @@ export class EmbeddingService {
       feeds.position_ids = new ort.Tensor("int64", positionIds, [1, seqLength]);
     }
 
-    // Decoder models (e.g. Qwen3) require empty past_key_values for initial pass
+    // Decoder models (e.g. Qwen3) may require empty past_key_values for initial pass.
+    // Shape: [batch=1, num_kv_heads, past_seq_len=0, head_dim] — inferred from session metadata.
     for (const name of inputNames) {
-      if (name.startsWith("past_key_values") && !feeds[name]) {
-        const meta = this.session.inputMetadata?.[name] ?? (this.session as any)._inputNames;
-        // Shape is typically [batch, num_kv_heads, 0, head_dim] — 0 past tokens
-        // Infer dimensions from the model's input shape metadata
-        const dims = (this.session as any).inputMetadata?.[name]?.dims;
-        if (dims && Array.isArray(dims)) {
-          // Replace dynamic axes with concrete values: batch=1, past_seq_len=0
-          const shape = dims.map((d: number | string) => typeof d === "number" ? d : 0);
-          shape[0] = 1; // batch size
-          const size = shape.reduce((a: number, b: number) => a * b, 1);
-          feeds[name] = new ort.Tensor("float32", new Float32Array(size), shape);
-        } else {
-          // Fallback: create empty [1, 1, 0, 1] tensor (0 past tokens = empty)
-          feeds[name] = new ort.Tensor("float32", new Float32Array(0), [1, 1, 0, 1]);
-        }
-      }
+      if (!name.startsWith("past_key_values") || feeds[name]) continue;
+      const meta = (this.session as any).inputMetadata?.[name];
+      const dims: (number | string)[] | undefined = meta?.dims;
+      // Replace dynamic axes with 0 (empty past), fix batch=1
+      const shape = dims?.map((d: number | string) => typeof d === "number" ? d : 0) ?? [1, 1, 0, 1];
+      if (shape.length > 0) shape[0] = 1;
+      const size = shape.reduce((a: number, b: number) => a * b, 1);
+      const dtype = meta?.type === "tensor(float16)" ? "float16" : "float32";
+      const data = dtype === "float16" ? new Uint16Array(size) : new Float32Array(size);
+      feeds[name] = new ort.Tensor(dtype, data, shape);
     }
 
     const results = await this.session.run(feeds);

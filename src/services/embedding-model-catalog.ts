@@ -17,9 +17,9 @@ export const EMBEDDING_MODEL_CATALOG: Record<EmbeddingModelId, EmbeddingModelInf
   "Qwen3-Embedding-0.6B": {
     id: "Qwen3-Embedding-0.6B",
     displayName: "Qwen3 Embedding 0.6B",
-    description: "Multilingual embedding model. Higher quality, larger footprint (~567 MB quantized). 1024 dimensions.",
+    description: "Multilingual embedding model. Higher quality, larger footprint (~614 MB quantized). 1024 dimensions.",
     dimension: 1024,
-    sizeBytes: 567_000_000,
+    sizeBytes: 614_000_000,
     language: "Multilingual",
     files: [
       "model.onnx",
@@ -38,8 +38,8 @@ export function getModelDownloadUrl(modelId: EmbeddingModelId, fileName: string)
   const repo = repoMap[modelId];
 
   if (fileName === "model.onnx") {
-    // Qwen3 uses the quantized ONNX variant from the onnx-community repo
-    const onnxFile = modelId === "Qwen3-Embedding-0.6B" ? "onnx/model_q4f16.onnx" : "onnx/model.onnx";
+    // Qwen3 uses the int8 quantized ONNX variant from the onnx-community repo
+    const onnxFile = modelId === "Qwen3-Embedding-0.6B" ? "onnx/model_quantized.onnx" : "onnx/model.onnx";
     return `https://huggingface.co/${repo}/resolve/main/${onnxFile}`;
   }
 
