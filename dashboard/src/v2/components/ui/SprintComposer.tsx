@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useRef, useState, useEffect, useMemo } from "preact/hooks";
 import gsap from "gsap";
 import {
   ClipboardList,
@@ -19,6 +19,8 @@ import {
   type PlanningRouteOption 
 } from "../../lib/sprint-composer-state.js";
 import { getProviderModelOptions } from "../../lib/settings-view-models.js";
+import { getPlanningFeedback, type PlanningActionType } from "../../lib/sprint-planning-feedback.js";
+import { ContainerShip, WoodenShip } from "./PlanningShip.js";
 
 interface SprintComposerProps {
   nextId: string;
@@ -51,11 +53,40 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const [isImproving, setIsImproving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
 
   const state = useSprintComposerState(initialSprint);
 
   const activeMode = state.availableModes.find((mode) => mode.id === state.submitMode) || state.availableModes[0]!;
   const SubmitIcon = activeMode.icon;
+
+  const isBusy = isImproving || isSubmitting;
+  const busyAction = useMemo<PlanningActionType | null>(() => {
+    if (isImproving) return "improve";
+    if (isSubmitting) {
+      if (state.submitMode === "plan_only") return "plan_only";
+      if (state.submitMode === "plan_and_start") return "plan_and_start";
+      if (state.submitMode === "replan") return "replan";
+    }
+    return null;
+  }, [isImproving, isSubmitting, state.submitMode]);
+
+  useEffect(() => {
+    if (!isBusy) {
+      setElapsedMs(0);
+      return;
+    }
+    const start = Date.now();
+    const interval = setInterval(() => {
+      setElapsedMs(Date.now() - start);
+    }, 100);
+    return () => clearInterval(interval);
+  }, [isBusy]);
+
+  const feedback = useMemo(() => {
+    if (!busyAction) return null;
+    return getPlanningFeedback(busyAction, elapsedMs);
+  }, [busyAction, elapsedMs]);
 
   useLayoutEffect(() => {
     const timeline = gsap.timeline();
@@ -145,12 +176,52 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const showModelOverride = currentRoute?.type === 'virtual';
   const modelOptions = currentRoute?.provider ? getProviderModelOptions(currentRoute.provider) : [];
 
+  const isDark = document.documentElement.classList.contains("dark");
+
   return (
     <section
       ref={cardRef}
       className="relative w-full overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/78 shadow-[0_20px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/72 dark:shadow-[0_24px_56px_rgba(0,0,0,0.28)]"
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,224,160,0.08),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(255,184,0,0.08),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(0,224,160,0.1),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(255,184,0,0.09),transparent_34%)]" />
+
+      {isBusy && feedback && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 p-8 backdrop-blur-xl dark:bg-void-900/80">
+          <div className="relative mb-12 flex h-32 w-full max-w-md items-center justify-center">
+            <div className="absolute inset-x-0 bottom-8 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent dark:via-white/10" />
+            <div 
+              className="absolute transition-all duration-300 ease-out"
+              style={{ left: `${feedback.progress * 100}%`, transform: 'translateX(-50%)' }}
+            >
+              <svg width="120" height="60" viewBox="-60 -30 120 60">
+                {feedback.shipType === "container" 
+                  ? <ContainerShip accentColor="#00E0A0" isMoving={true} isDark={isDark} />
+                  : <WoodenShip accentColor="#FFB800" isMoving={true} isDark={isDark} />
+                }
+              </svg>
+            </div>
+          </div>
+          
+          <div className="space-y-4 text-center">
+            <div className="inline-flex items-center gap-3 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-5 py-2 text-xs font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-300">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-signal-400 opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-signal-500"></span>
+              </span>
+              Planning in motion
+            </div>
+            <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+              {feedback.text}
+            </h3>
+            <p className="mx-auto max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+              {busyAction === "improve" 
+                ? "The AI is analyzing your goals to produce a more precise technical definition."
+                : "Orchestrating the planning specialist to decompose your sprint into atomic subtasks."
+              }
+            </p>
+          </div>
+        </div>
+      )}
 
       <form
         ref={fieldsRef}

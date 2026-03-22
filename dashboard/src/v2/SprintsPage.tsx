@@ -25,6 +25,7 @@ import {
 import { SprintBubble } from "./components/ui/SprintBubble.js";
 import { HumanInterventionBadge } from "./components/ui/HumanInterventionBadge.js";
 import { SprintComposer } from "./components/ui/SprintComposer.js";
+import { filterShowcaseSprints, sortSprintsByRecency } from "./lib/sprint-gallery.js";
 import type { SprintSubmitMode, PlanningRouteOption } from "./lib/sprint-composer-state.js";
 import { SprintMarkdownModal } from "./components/ui/SprintMarkdownModal.js";
 import { SprintSettingsOverrideModal } from "./components/ui/SprintSettingsOverrideModal.js";
@@ -283,17 +284,11 @@ export const SprintsPage: FunctionComponent = () => {
   ), [optimisticStatuses, sprints, suppressedRunningSprintIds]);
 
   const sortedSprints = useMemo(() => (
-    [...displaySprints].sort((left, right) => {
-      const createdAtDelta = right.createdAt.localeCompare(left.createdAt);
-      if (createdAtDelta !== 0) {
-        return createdAtDelta;
-      }
-      return (right.number || 0) - (left.number || 0);
-    })
+    sortSprintsByRecency(displaySprints)
   ), [displaySprints]);
 
   const showcaseSprints = useMemo(() => {
-    return sortedSprints.filter((sprint) => sprint.showcasePinned && sprint.status !== "completed");
+    return filterShowcaseSprints(sortedSprints);
   }, [sortedSprints]);
 
   const completedCount = useMemo(() => (
@@ -374,46 +369,6 @@ export const SprintsPage: FunctionComponent = () => {
     }
     return ordered;
   }, [sortedSprints, tableSort]);
-
-  useEffect(() => {
-    const completedPinnedSprints = sortedSprints.filter((sprint) => (
-      sprint.showcasePinned
-      && sprint.status === "completed"
-      && !pendingActionIds.has(`sprint-showcase-auto:${sprint.id}`)
-    ));
-
-    if (completedPinnedSprints.length === 0) {
-      return;
-    }
-
-    const actionIds = completedPinnedSprints.map((sprint) => `sprint-showcase-auto:${sprint.id}`);
-    setPendingActionIds((current) => {
-      const next = new Set(current);
-      for (const actionId of actionIds) {
-        next.add(actionId);
-      }
-      return next;
-    });
-
-    void Promise.all(completedPinnedSprints.map(async (sprint) => {
-      await updateSprint(sprint.id, { showcasePinned: false });
-    }))
-      .then(async () => {
-        await refresh();
-      })
-      .catch((error) => {
-        window.alert(error instanceof Error ? error.message : String(error));
-      })
-      .finally(() => {
-        setPendingActionIds((current) => {
-          const next = new Set(current);
-          for (const actionId of actionIds) {
-            next.delete(actionId);
-          }
-          return next;
-        });
-      });
-  }, [pendingActionIds, refresh, sortedSprints]);
 
   const runSprintAction = async (
     actionId: string,

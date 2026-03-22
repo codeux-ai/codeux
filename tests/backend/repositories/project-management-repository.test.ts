@@ -137,6 +137,42 @@ describe("ProjectManagementRepository", () => {
     expect(updated.originalPrompt).toBe("Actually, help me build a dashboard.");
   });
 
+  it("persists showcasePinned status across updates", async () => {
+    const { repository } = await createRepository();
+
+    const project = repository.createProject({
+      name: "Showcase Project",
+      sourceType: "local",
+      sourceRef: "/workspace/showcase-project",
+    });
+
+    const sprint = repository.createSprint(project.id, {
+      name: "Showcase Sprint",
+      showcasePinned: true,
+    });
+
+    expect(sprint.showcasePinned).toBe(true);
+
+    // Update other fields, pin should persist
+    const updated1 = repository.updateSprint(sprint.id, {
+      name: "Updated Showcase Sprint",
+    });
+    expect(updated1.showcasePinned).toBe(true);
+    expect(updated1.name).toBe("Updated Showcase Sprint");
+
+    // Explicitly unpin
+    const updated2 = repository.updateSprint(sprint.id, {
+      showcasePinned: false,
+    });
+    expect(updated2.showcasePinned).toBe(false);
+
+    // Explicitly pin again
+    const updated3 = repository.updateSprint(sprint.id, {
+      showcasePinned: true,
+    });
+    expect(updated3.showcasePinned).toBe(true);
+  });
+
   it("imports and exports sprint markdown against the database model", async () => {
     const { repository, markdownService } = await createRepository();
 
