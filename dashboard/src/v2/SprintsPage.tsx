@@ -828,7 +828,7 @@ export const SprintsPage: FunctionComponent = () => {
                     All sprints, fully sortable.
                   </h2>
                   <p className="mt-2 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-                    The showcase above reflects the sprints marked with the heart. New sprints are showcased by default.
+                    The showcase above reflects the sprints marked with the heart. New sprints are showcased by default. Pin or unpin any sprint using the heart icon.
                   </p>
                 </div>
                 <div className="text-xs font-mono text-slate-400">{tableSprints.length} total</div>

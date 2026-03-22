@@ -162,6 +162,7 @@ Legacy runtime:
 - The sprint page now shows a visible planning-connection indicator, preferring a listen-mode project `worker` and then a listen-mode project `listener`
 - New sprints are showcased by default, showcased sprints are controlled by the heart toggle, and the showcase gallery is no longer capped to 3 sprint cells
 - Showcase pinning is now fully operator-controlled; pinned sprints remain in the gallery until explicitly unpinned, surviving transitions like sprint start, pause, and completion
+- Showcase heart controls in the sprint ledger remain available for completed sprints, so completed work can stay pinned in or be removed from the gallery manually
 - The sprint gallery selection is now the full set of showcased sprints, ordered newest-first by sprint creation time
 - Completed sprint cells now use a static finished treatment and fade slightly instead of continuing animated motion
 - Sprint cell settings now open an animated menu with showcase toggle, `Edit`, `Export`, `Delete`, and live `Overrides`
