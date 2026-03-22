@@ -14,12 +14,12 @@ export const EMBEDDING_MODEL_CATALOG: Record<EmbeddingModelId, EmbeddingModelInf
       "tokenizer_config.json",
     ],
   },
-  "Qwen3-Embedding-0.6B": {
-    id: "Qwen3-Embedding-0.6B",
-    displayName: "Qwen3 Embedding 0.6B",
-    description: "Multilingual embedding model. Higher quality, larger footprint (~614 MB quantized). 1024 dimensions.",
+  "multilingual-e5-large": {
+    id: "multilingual-e5-large",
+    displayName: "Multilingual E5 Large",
+    description: "High-quality multilingual embedding model (XLM-RoBERTa). ~562 MB quantized. 1024 dimensions.",
     dimension: 1024,
-    sizeBytes: 614_000_000,
+    sizeBytes: 562_000_000,
     language: "Multilingual",
     files: [
       "model.onnx",
@@ -32,14 +32,16 @@ export const EMBEDDING_MODEL_CATALOG: Record<EmbeddingModelId, EmbeddingModelInf
 export function getModelDownloadUrl(modelId: EmbeddingModelId, fileName: string): string {
   const repoMap: Record<EmbeddingModelId, string> = {
     "bge-small-en-v1.5": "BAAI/bge-small-en-v1.5",
-    "Qwen3-Embedding-0.6B": "onnx-community/Qwen3-Embedding-0.6B-ONNX",
+    "multilingual-e5-large": "intfloat/multilingual-e5-large",
   };
 
   const repo = repoMap[modelId];
 
   if (fileName === "model.onnx") {
-    // Qwen3 uses the int8 quantized ONNX variant from the onnx-community repo
-    const onnxFile = modelId === "Qwen3-Embedding-0.6B" ? "onnx/model_quantized.onnx" : "onnx/model.onnx";
+    // E5-large uses int8 quantized variant; BGE uses the standard model
+    const onnxFile = modelId === "multilingual-e5-large"
+      ? "onnx/model_qint8_avx512_vnni.onnx"
+      : "onnx/model.onnx";
     return `https://huggingface.co/${repo}/resolve/main/${onnxFile}`;
   }
 

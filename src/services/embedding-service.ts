@@ -89,7 +89,7 @@ export class EmbeddingService {
       feeds.position_ids = new ort.Tensor("int64", positionIds, [1, seqLength]);
     }
 
-    // Decoder models (e.g. Qwen3) may require empty past_key_values for initial pass.
+    // Decoder models may require empty past_key_values for initial pass.
     // Shape: [batch=1, num_kv_heads, past_seq_len=0, head_dim] — inferred from session metadata.
     for (const name of inputNames) {
       if (!name.startsWith("past_key_values") || feeds[name]) continue;

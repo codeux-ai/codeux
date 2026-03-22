@@ -2,7 +2,7 @@ import * as fs from "fs";
 
 /**
  * Minimal HuggingFace tokenizer.json parser for ONNX model input.
- * Supports WordPiece (BERT/BGE) and BPE (Qwen3) tokenization.
+ * Supports WordPiece (BERT/BGE) and BPE tokenization.
  */
 
 type MergeEntry = string | [string, string];
