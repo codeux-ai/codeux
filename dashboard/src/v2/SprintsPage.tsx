@@ -428,6 +428,7 @@ export const SprintsPage: FunctionComponent = () => {
     routeOverride: PlanningRouteOption | null;
     modelOverride: string | null;
     planningAgentPresetId: string | null;
+    signal?: AbortSignal;
   }): Promise<void> => {
     if (!selectedProject) {
       return;
@@ -443,19 +444,19 @@ export const SprintsPage: FunctionComponent = () => {
       });
 
       if (payload.submitMode === "plan_only" || payload.submitMode === "replan") {
-        await planSprint(selectedProject.id, editingSprint.id, { 
-          autoStart: false, 
+        await planSprint(selectedProject.id, editingSprint.id, {
+          autoStart: false,
           replan: payload.submitMode === "replan",
           planningAgentPresetId: payload.planningAgentPresetId || undefined,
           overrides,
-        });
+        }, payload.signal);
       } else if (payload.submitMode === "plan_and_start") {
-        await planSprint(selectedProject.id, editingSprint.id, { 
+        await planSprint(selectedProject.id, editingSprint.id, {
           autoStart: true,
           replan: false,
           planningAgentPresetId: payload.planningAgentPresetId || undefined,
           overrides,
-        });
+        }, payload.signal);
       }
 
       await refresh();
@@ -475,28 +476,28 @@ export const SprintsPage: FunctionComponent = () => {
     });
 
     if (payload.submitMode === "plan_only") {
-      await planSprint(selectedProject.id, created.id, { 
-        autoStart: false, 
+      await planSprint(selectedProject.id, created.id, {
+        autoStart: false,
         planningAgentPresetId: payload.planningAgentPresetId || undefined,
         overrides,
-      });
+      }, payload.signal);
     } else if (payload.submitMode === "plan_and_start") {
-      await planSprint(selectedProject.id, created.id, { 
-        autoStart: true, 
+      await planSprint(selectedProject.id, created.id, {
+        autoStart: true,
         planningAgentPresetId: payload.planningAgentPresetId || undefined,
         overrides,
-      });
+      }, payload.signal);
     }
 
     await Promise.all([refresh(), refreshExecution()]);
     animateLatestCell();
   };
 
-  const handleImprovePrompt = async (draft: ImprovePromptInput): Promise<string> => {
+  const handleImprovePrompt = async (draft: ImprovePromptInput, signal?: AbortSignal): Promise<string> => {
     if (!selectedProject) {
       throw new Error("Select a project before using Plan ahead with AI.");
     }
-    const response = await improveSprintPrompt(selectedProject.id, draft);
+    const response = await improveSprintPrompt(selectedProject.id, draft, signal);
     return response.goal;
   };
 
