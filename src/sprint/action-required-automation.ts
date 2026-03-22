@@ -93,12 +93,20 @@ const buildClarificationAutoReply = (task: Subtask, template: string): string =>
 };
 
 export interface ApplyActionRequiredAutomationArgs {
+  projectId: string;
+  sprintGoal: string;
   automationLevel: AutomationLevel;
   settings: AutomationInterventionsSettings;
   isActionRequiredState: (state?: string) => boolean;
   isJulesApiConfigured: () => boolean;
   approveSessionPlan: (sessionId: string) => Promise<unknown>;
   sendSessionMessage: (sessionId: string, prompt: string) => Promise<unknown>;
+  generateWorkerClarificationReply?: (args: {
+    projectId: string;
+    sprintGoal: string;
+    subtasks: Subtask[];
+    task: Subtask;
+  }) => Promise<string>;
   onTaskEvent?: (args: {
     task: Subtask;
     eventType: string;
@@ -190,7 +198,18 @@ export const applyActionRequiredAutomation = async (
       }
 
       if (task.session_state === "AWAITING_USER_FEEDBACK") {
-        const reply = buildClarificationAutoReply(task, args.settings.clarificationAnswerTemplate);
+        let reply: string;
+        if (args.settings.autoAnswerClarificationMode === "WORKER" && args.generateWorkerClarificationReply) {
+          reply = await args.generateWorkerClarificationReply({
+            projectId: args.projectId,
+            sprintGoal: args.sprintGoal,
+            subtasks,
+            task,
+          });
+        } else {
+          reply = buildClarificationAutoReply(task, args.settings.clarificationAnswerTemplate);
+        }
+
         await args.sendSessionMessage(sessionId, reply);
         task.status = "RUNNING";
         emitTaskEvent(task, "action_required_auto_replied", {

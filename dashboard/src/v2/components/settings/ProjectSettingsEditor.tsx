@@ -241,6 +241,36 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             })}
           />
         </Row>
+        {settings.automationInterventions.autoAnswerClarification && (
+          <Row label="Clarification answer mode" description="Choose whether to use a static template or let a worker generate a contextual answer." badge={getBadge("automationInterventions.autoAnswerClarificationMode")}>
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+              <button
+                onClick={() => update({
+                  automationInterventions: { ...settings.automationInterventions, autoAnswerClarificationMode: "TEMPLATE" },
+                })}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  settings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE"
+                    ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                }`}
+              >
+                Template
+              </button>
+              <button
+                onClick={() => update({
+                  automationInterventions: { ...settings.automationInterventions, autoAnswerClarificationMode: "WORKER" },
+                })}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  settings.automationInterventions.autoAnswerClarificationMode === "WORKER"
+                    ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                }`}
+              >
+                Worker
+              </button>
+            </div>
+          </Row>
+        )}
         <Row label="Auto-resume paused runs" description="Resume paused sessions automatically after a transient pause condition clears." badge={getBadge("automationInterventions.autoResumePaused")}>
           <ToggleField
             checked={settings.automationInterventions.autoResumePaused}
@@ -252,21 +282,23 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             })}
           />
         </Row>
-        <div>
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">Clarification answer template</div>
-            {getBadge("automationInterventions.clarificationAnswerTemplate") ? <OverrideBadge label={getBadge("automationInterventions.clarificationAnswerTemplate")!} /> : null}
+        {(!settings.automationInterventions.autoAnswerClarification || settings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE") && (
+          <div>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">Clarification answer template</div>
+              {getBadge("automationInterventions.clarificationAnswerTemplate") ? <OverrideBadge label={getBadge("automationInterventions.clarificationAnswerTemplate")!} /> : null}
+            </div>
+            <TextAreaField
+              value={settings.automationInterventions.clarificationAnswerTemplate}
+              onChange={(value) => update({
+                automationInterventions: {
+                  ...settings.automationInterventions,
+                  clarificationAnswerTemplate: value,
+                },
+              })}
+            />
           </div>
-          <TextAreaField
-            value={settings.automationInterventions.clarificationAnswerTemplate}
-            onChange={(value) => update({
-              automationInterventions: {
-                ...settings.automationInterventions,
-                clarificationAnswerTemplate: value,
-              },
-            })}
-          />
-        </div>
+        )}
       </Card>
 
       <Card

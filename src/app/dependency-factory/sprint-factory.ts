@@ -8,6 +8,7 @@ import { SprintTaskDispatchService } from "../../services/sprint-task-dispatch-s
 import { WorkerTaskDispatchService } from "../../services/worker-task-dispatch-service.js";
 import { VirtualWorkerService } from "../../services/virtual-worker-service.js";
 import { SprintOrchestrator } from "../../sprint/sprint-orchestrator.js";
+import { WorkerInboxReplyService } from "../../services/worker-inbox-reply-service.js";
 import type { DashboardSettings, DashboardSettingsScope } from "../../contracts/app-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 
@@ -17,6 +18,7 @@ export interface SprintDependencies {
   sprintExecutionStateService: SprintExecutionStateService;
   sprintTaskDispatchService: SprintTaskDispatchService;
   virtualWorkerService: VirtualWorkerService;
+  workerInboxReplyService: WorkerInboxReplyService;
   sprintOrchestrator: SprintOrchestrator;
 }
 
@@ -118,6 +120,15 @@ export function createSprintDependencies(
     logger.child({ component: "sprint-task-dispatch-service" }),
   );
 
+  const workerInboxReplyService = new WorkerInboxReplyService({
+    projectManagementRepository,
+    taskService,
+    agentPresetSyncService,
+    getDashboardSettings: resolveDashboardSettings,
+    getGithubToken: () => context.getEffectiveGithubToken(),
+    logger: logger.child({ component: "worker-inbox-reply-service" }),
+  });
+
   projectAttentionService.setWorkerAttentionOpenedCallback((projectId) => {
     virtualWorkerService.scheduleProject(projectId, "worker_attention_opened");
   });
@@ -151,6 +162,7 @@ export function createSprintDependencies(
     isJulesApiConfigured: () => context.isJulesApiConfigured(),
     approveSessionPlan: (sessionId) => julesApi.approveSessionPlan(sessionId),
     sendSessionMessage: (sessionId, prompt) => julesApi.sendSessionMessage(sessionId, prompt),
+    generateWorkerClarificationReply: (args) => workerInboxReplyService.generateClarificationReply(args),
     getCiStatusForScope: (args) => context.getCiStatusForScope(args),
     autoMergeFeaturePr: (args) => context.autoMergeFeaturePr(args),
     resolveOrCreateMainBranchPr: (args) => context.resolveOrCreateMainBranchPr(args),
@@ -165,6 +177,7 @@ export function createSprintDependencies(
     sprintExecutionStateService,
     sprintTaskDispatchService,
     virtualWorkerService,
+    workerInboxReplyService,
     sprintOrchestrator,
   };
 }

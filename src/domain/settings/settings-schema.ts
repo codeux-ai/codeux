@@ -310,6 +310,9 @@ const validateAutomationInterventions = (
   }
   if (typeof value.autoApprovePlan !== "boolean") issues.push({ path: `${path}.autoApprovePlan`, message: "Expected a boolean" });
   if (typeof value.autoAnswerClarification !== "boolean") issues.push({ path: `${path}.autoAnswerClarification`, message: "Expected a boolean" });
+  if (value.autoAnswerClarificationMode !== "TEMPLATE" && value.autoAnswerClarificationMode !== "WORKER") {
+    issues.push({ path: `${path}.autoAnswerClarificationMode`, message: "Expected 'TEMPLATE' or 'WORKER'" });
+  }
   if (typeof value.autoResumePaused !== "boolean") issues.push({ path: `${path}.autoResumePaused`, message: "Expected a boolean" });
   if (typeof value.clarificationAnswerTemplate !== "string") issues.push({ path: `${path}.clarificationAnswerTemplate`, message: "Expected a string" });
 };

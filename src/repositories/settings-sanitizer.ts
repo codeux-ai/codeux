@@ -141,6 +141,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
       interventionInput.autoAnswerClarification,
       DEFAULT_DASHBOARD_SETTINGS.automationInterventions.autoAnswerClarification
     ),
+    autoAnswerClarificationMode: (interventionInput.autoAnswerClarificationMode === "WORKER" ? "WORKER" : "TEMPLATE"),
     autoResumePaused: readBoolean(
       interventionInput.autoResumePaused,
       DEFAULT_DASHBOARD_SETTINGS.automationInterventions.autoResumePaused

@@ -66,6 +66,12 @@ export interface SprintOrchestratorDependencies {
   isJulesApiConfigured: () => boolean;
   approveSessionPlan: (sessionId: string) => Promise<unknown>;
   sendSessionMessage: (sessionId: string, prompt: string) => Promise<unknown>;
+  generateWorkerClarificationReply?: (args: {
+    projectId: string;
+    sprintGoal: string;
+    subtasks: Subtask[];
+    task: Subtask;
+  }) => Promise<string>;
   getCiStatusForScope?: (args: {
     repoPath: string;
     scope: "FEATURE_PR_CI" | "MAIN_MERGE_PR_CI";

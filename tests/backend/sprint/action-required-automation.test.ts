@@ -24,10 +24,13 @@ describe("action-required-automation", () => {
   it("marks non-jules tasks for agent intervention", async () => {
     const task = createTask({ provider: "codex" });
     const result = await applyActionRequiredAutomation([task], {
+      projectId: "p1",
+      sprintGoal: "test goal",
       automationLevel: "FULL",
       settings: {
         autoApprovePlan: true,
         autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE",
         autoResumePaused: true,
         clarificationAnswerTemplate: "template",
       },
@@ -46,10 +49,13 @@ describe("action-required-automation", () => {
     const onTaskEvent = vi.fn();
     const task = createTask({ session_state: "AWAITING_PLAN_APPROVAL" });
     const result = await applyActionRequiredAutomation([task], {
+      projectId: "p1",
+      sprintGoal: "test goal",
       automationLevel: "FULL",
       settings: {
         autoApprovePlan: true,
         autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE",
         autoResumePaused: true,
         clarificationAnswerTemplate: "template",
       },
@@ -73,10 +79,13 @@ describe("action-required-automation", () => {
   it("does not intervene if not an action required state", async () => {
     const task = createTask({ session_state: "RUNNING" });
     const result = await applyActionRequiredAutomation([task], {
+      projectId: "p1",
+      sprintGoal: "test goal",
       automationLevel: "FULL",
       settings: {
         autoApprovePlan: true,
         autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE",
         autoResumePaused: true,
         clarificationAnswerTemplate: "template",
       },
@@ -92,10 +101,13 @@ describe("action-required-automation", () => {
   it("marks for human intervention if JULES API is not configured", async () => {
     const task = createTask();
     const result = await applyActionRequiredAutomation([task], {
+      projectId: "p1",
+      sprintGoal: "test goal",
       automationLevel: "FULL",
       settings: {
         autoApprovePlan: true,
         autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE",
         autoResumePaused: true,
         clarificationAnswerTemplate: "template",
       },
@@ -112,10 +124,13 @@ describe("action-required-automation", () => {
   it("marks for human intervention if automationLevel is ALWAYS_ASK", async () => {
     const task = createTask();
     const result = await applyActionRequiredAutomation([task], {
+      projectId: "p1",
+      sprintGoal: "test goal",
       automationLevel: "ALWAYS_ASK",
       settings: {
         autoApprovePlan: true,
         autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE",
         autoResumePaused: true,
         clarificationAnswerTemplate: "template",
       },
@@ -132,10 +147,13 @@ describe("action-required-automation", () => {
   it("marks for human intervention if SEMI_AUTO autoApprovePlan is false", async () => {
     const task = createTask({ session_state: "AWAITING_PLAN_APPROVAL" });
     const result = await applyActionRequiredAutomation([task], {
+      projectId: "p1",
+      sprintGoal: "test goal",
       automationLevel: "SEMI_AUTO",
       settings: {
         autoApprovePlan: false,
         autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE",
         autoResumePaused: true,
         clarificationAnswerTemplate: "template",
       },
@@ -152,10 +170,13 @@ describe("action-required-automation", () => {
   it("marks for human intervention if SEMI_AUTO autoAnswerClarification is false", async () => {
     const task = createTask({ session_state: "AWAITING_USER_FEEDBACK" });
     const result = await applyActionRequiredAutomation([task], {
+      projectId: "p1",
+      sprintGoal: "test goal",
       automationLevel: "SEMI_AUTO",
       settings: {
         autoApprovePlan: true,
         autoAnswerClarification: false,
+        autoAnswerClarificationMode: "TEMPLATE",
         autoResumePaused: true,
         clarificationAnswerTemplate: "template",
       },
@@ -172,10 +193,13 @@ describe("action-required-automation", () => {
   it("marks for human intervention if SEMI_AUTO autoResumePaused is false", async () => {
     const task = createTask({ session_state: "PAUSED" });
     const result = await applyActionRequiredAutomation([task], {
+      projectId: "p1",
+      sprintGoal: "test goal",
       automationLevel: "SEMI_AUTO",
       settings: {
         autoApprovePlan: true,
         autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE",
         autoResumePaused: false,
         clarificationAnswerTemplate: "template",
       },
@@ -200,10 +224,13 @@ describe("action-required-automation", () => {
       ]
     });
     const result = await applyActionRequiredAutomation([task], {
+      projectId: "p1",
+      sprintGoal: "test goal",
       automationLevel: "FULL",
       settings: {
         autoApprovePlan: true,
         autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE",
         autoResumePaused: true,
         clarificationAnswerTemplate: "Here is your answer",
       },
@@ -230,10 +257,13 @@ describe("action-required-automation", () => {
       ]
     });
     const result = await applyActionRequiredAutomation([task], {
+      projectId: "p1",
+      sprintGoal: "test goal",
       automationLevel: "FULL",
       settings: {
         autoApprovePlan: true,
         autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE",
         autoResumePaused: true,
         clarificationAnswerTemplate: "Here is your answer",
       },
@@ -251,10 +281,13 @@ describe("action-required-automation", () => {
     const sendMessage = vi.fn().mockResolvedValue({});
     const task = createTask({ session_state: "PAUSED" });
     const result = await applyActionRequiredAutomation([task], {
+      projectId: "p1",
+      sprintGoal: "test goal",
       automationLevel: "FULL",
       settings: {
         autoApprovePlan: true,
         autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE",
         autoResumePaused: true,
         clarificationAnswerTemplate: "template",
       },
@@ -273,10 +306,13 @@ describe("action-required-automation", () => {
     const approve = vi.fn().mockRejectedValue(new Error("API Error"));
     const task = createTask({ session_state: "AWAITING_PLAN_APPROVAL" });
     const result = await applyActionRequiredAutomation([task], {
+      projectId: "p1",
+      sprintGoal: "test goal",
       automationLevel: "FULL",
       settings: {
         autoApprovePlan: true,
         autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE",
         autoResumePaused: true,
         clarificationAnswerTemplate: "template",
       },
@@ -289,5 +325,38 @@ describe("action-required-automation", () => {
     expect(result.subtasks[0].intervention_owner).toBe("AGENT");
     expect(result.subtasks[0].intervention_hint).toContain("API Error");
     expect(result.reportText).toContain("Auto-Intervention Failed");
+  });
+
+  it("auto-answers clarification using worker when mode is WORKER", async () => {
+    const sendMessage = vi.fn().mockResolvedValue({});
+    const generateWorkerReply = vi.fn().mockResolvedValue("Worker generated answer");
+    const task = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+    });
+    const result = await applyActionRequiredAutomation([task], {
+      projectId: "p1",
+      sprintGoal: "test goal",
+      automationLevel: "FULL",
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoAnswerClarificationMode: "WORKER",
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: sendMessage,
+      generateWorkerClarificationReply: generateWorkerReply,
+    });
+
+    expect(generateWorkerReply).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "p1",
+      sprintGoal: "test goal",
+      task,
+    }));
+    expect(sendMessage).toHaveBeenCalledWith("abc123", "Worker generated answer");
+    expect(result.subtasks[0].status).toBe("RUNNING");
   });
 });

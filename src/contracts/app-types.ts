@@ -448,6 +448,7 @@ export type InterventionOwner = "HUMAN" | "AGENT";
 export interface AutomationInterventionsSettings {
   autoApprovePlan: boolean;
   autoAnswerClarification: boolean;
+  autoAnswerClarificationMode: "TEMPLATE" | "WORKER";
   autoResumePaused: boolean;
   clarificationAnswerTemplate: string;
 }

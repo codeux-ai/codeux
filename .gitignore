@@ -9,3 +9,4 @@ server.log
 coverage/
 .jules-subagents/debug.log
 .sprint-os/debug.log
+.sprint-os/worktrees/

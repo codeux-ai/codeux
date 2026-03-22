@@ -6,7 +6,6 @@ import { AgentToolHandler } from "../../mcp/agent-tool-handler.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 import { WorkerTaskDispatchService } from "../../services/worker-task-dispatch-service.js";
 import { WorkerDispatchExecutionService } from "../../services/worker-dispatch-execution-service.js";
-import { WorkerInboxReplyService } from "../../services/worker-inbox-reply-service.js";
 import { WorkerListenEventService } from "../../domain/workers/worker-listen-event-service.js";
 
 export interface McpDependencies {
@@ -94,14 +93,7 @@ export function createMcpDependencies(
       julesApi,
       logger.child({ component: "worker-dispatch-execution-service" }),
     ),
-    workerInboxReplyService: new WorkerInboxReplyService({
-      projectManagementRepository,
-      taskService,
-      agentPresetSyncService,
-      getDashboardSettings: () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
-      getGithubToken: () => context.getEffectiveGithubToken(),
-      logger: logger.child({ component: "worker-inbox-reply-service" }),
-    }),
+    workerInboxReplyService: sprintDeps.workerInboxReplyService,
   });
 
   return {

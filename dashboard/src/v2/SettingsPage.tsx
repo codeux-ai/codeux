@@ -823,6 +823,38 @@ export const SettingsPage: FunctionComponent = () => {
               }))}
             />
           </Row>
+          {projectSettings.automationInterventions.autoAnswerClarification && (
+            <Row label="Clarification answer mode" description="Choose whether to use a static template or let a worker generate a contextual answer." badge={getFieldBadge("automationInterventions.autoAnswerClarificationMode")}>
+              <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                <button
+                  onClick={() => updateProject((current) => ({
+                    ...current,
+                    automationInterventions: { ...current.automationInterventions, autoAnswerClarificationMode: "TEMPLATE" },
+                  }))}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    projectSettings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE"
+                      ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                      : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                  }`}
+                >
+                  Template
+                </button>
+                <button
+                  onClick={() => updateProject((current) => ({
+                    ...current,
+                    automationInterventions: { ...current.automationInterventions, autoAnswerClarificationMode: "WORKER" },
+                  }))}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                    projectSettings.automationInterventions.autoAnswerClarificationMode === "WORKER"
+                      ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
+                      : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                  }`}
+                >
+                  Worker
+                </button>
+              </div>
+            </Row>
+          )}
           <Row label="Auto-resume paused runs" description="Resume a project automatically when a transient pause clears." badge={getFieldBadge("automationInterventions.autoResumePaused")}>
             <Toggle
               value={projectSettings.automationInterventions.autoResumePaused}
@@ -835,19 +867,21 @@ export const SettingsPage: FunctionComponent = () => {
               }))}
             />
           </Row>
-          <Row label="Clarification answer template" description="Template used when project automation answers a clarification request." badge={getFieldBadge("automationInterventions.clarificationAnswerTemplate")} last>
-            <TextInput
-              value={projectSettings.automationInterventions.clarificationAnswerTemplate}
-              onChange={(value) => updateProject((current) => ({
-                ...current,
-                automationInterventions: {
-                  ...current.automationInterventions,
-                  clarificationAnswerTemplate: value,
-                },
-              }))}
-              placeholder="Respond with the usual clarification template..."
-            />
-          </Row>
+          {(!projectSettings.automationInterventions.autoAnswerClarification || projectSettings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE") && (
+            <Row label="Clarification answer template" description="Template used when project automation answers a clarification request." badge={getFieldBadge("automationInterventions.clarificationAnswerTemplate")} last>
+              <TextInput
+                value={projectSettings.automationInterventions.clarificationAnswerTemplate}
+                onChange={(value) => updateProject((current) => ({
+                  ...current,
+                  automationInterventions: {
+                    ...current.automationInterventions,
+                    clarificationAnswerTemplate: value,
+                  },
+                }))}
+                placeholder="Respond with the usual clarification template..."
+              />
+            </Row>
+          )}
         </SectionCard>
       </div>
     );

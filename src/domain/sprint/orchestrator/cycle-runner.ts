@@ -129,12 +129,15 @@ export class CycleRunner {
 
     if (subtasks.length > 0) {
       const interventionResult = await applyActionRequiredAutomation(subtasks, {
+        projectId: args.executionContext.project.id,
+        sprintGoal: args.executionContext.sprint.goal || "",
         automationLevel: args.automationLevel,
         settings: args.automationInterventions,
         isActionRequiredState: this.deps.isActionRequiredState,
         isJulesApiConfigured: this.deps.isJulesApiConfigured,
         approveSessionPlan: this.deps.approveSessionPlan,
         sendSessionMessage: this.deps.sendSessionMessage,
+        generateWorkerClarificationReply: this.deps.generateWorkerClarificationReply,
         onTaskEvent: ({ task, eventType, payload, sourceEventKey }) => {
           appendTaskEvent(task, eventType, payload, sourceEventKey);
         },
