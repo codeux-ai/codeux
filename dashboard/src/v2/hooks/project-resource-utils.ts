@@ -1,4 +1,5 @@
 import type { Sprint, TaskRecord } from "../types.js";
+import type { ExecutionDashboardSnapshot, ProjectExecutionStatsSnapshot } from "../../types.js";
 
 export function shouldUseForegroundLoading(hasLoaded: boolean, silent = false): boolean {
   return !silent && !hasLoaded;
@@ -39,6 +40,35 @@ export function areSprintListsEqual(current: Sprint[], next: Sprint[]): boolean 
   }
 
   return true;
+}
+
+export function areExecutionSnapshotsEqual(
+  current: ExecutionDashboardSnapshot | null,
+  next: ExecutionDashboardSnapshot | null
+): boolean {
+  if (current === next) {
+    return true;
+  }
+  if (!current || !next) {
+    return false;
+  }
+  if (current.updatedAt && next.updatedAt && current.updatedAt !== next.updatedAt) {
+    return false;
+  }
+  return JSON.stringify(current) === JSON.stringify(next);
+}
+
+export function areProjectStatsSnapshotsEqual(
+  current: ProjectExecutionStatsSnapshot | null,
+  next: ProjectExecutionStatsSnapshot | null
+): boolean {
+  if (current === next) {
+    return true;
+  }
+  if (!current || !next) {
+    return false;
+  }
+  return JSON.stringify(current) === JSON.stringify(next);
 }
 
 export function areTaskRecordListsEqual(current: TaskRecord[], next: TaskRecord[]): boolean {

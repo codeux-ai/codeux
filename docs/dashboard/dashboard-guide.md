@@ -15,6 +15,14 @@ Configured by:
 
 If the requested port is busy, startup automatically retries the next port (`+1`) until it finds a free port.
 
+## Shared Resource Store
+
+Project data for the selected project (sprints, tasks, execution, stats) is managed by a shared, module-level `ProjectResourceStore`. This means:
+- Concurrent consumers of the same project resource reuse a single in-flight fetch.
+- Cached results are fanned out to all subscribed hooks.
+- A single websocket invalidation path and fallback poll timer are maintained per resource key.
+- Hook outputs remain backward compatible while improving performance.
+
 ## API Endpoints Used by Dashboard
 
 Implemented in `src/server/dashboard-server.ts`.

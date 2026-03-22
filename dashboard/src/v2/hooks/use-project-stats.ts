@@ -5,10 +5,33 @@ import type {
   ProjectStatsQuery,
   ProjectStatsWindow,
 } from "../../types.js";
-import { subscribeToDashboardRealtime } from "../../lib/realtime/dashboard-realtime-client.js";
 import { fetchProjectStats } from "../lib/project-api.js";
+import { areProjectStatsSnapshotsEqual } from "./project-resource-utils.js";
+import { ProjectResourceStore } from "./project-resource-store.js";
 
 const EMPTY_STATS: ProjectExecutionStatsSnapshot | null = null;
+
+export const projectStatsStore = new ProjectResourceStore<ProjectExecutionStatsSnapshot | null>({
+  resourceType: "stats",
+  fetcher: async (projectId: string, args: { statsQuery: ProjectStatsQuery | ProjectStatsWindow }) => {
+    return await fetchProjectStats(projectId, args.statsQuery);
+  },
+  isEqual: areProjectStatsSnapshotsEqual,
+  emptyData: EMPTY_STATS,
+  getRealtimeScopes: (projectId: string) => [`project:${projectId}`],
+  shouldRefreshOnRealtimeEvent: (message: DashboardRealtimeServerMessage) => {
+    if (message.type === "event" && (
+      message.event.eventType === "project.execution.updated" ||
+      message.event.eventType === "project.structure.updated"
+    )) {
+      return true;
+    }
+    if (message.type === "snapshot_required") {
+      return true;
+    }
+    return false;
+  },
+});
 
 export function useProjectStats(
   projectId: string | null,
@@ -24,58 +47,27 @@ export function useProjectStats(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(async (): Promise<void> => {
-    if (!projectId) {
-      setStats(null);
-      setError(null);
-      setLoading(false);
-      return;
-    }
+  useEffect(() => {
+    const keySuffix = JSON.stringify(statsQuery);
+    return projectStatsStore.subscribe(
+      projectId,
+      keySuffix,
+      { statsQuery },
+      (data, errorStr, isLoading) => {
+        setStats(data);
+        setError(errorStr);
+        setLoading(isLoading);
+      },
+      pollIntervalMs
+    );
+  }, [projectId, pollIntervalMs, statsQuery]);
 
-    setLoading(true);
-    try {
-      setStats(await fetchProjectStats(projectId, statsQuery));
-      setError(null);
-    } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
-    } finally {
-      setLoading(false);
+  const refresh = useCallback(async (): Promise<void> => {
+    if (projectId) {
+      const keySuffix = JSON.stringify(statsQuery);
+      await projectStatsStore.fetch(projectId, keySuffix, { statsQuery }, { silent: true });
     }
   }, [projectId, statsQuery]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
-
-  useEffect(() => {
-    if (!projectId) {
-      return;
-    }
-
-    return subscribeToDashboardRealtime([`project:${projectId}`], (message: DashboardRealtimeServerMessage) => {
-      if (message.type === "event" && (
-        message.event.eventType === "project.execution.updated"
-        || message.event.eventType === "project.structure.updated"
-      )) {
-        void refresh();
-        return;
-      }
-
-      if (message.type === "snapshot_required") {
-        void refresh();
-      }
-    });
-  }, [projectId, refresh]);
-
-  useEffect(() => {
-    if (!projectId || pollIntervalMs <= 0) {
-      return;
-    }
-    const intervalId = globalThis.window.setInterval(() => {
-      void refresh();
-    }, pollIntervalMs);
-    return () => globalThis.window.clearInterval(intervalId);
-  }, [pollIntervalMs, projectId, refresh]);
 
   return useMemo(() => ({
     stats,

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Sprint, TaskRecord } from "../../../dashboard/src/v2/types.js";
+import type { ExecutionDashboardSnapshot, ProjectExecutionStatsSnapshot } from "../../../src/contracts/app-types.js";
 import {
+  areExecutionSnapshotsEqual,
+  areProjectStatsSnapshotsEqual,
   areSprintListsEqual,
   areTaskRecordListsEqual,
   shouldUseForegroundLoading,
@@ -85,5 +88,55 @@ describe("project-resource-utils", () => {
     const next = [createSprint({ status: "running" })];
 
     expect(areSprintListsEqual(current, next)).toBe(false);
+  });
+
+  describe("areExecutionSnapshotsEqual", () => {
+    it("returns true for identical object references", () => {
+      const snap = { updatedAt: "2026-03-10T00:00:00.000Z" } as ExecutionDashboardSnapshot;
+      expect(areExecutionSnapshotsEqual(snap, snap)).toBe(true);
+    });
+
+    it("returns false if one is null", () => {
+      const snap = { updatedAt: "2026-03-10T00:00:00.000Z" } as ExecutionDashboardSnapshot;
+      expect(areExecutionSnapshotsEqual(snap, null)).toBe(false);
+      expect(areExecutionSnapshotsEqual(null, snap)).toBe(false);
+    });
+
+    it("returns true for identical values", () => {
+      const current = { projectId: "p1", updatedAt: "2026-03-10T00:00:00.000Z" } as ExecutionDashboardSnapshot;
+      const next = { projectId: "p1", updatedAt: "2026-03-10T00:00:00.000Z" } as ExecutionDashboardSnapshot;
+      expect(areExecutionSnapshotsEqual(current, next)).toBe(true);
+    });
+
+    it("returns false for different values", () => {
+      const current = { projectId: "p1", updatedAt: "2026-03-10T00:00:00.000Z" } as ExecutionDashboardSnapshot;
+      const next = { projectId: "p1", updatedAt: "2026-03-10T00:00:01.000Z" } as ExecutionDashboardSnapshot;
+      expect(areExecutionSnapshotsEqual(current, next)).toBe(false);
+    });
+  });
+
+  describe("areProjectStatsSnapshotsEqual", () => {
+    it("returns true for identical object references", () => {
+      const stats = { projectId: "p1" } as ProjectExecutionStatsSnapshot;
+      expect(areProjectStatsSnapshotsEqual(stats, stats)).toBe(true);
+    });
+
+    it("returns false if one is null", () => {
+      const stats = { projectId: "p1" } as ProjectExecutionStatsSnapshot;
+      expect(areProjectStatsSnapshotsEqual(stats, null)).toBe(false);
+      expect(areProjectStatsSnapshotsEqual(null, stats)).toBe(false);
+    });
+
+    it("returns true for identical structural values", () => {
+      const current = { projectId: "p1", totalRuns: 10 } as unknown as ProjectExecutionStatsSnapshot;
+      const next = { projectId: "p1", totalRuns: 10 } as unknown as ProjectExecutionStatsSnapshot;
+      expect(areProjectStatsSnapshotsEqual(current, next)).toBe(true);
+    });
+
+    it("returns false for different structural values", () => {
+      const current = { projectId: "p1", totalRuns: 10 } as unknown as ProjectExecutionStatsSnapshot;
+      const next = { projectId: "p1", totalRuns: 11 } as unknown as ProjectExecutionStatsSnapshot;
+      expect(areProjectStatsSnapshotsEqual(current, next)).toBe(false);
+    });
   });
 });
