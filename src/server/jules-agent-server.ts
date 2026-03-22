@@ -60,6 +60,7 @@ import { bootMcpHttpTransport, bootMcpTransport, type McpHttpTransportHandle } f
 import { getSprintSubtasksDir, SPRINT_OS_SERVICE_NAME } from "../shared/config/sprint-os-paths.js";
 import { SprintMarkdownService } from "../services/sprint-markdown-service.js";
 import { VirtualWorkerService } from "../services/virtual-worker-service.js";
+import type { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -114,6 +115,7 @@ export class JulesAgentServer {
   private projectRuntimeRepository: ProjectRuntimeRepository;
   private connectionChatRepository: ConnectionChatRepository;
   private projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
+  private projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   private projectAttentionRepository: ProjectAttentionRepository;
   private agentPresetRepository: AgentPresetRepository;
   private agentPresetSyncService: AgentPresetSyncService;
@@ -155,6 +157,7 @@ export class JulesAgentServer {
     this.projectRuntimeRepository = deps.projectRuntimeRepository;
     this.connectionChatRepository = deps.connectionChatRepository;
     this.projectWorkerAssignmentRepository = deps.projectWorkerAssignmentRepository;
+    this.projectWorkerAssignmentService = deps.projectWorkerAssignmentService;
     this.projectAttentionRepository = deps.projectAttentionRepository;
     this.agentPresetRepository = deps.agentPresetRepository;
     this.agentPresetSyncService = deps.agentPresetSyncService;
@@ -771,6 +774,7 @@ export class JulesAgentServer {
         executionRepository: this.executionRepository,
         connectionChatRepository: this.connectionChatRepository,
         projectWorkerAssignmentRepository: this.projectWorkerAssignmentRepository,
+        projectWorkerAssignmentService: this.projectWorkerAssignmentService,
         projectAttentionRepository: this.projectAttentionRepository,
         agentPresetRepository: this.agentPresetRepository,
         agentPresetSyncService: this.agentPresetSyncService,

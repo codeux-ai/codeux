@@ -105,6 +105,10 @@ describe("dashboard-lifecycle-service", () => {
       } as any,
       projectManagementRepository: {
         getSelectedProjectId: vi.fn().mockReturnValue("project-1"),
+        getProject: vi.fn().mockReturnValue({
+          id: "project-1",
+          name: "Project 1",
+        }),
         listProjects: vi.fn().mockReturnValue({ projects: [], selectedProjectId: "project-1" }),
         notifyProjectsUpdated: vi.fn(),
       } as any,
@@ -116,6 +120,9 @@ describe("dashboard-lifecycle-service", () => {
       } as any,
       projectWorkerAssignmentRepository: {
         listAssignmentsForProject: vi.fn().mockReturnValue([]),
+      } as any,
+      projectWorkerAssignmentService: {
+        setProjectPreferredWorker: vi.fn().mockReturnValue([]),
       } as any,
       projectAttentionRepository: {
         listProjectAttentionItems: vi.fn().mockReturnValue([]),

@@ -5,6 +5,7 @@ import type { Server } from "http";
 import { createServer } from "http";
 import type {
   ExecutionAttentionItemSummary,
+  ExecutionAssignedWorkerSummary,
   ExecutionDashboardSnapshot,
   ExternalSettingsHints,
     GitTrackingStatus,
@@ -64,6 +65,17 @@ export interface DashboardServerOptions {
   getExecutionSnapshot: () => ExecutionDashboardSnapshot;
   getProjectExecutionSnapshot: (projectId: string) => ExecutionDashboardSnapshot;
   getProjectStatsSnapshot: (projectId: string, query?: ProjectStatsQuery) => ProjectExecutionStatsSnapshot;
+  setPreferredWorker?: (
+    projectId: string,
+    input?: {
+      workerConnectionId?: string | null;
+      workerEndpointId?: string | null;
+      workerEndpointKey?: string | null;
+    },
+  ) => {
+    primaryAssignedWorker: ExecutionAssignedWorkerSummary | null;
+    overflowAssignedWorkers: ExecutionAssignedWorkerSummary[];
+  };
   claimAttentionItem?: (
     projectId: string,
     attentionItemId: string,
@@ -276,6 +288,26 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       res.json(options.getProjectStatsSnapshot(String(req.params.projectId || "").trim(), query));
     } catch (error) {
       res.status(400).json({ error: toErrorMessage(error, "Failed to load project stats snapshot") });
+    }
+  });
+
+  app.put("/api/projects/:projectId/preferred-worker", (req, res) => {
+    if (!options.setPreferredWorker) {
+      res.status(501).json({ error: "Preferred worker assignment is not enabled." });
+      return;
+    }
+
+    try {
+      res.json(options.setPreferredWorker(
+        String(req.params.projectId || "").trim(),
+        {
+          workerConnectionId: parseNullableTrimmedString(req.body?.workerConnectionId),
+          workerEndpointId: parseNullableTrimmedString(req.body?.workerEndpointId),
+          workerEndpointKey: parseNullableTrimmedString(req.body?.workerEndpointKey),
+        },
+      ));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to update preferred worker") });
     }
   });
 
@@ -886,4 +918,16 @@ function parseProjectStatsQuery(query: Record<string, unknown>): ProjectStatsQue
     from,
     to,
   };
+}
+
+function parseNullableTrimmedString(value: unknown): string | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }

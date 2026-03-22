@@ -20,6 +20,12 @@ interface WorkerEndpointRow {
   updated_at: string;
 }
 
+export interface ResolveWorkerEndpointInput {
+  workerEndpointId?: string | null;
+  workerConnectionId?: string | null;
+  workerEndpointKey?: string | null;
+}
+
 const DEFAULT_WORKER_ENDPOINT_CAPABILITIES: WorkerEndpointCapabilities = {
   canSuperviseProjects: true,
   canExecuteTasks: true,
@@ -86,6 +92,25 @@ export class WorkerEndpointRepository {
     `).get(endpointKey) as WorkerEndpointRow | undefined;
 
     return row ? this.mapRow(row) : null;
+  }
+
+  resolveWorkerEndpoint(input: ResolveWorkerEndpointInput): WorkerEndpointRecord | null {
+    const workerEndpointId = typeof input.workerEndpointId === "string" ? input.workerEndpointId.trim() : "";
+    if (workerEndpointId) {
+      return this.getWorkerEndpoint(workerEndpointId);
+    }
+
+    const workerConnectionId = typeof input.workerConnectionId === "string" ? input.workerConnectionId.trim() : "";
+    if (workerConnectionId) {
+      return this.getWorkerEndpointByConnectionId(workerConnectionId);
+    }
+
+    const workerEndpointKey = typeof input.workerEndpointKey === "string" ? input.workerEndpointKey.trim() : "";
+    if (workerEndpointKey) {
+      return this.getWorkerEndpointByKey(workerEndpointKey);
+    }
+
+    return null;
   }
 
   createVirtualEndpoint(input: {

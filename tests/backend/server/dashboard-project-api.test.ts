@@ -49,8 +49,12 @@ const mapExecutionConnections = (connections: McpConnectionRecord[]) => (
   }))
 );
 
-const mapAssignedWorkers = (projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository, projectId: string) => {
-  const assignments = projectWorkerAssignmentRepository.listAssignmentsForProject(projectId, { activeOnly: true })
+const mapAssignedWorkers = (
+  projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository,
+  projectId: string,
+  assignments = projectWorkerAssignmentRepository.listAssignmentsForProject(projectId, { activeOnly: true }),
+) => {
+  const mappedAssignments = assignments
     .map((assignment) => ({
       assignmentId: assignment.id,
       workerEndpointId: assignment.workerEndpointId,
@@ -70,8 +74,8 @@ const mapAssignedWorkers = (projectWorkerAssignmentRepository: ProjectWorkerAssi
     }));
 
   return {
-    primaryAssignedWorker: assignments.find((assignment) => assignment.assignmentRole === "primary") || null,
-    overflowAssignedWorkers: assignments.filter((assignment) => assignment.assignmentRole === "overflow"),
+    primaryAssignedWorker: mappedAssignments.find((assignment) => assignment.assignmentRole === "primary") || null,
+    overflowAssignedWorkers: mappedAssignments.filter((assignment) => assignment.assignmentRole === "overflow"),
   };
 };
 
@@ -212,6 +216,11 @@ async function createServerHandle(): Promise<{
       attentionItems: mapAttentionItems(projectAttentionRepository, projectId),
     }),
     getProjectStatsSnapshot: (projectId, window) => executionRepository.getProjectStatsSnapshot(projectId, window),
+    setPreferredWorker: (projectId, input) => mapAssignedWorkers(
+      projectWorkerAssignmentRepository,
+      projectId,
+      projectWorkerAssignmentService.setProjectPreferredWorker(projectId, input),
+    ),
     claimAttentionItem: (projectId, attentionItemId, input) => {
       const current = projectAttentionRepository.getAttentionItem(attentionItemId);
       if (!current || current.projectId !== projectId) {
@@ -993,5 +1002,170 @@ describe("dashboard project management API", () => {
     });
     expect(orchestrateResponse.status).toBe(202);
     expect(controlCalls.orchestrate).toEqual([{ projectId: project.id, sprintId: sprint.id }]);
+  });
+
+  it("promotes and clears a preferred worker through the project API while keeping execution snapshots consistent", async () => {
+    const {
+      port,
+      repository,
+      connectionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentService,
+    } = await createServerHandle();
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const projectA = repository.createProject({
+      name: "Preferred Worker API Project A",
+      sourceType: "local",
+      sourceRef: "/workspace/preferred-worker-api-project-a",
+    });
+    const projectB = repository.createProject({
+      name: "Preferred Worker API Project B",
+      sourceType: "local",
+      sourceRef: "/workspace/preferred-worker-api-project-b",
+    });
+
+    const workerA = connectionRepository.upsertConnection({
+      connectionKey: "preferred-worker-api-a",
+      displayName: "Preferred Worker API A",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [projectA.id],
+      activeProjectIds: [projectA.id],
+    });
+    const workerB = connectionRepository.upsertConnection({
+      connectionKey: "preferred-worker-api-b",
+      displayName: "Preferred Worker API B",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [projectA.id],
+      activeProjectIds: [projectA.id],
+    });
+    const workerC = connectionRepository.upsertConnection({
+      connectionKey: "preferred-worker-api-c",
+      displayName: "Preferred Worker API C",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [projectB.id],
+      activeProjectIds: [projectB.id],
+    });
+
+    const endpointA = workerEndpointRepository.getWorkerEndpointByConnectionId(workerA.id)!;
+    const endpointB = workerEndpointRepository.getWorkerEndpointByConnectionId(workerB.id)!;
+    const endpointC = workerEndpointRepository.getWorkerEndpointByConnectionId(workerC.id)!;
+
+    projectWorkerAssignmentService.noteWorkerActivity(projectA.id, endpointA.id);
+    projectWorkerAssignmentService.noteWorkerActivity(projectA.id, endpointB.id);
+    projectWorkerAssignmentService.noteWorkerActivity(projectB.id, endpointC.id);
+
+    const setPreferredWorkerResponse = await fetch(`${baseUrl}/api/projects/${projectA.id}/preferred-worker`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workerConnectionId: workerB.id,
+      }),
+    });
+    expect(setPreferredWorkerResponse.status).toBe(200);
+    const updatedAssignments = await setPreferredWorkerResponse.json() as {
+      primaryAssignedWorker: null | { workerEndpointId: string | null; workerDisplayName: string; assignmentRole: string };
+      overflowAssignedWorkers: Array<{ workerEndpointId: string | null; workerDisplayName: string; assignmentRole: string }>;
+    };
+    expect(updatedAssignments.primaryAssignedWorker).toMatchObject({
+      workerEndpointId: endpointB.id,
+      workerDisplayName: "Preferred Worker API B",
+      assignmentRole: "primary",
+    });
+    expect(updatedAssignments.overflowAssignedWorkers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        workerEndpointId: endpointA.id,
+        workerDisplayName: "Preferred Worker API A",
+        assignmentRole: "overflow",
+      }),
+    ]));
+
+    const projectExecutionSnapshot = await fetch(`${baseUrl}/api/projects/${projectA.id}/execution`)
+      .then(async (response) => response.json()) as {
+        primaryAssignedWorker: null | { workerEndpointId: string | null; workerDisplayName: string; assignmentRole: string };
+        overflowAssignedWorkers: Array<{ workerEndpointId: string | null; workerDisplayName: string; assignmentRole: string }>;
+      };
+    expect(projectExecutionSnapshot).toMatchObject(updatedAssignments);
+
+    const otherProjectExecutionSnapshot = await fetch(`${baseUrl}/api/projects/${projectB.id}/execution`)
+      .then(async (response) => response.json()) as {
+        primaryAssignedWorker: null | { workerEndpointId: string | null; workerDisplayName: string; assignmentRole: string };
+      };
+    expect(otherProjectExecutionSnapshot.primaryAssignedWorker).toMatchObject({
+      workerEndpointId: endpointC.id,
+      workerDisplayName: "Preferred Worker API C",
+      assignmentRole: "primary",
+    });
+
+    const clearPreferredWorkerResponse = await fetch(`${baseUrl}/api/projects/${projectA.id}/preferred-worker`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workerConnectionId: null,
+      }),
+    });
+    expect(clearPreferredWorkerResponse.status).toBe(200);
+    const clearedAssignments = await clearPreferredWorkerResponse.json() as {
+      primaryAssignedWorker: null;
+      overflowAssignedWorkers: Array<{ workerEndpointId: string | null; workerDisplayName: string; assignmentRole: string }>;
+    };
+    expect(clearedAssignments.primaryAssignedWorker).toBeNull();
+    expect(clearedAssignments.overflowAssignedWorkers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        workerEndpointId: endpointA.id,
+        workerDisplayName: "Preferred Worker API A",
+        assignmentRole: "overflow",
+      }),
+      expect.objectContaining({
+        workerEndpointId: endpointB.id,
+        workerDisplayName: "Preferred Worker API B",
+        assignmentRole: "overflow",
+      }),
+    ]));
+
+    const clearedProjectExecutionSnapshot = await fetch(`${baseUrl}/api/projects/${projectA.id}/execution`)
+      .then(async (response) => response.json()) as {
+        primaryAssignedWorker: null;
+        overflowAssignedWorkers: Array<{ workerEndpointId: string | null; workerDisplayName: string; assignmentRole: string }>;
+      };
+    expect(clearedProjectExecutionSnapshot).toMatchObject(clearedAssignments);
+  });
+
+  it("rejects invalid preferred worker selections through the project API", async () => {
+    const {
+      port,
+      repository,
+      connectionRepository,
+    } = await createServerHandle();
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const project = repository.createProject({
+      name: "Preferred Worker Validation Project",
+      sourceType: "local",
+      sourceRef: "/workspace/preferred-worker-validation-project",
+    });
+    const listener = connectionRepository.startListen({
+      connectionKey: "preferred-worker-listener",
+      displayName: "Preferred Worker Listener",
+      role: "listener",
+      projectId: project.id,
+    });
+
+    const response = await fetch(`${baseUrl}/api/projects/${project.id}/preferred-worker`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workerConnectionId: listener.connection.id,
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: `Failed to update preferred worker: Preferred worker target not found: ${listener.connection.id}`,
+    });
   });
 });
