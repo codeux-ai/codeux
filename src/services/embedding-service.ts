@@ -78,10 +78,15 @@ export class EmbeddingService {
       attention_mask: new ort.Tensor("int64", attentionMask, [1, seqLength]),
     };
 
-    // Some models expect token_type_ids
+    // Some models expect additional inputs
     const inputNames = this.session.inputNames as string[];
     if (inputNames.includes("token_type_ids")) {
       feeds.token_type_ids = new ort.Tensor("int64", tokenTypeIds, [1, seqLength]);
+    }
+    if (inputNames.includes("position_ids")) {
+      const positionIds = new BigInt64Array(seqLength);
+      for (let i = 0; i < seqLength; i++) positionIds[i] = BigInt(i);
+      feeds.position_ids = new ort.Tensor("int64", positionIds, [1, seqLength]);
     }
 
     const results = await this.session.run(feeds);
