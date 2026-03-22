@@ -3,7 +3,6 @@ import { useLayoutEffect, useRef, useState, useEffect, useMemo } from "preact/ho
 import gsap from "gsap";
 import {
   ClipboardList,
-  ChevronDown,
   Loader2,
   RefreshCw,
   Rocket,
@@ -13,6 +12,7 @@ import {
   X,
 } from "lucide-preact";
 import type { Sprint, ExecutionConnectionSummary, AgentPreset } from "../../types.js";
+import { AvantgardeSelect } from "./AvantgardeSelect.js";
 import {
   useSprintComposerState, 
   type SprintSubmitMode,
@@ -313,22 +313,20 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
             <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
               <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Planning Route</div>
-              <div className="relative mt-2">
-                <select
+              <div className="mt-2">
+                <AvantgardeSelect
+                  variant="compact"
                   value={state.routeOverride?.id || ""}
-                  onChange={(e) => {
-                    const id = (e.target as HTMLSelectElement).value;
+                  onChange={(id) => {
                     const opt = routeOptions.find(o => o.id === id);
                     state.setRouteOverride(opt || null);
                   }}
-                  className="w-full appearance-none bg-transparent pr-8 text-[11px] font-bold uppercase tracking-[0.14em] text-signal-600 outline-none dark:text-signal-300"
-                >
-                  <option value="">Default Route</option>
-                  {routeOptions.map(opt => (
-                    <option key={opt.id} value={opt.id}>{opt.label}</option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-0 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+                  options={[
+                    { value: "", label: "Default Route" },
+                    ...routeOptions.map(opt => ({ value: opt.id, label: opt.label })),
+                  ]}
+                  placeholder="Default Route"
+                />
               </div>
             </div>
 
@@ -338,19 +336,18 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 : "border-black/[0.06] bg-black/[0.025] opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03]"
             }`}>
               <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Model Override</div>
-              <div className="relative mt-2">
-                <select
+              <div className="mt-2">
+                <AvantgardeSelect
+                  variant="compact"
                   disabled={!showModelOverride}
                   value={state.modelOverride || ""}
-                  onChange={(e) => state.setModelOverride((e.target as HTMLSelectElement).value || null)}
-                  className="w-full appearance-none bg-transparent pr-8 text-[11px] font-bold uppercase tracking-[0.14em] text-signal-600 outline-none disabled:text-slate-400 dark:text-signal-300"
-                >
-                  <option value="">Default Model</option>
-                  {modelOptions.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-0 top-1/2 h-3 w-3 -translate-y-1/2 text-slate-400" />
+                  onChange={(val) => state.setModelOverride(val || null)}
+                  options={[
+                    { value: "", label: "Default Model" },
+                    ...modelOptions.map(opt => ({ value: opt.value, label: opt.label })),
+                  ]}
+                  placeholder="Default Model"
+                />
               </div>
             </div>
           </div>
@@ -411,18 +408,17 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         <aside className="flex flex-col gap-4 p-6 sm:p-8">
           <div data-composer-stagger>
             <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Planning Agent</div>
-            <div className="relative mt-3">
-              <select
+            <div className="mt-3">
+              <AvantgardeSelect
+                variant="card"
                 value={state.planningAgentPresetId || ""}
-                onChange={(e) => state.setPlanningAgentPresetId((e.target as HTMLSelectElement).value || null)}
-                className="w-full appearance-none rounded-[1.2rem] border border-black/[0.06] bg-white/66 px-4 py-2.5 pr-10 text-[11px] font-bold uppercase tracking-[0.14em] text-signal-600 outline-none hover:border-black/[0.1] dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-signal-300 dark:hover:border-white/[0.1]"
-              >
-                <option value="">Built-in Planning agent</option>
-                {planningPresets.map((preset) => (
-                  <option key={preset.id} value={preset.id}>{preset.name}</option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                onChange={(val) => state.setPlanningAgentPresetId(val || null)}
+                options={[
+                  { value: "", label: "Built-in Planning agent" },
+                  ...planningPresets.map((preset) => ({ value: preset.id, label: preset.name })),
+                ]}
+                placeholder="Built-in Planning agent"
+              />
             </div>
           </div>
 

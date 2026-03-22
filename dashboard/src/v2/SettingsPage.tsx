@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   Bot,
   Check,
-  ChevronDown,
   Cpu,
   ExternalLink,
   Plug,
@@ -18,6 +17,7 @@ import {
 import { fetchExternalSettingsHints } from "../lib/api/dashboard-api.js";
 import type { ProjectSettings, SettingsValueSource, SystemSettings, ThinkingMode } from "../types.js";
 import { ActionButton, NoticePanel } from "./components/settings/SettingsSurface.js";
+import { AvantgardeSelect } from "./components/ui/AvantgardeSelect.js";
 import { useProjectData } from "./context/project-data.js";
 import {
   fetchProjectEffectiveSettings,
@@ -147,25 +147,7 @@ const SelectInput: FunctionComponent<{
   options: Array<{ value: string; label: string }>;
   disabled?: boolean;
 }> = ({ value, onChange, options, disabled }) => (
-  <div className="relative w-full">
-    <select
-      value={value}
-      onChange={(event) => onChange((event.currentTarget as HTMLSelectElement).value)}
-      disabled={disabled}
-      className="w-full min-w-[150px] cursor-pointer appearance-none rounded-xl border border-black/[0.07] bg-white/52 px-3 py-2 pr-10 text-sm font-mono text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_10px_24px_rgba(15,23,42,0.04)] backdrop-blur-xl transition-[border-color,background-color,color,box-shadow] duration-200 focus:border-signal-500/35 focus:bg-white/68 focus:outline-none focus:ring-2 focus:ring-signal-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.08] dark:bg-white/[0.045] dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_10px_24px_rgba(0,0,0,0.18)] dark:[color-scheme:dark] dark:focus:border-signal-400/35 dark:focus:bg-white/[0.07]"
-    >
-      {options.map((option) => (
-        <option
-          key={option.value}
-          value={option.value}
-          className="bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100"
-        >
-          {option.label}
-        </option>
-      ))}
-    </select>
-    <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400/90" strokeWidth={2} />
-  </div>
+  <AvantgardeSelect value={value} onChange={onChange} options={options} disabled={disabled} />
 );
 
 const ProviderLogo: FunctionComponent<{
@@ -825,16 +807,16 @@ export const SettingsPage: FunctionComponent = () => {
           </Row>
           {projectSettings.automationInterventions.autoAnswerClarification && (
             <Row label="Clarification answer mode" description="Choose whether to use a static template or let a worker generate a contextual answer." badge={getFieldBadge("automationInterventions.autoAnswerClarificationMode")}>
-              <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+              <div className="flex gap-1 p-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.04]">
                 <button
                   onClick={() => updateProject((current) => ({
                     ...current,
                     automationInterventions: { ...current.automationInterventions, autoAnswerClarificationMode: "TEMPLATE" },
                   }))}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  className={`px-3 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all duration-200 ${
                     projectSettings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE"
-                      ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                      : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                      ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
+                      : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                   }`}
                 >
                   Template
@@ -844,10 +826,10 @@ export const SettingsPage: FunctionComponent = () => {
                     ...current,
                     automationInterventions: { ...current.automationInterventions, autoAnswerClarificationMode: "WORKER" },
                   }))}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  className={`px-3 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all duration-200 ${
                     projectSettings.automationInterventions.autoAnswerClarificationMode === "WORKER"
-                      ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                      : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                      ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
+                      : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                   }`}
                 >
                   Worker
@@ -855,20 +837,8 @@ export const SettingsPage: FunctionComponent = () => {
               </div>
             </Row>
           )}
-          <Row label="Auto-resume paused runs" description="Resume a project automatically when a transient pause clears." badge={getFieldBadge("automationInterventions.autoResumePaused")}>
-            <Toggle
-              value={projectSettings.automationInterventions.autoResumePaused}
-              onChange={() => updateProject((current) => ({
-                ...current,
-                automationInterventions: {
-                  ...current.automationInterventions,
-                  autoResumePaused: !current.automationInterventions.autoResumePaused,
-                },
-              }))}
-            />
-          </Row>
           {(!projectSettings.automationInterventions.autoAnswerClarification || projectSettings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE") && (
-            <Row label="Clarification answer template" description="Template used when project automation answers a clarification request." badge={getFieldBadge("automationInterventions.clarificationAnswerTemplate")} last>
+            <Row label="Clarification answer template" description="Template used when project automation answers a clarification request." badge={getFieldBadge("automationInterventions.clarificationAnswerTemplate")}>
               <TextInput
                 value={projectSettings.automationInterventions.clarificationAnswerTemplate}
                 onChange={(value) => updateProject((current) => ({
@@ -882,6 +852,18 @@ export const SettingsPage: FunctionComponent = () => {
               />
             </Row>
           )}
+          <Row label="Auto-resume paused runs" description="Resume a project automatically when a transient pause clears." badge={getFieldBadge("automationInterventions.autoResumePaused")} last>
+            <Toggle
+              value={projectSettings.automationInterventions.autoResumePaused}
+              onChange={() => updateProject((current) => ({
+                ...current,
+                automationInterventions: {
+                  ...current.automationInterventions,
+                  autoResumePaused: !current.automationInterventions.autoResumePaused,
+                },
+              }))}
+            />
+          </Row>
         </SectionCard>
       </div>
     );

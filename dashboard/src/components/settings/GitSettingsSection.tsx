@@ -3,22 +3,25 @@ import type { DashboardSettings } from "../../types.js";
 import { updateGitHubMode, updateGitSettings } from "../../lib/settings-updaters.js";
 import { FieldLabel, SettingsCard, ToggleRow } from "./primitives.js";
 import type { SettingsSectionProps } from "./types.js";
+import { AvantgardeSelect } from "../../v2/components/ui/AvantgardeSelect.js";
+
+const githubModeOptions = [
+  { value: "REMOTE", label: "Remote (GitHub CLI)" },
+  { value: "LOCAL", label: "Local (Git Commands)" },
+];
 
 export const GitSettingsSection: FunctionComponent<SettingsSectionProps> = ({ settings, onChange }) => (
   <SettingsCard title="Git Settings">
     <label className="block space-y-2">
       <FieldLabel>GitHub Mode</FieldLabel>
-      <select
+      <AvantgardeSelect
         value={settings.git.githubMode}
-        onChange={(event) => {
-          const nextMode = event.currentTarget.value as DashboardSettings["git"]["githubMode"];
+        onChange={(val) => {
+          const nextMode = val as DashboardSettings["git"]["githubMode"];
           onChange(updateGitHubMode(settings, nextMode));
         }}
-        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
-      >
-        <option value="REMOTE">Remote (GitHub CLI)</option>
-        <option value="LOCAL">Local (Git Commands)</option>
-      </select>
+        options={githubModeOptions}
+      />
       <p className="text-[11px] text-slate-500">
         Exactly one Git Manager skillset is active based on mode: remote enables <code>git_manager_remote</code>, local enables <code>git_manager_local</code>.
       </p>

@@ -1,6 +1,7 @@
 import type { FunctionComponent, JSX } from "preact";
 import type { FieldDescriptor } from "./field-descriptors.js";
 import { FieldLabel, ToggleRow } from "./primitives.js";
+import { AvantgardeSelect } from "../../v2/components/ui/AvantgardeSelect.js";
 
 interface SettingsFieldRendererProps<T> {
   descriptor: FieldDescriptor<T>;
@@ -80,30 +81,18 @@ export const SettingsFieldRenderer = <T,>({
 
     case "select":
       return (
-        <label className={className}>
+        <div className={className}>
           <FieldLabel>{descriptor.label}</FieldLabel>
-          <select
+          <AvantgardeSelect
             value={descriptor.getValue(context)}
             disabled={isDisabled}
-            onChange={(event: JSX.TargetedEvent<HTMLSelectElement>) =>
-              onChange(descriptor.onChange(context, event.currentTarget.value))
-            }
-            className="w-full rounded-lg border border-slate-700 bg-[linear-gradient(180deg,rgba(24,20,17,0.94),rgba(14,12,10,0.98))] px-3 py-2 text-sm text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:outline-none focus:ring-2 focus:ring-sky-500/50 disabled:opacity-50 [color-scheme:dark]"
-          >
-            {descriptor.options.map((option) => (
-              <option
-                key={option.value}
-                value={option.value}
-                className="bg-slate-950 text-slate-100"
-              >
-                {option.label}
-              </option>
-            ))}
-          </select>
+            onChange={(val) => onChange(descriptor.onChange(context, val))}
+            options={descriptor.options}
+          />
           {descriptor.description && (
             <p className="text-[11px] text-slate-500">{descriptor.description}</p>
           )}
-        </label>
+        </div>
       );
 
     case "range":

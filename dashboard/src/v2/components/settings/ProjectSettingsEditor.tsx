@@ -1,5 +1,6 @@
 import type { FunctionComponent, ComponentChildren } from "preact";
 import type { ProjectSettings, SettingsValueSource, ThinkingMode } from "../../../types.js";
+import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import {
   getFieldSource,
   getFieldSourceLabel,
@@ -105,21 +106,7 @@ const SelectField: FunctionComponent<{
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
 }> = ({ value, onChange, options }) => (
-  <select
-    value={value}
-    onChange={(event) => onChange((event.currentTarget as HTMLSelectElement).value)}
-    className="h-11 w-full rounded-xl border border-black/[0.07] bg-white/52 px-3 pr-10 text-sm text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_10px_24px_rgba(15,23,42,0.04)] backdrop-blur-xl outline-none transition-[border-color,background-color,color,box-shadow] focus:border-signal-500/35 focus:bg-white/68 dark:border-white/[0.08] dark:bg-white/[0.045] dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_10px_24px_rgba(0,0,0,0.18)] dark:[color-scheme:dark] dark:focus:border-signal-400/35 dark:focus:bg-white/[0.07]"
-  >
-    {options.map((option) => (
-      <option
-        key={option.value}
-        value={option.value}
-        className="bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100"
-      >
-        {option.label}
-      </option>
-    ))}
-  </select>
+  <AvantgardeSelect value={value} onChange={onChange} options={options} />
 );
 
 const ProviderLogo: FunctionComponent<{
@@ -243,15 +230,15 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         </Row>
         {settings.automationInterventions.autoAnswerClarification && (
           <Row label="Clarification answer mode" description="Choose whether to use a static template or let a worker generate a contextual answer." badge={getBadge("automationInterventions.autoAnswerClarificationMode")}>
-            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+            <div className="flex gap-1 p-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.04]">
               <button
                 onClick={() => update({
                   automationInterventions: { ...settings.automationInterventions, autoAnswerClarificationMode: "TEMPLATE" },
                 })}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                className={`px-3 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all duration-200 ${
                   settings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE"
-                    ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                    ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
+                    : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                 }`}
               >
                 Template
@@ -260,10 +247,10 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                 onClick={() => update({
                   automationInterventions: { ...settings.automationInterventions, autoAnswerClarificationMode: "WORKER" },
                 })}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                className={`px-3 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all duration-200 ${
                   settings.automationInterventions.autoAnswerClarificationMode === "WORKER"
-                    ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-sm"
-                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                    ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
+                    : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                 }`}
               >
                 Worker
@@ -271,17 +258,6 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             </div>
           </Row>
         )}
-        <Row label="Auto-resume paused runs" description="Resume paused sessions automatically after a transient pause condition clears." badge={getBadge("automationInterventions.autoResumePaused")}>
-          <ToggleField
-            checked={settings.automationInterventions.autoResumePaused}
-            onChange={(value) => update({
-              automationInterventions: {
-                ...settings.automationInterventions,
-                autoResumePaused: value,
-              },
-            })}
-          />
-        </Row>
         {(!settings.automationInterventions.autoAnswerClarification || settings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE") && (
           <div>
             <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -299,6 +275,17 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             />
           </div>
         )}
+        <Row label="Auto-resume paused runs" description="Resume paused sessions automatically after a transient pause condition clears." badge={getBadge("automationInterventions.autoResumePaused")}>
+          <ToggleField
+            checked={settings.automationInterventions.autoResumePaused}
+            onChange={(value) => update({
+              automationInterventions: {
+                ...settings.automationInterventions,
+                autoResumePaused: value,
+              },
+            })}
+          />
+        </Row>
       </Card>
 
       <Card
