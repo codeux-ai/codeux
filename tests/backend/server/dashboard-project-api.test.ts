@@ -380,7 +380,13 @@ async function createServerHandle(): Promise<{
       return { ok: true };
     },
     improveSprintPrompt: async (projectId, input) => {
-      return { goal: `Improved: ${input.goal}`, threadId: "thread-1", agentId: "agent-1", workerConnectionId: input.overrides?.workerId || null };
+      return {
+        goal: `Improved: ${input.goal}`,
+        threadId: "thread-1",
+        agentId: "agent-1",
+        workerConnectionId: input.overrides?.workerId || null,
+        planningAgentPresetId: input.planningAgentPresetId,
+      };
     },
     planSprint: async (projectId, sprintId, options) => {
       if (options.replan) {
@@ -388,7 +394,7 @@ async function createServerHandle(): Promise<{
       }
       repository.createTask(projectId, {
         sprintId,
-        title: `Planned from ${options.overrides?.virtualProvider || "default"}:${options.overrides?.virtualModel || "default"}`,
+        title: `Planned from ${options.overrides?.virtualProvider || "default"}:${options.overrides?.virtualModel || "default"} using ${options.planningAgentPresetId || "default-preset"}`,
       });
       return { ok: true, threadId: "thread-2", agentId: "agent-2", createdTaskIds: ["task-1"], started: options.autoStart };
     },
@@ -1050,13 +1056,15 @@ describe("dashboard project management API", () => {
       body: JSON.stringify({
         name: sprint.name,
         goal: "Refine me",
+        planningAgentPresetId: "preset-improve-123",
         overrides: { workerId: "custom-worker-id" },
       }),
     });
-    const improved = await improveResponse.json() as { goal: string; workerConnectionId: string };
+    const improved = await improveResponse.json() as { goal: string; workerConnectionId: string; planningAgentPresetId: string };
     expect(improveResponse.status).toBe(202);
     expect(improved.goal).toBe("Improved: Refine me");
     expect(improved.workerConnectionId).toBe("custom-worker-id");
+    expect(improved.planningAgentPresetId).toBe("preset-improve-123");
 
     const planResponse = await fetch(`${baseUrl}/api/projects/${project.id}/sprints/${sprint.id}/plan`, {
       method: "POST",
@@ -1064,6 +1072,7 @@ describe("dashboard project management API", () => {
       body: JSON.stringify({
         autoStart: false,
         replan: true,
+        planningAgentPresetId: "preset-plan-456",
         overrides: {
           virtualProvider: "codex",
           virtualModel: "super-model",
@@ -1073,7 +1082,7 @@ describe("dashboard project management API", () => {
     expect(planResponse.status).toBe(202);
     const plannedTasks = repository.listTasks(project.id, sprint.id);
     expect(plannedTasks).toHaveLength(1);
-    expect(plannedTasks[0].title).toBe("Planned from codex:super-model");
+    expect(plannedTasks[0].title).toBe("Planned from codex:super-model using preset-plan-456");
   });
 
   it("promotes and clears a preferred worker through the project API while keeping execution snapshots consistent", async () => {
