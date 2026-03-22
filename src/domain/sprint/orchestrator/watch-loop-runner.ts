@@ -325,6 +325,7 @@ export class WatchLoopRunner {
               }, {
                 sourceEventKey: `sprint-completed:${sprintRunId}`,
               });
+              this.triggerAutoPromote(scopedExecutionContext.project.id, scopedExecutionContext.sprint.id);
               fullReport += await this.deps.renderInstruction("cleanupAllMerged", { planning_target: scopedExecutionContext.sprint.name }, repoPath);
               fullReport += completionGuidance;
               fullReport += mergeFeedback.text;
@@ -435,6 +436,22 @@ export class WatchLoopRunner {
     }
 
     return fullReport;
+  }
+
+  private triggerAutoPromote(projectId: string, sprintId: string): void {
+    const promotionService = this.deps.memoryPromotionService;
+    if (!promotionService) return;
+
+    const settings = this.deps.getDashboardSettings({ projectId, sprintId });
+    if (!settings.memory?.enabled || !settings.memory.autoPromote) return;
+
+    promotionService.autoPromoteFromSprint(projectId, sprintId, settings.memory).catch((err) => {
+      this.deps.logger.warn("Failed to auto-promote sprint memories", {
+        projectId,
+        sprintId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
   }
 
   private async renderInstruction(

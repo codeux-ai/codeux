@@ -35,8 +35,10 @@ import { executeProviderStage } from "./cli-workflow/pipeline/execute-provider-s
 import { executeGitFinalizeStage } from "./cli-workflow/pipeline/git-finalize-stage.js";
 import { executePrFinalizeStage } from "./cli-workflow/pipeline/pr-finalize-stage.js";
 import { executeCleanupStage } from "./cli-workflow/pipeline/cleanup-stage.js";
+import { executeMemoryCaptureStage } from "./cli-workflow/pipeline/memory-capture-stage.js";
 import type { ActiveDispatchRegistry } from "./active-dispatch-registry.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
+import type { MemoryService } from "./memory-service.js";
 import { ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
 
 interface CliWorkflowServiceDependencies {
@@ -44,6 +46,7 @@ interface CliWorkflowServiceDependencies {
   executionRepository?: ExecutionRepository;
   projectManagementRepository?: ProjectManagementRepository;
   activeDispatchRegistry?: ActiveDispatchRegistry;
+  memoryService?: MemoryService;
   getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings;
   agentPresetSyncService: AgentPresetSyncService;
   getGithubToken: () => string | undefined;
@@ -213,7 +216,15 @@ export class CliWorkflowService {
         provider: args.provider,
         worktreePath: ctx.worktreePath,
       }, `cli:provider:completed:${ctx.worktreePath}`);
-      
+
+      const { memoriesCaptured } = await executeMemoryCaptureStage(ctx);
+      if (memoriesCaptured > 0) {
+        this.appendExecutionEvent(args, "cli_memory_captured", {
+          provider: args.provider,
+          memoriesCaptured,
+        }, `cli:memory:captured:${args.sessionId}`);
+      }
+
       const { hasChanges, committedChanges, pushedBranch } = await executeGitFinalizeStage(ctx);
 
       if (!hasChanges) {

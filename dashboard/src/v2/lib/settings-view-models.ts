@@ -71,6 +71,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     instructionTemplates: { ...settings.agents.instructionTemplates },
   },
   skills: cloneSkills(settings.skills),
+  memory: { ...settings.memory },
 });
 
 export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings => ({
@@ -108,6 +109,7 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
     instructionTemplates: { ...settings.agents.instructionTemplates },
   },
   skills: cloneSkills(settings.skills),
+  memory: { ...settings.memory },
 });
 
 export const cloneSystemSettings = (settings: SystemSettings): SystemSettings => ({

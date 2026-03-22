@@ -12,6 +12,7 @@ import { sanitizeCiIntelligence } from "../domain/settings/settings-sanitizers/c
 import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/sprint-loop-sanitizer.js";
 import { sanitizeCliWorkflow } from "../domain/settings/settings-sanitizers/cli-workflow-sanitizer.js";
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
+import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sanitizer.js";
 import {
   DEFAULT_DASHBOARD_SETTINGS,
   DEFAULT_SKILLS,
@@ -119,6 +120,7 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
   mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),
+  memory: { ...DEFAULT_DASHBOARD_SETTINGS.memory },
 });
 
 export const sanitizeSettings = (value: unknown, externalHints?: ExternalSettingsHints): DashboardSettings => {
@@ -178,6 +180,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
 
   const normalizedSkills = enforceGitManagerSkillset(sanitizeSkills(input.skills), git.githubMode);
   const mcpTools = sanitizeMcpTools(input.mcpTools);
+  const memory = sanitizeMemory(input);
 
   return {
     dashboardPort,
@@ -193,5 +196,6 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     agents,
     skills: normalizedSkills,
     mcpTools,
+    memory,
   };
 };

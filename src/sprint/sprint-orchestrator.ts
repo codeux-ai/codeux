@@ -30,6 +30,8 @@ import { SprintActionRunner } from "../domain/sprint/orchestrator/sprint-action-
 import type { Logger } from "../shared/logging/logger.js";
 import { MainMergeGateService, type MergeFeedbackResult } from "../domain/sprint/ci/main-merge-gate.js";
 import type { ResolvePullRequestResult } from "../services/git-status-service.js";
+import type { MemoryService } from "../services/memory-service.js";
+import type { MemoryPromotionService } from "../services/memory-promotion-service.js";
 
 const SPRINT_ORCHESTRATOR_OWNER_KEY = "sprint_orchestrator";
 
@@ -90,6 +92,8 @@ export interface SprintOrchestratorDependencies {
   }) => Promise<ResolvePullRequestResult | null>;
   renderInstruction: (templateId: InstructionTemplateId, variables: Record<string, unknown>, repoPath?: string) => Promise<string>;
   logger: Logger;
+  memoryService?: MemoryService;
+  memoryPromotionService?: MemoryPromotionService;
 }
 
 export class SprintOrchestrator {

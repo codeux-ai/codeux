@@ -9,9 +9,16 @@ export async function executePrepareStage(
 
   const workerGuide = await ctx.deps.getWorkerInstruction(ctx.repoPath);
 
-  const promptBody = workerGuide
+  let promptBody = workerGuide
     ? `## SYSTEM INSTRUCTIONS & ENGINEERING STANDARDS\n\n${workerGuide}\n\n---\n\n## SUBTASK TO EXECUTE\n\n${ctx.task.prompt}`
     : ctx.task.prompt;
+
+  const learningsInstruction = ctx.settings.memory?.enabled
+    && ctx.settings.memory.autoCaptureSprint
+    && ctx.settings.memory.workerLearningsInstruction?.trim();
+  if (learningsInstruction) {
+    promptBody += `\n\n## LEARNINGS CAPTURE (Required)\n\n${learningsInstruction}`;
+  }
 
   const { worktreePath: finalPath, resumed } = await ctx.workspaceManager.prepareWorktree(
     ctx.repoPath,

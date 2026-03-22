@@ -27,7 +27,7 @@
   "dependencies": {
     "@anthropic-ai/tokenizer": "^0.0.4",
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "@tanstack/react-router": "^1.166.2",
+    "@tanstack/react-router": "1.166.2",
     "ajv": "^8.18.0",
     "axios": "^1.13.5",
     "dotenv": "^17.3.1",
@@ -35,7 +35,8 @@
     "gsap": "^3.14.2",
     "js-tiktoken": "^1.0.21",
     "lucide-preact": "^0.577.0",
-    "marked": "^17.0.3"
+    "marked": "^17.0.3",
+    "onnxruntime-node": "^1.24.3"
   },
   "overrides": {
     "hono": "^4.12.7"

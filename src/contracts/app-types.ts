@@ -1,5 +1,6 @@
 import type { InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
 import type { ProviderInvocationPurpose, TokenUsageSource } from "./execution-types.js";
+import type { MemorySettings } from "./memory-types.js";
 
 export interface JulesSource {
   name: string;
@@ -566,6 +567,7 @@ export interface DashboardSettings {
   agents: AgentSettings;
   skills: SkillToggle[];
   mcpTools: McpToolToggle[];
+  memory: MemorySettings;
 }
 
 export interface DashboardSettingsScope {

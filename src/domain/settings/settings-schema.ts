@@ -12,6 +12,8 @@ import type {
   VirtualWorkerProvider,
   WorkerExecutionMode,
 } from "../../contracts/app-types.js";
+import { EMBEDDING_MODEL_IDS } from "../../contracts/memory-types.js";
+import type { EmbeddingModelId } from "../../contracts/memory-types.js";
 import {
   PROVIDER_IDS,
   THINKING_MODES,
@@ -317,6 +319,27 @@ const validateAutomationInterventions = (
   if (typeof value.clarificationAnswerTemplate !== "string") issues.push({ path: `${path}.clarificationAnswerTemplate`, message: "Expected a string" });
 };
 
+const validateMemory = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[]
+) => {
+  if (!isRecord(value)) {
+    issues.push({ path, message: "Expected an object" });
+    return;
+  }
+  if (typeof value.enabled !== "boolean") issues.push({ path: `${path}.enabled`, message: "Expected a boolean" });
+  if (value.embeddingModel !== null && (typeof value.embeddingModel !== "string" || !EMBEDDING_MODEL_IDS.includes(value.embeddingModel as EmbeddingModelId))) {
+    issues.push({ path: `${path}.embeddingModel`, message: `Expected null or one of: ${EMBEDDING_MODEL_IDS.join(", ")}` });
+  }
+  if (typeof value.autoCaptureSprint !== "boolean") issues.push({ path: `${path}.autoCaptureSprint`, message: "Expected a boolean" });
+  if (typeof value.autoCaptureAgent !== "boolean") issues.push({ path: `${path}.autoCaptureAgent`, message: "Expected a boolean" });
+  if (typeof value.autoPromote !== "boolean") issues.push({ path: `${path}.autoPromote`, message: "Expected a boolean" });
+  if (typeof value.promotionThreshold !== "number") issues.push({ path: `${path}.promotionThreshold`, message: "Expected a number" });
+  if (typeof value.maxSprintMemories !== "number") issues.push({ path: `${path}.maxSprintMemories`, message: "Expected a number" });
+  if (typeof value.maxProjectMemories !== "number") issues.push({ path: `${path}.maxProjectMemories`, message: "Expected a number" });
+};
+
 export const validateSettingsPayload = (payload: unknown): ValidationResult<DashboardSettings> => {
   const issues: ValidationIssue[] = [];
 
@@ -348,6 +371,7 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
   validateAgents(payload.agents, "agents", issues);
   validateSkills(payload.skills, "skills", issues);
   validateMcpTools(payload.mcpTools, "mcpTools", issues);
+  validateMemory(payload.memory, "memory", issues);
 
   if (issues.length > 0) {
     return { success: false, issues };

@@ -4,12 +4,14 @@ import type { IPrService } from "../../../infrastructure/providers/cli/pr-servic
 import type { IProviderRunner } from "../../../infrastructure/providers/cli/provider-runner.js";
 import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
 import type { SessionTrackingRepository } from "../../../repositories/session-tracking-repository.js";
+import type { MemoryService } from "../../memory-service.js";
 import type { Logger } from "../../../shared/logging/logger.js";
 import type { CommandResult } from "../../cli-process-runner.js";
 
 export interface PipelineContextDeps {
   sessionTracking: SessionTrackingRepository;
   executionRepository?: ExecutionRepository;
+  memoryService?: MemoryService;
   getDashboardSettings: () => DashboardSettings;
   getWorkerInstruction: (repoPath: string) => Promise<string>;
   getGithubToken: () => string | undefined;

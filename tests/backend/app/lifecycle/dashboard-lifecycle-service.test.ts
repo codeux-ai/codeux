@@ -7,6 +7,9 @@ import * as path from "path";
 
 vi.mock("../../../../src/server/dashboard-server.js");
 vi.mock("../../../../src/shared/logging/logger.js");
+vi.mock("../../../../src/server/memory-routes.js", () => ({
+  registerMemoryRoutes: vi.fn(),
+}));
 
 describe("dashboard-lifecycle-service", () => {
   let mockDeps: BootDashboardDeps;
@@ -174,6 +177,11 @@ describe("dashboard-lifecycle-service", () => {
       refreshJulesApiKey: vi.fn(),
       setLogger: vi.fn(),
       LIVE_ACTIVITY_CACHE_MS: 500,
+      memoryService: {} as any,
+      memoryPromotionService: {} as any,
+      embeddingModelManager: {} as any,
+      embeddingService: {} as any,
+      memoryRepository: {} as any,
     };
 
     vi.mocked(setupDashboardServer).mockResolvedValue({ port: 3000 } as any);

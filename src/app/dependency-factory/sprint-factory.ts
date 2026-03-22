@@ -59,6 +59,7 @@ export function createSprintDependencies(
     executionRepository,
     projectManagementRepository,
     activeDispatchRegistry,
+    memoryService: coreDeps.memoryService,
     getDashboardSettings: resolveDashboardSettings,
     agentPresetSyncService,
     getGithubToken: () => context.getEffectiveGithubToken(),
@@ -107,6 +108,7 @@ export function createSprintDependencies(
           : coreDeps.settingsRepository.resolveProjectDashboardSettings(projectId).settings.workers.executionMode
       ),
       logger.child({ component: "virtual-worker-task-dispatch-service" }),
+      coreDeps.memoryService,
     ),
     cliWorkflowService,
     logger: logger.child({ component: "virtual-worker-service" }),
@@ -169,6 +171,8 @@ export function createSprintDependencies(
     renderInstruction: (templateId, variables, repoPath) =>
       instructionService.render(templateId, variables, repoPath),
     logger: logger.child({ component: "sprint-orchestrator" }),
+    memoryService: coreDeps.memoryService,
+    memoryPromotionService: coreDeps.memoryPromotionService,
   });
 
   return {

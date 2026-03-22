@@ -18,6 +18,7 @@ import { sanitizeCiIntelligence } from "../domain/settings/settings-sanitizers/c
 import { sanitizeCliWorkflow } from "../domain/settings/settings-sanitizers/cli-workflow-sanitizer.js";
 import { sanitizeGit } from "../domain/settings/settings-sanitizers/git-sanitizer.js";
 import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/sprint-loop-sanitizer.js";
+import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sanitizer.js";
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
 import { sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES, INSTRUCTION_TEMPLATE_IDS, type InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
@@ -235,6 +236,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
       instructionTemplates: cloneInstructionTemplates(DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates),
     },
     skills: cloneSkills(DEFAULT_SKILLS),
+    memory: { ...DEFAULT_DASHBOARD_SETTINGS.memory },
   };
 }
 
@@ -337,6 +339,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       instructionTemplates: sanitizeInstructionTemplates(toRecord(input.agents).instructionTemplates),
     },
     skills: sanitizeSkills(input.skills, git.githubMode),
+    memory: sanitizeMemory(input as Partial<DashboardSettings>),
   };
 }
 
@@ -441,6 +444,7 @@ export function resolveDashboardSettings(args: {
     agents: { ...sprintSettings.agents },
     skills: cloneSkills(sprintSettings.skills),
     mcpTools: cloneMcpTools(args.systemSettings.mcpTools),
+    memory: { ...sprintSettings.memory },
   };
 
   const sources = flattenSources(args.systemSettings.runtime, "system");

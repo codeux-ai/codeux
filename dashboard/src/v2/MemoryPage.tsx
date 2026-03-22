@@ -1,18 +1,21 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef, useState, useCallback } from "preact/hooks";
+import { useLayoutEffect, useRef, useState, useCallback, useEffect } from "preact/hooks";
 import gsap from "gsap";
-import { Brain, Search, X, AlertTriangle, Save, Check, RotateCcw, ZoomIn, ZoomOut, Maximize2 } from "lucide-preact";
+import { Brain, Search, X, AlertTriangle, Save, Check, RotateCcw, ZoomIn, ZoomOut, Maximize2, Plus, Download, Trash2, Power, Loader2, HardDrive } from "lucide-preact";
+import { listMemories, createMemory, deleteMemory as apiDeleteMemory, searchMemories, listEmbeddingModels, downloadEmbeddingModel, selectEmbeddingModel, deleteEmbeddingModel, getMemoryStats, type EmbeddingModelWithStatus } from "./lib/memory-api.js";
+import type { MemoryRecord, MemoryScope, MemoryCategory } from "./memory-types.js";
+import { useProjectData } from "./context/project-data.js";
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
-type MemCat = "architecture" | "codebase" | "context" | "preferences" | "patterns" | "people";
+type MemCat = MemoryCategory;
 
 interface MemNode {
     id: string;
     content: string;
     category: MemCat;
     strength: number;
-    agent: string;
+    scope: MemoryScope;
     x: number;
     y: number;
     targetX: number;
@@ -25,63 +28,59 @@ interface MemNode {
 }
 
 interface Edge { a: number; b: number }
-
 interface Pulse { edgeIdx: number; progress: number; speed: number }
 
 /* ─── Config ─────────────────────────────────────────────────────────────── */
 
-const CAT: Record<MemCat, { label: string; hex: string; r: number; g: number; b: number }> = {
+const CAT: Record<string, { label: string; hex: string; r: number; g: number; b: number }> = {
     architecture: { label: "Architecture", hex: "#00E0A0", r: 0,   g: 224, b: 160 },
     codebase:     { label: "Codebase",     hex: "#FFB800", r: 255, g: 184, b: 0   },
     context:      { label: "Context",      hex: "#00AB84", r: 0,   g: 171, b: 132 },
     preferences:  { label: "Preferences",  hex: "#94a3b8", r: 148, g: 163, b: 184 },
     patterns:     { label: "Patterns",     hex: "#F59E0B", r: 245, g: 158, b: 11  },
-    people:       { label: "People",       hex: "#33FFB8", r: 51,  g: 255, b: 184 },
+    decision:     { label: "Decision",     hex: "#8B5CF6", r: 139, g: 92,  b: 246 },
+    error:        { label: "Error",        hex: "#EF4444", r: 239, g: 68,  b: 68  },
+    learning:     { label: "Learning",     hex: "#33FFB8", r: 51,  g: 255, b: 184 },
 };
 
-const CLUSTER: Record<MemCat, [number, number]> = {
-    people:       [0,    -270],
-    architecture: [240,  -135],
-    codebase:     [240,   135],
+const CLUSTER: Record<string, [number, number]> = {
+    architecture: [0,    -270],
+    codebase:     [240,  -135],
+    context:      [240,   135],
     preferences:  [0,     270],
-    context:      [-240,  135],
     patterns:     [-240, -135],
+    decision:     [-240,  135],
+    error:        [170,   250],
+    learning:     [-170,  -250],
 };
 
-/* ─── Seed data ──────────────────────────────────────────────────────────── */
-
-const SEED = [
-    { id: "m01", cat: "people"       as MemCat, s: 0.60, agent: "Planner",   text: "Sprint planning every Monday at 10:00 UTC with full team standup" },
-    { id: "m02", cat: "people"       as MemCat, s: 0.70, agent: "Reviewer",  text: "Felix leads backend architecture decisions for auth-service" },
-    { id: "m03", cat: "architecture" as MemCat, s: 0.90, agent: "Architect", text: "auth-service: JWT with 15 min expiry + refresh token rotation" },
-    { id: "m04", cat: "architecture" as MemCat, s: 0.75, agent: "Architect", text: "Payment gateway retries use exponential backoff — 3 max" },
-    { id: "m05", cat: "codebase"     as MemCat, s: 0.95, agent: "Debugger",  text: "Dashboard V2: Preact + Tailwind v4 + GSAP + TanStack Router" },
-    { id: "m06", cat: "codebase"     as MemCat, s: 0.65, agent: "Debugger",  text: "useLayoutEffect prevents animation double-pop in modals" },
-    { id: "m07", cat: "preferences"  as MemCat, s: 0.85, agent: "Planner",   text: "2-week sprints with Monday kickoffs confirmed preference" },
-    { id: "m08", cat: "preferences"  as MemCat, s: 0.75, agent: "Reviewer",  text: "All PRs require explicit approval before merge to main" },
-    { id: "m09", cat: "context"      as MemCat, s: 0.80, agent: "Debugger",  text: "payment-gateway: open Stripe webhook reliability issue — P1" },
-    { id: "m10", cat: "context"      as MemCat, s: 0.95, agent: "Architect", text: "Current sprint: Dashboard V2 avant-garde UI completion" },
-    { id: "m11", cat: "patterns"     as MemCat, s: 0.80, agent: "Architect", text: "GSAP elastic.out(1,0.7) cards, power4.out page headers" },
-    { id: "m12", cat: "patterns"     as MemCat, s: 0.65, agent: "Architect", text: "Organic morph: 12s fwd / 15s rev prevents sync artifacts" },
+const SCOPE_TABS: { key: MemoryScope; label: string }[] = [
+    { key: "sprint",  label: "Sprint" },
+    { key: "agent",   label: "Agent" },
+    { key: "project", label: "Project" },
 ];
 
-/* ─── Build nodes + edges ────────────────────────────────────────────────── */
+const CATEGORIES: MemoryCategory[] = ["architecture", "codebase", "context", "preferences", "patterns", "decision", "error", "learning"];
 
-function buildNodes(): MemNode[] {
+/* ─── Build nodes + edges from API data ─────────────────────────────────── */
+
+function buildNodesFromRecords(records: MemoryRecord[]): MemNode[] {
     const counts: Record<string, number> = {};
-    return SEED.map(s => {
-        const ci = counts[s.cat] = (counts[s.cat] || 0);
-        counts[s.cat]++;
-        const [cx, cy] = CLUSTER[s.cat];
-        const angle = ci * (Math.PI * 2 / 3) + Math.PI / 4;
-        const dist = 45 + s.s * 35;
+    return records.map(r => {
+        const cat = r.category in CLUSTER ? r.category : "context";
+        const ci = counts[cat] = (counts[cat] || 0);
+        counts[cat]++;
+        const [cx, cy] = CLUSTER[cat] || [0, 0];
+        const angle = ci * (Math.PI * 2 / Math.max(3, records.filter(m => m.category === cat).length)) + Math.PI / 4;
+        const dist = 45 + r.strength * 35;
         const tx = cx + Math.cos(angle) * dist;
         const ty = cy + Math.sin(angle) * dist;
         return {
-            id: s.id, content: s.text, category: s.cat, strength: s.s, agent: s.agent,
+            id: r.id, content: r.content, category: r.category as MemCat,
+            strength: r.strength, scope: r.scope,
             x: 0, y: 0, targetX: tx, targetY: ty,
-            radius: 4 + s.s * 7, opacity: 0, scale: 0,
-            glow: s.s * 0.4, alive: true,
+            radius: 4 + r.strength * 7, opacity: 0, scale: 0,
+            glow: r.strength * 0.4, alive: true,
         };
     });
 }
@@ -91,11 +90,6 @@ function buildEdges(nodes: MemNode[]): Edge[] {
     for (let i = 0; i < nodes.length; i++)
         for (let j = i + 1; j < nodes.length; j++)
             if (nodes[i].category === nodes[j].category) edges.push({ a: i, b: j });
-    // Cross-category semantic links
-    edges.push({ a: 2, b: 10 }); // architecture ↔ patterns
-    edges.push({ a: 4, b: 9 });  // codebase ↔ context
-    edges.push({ a: 0, b: 6 });  // people ↔ preferences
-    edges.push({ a: 3, b: 8 });  // architecture ↔ context
     return edges;
 }
 
@@ -124,6 +118,83 @@ function hitTest(wx: number, wy: number, nodes: MemNode[]): number {
     return -1;
 }
 
+function formatBytes(bytes: number): string {
+    if (bytes < 1e6) return `${(bytes / 1024).toFixed(0)} KB`;
+    if (bytes < 1e9) return `${(bytes / 1e6).toFixed(0)} MB`;
+    return `${(bytes / 1e9).toFixed(1)} GB`;
+}
+
+/* ─── Model Download Card ───────────────────────────────────────────────── */
+
+const ModelCard: FunctionComponent<{
+    model: EmbeddingModelWithStatus;
+    onDownload: (id: string) => void;
+    onSelect: (id: string) => void;
+    onDelete: (id: string) => void;
+}> = ({ model, onDownload, onSelect, onDelete }) => (
+    <div className="flex flex-col gap-3 p-4 rounded-[1.25rem]
+                   bg-white/60 dark:bg-void-800/50 backdrop-blur-xl
+                   border border-black/[0.06] dark:border-white/[0.06]
+                   shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.2)]">
+        <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+                <HardDrive className="w-4 h-4 text-signal-500" strokeWidth={2} />
+                <span className="text-sm font-bold text-slate-800 dark:text-white">{model.displayName}</span>
+            </div>
+            {model.active && (
+                <span className="text-[9px] font-bold uppercase tracking-widest text-signal-500 bg-signal-500/10 px-2 py-0.5 rounded-full">Active</span>
+            )}
+        </div>
+        <p className="text-[11px] text-slate-500 leading-relaxed">{model.description}</p>
+        <div className="flex items-center gap-3 text-[10px] font-mono text-slate-400">
+            <span>{model.dimension}d</span>
+            <span>{formatBytes(model.sizeBytes)}</span>
+            <span>{model.language}</span>
+        </div>
+        {model.downloading && (
+            <div className="flex flex-col gap-1.5">
+                <div className="h-1.5 w-full bg-black/[0.06] dark:bg-white/[0.06] rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-signal-500 transition-all duration-300"
+                        style={{ width: `${Math.round(model.downloadProgress * 100)}%` }} />
+                </div>
+                <span className="text-[9px] font-mono text-slate-400 flex items-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin" strokeWidth={2} />
+                    Downloading {Math.round(model.downloadProgress * 100)}%
+                </span>
+            </div>
+        )}
+        <div className="flex items-center gap-2 pt-1">
+            {!model.downloaded && !model.downloading && (
+                <button onClick={() => onDownload(model.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
+                               bg-signal-500 text-void-900 hover:bg-signal-400 transition-colors duration-200
+                               shadow-[0_2px_8px_rgba(0,224,160,0.25)]">
+                    <Download className="w-3 h-3" strokeWidth={2.5} />
+                    Download
+                </button>
+            )}
+            {model.downloaded && !model.active && (
+                <button onClick={() => onSelect(model.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
+                               bg-signal-500/10 text-signal-500 hover:bg-signal-500/20 transition-colors duration-200">
+                    <Power className="w-3 h-3" strokeWidth={2.5} />
+                    Activate
+                </button>
+            )}
+            {model.downloaded && (
+                <button onClick={() => onDelete(model.id)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
+                               text-slate-400 hover:text-status-red transition-colors duration-200">
+                    <Trash2 className="w-3 h-3" strokeWidth={2} />
+                </button>
+            )}
+            {model.error && (
+                <span className="text-[10px] text-status-red font-medium">{model.error}</span>
+            )}
+        </div>
+    </div>
+);
+
 /* ─── Inspector Panel ────────────────────────────────────────────────────── */
 
 const Inspector: FunctionComponent<{
@@ -134,7 +205,7 @@ const Inspector: FunctionComponent<{
     onClose: () => void;
     onDelete: (id: string) => void;
 }> = ({ node, allNodes, edges, lobotomize, onClose, onDelete }) => {
-    const cat = node ? CAT[node.category] : CAT.architecture;
+    const cat = node ? (CAT[node.category] || CAT.context) : CAT.architecture;
     const nodeIdx = node ? allNodes.findIndex(n => n.id === node.id) : -1;
     const connected = node ? edges
         .filter(e => e.a === nodeIdx || e.b === nodeIdx)
@@ -155,36 +226,27 @@ const Inspector: FunctionComponent<{
                 pointerEvents: node ? "auto" : "none",
             }}
         >
-            <button
-                onClick={onClose}
+            <button onClick={onClose}
                 className="absolute top-4 right-4 w-7 h-7 rounded-full flex items-center justify-center
                            bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08]
-                           transition-colors duration-200"
-            >
+                           transition-colors duration-200">
                 <X className="w-3.5 h-3.5 text-slate-500" strokeWidth={2} />
             </button>
-
             {node && (
                 <>
-                    {/* Category */}
                     <div className="flex items-center gap-2 pt-1">
                         <div className="w-2.5 h-2.5 rounded-full" style={{ background: cat.hex, boxShadow: `0 0 10px ${cat.hex}` }} />
                         <span className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono" style={{ color: cat.hex }}>
                             {cat.label}
                         </span>
+                        <span className="text-[9px] font-mono text-slate-400 ml-auto px-2 py-0.5 rounded-full bg-black/[0.04] dark:bg-white/[0.04]">
+                            {node.scope}
+                        </span>
                     </div>
-
-                    {/* Content */}
                     <p className="text-[13px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed">
                         {node.content}
                     </p>
-
-                    {/* Meta */}
                     <div className="flex flex-col gap-3 pt-3 border-t border-black/[0.06] dark:border-white/[0.06]">
-                        <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Agent</span>
-                            <span className="text-xs font-mono text-slate-600 dark:text-slate-400">{node.agent}</span>
-                        </div>
                         <div className="flex items-center justify-between">
                             <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Strength</span>
                             <div className="flex items-center gap-2">
@@ -197,20 +259,18 @@ const Inspector: FunctionComponent<{
                         </div>
                         <div className="flex items-center justify-between">
                             <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">ID</span>
-                            <span className="text-[11px] font-mono text-slate-400">{node.id}</span>
+                            <span className="text-[11px] font-mono text-slate-400">{node.id.slice(0, 8)}…</span>
                         </div>
                     </div>
-
-                    {/* Connected */}
                     {connected.length > 0 && (
                         <div className="flex flex-col gap-2 pt-3 border-t border-black/[0.06] dark:border-white/[0.06]">
                             <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">
                                 Synapses ({connected.length})
                             </span>
-                            {connected.map(cn => (
+                            {connected.slice(0, 6).map(cn => (
                                 <div key={cn.id} className="flex items-start gap-2 py-1">
                                     <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
-                                        style={{ background: CAT[cn.category].hex }} />
+                                        style={{ background: (CAT[cn.category] || CAT.context).hex }} />
                                     <span className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 font-medium">
                                         {cn.content}
                                     </span>
@@ -218,16 +278,12 @@ const Inspector: FunctionComponent<{
                             ))}
                         </div>
                     )}
-
-                    {/* Delete */}
                     {lobotomize && (
-                        <button
-                            onClick={() => onDelete(node.id)}
+                        <button onClick={() => onDelete(node.id)}
                             className="mt-auto flex items-center justify-center gap-2 w-full py-3 rounded-xl
                                        bg-status-red text-white font-bold text-xs
                                        shadow-[0_0_20px_rgba(227,0,15,0.3)] hover:shadow-[0_0_30px_rgba(227,0,15,0.5)]
-                                       transition-shadow duration-300"
-                        >
+                                       transition-shadow duration-300">
                             <X className="w-3.5 h-3.5" strokeWidth={2.5} />
                             Excise Memory
                         </button>
@@ -238,9 +294,92 @@ const Inspector: FunctionComponent<{
     );
 };
 
+/* ─── Add Memory Modal ───────────────────────────────────────────────────── */
+
+const AddMemoryModal: FunctionComponent<{
+    open: boolean;
+    scope: MemoryScope;
+    projectId: string;
+    onClose: () => void;
+    onCreated: () => void;
+}> = ({ open, scope, projectId, onClose, onCreated }) => {
+    const [content, setContent] = useState("");
+    const [category, setCategory] = useState<MemoryCategory>("context");
+    const [strength, setStrength] = useState(0.7);
+    const [saving, setSaving] = useState(false);
+
+    if (!open) return null;
+
+    const handleSubmit = async () => {
+        if (!content.trim()) return;
+        setSaving(true);
+        try {
+            await createMemory(projectId, { scope, content: content.trim(), category, strength });
+            setContent("");
+            onCreated();
+            onClose();
+        } catch { /* ignore */ }
+        setSaving(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/50 backdrop-blur-sm"
+            onClick={onClose}>
+            <div className="w-full max-w-md bg-white dark:bg-void-800 rounded-[1.5rem] p-6 flex flex-col gap-4
+                           border border-black/[0.06] dark:border-white/[0.06]
+                           shadow-[0_24px_80px_rgba(0,0,0,0.15)] dark:shadow-[0_24px_80px_rgba(0,0,0,0.5)]"
+                onClick={e => e.stopPropagation()}>
+                <h3 className="text-lg font-black text-slate-900 dark:text-white font-display">Add Memory</h3>
+                <textarea value={content} onInput={e => setContent((e.target as HTMLTextAreaElement).value)}
+                    placeholder="What should be remembered…"
+                    rows={3}
+                    className="w-full px-4 py-3 rounded-xl text-sm
+                               bg-black/[0.03] dark:bg-white/[0.03]
+                               border border-black/[0.06] dark:border-white/[0.06]
+                               text-slate-800 dark:text-slate-200
+                               placeholder:text-slate-400
+                               focus:outline-none focus:ring-2 focus:ring-signal-500/20 focus:border-signal-500/40
+                               resize-none" />
+                <div className="flex items-center gap-3">
+                    <select value={category} onChange={e => setCategory((e.target as HTMLSelectElement).value as MemoryCategory)}
+                        className="flex-1 px-3 py-2 rounded-lg text-xs font-medium
+                                   bg-black/[0.03] dark:bg-white/[0.03]
+                                   border border-black/[0.06] dark:border-white/[0.06]
+                                   text-slate-700 dark:text-slate-300">
+                        {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono text-slate-400">{Math.round(strength * 100)}%</span>
+                        <input type="range" min="0.1" max="1" step="0.1" value={strength}
+                            onInput={e => setStrength(parseFloat((e.target as HTMLInputElement).value))}
+                            className="w-20 accent-signal-500" />
+                    </div>
+                </div>
+                <div className="flex items-center gap-2 pt-2">
+                    <button onClick={onClose}
+                        className="flex-1 py-2.5 rounded-xl text-xs font-bold
+                                   bg-black/[0.04] dark:bg-white/[0.04] text-slate-500 hover:text-slate-900 dark:hover:text-white
+                                   transition-colors duration-200">
+                        Cancel
+                    </button>
+                    <button onClick={handleSubmit} disabled={!content.trim() || saving}
+                        className="flex-1 py-2.5 rounded-xl text-xs font-bold
+                                   bg-signal-500 text-void-900 hover:bg-signal-400
+                                   shadow-[0_2px_12px_rgba(0,224,160,0.3)]
+                                   transition-colors duration-200 disabled:opacity-50">
+                        {saving ? "Saving…" : "Add Memory"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 /* ─── Memory Page ────────────────────────────────────────────────────────── */
 
 export const MemoryPage: FunctionComponent = () => {
+    const { selectedProject } = useProjectData();
+    const pid = selectedProject?.id || "";
     const headerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const wrapRef = useRef<HTMLDivElement>(null);
@@ -248,15 +387,20 @@ export const MemoryPage: FunctionComponent = () => {
     const [lobotomize, setLobotomize] = useState(false);
     const [selectedNode, setSelectedNode] = useState<MemNode | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
-    const [memoryCount, setMemoryCount] = useState(SEED.length);
+    const [memoryCount, setMemoryCount] = useState(0);
     const [deletedCount, setDeletedCount] = useState(0);
-    const [saved, setSaved] = useState(false);
-    const [isDirty, setIsDirty] = useState(false);
+    const [activeScope, setActiveScope] = useState<MemoryScope>("project");
+    const [models, setModels] = useState<EmbeddingModelWithStatus[]>([]);
+    const [showModels, setShowModels] = useState(false);
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [records, setRecords] = useState<MemoryRecord[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [stats, setStats] = useState({ sprint: 0, agent: 0, project: 0, activeModel: null as string | null });
 
-    // Mutable render state — GSAP writes here, rAF reads
+    // Mutable render state
     const S = useRef({
-        nodes: buildNodes(),
-        edges: buildEdges(buildNodes()),
+        nodes: [] as MemNode[],
+        edges: [] as Edge[],
         cam: { x: 0, y: 0, zoom: 0.55 },
         hoveredIdx: -1,
         selectedIdx: -1,
@@ -271,27 +415,71 @@ export const MemoryPage: FunctionComponent = () => {
         neuronTimer: 0,
     });
 
-    // Sync lobotomize to mutable ref
     const lobRef = useRef(lobotomize);
     lobRef.current = lobotomize;
 
-    /* ── Canvas setup & render loop ───────────────────────────────────────── */
+    /* ── Load data ─────────────────────────────────────────────────────── */
+    const loadData = useCallback(async () => {
+        if (!pid) return;
+        setLoading(true);
+        try {
+            const [memoriesData, modelsData, statsData] = await Promise.all([
+                listMemories({ projectId: pid, scope: activeScope, limit: 200 }),
+                listEmbeddingModels(),
+                getMemoryStats(pid),
+            ]);
+            setRecords(memoriesData);
+            setModels(modelsData);
+            setStats(statsData);
+            setMemoryCount(memoriesData.length);
+
+            // Update canvas
+            const s = S.current;
+            s.nodes = buildNodesFromRecords(memoriesData);
+            s.edges = buildEdges(s.nodes);
+            s.pulses = s.edges.map((_, i) => ({ edgeIdx: i, progress: Math.random(), speed: 0.002 + Math.random() * 0.003 }));
+            s.selectedIdx = -1;
+            s.searchMatch = null;
+            setSelectedNode(null);
+
+            // Animate entrance
+            gsap.to(s.cam, { x: 0, y: 0, zoom: 0.55, duration: 0.01, overwrite: true });
+            const tl = gsap.timeline();
+            tl.to(s.cam, { zoom: 1, duration: 1.8, ease: "power2.out" }, 0);
+            s.nodes.forEach((node, i) => {
+                tl.to(node, {
+                    x: node.targetX, y: node.targetY,
+                    scale: 1, opacity: 1,
+                    duration: 1.2, ease: "power3.out",
+                }, 0.15 + Math.min(i, 20) * 0.03);
+            });
+            s.entranceDone = true;
+        } catch { /* ignore */ }
+        setLoading(false);
+    }, [pid, activeScope]);
+
+    useEffect(() => { loadData(); }, [loadData]);
+
+    /* ── Polling for model download progress ───────────────────────────── */
+    useEffect(() => {
+        const hasDownloading = models.some(m => m.downloading);
+        if (!hasDownloading) return;
+        const interval = setInterval(async () => {
+            try {
+                const updated = await listEmbeddingModels();
+                setModels(updated);
+                if (!updated.some(m => m.downloading)) clearInterval(interval);
+            } catch { /* ignore */ }
+        }, 2000);
+        return () => clearInterval(interval);
+    }, [models]);
+
+    /* ── Canvas setup & render loop ───────────────────────────────────── */
     useLayoutEffect(() => {
         const canvas = canvasRef.current!;
         const ctx = canvas.getContext("2d")!;
         const s = S.current;
 
-        // Rebuild edges with the actual nodes ref
-        s.edges = buildEdges(s.nodes);
-
-        // Spawn initial pulses (one per edge)
-        s.pulses = s.edges.map((_, i) => ({
-            edgeIdx: i,
-            progress: Math.random(),
-            speed: 0.002 + Math.random() * 0.003,
-        }));
-
-        /* Resize canvas for HiDPI */
         const resize = () => {
             const rect = canvas.parentElement!.getBoundingClientRect();
             const dpr = window.devicePixelRatio || 1;
@@ -304,7 +492,6 @@ export const MemoryPage: FunctionComponent = () => {
         resize();
         window.addEventListener("resize", resize);
 
-        /* ── Draw frame ──────────────────────────────────────────────────── */
         function draw(time: number) {
             const dpr = window.devicePixelRatio || 1;
             const w = canvas.width / dpr;
@@ -315,7 +502,6 @@ export const MemoryPage: FunctionComponent = () => {
 
             ctx.clearRect(0, 0, w, h);
 
-            /* BG radial glow */
             const scx = w / 2, scy = h / 2;
             const glowR = 380 * cam.zoom;
             const coreRGB = lob ? "227,0,15" : "0,224,160";
@@ -325,15 +511,14 @@ export const MemoryPage: FunctionComponent = () => {
             ctx.fillStyle = bg;
             ctx.fillRect(0, 0, w, h);
 
-            /* Camera transform */
             ctx.save();
             ctx.translate(w / 2, h / 2);
             ctx.scale(cam.zoom, cam.zoom);
             ctx.translate(-cam.x, -cam.y);
 
-            /* Cluster halos */
-            for (const [cat, [cx, cy]] of Object.entries(CLUSTER) as [MemCat, [number, number]][]) {
+            for (const [cat, [cx, cy]] of Object.entries(CLUSTER)) {
                 const c = CAT[cat];
+                if (!c) continue;
                 const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, 130);
                 const a = lob ? 0.015 : (dark ? 0.05 : 0.025);
                 halo.addColorStop(0, `rgba(${c.r},${c.g},${c.b},${a})`);
@@ -344,12 +529,12 @@ export const MemoryPage: FunctionComponent = () => {
                 ctx.fill();
             }
 
-            /* Cluster labels */
             if (cam.zoom > 0.55) {
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
-                for (const [cat, [cx, cy]] of Object.entries(CLUSTER) as [MemCat, [number, number]][]) {
+                for (const [cat, [cx, cy]] of Object.entries(CLUSTER)) {
                     const c = CAT[cat];
+                    if (!c) continue;
                     ctx.font = `700 ${11}px "Plus Jakarta Sans", sans-serif`;
                     ctx.fillStyle = lob
                         ? `rgba(227,0,15,${dark ? 0.2 : 0.12})`
@@ -358,52 +543,50 @@ export const MemoryPage: FunctionComponent = () => {
                 }
             }
 
-            /* Radial tendrils (node → core) */
             for (const node of nodes) {
                 if (!node.alive || node.opacity < 0.05) continue;
                 ctx.beginPath();
                 ctx.moveTo(0, 0);
                 ctx.lineTo(node.x, node.y);
+                const cc = CAT[node.category] || CAT.context;
                 const a = (0.03 + node.strength * 0.03) * node.opacity;
                 ctx.strokeStyle = lob
                     ? `rgba(227,0,15,${a})`
-                    : `rgba(${CAT[node.category].r},${CAT[node.category].g},${CAT[node.category].b},${a})`;
+                    : `rgba(${cc.r},${cc.g},${cc.b},${a})`;
                 ctx.lineWidth = 0.6;
                 ctx.stroke();
             }
 
-            /* Edges */
             for (let ei = 0; ei < edges.length; ei++) {
                 const { a, b } = edges[ei];
                 const na = nodes[a], nb = nodes[b];
-                if (!na.alive || !nb.alive || na.opacity < 0.05 || nb.opacity < 0.05) continue;
+                if (!na || !nb || !na.alive || !nb.alive || na.opacity < 0.05 || nb.opacity < 0.05) continue;
                 const cp = bezierCtrl(na.x, na.y, nb.x, nb.y, ei);
                 const alpha = (0.08 + (na.strength + nb.strength) * 0.04) * Math.min(na.opacity, nb.opacity);
-                const cat = CAT[na.category];
+                const cc = CAT[na.category] || CAT.context;
                 ctx.beginPath();
                 ctx.moveTo(na.x, na.y);
                 ctx.quadraticCurveTo(cp.cx, cp.cy, nb.x, nb.y);
                 ctx.strokeStyle = lob
                     ? `rgba(227,0,15,${alpha})`
-                    : `rgba(${cat.r},${cat.g},${cat.b},${alpha})`;
+                    : `rgba(${cc.r},${cc.g},${cc.b},${alpha})`;
                 ctx.lineWidth = 0.8;
                 ctx.stroke();
             }
 
-            /* Traveling pulses */
             if (s.entranceDone) {
                 ctx.shadowBlur = 10;
                 for (const p of pulses) {
                     const edge = edges[p.edgeIdx];
                     if (!edge) continue;
                     const na = nodes[edge.a], nb = nodes[edge.b];
-                    if (!na.alive || !nb.alive) continue;
+                    if (!na || !nb || !na.alive || !nb.alive) continue;
                     const cp = bezierCtrl(na.x, na.y, nb.x, nb.y, p.edgeIdx);
                     const px = quadAt(p.progress, na.x, cp.cx, nb.x);
                     const py = quadAt(p.progress, na.y, cp.cy, nb.y);
-                    const cat = CAT[na.category];
-                    const pColor = lob ? "rgba(227,0,15,0.7)" : `rgba(${cat.r},${cat.g},${cat.b},0.75)`;
-                    ctx.shadowColor = lob ? "rgba(227,0,15,0.5)" : cat.hex;
+                    const cc = CAT[na.category] || CAT.context;
+                    const pColor = lob ? "rgba(227,0,15,0.7)" : `rgba(${cc.r},${cc.g},${cc.b},0.75)`;
+                    ctx.shadowColor = lob ? "rgba(227,0,15,0.5)" : cc.hex;
                     ctx.beginPath();
                     ctx.arc(px, py, 2, 0, Math.PI * 2);
                     ctx.fillStyle = pColor;
@@ -414,7 +597,6 @@ export const MemoryPage: FunctionComponent = () => {
                 ctx.shadowBlur = 0;
             }
 
-            /* Core rings */
             const pulse = 0.5 + Math.sin(time * 0.002) * 0.25;
             for (let i = 0; i < 4; i++) {
                 const ringR = 22 + i * 18 + Math.sin(time * 0.001 + i * 1.8) * 4;
@@ -426,7 +608,6 @@ export const MemoryPage: FunctionComponent = () => {
                 ctx.stroke();
             }
 
-            /* Core dot */
             const coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 18);
             coreGrad.addColorStop(0, `rgba(${coreRGB},${0.85 * pulse})`);
             coreGrad.addColorStop(0.4, `rgba(${coreRGB},${0.25 * pulse})`);
@@ -444,57 +625,51 @@ export const MemoryPage: FunctionComponent = () => {
             ctx.fill();
             ctx.shadowBlur = 0;
 
-            /* Nodes */
             for (let i = 0; i < nodes.length; i++) {
                 const n = nodes[i];
                 if (!n.alive || n.opacity < 0.01) continue;
-                const cat = CAT[n.category];
+                const cc = CAT[n.category] || CAT.context;
                 const r = n.radius * n.scale;
                 const isHov = i === hoveredIdx;
                 const isSel = i === selectedIdx;
                 const dimmed = s.searchMatch && !s.searchMatch.has(i);
-
                 const effOpacity = dimmed ? n.opacity * 0.12 : n.opacity;
 
-                /* Glow halo */
                 const glR = r * (3 + n.glow * 2.5);
                 const glAlpha = (n.glow * 0.12 + (isHov ? 0.14 : 0) + (isSel ? 0.1 : 0)) * effOpacity;
                 const gl = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, glR);
-                gl.addColorStop(0, lob ? `rgba(227,0,15,${glAlpha})` : `rgba(${cat.r},${cat.g},${cat.b},${glAlpha})`);
+                gl.addColorStop(0, lob ? `rgba(227,0,15,${glAlpha})` : `rgba(${cc.r},${cc.g},${cc.b},${glAlpha})`);
                 gl.addColorStop(1, "transparent");
                 ctx.fillStyle = gl;
                 ctx.beginPath();
                 ctx.arc(n.x, n.y, glR, 0, Math.PI * 2);
                 ctx.fill();
 
-                /* Body */
                 ctx.beginPath();
                 ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
                 const bodyAlpha = (0.65 + n.strength * 0.35) * effOpacity;
                 ctx.fillStyle = lob
                     ? `rgba(227,0,15,${bodyAlpha})`
-                    : `rgba(${cat.r},${cat.g},${cat.b},${bodyAlpha})`;
+                    : `rgba(${cc.r},${cc.g},${cc.b},${bodyAlpha})`;
                 if (isHov || isSel) {
                     ctx.shadowBlur = 22;
-                    ctx.shadowColor = lob ? "rgba(227,0,15,0.6)" : cat.hex;
+                    ctx.shadowColor = lob ? "rgba(227,0,15,0.6)" : cc.hex;
                 }
                 ctx.fill();
                 ctx.shadowBlur = 0;
 
-                /* Selection ring */
                 if (isSel) {
                     ctx.beginPath();
                     ctx.arc(n.x, n.y, r + 5, 0, Math.PI * 2);
                     ctx.strokeStyle = lob
                         ? "rgba(227,0,15,0.4)"
-                        : `rgba(${cat.r},${cat.g},${cat.b},0.4)`;
+                        : `rgba(${cc.r},${cc.g},${cc.b},0.4)`;
                     ctx.lineWidth = 1.5;
                     ctx.setLineDash([4, 4]);
                     ctx.stroke();
                     ctx.setLineDash([]);
                 }
 
-                /* Label */
                 if (cam.zoom > 0.65 && !dimmed) {
                     const label = n.content.length > 28 ? n.content.slice(0, 28) + "…" : n.content;
                     ctx.font = `600 ${10}px "Plus Jakarta Sans", sans-serif`;
@@ -506,7 +681,6 @@ export const MemoryPage: FunctionComponent = () => {
                     ctx.fillText(label, n.x + r + 10, n.y);
                 }
 
-                /* Breathing oscillation */
                 if (s.entranceDone && n.alive) {
                     const breath = 1 + Math.sin(time * 0.0015 + i * 1.2) * 0.04;
                     if (n.scale > 0.95 && n.scale < 1.1) n.scale = breath;
@@ -515,7 +689,6 @@ export const MemoryPage: FunctionComponent = () => {
 
             ctx.restore();
 
-            /* Core label */
             ctx.textAlign = "center";
             ctx.font = `700 9px "JetBrains Mono", monospace`;
             ctx.fillStyle = lob ? "rgba(227,0,15,0.5)" : "rgba(0,224,160,0.5)";
@@ -526,7 +699,6 @@ export const MemoryPage: FunctionComponent = () => {
 
         s.rafId = requestAnimationFrame(draw);
 
-        /* ── Mouse events ────────────────────────────────────────────────── */
         const getWorld = (e: MouseEvent) => {
             const rect = canvas.getBoundingClientRect();
             const sx = e.clientX - rect.left, sy = e.clientY - rect.top;
@@ -568,15 +740,7 @@ export const MemoryPage: FunctionComponent = () => {
                 if (idx >= 0) {
                     s.selectedIdx = idx;
                     setSelectedNode({ ...s.nodes[idx] });
-                    // Fly camera to node
-                    gsap.to(s.cam, {
-                        x: s.nodes[idx].x,
-                        y: s.nodes[idx].y,
-                        zoom: 1.4,
-                        duration: 1,
-                        ease: "power3.out",
-                        overwrite: true,
-                    });
+                    gsap.to(s.cam, { x: s.nodes[idx].x, y: s.nodes[idx].y, zoom: 1.4, duration: 1, ease: "power3.out", overwrite: true });
                 } else {
                     s.selectedIdx = -1;
                     setSelectedNode(null);
@@ -600,28 +764,7 @@ export const MemoryPage: FunctionComponent = () => {
         canvas.addEventListener("mouseleave", () => { s.mouseDown = false; s.hoveredIdx = -1; });
         canvas.addEventListener("wheel", onWheel, { passive: false });
 
-        /* ── Entrance animation ──────────────────────────────────────────── */
-        const tl = gsap.timeline({
-            delay: 0.25,
-            onComplete: () => { s.entranceDone = true; startNeuralFire(); },
-        });
-
-        // Camera zoom in
-        tl.to(s.cam, { zoom: 1, duration: 2.2, ease: "power2.out" }, 0);
-
-        // Nodes fly out from core
-        s.nodes.forEach((node, i) => {
-            tl.to(node, {
-                x: node.targetX,
-                y: node.targetY,
-                scale: 1,
-                opacity: 1,
-                duration: 1.5,
-                ease: "power3.out",
-            }, 0.35 + i * 0.07);
-        });
-
-        /* ── Neural fire (random node pulses) ────────────────────────────── */
+        // Neural fire (random node pulses)
         function startNeuralFire() {
             const fire = () => {
                 const alive = s.nodes.filter(n => n.alive);
@@ -635,8 +778,8 @@ export const MemoryPage: FunctionComponent = () => {
             };
             s.neuronTimer = window.setTimeout(fire, 800);
         }
+        startNeuralFire();
 
-        /* ── Header entrance ─────────────────────────────────────────────── */
         if (headerRef.current) {
             gsap.fromTo(
                 Array.from(headerRef.current.children),
@@ -656,8 +799,8 @@ export const MemoryPage: FunctionComponent = () => {
         };
     }, []);
 
-    /* ── Search ───────────────────────────────────────────────────────────── */
-    const handleSearch = useCallback((q: string) => {
+    /* ── Search ────────────────────────────────────────────────────────── */
+    const handleSearch = useCallback(async (q: string) => {
         setSearchQuery(q);
         const s = S.current;
         if (!q.trim()) {
@@ -665,15 +808,15 @@ export const MemoryPage: FunctionComponent = () => {
             s.nodes.forEach(n => { if (n.alive) gsap.to(n, { opacity: 1, duration: 0.4 }); });
             return;
         }
+        // Local text filter
         const lower = q.toLowerCase();
         const matches = new Set<number>();
         s.nodes.forEach((n, i) => {
-            if (n.alive && (n.content.toLowerCase().includes(lower) || n.category.includes(lower) || n.agent.toLowerCase().includes(lower)))
+            if (n.alive && (n.content.toLowerCase().includes(lower) || n.category.includes(lower)))
                 matches.add(i);
         });
         s.searchMatch = matches;
 
-        // Fly to centroid of matches
         if (matches.size > 0) {
             let cx = 0, cy = 0;
             matches.forEach(i => { cx += s.nodes[i].x; cy += s.nodes[i].y; });
@@ -682,7 +825,7 @@ export const MemoryPage: FunctionComponent = () => {
         }
     }, []);
 
-    /* ── Lobotomize toggle ────────────────────────────────────────────────── */
+    /* ── Lobotomize toggle ────────────────────────────────────────────── */
     const handleLobotomizeToggle = useCallback(() => {
         setLobotomize(prev => {
             const next = !prev;
@@ -698,13 +841,15 @@ export const MemoryPage: FunctionComponent = () => {
         });
     }, []);
 
-    /* ── Delete ───────────────────────────────────────────────────────────── */
-    const handleDelete = useCallback((id: string) => {
+    /* ── Delete ────────────────────────────────────────────────────────── */
+    const handleDelete = useCallback(async (id: string) => {
         const s = S.current;
         const idx = s.nodes.findIndex(n => n.id === id);
         if (idx < 0) return;
         const node = s.nodes[idx];
-        setIsDirty(true);
+
+        // API delete
+        try { await apiDeleteMemory(id); } catch { /* ignore */ }
 
         gsap.timeline({
             onComplete: () => {
@@ -722,7 +867,7 @@ export const MemoryPage: FunctionComponent = () => {
             .to(node, { scale: 0, opacity: 0, x: 0, y: 0, duration: 0.4, ease: "power4.in" });
     }, []);
 
-    /* ── Camera controls ──────────────────────────────────────────────────── */
+    /* ── Camera controls ──────────────────────────────────────────────── */
     const zoomIn = useCallback(() => {
         gsap.to(S.current.cam, { zoom: Math.min(2.5, S.current.cam.zoom + 0.3), duration: 0.5, ease: "power2.out", overwrite: true });
     }, []);
@@ -735,49 +880,39 @@ export const MemoryPage: FunctionComponent = () => {
         setSelectedNode(null);
     }, []);
 
-    /* ── Save / Reset ─────────────────────────────────────────────────────── */
-    const handleSave = useCallback(() => {
-        setSaved(true); setIsDirty(false);
-        setTimeout(() => setSaved(false), 2400);
+    /* ── Model actions ────────────────────────────────────────────────── */
+    const handleDownloadModel = useCallback(async (modelId: string) => {
+        try {
+            await downloadEmbeddingModel(modelId);
+            const updated = await listEmbeddingModels();
+            setModels(updated);
+        } catch { /* ignore */ }
+    }, []);
+    const handleSelectModel = useCallback(async (modelId: string) => {
+        try {
+            await selectEmbeddingModel(modelId);
+            const updated = await listEmbeddingModels();
+            setModels(updated);
+        } catch { /* ignore */ }
+    }, []);
+    const handleDeleteModel = useCallback(async (modelId: string) => {
+        try {
+            await deleteEmbeddingModel(modelId);
+            const updated = await listEmbeddingModels();
+            setModels(updated);
+        } catch { /* ignore */ }
     }, []);
 
-    const handleReset = useCallback(() => {
-        const s = S.current;
-        s.nodes = buildNodes();
-        s.edges = buildEdges(s.nodes);
-        s.pulses = s.edges.map((_, i) => ({ edgeIdx: i, progress: Math.random(), speed: 0.002 + Math.random() * 0.003 }));
-        s.selectedIdx = -1;
-        s.searchMatch = null;
-        setSelectedNode(null);
-        setSearchQuery("");
-        setMemoryCount(SEED.length);
-        setDeletedCount(0);
-        setIsDirty(false);
-
-        // Re-entrance
-        gsap.to(s.cam, { x: 0, y: 0, zoom: 0.55, duration: 0.01, overwrite: true });
-        const tl = gsap.timeline();
-        tl.to(s.cam, { zoom: 1, duration: 1.8, ease: "power2.out" }, 0);
-        s.nodes.forEach((node, i) => {
-            tl.to(node, {
-                x: node.targetX, y: node.targetY,
-                scale: 1, opacity: 1,
-                duration: 1.2, ease: "power3.out",
-            }, 0.15 + i * 0.06);
-        });
-    }, []);
-
-    /* ─── Render ──────────────────────────────────────────────────────────── */
+    /* ─── Render ──────────────────────────────────────────────────────── */
     return (
         <div className="max-w-[2400px] mx-auto px-8 md:px-20 py-16 flex flex-col gap-8 relative z-10">
 
-            {/* Ambient glow */}
             <div aria-hidden className="fixed inset-0 pointer-events-none -z-10">
                 <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_40%,rgba(0,224,160,0.04)_0%,transparent_70%)]
                                dark:bg-[radial-gradient(ellipse_70%_50%_at_50%_40%,rgba(0,224,160,0.06)_0%,transparent_70%)]" />
             </div>
 
-            {/* ── Header ─────────────────────────────────────────────────── */}
+            {/* ── Header ──────────────────────────────────────────────── */}
             <div ref={headerRef} className="flex flex-col md:flex-row items-start md:items-end justify-between gap-6">
                 <div className="flex flex-col gap-4">
                     <div className="flex items-center gap-2.5 text-signal-500 font-mono text-[10px] font-bold uppercase tracking-[0.2em]">
@@ -803,35 +938,39 @@ export const MemoryPage: FunctionComponent = () => {
                 </div>
 
                 <div className="flex flex-col items-end gap-3.5 shrink-0">
-                    {/* Stats */}
                     <div className="flex items-center gap-2.5">
-                        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full
-                                       bg-signal-500/[0.08] border border-signal-500/20 text-[10px] font-bold font-mono text-signal-500">
-                            <span className="w-1.5 h-1.5 rounded-full bg-signal-500 animate-pulse" />
-                            {memoryCount} memories
-                        </div>
-                        {deletedCount > 0 && (
-                            <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full
-                                           bg-status-red/[0.08] border border-status-red/20
-                                           text-[10px] font-bold font-mono text-status-red">
-                                <X className="w-3 h-3" strokeWidth={2.5} />
-                                {deletedCount} pruned
-                            </div>
-                        )}
+                        {SCOPE_TABS.map(tab => (
+                            <span key={tab.key} className={`text-[10px] font-bold font-mono px-3.5 py-1.5 rounded-full cursor-pointer transition-all duration-200
+                                ${stats[tab.key] ?? 0} ${activeScope === tab.key
+                                    ? "bg-signal-500/[0.12] border border-signal-500/30 text-signal-500"
+                                    : "bg-black/[0.04] dark:bg-white/[0.04] border border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                                }`}
+                                onClick={() => setActiveScope(tab.key)}>
+                                {tab.label} · {stats[tab.key] ?? 0}
+                            </span>
+                        ))}
                     </div>
-
-                    {/* Action buttons */}
                     <div className="flex items-center gap-2.5">
-                        {isDirty && (
-                            <button onClick={handleReset}
-                                className="flex items-center gap-2 px-4 py-2.5 rounded-xl
-                                           bg-black/[0.04] dark:bg-white/[0.04]
-                                           border border-black/[0.06] dark:border-white/[0.06]
-                                           text-xs font-bold text-slate-500 hover:text-slate-900 dark:hover:text-white
-                                           transition-colors duration-200">
-                                <RotateCcw className="w-3.5 h-3.5" strokeWidth={2} /> Reset
-                            </button>
-                        )}
+                        <button onClick={() => setShowAddModal(true)}
+                            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold
+                                       bg-signal-500/10 text-signal-500 hover:bg-signal-500/20
+                                       border border-signal-500/20
+                                       transition-colors duration-200">
+                            <Plus className="w-3.5 h-3.5" strokeWidth={2.5} /> Add Memory
+                        </button>
+                        <button onClick={() => setShowModels(v => !v)}
+                            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold
+                                       border transition-colors duration-200
+                                       ${showModels
+                                           ? "bg-signal-500/[0.12] border-signal-500/30 text-signal-500"
+                                           : "bg-black/[0.04] dark:bg-white/[0.04] border-black/[0.06] dark:border-white/[0.06] text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                                       }`}>
+                            <HardDrive className="w-3.5 h-3.5" strokeWidth={2} />
+                            Models
+                            {stats.activeModel && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-signal-500" />
+                            )}
+                        </button>
                         <button onClick={handleLobotomizeToggle}
                             className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-bold text-xs border
                                        transition-[background-color,box-shadow,border-color] duration-300
@@ -842,22 +981,28 @@ export const MemoryPage: FunctionComponent = () => {
                             <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.5} />
                             {lobotomize ? "Lobotomize Active" : "Lobotomize"}
                         </button>
-                        <button onClick={handleSave} disabled={!isDirty}
-                            className={`flex items-center gap-2.5 px-5 py-2.5 rounded-xl font-bold text-xs
-                                       transition-[background-color,box-shadow] duration-300
-                                       ${saved
-                                           ? "bg-status-green text-white shadow-[0_0_20px_rgba(0,171,132,0.4)]"
-                                           : isDirty
-                                               ? "bg-signal-500 hover:bg-signal-400 text-void-900 shadow-[0_4px_16px_rgba(0,224,160,0.3)] hover:shadow-[0_4px_24px_rgba(0,224,160,0.5)]"
-                                               : "bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] text-slate-400 cursor-not-allowed"
-                                       }`}>
-                            {saved ? <><Check className="w-3.5 h-3.5" strokeWidth={2.5} /> Saved</> : <><Save className="w-3.5 h-3.5" strokeWidth={2} /> Save Memory</>}
-                        </button>
                     </div>
                 </div>
             </div>
 
-            {/* ── Lobotomize warning ─────────────────────────────────────── */}
+            {/* ── Model Management ────────────────────────────────────── */}
+            {showModels && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {models.map(model => (
+                        <ModelCard key={model.id} model={model}
+                            onDownload={handleDownloadModel}
+                            onSelect={handleSelectModel}
+                            onDelete={handleDeleteModel} />
+                    ))}
+                    {models.length === 0 && (
+                        <p className="text-sm text-slate-400 font-medium col-span-2 text-center py-8">
+                            Loading embedding models…
+                        </p>
+                    )}
+                </div>
+            )}
+
+            {/* ── Lobotomize warning ──────────────────────────────────── */}
             {lobotomize && (
                 <div className="flex items-center gap-3 px-5 py-3 rounded-2xl
                                bg-status-red/[0.08] border border-status-red/25 text-status-red"
@@ -870,14 +1015,14 @@ export const MemoryPage: FunctionComponent = () => {
                 </div>
             )}
 
-            {/* ── Neural Canvas ──────────────────────────────────────────── */}
+            {/* ── Neural Canvas ───────────────────────────────────────── */}
             <div
                 ref={wrapRef}
                 className="relative w-full rounded-[2rem] overflow-hidden
                            bg-white/50 dark:bg-void-800/40 backdrop-blur-2xl
                            border border-black/[0.05] dark:border-white/[0.05]
                            shadow-[0_8px_48px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_48px_rgba(0,0,0,0.4)]"
-                style={{ height: "max(600px, calc(100vh - 340px))" }}
+                style={{ height: "max(600px, calc(100vh - 440px))" }}
             >
                 <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
 
@@ -930,7 +1075,7 @@ export const MemoryPage: FunctionComponent = () => {
 
                 {/* Legend */}
                 <div className="absolute bottom-5 left-5 z-20 flex flex-wrap gap-x-4 gap-y-1.5">
-                    {(Object.entries(CAT) as [MemCat, (typeof CAT)[MemCat]][]).map(([, cfg]) => (
+                    {Object.entries(CAT).map(([, cfg]) => (
                         <div key={cfg.label} className="flex items-center gap-1.5">
                             <div className="w-2 h-2 rounded-full" style={{ background: cfg.hex, boxShadow: `0 0 6px ${cfg.hex}` }} />
                             <span className="text-[9px] font-bold uppercase tracking-[0.12em]
@@ -944,17 +1089,26 @@ export const MemoryPage: FunctionComponent = () => {
                 {/* Node count */}
                 <div className="absolute top-5 right-5 z-20 pointer-events-none">
                     <span className="text-[9px] font-mono text-slate-300 dark:text-slate-600">
-                        {memoryCount} / {SEED.length} nodes
+                        {memoryCount} nodes
                     </span>
                 </div>
 
                 {/* Empty state */}
-                {memoryCount === 0 && (
+                {!loading && memoryCount === 0 && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 pointer-events-none z-20">
-                        <p className="text-2xl font-black font-display tracking-tight text-status-red/60">
-                            Lobotomised.
+                        <Brain className="w-12 h-12 text-signal-500/20" strokeWidth={1.5} />
+                        <p className="text-lg font-black font-display tracking-tight text-slate-400/60">
+                            No memories yet
                         </p>
-                        <p className="text-xs font-mono text-slate-400">All memories have been excised from the neural map.</p>
+                        <p className="text-xs font-mono text-slate-400/50">
+                            Memories will appear here as sprints capture them, or add one manually.
+                        </p>
+                    </div>
+                )}
+
+                {loading && (
+                    <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                        <Loader2 className="w-8 h-8 text-signal-500/40 animate-spin" strokeWidth={1.5} />
                     </div>
                 )}
 
@@ -969,11 +1123,11 @@ export const MemoryPage: FunctionComponent = () => {
                 />
             </div>
 
-            {/* ── Category summary ───────────────────────────────────────── */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                {(Object.entries(CAT) as [MemCat, (typeof CAT)[MemCat]][]).map(([key, cfg]) => {
+            {/* ── Category summary ────────────────────────────────────── */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+                {Object.entries(CAT).map(([key, cfg]) => {
                     const alive = S.current.nodes.filter(n => n.category === key && n.alive).length;
-                    const total = SEED.filter(s => s.cat === key).length;
+                    const total = records.filter(r => r.category === key).length;
                     return (
                         <div key={key}
                             className="relative overflow-hidden flex flex-col gap-2 p-4 rounded-[1.25rem]
@@ -995,6 +1149,15 @@ export const MemoryPage: FunctionComponent = () => {
                     );
                 })}
             </div>
+
+            {/* ── Add Memory Modal ────────────────────────────────────── */}
+            <AddMemoryModal
+                open={showAddModal}
+                scope={activeScope}
+                projectId={pid}
+                onClose={() => setShowAddModal(false)}
+                onCreated={loadData}
+            />
         </div>
     );
 };

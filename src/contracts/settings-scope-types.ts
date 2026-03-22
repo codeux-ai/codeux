@@ -11,6 +11,7 @@ import type {
   ThinkingMode,
   WorkerSettings,
 } from "./app-types.js";
+import type { MemorySettings } from "./memory-types.js";
 import type { WorkerRuntimeSettings } from "./worker-types.js";
 
 export type { WorkerRuntimeSettings };
@@ -47,6 +48,7 @@ export interface ProjectSettings {
   workers: WorkerSettings;
   agents: AgentSettings;
   skills: SkillToggle[];
+  memory: MemorySettings;
 }
 
 export interface SystemRuntimeSettings {

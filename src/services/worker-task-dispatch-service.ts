@@ -10,6 +10,7 @@ import { ConnectionChatRepository } from "../repositories/connection-chat-reposi
 import { WorkerEndpointRepository } from "../repositories/worker-endpoint-repository.js";
 import { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
 import { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
+import type { MemoryService } from "./memory-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 
 export interface PullWorkerTaskDispatchArgs {
@@ -48,6 +49,7 @@ export class WorkerTaskDispatchService {
     private readonly getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings,
     private readonly resolveWorkerExecutionMode: (projectId: string, sprintId?: string | null) => WorkerExecutionMode = () => "CONNECTED_MCP",
     private readonly logger?: Logger,
+    private readonly memoryService?: MemoryService,
   ) {}
 
   pullNextDispatch(args: PullWorkerTaskDispatchArgs): WorkerTaskDispatchClaim | null {
@@ -288,6 +290,10 @@ export class WorkerTaskDispatchService {
       errorMessage: args.errorMessage ?? null,
     });
 
+    if (args.state === "COMPLETED" && args.summaryMarkdown?.trim()) {
+      this.captureDispatchSummaryMemory(dispatch, args.summaryMarkdown);
+    }
+
     if (args.state === "RUNNING") {
       this.executionRepository.renewLease({
         scopeType: "task_dispatch",
@@ -523,5 +529,38 @@ export class WorkerTaskDispatchService {
 
   private createLeaseExpiry(): string {
     return new Date(Date.now() + 5 * 60 * 1000).toISOString();
+  }
+
+  private captureDispatchSummaryMemory(
+    dispatch: ReturnType<ExecutionRepository["getTaskDispatch"]> & { projectId: string; taskId: string; sprintId?: string | null },
+    summaryMarkdown: string,
+  ): void {
+    if (!this.memoryService) return;
+    const settings = this.getDashboardSettings({
+      projectId: dispatch.projectId,
+      sprintId: dispatch.sprintId ?? undefined,
+    });
+    if (!settings.memory?.enabled || !settings.memory.autoCaptureSprint) return;
+
+    const task = this.projectManagementRepository.getTask(dispatch.taskId);
+    const content = `Worker completed task ${task?.taskKey || dispatch.taskId}: ${task?.title || "unknown"}.\n\nSummary:\n${summaryMarkdown.trim()}`;
+
+    this.memoryService.createMemory(dispatch.projectId, {
+      scope: "sprint",
+      sprintId: dispatch.sprintId ?? undefined,
+      content,
+      category: "context",
+      strength: 0.7,
+      source: {
+        type: "auto_capture",
+        originType: "worker_dispatch_summary",
+        originId: dispatch.id,
+      },
+    }).catch((err) => {
+      this.logger?.warn("Failed to capture dispatch summary memory", {
+        dispatchId: dispatch.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
   }
 }

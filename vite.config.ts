@@ -10,11 +10,19 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          "vendor-preact":  ["preact", "preact/hooks", "preact/compat"],
-          "vendor-router":  ["@tanstack/react-router"],
-          "vendor-gsap":    ["gsap"],
-          "vendor-lucide":  ["lucide-preact"],
+        manualChunks(id) {
+          if (id.includes("node_modules/preact") || id.includes("node_modules/react")) {
+            return "vendor-preact";
+          }
+          if (id.includes("@tanstack/react-router")) {
+            return "vendor-router";
+          }
+          if (id.includes("node_modules/gsap")) {
+            return "vendor-gsap";
+          }
+          if (id.includes("lucide-preact")) {
+            return "vendor-lucide";
+          }
         },
       },
     },

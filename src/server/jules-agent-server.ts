@@ -134,6 +134,11 @@ export class JulesAgentServer {
   private planningAgentService: PlanningAgentService;
   private runtimeCleanupService: RuntimeCleanupService;
   private dashboardRealtimeService: DashboardRealtimeService;
+  private memoryService: import("../services/memory-service.js").MemoryService;
+  private memoryPromotionService: import("../services/memory-promotion-service.js").MemoryPromotionService;
+  private embeddingModelManager: import("../services/embedding-model-manager.js").EmbeddingModelManager;
+  private embeddingService: import("../services/embedding-service.js").EmbeddingService;
+  private memoryRepository: import("../repositories/memory-repository.js").MemoryRepository;
   private runtimeCleanupInterval: ReturnType<typeof setInterval> | null = null;
   private mcpHttpHandle: McpHttpTransportHandle | null = null;
   private mcpServiceBound = false;
@@ -176,6 +181,11 @@ export class JulesAgentServer {
     this.planningAgentService = deps.planningAgentService;
     this.runtimeCleanupService = deps.runtimeCleanupService;
     this.dashboardRealtimeService = deps.dashboardRealtimeService;
+    this.memoryService = deps.memoryService;
+    this.memoryPromotionService = deps.memoryPromotionService;
+    this.embeddingModelManager = deps.embeddingModelManager;
+    this.embeddingService = deps.embeddingService;
+    this.memoryRepository = deps.memoryRepository;
 
     this.configureMcpServer(this.server, this.appConfig.runtimeRole);
 
@@ -793,6 +803,11 @@ export class JulesAgentServer {
         refreshJulesApiKey: () => this.refreshJulesApiKey(),
         setLogger: (logger) => { this.logger = logger; },
         LIVE_ACTIVITY_CACHE_MS: JulesAgentServer.LIVE_ACTIVITY_CACHE_MS,
+        memoryService: this.memoryService,
+        memoryPromotionService: this.memoryPromotionService,
+        embeddingModelManager: this.embeddingModelManager,
+        embeddingService: this.embeddingService,
+        memoryRepository: this.memoryRepository,
       });
     } else {
       this.logger.info("Dashboard startup skipped for headless Sprint OS runtime", {

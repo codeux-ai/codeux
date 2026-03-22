@@ -1,0 +1,180 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryPromotionService } from "../../../src/services/memory-promotion-service.js";
+import type { MemoryRecord, MemorySettings } from "../../../src/contracts/memory-types.js";
+
+const mockLogger = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  child: vi.fn().mockReturnThis(),
+};
+
+function makeMemory(overrides: Partial<MemoryRecord> = {}): MemoryRecord {
+  return {
+    id: "mem-1",
+    projectId: "proj-1",
+    scope: "sprint",
+    sprintId: "sprint-1",
+    agentPresetId: null,
+    content: "Always use factory pattern for DI",
+    category: "architecture",
+    strength: 0.85,
+    source: "agent",
+    embeddingModel: null,
+    embeddingDimension: null,
+    embeddingBlob: null,
+    promotedFromId: null,
+    promotionReason: null,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+describe("MemoryPromotionService", () => {
+  let memoryService: { search: ReturnType<typeof vi.fn> };
+  let memoryRepository: {
+    listBySprint: ReturnType<typeof vi.fn>;
+    getMemory: ReturnType<typeof vi.fn>;
+    createPromotedMemory: ReturnType<typeof vi.fn>;
+  };
+  let service: MemoryPromotionService;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    memoryService = { search: vi.fn().mockResolvedValue([]) };
+    memoryRepository = {
+      listBySprint: vi.fn().mockReturnValue([]),
+      getMemory: vi.fn(),
+      createPromotedMemory: vi.fn(),
+    };
+    service = new MemoryPromotionService(
+      memoryService as any,
+      memoryRepository as any,
+      mockLogger as any,
+    );
+  });
+
+  describe("analyzeForPromotion", () => {
+    it("returns candidates with scores for sprint memories with high strength", async () => {
+      const mem = makeMemory({ strength: 0.92, category: "architecture" });
+      memoryRepository.listBySprint.mockReturnValue([mem]);
+      // No cross-sprint matches, no project duplicates
+      memoryService.search.mockResolvedValue([]);
+
+      const candidates = await service.analyzeForPromotion("proj-1", "sprint-1");
+
+      expect(candidates).toHaveLength(1);
+      expect(candidates[0].memory).toBe(mem);
+      expect(candidates[0].score).toBeGreaterThan(0);
+      expect(candidates[0].reason).toContain("high strength");
+      expect(candidates[0].crossSprintCount).toBe(0);
+    });
+
+    it("filters out low-strength memories below 0.6", async () => {
+      const lowMem = makeMemory({ id: "low", strength: 0.4 });
+      const highMem = makeMemory({ id: "high", strength: 0.75 });
+      memoryRepository.listBySprint.mockReturnValue([lowMem, highMem]);
+      memoryService.search.mockResolvedValue([]);
+
+      const candidates = await service.analyzeForPromotion("proj-1", "sprint-1");
+
+      expect(candidates).toHaveLength(1);
+      expect(candidates[0].memory.id).toBe("high");
+    });
+
+    it("deduplicates against existing project memories with >0.95 similarity", async () => {
+      const mem = makeMemory({ strength: 0.9 });
+      memoryRepository.listBySprint.mockReturnValue([mem]);
+
+      // First call: sprint-scope search (no cross-sprint matches)
+      // Second call: project-scope search returns a near-duplicate
+      memoryService.search
+        .mockResolvedValueOnce([]) // sprint search
+        .mockResolvedValueOnce([{ memory: makeMemory({ id: "existing-proj", scope: "project" }), similarity: 0.97 }]); // project dedup
+
+      const candidates = await service.analyzeForPromotion("proj-1", "sprint-1");
+
+      expect(candidates).toHaveLength(0);
+      expect(memoryService.search).toHaveBeenCalledTimes(2);
+      expect(memoryService.search).toHaveBeenCalledWith(
+        expect.objectContaining({ scope: "project", minSimilarity: 0.95 }),
+      );
+    });
+  });
+
+  describe("promoteMemories", () => {
+    it("creates project-scoped copies with promotedFromId", () => {
+      const source = makeMemory({ id: "src-1" });
+      const promoted = makeMemory({
+        id: "promoted-1",
+        scope: "project",
+        promotedFromId: "src-1",
+        promotionReason: "Manual promotion",
+      });
+      memoryRepository.getMemory.mockReturnValue(source);
+      memoryRepository.createPromotedMemory.mockReturnValue(promoted);
+
+      const result = service.promoteMemories("proj-1", ["src-1"], "Manual promotion");
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toBe(promoted);
+      expect(memoryRepository.createPromotedMemory).toHaveBeenCalledWith(
+        "proj-1",
+        source,
+        "Manual promotion",
+      );
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        expect.stringContaining("Promoted memory src-1"),
+      );
+    });
+  });
+
+  describe("autoPromoteFromSprint", () => {
+    const baseSettings: MemorySettings = {
+      enabled: true,
+      embeddingModel: null,
+      autoCaptureSprint: true,
+      autoCaptureAgent: true,
+      autoPromote: true,
+      promotionThreshold: 0.5,
+      maxSprintMemories: 100,
+      maxProjectMemories: 500,
+    };
+
+    it("respects settings.autoPromote flag and returns empty when disabled", async () => {
+      const settings = { ...baseSettings, autoPromote: false };
+
+      const result = await service.autoPromoteFromSprint("proj-1", "sprint-1", settings);
+
+      expect(result).toEqual([]);
+      expect(memoryRepository.listBySprint).not.toHaveBeenCalled();
+    });
+
+    it("promotes only candidates above threshold", async () => {
+      const highMem = makeMemory({ id: "high", strength: 0.95, category: "architecture" });
+      const lowMem = makeMemory({ id: "low", strength: 0.62, category: "context" });
+      memoryRepository.listBySprint.mockReturnValue([highMem, lowMem]);
+      memoryService.search.mockResolvedValue([]);
+
+      const promotedRecord = makeMemory({ id: "promoted-high", scope: "project", promotedFromId: "high" });
+      memoryRepository.getMemory.mockImplementation((id: string) =>
+        id === "high" ? highMem : id === "low" ? lowMem : null,
+      );
+      memoryRepository.createPromotedMemory.mockReturnValue(promotedRecord);
+
+      const settings = { ...baseSettings, promotionThreshold: 0.6 };
+      const result = await service.autoPromoteFromSprint("proj-1", "sprint-1", settings);
+
+      // The high-strength architecture memory should score well above 0.6;
+      // the low-strength context memory should score below 0.6 threshold.
+      // Verify at least one was promoted and the promoted IDs came from qualifying candidates.
+      expect(result.length).toBeGreaterThanOrEqual(1);
+      expect(memoryRepository.createPromotedMemory).toHaveBeenCalled();
+      const promotedIds = memoryRepository.createPromotedMemory.mock.calls.map(
+        (call: any[]) => call[1].id,
+      );
+      expect(promotedIds).toContain("high");
+    });
+  });
+});

@@ -1,4 +1,5 @@
 import { setupDashboardServer } from "../../server/dashboard-server.js";
+import { registerMemoryRoutes } from "../../server/memory-routes.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 import { createLogger } from "../../shared/logging/logger.js";
 import type { Express } from "express";
@@ -32,6 +33,11 @@ import type { TaskRerunService } from "../../services/task-rerun-service.js";
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
 import type { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
+import type { MemoryService } from "../../services/memory-service.js";
+import type { MemoryPromotionService } from "../../services/memory-promotion-service.js";
+import type { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
+import type { EmbeddingService } from "../../services/embedding-service.js";
+import type { MemoryRepository } from "../../repositories/memory-repository.js";
 import { getRepoDebugLogPath, SPRINT_OS_SERVICE_NAME } from "../../shared/config/sprint-os-paths.js";
 
 export interface BootDashboardDeps {
@@ -66,6 +72,11 @@ export interface BootDashboardDeps {
   refreshJulesApiKey: () => void;
   setLogger: (logger: Logger) => void;
   LIVE_ACTIVITY_CACHE_MS: number;
+  memoryService: MemoryService;
+  memoryPromotionService: MemoryPromotionService;
+  embeddingModelManager: EmbeddingModelManager;
+  embeddingService: EmbeddingService;
+  memoryRepository: MemoryRepository;
 }
 
 export function reinitializeLogger(deps: { projectRoot: string, runtimeContext: RuntimeContext }): Logger {
@@ -331,6 +342,14 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     getProjectExecutionSnapshot,
     getProjectStatusSnapshot: (projectId) => deps.projectRuntimeRepository.getProjectStatus(projectId),
     getOverviewTelemetrySnapshot,
+  });
+
+  registerMemoryRoutes(deps.app, {
+    memoryService: deps.memoryService,
+    memoryPromotionService: deps.memoryPromotionService,
+    embeddingModelManager: deps.embeddingModelManager,
+    embeddingService: deps.embeddingService,
+    memoryRepository: deps.memoryRepository,
   });
 
   const handle = await setupDashboardServer({

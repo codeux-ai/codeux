@@ -26,6 +26,11 @@ import { ActiveDispatchRegistry } from "../../services/active-dispatch-registry.
 import { RuntimeCleanupService } from "../../services/runtime-cleanup-service.js";
 import { DockerRuntimePruneService } from "../../services/docker-runtime-prune-service.js";
 import { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
+import { MemoryRepository } from "../../repositories/memory-repository.js";
+import { EmbeddingService } from "../../services/embedding-service.js";
+import { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
+import { MemoryService } from "../../services/memory-service.js";
+import { MemoryPromotionService } from "../../services/memory-promotion-service.js";
 import { DashboardSettings, ExternalSettingsHints } from "../../contracts/app-types.js";
 import { loadExternalSettingsHints } from "../../config/external-settings.js";
 import { createLogger, type Logger } from "../../shared/logging/logger.js";
@@ -62,6 +67,11 @@ export interface CoreDependencies {
   runtimeCleanupService: RuntimeCleanupService;
   externalSettingsHints: ExternalSettingsHints;
   dashboardSettings: DashboardSettings;
+  memoryRepository: MemoryRepository;
+  embeddingService: EmbeddingService;
+  embeddingModelManager: EmbeddingModelManager;
+  memoryService: MemoryService;
+  memoryPromotionService: MemoryPromotionService;
 }
 
 export function createCoreDependencies(
@@ -162,6 +172,23 @@ export function createCoreDependencies(
   );
   const julesSourceResolver = new JulesSourceResolver(julesApi);
   const activitySummary = new ActivitySummaryService();
+  const memoryRepository = new MemoryRepository(appDbStorage);
+  const embeddingService = new EmbeddingService();
+  const embeddingModelManager = new EmbeddingModelManager(
+    embeddingService,
+    memoryRepository,
+    logger.child({ component: "embedding-model-manager" }),
+  );
+  const memoryService = new MemoryService(
+    memoryRepository,
+    embeddingService,
+    logger.child({ component: "memory-service" }),
+  );
+  const memoryPromotionService = new MemoryPromotionService(
+    memoryService,
+    memoryRepository,
+    logger.child({ component: "memory-promotion-service" }),
+  );
   const instructionService = new InstructionService({
     settingsRepository,
     projectManagementRepository,
@@ -197,5 +224,10 @@ export function createCoreDependencies(
     runtimeCleanupService,
     externalSettingsHints,
     dashboardSettings,
+    memoryRepository,
+    embeddingService,
+    embeddingModelManager,
+    memoryService,
+    memoryPromotionService,
   };
 }

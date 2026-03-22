@@ -28,6 +28,7 @@ export const cloneDefaultSettings = (): DashboardSettings => ({
   },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
   mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),
+  memory: { ...DEFAULT_DASHBOARD_SETTINGS.memory },
 });
 
 export const applyExternalSettingsHints = (

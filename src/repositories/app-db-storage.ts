@@ -381,6 +381,38 @@ export class AppDbStorage {
         UNIQUE(scope_type, scope_id)
       );
 
+      CREATE TABLE IF NOT EXISTS memories (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        scope TEXT NOT NULL,
+        sprint_id TEXT,
+        agent_preset_id TEXT,
+        content TEXT NOT NULL,
+        category TEXT NOT NULL,
+        strength REAL NOT NULL DEFAULT 0.5,
+        source_json TEXT NOT NULL DEFAULT '{}',
+        embedding_model TEXT,
+        embedding_dimension INTEGER,
+        embedding_blob BLOB,
+        promoted_from_id TEXT,
+        promotion_reason TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+        FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE SET NULL,
+        FOREIGN KEY (promoted_from_id) REFERENCES memories(id) ON DELETE SET NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS embedding_models (
+        id TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'not_downloaded',
+        download_progress REAL NOT NULL DEFAULT 0,
+        local_path TEXT,
+        error_message TEXT,
+        updated_at TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS dashboard_realtime_events (
         sequence INTEGER PRIMARY KEY AUTOINCREMENT,
         scope_type TEXT NOT NULL,
@@ -440,6 +472,12 @@ export class AppDbStorage {
     this.ensureIndex("idx_sprint_run_events_sprint_run_created", "sprint_run_events", "sprint_run_id, created_at DESC");
     this.ensureUniqueIndex("idx_sprint_run_events_source_event", "sprint_run_events", "sprint_run_id, source_event_key");
     this.ensureIndex("idx_dashboard_realtime_events_scope_sequence", "dashboard_realtime_events", "scope_type, scope_id, is_replayable, sequence DESC");
+    this.ensureIndex("idx_memories_project_scope", "memories", "project_id, scope, updated_at DESC");
+    this.ensureIndex("idx_memories_project_sprint", "memories", "project_id, sprint_id, created_at DESC");
+    this.ensureIndex("idx_memories_project_agent", "memories", "project_id, agent_preset_id, created_at DESC");
+    this.ensureIndex("idx_memories_scope_category", "memories", "scope, category, strength DESC");
+    this.ensureIndex("idx_memories_promoted_from", "memories", "promoted_from_id");
+    this.ensureIndex("idx_memories_embedding_model", "memories", "embedding_model, project_id");
     this.ensureIndex("idx_agent_presets_project_updated", "agent_presets", "project_id, updated_at DESC");
     this.ensureIndex("idx_agent_presets_project_name", "agent_presets", "project_id, name");
     this.ensureUniqueIndex("idx_worker_endpoints_connection", "worker_endpoints", "connection_id");
