@@ -1,27 +1,58 @@
 import { describe, expect, it } from "vitest";
-import { getAvailableModes } from "../../../dashboard/src/v2/lib/sprint-composer-state.js";
+import { getAvailableModes, toPlanningOverrides } from "../../../dashboard/src/v2/lib/sprint-composer-state.js";
 
 describe("Sprint Composer State Helpers", () => {
-  it("returns creation modes for new sprints", () => {
-    const modes = getAvailableModes(false, false);
-    expect(modes.map(m => m.id)).toEqual(["plan_and_start", "plan_only", "draft"]);
-    expect(modes[0].label).toBe("Plan & Start");
-    expect(modes[2].label).toBe("Save Draft");
+  describe("getAvailableModes", () => {
+    it("returns creation modes for new sprints", () => {
+      const modes = getAvailableModes(false, false);
+      expect(modes.map(m => m.id)).toEqual(["plan_and_start", "plan_only", "draft"]);
+      expect(modes[0].label).toBe("Plan & Start");
+      expect(modes[2].label).toBe("Save Draft");
+    });
+
+    it("returns planning actions for draft edit mode", () => {
+      // Draft edit = isEditing(true), hasTasks(false)
+      const modes = getAvailableModes(true, false);
+      expect(modes.map(m => m.id)).toEqual(["plan_and_start", "plan_only", "draft"]);
+      expect(modes[2].label).toBe("Save Changes");
+      expect(modes[0].label).toBe("Plan & Start");
+    });
+
+    it("returns replan action for planned sprints", () => {
+      // Planned edit = isEditing(true), hasTasks(true)
+      const modes = getAvailableModes(true, true);
+      expect(modes.map(m => m.id)).toEqual(["replan", "draft"]);
+      expect(modes[0].id).toBe("replan");
+      expect(modes[1].label).toBe("Save Changes");
+    });
   });
 
-  it("returns planning actions for draft edit mode", () => {
-    // Draft edit = isEditing(true), hasTasks(false)
-    const modes = getAvailableModes(true, false);
-    expect(modes.map(m => m.id)).toEqual(["plan_and_start", "plan_only", "draft"]);
-    expect(modes[2].label).toBe("Save Changes");
-    expect(modes[0].label).toBe("Plan & Start");
-  });
+  describe("toPlanningOverrides", () => {
+    it("returns undefined if no overrides", () => {
+      expect(toPlanningOverrides(null, null, null)).toBeUndefined();
+    });
 
-  it("returns replan action for planned sprints", () => {
-    // Planned edit = isEditing(true), hasTasks(true)
-    const modes = getAvailableModes(true, true);
-    expect(modes.map(m => m.id)).toEqual(["replan", "draft"]);
-    expect(modes[0].id).toBe("replan");
-    expect(modes[1].label).toBe("Save Changes");
+    it("returns workerId for connected route", () => {
+      expect(toPlanningOverrides({ type: "connected", id: "worker-1", label: "Worker 1" }, null, null))
+        .toEqual({ workerId: "worker-1" });
+    });
+
+    it("returns virtualProvider and virtualModel for virtual route", () => {
+      expect(toPlanningOverrides({ type: "virtual", id: "gemini", label: "Gemini", provider: "gemini" }, "pro", null))
+        .toEqual({ virtualProvider: "gemini", virtualModel: "pro" });
+    });
+
+    it("returns virtualModel if only model override provided", () => {
+      expect(toPlanningOverrides(null, "pro", null)).toEqual({ virtualModel: "pro" });
+    });
+
+    it("returns planningAgentPresetId if provided", () => {
+      expect(toPlanningOverrides(null, null, "preset-123")).toEqual({ planningAgentPresetId: "preset-123" });
+    });
+
+    it("combines multiple overrides", () => {
+      expect(toPlanningOverrides({ type: "connected", id: "worker-1", label: "Worker 1" }, null, "preset-123"))
+        .toEqual({ workerId: "worker-1", planningAgentPresetId: "preset-123" });
+    });
   });
 });
