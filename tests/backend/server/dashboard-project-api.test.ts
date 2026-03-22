@@ -386,7 +386,10 @@ async function createServerHandle(): Promise<{
       if (options.replan) {
         repository.deleteTasksBySprint(sprintId);
       }
-      repository.createTask(projectId, { sprintId, title: `Planned from ${options.overrides?.virtualModel || "default"}` });
+      repository.createTask(projectId, {
+        sprintId,
+        title: `Planned from ${options.overrides?.virtualProvider || "default"}:${options.overrides?.virtualModel || "default"}`,
+      });
       return { ok: true, threadId: "thread-2", agentId: "agent-2", createdTaskIds: ["task-1"], started: options.autoStart };
     },
   });
@@ -1061,13 +1064,16 @@ describe("dashboard project management API", () => {
       body: JSON.stringify({
         autoStart: false,
         replan: true,
-        overrides: { virtualModel: "super-model" },
+        overrides: {
+          virtualProvider: "codex",
+          virtualModel: "super-model",
+        },
       }),
     });
     expect(planResponse.status).toBe(202);
     const plannedTasks = repository.listTasks(project.id, sprint.id);
     expect(plannedTasks).toHaveLength(1);
-    expect(plannedTasks[0].title).toBe("Planned from super-model");
+    expect(plannedTasks[0].title).toBe("Planned from codex:super-model");
   });
 
   it("promotes and clears a preferred worker through the project API while keeping execution snapshots consistent", async () => {

@@ -97,6 +97,13 @@ Validation rules:
 - non-live configured endpoints are rejected
 - non-worker connection ids do not resolve and are rejected
 
+Important distinction:
+
+- this API only manages live worker-endpoint affinity
+- selecting a virtual worker from the dashboard top-nav does not create a preferred-worker assignment row
+- virtual worker selection instead updates project worker settings (`workers.executionMode` and `workers.virtualWorkerProvider`)
+- switching back to a live worker in the top-nav re-enables `CONNECTED_MCP` mode and then updates the preferred-worker assignment
+
 ## Dashboard Projection
 
 Project execution snapshots now expose assignment state separately from live connections:

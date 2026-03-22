@@ -1,3 +1,5 @@
+import type { VirtualWorkerProvider } from "./app-types.js";
+
 export type ProjectStatus = "running" | "failed" | "intervention" | "idle";
 export type ProjectSourceType = "local" | "git";
 export type SprintStatus = "running" | "paused" | "completed" | "failed" | "cancelled" | "idle";
@@ -116,6 +118,7 @@ export interface UpdateSprintInput {
 
 export interface PlanningOverrides {
   workerId?: string;
+  virtualProvider?: VirtualWorkerProvider;
   virtualModel?: string;
 }
 

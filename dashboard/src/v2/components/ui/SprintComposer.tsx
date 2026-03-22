@@ -13,22 +13,24 @@ import {
   X,
 } from "lucide-preact";
 import type { Sprint, ExecutionConnectionSummary } from "../../types.js";
-import { 
+import {
   useSprintComposerState, 
   type SprintSubmitMode,
-  type PlanningRouteOption 
+  type PlanningRouteOption,
+  toPlanningOverrides,
 } from "../../lib/sprint-composer-state.js";
 import { getProviderModelOptions } from "../../lib/settings-view-models.js";
 import { getPlanningFeedback, type PlanningActionType } from "../../lib/sprint-planning-feedback.js";
 import { ContainerShip, WoodenShip } from "./PlanningShip.js";
+import type { ImprovePromptInput, VirtualWorkerProvider } from "../../types.js";
 
 interface SprintComposerProps {
   nextId: string;
   initialSprint?: Sprint | null;
   connections: ExecutionConnectionSummary[];
-  virtualProviders: Array<{ id: string; label: string }>;
+  virtualProviders: Array<{ id: VirtualWorkerProvider; label: string }>;
   onClose: () => void;
-  onImprovePrompt?: (draft: { name: string; goal: string }) => Promise<string>;
+  onImprovePrompt?: (draft: ImprovePromptInput) => Promise<string>;
   onSubmit: (payload: {
     name: string;
     goal: string;
@@ -116,16 +118,11 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     const rawPrompt = state.goal.trim();
     setIsImproving(true);
     try {
-      const overrides = state.routeOverride || state.modelOverride ? {
-        workerId: state.routeOverride?.type === 'connected' ? state.routeOverride.id : undefined,
-        virtualModel: state.routeOverride?.type === 'virtual' ? (state.modelOverride || undefined) : undefined,
-      } : undefined;
-
       const improvedGoal = await onImprovePrompt({
         name: state.name.trim(),
         goal: rawPrompt,
-        overrides,
-      } as any);
+        overrides: toPlanningOverrides(state.routeOverride, state.modelOverride),
+      });
       state.setGoal(improvedGoal);
       state.setOriginalPrompt(rawPrompt);
     } finally {
@@ -168,7 +165,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       type: 'virtual' as const,
       id: v.id,
       label: v.label,
-      provider: v.id as any
+      provider: v.id,
     }))
   ];
 

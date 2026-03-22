@@ -300,6 +300,21 @@ export class PlanningAgentService {
       }
     }
 
+    if (overrides?.virtualProvider) {
+      return {
+        mode: "VIRTUAL",
+        settings: {
+          ...settings,
+          workers: {
+            ...settings.workers,
+            executionMode: "VIRTUAL",
+            virtualWorkerProvider: overrides.virtualProvider,
+          },
+        },
+        connection: null,
+      };
+    }
+
     if (settings.workers.executionMode === "VIRTUAL") {
       return {
         mode: "VIRTUAL",
@@ -324,7 +339,7 @@ export class PlanningAgentService {
     rawPrompt: string;
     overrides?: PlanningOverrides;
   }): Promise<{ bodyMarkdown: string }> {
-    const provider = args.settings.workers.virtualWorkerProvider;
+    const provider = args.overrides?.virtualProvider || args.settings.workers.virtualWorkerProvider;
     const providerSettings = { ...args.settings.aiProvider.providers[provider] };
     if (!providerSettings) {
       throw new Error(`Virtual worker provider "${provider}" is not configured. Check AI Provider settings.`);

@@ -490,7 +490,7 @@ describe("PlanningAgentService", () => {
     expect(createdTasks[1]?.dependsOnTaskIds).toHaveLength(1);
   });
 
-  it("supports worker and model overrides and explicit replanning", async () => {
+  it("supports worker, virtual provider, and model overrides and explicit replanning", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-overrides-"));
     tempDirs.push(dir);
 
@@ -573,18 +573,18 @@ describe("PlanningAgentService", () => {
 
     settingsRepository.saveProjectSettings(project.id, {
       workers: {
-        executionMode: "VIRTUAL",
+        executionMode: "CONNECTED_MCP",
         virtualWorkerProvider: "gemini",
       },
       aiProvider: {
         providers: {
           gemini: {
-            apiKey: "key",
+            apiKey: "gemini-key",
             model: "default-model",
             thinkingMode: "enabled",
           },
           codex: {
-            apiKey: "key",
+            apiKey: "codex-key",
             model: "codex-model",
             thinkingMode: "disabled",
           },
@@ -592,13 +592,17 @@ describe("PlanningAgentService", () => {
       },
     });
 
-    // Test model override
+    // Test virtual provider + model override even when connected workers are the project default
     await service.improveSprintPrompt(project.id, {
       name: "Sprint",
       goal: "Prompt",
-      overrides: { virtualModel: "custom-model" },
+      overrides: {
+        virtualProvider: "codex",
+        virtualModel: "custom-model",
+      },
     });
     expect(providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "codex",
       model: "custom-model",
     }));
 
@@ -640,11 +644,18 @@ describe("PlanningAgentService", () => {
     await service.planSprint(project.id, sprint.id, {
       autoStart: false,
       replan: true,
-      overrides: { virtualModel: "plan-model" },
+      overrides: {
+        virtualProvider: "gemini",
+        virtualModel: "plan-model",
+      },
     });
 
     const tasks = projectRepository.listTasks(project.id, sprint.id);
     expect(tasks).toHaveLength(1);
     expect(tasks[0].title).toBe("Overridden task");
+    expect(providerRunner.runProviderForText).toHaveBeenLastCalledWith(expect.objectContaining({
+      provider: "gemini",
+      model: "plan-model",
+    }));
   });
 });

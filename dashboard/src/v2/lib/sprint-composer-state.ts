@@ -1,6 +1,6 @@
 import { useState, useEffect } from "preact/hooks";
 import { Rocket, ClipboardList, Save, RefreshCw } from "lucide-preact";
-import type { Sprint, ProviderId } from "../types.js";
+import type { PlanningOverrides, Sprint, VirtualWorkerProvider } from "../types.js";
 
 export type SprintSubmitMode = "plan_and_start" | "plan_only" | "draft" | "replan";
 
@@ -36,7 +36,33 @@ export interface PlanningRouteOption {
   type: 'connected' | 'virtual';
   id: string; // connection id or virtual provider id
   label: string;
-  provider?: ProviderId;
+  provider?: VirtualWorkerProvider;
+}
+
+export function toPlanningOverrides(
+  routeOverride: PlanningRouteOption | null,
+  modelOverride: string | null,
+): PlanningOverrides | undefined {
+  if (!routeOverride && !modelOverride) {
+    return undefined;
+  }
+
+  if (routeOverride?.type === "connected") {
+    return {
+      workerId: routeOverride.id,
+    };
+  }
+
+  if (routeOverride?.type === "virtual") {
+    return {
+      virtualProvider: routeOverride.provider,
+      virtualModel: modelOverride || undefined,
+    };
+  }
+
+  return modelOverride
+    ? { virtualModel: modelOverride }
+    : undefined;
 }
 
 export interface SprintComposerState {

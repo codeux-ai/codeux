@@ -30,6 +30,7 @@ import type {
   ProjectStatsQuery,
   ProjectStatsWindow,
   ProviderId,
+  VirtualWorkerProvider,
 } from "../../../src/contracts/app-types.js";
 import type {
   CreateProjectInput,
@@ -136,4 +137,5 @@ export type {
   UpdateSprintInput,
   UpdateTaskInput,
   ProviderId,
+  VirtualWorkerProvider,
 };

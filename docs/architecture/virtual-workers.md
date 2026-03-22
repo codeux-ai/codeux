@@ -34,6 +34,12 @@ When a project or sprint resolves to `VIRTUAL`:
 - worker-owned attention is opened without assigning a connected endpoint
 - the internal virtual worker scheduler becomes responsible for draining the queue
 
+Dashboard operators can also force a specific virtual provider for one planning action without changing the project default worker mode:
+
+- sprint prompt improvement overrides may specify a virtual provider and optional model
+- sprint planning overrides may specify a virtual provider and optional model
+- those request-scoped overrides take precedence over the inherited worker mode/provider for that planning request only
+
 ## Runtime Model
 
 Primary files:
@@ -85,6 +91,7 @@ Today virtual workers handle:
 For planning flows, Sprint OS:
 
 - runs the Planning agent prompt through the configured virtual worker CLI
+- honors per-request planning overrides for virtual provider selection, so choosing `codex` in the sprint composer actually launches the Codex CLI and credentials even if the project default is `gemini`
 - creates the same planning thread record in the dashboard, but stores the request/response as system messages instead of waiting on an MCP reply
 - allows sprint compose, improve, and `Plan & Start` to work even when no live MCP listener is attached
 

@@ -26,10 +26,14 @@ import { SprintBubble } from "./components/ui/SprintBubble.js";
 import { HumanInterventionBadge } from "./components/ui/HumanInterventionBadge.js";
 import { SprintComposer } from "./components/ui/SprintComposer.js";
 import { filterShowcaseSprints, sortSprintsByRecency } from "./lib/sprint-gallery.js";
-import type { SprintSubmitMode, PlanningRouteOption } from "./lib/sprint-composer-state.js";
+import {
+  toPlanningOverrides,
+  type SprintSubmitMode,
+  type PlanningRouteOption,
+} from "./lib/sprint-composer-state.js";
 import { SprintMarkdownModal } from "./components/ui/SprintMarkdownModal.js";
 import { SprintSettingsOverrideModal } from "./components/ui/SprintSettingsOverrideModal.js";
-import type { Sprint, SprintStatus, ImprovePromptInput } from "./types.js";
+import type { ImprovePromptInput, Sprint, SprintStatus, VirtualWorkerProvider } from "./types.js";
 import { useProjectData } from "./context/project-data.js";
 import { useProjectSprints } from "./hooks/use-project-sprints.js";
 import { useProjectExecution } from "./hooks/use-project-execution.js";
@@ -484,7 +488,10 @@ export const SprintsPage: FunctionComponent = () => {
   };
 
   const virtualProviders = useMemo(() => (
-    Object.entries(VIRTUAL_PROVIDER_LABELS).map(([id, label]) => ({ id, label }))
+    Object.entries(VIRTUAL_PROVIDER_LABELS).map(([id, label]) => ({
+      id: id as VirtualWorkerProvider,
+      label,
+    }))
   ), []);
 
   const handleSubmitSprint = async (payload: {
@@ -499,10 +506,7 @@ export const SprintsPage: FunctionComponent = () => {
       return;
     }
 
-    const overrides = payload.routeOverride || payload.modelOverride ? {
-      workerId: payload.routeOverride?.type === 'connected' ? payload.routeOverride.id : undefined,
-      virtualModel: payload.routeOverride?.type === 'virtual' ? (payload.modelOverride || undefined) : undefined,
-    } : undefined;
+    const overrides = toPlanningOverrides(payload.routeOverride, payload.modelOverride);
 
     if (editingSprint) {
       await updateSprint(editingSprint.id, {

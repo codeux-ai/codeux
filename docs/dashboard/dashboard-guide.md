@@ -68,9 +68,11 @@ Project management:
   - Re-imports every out-of-sync linked markdown agent for the selected project
 - `POST /api/projects/:projectId/planning/improve-sprint-prompt`
   - Sends a draft sprint prompt to the Planning agent through a connected worker and returns the improved prompt
+  - Planning overrides may now explicitly target either a live worker connection or a virtual CLI provider/model for that one request
 - `POST /api/projects/:projectId/sprints/:sprintId/plan`
   - Sends a created sprint to the Planning agent through a connected worker, creates subtasks from the reply, and can auto-start the sprint
   - Auto-start orchestration now prepares the local sprint feature branch automatically and attempts to push it to `origin` when that remote exists
+  - Planning overrides may now explicitly target either a live worker connection or a virtual CLI provider/model for that one request
 - `GET /api/projects/:projectId/conversations/threads`
   - Lists project conversation threads
 - `POST /api/projects/:projectId/conversations/threads`
@@ -135,6 +137,9 @@ Legacy runtime:
 
 ### V2 project management
 - Top-nav project selector persists the active project in sqlite
+- The top-nav worker selector now always lists the built-in virtual workers even when no live MCP worker is connected
+- Selecting a virtual worker from the top nav switches the selected project into `workers.executionMode = VIRTUAL` with that provider
+- Selecting a live worker from the top nav switches the project back to `workers.executionMode = CONNECTED_MCP` and updates the preferred live worker assignment
 - Projects page is DB-backed and can create/select/delete projects
 - Project selector and project cards now refresh over websocket when the project collection or selected project changes
 - Sprints page is project-scoped, creates sprint records in sqlite, and exposes markdown import/export controls
@@ -168,6 +173,7 @@ Legacy runtime:
 - Ledger rows now expose the same control model as sprint cells: a primary start/stop button, an `Open Subtasks` button, and a compact settings menu for edit/export/showcase/overrides/delete
 - The sprint page no longer runs a full-page entrance fade on mount, which keeps initial navigation more immediate and avoids perceived flashing
 - The sprint page now uses lighter targeted motion on the heading instead of a full-page fade, keeping navigation more immediate without leaving the page static
+- Sprint composer planning-route overrides now correctly force the selected virtual provider instead of only overriding the model on the project default provider
 - Tasks page is project-scoped and supports create/edit/delete plus dependency metadata
 - Navigating from a sprint cell into `View Tasks` now preselects that sprint instead of leaving the board on `All Sprints`
 - Tasks page now refreshes from the same project-structure realtime invalidation path as sprints

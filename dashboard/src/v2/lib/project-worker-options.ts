@@ -1,4 +1,37 @@
-import type { ExecutionDashboardSnapshot, ExecutionConnectionSummary, ExecutionAssignedWorkerSummary } from "../../types.js";
+import type {
+  ExecutionDashboardSnapshot,
+  ExecutionAssignedWorkerSummary,
+  VirtualWorkerProvider,
+} from "../../types.js";
+
+const LIVE_WORKER_STATUSES = new Set(["connected", "listening", "idle", "paused"]);
+
+export const VIRTUAL_WORKER_OPTIONS: Array<{
+  id: VirtualWorkerProvider;
+  label: string;
+  subLabel: string;
+}> = [
+  {
+    id: "gemini",
+    label: "Virtual Gemini Worker",
+    subLabel: "On-demand CLI",
+  },
+  {
+    id: "codex",
+    label: "Virtual Codex Worker",
+    subLabel: "On-demand CLI",
+  },
+  {
+    id: "claude-code",
+    label: "Virtual Claude Code Worker",
+    subLabel: "On-demand CLI",
+  },
+];
+
+export interface WorkerRoutingPreference {
+  executionMode: "CONNECTED_MCP" | "VIRTUAL";
+  virtualWorkerProvider: VirtualWorkerProvider;
+}
 
 export interface WorkerOption {
   id: string; // connectionId or endpointId
@@ -7,9 +40,11 @@ export interface WorkerOption {
   status: string;
   isPrimary: boolean;
   type: 'connection' | 'endpoint' | 'virtual';
+  isSelectable: boolean;
   connectionId?: string | null;
   workerEndpointId?: string | null;
   workerEndpointKey?: string | null;
+  providerId?: VirtualWorkerProvider;
 }
 
 export interface ProjectWorkerOptionsResult {
@@ -21,23 +56,17 @@ export interface ProjectWorkerOptionsResult {
 
 export function getProjectWorkerOptions(
   execution: ExecutionDashboardSnapshot | null,
+  routing: WorkerRoutingPreference | null,
   loading: boolean = false
 ): ProjectWorkerOptionsResult {
-  if (!execution || loading) {
-    return {
-      options: [],
-      selectedOption: null,
-      isLoading: loading,
-      hasConnections: false,
-    };
-  }
-
-  const { connections, primaryAssignedWorker } = execution;
+  const connections = (execution?.connections || []).filter((connection) => connection.role === "worker");
+  const primaryAssignedWorker = execution?.primaryAssignedWorker || null;
   const options: WorkerOption[] = [];
+  const isVirtualMode = routing?.executionMode === "VIRTUAL";
+  const selectedVirtualProvider = isVirtualMode ? routing?.virtualWorkerProvider : null;
 
-  // 1. Add connections as options
   for (const conn of connections) {
-    const isPrimary = primaryAssignedWorker?.connectionId === conn.id;
+    const isPrimary = !isVirtualMode && primaryAssignedWorker?.connectionId === conn.id;
     options.push({
       id: conn.id,
       label: conn.displayName,
@@ -45,12 +74,16 @@ export function getProjectWorkerOptions(
       status: conn.status,
       isPrimary,
       type: 'connection',
+      isSelectable: LIVE_WORKER_STATUSES.has(conn.status),
       connectionId: conn.id,
     });
   }
 
-  // 2. If primary worker is not in connections (e.g. offline/stale but still assigned), add it
-  if (primaryAssignedWorker && !options.find(o => o.connectionId === primaryAssignedWorker.connectionId)) {
+  if (
+    primaryAssignedWorker
+    && !isVirtualMode
+    && !options.find((option) => option.connectionId === primaryAssignedWorker.connectionId)
+  ) {
     options.unshift({
       id: primaryAssignedWorker.workerEndpointId || primaryAssignedWorker.assignmentId,
       label: primaryAssignedWorker.workerDisplayName,
@@ -58,18 +91,36 @@ export function getProjectWorkerOptions(
       status: primaryAssignedWorker.workerStatus || 'offline',
       isPrimary: true,
       type: 'endpoint',
+      isSelectable: isSelectableAssignedWorker(primaryAssignedWorker),
       workerEndpointId: primaryAssignedWorker.workerEndpointId,
       workerEndpointKey: primaryAssignedWorker.workerEndpointKey,
     });
   }
 
-  // Find selected option
-  const selectedOption = options.find(o => o.isPrimary) || null;
+  for (const virtualWorker of VIRTUAL_WORKER_OPTIONS) {
+    options.push({
+      id: `virtual:${virtualWorker.id}`,
+      label: virtualWorker.label,
+      subLabel: virtualWorker.subLabel,
+      status: "available",
+      isPrimary: selectedVirtualProvider === virtualWorker.id,
+      type: "virtual",
+      isSelectable: true,
+      providerId: virtualWorker.id,
+      workerEndpointKey: `virtual:${virtualWorker.id}`,
+    });
+  }
+
+  const selectedOption = options.find((option) => option.isPrimary) || null;
 
   return {
     options,
     selectedOption,
-    isLoading: false,
+    isLoading: loading,
     hasConnections: connections.length > 0,
   };
+}
+
+function isSelectableAssignedWorker(primaryAssignedWorker: ExecutionAssignedWorkerSummary): boolean {
+  return LIVE_WORKER_STATUSES.has(primaryAssignedWorker.workerStatus || primaryAssignedWorker.status);
 }

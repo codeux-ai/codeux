@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { Bell, Command, Search, Moon, Sun, ChevronDown, Activity, FolderOpen, ArrowRight, Cpu, Zap } from "lucide-preact";
 import { Link } from "@tanstack/react-router";
@@ -7,8 +7,16 @@ import { StatusDot } from "./ui/StatusDot.js";
 import { AddProjectModal } from "./ui/AddProjectModal.js";
 import { useProjectData } from "../context/project-data.js";
 import { useProjectExecution } from "../hooks/use-project-execution.js";
-import { getProjectWorkerOptions } from "../lib/project-worker-options.js";
+import { dashboardSettingsToProjectSettings } from "../lib/settings-view-models.js";
+import {
+    getProjectWorkerOptions,
+    type WorkerOption,
+    type WorkerRoutingPreference,
+} from "../lib/project-worker-options.js";
 import { setProjectPreferredWorker } from "../lib/project-api.js";
+import { fetchProjectEffectiveSettings, saveProjectSettings } from "../lib/settings-api.js";
+
+const LIVE_WORKER_STATUSES = new Set(["connected", "listening", "idle"]);
 
 interface TopNavProps {
     isDark: boolean;
@@ -22,6 +30,8 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [workerDropdownOpen, setWorkerDropdownOpen] = useState(false);
     const [showAddProject, setShowAddProject] = useState(false);
+    const [workerRouting, setWorkerRouting] = useState<WorkerRoutingPreference | null>(null);
+    const [workerSwitchBusy, setWorkerSwitchBusy] = useState(false);
     const {
         projects,
         selectedProject,
@@ -31,13 +41,32 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
     } = useProjectData();
 
     const { execution, loading: executionLoading, refresh: refreshExecution } = useProjectExecution(selectedProject?.id || null);
-    const { options: workerOptions, selectedOption: selectedWorker, hasConnections } = getProjectWorkerOptions(execution, executionLoading);
+    const { options: workerOptions, selectedOption: selectedWorker } = getProjectWorkerOptions(execution, workerRouting, executionLoading);
 
     useLayoutEffect(() => {
         if (navRef.current) {
             gsap.fromTo(navRef.current, { y: -20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.9, ease: "power3.out" });
         }
     }, []);
+
+    const refreshWorkerRouting = useCallback(async (): Promise<void> => {
+        if (!selectedProject) {
+            setWorkerRouting(null);
+            return;
+        }
+
+        const response = await fetchProjectEffectiveSettings(selectedProject.id);
+        setWorkerRouting({
+            executionMode: response.settings.workers.executionMode,
+            virtualWorkerProvider: response.settings.workers.virtualWorkerProvider,
+        });
+    }, [selectedProject]);
+
+    useEffect(() => {
+        void refreshWorkerRouting().catch(() => {
+            setWorkerRouting(null);
+        });
+    }, [refreshWorkerRouting]);
 
     // Close dropdowns on outside click
     useEffect(() => {
@@ -62,19 +91,48 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
         });
     };
 
-    const handleWorkerSelect = async (option: typeof workerOptions[0]) => {
-        if (!selectedProject) return;
+    const handleWorkerSelect = async (option: WorkerOption) => {
+        if (!selectedProject || !option.isSelectable || workerSwitchBusy) return;
         setWorkerDropdownOpen(false);
+        setWorkerSwitchBusy(true);
         try {
-            await setProjectPreferredWorker(selectedProject.id, {
-                workerConnectionId: option.connectionId,
-                workerEndpointId: option.workerEndpointId,
-                workerEndpointKey: option.workerEndpointKey,
-            });
-            await refreshExecution();
+            const effectiveSettings = await fetchProjectEffectiveSettings(selectedProject.id);
+            const nextSettings = dashboardSettingsToProjectSettings(effectiveSettings.settings);
+
+            if (option.type === "virtual" && option.providerId) {
+                const nextProvider = option.providerId;
+                const providerChanged = nextSettings.workers.virtualWorkerProvider !== nextProvider;
+                nextSettings.workers.executionMode = "VIRTUAL";
+                nextSettings.workers.virtualWorkerProvider = nextProvider;
+                if (providerChanged) {
+                    nextSettings.workers.model = "default";
+                }
+                await saveProjectSettings(selectedProject.id, nextSettings);
+            } else {
+                nextSettings.workers.executionMode = "CONNECTED_MCP";
+                await saveProjectSettings(selectedProject.id, nextSettings);
+                await setProjectPreferredWorker(selectedProject.id, {
+                    workerConnectionId: option.connectionId,
+                    workerEndpointId: option.workerEndpointId,
+                    workerEndpointKey: option.workerEndpointKey,
+                });
+            }
+            await Promise.all([refreshExecution(), refreshWorkerRouting()]);
         } catch (err) {
             console.error("Failed to update preferred worker:", err);
+        } finally {
+            setWorkerSwitchBusy(false);
         }
+    };
+
+    const workerStatusClass = (option: WorkerOption): string => {
+        if (option.type === "virtual") {
+            return "bg-signal-500";
+        }
+        if (option.status === "paused") {
+            return "bg-amber-500";
+        }
+        return LIVE_WORKER_STATUSES.has(option.status) ? "bg-emerald-500" : "bg-slate-300";
     };
 
     return (
@@ -188,7 +246,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                 <Cpu className="w-3 h-3" strokeWidth={2.5} />
                             </div>
                             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">
-                                {selectedWorker?.label || (executionLoading ? "Loading..." : "Assign Worker")}
+                                {selectedWorker?.label || (executionLoading ? "Loading..." : "Select Worker")}
                             </span>
                             <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${workerDropdownOpen ? 'rotate-180' : ''}`} />
                         </button>
@@ -204,20 +262,27 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                         <button
                                             key={option.id}
                                             onClick={() => handleWorkerSelect(option)}
-                                            className={`w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-signal-500/5 transition-colors group ${option.isPrimary ? 'bg-signal-500/8' : ''}`}
+                                            disabled={!option.isSelectable || workerSwitchBusy}
+                                            className={`w-full flex items-center gap-3 px-3 py-3 text-left transition-colors group ${
+                                                option.isPrimary ? 'bg-signal-500/8' : ''
+                                            } ${
+                                                option.isSelectable && !workerSwitchBusy
+                                                    ? 'hover:bg-signal-500/5'
+                                                    : 'cursor-not-allowed opacity-55'
+                                            }`}
                                         >
                                             <div className="relative">
                                                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${option.isPrimary ? 'bg-signal-500/20 text-signal-500' : 'bg-slate-100 dark:bg-white/5 text-slate-400'}`}>
                                                     <Cpu className="w-4 h-4" />
                                                 </div>
-                                                <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-void-800 ${option.status === 'online' ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                                <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-void-800 ${workerStatusClass(option)}`} />
                                             </div>
                                             <div className="flex flex-col min-w-0">
                                                 <span className={`text-sm font-bold truncate transition-colors ${option.isPrimary ? 'text-signal-600 dark:text-signal-400' : 'text-slate-700 dark:text-slate-200'}`}>
                                                     {option.label}
                                                 </span>
                                                 <span className="text-[10px] font-medium text-slate-400 truncate uppercase tracking-wider">
-                                                    {option.subLabel}
+                                                    {option.subLabel || (option.isSelectable ? "Available" : "Unavailable")}
                                                 </span>
                                             </div>
                                             {option.isPrimary && (
@@ -232,7 +297,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                             <Cpu className="w-5 h-5 text-slate-300" />
                                         </div>
                                         <p className="text-xs text-slate-400 font-medium">
-                                            No connected workers available.
+                                            No workers available.
                                         </p>
                                     </div>
                                 )}
