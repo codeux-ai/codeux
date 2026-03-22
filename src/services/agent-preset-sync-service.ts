@@ -196,6 +196,19 @@ export class AgentPresetSyncService {
     return await this.getRequiredAgent(projectId, "Planning agent", "planning_agent.md");
   }
 
+  async resolveTargetedPlanningAgent(projectId: string, planningAgentPresetId?: string): Promise<AgentPresetRecord> {
+    await this.syncProjectAgents(projectId);
+
+    if (planningAgentPresetId) {
+      const targeted = this.deps.agentPresetRepository.getAgentPreset(planningAgentPresetId);
+      if (targeted && targeted.projectId === projectId && targeted.labels.includes("planning")) {
+        return await this.decorateAgentPreset(targeted);
+      }
+    }
+
+    return await this.getPlanningAgent(projectId);
+  }
+
   async getWorkerAgent(projectId: string): Promise<AgentPresetRecord> {
     return await this.getRequiredAgent(projectId, "Worker", "worker.md");
   }

@@ -170,4 +170,135 @@ describe("AgentPresetSyncService", () => {
     expect(synced.find((preset) => preset.name === "Planning agent")?.instructionMarkdown).toContain("Updated planning instructions");
     expect(synced.find((preset) => preset.name === "Reviewer")?.instructionMarkdown).toContain("Updated review instructions");
   });
+
+  describe("resolveTargetedPlanningAgent", () => {
+    it("resolves to the default planning agent when no ID is provided", async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-resolve-"));
+      tempDirs.push(dir);
+      const storage = new AppDbStorage(path.join(dir, "app.db"));
+      const projectRepository = new ProjectManagementRepository(storage);
+      const agentPresetRepository = new AgentPresetRepository(storage);
+      const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+      const syncService = new AgentPresetSyncService({
+        projectManagementRepository: projectRepository,
+        agentPresetRepository,
+        settingsRepository,
+        projectRoot: dir,
+      });
+
+      const repoPath = path.join(dir, "repo");
+      await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+      await fs.writeFile(path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"), "Default planning instructions.", "utf8");
+
+      const project = projectRepository.createProject({ name: "P1", sourceType: "local", sourceRef: repoPath });
+      const resolved = await syncService.resolveTargetedPlanningAgent(project.id);
+      expect(resolved.name).toBe("Planning agent");
+    });
+
+    it("resolves to a valid targeted planning preset with 'planning' label", async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-resolve-valid-"));
+      tempDirs.push(dir);
+      const storage = new AppDbStorage(path.join(dir, "app.db"));
+      const projectRepository = new ProjectManagementRepository(storage);
+      const agentPresetRepository = new AgentPresetRepository(storage);
+      const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+      const syncService = new AgentPresetSyncService({
+        projectManagementRepository: projectRepository,
+        agentPresetRepository,
+        settingsRepository,
+        projectRoot: dir,
+      });
+
+      const project = projectRepository.createProject({ name: "P1", sourceType: "local", sourceRef: "/fake" });
+      const custom = agentPresetRepository.createAgentPreset(project.id, {
+        name: "Custom Planner",
+        instructionMarkdown: "Custom instructions.",
+        labels: ["planning"],
+      });
+
+      const resolved = await syncService.resolveTargetedPlanningAgent(project.id, custom.id);
+      expect(resolved.id).toBe(custom.id);
+      expect(resolved.name).toBe("Custom Planner");
+    });
+
+    it("falls back to default planning agent if targeted ID is missing or invalid", async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-resolve-fallback-"));
+      tempDirs.push(dir);
+      const storage = new AppDbStorage(path.join(dir, "app.db"));
+      const projectRepository = new ProjectManagementRepository(storage);
+      const agentPresetRepository = new AgentPresetRepository(storage);
+      const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+      const syncService = new AgentPresetSyncService({
+        projectManagementRepository: projectRepository,
+        agentPresetRepository,
+        settingsRepository,
+        projectRoot: dir,
+      });
+
+      const repoPath = path.join(dir, "repo");
+      await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+      await fs.writeFile(path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"), "Default instructions.", "utf8");
+
+      const project = projectRepository.createProject({ name: "P1", sourceType: "local", sourceRef: repoPath });
+      const resolved = await syncService.resolveTargetedPlanningAgent(project.id, "non-existent-id");
+      expect(resolved.name).toBe("Planning agent");
+    });
+
+    it("falls back to default planning agent if targeted preset belongs to a different project", async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-resolve-cross-project-"));
+      tempDirs.push(dir);
+      const storage = new AppDbStorage(path.join(dir, "app.db"));
+      const projectRepository = new ProjectManagementRepository(storage);
+      const agentPresetRepository = new AgentPresetRepository(storage);
+      const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+      const syncService = new AgentPresetSyncService({
+        projectManagementRepository: projectRepository,
+        agentPresetRepository,
+        settingsRepository,
+        projectRoot: dir,
+      });
+
+      const repoPath = path.join(dir, "repo");
+      await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+      await fs.writeFile(path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"), "Default instructions.", "utf8");
+
+      const p1 = projectRepository.createProject({ name: "P1", sourceType: "local", sourceRef: repoPath });
+      const p2 = projectRepository.createProject({ name: "P2", sourceType: "local", sourceRef: "/p2" });
+      const p2Agent = agentPresetRepository.createAgentPreset(p2.id, {
+        name: "P2 Planner",
+        labels: ["planning"],
+      });
+
+      const resolved = await syncService.resolveTargetedPlanningAgent(p1.id, p2Agent.id);
+      expect(resolved.name).toBe("Planning agent");
+    });
+
+    it("falls back to default planning agent if targeted preset lacks 'planning' label", async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-resolve-unlabeled-"));
+      tempDirs.push(dir);
+      const storage = new AppDbStorage(path.join(dir, "app.db"));
+      const projectRepository = new ProjectManagementRepository(storage);
+      const agentPresetRepository = new AgentPresetRepository(storage);
+      const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+      const syncService = new AgentPresetSyncService({
+        projectManagementRepository: projectRepository,
+        agentPresetRepository,
+        settingsRepository,
+        projectRoot: dir,
+      });
+
+      const repoPath = path.join(dir, "repo");
+      await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+      await fs.writeFile(path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"), "Default instructions.", "utf8");
+
+      const project = projectRepository.createProject({ name: "P1", sourceType: "local", sourceRef: repoPath });
+      const unlabeled = agentPresetRepository.createAgentPreset(project.id, {
+        name: "Just a Worker",
+        labels: ["worker"],
+      });
+
+      const resolved = await syncService.resolveTargetedPlanningAgent(project.id, unlabeled.id);
+      expect(resolved.name).toBe("Planning agent");
+    });
+  });
 });
