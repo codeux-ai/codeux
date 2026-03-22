@@ -135,8 +135,8 @@ export interface DashboardServerOptions {
   postConversationMessage: (projectId: string, input: CreateDashboardConversationMessageInput) => ConversationMessageRecord;
   rerunTask: (taskId: string) => Promise<unknown>;
   orchestrateSprint: (projectId: string, sprintId: string) => Promise<unknown>;
-  improveSprintPrompt?: (projectId: string, input: ImprovePromptInput) => Promise<unknown>;
-  planSprint?: (projectId: string, sprintId: string, options: PlanSprintOptions) => Promise<unknown>;
+  improveSprintPrompt?: (projectId: string, input: ImprovePromptInput, signal?: AbortSignal) => Promise<unknown>;
+  planSprint?: (projectId: string, sprintId: string, options: PlanSprintOptions, signal?: AbortSignal) => Promise<unknown>;
   pauseSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
   cancelSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
   forceCancelSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
@@ -777,6 +777,8 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       res.status(404).json({ error: "Sprint prompt improvement is not enabled." });
       return;
     }
+    const ac = new AbortController();
+    req.on("close", () => ac.abort());
     try {
       const projectId = String(req.params.projectId || "").trim();
       const input: ImprovePromptInput = {
@@ -785,9 +787,11 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
         planningAgentPresetId: typeof req.body?.planningAgentPresetId === "string" ? req.body.planningAgentPresetId.trim() : undefined,
         overrides: req.body?.overrides,
       };
-      res.status(202).json(await improveSprintPrompt(projectId, input));
+      res.status(202).json(await improveSprintPrompt(projectId, input, ac.signal));
     } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to improve sprint prompt") });
+      if (!res.headersSent) {
+        res.status(400).json({ error: toErrorMessage(error, "Failed to improve sprint prompt") });
+      }
     }
   });
 
@@ -796,6 +800,8 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       res.status(404).json({ error: "Sprint planning is not enabled." });
       return;
     }
+    const ac = new AbortController();
+    req.on("close", () => ac.abort());
     try {
       const projectId = String(req.params.projectId || "").trim();
       const sprintId = String(req.params.sprintId || "").trim();
@@ -805,9 +811,11 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
         planningAgentPresetId: typeof req.body?.planningAgentPresetId === "string" ? req.body.planningAgentPresetId.trim() : undefined,
         overrides: req.body?.overrides,
       };
-      res.status(202).json(await planSprint(projectId, sprintId, options));
+      res.status(202).json(await planSprint(projectId, sprintId, options, ac.signal));
     } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to plan sprint") });
+      if (!res.headersSent) {
+        res.status(400).json({ error: toErrorMessage(error, "Failed to plan sprint") });
+      }
     }
   });
 

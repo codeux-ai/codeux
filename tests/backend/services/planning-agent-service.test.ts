@@ -729,4 +729,216 @@ describe("PlanningAgentService", () => {
     expect(lastPrompt).toContain("SPECIFIC_INSTRUCTIONS_FOR_PLANNING");
     expect(lastPrompt).not.toContain("Default planning instructions.");
   });
+
+  it("aborts a virtual improveSprintPrompt request immediately without leaving side-effects", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-abort-improve-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      "Turn sprint goals into concrete executable tasks.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const connectionRepository = new ConnectionChatRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn().mockImplementation(() => new Promise(() => {
+        // never resolves — simulates a long-running provider call
+      })),
+    };
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+      providerRunner,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Abort Improve Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "gemini" },
+    });
+
+    const ac = new AbortController();
+    const improvePromise = service.improveSprintPrompt(
+      project.id,
+      { name: "Sprint", goal: "Some goal" },
+      ac.signal,
+    );
+
+    // Abort before the provider can respond
+    ac.abort();
+
+    await expect(improvePromise).rejects.toThrow();
+
+    // Verify the signal was passed to the provider runner
+    const runCalls = vi.mocked(providerRunner.runProviderForText).mock.calls;
+    if (runCalls.length > 0) {
+      expect(runCalls[0]?.[0]?.signal).toBe(ac.signal);
+    }
+  });
+
+  it("aborts a virtual planSprint replan request without deleting existing tasks", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-abort-plan-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      "Turn sprint goals into concrete executable tasks.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const connectionRepository = new ConnectionChatRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn().mockImplementation(() => new Promise(() => {
+        // never resolves — simulates a long-running provider call
+      })),
+    };
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+      providerRunner,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Abort Plan Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Abort Sprint",
+      goal: "Goal",
+    });
+
+    // Create an existing task that must survive the aborted replan
+    projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Existing task that must survive",
+    });
+    expect(projectRepository.listTasks(project.id, sprint.id)).toHaveLength(1);
+
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "gemini" },
+    });
+
+    const ac = new AbortController();
+    const planPromise = service.planSprint(
+      project.id,
+      sprint.id,
+      { autoStart: false, replan: true, overrides: { virtualProvider: "gemini" } },
+      ac.signal,
+    );
+
+    ac.abort();
+
+    await expect(planPromise).rejects.toThrow();
+
+    // The existing task must still be present — replan must not delete tasks when aborted
+    const tasksAfterAbort = projectRepository.listTasks(project.id, sprint.id);
+    expect(tasksAfterAbort).toHaveLength(1);
+    expect(tasksAfterAbort[0]?.title).toBe("Existing task that must survive");
+  });
+
+  it("aborts a connected-worker polling loop when signal fires", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-abort-connected-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      "Turn sprint goals into concrete executable tasks.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const connectionRepository = new ConnectionChatRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Abort Connected Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+
+    connectionRepository.upsertConnection({
+      connectionKey: "abort-worker",
+      displayName: "Abort Worker",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      capabilities: { listenMode: true },
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+
+    // Do NOT mock postDashboardMessage to post a reply — the poll loop will wait forever
+    const ac = new AbortController();
+    const improvePromise = service.improveSprintPrompt(
+      project.id,
+      { name: "Sprint", goal: "A goal" },
+      ac.signal,
+    );
+
+    // Give the poll loop one tick to start, then abort
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    ac.abort();
+
+    await expect(improvePromise).rejects.toThrow();
+  });
 });
