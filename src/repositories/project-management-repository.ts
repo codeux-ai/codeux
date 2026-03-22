@@ -45,6 +45,7 @@ interface SprintRow {
   number: number | string | null;
   slug: string;
   name: string;
+  original_prompt: string | null;
   goal: string | null;
   status: SprintRecord["status"];
   showcase_pinned: number | string | null;
@@ -287,6 +288,7 @@ export class ProjectManagementRepository {
         s.number,
         s.slug,
         s.name,
+        s.original_prompt,
         s.goal,
         s.status,
         s.showcase_pinned,
@@ -325,14 +327,15 @@ export class ProjectManagementRepository {
 
     this.db.prepare(`
       INSERT INTO sprints (
-        id, project_id, number, slug, name, goal, status, showcase_pinned, start_date, end_date, feature_branch, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, project_id, number, slug, name, original_prompt, goal, status, showcase_pinned, start_date, end_date, feature_branch, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
       number,
       slug,
       name,
+      input.originalPrompt?.trim() || null,
       input.goal?.trim() || "",
       input.status || "idle",
       Number(Boolean(input.showcasePinned)),
@@ -357,12 +360,13 @@ export class ProjectManagementRepository {
 
     this.db.prepare(`
       UPDATE sprints
-      SET number = ?, slug = ?, name = ?, goal = ?, status = ?, showcase_pinned = ?, start_date = ?, end_date = ?, feature_branch = ?, updated_at = ?
+      SET number = ?, slug = ?, name = ?, original_prompt = ?, goal = ?, status = ?, showcase_pinned = ?, start_date = ?, end_date = ?, feature_branch = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.number === undefined ? current.number : input.number,
       nextSlug,
       nextName,
+      input.originalPrompt === undefined ? current.originalPrompt : input.originalPrompt,
       input.goal === undefined ? current.goal : input.goal,
       input.status || current.status,
       input.showcasePinned === undefined ? Number(current.showcasePinned) : Number(Boolean(input.showcasePinned)),
@@ -515,6 +519,13 @@ export class ProjectManagementRepository {
     this.publishProjectStructureRefresh(task.projectId);
   }
 
+  deleteTasksBySprint(sprintId: string): void {
+    const sprint = this.requireSprint(sprintId);
+    this.db.prepare(`DELETE FROM tasks WHERE sprint_id = ?`).run(sprintId);
+    this.touchProject(sprint.projectId);
+    this.publishProjectStructureRefresh(sprint.projectId);
+  }
+
   getSelectedProjectId(): string | null {
     const row = this.db.prepare(`
       SELECT payload
@@ -573,6 +584,7 @@ export class ProjectManagementRepository {
         s.number,
         s.slug,
         s.name,
+        s.original_prompt,
         s.goal,
         s.status,
         s.start_date,
@@ -623,8 +635,10 @@ export class ProjectManagementRepository {
         s.number,
         s.slug,
         s.name,
+        s.original_prompt,
         s.goal,
         s.status,
+        s.showcase_pinned,
         s.start_date,
         s.end_date,
         s.feature_branch,
@@ -740,6 +754,7 @@ export class ProjectManagementRepository {
       number: row.number === null ? null : toNumber(row.number),
       slug: row.slug,
       name: row.name,
+      originalPrompt: row.original_prompt || null,
       goal: row.goal || "",
       status: mapEffectiveSprintStatus(row.status, row.latest_run_status),
       showcasePinned: toBoolean(row.showcase_pinned),

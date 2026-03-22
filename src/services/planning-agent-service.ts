@@ -1,7 +1,13 @@
 import { randomUUID } from "crypto";
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 import type { DashboardSettings } from "../contracts/app-types.js";
-import type { TaskExecutorType, TaskPriority } from "../contracts/project-management-types.js";
+import type {
+  TaskExecutorType,
+  TaskPriority,
+  ImprovePromptInput,
+  PlanSprintOptions,
+  PlanningOverrides,
+} from "../contracts/project-management-types.js";
 import type { McpConnectionRecord, McpConnectionRole } from "../contracts/connection-chat-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
@@ -25,11 +31,6 @@ interface PlanningAgentServiceDeps {
   executionControlService: ExecutionControlService;
   providerRunner?: IProviderRunner;
   logger?: Logger;
-}
-
-interface ImprovePromptInput {
-  name: string;
-  goal: string;
 }
 
 interface ImprovePromptResult {
@@ -125,7 +126,7 @@ export class PlanningAgentService {
   async improveSprintPrompt(projectId: string, input: ImprovePromptInput): Promise<ImprovePromptResult> {
     const project = this.requireProject(projectId);
     const planningAgent = await this.deps.agentPresetSyncService.getPlanningAgent(projectId);
-    const runtime = this.resolvePlanningRuntime(projectId);
+    const runtime = this.resolvePlanningRuntime(projectId, input.overrides);
     const worker = runtime.mode === "CONNECTED_MCP" ? runtime.connection : null;
     const thread = this.deps.connectionChatRepository.createThread(projectId, {
       title: `Planning agent · ${input.name.trim() || "Untitled sprint"} · Improve`,
@@ -147,6 +148,7 @@ export class PlanningAgentService {
         repoPath: project.baseDir,
         settings: runtime.settings,
         rawPrompt: prompt,
+        overrides: input.overrides,
       });
     const payload = this.parseJsonReply<{ goal?: string }>(reply.bodyMarkdown);
     const goal = String(payload.goal || "").trim();
@@ -162,14 +164,15 @@ export class PlanningAgentService {
     };
   }
 
-  async planSprint(projectId: string, sprintId: string, options: { autoStart: boolean }): Promise<PlanSprintResult> {
+  async planSprint(projectId: string, sprintId: string, options: PlanSprintOptions): Promise<PlanSprintResult> {
     const project = this.requireProject(projectId);
     const sprint = this.requireSprint(projectId, sprintId);
     const planningAgent = await this.deps.agentPresetSyncService.getPlanningAgent(projectId);
-    const runtime = this.resolvePlanningRuntime(projectId);
+    const runtime = this.resolvePlanningRuntime(projectId, options.overrides);
     const worker = runtime.mode === "CONNECTED_MCP" ? runtime.connection : null;
+
     const existingTasks = this.deps.projectManagementRepository.listTasks(projectId, sprintId);
-    if (existingTasks.length > 0) {
+    if (existingTasks.length > 0 && !options.replan) {
       throw new Error(`Sprint ${sprint.name} already has ${existingTasks.length} task(s). Clear or edit them before running Planning agent.`);
     }
 
@@ -194,8 +197,14 @@ export class PlanningAgentService {
         repoPath: project.baseDir,
         settings: runtime.settings,
         rawPrompt: prompt,
+        overrides: options.overrides,
       });
     const payload = this.parsePlannedSprintReply(reply.bodyMarkdown);
+
+    if (options.replan) {
+      this.deps.projectManagementRepository.deleteTasksBySprint(sprintId);
+    }
+
     if (payload.goal && payload.goal.trim() && payload.goal.trim() !== sprint.goal.trim()) {
       this.deps.projectManagementRepository.updateSprint(sprint.id, {
         goal: payload.goal.trim(),
@@ -254,7 +263,7 @@ export class PlanningAgentService {
       connectionId,
       bodyMarkdown,
     });
-    const timeoutAt = Date.now() + 45_000;
+    const timeoutAt = Date.now() + 60_000;
 
     while (Date.now() < timeoutAt) {
       const reply = this.deps.connectionChatRepository
@@ -272,12 +281,25 @@ export class PlanningAgentService {
     throw new Error(`Planning agent request timed out while waiting for worker reply in thread ${threadId}.`);
   }
 
-  private resolvePlanningRuntime(projectId: string): {
+  private resolvePlanningRuntime(projectId: string, overrides?: PlanningOverrides): {
     mode: "CONNECTED_MCP" | "VIRTUAL";
     settings: DashboardSettings;
     connection: McpConnectionRecord | null;
   } {
     const settings = this.deps.settingsRepository.resolveProjectDashboardSettings(projectId).settings;
+
+    if (overrides?.workerId) {
+      const connections = this.deps.connectionChatRepository.listConnections(projectId);
+      const connection = connections.find(c => c.id === overrides.workerId);
+      if (connection && (connection.status === "listening" || connection.status === "connected" || connection.status === "idle")) {
+        return {
+          mode: "CONNECTED_MCP",
+          settings,
+          connection,
+        };
+      }
+    }
+
     if (settings.workers.executionMode === "VIRTUAL") {
       return {
         mode: "VIRTUAL",
@@ -300,12 +322,18 @@ export class PlanningAgentService {
     repoPath: string;
     settings: DashboardSettings;
     rawPrompt: string;
+    overrides?: PlanningOverrides;
   }): Promise<{ bodyMarkdown: string }> {
     const provider = args.settings.workers.virtualWorkerProvider;
-    const providerSettings = args.settings.aiProvider.providers[provider];
+    const providerSettings = { ...args.settings.aiProvider.providers[provider] };
     if (!providerSettings) {
       throw new Error(`Virtual worker provider "${provider}" is not configured. Check AI Provider settings.`);
     }
+
+    if (args.overrides?.virtualModel) {
+      providerSettings.model = args.overrides.virtualModel;
+    }
+
     const workflowSettings = {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...args.settings.cliWorkflow,
@@ -315,7 +343,7 @@ export class PlanningAgentService {
 
     this.deps.connectionChatRepository.postSystemMessage(args.projectId, {
       threadId: args.threadId,
-      bodyMarkdown: `Planning request routed through virtual ${this.getProviderLabel(provider)} worker.`,
+      bodyMarkdown: `Planning request routed through virtual ${this.getProviderLabel(provider)} worker (model: ${providerSettings.model}).`,
     });
 
     const runProvider = async (prompt: string, currentSessionId: string, retry: boolean) => {
@@ -430,12 +458,17 @@ export class PlanningAgentService {
       args.planningAgent.instructionMarkdown.trim() || "Refine sprint prompts into crisp, implementation-ready scopes.",
       "",
       "## Task",
-      "Improve the sprint prompt only. Do not break it into tasks yet.",
+      "Scan the repository to understand the context, then improve the sprint prompt. Do not break it into tasks yet.",
       `Project: ${args.projectName}`,
       `Sprint: ${args.sprintName.trim() || "Untitled sprint"}`,
       "",
       "## Current Prompt",
       args.goal.trim() || "No prompt provided.",
+      "",
+      "## Guidance",
+      "- Use file discovery or codebase search to clarify symbols, paths, or architectural patterns mentioned or implied by the prompt.",
+      "- Ground the improved prompt in the actual reality of the codebase.",
+      "- Be concise but technically precise.",
       "",
       "## Required Output",
       "Return JSON only with this exact shape and no surrounding commentary:",

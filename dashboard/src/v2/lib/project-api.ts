@@ -2,6 +2,8 @@ import type {
   CreateProjectInput,
   CreateSprintInput,
   CreateTaskInput,
+  ImprovePromptInput,
+  PlanSprintOptions,
   ProjectCollectionResponse,
   ProjectSummary,
   SprintMarkdownExportBundle,
@@ -121,7 +123,7 @@ export const createSprint = async (projectId: string, input: CreateSprintInput):
 
 export const improveSprintPrompt = async (
   projectId: string,
-  input: { name: string; goal: string },
+  input: ImprovePromptInput,
 ): Promise<{ goal: string; threadId: string; agentId: string; workerConnectionId: string | null }> => {
   return fetchJson(`/api/projects/${encodeURIComponent(projectId)}/planning/improve-sprint-prompt`, {
     method: "POST",
@@ -133,7 +135,7 @@ export const improveSprintPrompt = async (
 export const planSprint = async (
   projectId: string,
   sprintId: string,
-  input: { autoStart: boolean },
+  input: PlanSprintOptions,
 ): Promise<{ ok: true; threadId: string; agentId: string; createdTaskIds: string[]; started: boolean }> => {
   return fetchJson(`/api/projects/${encodeURIComponent(projectId)}/sprints/${encodeURIComponent(sprintId)}/plan`, {
     method: "POST",

@@ -379,6 +379,16 @@ async function createServerHandle(): Promise<{
       controlCalls.retryDispatches.push(dispatchId);
       return { ok: true };
     },
+    improveSprintPrompt: async (projectId, input) => {
+      return { goal: `Improved: ${input.goal}`, threadId: "thread-1", agentId: "agent-1", workerConnectionId: input.overrides?.workerId || null };
+    },
+    planSprint: async (projectId, sprintId, options) => {
+      if (options.replan) {
+        repository.deleteTasksBySprint(sprintId);
+      }
+      repository.createTask(projectId, { sprintId, title: `Planned from ${options.overrides?.virtualModel || "default"}` });
+      return { ok: true, threadId: "thread-2", agentId: "agent-2", createdTaskIds: ["task-1"], started: options.autoStart };
+    },
   });
   serversToClose.push(handle.server);
 
@@ -1016,6 +1026,48 @@ describe("dashboard project management API", () => {
     });
     expect(orchestrateResponse.status).toBe(202);
     expect(controlCalls.orchestrate).toEqual([{ projectId: project.id, sprintId: sprint.id }]);
+  });
+
+  it("supports planning prompt improvement and task generation with overrides and replanning", async () => {
+    const { dir, port, repository } = await createServerHandle();
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const project = repository.createProject({
+      name: "Planning API Project",
+      sourceType: "local",
+      sourceRef: path.join(dir, "workspace", "planning-api-project"),
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Initial Sprint",
+      goal: "Initial Goal",
+    });
+
+    const improveResponse = await fetch(`${baseUrl}/api/projects/${project.id}/planning/improve-sprint-prompt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: sprint.name,
+        goal: "Refine me",
+        overrides: { workerId: "custom-worker-id" },
+      }),
+    });
+    const improved = await improveResponse.json() as { goal: string; workerConnectionId: string };
+    expect(improveResponse.status).toBe(202);
+    expect(improved.goal).toBe("Improved: Refine me");
+    expect(improved.workerConnectionId).toBe("custom-worker-id");
+
+    const planResponse = await fetch(`${baseUrl}/api/projects/${project.id}/sprints/${sprint.id}/plan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        autoStart: false,
+        replan: true,
+        overrides: { virtualModel: "super-model" },
+      }),
+    });
+    expect(planResponse.status).toBe(202);
+    const plannedTasks = repository.listTasks(project.id, sprint.id);
+    expect(plannedTasks).toHaveLength(1);
+    expect(plannedTasks[0].title).toBe("Planned from super-model");
   });
 
   it("promotes and clears a preferred worker through the project API while keeping execution snapshots consistent", async () => {

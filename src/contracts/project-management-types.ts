@@ -30,6 +30,7 @@ export interface SprintRecord {
   number: number | null;
   slug: string;
   name: string;
+  originalPrompt: string | null;
   goal: string;
   status: SprintStatus;
   showcasePinned: boolean;
@@ -91,6 +92,7 @@ export interface UpdateProjectInput {
 
 export interface CreateSprintInput {
   name: string;
+  originalPrompt?: string | null;
   goal?: string;
   number?: number;
   status?: SprintStatus;
@@ -102,6 +104,7 @@ export interface CreateSprintInput {
 
 export interface UpdateSprintInput {
   name?: string;
+  originalPrompt?: string | null;
   goal?: string;
   number?: number | null;
   status?: SprintStatus;
@@ -109,6 +112,23 @@ export interface UpdateSprintInput {
   startDate?: string | null;
   endDate?: string | null;
   featureBranch?: string | null;
+}
+
+export interface PlanningOverrides {
+  workerId?: string;
+  virtualModel?: string;
+}
+
+export interface ImprovePromptInput {
+  name: string;
+  goal: string;
+  overrides?: PlanningOverrides;
+}
+
+export interface PlanSprintOptions {
+  autoStart: boolean;
+  replan?: boolean;
+  overrides?: PlanningOverrides;
 }
 
 export interface CreateTaskInput {

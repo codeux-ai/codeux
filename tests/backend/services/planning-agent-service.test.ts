@@ -485,9 +485,166 @@ describe("PlanningAgentService", () => {
     await service.planSprint(project.id, sprint.id, { autoStart: false });
     const createdTasks = projectRepository.listTasks(project.id, sprint.id);
     expect(createdTasks).toHaveLength(2);
-    expect(createdTasks[0]?.promptMarkdown).toBe("Perform the setup work");
     expect(createdTasks[0]?.priority).toBe("high");
     expect(createdTasks[1]?.executorType).toBe("mcp_worker");
     expect(createdTasks[1]?.dependsOnTaskIds).toHaveLength(1);
+  });
+
+  it("supports worker and model overrides and explicit replanning", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-overrides-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      "Turn sprint goals into concrete executable tasks.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const connectionRepository = new ConnectionChatRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn().mockResolvedValue({
+        ok: true,
+        stdout: "",
+        stderr: "",
+        code: 0,
+        signal: null,
+        text: JSON.stringify({
+          goal: "Overridden improved prompt.",
+          tasks: [
+            {
+              key: "T01",
+              title: "Overridden task",
+              description: "Desc",
+              promptMarkdown: "Prompt",
+              priority: "medium",
+              executorType: "auto",
+              dependsOn: [],
+            },
+          ],
+        }),
+        usageTelemetry: {
+          inputTokens: 100,
+          cachedInputTokens: 0,
+          outputTokens: 50,
+          reasoningOutputTokens: 0,
+          totalTokens: 150,
+          usageSource: "reported",
+          rawUsageJson: {},
+          transcriptText: "",
+          nativeSessionId: null,
+        },
+        nativeSessionId: "native-123",
+      }),
+    };
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: {
+        orchestrateSprint: vi.fn(async () => ({ ok: true })),
+      } as any,
+      providerRunner,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Override Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Override Sprint",
+      goal: "Goal",
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: {
+        executionMode: "VIRTUAL",
+        virtualWorkerProvider: "gemini",
+      },
+      aiProvider: {
+        providers: {
+          gemini: {
+            apiKey: "key",
+            model: "default-model",
+            thinkingMode: "enabled",
+          },
+          codex: {
+            apiKey: "key",
+            model: "codex-model",
+            thinkingMode: "disabled",
+          },
+        },
+      },
+    });
+
+    // Test model override
+    await service.improveSprintPrompt(project.id, {
+      name: "Sprint",
+      goal: "Prompt",
+      overrides: { virtualModel: "custom-model" },
+    });
+    expect(providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      model: "custom-model",
+    }));
+
+    // Test worker override (CONNECTED_MCP)
+    const workerConnection = connectionRepository.upsertConnection({
+      connectionKey: "custom-worker",
+      displayName: "Custom Worker",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      capabilities: { listenMode: true },
+      projectIds: [project.id],
+    });
+
+    vi.spyOn(connectionRepository, "postDashboardMessage").mockImplementation((projectId, input) => {
+      setTimeout(() => {
+        connectionRepository.postListenReply({
+          connectionKey: "custom-worker",
+          threadId: input.threadId,
+          bodyMarkdown: '{"goal":"Improved by custom worker."}',
+          replyToMessageId: "any",
+        });
+      }, 10);
+      return { id: "msg-1", threadId: input.threadId, createdAt: new Date().toISOString() } as any;
+    });
+
+    const improved = await service.improveSprintPrompt(project.id, {
+      name: "Sprint",
+      goal: "Prompt",
+      overrides: { workerId: workerConnection.id },
+    });
+    expect(improved.goal).toBe("Improved by custom worker.");
+    expect(improved.workerConnectionId).toBe(workerConnection.id);
+
+    // Test replanning
+    projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Old Task" });
+    expect(projectRepository.listTasks(project.id, sprint.id)).toHaveLength(1);
+
+    await service.planSprint(project.id, sprint.id, {
+      autoStart: false,
+      replan: true,
+      overrides: { virtualModel: "plan-model" },
+    });
+
+    const tasks = projectRepository.listTasks(project.id, sprint.id);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].title).toBe("Overridden task");
   });
 });

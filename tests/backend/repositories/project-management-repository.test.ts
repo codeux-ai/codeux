@@ -98,6 +98,45 @@ describe("ProjectManagementRepository", () => {
     });
   });
 
+  it("handles originalPrompt in sprints and supports clearing tasks", async () => {
+    const { repository } = await createRepository();
+
+    const project = repository.createProject({
+      name: "Original Prompt Project",
+      sourceType: "local",
+      sourceRef: "/workspace/original-prompt-project",
+    });
+
+    const sprint = repository.createSprint(project.id, {
+      name: "Planning Sprint",
+      originalPrompt: "Help me build a login page.",
+      goal: "Implement a secure login page with MFA.",
+    });
+
+    expect(sprint.originalPrompt).toBe("Help me build a login page.");
+    expect(sprint.goal).toBe("Implement a secure login page with MFA.");
+
+    repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Task 1",
+    });
+    repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Task 2",
+    });
+
+    expect(repository.listTasks(project.id, sprint.id)).toHaveLength(2);
+
+    repository.deleteTasksBySprint(sprint.id);
+
+    expect(repository.listTasks(project.id, sprint.id)).toHaveLength(0);
+
+    const updated = repository.updateSprint(sprint.id, {
+      originalPrompt: "Actually, help me build a dashboard.",
+    });
+    expect(updated.originalPrompt).toBe("Actually, help me build a dashboard.");
+  });
+
   it("imports and exports sprint markdown against the database model", async () => {
     const { repository, markdownService } = await createRepository();
 

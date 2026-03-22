@@ -41,6 +41,8 @@ import type {
   CreateProjectInput,
   CreateSprintInput,
   CreateTaskInput,
+  ImprovePromptInput,
+  PlanSprintOptions,
   ProjectCollectionResponse,
   ProjectSummary,
   SprintMarkdownExportBundle,
@@ -133,8 +135,8 @@ export interface DashboardServerOptions {
   postConversationMessage: (projectId: string, input: CreateDashboardConversationMessageInput) => ConversationMessageRecord;
   rerunTask: (taskId: string) => Promise<unknown>;
   orchestrateSprint: (projectId: string, sprintId: string) => Promise<unknown>;
-  improveSprintPrompt?: (projectId: string, input: { name: string; goal: string }) => Promise<unknown>;
-  planSprint?: (projectId: string, sprintId: string, input: { autoStart: boolean }) => Promise<unknown>;
+  improveSprintPrompt?: (projectId: string, input: ImprovePromptInput) => Promise<unknown>;
+  planSprint?: (projectId: string, sprintId: string, options: PlanSprintOptions) => Promise<unknown>;
   pauseSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
   cancelSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
   forceCancelSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
@@ -777,9 +779,12 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     }
     try {
       const projectId = String(req.params.projectId || "").trim();
-      const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
-      const goal = typeof req.body?.goal === "string" ? req.body.goal : "";
-      res.status(202).json(await improveSprintPrompt(projectId, { name, goal }));
+      const input: ImprovePromptInput = {
+        name: typeof req.body?.name === "string" ? req.body.name.trim() : "",
+        goal: typeof req.body?.goal === "string" ? req.body.goal : "",
+        overrides: req.body?.overrides,
+      };
+      res.status(202).json(await improveSprintPrompt(projectId, input));
     } catch (error) {
       res.status(400).json({ error: toErrorMessage(error, "Failed to improve sprint prompt") });
     }
@@ -793,8 +798,12 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     try {
       const projectId = String(req.params.projectId || "").trim();
       const sprintId = String(req.params.sprintId || "").trim();
-      const autoStart = Boolean(req.body?.autoStart);
-      res.status(202).json(await planSprint(projectId, sprintId, { autoStart }));
+      const options: PlanSprintOptions = {
+        autoStart: Boolean(req.body?.autoStart),
+        replan: Boolean(req.body?.replan),
+        overrides: req.body?.overrides,
+      };
+      res.status(202).json(await planSprint(projectId, sprintId, options));
     } catch (error) {
       res.status(400).json({ error: toErrorMessage(error, "Failed to plan sprint") });
     }
