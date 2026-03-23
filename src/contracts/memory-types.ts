@@ -138,5 +138,6 @@ export interface MemorySettings {
   promotionThreshold: number;
   maxSprintMemories: number;
   maxProjectMemories: number;
+  mapMaxEdgesPerNode: number;
   workerLearningsInstruction: string;
 }

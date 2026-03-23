@@ -449,11 +449,32 @@ describe("MemoryService", () => {
       expect(m1m2Edge).toBeDefined();
       expect(m1m2Edge!.similarity).toBeGreaterThan(0.9);
 
-      // m1 and m3 are orthogonal (cosine = 0), should NOT produce an edge at default threshold
-      const m1m3Edge = result.edges.find(
-        e => (e.source === "m1" && e.target === "m3") || (e.source === "m3" && e.target === "m1"),
+      // Edges are sorted by similarity descending
+      for (let i = 1; i < result.edges.length; i++) {
+        expect(result.edges[i].similarity).toBeLessThanOrEqual(result.edges[i - 1].similarity);
+      }
+    });
+
+    it("respects topKPerNode to limit edges", () => {
+      mockEmbeddingService.getLoadedModelId.mockReturnValue("bge-small-en-v1.5");
+      mockEmbeddingService.getDimension.mockReturnValue(3);
+
+      mockRepo.loadEmbeddingsForScope.mockReturnValue([
+        { id: "m1", embeddingBlob: makeFloat32Buffer([1, 0, 0]), embeddingDimension: 3 },
+        { id: "m2", embeddingBlob: makeFloat32Buffer([0.9, 0.1, 0]), embeddingDimension: 3 },
+        { id: "m3", embeddingBlob: makeFloat32Buffer([0, 0, 1]), embeddingDimension: 3 },
+      ]);
+
+      // topKPerNode=1: each node keeps only its single strongest neighbor
+      const result = service.getEmbeddingMap("proj-1", undefined, undefined, undefined, 1);
+
+      // m1↔m2 are each other's top-1. m3's top-1 is either m1 or m2. So 2 edges.
+      expect(result.edges.length).toBeLessThanOrEqual(2);
+      // m1↔m2 must be included (strongest pair)
+      const m1m2 = result.edges.find(
+        e => (e.source === "m1" && e.target === "m2") || (e.source === "m2" && e.target === "m1"),
       );
-      expect(m1m3Edge).toBeUndefined();
+      expect(m1m2).toBeDefined();
     });
 
     it("passes scope parameters to repository", () => {

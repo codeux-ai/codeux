@@ -65,6 +65,11 @@ function createMockDeps(): MemoryRouteDependencies {
     memoryRepository: {
       getModelStatus: vi.fn().mockReturnValue(null),
     } as any,
+    settingsRepository: {
+      getProjectResolvedSettings: vi.fn().mockReturnValue({
+        memory: { mapMaxEdgesPerNode: 3 },
+      }),
+    } as any,
   };
 }
 
@@ -308,11 +313,12 @@ describe("memory-routes", () => {
   });
 
   describe("GET /api/projects/:projectId/memories/embedding-map", () => {
-    it("returns embedding map data", () => {
+    it("returns embedding map data with topK from settings", () => {
       const handler = routes["GET:/api/projects/:projectId/memories/embedding-map"].handler;
       const res = createMockRes();
       handler({ params: { projectId: "p1" }, query: {} }, res);
-      expect(deps.memoryService.getEmbeddingMap).toHaveBeenCalledWith("p1", undefined, undefined, undefined);
+      expect(deps.settingsRepository.getProjectResolvedSettings).toHaveBeenCalledWith("p1");
+      expect(deps.memoryService.getEmbeddingMap).toHaveBeenCalledWith("p1", undefined, undefined, undefined, 3);
       expect(res.json).toHaveBeenCalledWith({ nodes: [], edges: [], hasEmbeddings: false });
     });
 
@@ -320,7 +326,7 @@ describe("memory-routes", () => {
       const handler = routes["GET:/api/projects/:projectId/memories/embedding-map"].handler;
       const res = createMockRes();
       handler({ params: { projectId: "p1" }, query: { scope: "project" } }, res);
-      expect(deps.memoryService.getEmbeddingMap).toHaveBeenCalledWith("p1", "project", undefined, undefined);
+      expect(deps.memoryService.getEmbeddingMap).toHaveBeenCalledWith("p1", "project", undefined, undefined, 3);
     });
   });
 

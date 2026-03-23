@@ -4,6 +4,7 @@ import type { MemoryPromotionService } from "../services/memory-promotion-servic
 import type { EmbeddingModelManager } from "../services/embedding-model-manager.js";
 import type { EmbeddingService } from "../services/embedding-service.js";
 import type { MemoryRepository } from "../repositories/memory-repository.js";
+import type { SettingsRepository } from "../repositories/settings-repository.js";
 import type {
   MemoryScope,
   MemoryCategory,
@@ -20,6 +21,7 @@ export interface MemoryRouteDependencies {
   embeddingModelManager: EmbeddingModelManager;
   embeddingService: EmbeddingService;
   memoryRepository: MemoryRepository;
+  settingsRepository: SettingsRepository;
 }
 
 function toError(error: unknown, prefix: string): string {
@@ -34,6 +36,7 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
     embeddingModelManager,
     embeddingService,
     memoryRepository,
+    settingsRepository,
   } = deps;
 
   // --- Memory CRUD ---
@@ -308,8 +311,10 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
       const scope = req.query.scope as MemoryScope | undefined;
       const sprintId = req.query.sprintId as string | undefined;
       const agentPresetId = req.query.agentPresetId as string | undefined;
+      const settings = settingsRepository.getProjectResolvedSettings(projectId);
+      const topK = settings.memory.mapMaxEdgesPerNode;
       const result = memoryService.getEmbeddingMap(
-        projectId, scope, sprintId, agentPresetId,
+        projectId, scope, sprintId, agentPresetId, topK,
       );
       res.json(result);
     } catch (error) {

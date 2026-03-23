@@ -31,6 +31,7 @@ export const sanitizeMemory = (
       : defaults.promotionThreshold)),
     maxSprintMemories: Math.max(10, readInteger(memInput.maxSprintMemories, defaults.maxSprintMemories)),
     maxProjectMemories: Math.max(10, readInteger(memInput.maxProjectMemories, defaults.maxProjectMemories)),
+    mapMaxEdgesPerNode: Math.max(1, Math.min(20, readInteger(memInput.mapMaxEdgesPerNode, defaults.mapMaxEdgesPerNode))),
     workerLearningsInstruction: typeof memInput.workerLearningsInstruction === "string"
       ? memInput.workerLearningsInstruction
       : defaults.workerLearningsInstruction,

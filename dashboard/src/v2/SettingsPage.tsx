@@ -2181,7 +2181,7 @@ export const SettingsPage: FunctionComponent = () => {
               }))}
             />
           </Row>
-          <Row label="Max project memories" description="Maximum number of long-term project-scoped memories. Oldest low-strength memories are evicted when exceeded." badge={getFieldBadge("memory.maxProjectMemories")} last>
+          <Row label="Max project memories" description="Maximum number of long-term project-scoped memories. Oldest low-strength memories are evicted when exceeded." badge={getFieldBadge("memory.maxProjectMemories")}>
             <NumberInput
               value={editableSettings.memory.maxProjectMemories}
               min={10}
@@ -2191,6 +2191,19 @@ export const SettingsPage: FunctionComponent = () => {
               onChange={(value) => updateEditableSettings((current) => ({
                 ...current,
                 memory: { ...current.memory, maxProjectMemories: value },
+              }))}
+            />
+          </Row>
+          <Row label="Map edges per node" description="Maximum number of similarity connections per memory node on the neural map. Lower values produce a cleaner graph, higher values reveal more relationships." badge={getFieldBadge("memory.mapMaxEdgesPerNode")} last>
+            <NumberInput
+              value={editableSettings.memory.mapMaxEdgesPerNode}
+              min={1}
+              max={20}
+              step={1}
+              disabled={!editableSettings.memory.enabled}
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                memory: { ...current.memory, mapMaxEdgesPerNode: value },
               }))}
             />
           </Row>

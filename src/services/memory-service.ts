@@ -257,8 +257,7 @@ export class MemoryService {
     scope?: MemoryScope,
     sprintId?: string,
     agentPresetId?: string,
-    similarityThreshold = 0.35,
-    maxEdges = 300,
+    topKPerNode = 3,
   ): EmbeddingMapResult {
     const modelId = this.embeddingService.getLoadedModelId();
     if (!modelId) {
@@ -335,24 +334,46 @@ export class MemoryService {
       y: ((projections[i].y - minY) / rangeY - 0.5) * 2 * scale,
     }));
 
-    // --- Pairwise cosine similarity for edges ---
-    const edgeCandidates: EmbeddingMapEdge[] = [];
+    // --- Top-K nearest neighbors per node ---
+    // For each node, keep only its K strongest connections.
+    // This produces a sparse, meaningful graph instead of a near-complete one.
+    const simMatrix: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
         const sim = cosineSimilarity(vectors[i], vectors[j]);
-        if (sim >= similarityThreshold) {
-          edgeCandidates.push({
-            source: records[i].id,
-            target: records[j].id,
-            similarity: Math.round(sim * 1000) / 1000,
+        simMatrix[i][j] = sim;
+        simMatrix[j][i] = sim;
+      }
+    }
+
+    const edgeSet = new Set<string>();
+    const edges: EmbeddingMapEdge[] = [];
+
+    for (let i = 0; i < n; i++) {
+      // Find top-K neighbors for node i
+      const neighbors: Array<{ j: number; sim: number }> = [];
+      for (let j = 0; j < n; j++) {
+        if (j === i) continue;
+        neighbors.push({ j, sim: simMatrix[i][j] });
+      }
+      neighbors.sort((a, b) => b.sim - a.sim);
+
+      for (const nb of neighbors.slice(0, topKPerNode)) {
+        const lo = Math.min(i, nb.j);
+        const hi = Math.max(i, nb.j);
+        const key = `${lo}:${hi}`;
+        if (!edgeSet.has(key)) {
+          edgeSet.add(key);
+          edges.push({
+            source: records[lo].id,
+            target: records[hi].id,
+            similarity: Math.round(nb.sim * 1000) / 1000,
           });
         }
       }
     }
 
-    // Sort by similarity descending, cap at maxEdges
-    edgeCandidates.sort((a, b) => b.similarity - a.similarity);
-    const edges = edgeCandidates.slice(0, maxEdges);
+    edges.sort((a, b) => b.similarity - a.similarity);
 
     return { nodes, edges, hasEmbeddings: true };
   }

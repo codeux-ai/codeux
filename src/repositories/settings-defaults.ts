@@ -226,6 +226,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     promotionThreshold: 0.7,
     maxSprintMemories: 200,
     maxProjectMemories: 1000,
+    mapMaxEdgesPerNode: 3,
     workerLearningsInstruction: [
       "Before you finish, create a file called `.task-learnings.md` in the repository root.",
       "This file will NOT be committed — it is used to capture your learnings for the project memory system.",
