@@ -219,6 +219,14 @@ export class MemoryRepository {
     return row?.count ?? 0;
   }
 
+  countStaleEmbeddings(projectId: string, currentModel: EmbeddingModelId): number {
+    const row = this.db.prepare(`
+      SELECT COUNT(*) as count FROM memories
+      WHERE project_id = ? AND (embedding_model IS NULL OR embedding_model != ?)
+    `).get(projectId, currentModel) as CountRow | undefined;
+    return row?.count ?? 0;
+  }
+
   deleteSprintMemories(projectId: string, sprintId: string): void {
     this.db.prepare(`
       DELETE FROM memories

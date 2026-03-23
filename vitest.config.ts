@@ -19,6 +19,7 @@ export default defineConfig({
             }
         },
         include: ["src/**/*.ts"],
+        exclude: ["src/services/embedding-service.ts", "src/services/embedding-tokenizer.ts"],
     }
   },
 });

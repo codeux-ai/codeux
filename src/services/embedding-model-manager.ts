@@ -142,6 +142,23 @@ export class EmbeddingModelManager {
     this.logger.info(`Model ${modelId} deleted`);
   }
 
+  async restorePreviousModel(): Promise<void> {
+    const statuses = this.memoryRepository.listModelStatuses();
+    const downloaded = statuses.filter((s) => s.downloaded && s.localPath);
+
+    for (const status of downloaded) {
+      if (this.embeddingService.isModelDownloaded(status.id)) {
+        try {
+          await this.embeddingService.loadModel(status.id);
+          this.logger.info(`Auto-restored embedding model: ${status.id}`);
+          return;
+        } catch (error) {
+          this.logger.warn(`Failed to auto-restore model ${status.id}: ${error}`);
+        }
+      }
+    }
+  }
+
   getStatuses(): EmbeddingModelStatus[] {
     const dbStatuses = this.memoryRepository.listModelStatuses();
     const dbMap = new Map(dbStatuses.map((s) => [s.id, s]));

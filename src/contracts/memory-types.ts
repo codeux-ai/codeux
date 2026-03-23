@@ -32,11 +32,11 @@ export const MEMORY_CATEGORIES: MemoryCategory[] = [
   "learning",
 ];
 
-export type EmbeddingModelId = "bge-small-en-v1.5" | "Qwen3-Embedding-0.6B";
+export type EmbeddingModelId = "bge-small-en-v1.5" | "multilingual-e5-large";
 
 export const EMBEDDING_MODEL_IDS: EmbeddingModelId[] = [
   "bge-small-en-v1.5",
-  "Qwen3-Embedding-0.6B",
+  "multilingual-e5-large",
 ];
 
 export interface MemorySource {
@@ -99,7 +99,7 @@ export interface MemorySearchResult {
 
 export interface EmbeddingRecord {
   id: string;
-  embeddingBlob: Buffer;
+  embeddingBlob: Buffer | Uint8Array;
   embeddingDimension: number;
 }
 
@@ -138,5 +138,6 @@ export interface MemorySettings {
   promotionThreshold: number;
   maxSprintMemories: number;
   maxProjectMemories: number;
+  mapMaxEdgesPerNode: number;
   workerLearningsInstruction: string;
 }

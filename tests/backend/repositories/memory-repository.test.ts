@@ -348,7 +348,7 @@ describe("MemoryRepository", () => {
       const blob = Buffer.from([1]);
       repo.saveEmbedding(mem.id, "bge-small-en-v1.5", 384, blob);
 
-      repo.clearEmbeddingsForModel(projectId, "Qwen3-Embedding-0.6B");
+      repo.clearEmbeddingsForModel(projectId, "multilingual-e5-large");
 
       const loaded = repo.loadEmbeddingsForScope(projectId, "bge-small-en-v1.5");
       expect(loaded).toHaveLength(1);
@@ -461,12 +461,12 @@ describe("MemoryRepository", () => {
   describe("listModelStatuses", () => {
     it("returns all model statuses ordered by id", () => {
       repo.upsertModelStatus("bge-small-en-v1.5", { downloaded: true, localPath: "/a" });
-      repo.upsertModelStatus("Qwen3-Embedding-0.6B", { downloading: true, downloadProgress: 25 });
+      repo.upsertModelStatus("multilingual-e5-large", { downloading: true, downloadProgress: 25 });
 
       const statuses = repo.listModelStatuses();
       expect(statuses).toHaveLength(2);
-      expect(statuses[0]!.id).toBe("Qwen3-Embedding-0.6B");
-      expect(statuses[1]!.id).toBe("bge-small-en-v1.5");
+      expect(statuses[0]!.id).toBe("bge-small-en-v1.5");
+      expect(statuses[1]!.id).toBe("multilingual-e5-large");
     });
 
     it("returns empty array when no models tracked", () => {

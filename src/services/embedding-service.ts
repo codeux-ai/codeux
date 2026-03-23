@@ -78,10 +78,30 @@ export class EmbeddingService {
       attention_mask: new ort.Tensor("int64", attentionMask, [1, seqLength]),
     };
 
-    // Some models expect token_type_ids
+    // Provide additional inputs based on what the model expects
     const inputNames = this.session.inputNames as string[];
     if (inputNames.includes("token_type_ids")) {
       feeds.token_type_ids = new ort.Tensor("int64", tokenTypeIds, [1, seqLength]);
+    }
+    if (inputNames.includes("position_ids")) {
+      const positionIds = new BigInt64Array(seqLength);
+      for (let i = 0; i < seqLength; i++) positionIds[i] = BigInt(i);
+      feeds.position_ids = new ort.Tensor("int64", positionIds, [1, seqLength]);
+    }
+
+    // Decoder models may require empty past_key_values for initial pass.
+    // Shape: [batch=1, num_kv_heads, past_seq_len=0, head_dim] — inferred from session metadata.
+    for (const name of inputNames) {
+      if (!name.startsWith("past_key_values") || feeds[name]) continue;
+      const meta = (this.session as any).inputMetadata?.[name];
+      const dims: (number | string)[] | undefined = meta?.dims;
+      // Replace dynamic axes with 0 (empty past), fix batch=1
+      const shape = dims?.map((d: number | string) => typeof d === "number" ? d : 0) ?? [1, 1, 0, 1];
+      if (shape.length > 0) shape[0] = 1;
+      const size = shape.reduce((a: number, b: number) => a * b, 1);
+      const dtype = meta?.type === "tensor(float16)" ? "float16" : "float32";
+      const data = dtype === "float16" ? new Uint16Array(size) : new Float32Array(size);
+      feeds[name] = new ort.Tensor(dtype, data, shape);
     }
 
     const results = await this.session.run(feeds);

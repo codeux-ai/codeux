@@ -350,6 +350,12 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     embeddingModelManager: deps.embeddingModelManager,
     embeddingService: deps.embeddingService,
     memoryRepository: deps.memoryRepository,
+    settingsRepository: deps.settingsRepository,
+  });
+
+  // Auto-restore previously active embedding model (fire-and-forget)
+  deps.embeddingModelManager.restorePreviousModel().catch((error) => {
+    deps.logger.warn(`Embedding model auto-restore failed: ${error}`);
   });
 
   const handle = await setupDashboardServer({

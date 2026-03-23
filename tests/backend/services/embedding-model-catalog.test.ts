@@ -12,8 +12,8 @@ describe("embedding-model-catalog", () => {
     expect(model.files.length).toBeGreaterThan(0);
   });
 
-  it("contains Qwen3-Embedding-0.6B model", () => {
-    const model = EMBEDDING_MODEL_CATALOG["Qwen3-Embedding-0.6B"];
+  it("contains multilingual-e5-large model", () => {
+    const model = EMBEDDING_MODEL_CATALOG["multilingual-e5-large"];
     expect(model).toBeDefined();
     expect(model.dimension).toBe(1024);
     expect(model.files.length).toBeGreaterThan(0);

@@ -179,7 +179,7 @@ describe("dashboard-lifecycle-service", () => {
       LIVE_ACTIVITY_CACHE_MS: 500,
       memoryService: {} as any,
       memoryPromotionService: {} as any,
-      embeddingModelManager: {} as any,
+      embeddingModelManager: { restorePreviousModel: vi.fn().mockResolvedValue(undefined) } as any,
       embeddingService: {} as any,
       memoryRepository: {} as any,
     };

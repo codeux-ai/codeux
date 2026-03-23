@@ -4,6 +4,7 @@ import type { MemoryPromotionService } from "../services/memory-promotion-servic
 import type { EmbeddingModelManager } from "../services/embedding-model-manager.js";
 import type { EmbeddingService } from "../services/embedding-service.js";
 import type { MemoryRepository } from "../repositories/memory-repository.js";
+import type { SettingsRepository } from "../repositories/settings-repository.js";
 import type {
   MemoryScope,
   MemoryCategory,
@@ -20,6 +21,7 @@ export interface MemoryRouteDependencies {
   embeddingModelManager: EmbeddingModelManager;
   embeddingService: EmbeddingService;
   memoryRepository: MemoryRepository;
+  settingsRepository: SettingsRepository;
 }
 
 function toError(error: unknown, prefix: string): string {
@@ -34,6 +36,7 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
     embeddingModelManager,
     embeddingService,
     memoryRepository,
+    settingsRepository,
   } = deps;
 
   // --- Memory CRUD ---
@@ -277,13 +280,45 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
 
   // --- Re-embed ---
 
-  app.post("/api/projects/:projectId/memories/reembed", async (req, res) => {
+  app.post("/api/projects/:projectId/memories/reembed", (req, res) => {
     try {
       const projectId = String(req.params.projectId).trim();
-      const count = await memoryService.reembedProject(projectId);
-      res.json({ reembedded: count });
+      memoryService.startReembedProject(projectId);
+      res.json({ status: "started" });
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to re-embed") });
+      res.status(400).json({ error: toError(error, "Failed to start re-embed") });
+    }
+  });
+
+  app.get("/api/projects/:projectId/memories/reembed/progress", (req, res) => {
+    try {
+      const progress = memoryService.getReembedProgress();
+      if (!progress) {
+        res.json({ active: false, completed: 0, total: 0 });
+        return;
+      }
+      res.json(progress);
+    } catch (error) {
+      res.status(400).json({ error: toError(error, "Failed to get re-embed progress") });
+    }
+  });
+
+  // --- Embedding map (2D projection + similarity edges) ---
+
+  app.get("/api/projects/:projectId/memories/embedding-map", (req, res) => {
+    try {
+      const projectId = String(req.params.projectId).trim();
+      const scope = req.query.scope as MemoryScope | undefined;
+      const sprintId = req.query.sprintId as string | undefined;
+      const agentPresetId = req.query.agentPresetId as string | undefined;
+      const settings = settingsRepository.getProjectResolvedSettings(projectId);
+      const topK = settings.memory.mapMaxEdgesPerNode;
+      const result = memoryService.getEmbeddingMap(
+        projectId, scope, sprintId, agentPresetId, topK,
+      );
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ error: toError(error, "Failed to get embedding map") });
     }
   });
 
@@ -297,6 +332,7 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
         agent: memoryService.countByScope(projectId, "agent"),
         project: memoryService.countByScope(projectId, "project"),
         activeModel: embeddingService.getLoadedModelId(),
+        staleEmbeddings: memoryService.countStaleEmbeddings(projectId),
       });
     } catch (error) {
       res.status(400).json({ error: toError(error, "Failed to get memory stats") });

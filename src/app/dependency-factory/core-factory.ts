@@ -179,6 +179,7 @@ export function createCoreDependencies(
     memoryRepository,
     logger.child({ component: "embedding-model-manager" }),
   );
+
   const memoryService = new MemoryService(
     memoryRepository,
     embeddingService,

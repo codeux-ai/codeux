@@ -1,8 +1,8 @@
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef, useState, useCallback, useEffect } from "preact/hooks";
 import gsap from "gsap";
-import { Brain, Search, X, AlertTriangle, Save, Check, RotateCcw, ZoomIn, ZoomOut, Maximize2, Plus, Download, Trash2, Power, Loader2, HardDrive } from "lucide-preact";
-import { listMemories, createMemory, deleteMemory as apiDeleteMemory, searchMemories, listEmbeddingModels, downloadEmbeddingModel, selectEmbeddingModel, deleteEmbeddingModel, getMemoryStats, type EmbeddingModelWithStatus } from "./lib/memory-api.js";
+import { Brain, Search, X, AlertTriangle, Save, Check, RotateCcw, ZoomIn, ZoomOut, Maximize2, Plus, Download, Trash2, Power, Loader2, HardDrive, RefreshCw } from "lucide-preact";
+import { listMemories, createMemory, deleteMemory as apiDeleteMemory, searchMemories, listEmbeddingModels, downloadEmbeddingModel, selectEmbeddingModel, deleteEmbeddingModel, getMemoryStats, startReembed, getReembedProgress, getEmbeddingMap, type EmbeddingModelWithStatus, type ReembedProgress, type EmbeddingMapResult } from "./lib/memory-api.js";
 import type { MemoryRecord, MemoryScope, MemoryCategory } from "./memory-types.js";
 import { useProjectData } from "./context/project-data.js";
 
@@ -27,7 +27,7 @@ interface MemNode {
     alive: boolean;
 }
 
-interface Edge { a: number; b: number }
+interface Edge { a: number; b: number; similarity: number }
 interface Pulse { edgeIdx: number; progress: number; speed: number }
 
 /* ─── Config ─────────────────────────────────────────────────────────────── */
@@ -64,17 +64,38 @@ const CATEGORIES: MemoryCategory[] = ["architecture", "codebase", "context", "pr
 
 /* ─── Build nodes + edges from API data ─────────────────────────────────── */
 
-function buildNodesFromRecords(records: MemoryRecord[]): MemNode[] {
+function buildNodesFromRecords(records: MemoryRecord[], embeddingMap: EmbeddingMapResult | null): MemNode[] {
+    // Build a lookup from memory id → projected position
+    const posMap = new Map<string, { x: number; y: number }>();
+    if (embeddingMap?.hasEmbeddings) {
+        for (const n of embeddingMap.nodes) posMap.set(n.id, { x: n.x, y: n.y });
+    }
+
+    const hasProjections = posMap.size > 0;
+
+    // Fallback: category-based ring layout for memories without embeddings
     const counts: Record<string, number> = {};
+
     return records.map(r => {
-        const cat = r.category in CLUSTER ? r.category : "context";
-        const ci = counts[cat] = (counts[cat] || 0);
-        counts[cat]++;
-        const [cx, cy] = CLUSTER[cat] || [0, 0];
-        const angle = ci * (Math.PI * 2 / Math.max(3, records.filter(m => m.category === cat).length)) + Math.PI / 4;
-        const dist = 45 + r.strength * 35;
-        const tx = cx + Math.cos(angle) * dist;
-        const ty = cy + Math.sin(angle) * dist;
+        let tx: number, ty: number;
+        const projected = posMap.get(r.id);
+
+        if (projected && hasProjections) {
+            tx = projected.x;
+            ty = projected.y;
+        } else {
+            // Fallback to category ring layout
+            const cat = r.category in CLUSTER ? r.category : "context";
+            const ci = counts[cat] = (counts[cat] || 0);
+            counts[cat]++;
+            const [cx, cy] = CLUSTER[cat] || [0, 0];
+            const catCount = records.filter(m => m.category === cat).length;
+            const angle = ci * (Math.PI * 2 / Math.max(3, catCount)) + Math.PI / 4;
+            const dist = 45 + r.strength * 35;
+            tx = cx + Math.cos(angle) * dist;
+            ty = cy + Math.sin(angle) * dist;
+        }
+
         return {
             id: r.id, content: r.content, category: r.category as MemCat,
             strength: r.strength, scope: r.scope,
@@ -85,11 +106,29 @@ function buildNodesFromRecords(records: MemoryRecord[]): MemNode[] {
     });
 }
 
-function buildEdges(nodes: MemNode[]): Edge[] {
+function buildEdges(nodes: MemNode[], embeddingMap: EmbeddingMapResult | null): Edge[] {
     const edges: Edge[] = [];
-    for (let i = 0; i < nodes.length; i++)
-        for (let j = i + 1; j < nodes.length; j++)
-            if (nodes[i].category === nodes[j].category) edges.push({ a: i, b: j });
+
+    if (embeddingMap?.hasEmbeddings && embeddingMap.edges.length > 0) {
+        // Build index lookup: memory id → node index
+        const idxMap = new Map<string, number>();
+        nodes.forEach((n, i) => idxMap.set(n.id, i));
+
+        for (const e of embeddingMap.edges) {
+            const ai = idxMap.get(e.source);
+            const bi = idxMap.get(e.target);
+            if (ai !== undefined && bi !== undefined) {
+                edges.push({ a: ai, b: bi, similarity: e.similarity });
+            }
+        }
+    } else {
+        // Fallback: category-based edges
+        for (let i = 0; i < nodes.length; i++)
+            for (let j = i + 1; j < nodes.length; j++)
+                if (nodes[i].category === nodes[j].category)
+                    edges.push({ a: i, b: j, similarity: 0.5 });
+    }
+
     return edges;
 }
 
@@ -131,7 +170,10 @@ const ModelCard: FunctionComponent<{
     onDownload: (id: string) => void;
     onSelect: (id: string) => void;
     onDelete: (id: string) => void;
-}> = ({ model, onDownload, onSelect, onDelete }) => (
+    onReembed: () => void;
+    reembedding: boolean;
+    staleCount: number;
+}> = ({ model, onDownload, onSelect, onDelete, onReembed, reembedding, staleCount }) => (
     <div className="flex flex-col gap-3 p-4 rounded-[1.25rem]
                    bg-white/60 dark:bg-void-800/50 backdrop-blur-xl
                    border border-black/[0.06] dark:border-white/[0.06]
@@ -181,6 +223,20 @@ const ModelCard: FunctionComponent<{
                     Activate
                 </button>
             )}
+            {model.active && !reembedding && (
+                <button onClick={onReembed}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
+                               bg-signal-500/10 text-signal-500 hover:bg-signal-500/20 transition-colors duration-200">
+                    <RefreshCw className="w-3 h-3" strokeWidth={2.5} />
+                    Re-embed{staleCount > 0 ? ` (${staleCount} stale)` : " All"}
+                </button>
+            )}
+            {model.active && reembedding && (
+                <span className="flex items-center gap-1.5 text-[11px] font-bold text-signal-500">
+                    <RefreshCw className="w-3 h-3 animate-spin" strokeWidth={2.5} />
+                    Re-embedding…
+                </span>
+            )}
             {model.downloaded && (
                 <button onClick={() => onDelete(model.id)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
@@ -209,8 +265,12 @@ const Inspector: FunctionComponent<{
     const nodeIdx = node ? allNodes.findIndex(n => n.id === node.id) : -1;
     const connected = node ? edges
         .filter(e => e.a === nodeIdx || e.b === nodeIdx)
-        .map(e => allNodes[e.a === nodeIdx ? e.b : e.a])
-        .filter(n => n.alive) : [];
+        .map(e => ({
+            node: allNodes[e.a === nodeIdx ? e.b : e.a],
+            similarity: e.similarity,
+        }))
+        .filter(c => c.node.alive)
+        .sort((a, b) => b.similarity - a.similarity) : [];
 
     return (
         <div
@@ -267,12 +327,18 @@ const Inspector: FunctionComponent<{
                             <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">
                                 Synapses ({connected.length})
                             </span>
-                            {connected.slice(0, 6).map(cn => (
+                            {connected.slice(0, 8).map(({ node: cn, similarity }) => (
                                 <div key={cn.id} className="flex items-start gap-2 py-1">
                                     <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
                                         style={{ background: (CAT[cn.category] || CAT.context).hex }} />
-                                    <span className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 font-medium">
-                                        {cn.content}
+                                    <div className="flex-1 min-w-0">
+                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 font-medium">
+                                            {cn.content}
+                                        </span>
+                                    </div>
+                                    <span className="text-[9px] font-mono text-slate-400 shrink-0 mt-0.5"
+                                        style={{ color: similarity > 0.7 ? (CAT[cn.category] || CAT.context).hex : undefined }}>
+                                        {Math.round(similarity * 100)}%
                                     </span>
                                 </div>
                             ))}
@@ -395,12 +461,14 @@ export const MemoryPage: FunctionComponent = () => {
     const [showAddModal, setShowAddModal] = useState(false);
     const [records, setRecords] = useState<MemoryRecord[]>([]);
     const [loading, setLoading] = useState(true);
-    const [stats, setStats] = useState({ sprint: 0, agent: 0, project: 0, activeModel: null as string | null });
+    const [stats, setStats] = useState({ sprint: 0, agent: 0, project: 0, activeModel: null as string | null, staleEmbeddings: 0 });
+    const [reembed, setReembed] = useState<ReembedProgress | null>(null);
 
     // Mutable render state
     const S = useRef({
         nodes: [] as MemNode[],
         edges: [] as Edge[],
+        embeddingMap: null as EmbeddingMapResult | null,
         cam: { x: 0, y: 0, zoom: 0.55 },
         hoveredIdx: -1,
         selectedIdx: -1,
@@ -423,10 +491,11 @@ export const MemoryPage: FunctionComponent = () => {
         if (!pid) return;
         setLoading(true);
         try {
-            const [memoriesData, modelsData, statsData] = await Promise.all([
+            const [memoriesData, modelsData, statsData, mapData] = await Promise.all([
                 listMemories({ projectId: pid, scope: activeScope, limit: 200 }),
                 listEmbeddingModels(),
                 getMemoryStats(pid),
+                getEmbeddingMap(pid, activeScope).catch(() => null),
             ]);
             setRecords(memoriesData);
             setModels(modelsData);
@@ -435,8 +504,9 @@ export const MemoryPage: FunctionComponent = () => {
 
             // Update canvas
             const s = S.current;
-            s.nodes = buildNodesFromRecords(memoriesData);
-            s.edges = buildEdges(s.nodes);
+            s.embeddingMap = mapData;
+            s.nodes = buildNodesFromRecords(memoriesData, mapData);
+            s.edges = buildEdges(s.nodes, mapData);
             s.pulses = s.edges.map((_, i) => ({ edgeIdx: i, progress: Math.random(), speed: 0.002 + Math.random() * 0.003 }));
             s.selectedIdx = -1;
             s.searchMatch = null;
@@ -473,6 +543,23 @@ export const MemoryPage: FunctionComponent = () => {
         }, 2000);
         return () => clearInterval(interval);
     }, [models]);
+
+    /* ── Polling for re-embed progress ────────────────────────────────── */
+    useEffect(() => {
+        if (!reembed?.active || !pid) return;
+        const interval = setInterval(async () => {
+            try {
+                const progress = await getReembedProgress(pid);
+                setReembed(progress);
+                if (!progress.active) {
+                    clearInterval(interval);
+                    // Refresh everything: stats, embedding map, and nodes
+                    loadData();
+                }
+            } catch { /* ignore */ }
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [reembed?.active, pid, loadData]);
 
     /* ── Canvas setup & render loop ───────────────────────────────────── */
     useLayoutEffect(() => {
@@ -516,30 +603,52 @@ export const MemoryPage: FunctionComponent = () => {
             ctx.scale(cam.zoom, cam.zoom);
             ctx.translate(-cam.x, -cam.y);
 
-            for (const [cat, [cx, cy]] of Object.entries(CLUSTER)) {
-                const c = CAT[cat];
+            // Compute dynamic category centroids from actual node positions
+            const catCentroids: Record<string, { x: number; y: number; count: number; radius: number }> = {};
+            for (const n of nodes) {
+                if (!n.alive || n.opacity < 0.05) continue;
+                if (!catCentroids[n.category]) catCentroids[n.category] = { x: 0, y: 0, count: 0, radius: 0 };
+                const c = catCentroids[n.category];
+                c.x += n.x; c.y += n.y; c.count++;
+            }
+            for (const cat of Object.keys(catCentroids)) {
+                const c = catCentroids[cat];
+                if (c.count > 0) { c.x /= c.count; c.y /= c.count; }
+            }
+            // Compute radius as max distance from centroid to any node in the category + padding
+            for (const n of nodes) {
+                if (!n.alive || n.opacity < 0.05) continue;
+                const c = catCentroids[n.category];
                 if (!c) continue;
-                const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, 130);
-                const a = lob ? 0.015 : (dark ? 0.05 : 0.025);
+                const dist = Math.sqrt((n.x - c.x) ** 2 + (n.y - c.y) ** 2);
+                if (dist > c.radius) c.radius = dist;
+            }
+
+            for (const [cat, centroid] of Object.entries(catCentroids)) {
+                const c = CAT[cat];
+                if (!c || centroid.count === 0) continue;
+                const haloR = Math.max(80, centroid.radius + 50);
+                const halo = ctx.createRadialGradient(centroid.x, centroid.y, 0, centroid.x, centroid.y, haloR);
+                const a = lob ? 0.015 : (dark ? 0.04 : 0.02);
                 halo.addColorStop(0, `rgba(${c.r},${c.g},${c.b},${a})`);
                 halo.addColorStop(1, "transparent");
                 ctx.fillStyle = halo;
                 ctx.beginPath();
-                ctx.arc(cx, cy, 130, 0, Math.PI * 2);
+                ctx.arc(centroid.x, centroid.y, haloR, 0, Math.PI * 2);
                 ctx.fill();
             }
 
             if (cam.zoom > 0.55) {
                 ctx.textAlign = "center";
                 ctx.textBaseline = "middle";
-                for (const [cat, [cx, cy]] of Object.entries(CLUSTER)) {
+                for (const [cat, centroid] of Object.entries(catCentroids)) {
                     const c = CAT[cat];
-                    if (!c) continue;
+                    if (!c || centroid.count === 0) continue;
                     ctx.font = `700 ${11}px "Plus Jakarta Sans", sans-serif`;
                     ctx.fillStyle = lob
                         ? `rgba(227,0,15,${dark ? 0.2 : 0.12})`
                         : `rgba(${c.r},${c.g},${c.b},${dark ? 0.25 : 0.15})`;
-                    ctx.fillText(c.label.toUpperCase(), cx, cy);
+                    ctx.fillText(c.label.toUpperCase(), centroid.x, centroid.y);
                 }
             }
 
@@ -549,28 +658,35 @@ export const MemoryPage: FunctionComponent = () => {
                 ctx.moveTo(0, 0);
                 ctx.lineTo(node.x, node.y);
                 const cc = CAT[node.category] || CAT.context;
-                const a = (0.03 + node.strength * 0.03) * node.opacity;
+                const a = (0.015 + node.strength * 0.015) * node.opacity;
                 ctx.strokeStyle = lob
                     ? `rgba(227,0,15,${a})`
                     : `rgba(${cc.r},${cc.g},${cc.b},${a})`;
-                ctx.lineWidth = 0.6;
+                ctx.lineWidth = 0.4;
                 ctx.stroke();
             }
 
             for (let ei = 0; ei < edges.length; ei++) {
-                const { a, b } = edges[ei];
+                const { a, b, similarity } = edges[ei];
                 const na = nodes[a], nb = nodes[b];
                 if (!na || !nb || !na.alive || !nb.alive || na.opacity < 0.05 || nb.opacity < 0.05) continue;
                 const cp = bezierCtrl(na.x, na.y, nb.x, nb.y, ei);
-                const alpha = (0.08 + (na.strength + nb.strength) * 0.04) * Math.min(na.opacity, nb.opacity);
-                const cc = CAT[na.category] || CAT.context;
+                // Similarity-driven alpha: stronger connections are more visible
+                const simAlpha = similarity * 0.35;
+                const alpha = Math.max(0.03, simAlpha) * Math.min(na.opacity, nb.opacity);
+                // Blend colors from both endpoints for cross-category edges
+                const ca = CAT[na.category] || CAT.context;
+                const cb = CAT[nb.category] || CAT.context;
+                const mr = Math.round((ca.r + cb.r) / 2);
+                const mg = Math.round((ca.g + cb.g) / 2);
+                const mb = Math.round((ca.b + cb.b) / 2);
                 ctx.beginPath();
                 ctx.moveTo(na.x, na.y);
                 ctx.quadraticCurveTo(cp.cx, cp.cy, nb.x, nb.y);
                 ctx.strokeStyle = lob
                     ? `rgba(227,0,15,${alpha})`
-                    : `rgba(${cc.r},${cc.g},${cc.b},${alpha})`;
-                ctx.lineWidth = 0.8;
+                    : `rgba(${mr},${mg},${mb},${alpha})`;
+                ctx.lineWidth = 0.5 + similarity * 1.5;
                 ctx.stroke();
             }
 
@@ -584,11 +700,16 @@ export const MemoryPage: FunctionComponent = () => {
                     const cp = bezierCtrl(na.x, na.y, nb.x, nb.y, p.edgeIdx);
                     const px = quadAt(p.progress, na.x, cp.cx, nb.x);
                     const py = quadAt(p.progress, na.y, cp.cy, nb.y);
-                    const cc = CAT[na.category] || CAT.context;
-                    const pColor = lob ? "rgba(227,0,15,0.7)" : `rgba(${cc.r},${cc.g},${cc.b},0.75)`;
-                    ctx.shadowColor = lob ? "rgba(227,0,15,0.5)" : cc.hex;
+                    const ca = CAT[na.category] || CAT.context;
+                    const cb = CAT[nb.category] || CAT.context;
+                    const mr = Math.round((ca.r + cb.r) / 2);
+                    const mg = Math.round((ca.g + cb.g) / 2);
+                    const mb = Math.round((ca.b + cb.b) / 2);
+                    const pAlpha = 0.4 + edge.similarity * 0.45;
+                    const pColor = lob ? `rgba(227,0,15,${pAlpha})` : `rgba(${mr},${mg},${mb},${pAlpha})`;
+                    ctx.shadowColor = lob ? "rgba(227,0,15,0.5)" : `rgba(${mr},${mg},${mb},0.5)`;
                     ctx.beginPath();
-                    ctx.arc(px, py, 2, 0, Math.PI * 2);
+                    ctx.arc(px, py, 1.5 + edge.similarity, 0, Math.PI * 2);
                     ctx.fillStyle = pColor;
                     ctx.fill();
                     p.progress += p.speed;
@@ -902,6 +1023,30 @@ export const MemoryPage: FunctionComponent = () => {
             setModels(updated);
         } catch { /* ignore */ }
     }, []);
+    const handleReembed = useCallback(async () => {
+        if (!pid) return;
+        try {
+            await startReembed(pid);
+            setReembed({ active: true, completed: 0, total: 0 });
+            // Poll immediately — small models finish near-instantly
+            const progress = await getReembedProgress(pid);
+            setReembed(progress);
+            if (!progress.active) {
+                loadData();
+            }
+        } catch { /* ignore */ }
+    }, [pid, loadData]);
+    const handleSelectModelWithStats = useCallback(async (modelId: string) => {
+        try {
+            await selectEmbeddingModel(modelId);
+            const [updated, updatedStats] = await Promise.all([
+                listEmbeddingModels(),
+                pid ? getMemoryStats(pid) : Promise.resolve(stats),
+            ]);
+            setModels(updated);
+            setStats(updatedStats);
+        } catch { /* ignore */ }
+    }, [pid, stats]);
 
     /* ─── Render ──────────────────────────────────────────────────────── */
     return (
@@ -991,14 +1136,73 @@ export const MemoryPage: FunctionComponent = () => {
                     {models.map(model => (
                         <ModelCard key={model.id} model={model}
                             onDownload={handleDownloadModel}
-                            onSelect={handleSelectModel}
-                            onDelete={handleDeleteModel} />
+                            onSelect={handleSelectModelWithStats}
+                            onDelete={handleDeleteModel}
+                            onReembed={handleReembed}
+                            reembedding={!!reembed?.active}
+                            staleCount={stats.staleEmbeddings} />
                     ))}
                     {models.length === 0 && (
                         <p className="text-sm text-slate-400 font-medium col-span-2 text-center py-8">
                             Loading embedding models…
                         </p>
                     )}
+                </div>
+            )}
+
+            {/* ── Re-embed banner ─────────────────────────────────────── */}
+            {showModels && stats.staleEmbeddings > 0 && !reembed?.active && (
+                <div className="flex items-center gap-4 px-5 py-4 rounded-2xl
+                               bg-amber-500/[0.06] border border-amber-500/20
+                               dark:bg-amber-500/[0.04] dark:border-amber-400/15">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" strokeWidth={2.5} />
+                    <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                            {stats.staleEmbeddings} {stats.staleEmbeddings === 1 ? "memory needs" : "memories need"} re-embedding
+                        </p>
+                        <p className="text-[10px] text-amber-600/70 dark:text-amber-400/60 mt-0.5">
+                            These memories were embedded with a different model and won't appear in semantic search until re-embedded.
+                        </p>
+                    </div>
+                    <button onClick={handleReembed}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-bold shrink-0
+                                   bg-amber-500 text-white hover:bg-amber-600
+                                   transition-colors duration-200 shadow-[0_2px_8px_rgba(245,158,11,0.25)]">
+                        <RefreshCw className="w-3 h-3" strokeWidth={2.5} />
+                        Re-embed All
+                    </button>
+                </div>
+            )}
+
+            {/* ── Re-embed progress ───────────────────────────────────── */}
+            {showModels && reembed?.active && (
+                <div className="flex flex-col gap-3 px-5 py-4 rounded-2xl
+                               bg-signal-500/[0.06] border border-signal-500/20
+                               dark:bg-signal-500/[0.04] dark:border-signal-500/15">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <RefreshCw className="w-3.5 h-3.5 text-signal-500 animate-spin" strokeWidth={2.5} />
+                            <span className="text-xs font-bold text-signal-600 dark:text-signal-400">Re-embedding memories…</span>
+                        </div>
+                        <span className="text-[10px] font-mono text-signal-500">
+                            {reembed.completed}/{reembed.total}
+                        </span>
+                    </div>
+                    <div className="h-2 w-full bg-black/[0.06] dark:bg-white/[0.06] rounded-full overflow-hidden">
+                        <div className="h-full rounded-full bg-signal-500 transition-all duration-500 ease-out"
+                            style={{ width: `${reembed.total > 0 ? Math.round((reembed.completed / reembed.total) * 100) : 0}%` }} />
+                    </div>
+                </div>
+            )}
+
+            {/* ── Re-embed complete ───────────────────────────────────── */}
+            {showModels && reembed && !reembed.active && reembed.completed > 0 && stats.staleEmbeddings === 0 && (
+                <div className="flex items-center gap-3 px-5 py-3 rounded-2xl
+                               bg-signal-500/[0.06] border border-signal-500/20">
+                    <Check className="w-4 h-4 text-signal-500" strokeWidth={2.5} />
+                    <p className="text-xs font-bold text-signal-600 dark:text-signal-400">
+                        Re-embedding complete — {reembed.completed} {reembed.completed === 1 ? "memory" : "memories"} updated.
+                    </p>
                 </div>
             )}
 

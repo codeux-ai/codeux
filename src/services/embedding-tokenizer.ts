@@ -2,14 +2,16 @@ import * as fs from "fs";
 
 /**
  * Minimal HuggingFace tokenizer.json parser for ONNX model input.
- * Supports WordPiece (BERT/BGE) and BPE (Qwen3) tokenization.
+ * Supports WordPiece (BERT/BGE) and BPE tokenization.
  */
+
+type MergeEntry = string | [string, string];
 
 interface TokenizerConfig {
   model: {
     type: string;
     vocab: Record<string, number>;
-    merges?: string[];
+    merges?: MergeEntry[];
     unk_token?: string;
     continuing_subword_prefix?: string;
   };
@@ -34,7 +36,7 @@ export interface TokenizerOutput {
 
 export class EmbeddingTokenizer {
   private readonly vocab: Map<string, number>;
-  private readonly merges: string[];
+  private readonly mergeRanks: Map<string, number>;
   private readonly unkToken: string;
   private readonly unkId: number;
   private readonly clsId: number;
@@ -47,7 +49,18 @@ export class EmbeddingTokenizer {
   constructor(tokenizerJsonPath: string, maxLength = 512) {
     const raw = JSON.parse(fs.readFileSync(tokenizerJsonPath, "utf-8")) as TokenizerConfig;
     this.vocab = new Map(Object.entries(raw.model.vocab));
-    this.merges = raw.model.merges ?? [];
+
+    // Build merge priority map: "a\0b" → rank (lower = higher priority)
+    this.mergeRanks = new Map();
+    const rawMerges = raw.model.merges ?? [];
+    for (let i = 0; i < rawMerges.length; i++) {
+      const m = rawMerges[i];
+      const [a, b] = Array.isArray(m) ? m : m.split(" ");
+      if (a && b) {
+        this.mergeRanks.set(`${a}\0${b}`, i);
+      }
+    }
+
     this.isWordPiece = raw.model.type === "WordPiece";
     this.prefix = raw.model.continuing_subword_prefix ?? "##";
     this.unkToken = raw.model.unk_token ?? "[UNK]";
@@ -135,7 +148,6 @@ export class EmbeddingTokenizer {
   }
 
   private bpeTokenize(text: string): number[] {
-    // Simple BPE: split into characters, then greedily merge using vocabulary
     const ids: number[] = [];
     const words = text.split(/\s+/).filter(Boolean);
 
@@ -146,25 +158,30 @@ export class EmbeddingTokenizer {
         continue;
       }
 
-      // Fall back to character-level lookup
+      // Split into characters, then iteratively merge the highest-priority pair
       let tokens: string[] = [...word];
-      // Apply merges greedily
-      for (const merge of this.merges) {
-        const [a, b] = merge.split(" ");
-        if (!a || !b) continue;
 
-        const merged: string[] = [];
-        let i = 0;
-        while (i < tokens.length) {
-          if (i < tokens.length - 1 && tokens[i] === a && tokens[i + 1] === b) {
-            merged.push(a + b);
-            i += 2;
-          } else {
-            merged.push(tokens[i]);
-            i++;
+      while (tokens.length > 1) {
+        // Find the pair with the lowest merge rank (highest priority)
+        let bestRank = Infinity;
+        let bestIdx = -1;
+
+        for (let i = 0; i < tokens.length - 1; i++) {
+          const rank = this.mergeRanks.get(`${tokens[i]}\0${tokens[i + 1]}`);
+          if (rank !== undefined && rank < bestRank) {
+            bestRank = rank;
+            bestIdx = i;
           }
         }
-        tokens = merged;
+
+        if (bestIdx === -1) break; // No more merges apply
+
+        // Apply the merge at bestIdx
+        tokens = [
+          ...tokens.slice(0, bestIdx),
+          tokens[bestIdx] + tokens[bestIdx + 1],
+          ...tokens.slice(bestIdx + 2),
+        ];
       }
 
       for (const token of tokens) {

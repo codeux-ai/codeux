@@ -41,7 +41,11 @@ function createMockDeps(): MemoryRouteDependencies {
       listByAgent: vi.fn().mockReturnValue([]),
       search: vi.fn().mockResolvedValue([]),
       reembedProject: vi.fn().mockResolvedValue(5),
+      startReembedProject: vi.fn(),
+      getReembedProgress: vi.fn().mockReturnValue(null),
       countByScope: vi.fn().mockReturnValue(10),
+      countStaleEmbeddings: vi.fn().mockReturnValue(0),
+      getEmbeddingMap: vi.fn().mockReturnValue({ nodes: [], edges: [], hasEmbeddings: false }),
     } as any,
     memoryPromotionService: {
       analyzeForPromotion: vi.fn().mockResolvedValue([]),
@@ -61,6 +65,11 @@ function createMockDeps(): MemoryRouteDependencies {
     memoryRepository: {
       getModelStatus: vi.fn().mockReturnValue(null),
     } as any,
+    settingsRepository: {
+      getProjectResolvedSettings: vi.fn().mockReturnValue({
+        memory: { mapMaxEdgesPerNode: 3 },
+      }),
+    } as any,
   };
 }
 
@@ -79,7 +88,7 @@ describe("memory-routes", () => {
   });
 
   it("registers all expected routes", () => {
-    expect(app.get).toHaveBeenCalledTimes(4); // list, embedding-models, model status, stats
+    expect(app.get).toHaveBeenCalledTimes(6); // list, embedding-models, model status, reembed progress, embedding-map, stats
     expect(app.post).toHaveBeenCalledTimes(8); // create, search, promotion analyze/execute, download, cancel, select, reembed
     expect(app.patch).toHaveBeenCalledTimes(1); // update
     expect(app.delete).toHaveBeenCalledTimes(2); // delete memory, delete model
@@ -295,11 +304,29 @@ describe("memory-routes", () => {
   });
 
   describe("POST /api/projects/:projectId/memories/reembed", () => {
-    it("re-embeds and returns count", async () => {
+    it("starts re-embed and returns status", () => {
       const handler = routes["POST:/api/projects/:projectId/memories/reembed"].handler;
       const res = createMockRes();
-      await handler({ params: { projectId: "p1" } }, res);
-      expect(res.json).toHaveBeenCalledWith({ reembedded: 5 });
+      handler({ params: { projectId: "p1" } }, res);
+      expect(res.json).toHaveBeenCalledWith({ status: "started" });
+    });
+  });
+
+  describe("GET /api/projects/:projectId/memories/embedding-map", () => {
+    it("returns embedding map data with topK from settings", () => {
+      const handler = routes["GET:/api/projects/:projectId/memories/embedding-map"].handler;
+      const res = createMockRes();
+      handler({ params: { projectId: "p1" }, query: {} }, res);
+      expect(deps.settingsRepository.getProjectResolvedSettings).toHaveBeenCalledWith("p1");
+      expect(deps.memoryService.getEmbeddingMap).toHaveBeenCalledWith("p1", undefined, undefined, undefined, 3);
+      expect(res.json).toHaveBeenCalledWith({ nodes: [], edges: [], hasEmbeddings: false });
+    });
+
+    it("passes scope query parameter", () => {
+      const handler = routes["GET:/api/projects/:projectId/memories/embedding-map"].handler;
+      const res = createMockRes();
+      handler({ params: { projectId: "p1" }, query: { scope: "project" } }, res);
+      expect(deps.memoryService.getEmbeddingMap).toHaveBeenCalledWith("p1", "project", undefined, undefined, 3);
     });
   });
 
@@ -313,6 +340,7 @@ describe("memory-routes", () => {
         agent: 10,
         project: 10,
         activeModel: null,
+        staleEmbeddings: 0,
       });
     });
   });

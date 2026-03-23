@@ -82,7 +82,7 @@ describe("EmbeddingModelManager", () => {
     });
 
     it("deletes without unloading if a different model is loaded", async () => {
-      mockEmbeddingService.getLoadedModelId.mockReturnValue("Qwen3-Embedding-0.6B");
+      mockEmbeddingService.getLoadedModelId.mockReturnValue("multilingual-e5-large");
       await manager.deleteModel("bge-small-en-v1.5");
       expect(mockEmbeddingService.unloadModel).not.toHaveBeenCalled();
       expect(mockEmbeddingService.deleteModelFiles).toHaveBeenCalledWith("bge-small-en-v1.5");
@@ -114,7 +114,7 @@ describe("EmbeddingModelManager", () => {
 
       const statuses = manager.getStatuses();
       const bge = statuses.find((s) => s.id === "bge-small-en-v1.5");
-      const qwen = statuses.find((s) => s.id === "Qwen3-Embedding-0.6B");
+      const qwen = statuses.find((s) => s.id === "multilingual-e5-large");
       expect(bge!.downloaded).toBe(true);
       expect(qwen!.downloaded).toBe(false);
     });
