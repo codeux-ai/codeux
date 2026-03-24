@@ -294,4 +294,51 @@ describe("ProjectManagementRepository", () => {
     expect(notifier.scheduleProjectsRefresh).toHaveBeenCalled();
     expect(notifier.scheduleProjectStructureRefresh).toHaveBeenCalledWith(project.id, { includeProjects: true });
   });
+
+  it("filters tasks by active sprint run or sprint status when activeSprintsOnly is true", async () => {
+    const { repository, executionRepository } = await createRepository();
+    const project = repository.createProject({
+      name: "Active Stream Project",
+      sourceType: "local",
+      sourceRef: "/workspace/active",
+    });
+
+    const activeSprint = repository.createSprint(project.id, { name: "Active Sprint", status: "running" });
+    const inactiveSprint = repository.createSprint(project.id, { name: "Completed Sprint", status: "completed" });
+
+    // Explicitly add an inactive sprint run, making sure it shouldn't show up.
+    const run1 = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: inactiveSprint.id,
+      featureBranch: "inactive-branch",
+    });
+    executionRepository.updateSprintRun(run1.id, { status: "completed" });
+
+    // Explicitly add an active sprint run
+    const run2 = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: activeSprint.id,
+      featureBranch: "active-branch",
+    });
+    executionRepository.updateSprintRun(run2.id, { status: "running" });
+
+    repository.createTask(project.id, {
+      sprintId: activeSprint.id,
+      title: "Active Task",
+      promptMarkdown: "Do this.",
+    });
+
+    repository.createTask(project.id, {
+      sprintId: inactiveSprint.id,
+      title: "Inactive Task",
+      promptMarkdown: "Already done.",
+    });
+
+    const allTasks = repository.listTasks(project.id);
+    expect(allTasks).toHaveLength(2);
+
+    const activeTasks = repository.listTasks(project.id, undefined, true);
+    expect(activeTasks).toHaveLength(1);
+    expect(activeTasks[0].title).toBe("Active Task");
+  });
 });

@@ -19,7 +19,8 @@ export function useProjectTasks(
   projectId: string | null,
   sources: Source[],
   sprints: Sprint[],
-  sprintId?: string | null
+  sprintId?: string | null,
+  activeSprintsOnly?: boolean
 ): UseProjectTasksResult {
   const [taskRecords, setTaskRecords] = useState<TaskRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -40,8 +41,8 @@ export function useProjectTasks(
       setLoading(true);
     }
     try {
-      const nextTaskRecords = await fetchTasks(projectId, sprintId || undefined);
-      const cacheKey = `${projectId}:${sprintId || 'all'}`;
+      const nextTaskRecords = await fetchTasks(projectId, sprintId || undefined, activeSprintsOnly);
+      const cacheKey = `${projectId}:${sprintId || 'all'}:${activeSprintsOnly ? 'active' : 'all'}`;
       taskCache.set(cacheKey, nextTaskRecords);
       setTaskRecords((current) => (areTaskRecordListsEqual(current, nextTaskRecords) ? current : nextTaskRecords));
       hasLoadedRef.current = true;
@@ -53,7 +54,7 @@ export function useProjectTasks(
         setLoading(false);
       }
     }
-  }, [projectId, sprintId]);
+  }, [projectId, sprintId, activeSprintsOnly]);
 
   useEffect(() => {
     if (!projectId) {
@@ -62,7 +63,7 @@ export function useProjectTasks(
       return;
     }
 
-    const cacheKey = `${projectId}:${sprintId || 'all'}`;
+    const cacheKey = `${projectId}:${sprintId || 'all'}:${activeSprintsOnly ? 'active' : 'all'}`;
     const cachedTasks = taskCache.get(cacheKey);
 
     if (cachedTasks) {
@@ -76,7 +77,7 @@ export function useProjectTasks(
 
     hasLoadedRef.current = false;
     void refreshInternal();
-  }, [projectId, sprintId, refreshInternal]);
+  }, [projectId, sprintId, activeSprintsOnly, refreshInternal]);
 
   useEffect(() => {
     if (!projectId) {

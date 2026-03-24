@@ -390,21 +390,45 @@ export class ProjectManagementRepository {
     this.publishProjectStructureRefresh(sprint.projectId);
   }
 
-  listTasks(projectId: string, sprintId?: string): TaskRecord[] {
+  listTasks(projectId: string, sprintId?: string, activeSprintsOnly?: boolean): TaskRecord[] {
     this.requireProject(projectId);
-    const rows = sprintId
-      ? this.db.prepare(`
+
+    let rows;
+    if (sprintId) {
+      rows = this.db.prepare(`
         SELECT *
         FROM tasks
         WHERE project_id = ? AND sprint_id = ?
         ORDER BY sort_order ASC, created_at ASC, task_key ASC
-      `).all(projectId, sprintId)
-      : this.db.prepare(`
+      `).all(projectId, sprintId);
+    } else if (activeSprintsOnly) {
+      rows = this.db.prepare(`
+        SELECT t.*
+        FROM tasks t
+        JOIN sprints s ON t.sprint_id = s.id
+        WHERE t.project_id = ? AND (
+          (
+            SELECT sr.status
+            FROM sprint_runs sr
+            WHERE sr.sprint_id = s.id
+            ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC, sr.rowid DESC
+            LIMIT 1
+          ) IN ('running', 'queued')
+          OR (
+            NOT EXISTS (SELECT 1 FROM sprint_runs sr WHERE sr.sprint_id = s.id)
+            AND s.status = 'running'
+          )
+        )
+        ORDER BY t.sort_order ASC, t.created_at ASC, t.task_key ASC
+      `).all(projectId);
+    } else {
+      rows = this.db.prepare(`
         SELECT *
         FROM tasks
         WHERE project_id = ?
         ORDER BY sort_order ASC, created_at ASC, task_key ASC
       `).all(projectId);
+    }
 
     return this.inflateTasks(rows as unknown as TaskRow[]);
   }

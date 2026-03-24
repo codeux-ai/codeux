@@ -182,10 +182,13 @@ export const exportSprintMarkdown = async (
   );
 };
 
-export const fetchTasks = async (projectId: string, sprintId?: string): Promise<TaskRecord[]> => {
+export const fetchTasks = async (projectId: string, sprintId?: string, activeSprintsOnly?: boolean): Promise<TaskRecord[]> => {
   const url = new URL(`/api/projects/${encodeURIComponent(projectId)}/tasks`, window.location.origin);
   if (sprintId) {
     url.searchParams.set("sprintId", sprintId);
+  }
+  if (activeSprintsOnly) {
+    url.searchParams.set("activeSprintsOnly", "true");
   }
   return fetchJson<TaskRecord[]>(`${url.pathname}${url.search}`);
 };

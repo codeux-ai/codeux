@@ -16,7 +16,7 @@ export const TasksList: FunctionComponent = () => {
     const [activeFilter, setActiveFilter] = useState<TaskFilter>("All Tasks");
     const { projects, selectedProject } = useProjectData();
     const { sprints } = useProjectSprints(selectedProject?.id || null);
-    const { tasks } = useProjectTasks(selectedProject?.id || null, projects, sprints);
+    const { tasks } = useProjectTasks(selectedProject?.id || null, projects, sprints, undefined, true);
 
     useLayoutEffect(() => {
         if (listRef.current) {

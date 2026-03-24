@@ -115,7 +115,7 @@ export interface DashboardServerOptions {
   deleteSprint: (sprintId: string) => void;
   importSprintFromMarkdown: (projectId: string, input: SprintMarkdownImportInput) => SprintRecord;
   exportSprintToMarkdown: (projectId: string, sprintId: string) => SprintMarkdownExportBundle;
-  listTasks: (projectId: string, sprintId?: string) => TaskRecord[];
+  listTasks: (projectId: string, sprintId?: string, activeSprintsOnly?: boolean) => TaskRecord[];
   createTask: (projectId: string, input: CreateTaskInput) => TaskRecord;
   updateTask: (taskId: string, input: UpdateTaskInput) => TaskRecord;
   deleteTask: (taskId: string) => void;
@@ -575,7 +575,8 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       const sprintId = typeof req.query.sprintId === "string" && req.query.sprintId.trim()
         ? req.query.sprintId.trim()
         : undefined;
-      res.json(options.listTasks(String(req.params.projectId || "").trim(), sprintId));
+      const activeSprintsOnly = req.query.activeSprintsOnly === "true";
+      res.json(options.listTasks(String(req.params.projectId || "").trim(), sprintId, activeSprintsOnly));
     } catch (error) {
       res.status(400).json({ error: toErrorMessage(error, "Failed to list tasks") });
     }

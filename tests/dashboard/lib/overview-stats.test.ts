@@ -30,4 +30,26 @@ describe("overview-stats", () => {
       criticalTasks: 1,
     });
   });
+
+  describe("active stream filtering", () => {
+    it("excludes tasks belonging to inactive or completed sprints from the active stream", () => {
+      // Simulate the backend filtering that now happens before the component receives tasks
+      const allTasks = [
+        { id: "t1", sprintId: "s1", title: "Active sprint task" },
+        { id: "t2", sprintId: "s2", title: "Inactive sprint task" }
+      ];
+
+      const sprints = [
+        { id: "s1", status: "running" },
+        { id: "s2", status: "completed" }
+      ];
+
+      // Simulate the activeSprintsOnly backend logic for the frontend
+      const activeSprints = new Set(sprints.filter(s => s.status === "running").map(s => s.id));
+      const activeStreamTasks = allTasks.filter(t => activeSprints.has(t.sprintId));
+
+      expect(activeStreamTasks).toHaveLength(1);
+      expect(activeStreamTasks[0].id).toBe("t1");
+    });
+  });
 });

@@ -1,5 +1,5 @@
 import express from "express";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Server } from "http";
 import * as fs from "fs/promises";
 import * as os from "os";
@@ -1313,6 +1313,29 @@ describe("dashboard project management API", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
       error: `Failed to update preferred worker: Preferred worker target not found: ${listener.connection.id}`,
+    });
+  });
+
+  describe("GET /api/projects/:projectId/tasks", () => {
+    it("passes activeSprintsOnly query param to repository", async () => {
+      const { repository } = await createServerHandle();
+      const port = serversToClose[serversToClose.length - 1].address().port;
+      const baseUrl = `http://localhost:${port}`;
+      const project = repository.createProject({
+        name: "Mock Project",
+        sourceType: "local",
+        sourceRef: "/mock",
+      });
+
+      const listTasksSpy = vi.spyOn(repository, "listTasks").mockReturnValue([]);
+
+      const response1 = await fetch(`${baseUrl}/api/projects/${project.id}/tasks?activeSprintsOnly=true`);
+      expect(response1.status).toBe(200);
+      expect(listTasksSpy).toHaveBeenCalledWith(project.id, undefined, true);
+
+      const response2 = await fetch(`${baseUrl}/api/projects/${project.id}/tasks?sprintId=123`);
+      expect(response2.status).toBe(200);
+
     });
   });
 });
