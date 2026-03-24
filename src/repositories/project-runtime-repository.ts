@@ -89,7 +89,10 @@ function toNumber(value: number | string | null | undefined): number {
   return Number.parseInt(String(value ?? 0), 10) || 0;
 }
 
-function runtimeContextKey(projectId: string): string {
+function runtimeContextKey(projectId: string, sprintId?: string | null): string {
+  if (sprintId) {
+    return `${RUNTIME_CONTEXT_PREFIX}${projectId}:${sprintId}`;
+  }
   return `${RUNTIME_CONTEXT_PREFIX}${projectId}`;
 }
 
@@ -278,12 +281,14 @@ export class ProjectRuntimeRepository {
     if (!projectId) {
       return { subtasks: [], timestamp: null };
     }
-    return this.getProjectStatus(projectId);
+    const sprintId = this.getSelectedSprintId(projectId);
+    return this.getProjectStatus(projectId, sprintId);
   }
 
-  getProjectStatus(projectId: string): DashboardStatus {
-    const context = this.getRuntimeContext(projectId);
-    const tasks = this.getMappedTasks(projectId, context?.sprintId ?? null);
+  getProjectStatus(projectId: string, explicitSprintId?: string | null): DashboardStatus {
+    const context = this.getRuntimeContext(projectId, explicitSprintId);
+    const sprintIdToLoad = explicitSprintId ?? context?.sprintId ?? null;
+    const tasks = this.getMappedTasks(projectId, sprintIdToLoad);
     const latestRuns = this.getLatestRuns(tasks.map((task) => task.row.id));
     const taskKeyByRecordId = new Map(tasks.map((task) => [task.row.id, task.row.task_key]));
 
@@ -315,7 +320,7 @@ export class ProjectRuntimeRepository {
 
     return {
       project_id: projectId,
-      sprint_id: context?.sprintId ?? undefined,
+      sprint_id: sprintIdToLoad ?? undefined,
       sprint_number: context?.sprintNumber ?? undefined,
       source_id: context?.sourceId ?? undefined,
       repo_path: context?.repoPath ?? undefined,
@@ -332,6 +337,25 @@ export class ProjectRuntimeRepository {
     const status = this.getSelectedProjectStatus();
     const repoPath = typeof status.repo_path === "string" ? status.repo_path.trim() : "";
     return repoPath.length > 0 ? repoPath : fallbackPath;
+  }
+
+  getSelectedSprintId(projectId: string): string | null {
+    const row = this.db.prepare(`
+      SELECT payload
+      FROM app_settings
+      WHERE key = ?
+    `).get(`selected_sprint_id_${projectId}`) as { payload: string } | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(row.payload) as { sprintId?: string | null };
+      return parsed.sprintId ?? null;
+    } catch {
+      return null;
+    }
   }
 
   getSelectedProjectId(): string | null {
@@ -445,12 +469,22 @@ export class ProjectRuntimeRepository {
     return null;
   }
 
-  private getRuntimeContext(projectId: string): RuntimeContextPayload | null {
-    const row = this.db.prepare(`
+  private getRuntimeContext(projectId: string, sprintId?: string | null): RuntimeContextPayload | null {
+    const primaryKey = runtimeContextKey(projectId, sprintId);
+    let row = this.db.prepare(`
       SELECT payload
       FROM app_settings
       WHERE key = ?
-    `).get(runtimeContextKey(projectId)) as { payload: string } | undefined;
+    `).get(primaryKey) as { payload: string } | undefined;
+
+    if (!row && sprintId) {
+      // Fallback to project-level context if sprint-specific context is not found
+      row = this.db.prepare(`
+        SELECT payload
+        FROM app_settings
+        WHERE key = ?
+      `).get(runtimeContextKey(projectId)) as { payload: string } | undefined;
+    }
 
     if (!row) {
       return null;
@@ -470,7 +504,7 @@ export class ProjectRuntimeRepository {
       VALUES (?, ?, ?)
       ON CONFLICT(key) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at
     `).run(
-      runtimeContextKey(context.projectId),
+      runtimeContextKey(context.projectId, context.sprintId),
       JSON.stringify(context),
       now
     );

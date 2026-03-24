@@ -222,4 +222,61 @@ describe("ProjectRuntimeRepository", () => {
       merge_indicator: "AUTOMERGE",
     });
   });
+
+  it("maintains separate runtime context per sprint for the same project and returns the explicitly selected sprint", async () => {
+    const { projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Multi-sprint Project",
+      sourceType: "local",
+      sourceRef: "/workspace/multi",
+    });
+
+    const sprint1 = projectRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
+    const sprint2 = projectRepository.createSprint(project.id, { name: "Sprint 2", number: 2 });
+
+    const task1 = projectRepository.createTask(project.id, { sprintId: sprint1.id, taskKey: "S1T1", title: "Task 1 in Sprint 1", status: "in_progress" });
+    const task2 = projectRepository.createTask(project.id, { sprintId: sprint2.id, taskKey: "S2T1", title: "Task 1 in Sprint 2", status: "pending" });
+
+    // Sync status for sprint 1
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint1.id,
+      subtasks: [
+        { id: "S1T1", title: "Task 1 in Sprint 1", status: "RUNNING", record_id: task1.id, depends_on: [] }
+      ],
+      reportText: "Sprint 1 running"
+    });
+
+    // Sync status for sprint 2
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint2.id,
+      subtasks: [
+        { id: "S2T1", title: "Task 1 in Sprint 2", status: "PENDING", record_id: task2.id, depends_on: [] }
+      ],
+      reportText: "Sprint 2 pending"
+    });
+
+    // Select Sprint 1
+    projectRepository.setSelectedProjectId(project.id);
+    projectRepository.setSelectedSprintId(project.id, sprint1.id);
+
+    const status1 = runtimeRepository.getSelectedProjectStatus();
+    expect(status1.sprint_id).toBe(sprint1.id);
+    expect(status1.reportText).toBe("Sprint 1 running");
+    expect(status1.subtasks).toHaveLength(1);
+    expect(status1.subtasks[0].id).toBe("S1T1");
+    expect(status1.subtasks[0].status).toBe("RUNNING");
+
+    // Select Sprint 2
+    projectRepository.setSelectedSprintId(project.id, sprint2.id);
+
+    const status2 = runtimeRepository.getSelectedProjectStatus();
+    expect(status2.sprint_id).toBe(sprint2.id);
+    expect(status2.reportText).toBe("Sprint 2 pending");
+    expect(status2.subtasks).toHaveLength(1);
+    expect(status2.subtasks[0].id).toBe("S2T1");
+    expect(status2.subtasks[0].status).toBe("PENDING");
+  });
 });
