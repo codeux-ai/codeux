@@ -234,6 +234,7 @@ export class WatchLoopRunner {
                 featureBranchPrefix,
                 sprintNumber: scopedExecutionContext.sprintNumber,
                 sprintName: scopedExecutionContext.sprint.name,
+                sprintDescription: scopedExecutionContext.sprint.goal,
                 ciIntelligence,
                 githubMode,
               });

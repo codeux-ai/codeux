@@ -4,6 +4,7 @@ export async function executePrFinalizeStage(ctx: PipelineContext): Promise<{ pr
   let prUrl: string | undefined;
 
   if (ctx.settings.git.autoCreatePr) {
+    const sprint = ctx.task.sprint_id ? ctx.deps.projectManagementRepository?.getSprint(ctx.task.sprint_id) : null;
     prUrl = await ctx.prService.resolveOrCreateFeaturePr(
       {
         taskId: ctx.task.id,
@@ -11,6 +12,8 @@ export async function executePrFinalizeStage(ctx: PipelineContext): Promise<{ pr
         title: ctx.title,
         featureBranch: ctx.featureBranch,
         workerBranch: ctx.workerBranch,
+        taskDescription: ctx.task.prompt,
+        sprintDescription: sprint?.goal,
       },
       ctx.worktreePath,
       ctx.deps.getGithubToken()

@@ -61,6 +61,13 @@ flowchart TD
   T -->|false| V[single-cycle report]
 ```
 
+## Pull Request Content Rules
+
+Automatically created PRs must provide sufficient human context:
+- **Worker Feature PRs** (`worker-branch -> sprint-feature-branch`): Must include both the current task description (from the prompt) and the sprint goal/description in the PR body.
+- **Main Merge PRs** (`sprint-feature-branch -> default-branch`): Must include the sprint description alongside branch and sprint numbering metadata.
+- If task or sprint descriptions are missing/empty, PR bodies will use a compact fallback text instead of omitting sections.
+
 ## Execution Phases
 
 ### 1. Branch preflight (optional)

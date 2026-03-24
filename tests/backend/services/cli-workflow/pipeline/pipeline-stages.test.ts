@@ -11,7 +11,7 @@ const createMockContext = (): PipelineContext => {
     sessionId: "test-session",
     workerBranch: "worker-branch",
     featureBranch: "feature-branch",
-    task: { id: "T1", prompt: "test prompt", title: "test task", state: "PENDING", description: "desc" },
+    task: { id: "T1", sprint_id: "sprint-1", prompt: "test prompt", title: "test task", state: "PENDING", description: "desc" },
     provider: "gemini",
     title: "test title",
     repoPath: "/repo",
@@ -133,6 +133,7 @@ const createMockContext = (): PipelineContext => {
     } as any,
     deps: {
       sessionTracking: { appendActivity: vi.fn(), updateSession: vi.fn() } as any,
+      projectManagementRepository: { getSprint: vi.fn().mockReturnValue({ goal: "Mock Sprint Goal" }) } as any,
       getDashboardSettings: vi.fn(),
       getWorkerInstruction: vi.fn(),
       getGithubToken: vi.fn(),
@@ -261,6 +262,14 @@ describe("executePrFinalizeStage", () => {
     await executePrFinalizeStage(ctx);
 
     expect(ctx.workflowSucceeded).toBe(true);
+    expect(ctx.prService.resolveOrCreateFeaturePr).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskDescription: "test prompt",
+        sprintDescription: "Mock Sprint Goal",
+      }),
+      ctx.worktreePath,
+      undefined
+    );
     expect(ctx.deps.sessionTracking.updateSession).toHaveBeenCalledWith(ctx.sessionId, { state: "COMPLETED", prUrl: "https://github.com/pr/1" });
     expect(ctx.deps.sessionTracking.appendActivity).toHaveBeenCalledWith(ctx.sessionId, expect.objectContaining({
       description: "Workflow completed. PR: https://github.com/pr/1"

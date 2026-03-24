@@ -26,6 +26,31 @@ describe("PrService", () => {
             expect(res).toBe("http://newpr");
         });
 
+        it("creates new PR with task and sprint descriptions", async () => {
+            vi.mocked(cliProcessRunner.runCommandStrict)
+                .mockRejectedValueOnce(new Error("not found"))
+                .mockResolvedValueOnce({ stdout: "http://newpr2\n", stderr: "", exitCode: 0 } as any);
+            const service = new PrService();
+            const res = await service.resolveOrCreateFeaturePr({
+                ...defaultArgs,
+                taskDescription: "test task desc",
+                sprintDescription: "test sprint desc"
+            }, "/path", "token");
+            expect(res).toBe("http://newpr2");
+            expect(cliProcessRunner.runCommandStrict).toHaveBeenCalledWith(
+                "gh",
+                expect.arrayContaining([expect.stringContaining("test task desc")]),
+                "/path",
+                expect.any(Object)
+            );
+            expect(cliProcessRunner.runCommandStrict).toHaveBeenCalledWith(
+                "gh",
+                expect.arrayContaining([expect.stringContaining("test sprint desc")]),
+                "/path",
+                expect.any(Object)
+            );
+        });
+
         it("returns undefined if create fails", async () => {
             vi.mocked(cliProcessRunner.runCommandStrict).mockRejectedValue(new Error("fail"));
             const service = new PrService();

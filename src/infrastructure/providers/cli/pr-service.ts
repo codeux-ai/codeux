@@ -10,6 +10,8 @@ export interface IPrService {
     title: string;
     featureBranch: string;
     workerBranch: string;
+    taskDescription?: string;
+    sprintDescription?: string;
   }, worktreePath: string, githubToken?: string): Promise<string | undefined>;
 
   hasUnpushedCommits(worktreePath: string, workerBranch: string, featureBranch: string, runner?: Runner): Promise<boolean>;
@@ -24,6 +26,8 @@ export class PrService implements IPrService {
       title: string;
       featureBranch: string;
       workerBranch: string;
+      taskDescription?: string;
+      sprintDescription?: string;
     },
     worktreePath: string,
     githubToken?: string
@@ -43,12 +47,17 @@ export class PrService implements IPrService {
     } catch { /* fall through */ }
 
     try {
+      const taskSection = args.taskDescription?.trim() ? `**Task Context:**\n${args.taskDescription.trim()}` : `**Task Context:**\nNo task description provided.`;
+      const sprintSection = args.sprintDescription?.trim() ? `**Sprint Context:**\n${args.sprintDescription.trim()}` : `**Sprint Context:**\nNo sprint description provided.`;
+      
       const bodyLines = [
         `Automated task execution for \`${args.taskId}\` via ${args.provider}.`,
         "",
-        `Base: \`${args.featureBranch}\``,
-        `Head: \`${args.workerBranch}\``,
       ];
+      bodyLines.push(taskSection, "");
+      bodyLines.push(sprintSection, "");
+      bodyLines.push(`Base: \`${args.featureBranch}\``, `Head: \`${args.workerBranch}\``);
+
       const prTitle = `${args.title} (${args.provider})`;
       const createResult = await runCommandStrict(
         "gh",

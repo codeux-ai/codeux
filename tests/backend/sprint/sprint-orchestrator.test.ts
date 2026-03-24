@@ -139,6 +139,7 @@ describe("sprint-orchestrator", () => {
             featureBranchPrefix: "feature/",
             sprintNumber: 1,
             sprintName: "Sprint 1",
+            sprintDescription: "Awesome sprint description",
             ciIntelligence,
             githubMode: "REMOTE",
         });
@@ -147,6 +148,7 @@ describe("sprint-orchestrator", () => {
             repoPath: "/tmp/repo",
             featureBranch: "feature/sprint1-implementation",
             defaultBranch: "main",
+            body: expect.stringContaining("Awesome sprint description"),
         }));
         expect(autoMergeFeaturePr).toHaveBeenCalledWith({ repoPath: "/tmp/repo", prNumber: 321 });
         expect(feedback.state).toBe("automerge_succeeded");

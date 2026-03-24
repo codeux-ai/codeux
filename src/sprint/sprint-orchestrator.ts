@@ -208,6 +208,7 @@ export class SprintOrchestrator {
     featureBranchPrefix: string;
     sprintNumber?: number;
     sprintName?: string;
+    sprintDescription?: string;
     ciIntelligence: CiIntelligenceSettings;
     githubMode: "REMOTE" | "LOCAL";
   }): Promise<MergeFeedbackResult> {
@@ -577,16 +578,25 @@ function resolveMainBranchPrBody(args: {
   defaultBranch: string;
   sprintNumber?: number;
   sprintName?: string;
+  sprintDescription?: string;
 }): string {
   const scopeLine = typeof args.sprintNumber === "number" && Number.isFinite(args.sprintNumber)
     ? `Sprint: ${args.sprintNumber}`
     : typeof args.sprintName === "string" && args.sprintName.trim().length > 0
       ? `Sprint: ${args.sprintName.trim()}`
       : "Sprint: not recorded";
+
+  const descriptionSection = args.sprintDescription?.trim()
+    ? `**Sprint Context:**\n${args.sprintDescription.trim()}`
+    : `**Sprint Context:**\nNo sprint description provided.`;
+
   return [
     "Automated sprint completion PR opened by Sprint OS.",
     "",
     scopeLine,
+    "",
+    descriptionSection,
+    "",
     `Base: \`${args.defaultBranch}\``,
     `Head: \`${args.featureBranch}\``,
   ].join("\n");
