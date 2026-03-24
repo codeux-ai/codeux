@@ -1,5 +1,5 @@
 import type { JulesApiClient } from "../integrations/jules-api-client.js";
-import type { JulesSession, Subtask } from "../contracts/app-types.js";
+import type { JulesSession, Subtask, DashboardSettings, DashboardSettingsScope } from "../contracts/app-types.js";
 import type { ActiveDispatchRegistry, ActiveDispatchStopResult } from "./active-dispatch-registry.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
@@ -32,6 +32,7 @@ export class WorkerDispatchExecutionService {
     private readonly taskService: TaskService,
     private readonly activeDispatchRegistry: ActiveDispatchRegistry,
     private readonly julesApi: JulesApiClient,
+    private readonly getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings,
     private readonly logger?: Logger,
   ) {}
 
@@ -62,10 +63,15 @@ export class WorkerDispatchExecutionService {
       throw new Error(`Task not found: ${dispatch.taskId}`);
     }
 
+    const dashboardSettings = this.getDashboardSettings({
+      projectId: project.id,
+      sprintId: sprint.id,
+    });
+
     const session = await this.taskService.startSprintTask(
       this.toSubtask(task),
       undefined,
-      sprint.featureBranch?.trim() || project.defaultBranch?.trim() || "main",
+      sprint.featureBranch?.trim() || dashboardSettings.git.defaultBranch || project.defaultBranch?.trim() || "main",
       project.baseDir,
       sprint.number ?? 0,
       {

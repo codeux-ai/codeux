@@ -91,6 +91,7 @@ export function createMcpDependencies(
       taskService,
       activeDispatchRegistry,
       julesApi,
+      () => context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
       logger.child({ component: "worker-dispatch-execution-service" }),
     ),
     workerInboxReplyService: sprintDeps.workerInboxReplyService,

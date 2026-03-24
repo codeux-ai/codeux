@@ -16,7 +16,7 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-d
 
 const tempDirs: string[] = [];
 
-async function createFixture() {
+async function createFixture(dashboardSettings = DEFAULT_DASHBOARD_SETTINGS) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-worker-dispatch-"));
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
@@ -41,7 +41,7 @@ async function createFixture() {
     workerEndpointRepository,
     projectWorkerAssignmentService,
     projectAttentionService,
-    () => DEFAULT_DASHBOARD_SETTINGS,
+    () => dashboardSettings,
   );
 
   return {
@@ -538,5 +538,69 @@ describe("WorkerTaskDispatchService", () => {
       ownerType: "worker",
       summaryMarkdown: "Merge conflict requires attention.",
     });
+  });
+
+  it("uses the defaultBranch from settings instead of the project fallback when claimed", async () => {
+    const customSettings = {
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      git: {
+        ...DEFAULT_DASHBOARD_SETTINGS.git,
+        defaultBranch: "dev",
+      }
+    };
+    const { projectRepository, connectionRepository, executionRepository, workerService } = await createFixture(customSettings);
+    const project = projectRepository.createProject({
+      name: "Override Branch Project",
+      sourceType: "local",
+      sourceRef: "/workspace/override-branch",
+      defaultBranch: "main",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Override Branch Sprint",
+      number: 6,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Task on dev branch",
+      executorType: "mcp_worker",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mcp_worker",
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "mcp_worker",
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      status: "pending",
+    });
+
+    connectionRepository.upsertConnection({
+      connectionKey: "worker-override-1",
+      displayName: "Worker Override",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+    workerService.registerWorkerAvailability("worker-override-1", "available");
+
+    const claim = workerService.pullNextDispatch({
+      connectionKey: "worker-override-1",
+    });
+
+    expect(claim).not.toBeNull();
+    expect(claim?.executionContext.defaultBranch).toBe("dev");
   });
 });

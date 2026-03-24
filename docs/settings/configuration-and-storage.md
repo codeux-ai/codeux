@@ -53,6 +53,7 @@ Runtime resolution:
 - project saves are diffed against the current system defaults, not hardcoded app defaults
 - sprint settings are sparse temporary overrides on top of resolved project settings
 - orchestration, worker dispatch, and selected-project CI tracking resolve effective settings for the active project or sprint at runtime instead of using only the startup system snapshot
+- git default branches are resolved by preferring the scoped setting's `git.defaultBranch` (from system, project, or sprint) over the raw `project.defaultBranch` fallback, ensuring UI overrides are respected in execution paths
 - the old global `/api/settings` contract is removed in favor of explicit scoped endpoints
 
 ## Persisted Scoped Settings Model
