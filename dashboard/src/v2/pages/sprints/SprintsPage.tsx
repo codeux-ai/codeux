@@ -51,6 +51,7 @@ export const SprintsPage: FunctionComponent = () => {
     addTaskForSprint, setAddTaskForSprint,
     addTaskSprintTasks,
     virtualProviders,
+    planningEta,
     planningPresets,
     refreshSprints,
     refreshExecution,
@@ -318,6 +319,7 @@ export const SprintsPage: FunctionComponent = () => {
                     connections={execution.connections}
                     virtualProviders={virtualProviders}
                     planningPresets={planningPresets}
+                    planningEta={planningEta}
                     onClose={() => {
                       setShowCreateComposer(false);
                       setEditingSprint(null);

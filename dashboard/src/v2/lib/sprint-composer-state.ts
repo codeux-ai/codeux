@@ -173,3 +173,15 @@ export const useSprintComposerState = (initialSprint: Sprint | null = null): Spr
     availableModes,
   };
 };
+
+export function resolveSubmitOriginalPrompt(
+  submitMode: SprintSubmitMode,
+  originalPrompt: string | null,
+  goal: string,
+): string | null {
+  const isPlanning = submitMode === "plan_only" || submitMode === "plan_and_start";
+  if (isPlanning && !originalPrompt) {
+    return goal.trim() || null;
+  }
+  return originalPrompt;
+}

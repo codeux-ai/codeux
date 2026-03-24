@@ -17,6 +17,7 @@ import {
   deleteSprint,
   exportSprintMarkdown,
   fetchProjectExecution,
+  fetchProjectStats,
   fetchTasks,
   importSprintMarkdown,
   improveSprintPrompt,
@@ -26,6 +27,7 @@ import {
 import { fetchAgentPresets } from "../../lib/agent-preset-api.js";
 import { buildTaskBundle, parseTaskBundle } from "../../lib/markdown-transfer.js";
 import { toTaskViewModel } from "../../lib/view-models.js";
+import { derivePlanningETA } from "../../lib/planning-telemetry.js";
 import { fetchProjectEffectiveSettings } from "../../lib/settings-api.js";
 import { cancelSprintRun, orchestrateSprint } from "../../../lib/api/dashboard-api.js";
 import { getSprintHumanInterventionBySprintId } from "../../../lib/execution-intervention.js";
@@ -82,6 +84,7 @@ export function useSprintsPageData() {
     virtualWorkerProvider: string;
   }>(null);
   const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
+  const [planningEta, setPlanningEta] = useState(180000);
 
   const { selectedProject } = useProjectData();
   const { sprints, refresh, loading: sprintsLoading } = useProjectSprints(selectedProject?.id || null);
@@ -105,6 +108,24 @@ export function useSprintsPageData() {
       p.labels.some(label => label.trim().toLowerCase() === "planning")
     );
   }, [agentPresets]);
+
+  useEffect(() => {
+    if (!selectedProject) {
+      setPlanningEta(180000);
+      return;
+    }
+    let cancelled = false;
+    void fetchProjectStats(selectedProject.id, "all")
+      .then((stats) => {
+        if (!cancelled) setPlanningEta(derivePlanningETA(stats));
+      })
+      .catch((error) => {
+        console.error("Failed to fetch project stats for ETA", error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProject?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -526,6 +547,7 @@ export function useSprintsPageData() {
     addTaskForSprint, setAddTaskForSprint,
     addTaskSprintTasks,
     virtualProviders,
+    planningEta,
     planningPresets,
     refreshSprints: refresh,
     refreshExecution,

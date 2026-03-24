@@ -18,6 +18,7 @@ import {
   type SprintSubmitMode,
   type PlanningRouteOption,
   toPlanningOverrides,
+  resolveSubmitOriginalPrompt,
 } from "../../lib/sprint-composer-state.js";
 import { getProviderModelOptions } from "../../lib/settings-view-models.js";
 import { getPlanningFeedback, type PlanningActionType } from "../../lib/sprint-planning-feedback.js";
@@ -30,6 +31,7 @@ interface SprintComposerProps {
   connections: ExecutionConnectionSummary[];
   virtualProviders: Array<{ id: VirtualWorkerProvider; label: string }>;
   planningPresets: AgentPreset[];
+  planningEta: number;
   onClose: () => void;
   onImprovePrompt?: (draft: ImprovePromptInput, signal?: AbortSignal) => Promise<string>;
   onSubmit: (payload: {
@@ -51,6 +53,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   connections,
   virtualProviders,
   planningPresets,
+  planningEta,
   onClose,
   onImprovePrompt,
   onSubmit,
@@ -179,7 +182,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       await onSubmit({
         name: state.name.trim(),
         goal: state.goal.trim(),
-        originalPrompt: state.originalPrompt,
+        originalPrompt: resolveSubmitOriginalPrompt(state.submitMode, state.originalPrompt, state.goal),
         submitMode: state.submitMode,
         routeOverride: state.routeOverride,
         modelOverride: state.modelOverride,
@@ -247,6 +250,21 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-signal-500"></span>
               </span>
               Planning in motion
+            </div>
+            <div className="flex items-center justify-center gap-6">
+              <div className="flex flex-col items-center">
+                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">ETA</div>
+                <div className="font-mono text-xl font-medium tracking-tight text-slate-900 dark:text-white">
+                  {Math.floor(Math.max(0, planningEta - elapsedMs) / 60000)}:{String(Math.floor((Math.max(0, planningEta - elapsedMs) % 60000) / 1000)).padStart(2, '0')}
+                </div>
+              </div>
+              <div className="h-8 w-px bg-black/[0.08] dark:bg-white/[0.08]" />
+              <div className="flex flex-col items-center">
+                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Elapsed</div>
+                <div className="font-mono text-xl font-medium tracking-tight text-slate-500">
+                  {Math.floor(elapsedMs / 60000)}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, '0')}
+                </div>
+              </div>
             </div>
             <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
               {feedback.text}
@@ -379,7 +397,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
               </button>
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-2">
+            <div className={state.originalPrompt ? "grid gap-4 xl:grid-cols-2" : "grid gap-4"}>
               <div className={`rounded-[1.7rem] border bg-black/[0.025] transition-all dark:bg-white/[0.03] ${
                 isImproving
                   ? "border-signal-500/35 shadow-[0_0_0_1px_rgba(0,224,160,0.16),0_0_30px_rgba(0,224,160,0.1)]"
