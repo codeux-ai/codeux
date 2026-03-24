@@ -58,6 +58,58 @@ describe("AgentPresetSyncService", () => {
     expect(drifted[0]?.instructionMarkdown).toContain("Updated planning instructions");
   });
 
+  it("repairs stale DB content when source metadata already matches", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-stale-content-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    const agentPath = path.join(repoPath, ".sprint-os", "agents", "worker.md");
+    await fs.writeFile(agentPath, "Real worker instructions.\n", "utf8");
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Stale Content Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+
+    // First sync — imports correctly
+    const initial = await syncService.listAgentPresets(project.id);
+    expect(initial).toHaveLength(1);
+    expect(initial[0]?.instructionMarkdown).toContain("Real worker instructions");
+
+    // Simulate the old bug: metadata is correct but DB content is empty
+    const stats = await fs.stat(agentPath);
+    agentPresetRepository.linkAgentPresetToSource(initial[0]!.id, {
+      sourcePath: agentPath,
+      sourceScope: "project",
+      sourceUpdatedAt: stats.mtime.toISOString(),
+    });
+    agentPresetRepository.updateAgentPreset(initial[0]!.id, {
+      instructionMarkdown: "",
+    });
+
+    // Verify the stale state
+    const stale = agentPresetRepository.findAgentPresetByName(project.id, "Worker");
+    expect(stale?.instructionMarkdown).toBe("");
+
+    // Re-sync should detect and repair the content mismatch
+    const repaired = await syncService.listAgentPresets(project.id);
+    expect(repaired[0]?.instructionMarkdown).toContain("Real worker instructions");
+    expect(repaired[0]?.syncStatus).toBe("synced");
+  });
+
   it("writes dashboard-created and updated agents into the project agent directory", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-agent-dashboard-write-"));
     tempDirs.push(dir);

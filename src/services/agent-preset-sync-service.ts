@@ -144,32 +144,29 @@ export class AgentPresetSyncService {
         continue;
       }
 
-      if (
-        existing.sourcePath !== source.sourcePath
+      const metadataChanged = existing.sourcePath !== source.sourcePath
         || existing.sourceScope !== source.sourceScope
-        || existing.sourceUpdatedAt !== source.sourceUpdatedAt
-      ) {
-        const linked = this.deps.agentPresetRepository.linkAgentPresetToSource(existing.id, {
+        || existing.sourceUpdatedAt !== source.sourceUpdatedAt;
+
+      if (metadataChanged) {
+        this.deps.agentPresetRepository.linkAgentPresetToSource(existing.id, {
           sourcePath: source.sourcePath,
           sourceScope: source.sourceScope,
           sourceUpdatedAt: source.sourceUpdatedAt,
           sourceImportedAt: source.sourceUpdatedAt,
         });
+      }
 
-        const contentChanged = source.instructionMarkdown.trim() !== existing.instructionMarkdown.trim();
-        const nameChanged = source.normalizedName !== this.normalizeName(existing.name);
-        if (contentChanged || nameChanged) {
-          const imported = this.deps.agentPresetRepository.importLinkedAgentPreset(existing.id, {
-            name: source.sourceScope === "project" ? existing.name : source.name,
-            instructionMarkdown: source.instructionMarkdown,
-            sourceUpdatedAt: source.sourceUpdatedAt,
-          });
-          presetsById.set(imported.id, imported);
-          presetsByName.set(source.normalizedName, imported);
-        } else {
-          presetsById.set(linked.id, linked);
-          presetsByName.set(source.normalizedName, linked);
-        }
+      const contentChanged = source.instructionMarkdown.trim() !== existing.instructionMarkdown.trim();
+      const nameChanged = source.normalizedName !== this.normalizeName(existing.name);
+      if (contentChanged || nameChanged) {
+        const imported = this.deps.agentPresetRepository.importLinkedAgentPreset(existing.id, {
+          name: source.sourceScope === "project" ? existing.name : source.name,
+          instructionMarkdown: source.instructionMarkdown,
+          sourceUpdatedAt: source.sourceUpdatedAt,
+        });
+        presetsById.set(imported.id, imported);
+        presetsByName.set(source.normalizedName, imported);
       }
     }
   }
