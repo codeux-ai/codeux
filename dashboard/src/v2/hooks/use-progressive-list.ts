@@ -1,44 +1,84 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
+import { type PageSizeOption, resolvePageSize, shouldResetVisibleCount } from "../lib/progressive-list-options.js";
 
 export interface UseProgressiveListOptions {
-  initialCount?: number;
-  incrementCount?: number;
-  delay?: number;
+  pageSize?: PageSizeOption;
+  stepCount?: number;
+  rootMargin?: string;
 }
 
 /**
  * Progressively renders a list of items to keep the UI responsive.
- * Useful for large collections of sprints or tasks.
+ * Implemented with an IntersectionObserver to load more items when reaching the sentinel.
  */
 export function useProgressiveList<T>(
   items: T[],
   options: UseProgressiveListOptions = {}
-): T[] {
+) {
   const {
-    initialCount = 20,
-    incrementCount = 20,
-    delay = 10,
+    pageSize = "20",
+    stepCount = 20,
+    rootMargin = "120px 0px 120px 0px",
   } = options;
 
+  const previousLengthRef = useRef(items.length);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  const initialCount = resolvePageSize(pageSize, items.length);
   const [visibleCount, setVisibleCount] = useState(initialCount);
 
-  // Reset visible count when items change significantly (e.g. project switch)
-  // or if the items array is now smaller than what we're showing.
+  // Handle data or page size changes deterministically
   useEffect(() => {
-    setVisibleCount(initialCount);
-  }, [items.length, initialCount]);
+    const prevLength = previousLengthRef.current;
+    const newLength = items.length;
 
+    // We must reset if the user chose "All" or a size change happened.
+    // Or if the array changes so that it's smaller, etc.
+    if (pageSize === "All" || shouldResetVisibleCount(prevLength, newLength, visibleCount)) {
+      setVisibleCount(resolvePageSize(pageSize, newLength));
+    } else {
+      // If we didn't reset entirely, ensure we don't display more items than exist
+      setVisibleCount((prev) => Math.min(prev, newLength));
+    }
+
+    previousLengthRef.current = newLength;
+  }, [items.length, pageSize, visibleCount]);
+
+  // Set up the IntersectionObserver for scroll-based loading
   useEffect(() => {
-    if (visibleCount >= items.length) {
+    // If we're displaying everything, no need for an observer.
+    if (pageSize === "All" || visibleCount >= items.length) {
       return;
     }
 
-    const timer = setTimeout(() => {
-      setVisibleCount((prev) => Math.min(prev + incrementCount, items.length));
-    }, delay);
+    const sentinel = sentinelRef.current;
+    const root = scrollContainerRef.current;
 
-    return () => clearTimeout(timer);
-  }, [visibleCount, items.length, incrementCount, delay]);
+    if (!sentinel) {
+      return;
+    }
 
-  return items.slice(0, visibleCount);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry?.isIntersecting) {
+          setVisibleCount((prev) => Math.min(prev + stepCount, items.length));
+        }
+      },
+      { root, rootMargin }
+    );
+
+    observer.observe(sentinel);
+
+    return () => observer.disconnect();
+  }, [items.length, visibleCount, pageSize, stepCount, rootMargin]);
+
+  return {
+    visibleItems: items.slice(0, visibleCount),
+    visibleCount,
+    hasMore: visibleCount < items.length && pageSize !== "All",
+    scrollContainerRef,
+    sentinelRef,
+  };
 }

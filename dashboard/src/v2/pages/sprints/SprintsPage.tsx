@@ -21,7 +21,7 @@ import { SprintComposer } from "../../components/ui/SprintComposer.js";
 import { SprintMarkdownModal } from "../../components/ui/SprintMarkdownModal.js";
 import { SprintSettingsOverrideModal } from "../../components/ui/SprintSettingsOverrideModal.js";
 import { useSprintsPageData } from "./use-sprints-page-data.js";
-import { useProgressiveList } from "../../hooks/use-progressive-list.js";
+import { useProgressiveList } from "../hooks/use-progressive-list.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 
@@ -65,7 +65,7 @@ export const SprintsPage: FunctionComponent = () => {
     handleImportSprint,
   } = useSprintsPageData();
 
-  const progressiveSprints = useProgressiveList(sortedSprints);
+  const { visibleItems: progressiveSprints, sentinelRef, scrollContainerRef } = useProgressiveList(sortedSprints);
 
   useLayoutEffect(() => {
     if (!headerRef.current) {
@@ -342,6 +342,9 @@ export const SprintsPage: FunctionComponent = () => {
                 onBulkStart={(ids) => { for (const id of ids) handleSprintToggle(id); }}
                 onBulkDelete={(ids) => { for (const id of ids) void handleDeleteSprint(id); }}
               />
+              {progressiveSprints.length < sortedSprints.length && (
+                <div ref={sentinelRef} className="py-4 text-center text-sm text-slate-500" />
+              )}
             </div>
           </>
         ) : (
