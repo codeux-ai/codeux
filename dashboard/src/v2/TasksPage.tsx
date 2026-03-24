@@ -25,6 +25,10 @@ import { useProjectData } from "./context/project-data.js";
 import { useProjectSprints } from "./hooks/use-project-sprints.js";
 import { useProjectTasks } from "./hooks/use-project-tasks.js";
 import { createTask, deleteTask, updateTask } from "./lib/project-api.js";
+import { deriveTaskBoardState } from "./lib/task-board-state.js";
+import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "./lib/list-window.js";
+import { ListWindowSelector } from "./components/ui/ListWindowSelector.js";
+import { SkeletonCard } from "./components/ui/ListSkeletons.js";
 
 const PRIORITY_CFG: Record<TaskPriority, { label: string; color: string; dot: string; bg: string }> = {
   critical: { label: "Critical", color: "text-status-red", dot: "bg-status-red shadow-[0_0_8px_rgba(227,0,15,0.6)]", bg: "bg-status-red/[0.08] border-status-red/20" },
@@ -355,6 +359,7 @@ export const TasksPage: FunctionComponent = () => {
   const [selectedSprint, setSelectedSprint] = useState<string | null>(initialSprint);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
+  const [listWindow, setListWindow] = useState<ListWindowOption>(DEFAULT_LIST_WINDOW);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
@@ -408,29 +413,9 @@ export const TasksPage: FunctionComponent = () => {
     setSelectedSprint(null);
   }, [initialSprint, selectedProject, sprints, sprintsLoading]);
 
-  const filtered = useMemo(() => {
-    return tasks.filter((task) => {
-      if (statusFilter !== "all" && task.status !== statusFilter) return false;
-      if (priorityFilter !== "all" && task.priority !== priorityFilter) return false;
-      return true;
-    });
-  }, [priorityFilter, statusFilter, tasks]);
-
-  const columns = useMemo(() => {
-    const all = STATUS_ORDER.map((status) => ({
-      status,
-      tasks: filtered.filter((task) => task.status === status),
-    }));
-    if (statusFilter !== "all") return all.filter((column) => column.tasks.length > 0);
-    return all;
-  }, [filtered, statusFilter]);
-
-  const stats = useMemo(() => ({
-    total: filtered.length,
-    inProgress: filtered.filter((task) => task.status === "in_progress").length,
-    completed: filtered.filter((task) => task.status === "completed").length,
-    critical: filtered.filter((task) => task.priority === "critical").length,
-  }), [filtered]);
+  const { filteredTasks, visibleTasks, stats, columns } = useMemo(() => {
+    return deriveTaskBoardState(tasks, statusFilter, priorityFilter, listWindow);
+  }, [tasks, statusFilter, priorityFilter, listWindow]);
 
   const selectedSprintModel = selectedSprint ? sprints.find((sprint) => sprint.id === selectedSprint) || null : null;
 
@@ -568,11 +553,15 @@ export const TasksPage: FunctionComponent = () => {
             </button>
           ))}
         </div>
+
+        <div className="ml-auto">
+          <ListWindowSelector value={listWindow} onChange={setListWindow} label="Show" />
+        </div>
       </div>
 
       {selectedSprintModel && (
         <div className="-mt-6">
-          <SprintProgressCard sprint={selectedSprintModel} tasks={filtered} />
+          <SprintProgressCard sprint={selectedSprintModel} tasks={filteredTasks} />
         </div>
       )}
 
@@ -593,12 +582,16 @@ export const TasksPage: FunctionComponent = () => {
         columns.length === 2 ? "grid-cols-1 lg:grid-cols-2" :
         "grid-cols-1 lg:grid-cols-3"
       }`}>
-        {columns.map(({ status, tasks: columnTasks }) => (
+        {columns.map(({ status, count, tasks: columnTasks }) => (
           <div key={status} className="flex flex-col">
-            <ColumnHeader status={status} count={columnTasks.length} />
+            <ColumnHeader status={status} count={count} />
             <div className="flex-1 flex flex-col gap-4 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border border-black/[0.03] dark:border-white/[0.03]">
               {loading ? (
-                <div className="flex-1 flex items-center justify-center text-xs font-medium text-slate-400">Loading tasks…</div>
+                <>
+                  <SkeletonCard />
+                  <SkeletonCard />
+                  <SkeletonCard />
+                </>
               ) : columnTasks.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center text-xs font-medium text-slate-300 dark:text-slate-700">No tasks</div>
               ) : (
