@@ -340,7 +340,7 @@ async function createServerHandle(): Promise<{
     deleteSprint: (sprintId) => repository.deleteSprint(sprintId),
     importSprintFromMarkdown: (projectId, input) => markdownService.importSprint(projectId, input),
     exportSprintToMarkdown: (projectId, sprintId) => markdownService.exportSprint(projectId, sprintId),
-    listTasks: (projectId, sprintId) => repository.listTasks(projectId, sprintId),
+    listTasks: (projectId, sprintId, activeSprintsOnly) => repository.listTasks(projectId, sprintId, activeSprintsOnly),
     createTask: (projectId, input) => repository.createTask(projectId, input),
     updateTask: (taskId, input) => repository.updateTask(taskId, input),
     deleteTask: (taskId) => repository.deleteTask(taskId),

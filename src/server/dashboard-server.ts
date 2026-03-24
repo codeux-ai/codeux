@@ -575,7 +575,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       const sprintId = typeof req.query.sprintId === "string" && req.query.sprintId.trim()
         ? req.query.sprintId.trim()
         : undefined;
-      const activeSprintsOnly = req.query.activeSprintsOnly === "true";
+      const activeSprintsOnly = req.query.activeSprintsOnly === "true" || req.query.activeSprintsOnly === true ? true : undefined;
       res.json(options.listTasks(String(req.params.projectId || "").trim(), sprintId, activeSprintsOnly));
     } catch (error) {
       res.status(400).json({ error: toErrorMessage(error, "Failed to list tasks") });
