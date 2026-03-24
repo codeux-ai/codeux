@@ -3,6 +3,8 @@ import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { TaskRow } from "./ui/TaskRow.js";
 import { FilterStrip } from "./ui/FilterStrip.js";
+import { SkeletonRow } from "./ui/ListSkeletons.js";
+import { deriveActiveSprintIds, filterTasksToActiveSprints } from "../lib/overview-streams.js";
 import { useProjectData } from "../context/project-data.js";
 import { useProjectSprints } from "../hooks/use-project-sprints.js";
 import { useProjectTasks } from "../hooks/use-project-tasks.js";
@@ -14,9 +16,11 @@ const FILTER_OPTIONS = ["All Tasks", "Running", "Queued", "Completed"] as const;
 export const TasksList: FunctionComponent = () => {
     const listRef = useRef<HTMLDivElement>(null);
     const [activeFilter, setActiveFilter] = useState<TaskFilter>("All Tasks");
-    const { projects, selectedProject } = useProjectData();
-    const { sprints } = useProjectSprints(selectedProject?.id || null);
-    const { tasks } = useProjectTasks(selectedProject?.id || null, projects, sprints);
+    const { projects, selectedProject, loading: projectsLoading } = useProjectData();
+    const { sprints, loading: sprintsLoading } = useProjectSprints(selectedProject?.id || null);
+    const { tasks, loading: tasksLoading } = useProjectTasks(selectedProject?.id || null, projects, sprints);
+
+    const isLoading = projectsLoading || sprintsLoading || tasksLoading;
 
     useLayoutEffect(() => {
         if (listRef.current) {
@@ -28,7 +32,10 @@ export const TasksList: FunctionComponent = () => {
         }
     }, [activeFilter]);
 
-    const filteredTasks = tasks.filter(task => {
+    const activeSprintIds = deriveActiveSprintIds(sprints);
+    const activeTasks = filterTasksToActiveSprints(tasks, activeSprintIds);
+
+    const filteredTasks = activeTasks.filter(task => {
         if (activeFilter === "All Tasks") return true;
         if (activeFilter === "Running") return task.status === "in_progress";
         if (activeFilter === "Queued") return task.status === "pending";
@@ -50,10 +57,25 @@ export const TasksList: FunctionComponent = () => {
             </div>
 
             {/* Task rows */}
-            <div ref={listRef} className="flex flex-col w-full">
-                {filteredTasks.map((task) => (
-                    <TaskRow key={task.id} task={task} />
-                ))}
+            <div ref={listRef} className="flex flex-col w-full space-y-3">
+                {isLoading ? (
+                    <>
+                        <SkeletonRow />
+                        <SkeletonRow />
+                        <SkeletonRow />
+                        <SkeletonRow />
+                        <SkeletonRow />
+                    </>
+                ) : filteredTasks.length > 0 ? (
+                    filteredTasks.map((task) => (
+                        <TaskRow key={task.id} task={task} />
+                    ))
+                ) : (
+                    <div className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+                        <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">No active tasks</div>
+                        <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">There are no tasks currently matching the selected filter in active sprints.</div>
+                    </div>
+                )}
             </div>
         </div>
     );
