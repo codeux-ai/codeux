@@ -132,7 +132,7 @@ describe("ExecutionControlService", () => {
     }));
   });
 
-  it("fails fast when a lingering sprint lease still blocks orchestration", async () => {
+  it("clears stale lease and restarts orchestration if previous run is paused", async () => {
     const { projectRepository, executionRepository, service, executeOrchestrator } = await createFixture();
     const project = projectRepository.createProject({
       name: "Lingering Lease Project",
@@ -159,8 +159,15 @@ describe("ExecutionControlService", () => {
       expiresAt: "2030-03-09T12:00:00.000Z",
     });
 
-    await expect(service.orchestrateSprint(project.id, sprint.id)).rejects.toThrow("still owns the sprint lease");
-    expect(executeOrchestrator).not.toHaveBeenCalled();
+    await service.orchestrateSprint(project.id, sprint.id);
+
+    expect(executionRepository.getLease("sprint", sprint.id)).toBeNull();
+    expect(executeOrchestrator).toHaveBeenCalledWith(expect.objectContaining({
+      action: "orchestrate",
+      project_id: project.id,
+      sprint_id: sprint.id,
+      wait: true,
+    }));
   });
 
   it("rejects orchestration while a sprint cancellation is still pending for active work", async () => {

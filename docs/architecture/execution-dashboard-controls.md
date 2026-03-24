@@ -39,10 +39,10 @@ That means:
 - duplicate orchestration still respects sprint leases
 - a resumed sprint creates a fresh orchestration attempt rather than mutating old run history
 - dashboard-triggered execution and MCP-triggered execution converge on the same runtime model
-- Sprint OS now releases stale sprint leases left behind by already-terminal runs before starting a fresh orchestration attempt
+- Sprint OS now releases stale sprint leases left behind by already-terminal runs, paused runs, and fully-idle cancelled runs before starting a fresh orchestration attempt
 - if a lingering sprint lease still exists after stale-run recovery, the dashboard start request now fails fast instead of returning a misleading success while no new run can start
 - a sprint cannot be restarted while an older run is still `cancel_requested` with active dispatch shutdown still pending
-- if an older `cancel_requested` run is already idle, Sprint OS finalizes it to `cancelled` before allowing a fresh start
+- if an older `cancel_requested` run is already idle, Sprint OS finalizes it to `cancelled` before allowing a fresh start, allowing prompt restart without leftover lease blocking
 - dashboard-owned watch loops now continue through watch-loop output checkpoints instead of exiting and requiring a manual rerun; the checkpoint return behavior is preserved only for interactive MCP callers
 
 ### Pause Sprint Run
