@@ -185,7 +185,9 @@ Legacy runtime:
 - The sprint page no longer runs a full-page entrance fade on mount, which keeps initial navigation more immediate and avoids perceived flashing
 - The sprint page now uses lighter targeted motion on the heading instead of a full-page fade, keeping navigation more immediate without leaving the page static
 - Sprint composer planning-route overrides now correctly force the selected virtual provider instead of only overriding the model on the project default provider
-- Tasks page is project-scoped and supports create/edit/delete plus dependency metadata
+- Tasks page is project-scoped and uses a three-column board state (`Queued`, `In Progress`, `Completed`), where `coding_completed` acts as active work.
+- Tasks page renders create/edit inline through the new `TaskComposer` replacing the modal flow.
+- Task cards now explicitly show downstream dependent tasks as readable metadata tags.
 - Navigating from a sprint cell into `View Tasks` now preselects that sprint instead of leaving the board on `All Sprints`
 - Tasks page now refreshes from the same project-structure realtime invalidation path as sprints
 - Tasks and sprints now refresh silently on background realtime invalidation, so opening the Tasks page no longer repeatedly flashes loading state when project metadata or structure updates arrive

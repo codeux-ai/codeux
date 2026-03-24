@@ -15,11 +15,13 @@ import {
   Settings,
   Trash2,
   Plus,
+  X,
   ArrowUpRight,
 } from "lucide-preact";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
-import { AddTaskModal } from "./components/ui/AddTaskModal.js";
+import { TaskComposer } from "./components/ui/TaskComposer.js";
+import { buildDependentTasksMap, type DependentTaskMetadata } from "./lib/task-relations.js";
 import type { Task, TaskPriority, TaskStatus } from "./types.js";
 import { useProjectData } from "./context/project-data.js";
 import { useProjectSprints } from "./hooks/use-project-sprints.js";
@@ -65,9 +67,10 @@ const timeAgo = (iso: string) => {
 
 const TaskCard: FunctionComponent<{
   task: Task;
+  dependents: DependentTaskMetadata[];
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
-}> = ({ task, onEdit, onDelete }) => {
+}> = ({ task, dependents, onEdit, onDelete }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const pri = PRIORITY_CFG[task.priority];
 
@@ -164,6 +167,26 @@ const TaskCard: FunctionComponent<{
       {task.dependsOnTaskIds.length > 0 && (
         <div className="relative z-10 mt-3 text-[10px] uppercase tracking-[0.14em] text-slate-400">
           Depends on {task.dependsOnTaskIds.length} task{task.dependsOnTaskIds.length > 1 ? "s" : ""}
+        </div>
+      )}
+
+      {dependents.length > 0 && (
+        <div className="relative z-10 mt-3 flex flex-wrap gap-1.5">
+          {dependents.map((dep) => (
+            <div
+              key={dep.recordId}
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[9px] font-bold uppercase tracking-widest ${
+                dep.status === "completed"
+                  ? "bg-status-green/[0.08] border-status-green/20 text-status-green"
+                  : dep.status === "coding_completed" || dep.status === "in_progress"
+                  ? "bg-signal-500/[0.08] border-signal-500/20 text-signal-500"
+                  : "bg-slate-400/[0.08] border-slate-400/20 text-slate-500"
+              }`}
+            >
+              <Target className="w-2.5 h-2.5" strokeWidth={2.5} />
+              <span>{dep.id}</span>
+            </div>
+          ))}
         </div>
       )}
 
@@ -360,8 +383,9 @@ export const TasksPage: FunctionComponent = () => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
   const [listWindow, setListWindow] = useState<ListWindowOption>(DEFAULT_LIST_WINDOW);
-  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [showComposer, setShowComposer] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
 
   const { tasks, loading, error, refresh: refreshTasks } = useProjectTasks(
     selectedProject?.id || null,
@@ -413,6 +437,8 @@ export const TasksPage: FunctionComponent = () => {
     setSelectedSprint(null);
   }, [initialSprint, selectedProject, sprints, sprintsLoading]);
 
+  const dependenciesMap = useMemo(() => buildDependentTasksMap(tasks), [tasks]);
+
   const { filteredTasks, visibleTasks, stats, columns } = useMemo(() => {
     return deriveTaskBoardState(tasks, statusFilter, priorityFilter, listWindow);
   }, [tasks, statusFilter, priorityFilter, listWindow]);
@@ -439,6 +465,7 @@ export const TasksPage: FunctionComponent = () => {
 
     await Promise.all([refreshTasks(), refreshSprints()]);
     setEditingTask(null);
+    setShowComposer(false);
   };
 
   const handleDeleteTask = async (task: Task) => {
@@ -498,12 +525,20 @@ export const TasksPage: FunctionComponent = () => {
           </div>
 
           <button
-            onClick={() => { setEditingTask(null); setShowTaskModal(true); }}
+            onClick={() => {
+              if (showComposer || editingTask) {
+                setShowComposer(false);
+                setEditingTask(null);
+              } else {
+                setShowComposer(true);
+                setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50);
+              }
+            }}
             disabled={!selectedProject || sprints.length === 0}
             className="group flex items-center gap-2.5 px-6 py-3.5 bg-signal-500 hover:bg-signal-400 disabled:opacity-50 disabled:cursor-not-allowed text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.45)] hover:-translate-y-px shrink-0"
           >
-            <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" />
-            New Task
+            {(showComposer || editingTask) ? <X className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" strokeWidth={2.3} /> : <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" strokeWidth={2.3} />}
+            {(showComposer || editingTask) ? "Close Composer" : "New Task"}
           </button>
         </div>
       </div>
@@ -577,6 +612,23 @@ export const TasksPage: FunctionComponent = () => {
         </div>
       )}
 
+      {(showComposer || editingTask) && (
+        <div ref={composerRef} className="scroll-mt-8">
+          <TaskComposer
+            key={editingTask?.recordId || "new"}
+            sprints={sprints}
+            availableTasks={tasks}
+            initialTask={editingTask}
+            initialSprintId={selectedSprint}
+            onClose={() => {
+              setShowComposer(false);
+              setEditingTask(null);
+            }}
+            onSubmit={handleTaskSubmit}
+          />
+        </div>
+      )}
+
       <div ref={boardRef} className={`grid gap-6 ${
         columns.length === 1 ? "grid-cols-1" :
         columns.length === 2 ? "grid-cols-1 lg:grid-cols-2" :
@@ -599,7 +651,12 @@ export const TasksPage: FunctionComponent = () => {
                   <TaskCard
                     key={task.recordId}
                     task={task}
-                    onEdit={(nextTask) => { setEditingTask(nextTask); setShowTaskModal(true); }}
+                    dependents={dependenciesMap[task.recordId] || []}
+                    onEdit={(nextTask) => {
+                      setEditingTask(nextTask);
+                      setShowComposer(true);
+                      setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50);
+                    }}
                     onDelete={(nextTask) => { void handleDeleteTask(nextTask); }}
                   />
                 ))
@@ -609,19 +666,7 @@ export const TasksPage: FunctionComponent = () => {
         ))}
       </div>
 
-      {showTaskModal && (
-        <AddTaskModal
-          sprints={sprints}
-          availableTasks={tasks}
-          initialTask={editingTask}
-          initialSprintId={selectedSprint}
-          onClose={() => {
-            setShowTaskModal(false);
-            setEditingTask(null);
-          }}
-          onSubmit={(draft) => handleTaskSubmit(draft)}
-        />
-      )}
+
     </div>
   );
 };
