@@ -172,6 +172,57 @@ describe("ExecutionRepository", () => {
     expect(executionRepository.getLease("sprint", sprint.id)).toBeNull();
   });
 
+  it("releases a stale sprint lease when the active run is paused or idle cancel_requested", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Stale Lease Project",
+      sourceType: "local",
+      sourceRef: "/workspace/stale-lease-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Stale Lease Sprint",
+      number: 6,
+    });
+    
+    // Test paused run
+    executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "paused",
+    });
+
+    executionRepository.acquireLease({
+      scopeType: "sprint",
+      scopeId: sprint.id,
+      ownerKey: "sprint_orchestrator",
+      leaseToken: "stale-lease-token",
+      expiresAt: "2030-03-09T12:00:00.000Z",
+    });
+
+    const releasedPaused = executionRepository.releaseStaleSprintLease(project.id, sprint.id);
+    expect(releasedPaused).toBe(true);
+    expect(executionRepository.getLease("sprint", sprint.id)).toBeNull();
+
+    // Test idle cancel_requested run
+    executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "cancel_requested",
+    });
+
+    executionRepository.acquireLease({
+      scopeType: "sprint",
+      scopeId: sprint.id,
+      ownerKey: "sprint_orchestrator",
+      leaseToken: "stale-lease-token-2",
+      expiresAt: "2030-03-09T12:00:00.000Z",
+    });
+
+    const releasedCancelRequested = executionRepository.releaseStaleSprintLease(project.id, sprint.id);
+    expect(releasedCancelRequested).toBe(true);
+    expect(executionRepository.getLease("sprint", sprint.id)).toBeNull();
+  });
+
   it("allows worker dispatch claims by connection identity", async () => {
     const { projectRepository, connectionRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({

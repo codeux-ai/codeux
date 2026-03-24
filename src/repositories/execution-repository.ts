@@ -1638,7 +1638,12 @@ export class ExecutionRepository {
 
     const activeRun = this.findActiveSprintRun(projectId, sprintId);
     if (activeRun) {
-      return false;
+      if (activeRun.status === "running" || activeRun.status === "queued") {
+        return false;
+      }
+      if (activeRun.status === "cancel_requested" && this.hasActiveTaskDispatches(activeRun.id)) {
+        return false;
+      }
     }
 
     this.releaseLease("sprint", sprintId, lease.leaseToken);
