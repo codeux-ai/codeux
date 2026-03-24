@@ -21,7 +21,7 @@ import { SprintComposer } from "../../components/ui/SprintComposer.js";
 import { SprintMarkdownModal } from "../../components/ui/SprintMarkdownModal.js";
 import { SprintSettingsOverrideModal } from "../../components/ui/SprintSettingsOverrideModal.js";
 import { useSprintsPageData } from "./use-sprints-page-data.js";
-import { useProgressiveList } from "../hooks/use-progressive-list.js";
+import { useProgressiveList } from "../../hooks/use-progressive-list.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 
