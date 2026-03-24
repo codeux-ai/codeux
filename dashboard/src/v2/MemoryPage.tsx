@@ -502,7 +502,7 @@ export const MemoryPage: FunctionComponent = () => {
         if (!pid) return;
         sprintsLoaded.current = false;
         Promise.all([
-            fetchSprints(pid).catch(() => [] as SprintRecord[]),
+            fetchSprints(pid).then((res) => res.sprints).catch(() => [] as SprintRecord[]),
             fetchAgentPresets(pid).catch(() => [] as AgentPreset[]),
         ]).then(([sprintsData, presetsData]) => {
             // Sort sprints by number descending so latest is first
