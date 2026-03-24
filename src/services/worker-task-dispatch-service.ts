@@ -50,6 +50,7 @@ export class WorkerTaskDispatchService {
     private readonly resolveWorkerExecutionMode: (projectId: string, sprintId?: string | null) => WorkerExecutionMode = () => "CONNECTED_MCP",
     private readonly logger?: Logger,
     private readonly memoryService?: MemoryService,
+    private readonly resolveWorkerAgentPresetId?: (projectId: string) => Promise<string | undefined>,
   ) {}
 
   pullNextDispatch(args: PullWorkerTaskDispatchArgs): WorkerTaskDispatchClaim | null {
@@ -545,22 +546,33 @@ export class WorkerTaskDispatchService {
     const task = this.projectManagementRepository.getTask(dispatch.taskId);
     const content = `Worker completed task ${task?.taskKey || dispatch.taskId}: ${task?.title || "unknown"}.\n\nSummary:\n${summaryMarkdown.trim()}`;
 
-    this.memoryService.createMemory(dispatch.projectId, {
-      scope: "sprint",
-      sprintId: dispatch.sprintId ?? undefined,
-      content,
-      category: "context",
-      strength: 0.7,
-      source: {
-        type: "auto_capture",
-        originType: "worker_dispatch_summary",
-        originId: dispatch.id,
-      },
-    }).catch((err) => {
-      this.logger?.warn("Failed to capture dispatch summary memory", {
-        dispatchId: dispatch.id,
-        error: err instanceof Error ? err.message : String(err),
+    const createMemory = (agentPresetId?: string) => {
+      this.memoryService!.createMemory(dispatch.projectId, {
+        scope: "sprint",
+        sprintId: dispatch.sprintId ?? undefined,
+        agentPresetId: agentPresetId ?? null,
+        content,
+        category: "context",
+        strength: 0.7,
+        source: {
+          type: "auto_capture",
+          originType: "worker_dispatch_summary",
+          originId: dispatch.id,
+        },
+      }).catch((err) => {
+        this.logger?.warn("Failed to capture dispatch summary memory", {
+          dispatchId: dispatch.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
       });
-    });
+    };
+
+    if (this.resolveWorkerAgentPresetId) {
+      this.resolveWorkerAgentPresetId(dispatch.projectId)
+        .then((id) => createMemory(id))
+        .catch(() => createMemory());
+    } else {
+      createMemory();
+    }
   }
 }

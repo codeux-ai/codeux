@@ -203,6 +203,30 @@ describe("executeMemoryCaptureStage", () => {
     });
   });
 
+  it("passes agentPresetId from pipeline context to createMemory", async () => {
+    mockReadFile.mockResolvedValue(`## Category: learning
+- Worker learned something
+` as any);
+    const ctx = buildCtx();
+    ctx.agentPresetId = "worker-agent-preset-123";
+    const result = await executeMemoryCaptureStage(ctx);
+    expect(result.memoriesCaptured).toBe(1);
+    const call = mockMemoryService.createMemory.mock.calls[0];
+    expect(call[1].agentPresetId).toBe("worker-agent-preset-123");
+  });
+
+  it("sets agentPresetId to null when not provided on context", async () => {
+    mockReadFile.mockResolvedValue(`## Category: learning
+- Worker learned something
+` as any);
+    const ctx = buildCtx();
+    // agentPresetId is undefined by default
+    const result = await executeMemoryCaptureStage(ctx);
+    expect(result.memoriesCaptured).toBe(1);
+    const call = mockMemoryService.createMemory.mock.calls[0];
+    expect(call[1].agentPresetId).toBeNull();
+  });
+
   it("returns 0 when no memoryService is available", async () => {
     const ctx = buildCtx();
     ctx.deps.memoryService = undefined;

@@ -1,5 +1,8 @@
 export type MemoryScope = "sprint" | "agent" | "project";
 
+/** High-level memory tier — maps to scopes: short_term → "sprint", long_term → "project" */
+export type MemoryTier = "short_term" | "long_term";
+
 export type MemoryCategory =
   | "architecture"
   | "codebase"

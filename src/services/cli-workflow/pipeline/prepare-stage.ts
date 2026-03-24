@@ -1,5 +1,20 @@
 import { buildProviderPrompt } from "../../cli-workflow-utils.js";
 import type { PipelineContext } from "./pipeline-context.js";
+import type { MemoryRecord } from "../../../contracts/memory-types.js";
+
+function formatMemoryContext(shortTerm: MemoryRecord[], longTerm: MemoryRecord[]): string {
+  if (shortTerm.length === 0 && longTerm.length === 0) return "";
+  const sections: string[] = ["## MEMORY CONTEXT"];
+  if (longTerm.length > 0) {
+    sections.push("### Long-Term Knowledge");
+    for (const m of longTerm) sections.push(`- [${m.category}] ${m.content.slice(0, 300)}`);
+  }
+  if (shortTerm.length > 0) {
+    sections.push("### Recent Sprint Learnings");
+    for (const m of shortTerm) sections.push(`- [${m.category}] ${m.content.slice(0, 300)}`);
+  }
+  return sections.join("\n");
+}
 
 export async function executePrepareStage(
   ctx: PipelineContext,
@@ -12,6 +27,26 @@ export async function executePrepareStage(
   let promptBody = workerGuide
     ? `## SYSTEM INSTRUCTIONS & ENGINEERING STANDARDS\n\n${workerGuide}\n\n---\n\n## SUBTASK TO EXECUTE\n\n${ctx.task.prompt}`
     : ctx.task.prompt;
+
+  // Inject memory context (short-term + long-term) for this worker agent
+  if (ctx.settings.memory?.enabled && ctx.deps.memoryService && ctx.agentPresetId) {
+    try {
+      let projectId: string | undefined;
+      let sprintId: string | undefined;
+      if (ctx.taskRunId && ctx.deps.executionRepository) {
+        const taskRun = ctx.deps.executionRepository.getTaskRun(ctx.taskRunId);
+        if (taskRun) { projectId = taskRun.projectId; sprintId = taskRun.sprintId ?? undefined; }
+      }
+      if (projectId) {
+        const shortTerm = sprintId
+          ? ctx.deps.memoryService.listBySprintAndAgent(projectId, sprintId, ctx.agentPresetId, 10)
+          : [];
+        const longTerm = ctx.deps.memoryService.listLongTermByAgent(projectId, ctx.agentPresetId, 10);
+        const memorySection = formatMemoryContext(shortTerm, longTerm);
+        if (memorySection) promptBody += `\n\n${memorySection}`;
+      }
+    } catch { /* memory injection is best-effort */ }
+  }
 
   const learningsInstruction = ctx.settings.memory?.enabled
     && ctx.settings.memory.autoCaptureSprint

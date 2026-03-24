@@ -66,6 +66,8 @@ export class WatchLoopRunner {
       sourceId: args.source_id,
     };
 
+    const planningAgentPresetId = await this.deps.resolvePlanningAgentPresetId?.(scopedExecutionContext.project.id);
+
     let allFinished = false;
     let checkpointWindowStartedAt = Date.now();
     let fullReport = await this.deps.renderInstruction(
@@ -134,6 +136,7 @@ export class WatchLoopRunner {
         defaultBranch,
         featureBranchPrefix,
         sprintRunId,
+        planningAgentPresetId,
       });
 
       const timestamp = new Date().toLocaleTimeString();

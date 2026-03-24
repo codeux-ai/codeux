@@ -94,6 +94,8 @@ export interface SprintOrchestratorDependencies {
   logger: Logger;
   memoryService?: MemoryService;
   memoryPromotionService?: MemoryPromotionService;
+  /** Resolve the planning agent preset ID for a project (used for per-agent memory tagging). */
+  resolvePlanningAgentPresetId?: (projectId: string) => Promise<string | undefined>;
 }
 
 export class SprintOrchestrator {
@@ -413,6 +415,7 @@ export class SprintOrchestrator {
     const requestedWait = args.wait !== undefined ? args.wait : supportsWatchMode;
     const shouldWait = supportsWatchMode && requestedWait;
     const watchLoopEnabled = shouldWait && loopSteps.watchLoop;
+    const planningAgentPresetId = await this.deps.resolvePlanningAgentPresetId?.(executionContext.project.id);
     switch (args.action) {
       case "plan":
         return await this.actionRunner.runPlan(args, planningTarget, repoPath);
@@ -433,6 +436,7 @@ export class SprintOrchestrator {
           dashboardPort,
           shouldWait,
           watchLoopEnabled,
+          planningAgentPresetId,
         });
       case "orchestrate":
       default: {
@@ -527,6 +531,7 @@ export class SprintOrchestrator {
               watchLoopEnabled,
               sprintRunId: sprintRun.id,
               leaseToken,
+              planningAgentPresetId,
             });
           } catch (error) {
             const failedAt = new Date().toISOString();

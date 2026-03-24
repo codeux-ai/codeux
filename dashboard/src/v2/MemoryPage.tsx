@@ -5,6 +5,9 @@ import { Brain, Search, X, AlertTriangle, Save, Check, RotateCcw, ZoomIn, ZoomOu
 import { listMemories, createMemory, deleteMemory as apiDeleteMemory, searchMemories, listEmbeddingModels, downloadEmbeddingModel, selectEmbeddingModel, deleteEmbeddingModel, getMemoryStats, startReembed, getReembedProgress, getEmbeddingMap, type EmbeddingModelWithStatus, type ReembedProgress, type EmbeddingMapResult } from "./lib/memory-api.js";
 import type { MemoryRecord, MemoryScope, MemoryCategory } from "./memory-types.js";
 import { useProjectData } from "./context/project-data.js";
+import { fetchSprints } from "./lib/project-api.js";
+import { fetchAgentPresets } from "./lib/agent-preset-api.js";
+import type { SprintRecord, AgentPreset } from "./types.js";
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
@@ -54,10 +57,10 @@ const CLUSTER: Record<string, [number, number]> = {
     learning:     [-170,  -250],
 };
 
-const SCOPE_TABS: { key: MemoryScope; label: string }[] = [
-    { key: "sprint",  label: "Sprint" },
-    { key: "agent",   label: "Agent" },
-    { key: "project", label: "Project" },
+type MemTier = "short_term" | "long_term";
+const TIER_TABS: { key: MemTier; label: string; scope: MemoryScope }[] = [
+    { key: "short_term", label: "Short Term", scope: "sprint" },
+    { key: "long_term",  label: "Long Term",  scope: "project" },
 ];
 
 const CATEGORIES: MemoryCategory[] = ["architecture", "codebase", "context", "preferences", "patterns", "decision", "error", "learning"];
@@ -455,7 +458,8 @@ export const MemoryPage: FunctionComponent = () => {
     const [searchQuery, setSearchQuery] = useState("");
     const [memoryCount, setMemoryCount] = useState(0);
     const [deletedCount, setDeletedCount] = useState(0);
-    const [activeScope, setActiveScope] = useState<MemoryScope>("project");
+    const [activeTier, setActiveTier] = useState<MemTier>("short_term");
+    const activeScope: MemoryScope = activeTier === "short_term" ? "sprint" : "project";
     const [models, setModels] = useState<EmbeddingModelWithStatus[]>([]);
     const [showModels, setShowModels] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
@@ -463,6 +467,13 @@ export const MemoryPage: FunctionComponent = () => {
     const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({ sprint: 0, agent: 0, project: 0, activeModel: null as string | null, staleEmbeddings: 0 });
     const [reembed, setReembed] = useState<ReembedProgress | null>(null);
+
+    // Sprint / agent filter state
+    const [sprints, setSprints] = useState<SprintRecord[]>([]);
+    const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
+    const [selectedSprintId, setSelectedSprintId] = useState<string | undefined>(undefined);
+    const [selectedAgentPresetId, setSelectedAgentPresetId] = useState<string | undefined>(undefined);
+    const sprintsLoaded = useRef(false);
 
     // Mutable render state
     const S = useRef({
@@ -486,16 +497,51 @@ export const MemoryPage: FunctionComponent = () => {
     const lobRef = useRef(lobotomize);
     lobRef.current = lobotomize;
 
+    /* ── Fetch sprints & agent presets on project change ─────────────── */
+    useEffect(() => {
+        if (!pid) return;
+        sprintsLoaded.current = false;
+        Promise.all([
+            fetchSprints(pid).catch(() => [] as SprintRecord[]),
+            fetchAgentPresets(pid).catch(() => [] as AgentPreset[]),
+        ]).then(([sprintsData, presetsData]) => {
+            // Sort sprints by number descending so latest is first
+            const sorted = [...sprintsData].sort((a, b) => (b.number ?? 0) - (a.number ?? 0));
+            setSprints(sorted);
+            setAgentPresets(presetsData);
+            // Default short-term to latest sprint
+            if (sorted.length > 0 && !sprintsLoaded.current) {
+                setSelectedSprintId(sorted[0].id);
+            }
+            sprintsLoaded.current = true;
+        });
+    }, [pid]);
+
     /* ── Load data ─────────────────────────────────────────────────────── */
     const loadData = useCallback(async () => {
         if (!pid) return;
         setLoading(true);
         try {
+            const memoryParams: { projectId: string; scope: MemoryScope; sprintId?: string; agentPresetId?: string; limit: number } = {
+                projectId: pid, scope: activeScope, limit: 200,
+            };
+            if (activeTier === "short_term" && selectedSprintId) {
+                memoryParams.sprintId = selectedSprintId;
+            }
+            if (selectedAgentPresetId) {
+                memoryParams.agentPresetId = selectedAgentPresetId;
+            }
+
             const [memoriesData, modelsData, statsData, mapData] = await Promise.all([
-                listMemories({ projectId: pid, scope: activeScope, limit: 200 }),
+                listMemories(memoryParams),
                 listEmbeddingModels(),
                 getMemoryStats(pid),
-                getEmbeddingMap(pid, activeScope).catch(() => null),
+                getEmbeddingMap(
+                    pid,
+                    activeScope,
+                    activeTier === "short_term" ? selectedSprintId : undefined,
+                    selectedAgentPresetId,
+                ).catch(() => null),
             ]);
             setRecords(memoriesData);
             setModels(modelsData);
@@ -526,7 +572,7 @@ export const MemoryPage: FunctionComponent = () => {
             s.entranceDone = true;
         } catch { /* ignore */ }
         setLoading(false);
-    }, [pid, activeScope]);
+    }, [pid, activeScope, activeTier, selectedSprintId, selectedAgentPresetId]);
 
     useEffect(() => { loadData(); }, [loadData]);
 
@@ -1084,16 +1130,54 @@ export const MemoryPage: FunctionComponent = () => {
 
                 <div className="flex flex-col items-end gap-3.5 shrink-0">
                     <div className="flex items-center gap-2.5">
-                        {SCOPE_TABS.map(tab => (
-                            <span key={tab.key} className={`text-[10px] font-bold font-mono px-3.5 py-1.5 rounded-full cursor-pointer transition-all duration-200
-                                ${stats[tab.key] ?? 0} ${activeScope === tab.key
-                                    ? "bg-signal-500/[0.12] border border-signal-500/30 text-signal-500"
-                                    : "bg-black/[0.04] dark:bg-white/[0.04] border border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                                }`}
-                                onClick={() => setActiveScope(tab.key)}>
-                                {tab.label} · {stats[tab.key] ?? 0}
-                            </span>
-                        ))}
+                        {TIER_TABS.map(tab => {
+                            const count = tab.key === "short_term"
+                                ? (stats.sprint + stats.agent)
+                                : stats.project;
+                            return (
+                                <span key={tab.key} className={`text-[10px] font-bold font-mono px-3.5 py-1.5 rounded-full cursor-pointer transition-all duration-200
+                                    ${activeTier === tab.key
+                                        ? "bg-signal-500/[0.12] border border-signal-500/30 text-signal-500"
+                                        : "bg-black/[0.04] dark:bg-white/[0.04] border border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                                    }`}
+                                    onClick={() => setActiveTier(tab.key)}>
+                                    {tab.label} · {count}
+                                </span>
+                            );
+                        })}
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                        {/* Sprint selector — only for Short Term */}
+                        {activeTier === "short_term" && sprints.length > 0 && (
+                            <select
+                                value={selectedSprintId ?? ""}
+                                onChange={(e) => setSelectedSprintId((e.target as HTMLSelectElement).value || undefined)}
+                                className="text-[11px] font-mono font-bold px-3 py-1.5 rounded-lg
+                                           bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08]
+                                           text-slate-600 dark:text-slate-300 cursor-pointer
+                                           focus:outline-none focus:border-signal-500/40">
+                                {sprints.map(s => (
+                                    <option key={s.id} value={s.id}>
+                                        Sprint {s.number ?? "?"} — {s.name || s.goal?.slice(0, 40) || s.id.slice(0, 8)}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
+                        {/* Agent selector — both tiers */}
+                        {agentPresets.length > 0 && (
+                            <select
+                                value={selectedAgentPresetId ?? ""}
+                                onChange={(e) => setSelectedAgentPresetId((e.target as HTMLSelectElement).value || undefined)}
+                                className="text-[11px] font-mono font-bold px-3 py-1.5 rounded-lg
+                                           bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.08] dark:border-white/[0.08]
+                                           text-slate-600 dark:text-slate-300 cursor-pointer
+                                           focus:outline-none focus:border-signal-500/40">
+                                <option value="">All Agents</option>
+                                {agentPresets.map(a => (
+                                    <option key={a.id} value={a.id}>{a.name}</option>
+                                ))}
+                            </select>
+                        )}
                     </div>
                     <div className="flex items-center gap-2.5">
                         <button onClick={() => setShowAddModal(true)}

@@ -49,8 +49,12 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
       const agentPresetId = req.query.agentPresetId as string | undefined;
       const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : undefined;
 
-      if (sprintId) {
+      if (sprintId && agentPresetId) {
+        res.json(memoryService.listBySprintAndAgent(projectId, sprintId, agentPresetId, limit));
+      } else if (sprintId) {
         res.json(memoryService.listBySprint(projectId, sprintId, limit));
+      } else if (agentPresetId && scope === "project") {
+        res.json(memoryService.listLongTermByAgent(projectId, agentPresetId, limit));
       } else if (agentPresetId) {
         res.json(memoryService.listByAgent(projectId, agentPresetId, limit));
       } else {

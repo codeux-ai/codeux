@@ -204,6 +204,26 @@ describe("MemoryService", () => {
     });
   });
 
+  describe("listBySprintAndAgent", () => {
+    it("passes through to repository", () => {
+      const records = [makeMemoryRecord({ sprintId: "s-1", agentPresetId: "agent-1" })];
+      mockRepo.listBySprintAndAgent = vi.fn().mockReturnValue(records);
+
+      expect(service.listBySprintAndAgent("proj-1", "s-1", "agent-1", 10)).toEqual(records);
+      expect(mockRepo.listBySprintAndAgent).toHaveBeenCalledWith("proj-1", "s-1", "agent-1", 10);
+    });
+  });
+
+  describe("listLongTermByAgent", () => {
+    it("passes through to repository", () => {
+      const records = [makeMemoryRecord({ scope: "project", agentPresetId: "agent-1" })];
+      mockRepo.listLongTermByAgent = vi.fn().mockReturnValue(records);
+
+      expect(service.listLongTermByAgent("proj-1", "agent-1", 10)).toEqual(records);
+      expect(mockRepo.listLongTermByAgent).toHaveBeenCalledWith("proj-1", "agent-1", 10);
+    });
+  });
+
   describe("search", () => {
     it("embeds query, loads embeddings, computes cosine similarity, and returns ranked results", async () => {
       const dim = 3;

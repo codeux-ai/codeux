@@ -109,6 +109,14 @@ export function createSprintDependencies(
       ),
       logger.child({ component: "virtual-worker-task-dispatch-service" }),
       coreDeps.memoryService,
+      async (projectId: string) => {
+        try {
+          const agent = await agentPresetSyncService.getWorkerAgent(projectId);
+          return agent.id;
+        } catch {
+          return undefined;
+        }
+      },
     ),
     cliWorkflowService,
     logger: logger.child({ component: "virtual-worker-service" }),
@@ -173,6 +181,14 @@ export function createSprintDependencies(
     logger: logger.child({ component: "sprint-orchestrator" }),
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
+    resolvePlanningAgentPresetId: async (projectId: string) => {
+      try {
+        const agent = await agentPresetSyncService.resolveTargetedPlanningAgent(projectId);
+        return agent.id;
+      } catch {
+        return undefined;
+      }
+    },
   });
 
   return {

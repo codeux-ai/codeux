@@ -88,6 +88,7 @@ export async function executeMemoryCaptureStage(
     memoryService.createMemory(projectId, {
       scope: "sprint",
       sprintId,
+      agentPresetId: ctx.agentPresetId ?? null,
       content: entry.content,
       category: entry.category,
       strength: 0.6,

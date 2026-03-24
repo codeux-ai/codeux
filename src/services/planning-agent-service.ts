@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
+import type { MemoryService } from "./memory-service.js";
 import type { DashboardSettings } from "../contracts/app-types.js";
 import type {
   TaskExecutorType,
@@ -29,6 +30,7 @@ interface PlanningAgentServiceDeps {
   settingsRepository: SettingsRepository;
   agentPresetSyncService: AgentPresetSyncService;
   executionControlService: ExecutionControlService;
+  memoryService?: MemoryService;
   providerRunner?: IProviderRunner;
   logger?: Logger;
 }
@@ -136,11 +138,13 @@ export class PlanningAgentService {
       connectionId: worker?.id,
     });
 
+    const memoryContext = this.buildMemoryContext(projectId, null, planningAgent.id);
     const prompt = this.buildImprovePrompt({
       projectName: project.name,
       planningAgent,
       sprintName: input.name,
       goal: input.goal,
+      memoryContext,
     });
     signal?.throwIfAborted();
     const reply = worker
@@ -160,6 +164,11 @@ export class PlanningAgentService {
     if (!goal) {
       throw new Error("Planning agent reply did not include an improved sprint prompt.");
     }
+
+    this.captureDecisionMemory(projectId, null, planningAgent.id,
+      `Sprint goal refined: "${input.goal.trim().slice(0, 100)}" → "${goal.slice(0, 100)}"`,
+      0.7,
+    );
 
     return {
       goal,
@@ -190,12 +199,14 @@ export class PlanningAgentService {
     });
 
     signal?.throwIfAborted();
+    const memoryContext = this.buildMemoryContext(projectId, sprintId, planningAgent.id);
     const prompt = this.buildPlanPrompt({
       projectName: project.name,
       planningAgent,
       sprintNumber: sprint.number,
       sprintName: sprint.name,
       goal: sprint.goal,
+      memoryContext,
     });
     const reply = worker
       ? await this.postRequestAndWaitForReply(projectId, thread.id, worker.id, prompt, signal)
@@ -249,6 +260,12 @@ export class PlanningAgentService {
       createdTaskIds.push(created.id);
       taskIdsByKey.set(task.key, created.id);
     }
+
+    const taskTitles = payload.tasks.map(t => t.title).join(", ");
+    this.captureDecisionMemory(projectId, sprintId, planningAgent.id,
+      `Sprint planned with ${payload.tasks.length} tasks: ${taskTitles.slice(0, 200)}. Goal: ${(sprint.goal || "").slice(0, 100)}`,
+      0.8,
+    );
 
     if (options.autoStart) {
       await this.deps.executionControlService.orchestrateSprint(projectId, sprintId);
@@ -482,8 +499,9 @@ export class PlanningAgentService {
     planningAgent: AgentPresetRecord;
     sprintName: string;
     goal: string;
+    memoryContext?: string;
   }): string {
-    return [
+    const parts = [
       "You are Sprint OS's Planning agent.",
       "",
       "## Planning Agent Instructions",
@@ -496,6 +514,11 @@ export class PlanningAgentService {
       "",
       "## Current Prompt",
       args.goal.trim() || "No prompt provided.",
+    ];
+    if (args.memoryContext) {
+      parts.push("", args.memoryContext);
+    }
+    parts.push(
       "",
       "## Guidance",
       "- Use file discovery or codebase search to clarify symbols, paths, or architectural patterns mentioned or implied by the prompt.",
@@ -505,7 +528,8 @@ export class PlanningAgentService {
       "## Required Output",
       "Return JSON only with this exact shape and no surrounding commentary:",
       '{"goal":"Improved sprint prompt"}',
-    ].join("\n");
+    );
+    return parts.join("\n");
   }
 
   private buildPlanPrompt(args: {
@@ -514,7 +538,9 @@ export class PlanningAgentService {
     sprintNumber: number | null;
     sprintName: string;
     goal: string;
+    memoryContext?: string;
   }): string {
+    const memorySection = args.memoryContext ? `\n${args.memoryContext}\n` : "";
     return [
       "You are Sprint OS's Planning agent.",
       "",
@@ -529,6 +555,7 @@ export class PlanningAgentService {
       "",
       "## Sprint Goal",
       args.goal.trim() || "No sprint goal provided.",
+      memorySection,
       "",
       "## Constraints",
       "- Plan as a DAG, not as a flat checklist.",
@@ -728,6 +755,60 @@ export class PlanningAgentService {
       default:
         return "Codex";
     }
+  }
+
+  private buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string): string | undefined {
+    const memoryService = this.deps.memoryService;
+    if (!memoryService) return undefined;
+
+    try {
+      const longTerm = memoryService.listLongTermByAgent(projectId, agentPresetId, 10);
+      const shortTerm = sprintId
+        ? memoryService.listBySprintAndAgent(projectId, sprintId, agentPresetId, 10)
+        : [];
+
+      if (longTerm.length === 0 && shortTerm.length === 0) return undefined;
+
+      const sections: string[] = ["## PROJECT CONTEXT FROM MEMORY"];
+      if (longTerm.length > 0) {
+        sections.push("### Long-Term Knowledge");
+        for (const m of longTerm) sections.push(`- [${m.category}] ${m.content.slice(0, 300)}`);
+      }
+      if (shortTerm.length > 0) {
+        sections.push("### Recent Sprint Learnings");
+        for (const m of shortTerm) sections.push(`- [${m.category}] ${m.content.slice(0, 300)}`);
+      }
+      return sections.join("\n");
+    } catch {
+      return undefined;
+    }
+  }
+
+  private captureDecisionMemory(
+    projectId: string,
+    sprintId: string | null,
+    agentPresetId: string,
+    content: string,
+    strength: number,
+  ): void {
+    this.deps.memoryService?.createMemory(projectId, {
+      scope: "sprint",
+      sprintId,
+      agentPresetId,
+      content,
+      category: "decision",
+      strength,
+      source: {
+        type: "auto_capture",
+        originType: "planning_agent",
+        agent: "planning",
+      },
+    }).catch((err) => {
+      this.deps.logger?.warn("Failed to capture planning decision memory", {
+        projectId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
   }
 
   private requireProject(projectId: string): NonNullable<ReturnType<ProjectManagementRepository["getProject"]>> {

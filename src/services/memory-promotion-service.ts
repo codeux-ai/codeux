@@ -85,14 +85,38 @@ export class MemoryPromotionService {
 
       if (isDuplicate) continue;
 
+      // Check for cross-agent consistency within the sprint
+      let crossAgentCount = 0;
+      try {
+        const sprintResults = await this.memoryService.search({
+          projectId,
+          query: memory.content,
+          scope: "sprint",
+          sprintId,
+          limit: 10,
+          minSimilarity: 0.75,
+        });
+        const distinctAgents = new Set<string>();
+        for (const result of sprintResults) {
+          if (result.memory.agentPresetId && result.memory.agentPresetId !== memory.agentPresetId) {
+            distinctAgents.add(result.memory.agentPresetId);
+          }
+        }
+        crossAgentCount = distinctAgents.size;
+      } catch {
+        // Search may fail — continue without cross-agent boost
+      }
+
       // Score the candidate
       const categoryWeight = CATEGORY_WEIGHTS[memory.category] ?? 1.0;
       const crossSprintBonus = crossSprintCount >= 3 ? 0.3 : crossSprintCount >= 2 ? 0.2 : crossSprintCount >= 1 ? 0.1 : 0;
+      const crossAgentBonus = crossAgentCount >= 2 ? 0.25 : crossAgentCount >= 1 ? 0.15 : 0;
       const strengthBonus = memory.strength >= 0.9 ? 0.2 : memory.strength >= 0.8 ? 0.1 : 0;
-      const score = Math.min(1, (memory.strength * categoryWeight + crossSprintBonus + strengthBonus) / 1.5);
+      const score = Math.min(1, (memory.strength * categoryWeight + crossSprintBonus + crossAgentBonus + strengthBonus) / 1.5);
 
       const reasons: string[] = [];
       if (crossSprintCount >= 2) reasons.push(`appeared in ${crossSprintCount + 1} sprints`);
+      if (crossAgentCount >= 1) reasons.push(`confirmed by ${crossAgentCount + 1} agents`);
       if (memory.strength >= 0.9) reasons.push("high strength");
       if (categoryWeight >= 1.2) reasons.push(`important category: ${memory.category}`);
       if (reasons.length === 0) reasons.push("meets promotion threshold");

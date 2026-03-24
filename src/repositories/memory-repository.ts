@@ -158,6 +158,28 @@ export class MemoryRepository {
     return rows.map((row) => this.mapRow(row));
   }
 
+  /** Short-term memories for a specific agent within a specific sprint. */
+  listBySprintAndAgent(projectId: string, sprintId: string, agentPresetId: string, limit = 200): MemoryRecord[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM memories
+      WHERE project_id = ? AND sprint_id = ? AND agent_preset_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(projectId, sprintId, agentPresetId, limit) as unknown as MemoryRow[];
+    return rows.map((row) => this.mapRow(row));
+  }
+
+  /** Long-term (project-scope) memories for a specific agent. */
+  listLongTermByAgent(projectId: string, agentPresetId: string, limit = 200): MemoryRecord[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM memories
+      WHERE project_id = ? AND scope = 'project' AND agent_preset_id = ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `).all(projectId, agentPresetId, limit) as unknown as MemoryRow[];
+    return rows.map((row) => this.mapRow(row));
+  }
+
   saveEmbedding(memoryId: string, model: EmbeddingModelId, dimension: number, blob: Buffer): void {
     const now = new Date().toISOString();
     this.db.prepare(`

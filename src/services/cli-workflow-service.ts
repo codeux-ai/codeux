@@ -153,6 +153,9 @@ export class CliWorkflowService {
     
     const worktreePath = args.resumeWorktreePath || this.workspaceManager.buildWorktreePath(args.repoPath, workspaceSessionId, workflowSettings.executionMode);
 
+    // Resolve worker agent preset for per-agent memory tagging
+    const workerAgent = await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath).catch(() => null);
+
     const ctx: PipelineContext = {
       ...args,
       settings,
@@ -161,6 +164,7 @@ export class CliWorkflowService {
       abortSignal: abortController.signal,
       initialHead: "",
       workflowSucceeded: false,
+      agentPresetId: workerAgent?.id,
       workspaceManager: this.workspaceManager,
       prService: this.prService,
       providerRunner: this.providerRunner,

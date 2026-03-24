@@ -123,6 +123,16 @@ export class MemoryService {
     return this.memoryRepository.listByAgent(projectId, agentPresetId, limit);
   }
 
+  /** Short-term memories for a specific agent within a specific sprint. */
+  listBySprintAndAgent(projectId: string, sprintId: string, agentPresetId: string, limit?: number): MemoryRecord[] {
+    return this.memoryRepository.listBySprintAndAgent(projectId, sprintId, agentPresetId, limit);
+  }
+
+  /** Long-term (project-scope) memories for a specific agent. */
+  listLongTermByAgent(projectId: string, agentPresetId: string, limit?: number): MemoryRecord[] {
+    return this.memoryRepository.listLongTermByAgent(projectId, agentPresetId, limit);
+  }
+
   async search(query: MemorySearchQuery): Promise<MemorySearchResult[]> {
     const modelId = this.embeddingService.getLoadedModelId();
     if (!modelId) {

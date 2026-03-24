@@ -33,6 +33,8 @@ export interface PipelineContext {
   settings: DashboardSettings;
   initialHead: string;
   workflowSucceeded: boolean;
+  /** Worker agent preset ID for per-agent memory tagging. */
+  agentPresetId?: string;
 
   workspaceManager: IWorkspaceManager;
   prService: IPrService;

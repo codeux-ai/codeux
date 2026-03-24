@@ -182,9 +182,11 @@ export interface EmbeddingMapResult {
   hasEmbeddings: boolean;
 }
 
-export const getEmbeddingMap = async (projectId: string, scope?: string): Promise<EmbeddingMapResult> => {
+export const getEmbeddingMap = async (projectId: string, scope?: string, sprintId?: string, agentPresetId?: string): Promise<EmbeddingMapResult> => {
   const qs = new URLSearchParams();
   if (scope) qs.set("scope", scope);
+  if (sprintId) qs.set("sprintId", sprintId);
+  if (agentPresetId) qs.set("agentPresetId", agentPresetId);
   const query = qs.toString();
   return fetchJson(`/api/projects/${projectId}/memories/embedding-map${query ? `?${query}` : ""}`);
 };

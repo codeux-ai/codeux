@@ -38,6 +38,8 @@ export interface CycleRunnerArgs {
   defaultBranch: string;
   featureBranchPrefix: string;
   sprintRunId?: string;
+  /** Planning agent preset ID for per-agent memory tagging. */
+  planningAgentPresetId?: string;
 }
 
 interface TaskStateSnapshot {
@@ -353,6 +355,7 @@ export class CycleRunner {
       memoryService.createMemory(args.executionContext.project.id, {
         scope: "sprint",
         sprintId: args.executionContext.sprint.id,
+        agentPresetId: args.planningAgentPresetId ?? null,
         content,
         category,
         strength,
@@ -392,6 +395,7 @@ export class CycleRunner {
       memoryService.createMemory(args.executionContext.project.id, {
         scope: "sprint",
         sprintId: args.executionContext.sprint.id,
+        agentPresetId: args.planningAgentPresetId ?? null,
         content,
         category: "error",
         strength: 0.8,

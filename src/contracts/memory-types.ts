@@ -1,13 +1,21 @@
 /**
  * Types for the memory + local embedding system.
  *
- * Three memory scopes:
- * - sprint: short-term, auto-captured during sprint execution
- * - agent: per-agent learning, accumulated across sprints
- * - project: long-term curated knowledge, promoted from sprint memories
+ * Two memory tiers:
+ * - Short Term (scope: "sprint"): per-sprint, per-agent — each agent has isolated memories
+ *   within a sprint. Sprint 46's memories don't leak into Sprint 47.
+ * - Long Term (scope: "project"): per-project, per-agent — promoted from short-term when
+ *   sprints complete. Each agent accumulates its own persistent knowledge across sprints.
+ *
+ * Legacy scope "agent" is deprecated — use "sprint" with agentPresetId for short-term,
+ * "project" with agentPresetId for long-term.
  */
 
+/** @see MemoryTier for the two-tier model */
 export type MemoryScope = "sprint" | "agent" | "project";
+
+/** High-level memory tier — maps to scopes: short_term → "sprint", long_term → "project" */
+export type MemoryTier = "short_term" | "long_term";
 
 export type MemoryCategory =
   | "architecture"
@@ -20,6 +28,16 @@ export type MemoryCategory =
   | "learning";
 
 export const MEMORY_SCOPES: MemoryScope[] = ["sprint", "agent", "project"];
+
+/** Maps a tier to its underlying scope. */
+export function scopeForTier(tier: MemoryTier): MemoryScope {
+  return tier === "short_term" ? "sprint" : "project";
+}
+
+/** Maps a scope to its tier (agent scope is legacy short-term). */
+export function tierForScope(scope: MemoryScope): MemoryTier {
+  return scope === "project" ? "long_term" : "short_term";
+}
 
 export const MEMORY_CATEGORIES: MemoryCategory[] = [
   "architecture",

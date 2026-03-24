@@ -145,6 +145,7 @@ export function createDashboardDependencies(
     settingsRepository,
     agentPresetSyncService,
     executionControlService,
+    memoryService: coreDeps.memoryService,
     logger: logger.child({ component: "planning-agent-service" }),
   });
 

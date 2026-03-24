@@ -35,6 +35,7 @@ export class SprintActionRunner {
     watchLoopEnabled: boolean;
     sprintRunId: string;
     leaseToken?: string;
+    planningAgentPresetId?: string;
   }): Promise<any> {
     if (options.watchLoopEnabled) {
       const fullReport = await this.watchLoopRunner.run({
@@ -71,6 +72,7 @@ export class SprintActionRunner {
       defaultBranch: options.defaultBranch,
       featureBranchPrefix: options.featureBranchPrefix,
       sprintRunId: options.sprintRunId,
+      planningAgentPresetId: options.planningAgentPresetId,
     });
 
     return await this.composeReport({
@@ -100,6 +102,7 @@ export class SprintActionRunner {
     dashboardPort: number;
     shouldWait: boolean;
     watchLoopEnabled: boolean;
+    planningAgentPresetId?: string;
   }): Promise<any> {
     const cycleResult = await this.cycleRunner.run({
       action: "status",
@@ -114,6 +117,7 @@ export class SprintActionRunner {
       githubMode: options.githubMode,
       defaultBranch: options.defaultBranch,
       featureBranchPrefix: options.featureBranchPrefix,
+      planningAgentPresetId: options.planningAgentPresetId,
     });
 
     return await this.composeReport({
