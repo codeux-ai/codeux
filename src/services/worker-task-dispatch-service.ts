@@ -146,7 +146,7 @@ export class WorkerTaskDispatchService {
       || (typeof sprint.number === "number"
         ? formatSprintBranch(dashboardSettings.git.sprintBranchScheme, sprint.number)
         : dashboardSettings.git.featureBranchPrefix + task.taskKey.toLowerCase());
-    const defaultBranch = project.defaultBranch?.trim() || dashboardSettings.git.defaultBranch || "main";
+    const defaultBranch = dashboardSettings.git.defaultBranch || "main";
     const repoPath = project.baseDir;
 
     this.projectManagementRepository.updateTask(task.id, {

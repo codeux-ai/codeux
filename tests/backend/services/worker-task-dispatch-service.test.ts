@@ -41,7 +41,16 @@ async function createFixture() {
     workerEndpointRepository,
     projectWorkerAssignmentService,
     projectAttentionService,
-    () => DEFAULT_DASHBOARD_SETTINGS,
+    (scope) => {
+      const settings = { ...DEFAULT_DASHBOARD_SETTINGS };
+      if (scope?.projectId) {
+        const project = projectRepository.getProject(scope.projectId);
+        if (project?.defaultBranch) {
+          settings.git = { ...settings.git, defaultBranch: project.defaultBranch };
+        }
+      }
+      return settings;
+    },
   );
 
   return {
@@ -538,5 +547,79 @@ describe("WorkerTaskDispatchService", () => {
       ownerType: "worker",
       summaryMarkdown: "Merge conflict requires attention.",
     });
+  });
+
+  it("prioritizes dashboard settings for defaultBranch over project metadata", async () => {
+    const { storage, projectRepository, connectionRepository, executionRepository } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Override Project",
+      sourceType: "local",
+      sourceRef: "/repo",
+      defaultBranch: "main", // Metadata says main
+    });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint", number: 1 });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Task",
+      executorType: "mcp_worker",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mcp_worker",
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "mcp_worker",
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      mode: "mcp_worker",
+      state: "RUNNING",
+    });
+
+    connectionRepository.upsertConnection({
+      connectionKey: "worker-override-1",
+      displayName: "Worker Override 1",
+      role: "worker",
+      transport: "stdio",
+      status: "listening",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+
+    const overrideWorkerService = new WorkerTaskDispatchService(
+      executionRepository,
+      projectRepository,
+      connectionRepository,
+      new WorkerEndpointRepository(storage),
+      new ProjectWorkerAssignmentService(new ProjectWorkerAssignmentRepository(storage), new WorkerEndpointRepository(storage)),
+      new ProjectAttentionService(new ProjectAttentionRepository(storage), new ProjectWorkerAssignmentRepository(storage)),
+      (scope) => {
+        if (scope?.projectId === project.id) {
+          return {
+            ...DEFAULT_DASHBOARD_SETTINGS,
+            git: { ...DEFAULT_DASHBOARD_SETTINGS.git, defaultBranch: "dev" }, // Dashboard says dev
+          };
+        }
+        return DEFAULT_DASHBOARD_SETTINGS;
+      }
+    );
+
+    const claim = overrideWorkerService.pullNextDispatch({
+      connectionKey: "worker-override-1",
+      projectId: project.id,
+    });
+
+    expect(claim?.executionContext.defaultBranch).toBe("dev");
+    expect(claim?.project.defaultBranch).toBe("main"); // Project metadata remains "main"
   });
 });

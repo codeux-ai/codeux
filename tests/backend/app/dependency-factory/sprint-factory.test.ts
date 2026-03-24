@@ -102,9 +102,11 @@ describe("Sprint Factory", () => {
       settingsRepository: {
         resolveProjectDashboardSettings: vi.fn().mockReturnValue({
           settings: { workers: { executionMode: "VIRTUAL" } },
+          sources: {},
         }),
         resolveSprintDashboardSettings: vi.fn().mockReturnValue({
           settings: { workers: { executionMode: "VIRTUAL" } },
+          sources: {},
         }),
       },
       workerEndpointRepository: {},

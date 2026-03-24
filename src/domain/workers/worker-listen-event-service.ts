@@ -10,7 +10,7 @@ import { ProjectAttentionRepository } from "../../repositories/project-attention
 import { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
 import { WorkerEndpointRepository } from "../../repositories/worker-endpoint-repository.js";
 import { ExecutionRepository } from "../../repositories/execution-repository.js";
-import type { WorkerExecutionMode } from "../../contracts/app-types.js";
+import type { DashboardSettings, DashboardSettingsScope, WorkerExecutionMode } from "../../contracts/app-types.js";
 
 function makeCursor(updatedAt: string, id: string): string {
   return `${updatedAt}::${id}`;
@@ -32,6 +32,7 @@ export class WorkerListenEventService {
     private readonly projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository,
     private readonly projectAttentionRepository: ProjectAttentionRepository,
     private readonly executionRepository: ExecutionRepository,
+    private readonly getDashboardSettings: (scope?: DashboardSettingsScope) => DashboardSettings,
     private readonly resolveWorkerExecutionMode: (projectId: string, sprintId?: string | null) => WorkerExecutionMode = () => "CONNECTED_MCP",
   ) {}
 
@@ -218,15 +219,22 @@ export class WorkerListenEventService {
     const activeSprintSummary = snapshot.sprintRuns.find((run) => ["running", "queued", "paused", "cancel_requested"].includes(run.status))
       || snapshot.sprintRuns[0]
       || null;
-    const sprint = activeSprintSummary
-      ? this.projectManagementRepository.getSprint(activeSprintSummary.sprintId)
+    const sprintId = activeSprintSummary?.sprintId || null;
+    const sprint = sprintId
+      ? this.projectManagementRepository.getSprint(sprintId)
       : this.projectManagementRepository.listSprints(projectId)[0] || null;
+
+    const settings = this.getDashboardSettings({
+      projectId: project.id,
+      sprintId: sprint?.id || undefined,
+    });
+    const defaultBranch = settings.git.defaultBranch || project.defaultBranch || "main";
 
     return {
       id: project.id,
       name: project.name,
       repoPath: project.baseDir,
-      defaultBranch: project.defaultBranch,
+      defaultBranch,
       featureBranch: sprint?.featureBranch || null,
     };
   }

@@ -64,7 +64,7 @@ export class SprintExecutionStateService {
     }
 
     const repoPath = path.resolve((args.repo_path && args.repo_path.trim()) || project.baseDir);
-    const defaultBranch = project.defaultBranch?.trim() || settings.git.defaultBranch || "main";
+    const defaultBranch = settings.git.defaultBranch || "main";
     const featureBranch = args.feature_branch?.trim()
       || sprint.featureBranch?.trim()
       || formatSprintBranch(settings.git.sprintBranchScheme, sprintNumber);

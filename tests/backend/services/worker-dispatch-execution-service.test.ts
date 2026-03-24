@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { WorkerDispatchExecutionService } from "../../../src/services/worker-dispatch-execution-service.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 describe("WorkerDispatchExecutionService", () => {
   it("starts a local worker dispatch through TaskService", async () => {
@@ -54,6 +55,7 @@ describe("WorkerDispatchExecutionService", () => {
       taskService,
       { requestStop: vi.fn() } as any,
       { sendSessionMessage: vi.fn() } as any,
+      () => DEFAULT_DASHBOARD_SETTINGS,
     );
 
     const result = await service.executeDispatch("dispatch-1");
@@ -68,6 +70,70 @@ describe("WorkerDispatchExecutionService", () => {
     expect(result.session.provider).toBe("codex");
   });
 
+  it("prioritizes dashboard settings for defaultBranch over project metadata", async () => {
+    const executionRepository = {
+      getTaskDispatch: vi.fn().mockReturnValue({
+        id: "dispatch-2",
+        projectId: "project-2",
+        sprintId: "sprint-2",
+        taskId: "task-2",
+        executorType: "mcp_worker",
+      }),
+      getTaskRunByDispatchId: vi.fn().mockReturnValue({ id: "task-run-2" }),
+    } as any;
+    const projectManagementRepository = {
+      getProject: vi.fn().mockReturnValue({
+        id: "project-2",
+        name: "Project 2",
+        baseDir: "/repo-2",
+        defaultBranch: "main", // DB says main
+      }),
+      getSprint: vi.fn().mockReturnValue({ id: "sprint-2", number: 1 }),
+      getTask: vi.fn().mockReturnValue({
+        id: "task-2",
+        projectId: "project-2",
+        sprintId: "sprint-2",
+        taskKey: "T-2",
+        title: "T-2",
+        promptMarkdown: "T-2",
+        dependsOnTaskIds: [],
+        isIndependent: true,
+      }),
+    } as any;
+    const taskService = {
+      startSprintTask: vi.fn().mockResolvedValue({ id: "s-2", name: "s-2", state: "RUNNING" }),
+    } as any;
+
+    const getDashboardSettings = vi.fn().mockReturnValue({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      git: { ...DEFAULT_DASHBOARD_SETTINGS.git, defaultBranch: "dev" }, // Dashboard says dev
+    });
+
+    const service = new WorkerDispatchExecutionService(
+      executionRepository,
+      projectManagementRepository,
+      taskService,
+      { requestStop: vi.fn() } as any,
+      { sendSessionMessage: vi.fn() } as any,
+      getDashboardSettings,
+    );
+
+    await service.executeDispatch("dispatch-2");
+
+    expect(getDashboardSettings).toHaveBeenCalledWith({ projectId: "project-2", sprintId: "sprint-2" });
+    // Should use "dev" because settings override metadata "main"
+    expect(taskService.startSprintTask).toHaveBeenCalledWith(
+      expect.anything(),
+      undefined,
+      "dev",
+      "/repo-2",
+      1,
+      expect.anything(),
+      "dispatch-2",
+      "task-run-2"
+    );
+  });
+
   it("cancels active local dispatch handles directly", async () => {
     const requestStop = vi.fn().mockResolvedValue({ accepted: true, message: "stopped" });
     const service = new WorkerDispatchExecutionService(
@@ -76,6 +142,7 @@ describe("WorkerDispatchExecutionService", () => {
       {} as any,
       { requestStop } as any,
       { sendSessionMessage: vi.fn() } as any,
+      () => DEFAULT_DASHBOARD_SETTINGS,
     );
 
     const result = await service.cancelLocalDispatch("dispatch-1", "Dashboard stop");
@@ -98,6 +165,7 @@ describe("WorkerDispatchExecutionService", () => {
       {} as any,
       { requestStop: vi.fn().mockResolvedValue({ accepted: false, message: "not local" }) } as any,
       { sendSessionMessage } as any,
+      () => DEFAULT_DASHBOARD_SETTINGS,
     );
 
     const result = await service.cancelLocalDispatch("dispatch-1", "Please stop");

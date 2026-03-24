@@ -45,13 +45,29 @@ export function createSprintDependencies(
     const projectId = scope?.projectId?.trim();
     const sprintId = scope?.sprintId?.trim();
 
+    let effective: { settings: DashboardSettings; sources: Record<string, string> };
     if (projectId) {
-      return sprintId
-        ? coreDeps.settingsRepository.resolveSprintDashboardSettings(projectId, sprintId).settings
-        : coreDeps.settingsRepository.resolveProjectDashboardSettings(projectId).settings;
+      effective = sprintId
+        ? coreDeps.settingsRepository.resolveSprintDashboardSettings(projectId, sprintId)
+        : coreDeps.settingsRepository.resolveProjectDashboardSettings(projectId);
+    } else {
+      effective = {
+        settings: context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
+        sources: {},
+      };
     }
 
-    return context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
+    const settings = { ...effective.settings };
+    const sources = effective.sources || {};
+
+    if (projectId && sources["git.defaultBranch"] === "system") {
+      const project = projectManagementRepository.getProject(projectId);
+      if (project?.defaultBranch) {
+        settings.git = { ...settings.git, defaultBranch: project.defaultBranch };
+      }
+    }
+
+    return settings;
   };
 
   const cliWorkflowService = new CliWorkflowService({

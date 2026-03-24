@@ -10,6 +10,7 @@ import { ProjectManagementRepository } from "../../../../src/repositories/projec
 import { ProjectWorkerAssignmentRepository } from "../../../../src/repositories/project-worker-assignment-repository.js";
 import { WorkerEndpointRepository } from "../../../../src/repositories/worker-endpoint-repository.js";
 import { WorkerListenEventService } from "../../../../src/domain/workers/worker-listen-event-service.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../../src/repositories/settings-defaults.js";
 
 const tempDirs: string[] = [];
 
@@ -30,6 +31,7 @@ async function createFixture() {
     projectWorkerAssignmentRepository,
     projectAttentionRepository,
     executionRepository,
+    () => DEFAULT_DASHBOARD_SETTINGS,
   );
 
   return {
