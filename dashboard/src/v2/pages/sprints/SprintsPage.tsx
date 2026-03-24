@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import {
   Activity,
@@ -22,6 +22,7 @@ import { SprintMarkdownModal } from "../../components/ui/SprintMarkdownModal.js"
 import { SprintSettingsOverrideModal } from "../../components/ui/SprintSettingsOverrideModal.js";
 import { useSprintsPageData } from "./use-sprints-page-data.js";
 import { useProgressiveList } from "../../hooks/use-progressive-list.js";
+import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "../../lib/list-window.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 
@@ -33,6 +34,7 @@ export const SprintsPage: FunctionComponent = () => {
   const {
     selectedProject,
     sortedSprints,
+    loading,
     showcaseSprints,
     execution,
     nextId,
@@ -67,6 +69,7 @@ export const SprintsPage: FunctionComponent = () => {
   } = useSprintsPageData();
 
   const progressiveSprints = useProgressiveList(sortedSprints);
+  const [listWindow, setListWindow] = useState<ListWindowOption>(DEFAULT_LIST_WINDOW);
 
   useLayoutEffect(() => {
     if (!headerRef.current) {
@@ -335,6 +338,9 @@ export const SprintsPage: FunctionComponent = () => {
             <div className="rounded-[2.2rem] border border-black/[0.06] bg-white/70 shadow-[0_12px_36px_rgba(15,23,42,0.05)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_14px_40px_rgba(0,0,0,0.22)]">
               <SprintLedger
                 sprints={progressiveSprints}
+                isLoading={loading}
+                listWindow={listWindow}
+                onListWindowChange={setListWindow}
                 activeRunsBySprintId={activeRunsBySprintId}
                 interventionBySprintId={interventionBySprintId}
                 pendingActionIds={pendingActionIds}

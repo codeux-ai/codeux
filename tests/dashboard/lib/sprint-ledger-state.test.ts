@@ -3,6 +3,7 @@ import {
   filterSprints,
   sortSprints,
   getLedgerSprints,
+  sliceLedgerSprints,
   toggleSelection,
   selectAllFiltered,
   deselectAll,
@@ -185,6 +186,20 @@ describe("sprint-ledger-state", () => {
       expect(result).toHaveLength(3);
       expect(result[0].name).toBe("Alpha Sprint");
       expect(result[2].name).toBe("Gamma Sprint");
+    });
+  });
+
+  describe("sliceLedgerSprints", () => {
+    it("slices the array up to the limit", () => {
+      const result = sliceLedgerSprints(sprints, 2);
+      expect(result).toHaveLength(2);
+      expect(result[0].id).toBe("a");
+      expect(result[1].id).toBe("b");
+    });
+
+    it("returns all if limit exceeds length", () => {
+      const result = sliceLedgerSprints(sprints, 10);
+      expect(result).toHaveLength(4);
     });
   });
 

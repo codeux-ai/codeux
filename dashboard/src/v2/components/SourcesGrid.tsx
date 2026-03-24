@@ -4,11 +4,12 @@ import gsap from "gsap";
 import { Activity } from "lucide-preact";
 import { SectionHeader } from "./ui/SectionHeader.js";
 import { SourceCell } from "./ui/SourceCell.js";
+import { SkeletonCard } from "./ui/ListSkeletons.js";
 import { useProjectData } from "../context/project-data.js";
 
 export const SourcesGrid: FunctionComponent = () => {
     const containerRef = useRef<HTMLDivElement>(null);
-    const { projects } = useProjectData();
+    const { projects, loading: projectsLoading } = useProjectData();
 
     useLayoutEffect(() => {
         if (containerRef.current) {
@@ -44,14 +45,22 @@ export const SourcesGrid: FunctionComponent = () => {
                 ref={containerRef}
                 className="flex flex-wrap justify-center gap-10 md:gap-14 lg:gap-20"
             >
-                {recentSources.map((source, index) => (
-                    <SourceCell
-                        key={source.id}
-                        source={source}
-                        isEven={index % 2 === 0}
-                        animDelay={index * 0.5}
-                    />
-                ))}
+                {projectsLoading ? (
+                    <>
+                        <div className="w-[18rem]"><SkeletonCard /></div>
+                        <div className="w-[18rem]"><SkeletonCard /></div>
+                        <div className="w-[18rem]"><SkeletonCard /></div>
+                    </>
+                ) : (
+                    recentSources.map((source, index) => (
+                        <SourceCell
+                            key={source.id}
+                            source={source}
+                            isEven={index % 2 === 0}
+                            animDelay={index * 0.5}
+                        />
+                    ))
+                )}
             </div>
         </div>
     );

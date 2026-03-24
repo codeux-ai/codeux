@@ -102,6 +102,13 @@ export function getLedgerSprints(sprints: Sprint[], query: string, sort: LedgerS
 }
 
 /**
+ * Slice the sorted/filtered sprints to the active view window limit.
+ */
+export function sliceLedgerSprints(sprints: Sprint[], limit: number): Sprint[] {
+  return sprints.slice(0, limit);
+}
+
+/**
  * Toggle a sprint ID in the selection set.
  */
 export function toggleSelection(selectedIds: Set<string>, id: string): Set<string> {

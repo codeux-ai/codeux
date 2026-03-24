@@ -1,7 +1,9 @@
 import type { FunctionComponent } from "preact";
 import { Activity, AlertTriangle, FolderKanban, Radio } from "lucide-preact";
+import { SkeletonPanel } from "./ui/ListSkeletons.js";
 import { useOverviewTelemetry } from "../../hooks/use-overview-telemetry.js";
 import { formatTime } from "../../lib/time.js";
+import { useProjectData } from "../context/project-data.js";
 
 const describeEvent = (eventType: string): string => {
   switch (eventType) {
@@ -29,7 +31,10 @@ const describeEvent = (eventType: string): string => {
 };
 
 export const OverviewTelemetry: FunctionComponent = () => {
-  const { telemetry, error } = useOverviewTelemetry();
+  const { telemetry, loading: telemetryLoading, error } = useOverviewTelemetry();
+  const { loading: projectsLoading } = useProjectData();
+  const isLoading = telemetryLoading || projectsLoading;
+
   const hasActiveProjects = telemetry.activeProjects.length > 0;
   const hasAttentionProjects = telemetry.attentionProjects.length > 0;
   const hasRuntimeSignal = hasActiveProjects || hasAttentionProjects;
@@ -71,7 +76,12 @@ export const OverviewTelemetry: FunctionComponent = () => {
       </h3>
 
       <div className="relative flex-1 overflow-hidden rounded-[2rem] border border-black/[0.06] dark:border-white/[0.06] bg-white/65 dark:bg-void-800/60 backdrop-blur-2xl p-7">
-        {!hasRuntimeSignal ? (
+        {isLoading ? (
+          <div className="flex flex-col gap-6">
+            <SkeletonPanel />
+            <SkeletonPanel />
+          </div>
+        ) : !hasRuntimeSignal ? (
           <div className="h-full flex items-center justify-center relative overflow-hidden">
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <div className="w-48 h-48 rounded-full border border-black/[0.07] dark:border-white/[0.08] animate-[ping_4s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />

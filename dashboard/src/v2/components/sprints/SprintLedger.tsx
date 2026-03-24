@@ -16,11 +16,15 @@ import {
   X,
 } from "lucide-preact";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
+import { ListWindowSelector } from "../ui/ListWindowSelector.js";
+import { SkeletonRow } from "../ui/ListSkeletons.js";
+import { resolveListWindow, type ListWindowOption } from "../../lib/list-window.js";
 import type { Sprint, SprintStatus } from "../../types.js";
 import type { ExecutionHumanInterventionSummary } from "../../../../../src/contracts/app-types.js";
 import {
   filterSprints,
   sortSprints,
+  sliceLedgerSprints,
   toggleSelection,
   selectAllFiltered,
   deselectAll,
@@ -58,6 +62,9 @@ const formatMetaDate = (value: string): string => TABLE_META_DATE_FORMATTER.form
 
 export interface SprintLedgerProps {
   sprints: Sprint[];
+  isLoading?: boolean;
+  listWindow: ListWindowOption;
+  onListWindowChange: (value: ListWindowOption) => void;
   activeRunsBySprintId: Map<string, { id: string; status: string }>;
   interventionBySprintId: Map<string, ExecutionHumanInterventionSummary>;
   pendingActionIds: Set<string>;
@@ -70,6 +77,9 @@ export interface SprintLedgerProps {
 
 export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
   sprints,
+  isLoading,
+  listWindow,
+  onListWindowChange,
   activeRunsBySprintId,
   interventionBySprintId,
   pendingActionIds,
@@ -93,6 +103,11 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
     [filteredSprints, sort],
   );
 
+  const windowedSprints = useMemo(() => {
+    const limit = resolveListWindow(listWindow, ledgerSprints.length);
+    return sliceLedgerSprints(ledgerSprints, limit);
+  }, [ledgerSprints, listWindow]);
+
   // Prune selection when filter changes
   useEffect(() => {
     setSelectedIds((current) => {
@@ -107,8 +122,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
     [selectedIds, ledgerSprints],
   );
 
-  const allFilteredSelected = ledgerSprints.length > 0 && selectedIds.size >= ledgerSprints.length
-    && ledgerSprints.every((s) => selectedIds.has(s.id));
+  const allFilteredSelected = windowedSprints.length > 0 && windowedSprints.every((s) => selectedIds.has(s.id));
 
   const handleSort = (key: SprintTableSortKey) => {
     setSort((current) => nextSort(current, key));
@@ -116,9 +130,17 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
 
   const handleToggleSelectAll = () => {
     if (allFilteredSelected) {
-      setSelectedIds(deselectAll());
+      const next = new Set(selectedIds);
+      for (const sprint of windowedSprints) {
+        next.delete(sprint.id);
+      }
+      setSelectedIds(next);
     } else {
-      setSelectedIds(selectAllFiltered(ledgerSprints));
+      const next = new Set(selectedIds);
+      for (const sprint of windowedSprints) {
+        next.add(sprint.id);
+      }
+      setSelectedIds(next);
     }
   };
 
@@ -162,6 +184,11 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
         </div>
 
         <div className="flex items-center gap-3">
+          <ListWindowSelector
+            value={listWindow}
+            onChange={onListWindowChange}
+            label="Show"
+          />
           {/* Search */}
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2.2} />
@@ -223,104 +250,116 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
       )}
 
       {/* Table */}
-      {ledgerSprints.length === 0 ? (
-        <div className="px-6 py-8 text-sm text-slate-400">
-          {searchQuery
-            ? `No sprints match "${searchQuery}".`
-            : "No sprints exist yet. Create one above and it will appear in the showcase and in the ledger below."}
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left">
-            <thead>
-              <tr className="border-b border-black/[0.06] text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:border-white/[0.06]">
-                <th className="px-4 py-3 pl-6 w-10">
-                  <button
-                    type="button"
-                    onClick={handleToggleSelectAll}
-                    className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
-                    title={allFilteredSelected ? "Deselect all" : "Select all filtered"}
-                  >
-                    {allFilteredSelected
-                      ? <CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} />
-                      : <Square className="h-4 w-4" strokeWidth={2.2} />}
-                  </button>
-                </th>
-                <th className="px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => handleSort("showcasePinned")}
-                    className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
-                  >
-                    Showcase
-                    {renderSortIndicator("showcasePinned")}
-                  </button>
-                </th>
-                <th className="px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => handleSort("sprintKey")}
-                    className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
-                  >
-                    Sprint ID
-                    {renderSortIndicator("sprintKey")}
-                  </button>
-                </th>
-                <th className="px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => handleSort("name")}
-                    className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
-                  >
-                    Sprint
-                    {renderSortIndicator("name")}
-                  </button>
-                </th>
-                <th className="px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => handleSort("status")}
-                    className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
-                  >
-                    Status
-                    {renderSortIndicator("status")}
-                  </button>
-                </th>
-                <th className="px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => handleSort("tasksCount")}
-                    className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
-                  >
-                    Tasks
-                    {renderSortIndicator("tasksCount")}
-                  </button>
-                </th>
-                <th className="px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => handleSort("completion")}
-                    className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
-                  >
-                    Completion
-                    {renderSortIndicator("completion")}
-                  </button>
-                </th>
-                <th className="px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => handleSort("createdAt")}
-                    className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
-                  >
-                    Created
-                    {renderSortIndicator("createdAt")}
-                  </button>
-                </th>
-                <th className="px-4 py-3 pr-6 text-right">Controls</th>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left">
+          <thead>
+            <tr className="border-b border-black/[0.06] text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:border-white/[0.06]">
+              <th className="px-4 py-3 pl-6 w-10">
+                <button
+                  type="button"
+                  onClick={handleToggleSelectAll}
+                  className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  title={allFilteredSelected ? "Deselect all" : "Select all visible"}
+                >
+                  {allFilteredSelected
+                    ? <CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} />
+                    : <Square className="h-4 w-4" strokeWidth={2.2} />}
+                </button>
+              </th>
+              <th className="px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => handleSort("showcasePinned")}
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                >
+                  Showcase
+                  {renderSortIndicator("showcasePinned")}
+                </button>
+              </th>
+              <th className="px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => handleSort("sprintKey")}
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                >
+                  Sprint ID
+                  {renderSortIndicator("sprintKey")}
+                </button>
+              </th>
+              <th className="px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => handleSort("name")}
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                >
+                  Sprint
+                  {renderSortIndicator("name")}
+                </button>
+              </th>
+              <th className="px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => handleSort("status")}
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                >
+                  Status
+                  {renderSortIndicator("status")}
+                </button>
+              </th>
+              <th className="px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => handleSort("tasksCount")}
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                >
+                  Tasks
+                  {renderSortIndicator("tasksCount")}
+                </button>
+              </th>
+              <th className="px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => handleSort("completion")}
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                >
+                  Completion
+                  {renderSortIndicator("completion")}
+                </button>
+              </th>
+              <th className="px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => handleSort("createdAt")}
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                >
+                  Created
+                  {renderSortIndicator("createdAt")}
+                </button>
+              </th>
+              <th className="px-4 py-3 pr-6 text-right">Controls</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i} className="border-b border-black/[0.04] dark:border-white/[0.04]">
+                  <td colSpan={9} className="p-4">
+                    <SkeletonRow />
+                  </td>
+                </tr>
+              ))
+            ) : windowedSprints.length === 0 ? (
+              <tr>
+                <td colSpan={9}>
+                  <div className="px-6 py-8 text-sm text-slate-400">
+                    {searchQuery
+                      ? `No sprints match "${searchQuery}".`
+                      : "No sprints exist yet. Create one above and it will appear in the showcase and in the ledger below."}
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {ledgerSprints.map((sprint, index) => {
+            ) : (
+              windowedSprints.map((sprint, index) => {
                 const activeRun = activeRunsBySprintId.get(sprint.id);
                 const humanIntervention = interventionBySprintId.get(sprint.id) || null;
                 const pendingActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
@@ -452,11 +491,11 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                     </td>
                   </tr>
                 );
-              })}
+              })
+            )}
             </tbody>
           </table>
         </div>
-      )}
     </div>
   );
 };

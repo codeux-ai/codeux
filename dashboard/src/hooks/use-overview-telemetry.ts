@@ -12,10 +12,12 @@ const EMPTY_TELEMETRY: OverviewTelemetrySnapshot = {
 
 export function useOverviewTelemetry(pollIntervalMs: number = 30000): {
   telemetry: OverviewTelemetrySnapshot;
+  loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
 } {
   const [telemetry, setTelemetry] = useState<OverviewTelemetrySnapshot>(EMPTY_TELEMETRY);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -24,6 +26,8 @@ export function useOverviewTelemetry(pollIntervalMs: number = 30000): {
       setError(null);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -36,6 +40,7 @@ export function useOverviewTelemetry(pollIntervalMs: number = 30000): {
       if (message.type === "event" && message.event.eventType === "overview.telemetry.updated") {
         setTelemetry(message.event.payload as OverviewTelemetrySnapshot);
         setError(null);
+        setLoading(false);
         return;
       }
 
@@ -55,5 +60,5 @@ export function useOverviewTelemetry(pollIntervalMs: number = 30000): {
     return () => window.clearInterval(intervalId);
   }, [pollIntervalMs, refresh]);
 
-  return useMemo(() => ({ telemetry, error, refresh }), [error, refresh, telemetry]);
+  return useMemo(() => ({ telemetry, loading, error, refresh }), [error, refresh, telemetry, loading]);
 }
