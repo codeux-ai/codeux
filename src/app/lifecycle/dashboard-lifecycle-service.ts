@@ -33,6 +33,7 @@ import type { TaskRerunService } from "../../services/task-rerun-service.js";
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
 import type { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
+import type { QuicksprintService } from "../../services/quicksprint-service.js";
 import type { MemoryService } from "../../services/memory-service.js";
 import type { MemoryPromotionService } from "../../services/memory-promotion-service.js";
 import type { EmbeddingModelManager } from "../../services/embedding-model-manager.js";
@@ -62,6 +63,7 @@ export interface BootDashboardDeps {
   taskRerunService: TaskRerunService;
   executionControlService: ExecutionControlService;
   planningAgentService: PlanningAgentService;
+  quicksprintService: QuicksprintService;
   dashboardRealtimeService: DashboardRealtimeService;
   logger: Logger;
   getLiveActivitiesForActiveTasks: () => Promise<Record<string, JulesActivity[]>>;
@@ -555,6 +557,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
       deps.activityCacheService.invalidateGitStatusCache();
       return result;
     },
+    quicksprintService: deps.quicksprintService,
     realtimeService: deps.dashboardRealtimeService,
     logger: deps.logger.child({ component: "dashboard-server" }),
     isReady: deps.isReady,
