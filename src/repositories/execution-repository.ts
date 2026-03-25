@@ -834,13 +834,6 @@ export class ExecutionRepository {
         td.connection_id,
         c.display_name AS connection_display_name,
         c.role AS connection_role,
-        tr.id AS task_run_id,
-        tr.state AS task_run_state,
-        tr.provider,
-        tr.session_id,
-        tr.session_name,
-        tr.worker_branch,
-        tr.pr_url,
         td.queued_at,
         td.claimed_at,
         td.started_at,
@@ -853,14 +846,6 @@ export class ExecutionRepository {
       INNER JOIN sprints s ON s.id = td.sprint_id
       INNER JOIN tasks t ON t.id = td.task_id
       LEFT JOIN mcp_connections c ON c.id = td.connection_id
-      LEFT JOIN task_runs tr
-        ON tr.id = (
-          SELECT tr2.id
-          FROM task_runs tr2
-          WHERE tr2.dispatch_id = td.id
-          ORDER BY tr2.rowid DESC
-          LIMIT 1
-        )
       LEFT JOIN execution_leases el
         ON el.scope_type = 'task_dispatch'
        AND el.scope_id = td.id
@@ -890,13 +875,6 @@ export class ExecutionRepository {
           td.connection_id,
           c.display_name AS connection_display_name,
           c.role AS connection_role,
-          tr.id AS task_run_id,
-          tr.state AS task_run_state,
-          tr.provider,
-          tr.session_id,
-          tr.session_name,
-          tr.worker_branch,
-          tr.pr_url,
           td.queued_at,
           td.claimed_at,
           td.started_at,
@@ -909,14 +887,6 @@ export class ExecutionRepository {
         INNER JOIN sprints s ON s.id = td.sprint_id
         INNER JOIN tasks t ON t.id = td.task_id
         LEFT JOIN mcp_connections c ON c.id = td.connection_id
-        LEFT JOIN task_runs tr
-          ON tr.id = (
-            SELECT tr2.id
-            FROM task_runs tr2
-            WHERE tr2.dispatch_id = td.id
-            ORDER BY tr2.rowid DESC
-            LIMIT 1
-          )
         LEFT JOIN execution_leases el
           ON el.scope_type = 'task_dispatch'
          AND el.scope_id = td.id
@@ -930,6 +900,38 @@ export class ExecutionRepository {
       taskDispatchById.set(row.id, row);
     }
     const taskDispatches = [...taskDispatchById.values()].sort((left, right) => this.compareExecutionTaskDispatchSummaryRows(left, right));
+
+    const dispatchIds = taskDispatches.map((row) => row.id);
+    const taskRunByDispatchId = new Map<string, { id: string; state: string; provider: string | null; session_id: string | null; session_name: string | null; worker_branch: string | null; pr_url: string | null; }>();
+
+    if (dispatchIds.length > 0) {
+      const taskRunRows = this.storage.executeChunkedInQuery<{ dispatch_id: string; id: string; state: string; provider: string | null; session_id: string | null; session_name: string | null; worker_branch: string | null; pr_url: string | null; }>({
+        sqlPrefix: `SELECT tr.dispatch_id, tr.id, tr.state, tr.provider, tr.session_id, tr.session_name, tr.worker_branch, tr.pr_url
+        FROM task_runs tr
+        INNER JOIN (
+          SELECT dispatch_id, MAX(rowid) AS latest_rowid
+          FROM task_runs
+          WHERE dispatch_id`,
+        sqlSuffix: `GROUP BY dispatch_id
+        ) latest ON latest.latest_rowid = tr.rowid`,
+        items: dispatchIds,
+      });
+
+      for (const run of taskRunRows) {
+        taskRunByDispatchId.set(run.dispatch_id, run);
+      }
+    }
+
+    for (const td of taskDispatches) {
+      const taskRun = taskRunByDispatchId.get(td.id);
+      td.task_run_id = taskRun?.id || null;
+      td.task_run_state = taskRun?.state || null;
+      td.provider = taskRun?.provider || null;
+      td.session_id = taskRun?.session_id || null;
+      td.session_name = taskRun?.session_name || null;
+      td.worker_branch = taskRun?.worker_branch || null;
+      td.pr_url = taskRun?.pr_url || null;
+    }
 
     const recentEvents = this.getCachedStatement(`
       SELECT *
@@ -1219,18 +1221,8 @@ export class ExecutionRepository {
         s.number AS sprint_number,
         sr.id AS sprint_run_id,
         sr.status AS sprint_run_status,
-        (
-          SELECT COUNT(*)
-          FROM task_dispatches td
-          WHERE td.sprint_run_id = sr.id
-            AND td.status IN ('queued', 'claimed', 'running', 'cancel_requested', 'blocked')
-        ) AS active_dispatch_count,
-        (
-          SELECT COUNT(*)
-          FROM task_dispatches td
-          WHERE td.sprint_run_id = sr.id
-            AND td.status IN ('claimed', 'running')
-        ) AS running_dispatch_count,
+        0 AS active_dispatch_count,
+        0 AS running_dispatch_count,
         COALESCE(sr.last_heartbeat_at, sr.updated_at, sr.started_at, sr.created_at) AS updated_at
       FROM sprint_runs sr
       INNER JOIN projects p ON p.id = sr.project_id
@@ -1249,18 +1241,8 @@ export class ExecutionRepository {
         s.number AS sprint_number,
         sr.id AS sprint_run_id,
         sr.status AS sprint_run_status,
-        (
-          SELECT COUNT(*)
-          FROM task_dispatches td
-          WHERE td.sprint_run_id = sr.id
-            AND td.status IN ('queued', 'claimed', 'running', 'cancel_requested', 'blocked')
-        ) AS active_dispatch_count,
-        (
-          SELECT COUNT(*)
-          FROM task_dispatches td
-          WHERE td.sprint_run_id = sr.id
-            AND td.status IN ('claimed', 'running')
-        ) AS running_dispatch_count,
+        0 AS active_dispatch_count,
+        0 AS running_dispatch_count,
         COALESCE(sr.last_heartbeat_at, sr.updated_at, sr.started_at, sr.created_at) AS updated_at
       FROM sprint_runs sr
       INNER JOIN projects p ON p.id = sr.project_id
@@ -1274,6 +1256,35 @@ export class ExecutionRepository {
       ...activeProjects.map((row) => row.sprint_run_id),
       ...pausedProjects.map((row) => row.sprint_run_id),
     ]));
+
+    if (telemetrySprintRunIds.length > 0) {
+      const counts = this.storage.executeChunkedInQuery<{ sprint_run_id: string; active_count: number | string; running_count: number | string; }>({
+        sqlPrefix: `SELECT sprint_run_id,
+          SUM(CASE WHEN status IN ('queued', 'claimed', 'running', 'cancel_requested', 'blocked') THEN 1 ELSE 0 END) AS active_count,
+          SUM(CASE WHEN status IN ('claimed', 'running') THEN 1 ELSE 0 END) AS running_count
+        FROM task_dispatches
+        WHERE sprint_run_id`,
+        sqlSuffix: `GROUP BY sprint_run_id`,
+        items: telemetrySprintRunIds,
+      });
+      const countsBySprintRunId = new Map<string, { active: number; running: number }>();
+      for (const row of counts) {
+        countsBySprintRunId.set(row.sprint_run_id, {
+          active: toNumber(row.active_count),
+          running: toNumber(row.running_count),
+        });
+      }
+      for (const row of activeProjects) {
+        const counts = countsBySprintRunId.get(row.sprint_run_id);
+        row.active_dispatch_count = counts?.active || 0;
+        row.running_dispatch_count = counts?.running || 0;
+      }
+      for (const row of pausedProjects) {
+        const counts = countsBySprintRunId.get(row.sprint_run_id);
+        row.active_dispatch_count = counts?.active || 0;
+        row.running_dispatch_count = counts?.running || 0;
+      }
+    }
     const activeAttentionItems = this.listActiveAttentionRowsForSprintRuns(telemetrySprintRunIds);
 
     const paddedSprintRunIds = [...telemetrySprintRunIds];
