@@ -82,6 +82,18 @@ export class SettingsDbStorage {
     return row?.payload ?? null;
   }
 
+  readProjectPayloads(projectIds: string[]): Array<{ project_id: string; payload: string }> {
+    if (projectIds.length === 0) {
+      return [];
+    }
+    const placeholders = projectIds.map(() => "?").join(", ");
+    return this.db.prepare(`
+      SELECT project_id, payload
+      FROM project_settings
+      WHERE project_id IN (${placeholders})
+    `).all(...projectIds) as { project_id: string; payload: string }[];
+  }
+
   writeProjectPayload(projectId: string, payload: string): void {
     this.db.prepare(`
       INSERT INTO project_settings (project_id, payload, updated_at)

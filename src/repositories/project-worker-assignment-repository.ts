@@ -58,7 +58,7 @@ function parseCapabilities(value: string | null): WorkerEndpointCapabilities {
 export class ProjectWorkerAssignmentRepository {
   private readonly db: DatabaseSync;
 
-  constructor(storage: AppDbStorage = new AppDbStorage()) {
+  constructor(private readonly storage: AppDbStorage = new AppDbStorage()) {
     this.db = storage.getDatabase();
   }
 
@@ -80,6 +80,47 @@ export class ProjectWorkerAssignmentRepository {
     `).all(projectId) as unknown as ProjectWorkerAssignmentRow[];
 
     return rows.map((row) => this.mapRow(row));
+  }
+
+  listAssignmentsForProjects(projectIds: string[], options?: { activeOnly?: boolean }): Map<string, ProjectWorkerAssignmentRecord[]> {
+    if (projectIds.length === 0) {
+      return new Map();
+    }
+
+    const map = new Map<string, ProjectWorkerAssignmentRecord[]>();
+    for (const projectId of projectIds) {
+      map.set(projectId, []);
+    }
+
+    const rows = this.storage.executeChunkedInQuery<ProjectWorkerAssignmentRow>({
+      sqlPrefix: `
+        SELECT
+          a.*,
+          we.status AS worker_status,
+          we.last_heartbeat_at AS worker_last_heartbeat_at,
+          we.capabilities_json
+        FROM project_worker_assignments a
+        LEFT JOIN worker_endpoints we ON we.id = a.worker_endpoint_id
+        WHERE a.project_id
+      `,
+      sqlSuffix: `
+        ${options?.activeOnly ? "AND a.status = 'active'" : ""}
+        ORDER BY
+          CASE a.assignment_role WHEN 'primary' THEN 0 ELSE 1 END ASC,
+          a.last_affinity_at DESC,
+          a.assigned_at ASC
+      `,
+      items: projectIds,
+    });
+
+    for (const row of rows) {
+      const records = map.get(row.project_id);
+      if (records) {
+        records.push(this.mapRow(row));
+      }
+    }
+
+    return map;
   }
 
   listActiveAssignmentsForWorker(workerEndpointId: string): ProjectWorkerAssignmentRecord[] {

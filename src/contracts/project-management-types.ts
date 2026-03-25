@@ -1,4 +1,6 @@
 import type { VirtualWorkerProvider } from "./app-types.js";
+import type { ProjectSettingsOverride } from "./settings-scope-types.js";
+import type { ProjectWorkerAssignmentRecord } from "./worker-types.js";
 
 export type ProjectStatus = "running" | "failed" | "intervention" | "idle";
 export type ProjectSourceType = "local" | "git";
@@ -22,6 +24,8 @@ export interface ProjectSummary {
   openTasks: number;
   completedTasks: number;
   isRunning: boolean;
+  settingsOverrides: ProjectSettingsOverride;
+  agentBindings: ProjectWorkerAssignmentRecord[];
   createdAt: string;
   updatedAt: string;
 }

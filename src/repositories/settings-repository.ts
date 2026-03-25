@@ -62,6 +62,36 @@ export class SettingsRepository {
     }
   }
 
+  getProjectSettingsBatch(projectIds: string[]): Map<string, ProjectSettingsOverride> {
+    this.migrateLegacySettingsIfNeeded();
+    const result = new Map<string, ProjectSettingsOverride>();
+
+    // Use an executeChunkedInQuery wrapper if we want, but SettingsDbStorage does it raw currently.
+    // For large projectIds, chunking may be needed. Given project size it's likely okay,
+    // but we can chunk the request.
+    const chunkSize = 100;
+    for (let i = 0; i < projectIds.length; i += chunkSize) {
+      const chunk = projectIds.slice(i, i + chunkSize);
+      const rows = this.storage.readProjectPayloads(chunk);
+      for (const row of rows) {
+        try {
+          result.set(row.project_id, JSON.parse(row.payload) as ProjectSettingsOverride);
+        } catch {
+          // Ignore
+        }
+      }
+    }
+
+    // Ensure all requested projects have an entry (even if empty)
+    for (const projectId of projectIds) {
+      if (!result.has(projectId)) {
+        result.set(projectId, {});
+      }
+    }
+
+    return result;
+  }
+
   saveProjectSettings(projectId: string, patch: ProjectSettingsOverride): ProjectSettingsOverride {
     const base = this.getSystemSettings().defaults;
     const normalized = toProjectSettingsOverride(base, patch, this.externalHints);

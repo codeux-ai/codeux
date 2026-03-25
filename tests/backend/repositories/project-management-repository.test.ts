@@ -114,6 +114,8 @@ describe("ProjectManagementRepository", () => {
       completedTasks: 1,
       openTasks: 1,
       isRunning: true,
+      settingsOverrides: {},
+      agentBindings: [],
     });
 
     expect(sprints[0]).toMatchObject({
