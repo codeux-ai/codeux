@@ -558,7 +558,7 @@ export function useSprintsPageData() {
   }, [refresh, selectedProject]);
 
 
-  const handleQuicksprintExecute = useCallback(async (templateId: string, taskCount: number, submitMode: string, additionalPrompt?: string) => {
+  const handleQuicksprintExecute = useCallback(async (templateId: string, taskCount: number, submitMode: string, additionalPrompt?: string, routeOverride?: PlanningRouteOption | null, modelOverride?: string | null) => {
     if (!selectedProject) return;
     try {
       await executeQuicksprint(selectedProject.id, {
@@ -566,6 +566,7 @@ export function useSprintsPageData() {
         taskCount,
         submitMode: submitMode as "plan_only" | "plan_and_start",
         additionalPrompt,
+        planningOverrides: toPlanningOverrides(routeOverride ?? null, modelOverride ?? null),
       });
       setShowQuicksprint(false);
       await refresh();

@@ -151,9 +151,7 @@ export class QuicksprintService {
     await this.planSprint(projectId, sprint.id, {
       autoStart,
       replan: false,
-      overrides: {
-        virtualModel: input.modelOverride,
-      }
+      overrides: input.planningOverrides ?? (input.modelOverride ? { virtualModel: input.modelOverride } : undefined),
     });
 
     return sprint;

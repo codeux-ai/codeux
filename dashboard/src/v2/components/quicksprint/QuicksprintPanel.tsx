@@ -71,7 +71,7 @@ type Phase = "browse" | "configure" | "editor";
 interface QuicksprintPanelProps {
   projectId: string;
   onClose: () => void;
-  onExecute: (templateId: string, taskCount: number, submitMode: "plan_only" | "plan_and_start", additionalPrompt?: string) => Promise<void>;
+  onExecute: (templateId: string, taskCount: number, submitMode: "plan_only" | "plan_and_start", additionalPrompt?: string, routeOverride?: PlanningRouteOption | null, modelOverride?: string | null) => Promise<void>;
   templates: QuicksprintTemplateRecord[];
   loading?: boolean;
   agentPresets?: AgentPreset[];
@@ -301,11 +301,11 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     if (!selectedTemplate) return;
     setExecutingMode(mode);
     try {
-      await onExecute(selectedTemplate.id, taskCount, mode, additionalPrompt.trim() || undefined);
+      await onExecute(selectedTemplate.id, taskCount, mode, additionalPrompt.trim() || undefined, routeOverride, modelOverride);
     } finally {
       setExecutingMode(null);
     }
-  }, [selectedTemplate, taskCount, additionalPrompt, onExecute]);
+  }, [selectedTemplate, taskCount, additionalPrompt, onExecute, routeOverride, modelOverride]);
 
   const builtinTemplates = templates.filter((t) => t.isBuiltIn);
   const customTemplates = templates.filter((t) => !t.isBuiltIn);

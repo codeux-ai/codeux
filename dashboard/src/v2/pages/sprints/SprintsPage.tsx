@@ -378,8 +378,8 @@ export const SprintsPage: FunctionComponent = () => {
                     connections={execution.connections}
                     virtualProviders={virtualProviders}
                     planningEta={planningEta}
-                    onExecute={async (templateId, taskCount, submitMode, additionalPrompt) => {
-                      await handleQuicksprintExecute(templateId, taskCount, submitMode, additionalPrompt);
+                    onExecute={async (templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride) => {
+                      await handleQuicksprintExecute(templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride);
                       animateLatestCell();
                     }}
                     onCreateTemplate={handleCreateQuicksprintTemplate}
