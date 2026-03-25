@@ -1,8 +1,9 @@
 import type { FunctionComponent } from "preact";
+import { memo } from "preact/compat";
 import { FolderGit2, CheckCircle2, Circle, PlayCircle, Clock, Play, Square, Settings, Maximize2 } from "lucide-preact";
 import type { Task } from "../../types.js";
 
-export const TaskRow: FunctionComponent<{ task: Task }> = ({ task }) => (
+export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
     <div className="group relative flex items-center justify-between py-5 cursor-pointer border-b border-black/[0.05] dark:border-white/[0.04] last:border-0">
         {/* Hover backdrop */}
         <div className="absolute inset-0 bg-gradient-to-r from-signal-500/0 via-signal-500/[0.03] to-signal-500/0 dark:via-signal-500/[0.05] opacity-0 group-hover:opacity-100 transition-opacity duration-400 -z-10 rounded-xl" />
@@ -71,4 +72,4 @@ export const TaskRow: FunctionComponent<{ task: Task }> = ({ task }) => (
             </div>
         </div>
     </div>
-);
+));

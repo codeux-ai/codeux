@@ -230,7 +230,10 @@ export class AgentPresetSyncService {
 
   private async decorateProjectAgentPresets(projectId: string): Promise<AgentPresetRecord[]> {
     const presets = this.deps.agentPresetRepository.listAgentPresets(projectId);
-    const decorated = await Promise.all(presets.map(async (preset) => await this.decorateAgentPreset(preset)));
+    const decorated: AgentPresetRecord[] = [];
+    for (const preset of presets) {
+      decorated.push(await this.decorateAgentPreset(preset));
+    }
     return decorated.sort((left, right) => {
       if (left.syncStatus !== right.syncStatus) {
         const rank = (status: AgentPresetRecord["syncStatus"]): number => {

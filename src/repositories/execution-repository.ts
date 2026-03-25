@@ -345,7 +345,7 @@ export class ExecutionRepository {
   private readonly cachedStatements = new Map<string, StatementSync>();
 
   constructor(
-    storage: AppDbStorage = new AppDbStorage(),
+    private readonly storage: AppDbStorage = new AppDbStorage(),
     private readonly realtimeNotifier?: DashboardRealtimeMutationNotifier,
   ) {
     this.db = storage.getDatabase();
@@ -1276,9 +1276,14 @@ export class ExecutionRepository {
     ]));
     const activeAttentionItems = this.listActiveAttentionRowsForSprintRuns(telemetrySprintRunIds);
 
+    const paddedSprintRunIds = [...telemetrySprintRunIds];
+    while (paddedSprintRunIds.length > 0 && paddedSprintRunIds.length < 48) {
+      paddedSprintRunIds.push(paddedSprintRunIds[paddedSprintRunIds.length - 1]!);
+    }
+    const placeholders = Array(48).fill("?").join(", ");
     const recentEvents = telemetrySprintRunIds.length === 0
       ? []
-      : this.db.prepare(`
+      : this.storage.getCachedStatement(`
         SELECT *
         FROM (
           SELECT
@@ -1315,7 +1320,7 @@ export class ExecutionRepository {
           INNER JOIN sprints s ON s.id = tr.sprint_id
           INNER JOIN tasks t ON t.id = tr.task_id
           LEFT JOIN mcp_connections c ON c.id = tr.connection_id
-          WHERE tr.sprint_run_id IN (${telemetrySprintRunIds.map(() => "?").join(", ")})
+          WHERE tr.sprint_run_id IN (${placeholders})
 
           UNION ALL
 
@@ -1350,11 +1355,11 @@ export class ExecutionRepository {
           FROM sprint_run_events sre
           INNER JOIN sprint_runs sr ON sr.id = sre.sprint_run_id
           INNER JOIN sprints s ON s.id = sr.sprint_id
-          WHERE sre.sprint_run_id IN (${telemetrySprintRunIds.map(() => "?").join(", ")})
+          WHERE sre.sprint_run_id IN (${placeholders})
         )
         ORDER BY created_at DESC, id DESC
         LIMIT 80
-      `).all(...telemetrySprintRunIds, ...telemetrySprintRunIds) as unknown as ExecutionRuntimeEventSummaryRow[];
+      `).all(...paddedSprintRunIds, ...paddedSprintRunIds) as unknown as ExecutionRuntimeEventSummaryRow[];
 
     const eventAwareHumanInterventionBySprintRunId = this.buildHumanInterventionSummaryBySprintRun(
       [...activeProjects, ...pausedProjects].map((row) => ({
@@ -1415,18 +1420,20 @@ export class ExecutionRepository {
     }
 
     const runClause = sprintRunId ? "AND sprint_run_id = ?" : "";
-    const rows = this.db.prepare(`
-      SELECT tr.*
+    const rows = this.storage.executeChunkedInQuery<TaskRunRow>({
+      sqlPrefix: `SELECT tr.*
       FROM task_runs tr
       INNER JOIN (
         SELECT task_id, MAX(rowid) AS latest_rowid
         FROM task_runs
-        WHERE task_id IN (${uniqueTaskIds.map(() => "?").join(", ")})
-        ${runClause}
+        WHERE task_id`,
+      sqlSuffix: `${runClause}
         GROUP BY task_id
       ) latest ON latest.latest_rowid = tr.rowid
-      ORDER BY tr.rowid DESC
-    `).all(...uniqueTaskIds, ...(sprintRunId ? [sprintRunId] : [])) as unknown as TaskRunRow[];
+      ORDER BY tr.rowid DESC`,
+      items: uniqueTaskIds,
+      bindParamsAfter: sprintRunId ? [sprintRunId] : [],
+    });
 
     const map = new Map<string, TaskRunRecord>();
     for (const row of rows) {
@@ -1782,12 +1789,11 @@ export class ExecutionRepository {
     if (taskIds.length === 0) {
       return new Map();
     }
-    const rows = this.db.prepare(`
-      SELECT *
-      FROM provider_invocations
-      WHERE project_id = ?
-        AND task_id IN (${taskIds.map(() => "?").join(", ")})
-    `).all(projectId, ...taskIds) as unknown as ProviderInvocationUsageRow[];
+    const rows = this.storage.executeChunkedInQuery<ProviderInvocationUsageRow>({
+      sqlPrefix: "SELECT * FROM provider_invocations WHERE project_id = ? AND task_id",
+      items: taskIds,
+      bindParamsBefore: [projectId],
+    });
     return this.groupUsageBy(rows.map((row) => this.mapProviderInvocationUsageRow(row)), (row) => row.taskId);
   }
 
@@ -1795,12 +1801,11 @@ export class ExecutionRepository {
     if (sprintRunIds.length === 0) {
       return new Map();
     }
-    const rows = this.db.prepare(`
-      SELECT *
-      FROM provider_invocations
-      WHERE project_id = ?
-        AND sprint_run_id IN (${sprintRunIds.map(() => "?").join(", ")})
-    `).all(projectId, ...sprintRunIds) as unknown as ProviderInvocationUsageRow[];
+    const rows = this.storage.executeChunkedInQuery<ProviderInvocationUsageRow>({
+      sqlPrefix: "SELECT * FROM provider_invocations WHERE project_id = ? AND sprint_run_id",
+      items: sprintRunIds,
+      bindParamsBefore: [projectId],
+    });
     return this.groupUsageBy(rows.map((row) => this.mapProviderInvocationUsageRow(row)), (row) => row.sprintRunId);
   }
 
@@ -1825,12 +1830,11 @@ export class ExecutionRepository {
     if (taskIds.length === 0) {
       return new Map();
     }
-    const rows = this.db.prepare(`
-      SELECT task_id, SUM(COALESCE(duration_ms, 0)) AS total_duration_ms
-      FROM task_runs
-      WHERE task_id IN (${taskIds.map(() => "?").join(", ")})
-      GROUP BY task_id
-    `).all(...taskIds) as unknown as Array<{ task_id: string; total_duration_ms: number | string }>;
+    const rows = this.storage.executeChunkedInQuery<{ task_id: string; total_duration_ms: number | string }>({
+      sqlPrefix: "SELECT task_id, SUM(COALESCE(duration_ms, 0)) AS total_duration_ms FROM task_runs WHERE task_id",
+      sqlSuffix: "GROUP BY task_id",
+      items: taskIds,
+    });
     return new Map(rows.map((row) => [row.task_id, toNumber(row.total_duration_ms)] as const));
   }
 
@@ -1838,12 +1842,11 @@ export class ExecutionRepository {
     if (sprintRunIds.length === 0) {
       return new Map();
     }
-    const rows = this.db.prepare(`
-      SELECT sprint_run_id, SUM(COALESCE(duration_ms, 0)) AS total_duration_ms
-      FROM task_runs
-      WHERE sprint_run_id IN (${sprintRunIds.map(() => "?").join(", ")})
-      GROUP BY sprint_run_id
-    `).all(...sprintRunIds) as unknown as Array<{ sprint_run_id: string; total_duration_ms: number | string }>;
+    const rows = this.storage.executeChunkedInQuery<{ sprint_run_id: string; total_duration_ms: number | string }>({
+      sqlPrefix: "SELECT sprint_run_id, SUM(COALESCE(duration_ms, 0)) AS total_duration_ms FROM task_runs WHERE sprint_run_id",
+      sqlSuffix: "GROUP BY sprint_run_id",
+      items: sprintRunIds,
+    });
     return new Map(rows.map((row) => [row.sprint_run_id, toNumber(row.total_duration_ms)] as const));
   }
 
@@ -2579,8 +2582,8 @@ export class ExecutionRepository {
       return [];
     }
 
-    return this.db.prepare(`
-      SELECT
+    return this.storage.executeChunkedInQuery<ProjectAttentionSummaryRow>({
+      sqlPrefix: `SELECT
         id,
         project_id,
         sprint_id,
@@ -2594,10 +2597,10 @@ export class ExecutionRepository {
         payload_json,
         updated_at
       FROM project_attention_items
-      WHERE sprint_run_id IN (${sprintRunIds.map(() => "?").join(", ")})
-        AND status IN ('open', 'claimed')
-      ORDER BY updated_at DESC, opened_at DESC, id DESC
-    `).all(...sprintRunIds) as unknown as ProjectAttentionSummaryRow[];
+      WHERE sprint_run_id`,
+      sqlSuffix: "AND status IN ('open', 'claimed') ORDER BY updated_at DESC, opened_at DESC, id DESC",
+      items: sprintRunIds,
+    });
   }
 
   private buildHumanInterventionSummaryBySprintRun(

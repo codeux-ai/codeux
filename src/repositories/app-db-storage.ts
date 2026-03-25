@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import type { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync, StatementSync } from "node:sqlite";
 import { getHomeSprintOsPath } from "../shared/config/sprint-os-paths.js";
 import { openSqliteDatabase } from "./sqlite-connection.js";
 
@@ -22,6 +22,7 @@ export function resolveAppDbPath(dbPath?: string): string {
 export class AppDbStorage {
   private readonly db: DatabaseSync;
   private readonly dbPath: string;
+  private readonly cachedStatements = new Map<string, StatementSync>();
 
   constructor(dbPath?: string) {
     this.dbPath = resolveAppDbPath(dbPath);
@@ -495,6 +496,64 @@ export class AppDbStorage {
 
   getDatabase(): DatabaseSync {
     return this.db;
+  }
+
+
+  getCachedStatement(sql: string): StatementSync {
+    let stmt = this.cachedStatements.get(sql);
+    if (!stmt) {
+      stmt = this.db.prepare(sql);
+      this.cachedStatements.set(sql, stmt);
+    }
+    return stmt;
+  }
+
+  executeChunkedInQuery<T>(params: {
+    sqlPrefix: string;
+    sqlSuffix?: string;
+    items: string[];
+    bindParamsBefore?: any[];
+    bindParamsAfter?: any[];
+  }): T[] {
+    const { sqlPrefix, items } = params;
+    const sqlSuffix = params.sqlSuffix || "";
+    const bindParamsBefore = params.bindParamsBefore || [];
+    const bindParamsAfter = params.bindParamsAfter || [];
+
+    if (items.length === 0) {
+      return [];
+    }
+
+    const uniqueIds = [...new Set(items)];
+    const results: T[] = [];
+    const BUCKET_SIZES = [1, 2, 5, 10, 25, 50, 100];
+
+    let i = 0;
+    while (i < uniqueIds.length) {
+      const remaining = uniqueIds.length - i;
+      const bucketSize = BUCKET_SIZES.find((size) => size >= remaining) || 100;
+
+      const chunk = uniqueIds.slice(i, i + bucketSize);
+
+      // Pad with the last element if chunk is smaller than bucketSize
+      while (chunk.length < bucketSize) {
+        chunk.push(chunk[chunk.length - 1]!);
+      }
+
+      const placeholders = Array(bucketSize).fill("?").join(", ");
+      const sql = `${sqlPrefix} IN (${placeholders}) ${sqlSuffix}`;
+      const stmt = this.getCachedStatement(sql);
+
+      const rows = stmt.all(...bindParamsBefore, ...chunk, ...bindParamsAfter) as T[];
+      results.push(...rows);
+
+      i += bucketSize === 100 && remaining > 100 ? 100 : remaining;
+      if (remaining <= 100) {
+        break; // we processed everything
+      }
+    }
+
+    return results;
   }
 
   hasTable(name: string): boolean {

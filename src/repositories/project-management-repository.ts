@@ -90,7 +90,7 @@ export class ProjectManagementRepository {
   private readonly db: DatabaseSync;
 
   constructor(
-    storage: AppDbStorage = new AppDbStorage(),
+    private readonly storage: AppDbStorage = new AppDbStorage(),
     private readonly realtimeNotifier?: DashboardRealtimeMutationNotifier,
   ) {
     this.db = storage.getDatabase();
@@ -750,12 +750,11 @@ export class ProjectManagementRepository {
       return [];
     }
 
-    const dependencyRows = this.db.prepare(`
-      SELECT task_id, depends_on_task_id
-      FROM task_dependencies
-      WHERE task_id IN (${rows.map(() => "?").join(", ")})
-      ORDER BY depends_on_task_id ASC
-    `).all(...rows.map((row) => row.id)) as unknown as DependencyRow[];
+    const dependencyRows = this.storage.executeChunkedInQuery<DependencyRow>({
+      sqlPrefix: "SELECT task_id, depends_on_task_id FROM task_dependencies WHERE task_id",
+      sqlSuffix: "ORDER BY depends_on_task_id ASC",
+      items: rows.map((row) => row.id),
+    });
 
     const dependencyMap = new Map<string, string[]>();
     for (const row of dependencyRows) {
