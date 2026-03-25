@@ -33,6 +33,8 @@ import { cancelSprintRun, orchestrateSprint } from "../../../lib/api/dashboard-a
 import { getSprintHumanInterventionBySprintId } from "../../../lib/execution-intervention.js";
 import { filterShowcaseSprints, sortSprintsByRecency } from "../../lib/sprint-gallery.js";
 import { toPlanningOverrides, type SprintSubmitMode, type PlanningRouteOption } from "../../lib/sprint-composer-state.js";
+import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
+import { fetchQuicksprintTemplates, executeQuicksprint } from "../../lib/quicksprint-api.js";
 
 const ACTIVE_CONNECTION_STATUSES = new Set(["connected", "listening", "idle"]);
 const IN_WORK_STATUSES = new Set<SprintStatus>(["running", "paused"]);
@@ -84,6 +86,9 @@ export function useSprintsPageData() {
     virtualWorkerProvider: string;
   }>(null);
   const [agentPresets, setAgentPresets] = useState<AgentPreset[]>([]);
+  const [showQuicksprint, setShowQuicksprint] = useState(false);
+  const [quicksprintTemplates, setQuicksprintTemplates] = useState<QuicksprintTemplateRecord[]>([]);
+  const [quicksprintLoading, setQuicksprintLoading] = useState(false);
   const [planningEta, setPlanningEta] = useState(180000);
 
   const { selectedProject } = useProjectData();
@@ -126,6 +131,35 @@ export function useSprintsPageData() {
       cancelled = true;
     };
   }, [selectedProject?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!selectedProject || !showQuicksprint) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setQuicksprintLoading(true);
+    void fetchQuicksprintTemplates(selectedProject.id)
+      .then((templates) => {
+        if (!cancelled) {
+          setQuicksprintTemplates(templates);
+          setQuicksprintLoading(false);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to fetch quicksprint templates", error);
+        if (!cancelled) {
+          setQuicksprintLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProject?.id, showQuicksprint]);
 
   useEffect(() => {
     let cancelled = false;
@@ -517,6 +551,23 @@ export function useSprintsPageData() {
     await refresh();
   }, [refresh, selectedProject]);
 
+
+  const handleQuicksprintExecute = useCallback(async (templateId: string, taskCount: number, submitMode: string) => {
+    if (!selectedProject) return;
+    try {
+      await executeQuicksprint(selectedProject.id, {
+        templateId,
+        taskCount,
+        submitMode: submitMode as "plan_only" | "plan_and_start",
+      });
+      setShowQuicksprint(false);
+      await refresh();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+  }, [selectedProject, refresh]);
+
   const virtualProviders = useMemo(() => (
     Object.entries(VIRTUAL_PROVIDER_LABELS).map(([id, label]) => ({
       id: id as VirtualWorkerProvider,
@@ -549,6 +600,10 @@ export function useSprintsPageData() {
     virtualProviders,
     planningEta,
     planningPresets,
+    showQuicksprint, setShowQuicksprint,
+    quicksprintTemplates,
+    quicksprintLoading,
+    handleQuicksprintExecute,
     refreshSprints: refresh,
     refreshExecution,
     handleSprintToggle,

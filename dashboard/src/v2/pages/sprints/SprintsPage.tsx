@@ -13,9 +13,11 @@ import {
   Target,
   X,
   XCircle,
+  Zap,
 } from "lucide-preact";
 import { SprintBubble } from "../../components/ui/SprintBubble.js";
 import { SprintLedger } from "../../components/sprints/SprintLedger.js";
+import { QuicksprintPanel } from "../../components/quicksprint/QuicksprintPanel.js";
 import { AddTaskModal } from "../../components/ui/AddTaskModal.js";
 import { SprintComposer } from "../../components/ui/SprintComposer.js";
 import { SprintMarkdownModal } from "../../components/ui/SprintMarkdownModal.js";
@@ -55,6 +57,10 @@ export const SprintsPage: FunctionComponent = () => {
     virtualProviders,
     planningEta,
     planningPresets,
+    showQuicksprint, setShowQuicksprint,
+    quicksprintTemplates,
+    quicksprintLoading,
+    handleQuicksprintExecute,
     refreshSprints,
     refreshExecution,
     handleSprintToggle,
@@ -216,6 +222,28 @@ export const SprintsPage: FunctionComponent = () => {
             <button
               type="button"
               onClick={() => {
+                if (showCreateComposer || editingSprint) {
+                  setShowCreateComposer(false);
+                  setEditingSprint(null);
+                }
+                setShowQuicksprint(!showQuicksprint);
+              }}
+              disabled={!selectedProject}
+              className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+                showQuicksprint
+                  ? "border border-black/[0.06] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
+                  : "bg-ember-500 text-void-900 hover:-translate-y-px hover:bg-ember-400"
+              }`}
+            >
+              {showQuicksprint ? <X className="h-3.5 w-3.5" strokeWidth={2.3} /> : <Zap className="h-3.5 w-3.5" strokeWidth={2.3} />}
+              {showQuicksprint ? "Close Quicksprint" : "Quicksprint"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (showQuicksprint) {
+                  setShowQuicksprint(false);
+                }
                 if (editingSprint || showCreateComposer) {
                   setEditingSprint(null);
                   setShowCreateComposer(false);
@@ -241,7 +269,7 @@ export const SprintsPage: FunctionComponent = () => {
             <div ref={createStageRef} className="relative overflow-hidden">
               <div
                 className={`transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                  showCreateComposer || editingSprint
+                  showCreateComposer || editingSprint || showQuicksprint
                     ? "pointer-events-none max-h-0 overflow-hidden -translate-y-8 scale-[0.985] opacity-0 blur-[10px]"
                     : "max-h-[240rem] overflow-visible translate-y-0 scale-100 opacity-100 blur-0"
                 }`}
@@ -330,6 +358,28 @@ export const SprintsPage: FunctionComponent = () => {
                     onImprovePrompt={handleImprovePrompt}
                     onSubmit={onSprintSubmit}
                     onAppendTasks={editingSprint ? () => { void handleOpenAppendTasks(editingSprint); } : undefined}
+                  />
+                </div>
+              </div>
+
+              <div
+                className={`overflow-hidden transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                  showQuicksprint
+                    ? "mt-0 max-h-[220rem] translate-y-0 scale-100 opacity-100 blur-0"
+                    : "pointer-events-none max-h-0 translate-y-10 scale-[0.985] opacity-0 blur-[10px]"
+                }`}
+              >
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-0 -z-10 rounded-[2.2rem] bg-[radial-gradient(circle_at_top,rgba(255,107,0,0.08),transparent_46%)] dark:bg-[radial-gradient(circle_at_top,rgba(255,107,0,0.12),transparent_46%)]" />
+                  <QuicksprintPanel
+                    projectId={selectedProject.id}
+                    onClose={() => setShowQuicksprint(false)}
+                    templates={quicksprintTemplates}
+                    loading={quicksprintLoading}
+                    onExecute={async (templateId, taskCount, submitMode) => {
+                      await handleQuicksprintExecute(templateId, taskCount, submitMode);
+                      animateLatestCell();
+                    }}
                   />
                 </div>
               </div>
