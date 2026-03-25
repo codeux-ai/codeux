@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "preact";
+import { lazy, Suspense } from "preact/compat";
 import { useLayoutEffect, useRef, useState, useEffect, useMemo } from "preact/hooks";
 import gsap from "gsap";
 import {
@@ -7,8 +8,6 @@ import {
     Play, RotateCcw, Bot, Workflow, PauseCircle,
     Ship, BarChart3,
 } from "lucide-preact";
-import { SprintBoatRace } from "./components/SprintBoatRace.js";
-import { SprintDag } from "./components/SprintDag.js";
 import { SprintStatsDeck, useLiveTaskTimingSummaries } from "./components/SprintStatsDeck.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
@@ -25,6 +24,7 @@ import { getTaskProgressPhase } from "../lib/task-progress.js";
 import { IntelPanel } from "./components/ui/IntelPanel.js";
 import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
 import { IdleRuntimeState } from "./components/ui/IdleRuntimeState.js";
+import { SkeletonPanel } from "./components/ui/ListSkeletons.js";
 import {
     EMPTY_RUNTIME_STATS,
 } from "./lib/live-session-config.js";
@@ -42,6 +42,9 @@ const statusTone = (value: string | null): string => {
     if (n === "FAILURE" || n === "FAILED" || n === "ERROR" || n === "CANCELLED") return "text-status-red";
     return "text-slate-400";
 };
+
+const SprintBoatRace = lazy(() => import("./components/SprintBoatRace.js").then(m => ({ default: m.SprintBoatRace })));
+const SprintDag = lazy(() => import("./components/SprintDag.js").then(m => ({ default: m.SprintDag })));
 
 const EXECUTOR_LABELS: Record<string, string> = {
     docker_cli: "CLI",
@@ -1160,17 +1163,21 @@ export const LiveSessionPage: FunctionComponent = () => {
                 />
             ) : headerView === "race" ? (
                 /* ── Boat Race View ───────────────────────────────── */
-                <SprintBoatRace
-                    tasks={visibleTasksWithLiveActivities}
-                    dispatches={sprintDispatches}
-                    hasLiveSprint={hasSprintContext}
-                />
+                <Suspense fallback={<SkeletonPanel />}>
+                    <SprintBoatRace
+                        tasks={visibleTasksWithLiveActivities}
+                        dispatches={sprintDispatches}
+                        hasLiveSprint={hasSprintContext}
+                    />
+                </Suspense>
             ) : (
-                <SprintDag
-                    tasks={visibleTasksWithLiveActivities}
-                    dispatches={sprintDispatches}
-                    hasSprintContext={hasSprintContext}
-                />
+                <Suspense fallback={<SkeletonPanel />}>
+                    <SprintDag
+                        tasks={visibleTasksWithLiveActivities}
+                        dispatches={sprintDispatches}
+                        hasSprintContext={hasSprintContext}
+                    />
+                </Suspense>
             )}
 
             {/* ── Section Divider ─────────────────────────────────────── */}

@@ -1,10 +1,13 @@
 import type { FunctionComponent } from "preact";
+import { lazy, Suspense } from "preact/compat";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { HeaderStats } from "./components/HeaderStats.js";
-import { OverviewTelemetry } from "./components/OverviewTelemetry.js";
 import { SourcesGrid } from "./components/SourcesGrid.js";
 import { TasksList } from "./components/TasksList.js";
+import { SkeletonPanel } from "./components/ui/ListSkeletons.js";
+
+const OverviewTelemetry = lazy(() => import("./components/OverviewTelemetry.js").then(m => ({ default: m.OverviewTelemetry })));
 
 export const DashboardV2: FunctionComponent = () => {
     const mainContentRef = useRef<HTMLDivElement>(null);
@@ -72,7 +75,9 @@ export const DashboardV2: FunctionComponent = () => {
 
                 {/* Live Telemetry */}
                 <div className="xl:col-span-4 h-full relative">
-                    <OverviewTelemetry />
+                    <Suspense fallback={<SkeletonPanel />}>
+                        <OverviewTelemetry />
+                    </Suspense>
                 </div>
             </div>
         </div>
