@@ -5,12 +5,14 @@ import { ActivityCacheService } from "../../server/activity-cache-service.js";
 import { TaskRerunService } from "../../services/task-rerun-service.js";
 import { ExecutionControlService } from "../../services/execution-control-service.js";
 import { PlanningAgentService } from "../../services/planning-agent-service.js";
+import { QuicksprintService } from "../../services/quicksprint-service.js";
 
 export interface DashboardDependencies {
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
   executionControlService: ExecutionControlService;
   planningAgentService: PlanningAgentService;
+  quicksprintService: QuicksprintService;
 }
 
 export function createDashboardDependencies(
@@ -149,10 +151,24 @@ export function createDashboardDependencies(
     logger: logger.child({ component: "planning-agent-service" }),
   });
 
+  const quicksprintService = new QuicksprintService(
+    (projectId) => {
+      const project = projectManagementRepository.getProject(projectId);
+      if (!project || !project.baseDir) {
+        throw new Error(`Project ${projectId} not found or has no base directory`);
+      }
+      return project.baseDir;
+    },
+    (projectId, input) => projectManagementRepository.createSprint(projectId, input),
+    (projectId, sprintId, options, signal) => planningAgentService.planSprint(projectId, sprintId, options, signal),
+    (agentPresetId) => coreDeps.agentPresetRepository.getAgentPreset(agentPresetId),
+  );
+
   return {
     activityCacheService,
     taskRerunService,
     executionControlService,
     planningAgentService,
+    quicksprintService,
   };
 }

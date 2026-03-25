@@ -19,9 +19,14 @@ export interface LiveSessionRuntimeState {
 export function deriveLiveSessionRuntimeState(
   status: DashboardStatus,
   execution: ExecutionDashboardSnapshot,
+  selectedSprintId?: string | null,
 ): LiveSessionRuntimeState {
-  const liveSprintRun = execution.sprintRuns.find((run) => run.status === "running" || run.status === "queued") || null;
-  const pausedInterventionRun = getPrimaryPausedInterventionRun(execution);
+  const candidateRuns = selectedSprintId
+    ? execution.sprintRuns.filter((r) => r.sprintId === selectedSprintId)
+    : execution.sprintRuns;
+
+  const liveSprintRun = candidateRuns.find((run) => run.status === "running" || run.status === "queued") || null;
+  const pausedInterventionRun = getPrimaryPausedInterventionRun(execution, selectedSprintId);
   const hasActiveSprint = Boolean(liveSprintRun);
   const hasSprintContext = Boolean(
     hasActiveSprint

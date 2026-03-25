@@ -334,6 +334,7 @@ async function createServerHandle(): Promise<{
     updateProject: (projectId, input) => repository.updateProject(projectId, input),
     deleteProject: (projectId) => repository.deleteProject(projectId),
     selectProject: (projectId) => repository.setSelectedProjectId(projectId),
+    selectSprint: (projectId, sprintId) => repository.setSelectedSprintId(projectId, sprintId),
     listSprints: (projectId) => repository.listSprints(projectId),
     createSprint: (projectId, input) => repository.createSprint(projectId, input),
     updateSprint: (sprintId, input) => repository.updateSprint(sprintId, input),
@@ -761,6 +762,15 @@ describe("dashboard project management API", () => {
       sprintRunId: telemetryRun.id,
       runningDispatchCount: 1,
     });
+
+
+    const sprintSelectResponse = await fetch(`${baseUrl}/api/projects/${project.id}/selected-sprint`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sprintId: sprint.id }),
+    });
+    expect(sprintSelectResponse.status).toBe(200);
+    expect(await sprintSelectResponse.json()).toEqual({ selectedSprintId: sprint.id });
 
     const taskRun = executionRepository.createTaskRun({
       projectId: project.id,

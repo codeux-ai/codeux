@@ -92,6 +92,11 @@ export async function bootMcpTransport(deps: BootMcpTransportDeps): Promise<void
     deps.logger.warn(deps.getMissingJulesApiKeyInstruction());
   }
 
+  if (process.stdin.isTTY) {
+    deps.logger.info(`${SPRINT_OS_DISPLAY_NAME} running in standalone mode (stdin is a TTY) — MCP stdio transport disabled`);
+    return;
+  }
+
   const transport = new StdioServerTransport();
   await deps.server.connect(transport);
   deps.logger.info(`${SPRINT_OS_DISPLAY_NAME} MCP server running on stdio`, { version: "1.2.0" });

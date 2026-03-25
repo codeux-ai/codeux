@@ -6,6 +6,7 @@ import type {
   PlanSprintOptions,
   ProjectCollectionResponse,
   ProjectSummary,
+  SprintCollectionResponse,
   SprintMarkdownExportBundle,
   SprintMarkdownImportInput,
   SprintRecord,
@@ -87,8 +88,20 @@ export const setProjectPreferredWorker = async (
   });
 };
 
-export const fetchSprints = async (projectId: string): Promise<SprintRecord[]> => {
-  return fetchJson<SprintRecord[]>(`/api/projects/${encodeURIComponent(projectId)}/sprints`);
+export const fetchSprints = async (projectId: string): Promise<SprintCollectionResponse> => {
+  return fetchJson<SprintCollectionResponse>(`/api/projects/${encodeURIComponent(projectId)}/sprints`);
+};
+
+export const selectSprint = async (projectId: string, sprintId: string | null): Promise<string | null> => {
+  const response = await fetchJson<{ selectedSprintId: string | null }>(
+    `/api/projects/${encodeURIComponent(projectId)}/selected-sprint`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sprintId }),
+    }
+  );
+  return response.selectedSprintId;
 };
 
 export const fetchProjectExecution = async (projectId: string): Promise<ExecutionDashboardSnapshot> => {

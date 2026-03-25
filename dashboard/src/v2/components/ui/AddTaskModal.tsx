@@ -19,6 +19,7 @@ interface AddTaskModalProps {
   sprints: Sprint[];
   availableTasks: Task[];
   initialTask?: Task | null;
+  defaultSprintId?: string | null;
   initialSprintId?: string | null;
   onClose: () => void;
   onSubmit: (task: TaskDraft) => Promise<void> | void;
@@ -37,13 +38,14 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   sprints,
   availableTasks,
   initialTask,
+  defaultSprintId,
   initialSprintId,
   onClose,
   onSubmit,
 }) => {
   const backdropRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const [sprintId, setSprintId] = useState(initialTask?.sprintId || initialSprintId || sprints[0]?.id || "");
+  const [sprintId, setSprintId] = useState(initialTask?.sprintId || defaultSprintId || initialSprintId || sprints[0]?.id || "");
   const [title, setTitle] = useState(initialTask?.title || "");
   const [description, setDescription] = useState(initialTask?.description || "");
   const [promptMarkdown, setPromptMarkdown] = useState(initialTask?.promptMarkdown || "");

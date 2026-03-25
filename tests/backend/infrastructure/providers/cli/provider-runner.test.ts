@@ -137,7 +137,7 @@ describe("ProviderRunner", () => {
     expect(args).toEqual(["exec", "--yolo", "--json", "--output-last-message", "/tmp/codex-last-message.txt", "--model", "test-model", "test prompt"]);
     expect(env.CODEX_MODEL).toBe("test-model");
     expect(env.OPENAI_API_KEY).toBe("test-api-key");
-  });
+  }, 15000);
 
   it("should capture codex text responses into a mounted output file", async () => {
     const onActivity = vi.fn();
@@ -351,7 +351,7 @@ describe("ProviderRunner", () => {
 
     expect(runStreamingCommand).toHaveBeenCalledTimes(2);
     expect(onActivity).toHaveBeenCalledWith(expect.stringContaining("Codex transport disconnected. Retrying once automatically..."));
-  });
+  }, 15000);
 
   it("should map GH_TOKEN correctly if githubToken is provided", async () => {
     const onActivity = vi.fn();

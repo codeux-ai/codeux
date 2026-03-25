@@ -28,6 +28,40 @@ afterEach(async () => {
 });
 
 describe("ProjectManagementRepository", () => {
+
+  it("preserves active sprint selection on creation and deletion", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Sprint Selection",
+      sourceType: "local",
+      sourceRef: "/workspace/sprint-selection",
+    });
+
+    const sprint1 = repository.createSprint(project.id, {
+      name: "Sprint 1",
+    });
+
+    expect(repository.getSelectedSprintId(project.id)).toBe(sprint1.id);
+    expect(repository.listSprints(project.id).selectedSprintId).toBe(sprint1.id);
+
+    const sprint2 = repository.createSprint(project.id, {
+      name: "Sprint 2",
+    });
+
+    expect(repository.getSelectedSprintId(project.id)).toBe(sprint2.id);
+    expect(repository.listSprints(project.id).selectedSprintId).toBe(sprint2.id);
+
+    repository.setSelectedSprintId(project.id, sprint1.id);
+    expect(repository.getSelectedSprintId(project.id)).toBe(sprint1.id);
+
+    // Deleting the selected sprint should fall back to next sprint
+    repository.deleteSprint(sprint1.id);
+    expect(repository.getSelectedSprintId(project.id)).toBe(sprint2.id);
+
+    repository.deleteSprint(sprint2.id);
+    expect(repository.getSelectedSprintId(project.id)).toBeNull();
+  });
+
   it("creates projects, sprints, tasks, and dependency summaries in sqlite", async () => {
     const { repository, executionRepository } = await createRepository();
 
@@ -70,7 +104,7 @@ describe("ProjectManagementRepository", () => {
     });
 
     const projects = repository.listProjects().projects;
-    const sprints = repository.listSprints(project.id);
+    const sprints = repository.listSprints(project.id).sprints;
     const tasks = repository.listTasks(project.id, sprint.id);
 
     expect(projects).toHaveLength(1);
@@ -255,7 +289,7 @@ describe("ProjectManagementRepository", () => {
     expect(repository.getSprint(sprint.id)).toMatchObject({
       status: "cancelled",
     });
-    expect(repository.listSprints(project.id)[0]).toMatchObject({
+    expect(repository.listSprints(project.id).sprints[0]).toMatchObject({
       status: "cancelled",
     });
   });

@@ -1,0 +1,15 @@
+{
+  "name": "Test Template",
+  "description": "",
+  "icon": "Bug",
+  "category": "LOL",
+  "agentInstructionMarkdown": "Test",
+  "defaultTaskCount": 5,
+  "agentPresetId": "213fae24-55b0-499f-acc2-9ed06d06fba0",
+  "id": "qs-custom-236038c0-1e62-422f-9001-90e5b0d5819e",
+  "projectId": "4071e4a9-9646-4f4c-a407-23d697e5f562",
+  "isBuiltIn": false,
+  "createdAt": "2026-03-25T09:04:47.597Z",
+  "updatedAt": "2026-03-25T09:34:04.696Z",
+  "categoryColor": "#22c55e"
+}

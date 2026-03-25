@@ -62,3 +62,58 @@ test("deriveTaskBoardState: applies list window and caps visible tasks but retai
   expect(pendingColumn.count).toBe(30);
   expect(pendingColumn.tasks.length).toBe(20);
 });
+
+test("deriveTaskBoardState: handles coding_completed correctly inside in_progress lane", () => {
+  const tasks = [
+    createTask("1", "coding_completed", "critical"),
+    createTask("2", "in_progress", "high"),
+    createTask("3", "pending", "low"),
+    createTask("4", "completed", "low"),
+  ];
+
+  const state1 = deriveTaskBoardState(tasks, "all", "all", "All");
+
+  // Total filtered and stats total
+  expect(state1.filteredTasks.length).toBe(4);
+  expect(state1.stats.total).toBe(4);
+
+  // Stats
+  expect(state1.stats.inProgress).toBe(2); // 1 in_progress + 1 coding_completed
+  expect(state1.stats.completed).toBe(1);
+  expect(state1.stats.critical).toBe(1);
+
+  // Columns
+  expect(state1.columns.length).toBe(3); // pending, in_progress, completed
+
+  const inProgressCol = state1.columns.find(c => c.status === "in_progress");
+  expect(inProgressCol).toBeDefined();
+  expect(inProgressCol!.count).toBe(2);
+  expect(inProgressCol!.tasks.map(t => t.status)).toContain("in_progress");
+  expect(inProgressCol!.tasks.map(t => t.status)).toContain("coding_completed");
+});
+
+test("deriveTaskBoardState: handles filtered status view when filtering by all", () => {
+  const tasks = [
+    createTask("1", "coding_completed", "critical"),
+  ];
+
+  // when filtered by "all", "in_progress" column should contain the coding_completed task.
+  const state = deriveTaskBoardState(tasks, "all", "all", "All");
+
+  const inProgressCol = state.columns.find(c => c.status === "in_progress")!;
+  expect(inProgressCol.count).toBe(1);
+});
+
+test("deriveTaskBoardState: filtered views - filtering by in_progress shows both in_progress and coding_completed", () => {
+  const tasks = [
+    createTask("1", "coding_completed", "critical"),
+    createTask("2", "in_progress", "high"),
+    createTask("3", "pending", "low"),
+  ];
+
+  const state = deriveTaskBoardState(tasks, "in_progress", "all", "All");
+
+  expect(state.filteredTasks.length).toBe(2);
+  const inProgressCol = state.columns.find(c => c.status === "in_progress")!;
+  expect(inProgressCol.count).toBe(2);
+});

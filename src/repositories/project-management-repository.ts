@@ -9,6 +9,7 @@ import type {
   ProjectSourceType,
   ProjectSummary,
   SprintRecord,
+  SprintCollectionResponse,
   TaskRecord,
   UpdateProjectInput,
   UpdateSprintInput,
@@ -154,6 +155,8 @@ export class ProjectManagementRepository {
 
   findProjectByBaseDir(repoPath: string): ProjectSummary | null {
     const normalizedRepoPath = path.resolve(repoPath);
+    // Also match paths stored with a trailing slash
+    const withTrailingSlash = normalizedRepoPath + "/";
     const row = this.db.prepare(`
       SELECT
         p.id,
@@ -174,11 +177,11 @@ export class ProjectManagementRepository {
         (SELECT MAX(CASE WHEN sr.status IN ('running', 'queued') THEN 1 ELSE 0 END) FROM sprint_runs sr WHERE sr.project_id = p.id) AS has_active_runs
       FROM projects p
       LEFT JOIN project_sources ps ON ps.project_id = p.id
-      WHERE p.base_dir = ?
-         OR ps.source_ref = ?
+      WHERE p.base_dir IN (?, ?)
+         OR ps.source_ref IN (?, ?)
       ORDER BY p.updated_at DESC
       LIMIT 1
-    `).get(normalizedRepoPath, normalizedRepoPath) as ProjectRow | undefined;
+    `).get(normalizedRepoPath, withTrailingSlash, normalizedRepoPath, withTrailingSlash) as ProjectRow | undefined;
 
     return row ? this.mapProjectRow(row) : null;
   }
@@ -280,7 +283,8 @@ export class ProjectManagementRepository {
     this.publishProjectsRefresh();
   }
 
-  listSprints(projectId: string): SprintRecord[] {
+  listSprints(projectId: string): SprintCollectionResponse {
+    const selectedSprintId = this.getSelectedSprintId(projectId);
     const rows = this.db.prepare(`
       SELECT
         s.id,
@@ -313,7 +317,10 @@ export class ProjectManagementRepository {
       ORDER BY COALESCE(s.number, 0) DESC, s.created_at DESC
     `).all(projectId) as unknown as SprintRow[];
 
-    return rows.map((row) => this.mapSprintRow(row));
+    return {
+      sprints: rows.map((row) => this.mapSprintRow(row)),
+      selectedSprintId,
+    };
   }
 
   createSprint(projectId: string, input: CreateSprintInput): SprintRecord {
@@ -348,6 +355,7 @@ export class ProjectManagementRepository {
 
     this.touchProject(projectId, now);
     const created = this.requireSprint(id);
+    this.setSelectedSprintId(projectId, id);
     this.publishProjectStructureRefresh(projectId);
     return created;
   }
@@ -386,6 +394,19 @@ export class ProjectManagementRepository {
   deleteSprint(sprintId: string): void {
     const sprint = this.requireSprint(sprintId);
     this.db.prepare(`DELETE FROM sprints WHERE id = ?`).run(sprintId);
+
+    if (this.getSelectedSprintId(sprint.projectId) === sprintId) {
+      const nextSprintRow = this.db.prepare(`
+        SELECT id
+        FROM sprints
+        WHERE project_id = ?
+        ORDER BY COALESCE(number, 0) DESC, created_at DESC
+        LIMIT 1
+      `).get(sprint.projectId) as { id: string } | undefined;
+
+      this.setSelectedSprintId(sprint.projectId, nextSprintRow?.id ?? null);
+    }
+
     this.touchProject(sprint.projectId);
     this.publishProjectStructureRefresh(sprint.projectId);
   }
@@ -524,6 +545,49 @@ export class ProjectManagementRepository {
     this.db.prepare(`DELETE FROM tasks WHERE sprint_id = ?`).run(sprintId);
     this.touchProject(sprint.projectId);
     this.publishProjectStructureRefresh(sprint.projectId);
+  }
+
+
+  getSelectedSprintId(projectId: string): string | null {
+    this.requireProject(projectId);
+    const row = this.db.prepare(`
+      SELECT payload
+      FROM app_settings
+      WHERE key = ?
+    `).get(`selected_sprint_id_${projectId}`) as { payload: string } | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(row.payload) as { sprintId?: string | null };
+      return parsed.sprintId ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  setSelectedSprintId(projectId: string, sprintId: string | null): string | null {
+    this.requireProject(projectId);
+    if (sprintId) {
+      const sprint = this.requireSprint(sprintId);
+      if (sprint.projectId !== projectId) {
+        throw new Error(`Sprint ${sprintId} does not belong to project ${projectId}`);
+      }
+    }
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      INSERT INTO app_settings (key, payload, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at
+    `).run(
+      `selected_sprint_id_${projectId}`,
+      JSON.stringify({ sprintId }),
+      now
+    );
+
+    return sprintId;
   }
 
   getSelectedProjectId(): string | null {

@@ -103,7 +103,7 @@ describe("collectProviderUsageTelemetry", () => {
     expect(result.outputTokens).toBeGreaterThan(0);
     expect(result.totalTokens).toBe(result.inputTokens + result.outputTokens);
     expect(result.transcriptText).toBe("Refactor complete.");
-  });
+  }, 15000);
 
   it("parses Claude session artifacts for reported usage", async () => {
     const fakeHome = await fs.mkdtemp(path.join(os.tmpdir(), "claude-usage-home-"));

@@ -26,8 +26,13 @@ export function getSprintHumanInterventionBySprintId(
 
 export function getPrimaryPausedInterventionRun(
   snapshot: ExecutionDashboardSnapshot,
+  selectedSprintId?: string | null,
 ): ExecutionSprintRunSummary | null {
-  return snapshot.sprintRuns.find((run) => run.status === "paused" && Boolean(run.humanIntervention)) || null;
+  return snapshot.sprintRuns.find((run) => (
+    run.status === "paused"
+    && Boolean(run.humanIntervention)
+    && (!selectedSprintId || run.sprintId === selectedSprintId)
+  )) || null;
 }
 
 export function getPrimaryOverviewIntervention(

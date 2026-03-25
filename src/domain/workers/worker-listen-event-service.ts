@@ -222,7 +222,7 @@ export class WorkerListenEventService {
     const sprintId = activeSprintSummary?.sprintId || null;
     const sprint = sprintId
       ? this.projectManagementRepository.getSprint(sprintId)
-      : this.projectManagementRepository.listSprints(projectId)[0] || null;
+      : this.projectManagementRepository.listSprints(projectId).sprints[0] || null;
 
     const settings = this.getDashboardSettings({
       projectId: project.id,

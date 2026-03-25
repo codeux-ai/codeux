@@ -527,6 +527,7 @@ export interface CliWorkflowSettings {
   containerGeminiAuthPath: string;
   containerCodexAuthPath: string;
   containerClaudeCodeAuthPath: string;
+  maxPlanningJsonRetries: number;
 }
 
 export interface WorkerSettings {

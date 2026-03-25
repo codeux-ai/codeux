@@ -23,6 +23,14 @@ import type {
   SprintSettingsOverride,
   SystemSettings,
 } from "../contracts/settings-scope-types.js";
+
+import type {
+  CreateQuicksprintTemplateInput,
+  QuicksprintExecutionInput,
+  QuicksprintTemplateRecord,
+  UpdateQuicksprintTemplateInput,
+} from "../contracts/quicksprint-types.js";
+import type { QuicksprintService } from "../services/quicksprint-service.js";
 import type {
   AgentPresetRecord,
   CreateAgentPresetInput,
@@ -44,6 +52,7 @@ import type {
   ImprovePromptInput,
   PlanSprintOptions,
   ProjectCollectionResponse,
+  SprintCollectionResponse,
   ProjectSummary,
   SprintMarkdownExportBundle,
   SprintMarkdownImportInput,
@@ -109,7 +118,8 @@ export interface DashboardServerOptions {
   updateProject: (projectId: string, input: UpdateProjectInput) => ProjectSummary;
   deleteProject: (projectId: string) => void;
   selectProject: (projectId: string | null) => string | null;
-  listSprints: (projectId: string) => SprintRecord[];
+  selectSprint: (projectId: string, sprintId: string | null) => string | null;
+  listSprints: (projectId: string) => SprintCollectionResponse;
   createSprint: (projectId: string, input: CreateSprintInput) => SprintRecord;
   updateSprint: (sprintId: string, input: UpdateSprintInput) => SprintRecord;
   deleteSprint: (sprintId: string) => void;
@@ -135,8 +145,11 @@ export interface DashboardServerOptions {
   postConversationMessage: (projectId: string, input: CreateDashboardConversationMessageInput) => ConversationMessageRecord;
   rerunTask: (taskId: string) => Promise<unknown>;
   orchestrateSprint: (projectId: string, sprintId: string) => Promise<unknown>;
+
   improveSprintPrompt?: (projectId: string, input: ImprovePromptInput, signal?: AbortSignal) => Promise<unknown>;
   planSprint?: (projectId: string, sprintId: string, options: PlanSprintOptions, signal?: AbortSignal) => Promise<unknown>;
+  quicksprintService?: QuicksprintService;
+
   pauseSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
   cancelSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
   forceCancelSprintRun: (sprintRunId: string) => Promise<unknown> | unknown;
@@ -474,6 +487,18 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     }
   });
 
+    app.put("/api/projects/:projectId/selected-sprint", (req, res) => {
+    try {
+      const projectId = String(req.params.projectId || "").trim();
+      const sprintId = typeof req.body?.sprintId === "string" && req.body.sprintId.trim()
+        ? req.body.sprintId.trim()
+        : null;
+      res.json({ selectedSprintId: options.selectSprint(projectId, sprintId) });
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to select sprint") });
+    }
+  });
+
   app.get("/api/projects/:projectId/sprints", (req, res) => {
     try {
       res.json(options.listSprints(String(req.params.projectId || "").trim()));
@@ -769,6 +794,96 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       res.status(202).json(result);
     } catch (error) {
       res.status(400).json({ error: toErrorMessage(error, "Failed to start sprint orchestration") });
+    }
+  });
+
+  app.get("/api/projects/:projectId/quicksprints/templates", (req, res) => {
+    try {
+      const projectId = String(req.params.projectId || "").trim();
+      if (!options.quicksprintService) {
+        res.status(404).json({ error: "Quicksprint service is not enabled." });
+        return;
+      }
+      res.json(options.quicksprintService.listTemplates(projectId));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to list quicksprint templates") });
+    }
+  });
+
+  app.get("/api/projects/:projectId/quicksprints/templates/:templateId", (req, res) => {
+    try {
+      const projectId = String(req.params.projectId || "").trim();
+      const templateId = String(req.params.templateId || "").trim();
+      if (!options.quicksprintService) {
+        res.status(404).json({ error: "Quicksprint service is not enabled." });
+        return;
+      }
+      const template = options.quicksprintService.getTemplate(projectId, templateId);
+      if (!template) {
+        res.status(404).json({ error: "Template not found" });
+        return;
+      }
+      res.json(template);
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to get quicksprint template") });
+    }
+  });
+
+  app.post("/api/projects/:projectId/quicksprints/templates", (req, res) => {
+    try {
+      const projectId = String(req.params.projectId || "").trim();
+      if (!options.quicksprintService) {
+        res.status(404).json({ error: "Quicksprint service is not enabled." });
+        return;
+      }
+      const template = options.quicksprintService.createCustomTemplate(projectId, req.body as CreateQuicksprintTemplateInput);
+      res.status(201).json(template);
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to create custom quicksprint template") });
+    }
+  });
+
+  app.patch("/api/projects/:projectId/quicksprints/templates/:templateId", (req, res) => {
+    try {
+      const projectId = String(req.params.projectId || "").trim();
+      const templateId = String(req.params.templateId || "").trim();
+      if (!options.quicksprintService) {
+        res.status(404).json({ error: "Quicksprint service is not enabled." });
+        return;
+      }
+      const template = options.quicksprintService.updateCustomTemplate(projectId, templateId, req.body as UpdateQuicksprintTemplateInput);
+      res.json(template);
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to update custom quicksprint template") });
+    }
+  });
+
+  app.delete("/api/projects/:projectId/quicksprints/templates/:templateId", (req, res) => {
+    try {
+      const projectId = String(req.params.projectId || "").trim();
+      const templateId = String(req.params.templateId || "").trim();
+      if (!options.quicksprintService) {
+        res.status(404).json({ error: "Quicksprint service is not enabled." });
+        return;
+      }
+      options.quicksprintService.deleteCustomTemplate(projectId, templateId);
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to delete custom quicksprint template") });
+    }
+  });
+
+  app.post("/api/projects/:projectId/quicksprints/execute", async (req, res) => {
+    try {
+      const projectId = String(req.params.projectId || "").trim();
+      if (!options.quicksprintService) {
+        res.status(404).json({ error: "Quicksprint service is not enabled." });
+        return;
+      }
+      const sprint = await options.quicksprintService.executeQuicksprint(projectId, req.body as QuicksprintExecutionInput);
+      res.status(201).json(sprint);
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to execute quicksprint") });
     }
   });
 

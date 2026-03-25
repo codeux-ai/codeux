@@ -12,6 +12,7 @@ Importantly, **API routes and backend contracts remain unchanged**. The optimiza
 
 Data fetching is governed by a unified resource layer rather than ad-hoc `useEffect` blocks. The shared resource provider ensures that:
 - Requests for the same resource key within a page are deduplicated.
+- Reusable cache payloads map project and sprint contexts so switching selected sprints does not repeatedly refetch unchanged baseline data.
 - Stale data is preserved during background refreshes to prevent UI flashing.
 - Cache invalidation is coordinated through realtime websocket events.
 
@@ -26,9 +27,9 @@ When a realtime websocket event arrives (such as `project.structure.updated` or 
 The v2 frontend is strictly organized into page-scoped module boundaries:
 - **Overview:** Project collection and aggregate system stats.
 - **Sprints:** Project-scoped sprint registry, composer, and markdown export.
-- **Tasks:** Project-scoped task board and dependency management.
+- **Tasks:** Project-scoped task board, sprint-filtered view based on active sprint selection, and dependency management.
 - **Stats:** Project-scoped usage telemetry, token trends, and performance ledgers.
-- **Live:** Active execution runtime, running tasks, and live realtime feeds.
+- **Live:** Active execution runtime bounded by the selected active sprint, running tasks, and live realtime feeds.
 
 Each module exclusively loads the resources it requires. Navigation between modules drops unused resource subscriptions, reducing memory overhead and background polling pressure.
 

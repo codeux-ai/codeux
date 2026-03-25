@@ -1,5 +1,5 @@
 import type { CliExecutionMode, DashboardSettings } from "../../../contracts/app-types.js";
-import { readBoolean, readString } from "../../../shared/config/value-readers.js";
+import { readBoolean, readInteger, readString } from "../../../shared/config/value-readers.js";
 import {
   CLI_EXECUTION_MODES,
   DEFAULT_DASHBOARD_SETTINGS,
@@ -84,5 +84,9 @@ export const sanitizeCliWorkflow = (
       cliInput.containerClaudeCodeAuthPath,
       DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerClaudeCodeAuthPath
     ).trim() || DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.containerClaudeCodeAuthPath,
+    maxPlanningJsonRetries: Math.max(0, Math.min(10, readInteger(
+      cliInput.maxPlanningJsonRetries,
+      DEFAULT_DASHBOARD_SETTINGS.cliWorkflow.maxPlanningJsonRetries
+    ))),
   };
 };

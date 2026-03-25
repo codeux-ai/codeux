@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 import type { MemoryService } from "./memory-service.js";
-import type { DashboardSettings } from "../contracts/app-types.js";
+import type { CliWorkflowSettings, DashboardSettings } from "../contracts/app-types.js";
 import type {
   TaskExecutorType,
   TaskPriority,
@@ -65,57 +65,101 @@ interface PlannedSprintPayload {
   tasks: PlannedTaskDraft[];
 }
 
-function extractJsonLikeBlock(bodyMarkdown: string): string {
+interface VirtualPlanningResult {
+  bodyMarkdown: string;
+  nativeSessionId: string | null;
+  provider: DashboardSettings["workers"]["virtualWorkerProvider"];
+  sessionId: string;
+  workflowSettings: CliWorkflowSettings;
+  providerSettings: { model: string; apiKey: string; thinkingMode?: unknown };
+}
+
+export function extractJsonLikeBlock(bodyMarkdown: string): string {
   const trimmed = bodyMarkdown.trim();
-  const fencedMatch = trimmed.match(/```[a-zA-Z0-9_-]*\s*([\s\S]*?)```/);
-  if (fencedMatch?.[1]?.trim()) {
-    return fencedMatch[1].trim();
+
+  // Strategy 1: Look for a fenced code block whose content looks like JSON.
+  // Skip fenced blocks that capture code examples inside JSON string values
+  // (e.g. ```ts ... ``` embedded in promptMarkdown fields).
+  const fenceRegex = /```[a-zA-Z0-9_-]*\s*([\s\S]*?)```/g;
+  let fencedMatch: RegExpExecArray | null;
+  while ((fencedMatch = fenceRegex.exec(trimmed)) !== null) {
+    const fencedContent = fencedMatch[1]?.trim();
+    if (fencedContent && (fencedContent.startsWith("{") || fencedContent.startsWith("["))) {
+      return fencedContent;
+    }
   }
 
-  const tryBalanced = (openChar: "{" | "[", closeChar: "}" | "]"): string | null => {
-    const start = trimmed.indexOf(openChar);
-    if (start < 0) {
-      return null;
-    }
-    let depth = 0;
-    let inString = false;
-    let escaped = false;
-    for (let index = start; index < trimmed.length; index += 1) {
-      const char = trimmed[index]!;
-      if (inString) {
-        if (escaped) {
-          escaped = false;
+  // Strategy 2: Find balanced brace/bracket blocks. Try each candidate starting
+  // position — if the first balanced block isn't valid JSON (e.g. a stray log
+  // object like `{ errno: -2 }`), advance to the next `{` and retry.
+  const findBalancedJson = (openChar: "{" | "[", closeChar: "}" | "]"): string | null => {
+    let searchFrom = 0;
+    while (searchFrom < trimmed.length) {
+      const start = trimmed.indexOf(openChar, searchFrom);
+      if (start < 0) return null;
+
+      let depth = 0;
+      let inString = false;
+      let escaped = false;
+      let endIndex = -1;
+      for (let index = start; index < trimmed.length; index += 1) {
+        const char = trimmed[index]!;
+        if (inString) {
+          if (escaped) { escaped = false; continue; }
+          if (char === "\\") { escaped = true; continue; }
+          if (char === "\"") { inString = false; }
           continue;
         }
-        if (char === "\\") {
-          escaped = true;
-          continue;
+        if (char === "\"") { inString = true; continue; }
+        if (char === openChar) { depth += 1; continue; }
+        if (char === closeChar) {
+          depth -= 1;
+          if (depth === 0) { endIndex = index; break; }
         }
-        if (char === "\"") {
-          inString = false;
-        }
-        continue;
       }
 
-      if (char === "\"") {
-        inString = true;
-        continue;
-      }
-      if (char === openChar) {
-        depth += 1;
-        continue;
-      }
-      if (char === closeChar) {
-        depth -= 1;
-        if (depth === 0) {
-          return trimmed.slice(start, index + 1);
-        }
+      if (endIndex < 0) return null;
+
+      const candidate = trimmed.slice(start, endIndex + 1);
+      try {
+        JSON.parse(candidate);
+        return candidate;
+      } catch {
+        // Not valid JSON — try next opening brace
+        searchFrom = start + 1;
       }
     }
     return null;
   };
 
-  return tryBalanced("{", "}") || tryBalanced("[", "]") || trimmed;
+  const candidate = findBalancedJson("{", "}") || findBalancedJson("[", "]") || trimmed;
+
+  // Unwrap wrapper objects that contain the real payload inside a stringified
+  // "response" field (common with Gemini/virtual worker session envelopes like
+  // `{ "session_id": "...", "response": "{...actual JSON...}", "stats": {...} }`).
+  try {
+    const parsed = JSON.parse(candidate);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed) &&
+      typeof parsed.response === "string"
+    ) {
+      const inner = parsed.response.trim();
+      if (inner.startsWith("{") || inner.startsWith("[")) {
+        try {
+          JSON.parse(inner);
+          return inner;
+        } catch {
+          // inner response isn't valid JSON on its own — fall through
+        }
+      }
+    }
+  } catch {
+    // candidate isn't valid JSON — return as-is for caller to handle
+  }
+
+  return candidate;
 }
 
 export class PlanningAgentService {
@@ -147,9 +191,12 @@ export class PlanningAgentService {
       memoryContext,
     });
     signal?.throwIfAborted();
-    const reply = worker
-      ? await this.postRequestAndWaitForReply(projectId, thread.id, worker.id, prompt, signal)
-      : await this.runVirtualPlanningRequest({
+    let payload: { goal?: string };
+    if (worker) {
+      const reply = await this.postRequestAndWaitForReply(projectId, thread.id, worker.id, prompt, signal);
+      payload = this.parseJsonReply<{ goal?: string }>(reply.bodyMarkdown);
+    } else {
+      const virtualResult = await this.runVirtualPlanningRequest({
         projectId,
         sprintId: null,
         threadId: thread.id,
@@ -159,7 +206,17 @@ export class PlanningAgentService {
         overrides: input.overrides,
         signal,
       });
-    const payload = this.parseJsonReply<{ goal?: string }>(reply.bodyMarkdown);
+      payload = await this.parseWithJsonRetry({
+        initialResult: virtualResult,
+        parseFn: (body) => this.parseJsonReply<{ goal?: string }>(body),
+        projectId,
+        sprintId: null,
+        threadId: thread.id,
+        repoPath: project.baseDir,
+        settings: runtime.settings,
+        signal,
+      });
+    }
     const goal = String(payload.goal || "").trim();
     if (!goal) {
       throw new Error("Planning agent reply did not include an improved sprint prompt.");
@@ -208,9 +265,12 @@ export class PlanningAgentService {
       goal: sprint.goal,
       memoryContext,
     });
-    const reply = worker
-      ? await this.postRequestAndWaitForReply(projectId, thread.id, worker.id, prompt, signal)
-      : await this.runVirtualPlanningRequest({
+    let payload: PlannedSprintPayload;
+    if (worker) {
+      const reply = await this.postRequestAndWaitForReply(projectId, thread.id, worker.id, prompt, signal);
+      payload = this.parsePlannedSprintReply(reply.bodyMarkdown);
+    } else {
+      const virtualResult = await this.runVirtualPlanningRequest({
         projectId,
         sprintId,
         threadId: thread.id,
@@ -220,7 +280,17 @@ export class PlanningAgentService {
         overrides: options.overrides,
         signal,
       });
-    const payload = this.parsePlannedSprintReply(reply.bodyMarkdown);
+      payload = await this.parseWithJsonRetry({
+        initialResult: virtualResult,
+        parseFn: (body) => this.parsePlannedSprintReply(body),
+        projectId,
+        sprintId,
+        threadId: thread.id,
+        repoPath: project.baseDir,
+        settings: runtime.settings,
+        signal,
+      });
+    }
 
     if (options.replan) {
       this.deps.projectManagementRepository.deleteTasksBySprint(sprintId);
@@ -370,7 +440,7 @@ export class PlanningAgentService {
     rawPrompt: string;
     overrides?: PlanningOverrides;
     signal?: AbortSignal;
-  }): Promise<{ bodyMarkdown: string }> {
+  }): Promise<VirtualPlanningResult> {
     const provider = args.overrides?.virtualProvider || args.settings.workers.virtualWorkerProvider;
     const providerSettings = { ...args.settings.aiProvider.providers[provider] };
     if (!providerSettings) {
@@ -491,7 +561,170 @@ export class PlanningAgentService {
       ].join("\n"),
     });
 
-    return { bodyMarkdown };
+    return {
+      bodyMarkdown,
+      nativeSessionId: result.nativeSessionId,
+      provider,
+      sessionId,
+      workflowSettings,
+      providerSettings: {
+        model: providerSettings.model,
+        apiKey: providerSettings.apiKey,
+        thinkingMode: providerSettings.thinkingMode,
+      },
+    };
+  }
+
+  private async runVirtualPlanningFollowUp(args: {
+    projectId: string;
+    sprintId: string | null;
+    threadId: string;
+    repoPath: string;
+    settings: DashboardSettings;
+    previousResult: VirtualPlanningResult;
+    followUpPrompt: string;
+    signal?: AbortSignal;
+  }): Promise<VirtualPlanningResult> {
+    const { previousResult } = args;
+    const { provider, sessionId, workflowSettings, providerSettings } = previousResult;
+
+    this.deps.connectionChatRepository.postSystemMessage(args.projectId, {
+      threadId: args.threadId,
+      bodyMarkdown: `Retrying JSON parse in same ${this.getProviderLabel(provider)} session (session: ${sessionId}).`,
+    });
+
+    args.signal?.throwIfAborted();
+    const startedAt = new Date().toISOString();
+    const invocation = this.deps.executionRepository?.createProviderInvocationUsage({
+      projectId: args.projectId,
+      sprintId: args.sprintId,
+      sessionId,
+      provider,
+      purpose: "planning",
+      model: providerSettings.model,
+      startedAt,
+      promptChars: args.followUpPrompt.length,
+    }) || null;
+    const startedMs = Date.now();
+
+    const result = await this.providerRunner.runProviderForText({
+      provider,
+      prompt: args.followUpPrompt,
+      cwd: args.repoPath,
+      model: providerSettings.model,
+      apiKey: providerSettings.apiKey,
+      sessionId,
+      workflowSettings,
+      repoPath: args.repoPath,
+      githubToken: args.settings.git.githubToken,
+      signal: args.signal,
+      continueSessionId: previousResult.nativeSessionId || sessionId,
+      onActivity: (description, originator) => {
+        this.deps.logger?.debug("Virtual planning JSON retry activity", {
+          projectId: args.projectId,
+          threadId: args.threadId,
+          provider,
+          originator: originator || "system",
+          description,
+        });
+      },
+    });
+
+    if (invocation && this.deps.executionRepository) {
+      this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
+        status: result.ok ? "completed" : "failed",
+        model: providerSettings.model,
+        nativeSessionId: result.nativeSessionId,
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - startedMs,
+        transcriptChars: result.usageTelemetry.transcriptText.length,
+        inputTokens: result.usageTelemetry.inputTokens,
+        cachedInputTokens: result.usageTelemetry.cachedInputTokens,
+        outputTokens: result.usageTelemetry.outputTokens,
+        reasoningOutputTokens: result.usageTelemetry.reasoningOutputTokens,
+        totalTokens: result.usageTelemetry.totalTokens,
+        usageSource: result.usageTelemetry.usageSource,
+        rawUsageJson: result.usageTelemetry.rawUsageJson,
+      });
+    }
+
+    const bodyMarkdown = result.text.trim();
+    if (!result.ok || !bodyMarkdown) {
+      throw new Error(`Virtual ${this.getProviderLabel(provider)} worker JSON retry returned no usable output.`);
+    }
+
+    this.deps.connectionChatRepository.postSystemMessage(args.projectId, {
+      threadId: args.threadId,
+      bodyMarkdown: [
+        `Virtual ${this.getProviderLabel(provider)} worker JSON retry reply:`,
+        "",
+        bodyMarkdown,
+      ].join("\n"),
+    });
+
+    return {
+      bodyMarkdown,
+      nativeSessionId: result.nativeSessionId || previousResult.nativeSessionId,
+      provider,
+      sessionId,
+      workflowSettings,
+      providerSettings,
+    };
+  }
+
+  private async parseWithJsonRetry<T>(args: {
+    initialResult: VirtualPlanningResult;
+    parseFn: (bodyMarkdown: string) => T;
+    projectId: string;
+    sprintId: string | null;
+    threadId: string;
+    repoPath: string;
+    settings: DashboardSettings;
+    signal?: AbortSignal;
+  }): Promise<T> {
+    const maxRetries = args.settings.cliWorkflow?.maxPlanningJsonRetries ?? 3;
+    let currentResult = args.initialResult;
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        return args.parseFn(currentResult.bodyMarkdown);
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+
+        if (attempt >= maxRetries) break;
+
+        this.deps.logger?.warn("Planning agent JSON parse failed, retrying in same session", {
+          projectId: args.projectId,
+          attempt: attempt + 1,
+          maxRetries,
+          error: lastError.message,
+        });
+
+        const followUpPrompt = [
+          "Your previous output could not be parsed as valid JSON.",
+          `Parse error: ${lastError.message}`,
+          "",
+          "Please output ONLY the valid JSON sprint definition. Requirements:",
+          "- Output raw JSON only — no markdown fences, no commentary, no prose before or after.",
+          "- Ensure all string values are properly escaped (especially quotes and newlines inside promptMarkdown).",
+          "- Use the exact schema from the original instructions: {\"goal\":\"...\",\"tasks\":[...]}",
+        ].join("\n");
+
+        currentResult = await this.runVirtualPlanningFollowUp({
+          projectId: args.projectId,
+          sprintId: args.sprintId,
+          threadId: args.threadId,
+          repoPath: args.repoPath,
+          settings: args.settings,
+          previousResult: currentResult,
+          followUpPrompt,
+          signal: args.signal,
+        });
+      }
+    }
+
+    throw lastError || new Error("Planning agent reply was not valid JSON.");
   }
 
   private buildImprovePrompt(args: {

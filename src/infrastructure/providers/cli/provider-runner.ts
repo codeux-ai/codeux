@@ -34,67 +34,36 @@ export const providerSpecs: Record<Extract<ProviderId, "gemini" | "codex" | "cla
   }
 };
 
+export interface ProviderRunInput {
+  provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
+  prompt: string;
+  cwd: string;
+  model: string;
+  apiKey: string;
+  sessionId: string;
+  workflowSettings: CliWorkflowSettings;
+  repoPath: string;
+  githubToken?: string;
+  signal?: AbortSignal;
+  onActivity: (desc: string, originator?: string) => void;
+  /** Pass a previous nativeSessionId to continue an existing CLI session.
+   *  Claude Code: reuses --session-id. Gemini: adds --resume. Codex: uses exec resume --last. */
+  continueSessionId?: string | null;
+}
+
 export interface IProviderRunner {
-  runProvider(input: {
-    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
-    prompt: string;
-    cwd: string;
-    model: string;
-    apiKey: string;
-    sessionId: string;
-    workflowSettings: CliWorkflowSettings;
-    repoPath: string;
-    githubToken?: string;
-    signal?: AbortSignal;
-    onActivity: (desc: string, originator?: string) => void;
-  }): Promise<ProviderRunResult>;
-  runProviderForText(input: {
-    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
-    prompt: string;
-    cwd: string;
-    model: string;
-    apiKey: string;
-    sessionId: string;
-    workflowSettings: CliWorkflowSettings;
-    repoPath: string;
-    githubToken?: string;
-    signal?: AbortSignal;
-    onActivity: (desc: string, originator?: string) => void;
-  }): Promise<ProviderRunResult & { text: string }>;
+  runProvider(input: ProviderRunInput): Promise<ProviderRunResult>;
+  runProviderForText(input: ProviderRunInput): Promise<ProviderRunResult & { text: string }>;
 }
 
 export class ProviderRunner implements IProviderRunner {
   constructor(private readonly dockerRunner: IDockerRunner) { }
 
-  async runProvider(input: {
-    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
-    prompt: string;
-    cwd: string;
-    model: string;
-    apiKey: string;
-    sessionId: string;
-    workflowSettings: CliWorkflowSettings;
-    repoPath: string;
-    githubToken?: string;
-    signal?: AbortSignal;
-    onActivity: (desc: string, originator?: string) => void;
-  }): Promise<ProviderRunResult> {
+  async runProvider(input: ProviderRunInput): Promise<ProviderRunResult> {
     return await this.runProviderInternal(input);
   }
 
-  async runProviderForText(input: {
-    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
-    prompt: string;
-    cwd: string;
-    model: string;
-    apiKey: string;
-    sessionId: string;
-    workflowSettings: CliWorkflowSettings;
-    repoPath: string;
-    githubToken?: string;
-    signal?: AbortSignal;
-    onActivity: (desc: string, originator?: string) => void;
-  }): Promise<ProviderRunResult & { text: string }> {
+  async runProviderForText(input: ProviderRunInput): Promise<ProviderRunResult & { text: string }> {
     const outputPath = input.provider === "codex"
       ? path.join(getRepoSprintOsPath(input.repoPath, "tmp"), `provider-last-message-${input.sessionId}.txt`)
       : null;
@@ -137,12 +106,14 @@ export class ProviderRunner implements IProviderRunner {
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
     codexOutputPath?: string | null;
+    continueSessionId?: string | null;
   }): Promise<ProviderRunResult> {
     const { provider, prompt, cwd, model, apiKey, sessionId, workflowSettings, repoPath, githubToken, signal, onActivity } = input;
     const providerEnv = this.withProviderEnv(provider, model, apiKey, workflowSettings, githubToken);
-    const nativeSessionId = provider === "claude-code" ? randomUUID() : null;
+    const nativeSessionId = input.continueSessionId || (provider === "claude-code" ? randomUUID() : null);
 
-    const spec = this.buildCommandSpec(provider, model, prompt, input.codexOutputPath, nativeSessionId);
+    const continueSession = !!input.continueSessionId;
+    const spec = this.buildCommandSpec(provider, model, prompt, input.codexOutputPath, nativeSessionId, continueSession);
     const { command, args } = spec;
 
     const runCmd = async () => {
@@ -200,9 +171,13 @@ export class ProviderRunner implements IProviderRunner {
     prompt: string,
     codexOutputPath?: string | null,
     nativeSessionId?: string | null,
+    continueSession?: boolean,
   ): { command: string; args: string[] } {
     if (provider === "codex" && codexOutputPath) {
-      const args = ["exec", "--yolo", "--json", "--output-last-message", codexOutputPath];
+      // `codex exec resume --last` continues the most recent session in the cwd
+      const args = continueSession
+        ? ["exec", "resume", "--last", "--yolo", "--json", "--output-last-message", codexOutputPath]
+        : ["exec", "--yolo", "--json", "--output-last-message", codexOutputPath];
       if (model && model !== "default") {
         args.push("--model", model);
       }
@@ -217,6 +192,14 @@ export class ProviderRunner implements IProviderRunner {
       }
       args.push("-p", prompt);
       return { command: "claude", args };
+    }
+
+    if (provider === "gemini" && continueSession) {
+      // `gemini --resume` restores the last session's chat history
+      return {
+        command: "gemini",
+        args: ["--resume", "--yolo", "--output-format", "json", "--p", prompt],
+      };
     }
 
     return providerSpecs[provider](model, prompt);

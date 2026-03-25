@@ -58,9 +58,7 @@ export class DockerRunner implements IDockerRunner {
 
     await this.maybeLogDockerPathMappingHint(sessionId, repoPath, onActivity);
     const runtimeRoot = resolveDockerRuntimeRoot(repoPath);
-    const runtimeHome = providerLabel === "codex"
-      ? path.join(runtimeRoot, `home-codex-${sessionId}`)
-      : path.join(runtimeRoot, "home");
+    const runtimeHome = path.join(runtimeRoot, `home-${providerLabel}-${sessionId}`);
     const runtimeNpmPrefix = path.join(runtimeRoot, "npm-global");
     const runtimeNpmCache = path.join(runtimeRoot, "npm-cache");
 
@@ -112,7 +110,22 @@ export class DockerRunner implements IDockerRunner {
     }
 
     const userSpec = await this.resolveDockerUserSpec(cwd);
-    if (userSpec) dockerArgs.push("--user", userSpec);
+    if (userSpec) {
+      dockerArgs.push("--user", userSpec);
+      // Generate a passwd file so that os.userInfo() works inside the container.
+      // Without this, tools like Gemini CLI fail with uv_os_get_passwd ENOENT.
+      const passwdPath = path.join(runtimeRoot, "passwd");
+      const [uid, gid] = userSpec.split(":");
+      const passwdContent = [
+        "root:x:0:0:root:/root:/bin/bash",
+        "nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin",
+        `worker:x:${uid}:${gid}::${runtimeHome}:/bin/bash`,
+        "",
+      ].join("\n");
+      await fs.writeFile(passwdPath, passwdContent);
+      const passwdSource = this.mapDockerSourcePathForDaemon(passwdPath, repoPath, sessionId, "passwd", onActivity);
+      dockerArgs.push("--mount", toDockerMountArg({ source: passwdSource, destination: "/etc/passwd", readonly: true }));
+    }
 
     const passthroughEnv = pickContainerEnv(providerEnv);
     for (const variable of passthroughEnv) {

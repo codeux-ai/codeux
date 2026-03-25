@@ -14,6 +14,7 @@ import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { HumanInterventionBadge } from "./components/ui/HumanInterventionBadge.js";
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
+import { useProjectSprints } from "./hooks/use-project-sprints.js";
 import { useLiveSessionActions } from "./hooks/use-live-session-actions.js";
 import { formatTime } from "../lib/time.js";
 import { renderMarkdown } from "../lib/markdown.js";
@@ -749,6 +750,9 @@ export const LiveSessionPage: FunctionComponent = () => {
     const headerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     const { error, execution, gitStatus, gitStatusError, refreshRuntimeStatus, refreshGitStatus, status, stats, tasksWithLiveActivities } = useDashboardRuntimeData();
+    const realtimeProjectId = execution.projectId || status.project_id || null;
+    const { selectedSprintId } = useProjectSprints(realtimeProjectId);
+
     const {
         rerunningIds,
         pendingActionIds,
@@ -787,8 +791,8 @@ export const LiveSessionPage: FunctionComponent = () => {
     }, []);
 
     const runtimeState = useMemo(
-        () => deriveLiveSessionRuntimeState(status, execution),
-        [status, execution],
+        () => deriveLiveSessionRuntimeState(status, execution, selectedSprintId),
+        [status, execution, selectedSprintId],
     );
     const liveSprintRun = runtimeState.liveSprintRun;
     const pausedInterventionRun = runtimeState.pausedInterventionRun;
@@ -796,20 +800,58 @@ export const LiveSessionPage: FunctionComponent = () => {
     const hasLiveSprint = runtimeState.hasActiveSprint;
     const hasSprintContext = runtimeState.hasSprintContext;
     const [nowIso, setNowIso] = useState(() => new Date().toISOString());
-    const visibleTasksWithLiveActivities = useMemo(
-        () => (hasSprintContext ? tasksWithLiveActivities : EMPTY_TASKS),
-        [hasSprintContext, tasksWithLiveActivities],
-    );
-    const visibleStats = useMemo(
-        () => (hasSprintContext ? stats : EMPTY_RUNTIME_STATS),
-        [hasSprintContext, stats],
-    );
+    const visibleTasksWithLiveActivities = useMemo(() => {
+        if (!hasSprintContext) return EMPTY_TASKS;
+        return selectedSprintId
+            ? tasksWithLiveActivities.filter((t) => t.sprint_id === selectedSprintId)
+            : tasksWithLiveActivities;
+    }, [hasSprintContext, tasksWithLiveActivities, selectedSprintId]);
+
+    const visibleStats = useMemo(() => {
+        if (!hasSprintContext) return EMPTY_RUNTIME_STATS;
+
+        let running = 0;
+        let completed = 0;
+        let failed = 0;
+        for (const task of visibleTasksWithLiveActivities) {
+            const phase = getTaskProgressPhase(task);
+            if (phase === "RUNNING") running++;
+            else if (phase === "COMPLETED") completed++;
+            else if (phase === "FAILED") failed++;
+        }
+
+        return {
+            ...stats,
+            running,
+            completed,
+            failed,
+            total: visibleTasksWithLiveActivities.length,
+        };
+    }, [hasSprintContext, visibleTasksWithLiveActivities, stats]);
+
+    const sprintDispatches = useMemo(() => {
+        return selectedSprintId
+            ? execution.taskDispatches.filter((d) => d.sprintId === selectedSprintId)
+            : execution.taskDispatches;
+    }, [execution.taskDispatches, selectedSprintId]);
+
+    const sprintEvents = useMemo(() => {
+        return selectedSprintId
+            ? execution.recentEvents.filter((e) => e.sprintId === selectedSprintId)
+            : execution.recentEvents;
+    }, [execution.recentEvents, selectedSprintId]);
+
+    const sprintRuns = useMemo(() => {
+        return selectedSprintId
+            ? execution.sprintRuns.filter((r) => r.sprintId === selectedSprintId)
+            : execution.sprintRuns;
+    }, [execution.sprintRuns, selectedSprintId]);
 
     const { sprintTiming, taskTimings, taskTimingMap } = useLiveTaskTimingSummaries({
         tasks: visibleTasksWithLiveActivities,
-        dispatches: execution.taskDispatches,
-        events: execution.recentEvents,
-        sprintRuns: execution.sprintRuns,
+        dispatches: sprintDispatches,
+        events: sprintEvents,
+        sprintRuns: sprintRuns,
         nowIso,
     });
 
@@ -817,7 +859,7 @@ export const LiveSessionPage: FunctionComponent = () => {
         taskTimings.some((taskTiming) => (
             deriveLiveDurationDisplay({ taskTiming }).mode === "live"
         ))
-        || execution.taskDispatches.some((dispatch) => (
+        || sprintDispatches.some((dispatch) => (
             deriveLiveDurationDisplay({
                 dispatchTiming: {
                     startedAt: dispatch.startedAt,
@@ -826,7 +868,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 },
             }).mode === "live"
         ))
-    ), [execution.taskDispatches, taskTimings]);
+    ), [sprintDispatches, taskTimings]);
 
     useEffect(() => {
         setNowIso(new Date().toISOString());
@@ -842,7 +884,7 @@ export const LiveSessionPage: FunctionComponent = () => {
     const taskEventsByRecordId = useMemo(() => {
         const byRecordId = new Map<string, ExecutionRuntimeEventSummary[]>();
         const byTaskKey = new Map<string, ExecutionRuntimeEventSummary[]>();
-        for (const event of execution.recentEvents) {
+        for (const event of sprintEvents) {
             if (event.taskId) {
                 const existing = byRecordId.get(event.taskId) || [];
                 existing.push(event);
@@ -855,7 +897,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             }
         }
         return { byRecordId, byTaskKey };
-    }, [execution.recentEvents]);
+    }, [sprintEvents]);
 
     const dispatchInfoByTaskId = useMemo(() => {
         const map = new Map<string, {
@@ -864,7 +906,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             finishedAt: string | null;
             status: string | null;
         }>();
-        for (const dispatch of execution.taskDispatches) {
+        for (const dispatch of sprintDispatches) {
             if (!dispatch.taskId) continue;
             const existing = map.get(dispatch.taskId);
             // Keep the most recent dispatch (last in list), but prefer one with error if present
@@ -878,7 +920,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             }
         }
         return map;
-    }, [execution.taskDispatches]);
+    }, [sprintDispatches]);
 
     const { filteredTasks, taskCounts } = useMemo(() => {
         const filteredTasks: Subtask[] = [];
@@ -1120,13 +1162,13 @@ export const LiveSessionPage: FunctionComponent = () => {
                 /* ── Boat Race View ───────────────────────────────── */
                 <SprintBoatRace
                     tasks={visibleTasksWithLiveActivities}
-                    dispatches={execution.taskDispatches}
+                    dispatches={sprintDispatches}
                     hasLiveSprint={hasSprintContext}
                 />
             ) : (
                 <SprintDag
                     tasks={visibleTasksWithLiveActivities}
-                    dispatches={execution.taskDispatches}
+                    dispatches={sprintDispatches}
                     hasSprintContext={hasSprintContext}
                 />
             )}

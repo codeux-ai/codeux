@@ -15,7 +15,7 @@ import "./styles.css";
 
 // Route components — each dynamic import becomes its own chunk in the build
 const DashboardV2   = lazy(() => import("./v2/DashboardV2.js").then(m => ({ default: m.DashboardV2 })));
-const SprintsPage   = lazy(() => import("./v2/SprintsPage.js").then(m => ({ default: m.SprintsPage })));
+const SprintsPage   = lazy(() => import("./v2/pages/sprints/SprintsPage.js").then(m => ({ default: m.SprintsPage })));
 const ProjectsPage  = lazy(() => import("./v2/ProjectsPage.js").then(m => ({ default: m.ProjectsPage })));
 const ChatPage      = lazy(() => import("./v2/ChatPage.js").then(m => ({ default: m.ChatPage })));
 const TasksPage     = lazy(() => import("./v2/TasksPage.js").then(m => ({ default: m.TasksPage })));

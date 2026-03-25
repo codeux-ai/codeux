@@ -21,7 +21,7 @@ Implemented in `src/server/dashboard-server.ts`.
 
 Project management:
 - `GET /api/projects`
-  - Lists projects plus selected project id and aggregate counts
+  - Lists projects plus selected project id, selected sprint id, and aggregate counts
 - `POST /api/projects`
   - Creates a project (`local` or `git`)
 - `PATCH /api/projects/:projectId`
@@ -30,8 +30,10 @@ Project management:
   - Deletes a project and cascades its sprints/tasks
 - `PUT /api/projects/:projectId/select`
   - Persists the active dashboard project
+- `PUT /api/projects/:projectId/selected-sprint`
+  - Persists the active sprint for the selected project
 - `GET /api/projects/:projectId/sprints`
-  - Lists sprints for the selected project
+  - Lists sprints for the selected project, plus the currently selected sprint ID
 - `POST /api/projects/:projectId/sprints`
   - Creates a sprint
 - `POST /api/projects/:projectId/sprints/import`
@@ -88,7 +90,7 @@ Project management:
 
 Legacy runtime:
 - `GET /api/status`
-  - Selected-project runtime payload (`sprint_number`, `subtasks`, `instructions`, etc.) projected from sqlite
+  - Selected-project runtime payload (`sprint_number`, `subtasks`, `instructions`, etc.) projected from sqlite, explicitly scoped to the newly persisted active sprint when one is set
 - `GET /api/execution`
   - Selected-project execution control-plane snapshot (`sprintRuns`, `taskDispatches`, `recentEvents`, lease ownership)
 - `GET /api/telemetry/overview`
@@ -137,6 +139,8 @@ Legacy runtime:
 
 ### V2 project management
 - Top-nav project selector persists the active project in sqlite
+- Top-nav sprint selector persists the active sprint for the selected project
+- Creating a new sprint automatically updates the active sprint selection to that new sprint
 - The top-nav worker selector now always lists the built-in virtual workers even when no live MCP worker is connected
 - Selecting a virtual worker from the top nav switches the selected project into `workers.executionMode = VIRTUAL` with that provider
 - Selecting a live worker from the top nav switches the project back to `workers.executionMode = CONNECTED_MCP` and updates the preferred live worker assignment
@@ -185,10 +189,13 @@ Legacy runtime:
 - The sprint page no longer runs a full-page entrance fade on mount, which keeps initial navigation more immediate and avoids perceived flashing
 - The sprint page now uses lighter targeted motion on the heading instead of a full-page fade, keeping navigation more immediate without leaving the page static
 - Sprint composer planning-route overrides now correctly force the selected virtual provider instead of only overriding the model on the project default provider
-- Tasks page is project-scoped and supports create/edit/delete plus dependency metadata
+- Tasks page is project-scoped and uses a three-column board state (`Queued`, `In Progress`, `Completed`), where `coding_completed` acts as active work.
+- Tasks page renders create/edit inline through the new `TaskComposer` replacing the modal flow.
+- Task cards now explicitly show downstream dependent tasks as readable metadata tags.
 - Navigating from a sprint cell into `View Tasks` now preselects that sprint instead of leaving the board on `All Sprints`
 - Tasks page now refreshes from the same project-structure realtime invalidation path as sprints
 - Tasks and sprints now refresh silently on background realtime invalidation, so opening the Tasks page no longer repeatedly flashes loading state when project metadata or structure updates arrive
+- Tasks board is now scoped to the active sprint selection when one is set, filtering the view to only tasks for that sprint
 - Tasks page also stores explicit task executor preference (`auto`, `docker_cli`, `jules`, `mcp_worker`)
 - The Tasks board entrance animation now replays only for project/view/filter changes instead of every background task refresh
 - Stats page is project-scoped and visualizes tracked token/time usage for the selected project with `24h`, `7d`, `30d`, `all time`, and custom date windows
@@ -201,7 +208,7 @@ Legacy runtime:
   - donut-style composition charts for providers, token anatomy, and telemetry-source mix now animate as interactive slices with hover emphasis and center-detail readouts
   - redesigned task and sprint ledgers with search, sort-by-recency/tokens/time/input/output/name, and richer token/time breakdowns
 - The Stats page uses the same project realtime invalidation channels as the rest of the v2 dashboard, then falls back to polling so usage graphs and tables stay current during active sprint execution
-- Overview widgets and headline stat cards now read project/task data from the same project-management API surface, and task streams are filtered to active sprints only (a frontend-only view change with no API contract change)
+- Overview widgets and headline stat cards now read project/task data from the same project-management API surface, and task streams are filtered to the currently selected active sprint only (a frontend-only view change with no API contract change)
 - Agents page is DB-backed and manages project-scoped agents (`name`, `labels`, `instruction markdown`)
 - Agents are auto-imported from project and home `.sprint-os/agents/*.md` when first discovered
 - Project-local markdown mirroring is enabled by default through project settings, so dashboard edits create/update `.sprint-os/agents/*.md` in the selected repo without touching shipped defaults
@@ -291,7 +298,7 @@ Legacy runtime:
 - Git/CI status panel
 
 Runtime scoping:
-- the selected project in the v2 top navigation now also scopes live session status, reruns, live activities, and git tracking
+- the selected project and selected sprint in the v2 top navigation now also scope live session status, reruns, live activities, and git tracking
 - the selected project also scopes Agents and Chat data
 - dashboard runtime state is projected through sqlite task-run records instead of being served only from one in-memory global payload
 

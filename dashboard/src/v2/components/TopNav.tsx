@@ -7,6 +7,7 @@ import { StatusDot } from "./ui/StatusDot.js";
 import { AddProjectModal } from "./ui/AddProjectModal.js";
 import { useProjectData } from "../context/project-data.js";
 import { useProjectExecution } from "../hooks/use-project-execution.js";
+import { useProjectSprints } from "../hooks/use-project-sprints.js";
 import { dashboardSettingsToProjectSettings } from "../lib/settings-view-models.js";
 import {
     getProjectWorkerOptions,
@@ -32,6 +33,9 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
     const [showAddProject, setShowAddProject] = useState(false);
     const [workerRouting, setWorkerRouting] = useState<WorkerRoutingPreference | null>(null);
     const [workerSwitchBusy, setWorkerSwitchBusy] = useState(false);
+    const [sprintDropdownOpen, setSprintDropdownOpen] = useState(false);
+    const sprintDropdownRef = useRef<HTMLDivElement>(null);
+
     const {
         projects,
         selectedProject,
@@ -41,6 +45,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
     } = useProjectData();
 
     const { execution, loading: executionLoading, refresh: refreshExecution } = useProjectExecution(selectedProject?.id || null);
+    const { sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useProjectSprints(selectedProject?.id || null);
     const { options: workerOptions, selectedOption: selectedWorker } = getProjectWorkerOptions(execution, workerRouting, executionLoading);
 
     useLayoutEffect(() => {
@@ -76,6 +81,9 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
             }
             if (workerDropdownRef.current && !workerDropdownRef.current.contains(e.target as Node)) {
                 setWorkerDropdownOpen(false);
+            }
+            if (sprintDropdownRef.current && !sprintDropdownRef.current.contains(e.target as Node)) {
+                setSprintDropdownOpen(false);
             }
         };
         document.addEventListener("mousedown", handler);
@@ -234,6 +242,69 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                         </div>
                     )}
                 </div>
+
+                {/* Sprint Selector */}
+                {selectedProject && (
+                    <div className="relative hidden md:block" ref={sprintDropdownRef}>
+                        <button
+                            onClick={() => setSprintDropdownOpen(!sprintDropdownOpen)}
+                            disabled={sprints.length === 0}
+                            className={`flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent rounded-xl transition-all group ${
+                                sprints.length > 0
+                                    ? 'hover:border-black/[0.08] dark:hover:border-white/[0.08] cursor-pointer'
+                                    : 'opacity-50 cursor-not-allowed'
+                            }`}
+                        >
+                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">
+                                {sprintsLoading ? "Loading..." : (selectedSprint ? selectedSprint.name : "All Sprints")}
+                            </span>
+                            {sprints.length > 0 && (
+                                <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${sprintDropdownOpen ? 'rotate-180' : ''}`} />
+                            )}
+                        </button>
+
+                        {/* Sprint Dropdown */}
+                        {sprintDropdownOpen && sprints.length > 0 && (
+                            <div className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
+                                <div className="px-3 pt-3 pb-1.5">
+                                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Sprint Scope</span>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        void selectSprint(null);
+                                        setSprintDropdownOpen(false);
+                                    }}
+                                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-signal-500/5 transition-colors group ${selectedSprintId === null ? 'bg-signal-500/8' : ''}`}
+                                >
+                                    <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedSprintId === null ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
+                                        All Sprints
+                                    </span>
+                                    {selectedSprintId === null && (
+                                        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-signal-500" />
+                                    )}
+                                </button>
+                                {sprints.map((sprint) => (
+                                    <button
+                                        key={sprint.id}
+                                        onClick={() => {
+                                            void selectSprint(sprint.id);
+                                            setSprintDropdownOpen(false);
+                                        }}
+                                        className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-signal-500/5 transition-colors group ${selectedSprintId === sprint.id ? 'bg-signal-500/8' : ''}`}
+                                    >
+                                        <StatusDot status={sprint.status as any} />
+                                        <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedSprintId === sprint.id ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
+                                            {sprint.name}
+                                        </span>
+                                        {selectedSprintId === sprint.id && (
+                                            <span className="ml-auto w-1.5 h-1.5 rounded-full bg-signal-500" />
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* Worker Selector */}
                 {selectedProject && (

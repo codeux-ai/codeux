@@ -204,6 +204,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     containerGeminiAuthPath: "~/.gemini",
     containerCodexAuthPath: "~/.codex",
     containerClaudeCodeAuthPath: "~/.claude",
+    maxPlanningJsonRetries: 3,
   },
   workers: {
     executionMode: "CONNECTED_MCP",
