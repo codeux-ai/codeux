@@ -114,4 +114,60 @@ describe("dashboard-realtime-client", () => {
 
     unsubscribe();
   });
+
+  it("suppresses subsequent snapshot_required messages within a 3000ms cooldown", async () => {
+    const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+    const listener = vi.fn();
+    const unsubscribe = subscribeToDashboardRealtime(["overview"], listener);
+
+    const socket = MockWebSocket.instances[0];
+    socket?.emit("open");
+
+    // First snapshot_required should be dispatched
+    socket?.emit("message", { type: "snapshot_required" });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith({ type: "snapshot_required" });
+
+    // Second snapshot_required within 3s should be suppressed
+    vi.advanceTimersByTime(2999);
+    socket?.emit("message", { type: "snapshot_required" });
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    // After 3000ms cooldown, the next snapshot_required should be dispatched
+    vi.advanceTimersByTime(1);
+    socket?.emit("message", { type: "snapshot_required" });
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    unsubscribe();
+  });
+
+  it("does not suppress event or subscribed messages", async () => {
+    const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+    const listener = vi.fn();
+    const unsubscribe = subscribeToDashboardRealtime(["overview"], listener);
+
+    const socket = MockWebSocket.instances[0];
+    socket?.emit("open");
+
+    // Send an initial snapshot_required to trigger the cooldown
+    socket?.emit("message", { type: "snapshot_required" });
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    // Send an event message immediately after
+    socket?.emit("message", {
+      type: "event",
+      event: { scope: "overview", type: "updated", sequence: 1 },
+    });
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    // Send a subscribed message immediately after
+    socket?.emit("message", {
+      type: "subscribed",
+      scopes: ["overview"],
+      lastSequence: 1,
+    });
+    expect(listener).toHaveBeenCalledTimes(3);
+
+    unsubscribe();
+  });
 });
