@@ -1,0 +1,146 @@
+import * as fs from "fs";
+import * as path from "path";
+import { randomUUID } from "crypto";
+import type {
+  CreateQuicksprintTemplateInput,
+  QuicksprintExecutionInput,
+  QuicksprintTemplateRecord,
+  UpdateQuicksprintTemplateInput
+} from "../contracts/quicksprint-types.js";
+import { BUILTIN_QUICKSPRINT_TEMPLATES } from "../domain/quicksprint/quicksprint-catalog.js";
+import type { CreateSprintInput, PlanSprintOptions, SprintRecord } from "../contracts/project-management-types.js";
+
+export class QuicksprintService {
+  constructor(
+    private readonly projectBaseDirResolver: (projectId: string) => string,
+    private readonly createSprint: (projectId: string, input: CreateSprintInput) => SprintRecord,
+    private readonly planSprint: (projectId: string, sprintId: string, options: PlanSprintOptions, signal?: AbortSignal) => Promise<unknown>
+  ) {}
+
+  private getQuicksprintsDir(projectId: string): string {
+    const baseDir = this.projectBaseDirResolver(projectId);
+    const dir = path.join(baseDir, ".quicksprints");
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    return dir;
+  }
+
+  listTemplates(projectId: string): QuicksprintTemplateRecord[] {
+    const customTemplates: QuicksprintTemplateRecord[] = [];
+    try {
+      const dir = this.getQuicksprintsDir(projectId);
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        if (file.endsWith(".json")) {
+          const content = fs.readFileSync(path.join(dir, file), "utf-8");
+          customTemplates.push(JSON.parse(content));
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    return [...BUILTIN_QUICKSPRINT_TEMPLATES, ...customTemplates];
+  }
+
+  getTemplate(projectId: string, templateId: string): QuicksprintTemplateRecord | null {
+    const builtin = BUILTIN_QUICKSPRINT_TEMPLATES.find(t => t.id === templateId);
+    if (builtin) return builtin;
+
+    try {
+      const dir = this.getQuicksprintsDir(projectId);
+      const filePath = path.join(dir, `${templateId}.json`);
+      if (fs.existsSync(filePath)) {
+        return JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      }
+    } catch (e) {
+      // ignore
+    }
+    return null;
+  }
+
+  createCustomTemplate(projectId: string, input: CreateQuicksprintTemplateInput): QuicksprintTemplateRecord {
+    const dir = this.getQuicksprintsDir(projectId);
+    const now = new Date().toISOString();
+    const template: QuicksprintTemplateRecord = {
+      ...input,
+      id: `qs-custom-${randomUUID()}`,
+      projectId,
+      isBuiltIn: false,
+      defaultTaskCount: input.defaultTaskCount || 5,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    fs.writeFileSync(path.join(dir, `${template.id}.json`), JSON.stringify(template, null, 2));
+    return template;
+  }
+
+  updateCustomTemplate(projectId: string, templateId: string, input: UpdateQuicksprintTemplateInput): QuicksprintTemplateRecord {
+    if (BUILTIN_QUICKSPRINT_TEMPLATES.some(t => t.id === templateId)) {
+      throw new Error("Cannot update built-in templates");
+    }
+
+    const dir = this.getQuicksprintsDir(projectId);
+    const filePath = path.join(dir, `${templateId}.json`);
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Template ${templateId} not found`);
+    }
+
+    const existing: QuicksprintTemplateRecord = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    const updated: QuicksprintTemplateRecord = {
+      ...existing,
+      ...input,
+      updatedAt: new Date().toISOString(),
+    };
+
+    fs.writeFileSync(filePath, JSON.stringify(updated, null, 2));
+    return updated;
+  }
+
+  deleteCustomTemplate(projectId: string, templateId: string): void {
+    if (BUILTIN_QUICKSPRINT_TEMPLATES.some(t => t.id === templateId)) {
+      throw new Error("Cannot delete built-in templates");
+    }
+
+    const dir = this.getQuicksprintsDir(projectId);
+    const filePath = path.join(dir, `${templateId}.json`);
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`Template ${templateId} not found`);
+    }
+
+    fs.unlinkSync(filePath);
+  }
+
+  async executeQuicksprint(projectId: string, input: QuicksprintExecutionInput): Promise<SprintRecord> {
+    const template = this.getTemplate(projectId, input.templateId);
+    if (!template) {
+      throw new Error(`Template ${input.templateId} not found`);
+    }
+
+    const sprintName = `QS: ${template.name}`;
+    const sprintGoal = `${template.agentInstructionMarkdown}\n\nProduce exactly ${input.taskCount} subtasks.`;
+
+    const sprint = this.createSprint(projectId, {
+      name: sprintName,
+      goal: sprintGoal,
+    });
+
+    const autoStart = input.submitMode === "plan_and_start";
+
+    // We orchestrate the plan request but don't strictly await it if it's meant to be fire-and-forget,
+    // though the prompt implies we return the created sprint.
+    // Dashboard router returns accepted (202) for plan Sprint, and returns the plan ID/response.
+    // Let's call planSprint.
+    await this.planSprint(projectId, sprint.id, {
+      autoStart,
+      replan: false,
+      overrides: {
+        virtualModel: input.modelOverride,
+      }
+    });
+
+    return sprint;
+  }
+}
