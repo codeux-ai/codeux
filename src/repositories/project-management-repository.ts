@@ -155,6 +155,8 @@ export class ProjectManagementRepository {
 
   findProjectByBaseDir(repoPath: string): ProjectSummary | null {
     const normalizedRepoPath = path.resolve(repoPath);
+    // Also match paths stored with a trailing slash
+    const withTrailingSlash = normalizedRepoPath + "/";
     const row = this.db.prepare(`
       SELECT
         p.id,
@@ -175,11 +177,11 @@ export class ProjectManagementRepository {
         (SELECT MAX(CASE WHEN sr.status IN ('running', 'queued') THEN 1 ELSE 0 END) FROM sprint_runs sr WHERE sr.project_id = p.id) AS has_active_runs
       FROM projects p
       LEFT JOIN project_sources ps ON ps.project_id = p.id
-      WHERE p.base_dir = ?
-         OR ps.source_ref = ?
+      WHERE p.base_dir IN (?, ?)
+         OR ps.source_ref IN (?, ?)
       ORDER BY p.updated_at DESC
       LIMIT 1
-    `).get(normalizedRepoPath, normalizedRepoPath) as ProjectRow | undefined;
+    `).get(normalizedRepoPath, withTrailingSlash, normalizedRepoPath, withTrailingSlash) as ProjectRow | undefined;
 
     return row ? this.mapProjectRow(row) : null;
   }
