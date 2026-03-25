@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "preact";
+import { memo } from "preact/compat";
 
 interface TaskHeaderProps {
   taskId: string;
@@ -14,7 +15,7 @@ interface TaskHeaderProps {
   onRerun: () => void;
 }
 
-export const TaskHeader: FunctionComponent<TaskHeaderProps> = ({
+export const TaskHeader: FunctionComponent<TaskHeaderProps> = memo(({
   taskId,
   title,
   hasSession,
@@ -75,4 +76,4 @@ export const TaskHeader: FunctionComponent<TaskHeaderProps> = ({
       </button>
     </div>
   </div>
-);
+));

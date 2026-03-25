@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "preact";
+import { memo } from "preact/compat";
 import { useEffect, useRef } from "preact/hooks";
 import { getActivityText } from "../../../lib/activity.js";
 import { formatTime } from "../../../lib/time.js";
@@ -24,7 +25,7 @@ const getOriginatorClasses = (originator?: string): { border: string; text: stri
   return { border: "border-slate-700", text: "text-slate-400" };
 };
 
-export const SessionFeed: FunctionComponent<SessionFeedProps> = ({ livePanelId, showLogs, activities }) => {
+export const SessionFeed: FunctionComponent<SessionFeedProps> = memo(({ livePanelId, showLogs, activities }) => {
   const feedScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -74,4 +75,4 @@ export const SessionFeed: FunctionComponent<SessionFeedProps> = ({ livePanelId, 
       </div>
     </div>
   );
-};
+});
