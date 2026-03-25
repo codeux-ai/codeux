@@ -1,5 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useMemo, useRef } from "preact/hooks";
+import { memo } from "preact/compat";
 import { Activity, CheckCircle2, Clock3, GitBranch, Sparkles, Timer, Workflow } from "lucide-preact";
 import type { ExecutionTaskDispatchSummary, Subtask } from "../../types.js";
 import { buildSprintDagModel, getSprintDagFocusNodeIds, type SprintDagEdgeModel, type SprintDagNodeModel } from "../lib/sprint-dag.js";
@@ -166,6 +167,122 @@ function formatExecutor(dispatch?: ExecutionTaskDispatchSummary): string | null 
       return "Auto";
   }
 }
+
+const areDagNodePropsEqual = (
+  prevProps: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary, tone: Tone },
+  nextProps: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary, tone: Tone }
+) => {
+  return prevProps.node.task.id === nextProps.node.task.id &&
+         prevProps.node.phase === nextProps.node.phase &&
+         prevProps.node.isReady === nextProps.node.isReady &&
+         prevProps.node.incoming.length === nextProps.node.incoming.length &&
+         prevProps.node.outgoing.length === nextProps.node.outgoing.length &&
+         prevProps.node.x === nextProps.node.x &&
+         prevProps.node.y === nextProps.node.y &&
+         prevProps.dispatch?.executorType === nextProps.dispatch?.executorType &&
+         prevProps.dispatch?.provider === nextProps.dispatch?.provider;
+};
+
+const DagNode = memo(({ node, dispatch, tone }: { node: SprintDagNodeModel & { x: number; y: number; }, dispatch?: ExecutionTaskDispatchSummary, tone: Tone }) => {
+  const executorLabel = formatExecutor(dispatch);
+  const mergeLabel = getMergeLabel(node.task);
+  const phaseLabel = node.phase === "CODING_COMPLETED" ? "Coding Done" : tone.label;
+
+  return (
+    <div
+      className={`absolute ${tone.glow} ${tone.dim}`}
+      style={{
+        left: `${node.x}px`,
+        top: `${node.y}px`,
+        width: `${NODE_W}px`,
+        height: `${NODE_H}px`,
+      }}
+      title={`${node.task.id} · ${node.task.title}`}
+    >
+      <div className={`relative h-full rounded-[1.4rem] border ${tone.card} px-4 py-3 backdrop-blur-2xl transition-transform duration-500`}>
+        <div
+          className="absolute left-[-7px] top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full border border-white/70 dark:border-white/15"
+          style={{ backgroundColor: `${tone.accent}CC`, boxShadow: `0 0 18px ${tone.accent}50` }}
+        />
+        <div
+          className="absolute right-[-7px] top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full border border-white/70 dark:border-white/15"
+          style={{ backgroundColor: `${tone.accent}CC`, boxShadow: `0 0 18px ${tone.accent}50` }}
+        />
+
+        <div
+          className="absolute inset-x-3 top-2 h-[2px] rounded-full opacity-90"
+          style={{ background: `linear-gradient(90deg, transparent, ${tone.accent}, transparent)` }}
+        />
+        <div
+          className="absolute inset-x-3 bottom-0 h-10 rounded-b-[1.2rem] opacity-60"
+          style={{ background: `radial-gradient(circle at 50% 0%, ${tone.accent}14 0%, transparent 70%)` }}
+        />
+
+        {node.phase === "RUNNING" && (
+          <div
+            className="dag-running-ring absolute -inset-1 rounded-[1.65rem] border border-signal-500/30"
+            style={{ boxShadow: "0 0 32px rgba(0,224,160,0.12)" }}
+          />
+        )}
+
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2.5 py-1 font-mono text-[10px] font-bold tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+                {node.task.id}
+              </span>
+              {node.incoming.length === 0 && (
+                <span className="rounded-full border border-ember-500/20 bg-ember-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.15em] text-ember-600 dark:text-ember-400">
+                  Root
+                </span>
+              )}
+              {node.isReady && (
+                <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.15em] text-signal-600 dark:text-signal-300">
+                  Ready
+                </span>
+              )}
+            </div>
+            <div className="mt-2 line-clamp-2 text-[15px] font-bold leading-tight tracking-tight text-slate-900 dark:text-white">
+              {node.task.title}
+            </div>
+          </div>
+
+          <div
+            className="relative mt-1 h-3 w-3 shrink-0 rounded-full"
+            style={{ backgroundColor: tone.accent, boxShadow: `0 0 18px ${tone.accent}70` }}
+          >
+            {(node.phase === "RUNNING" || node.phase === "CODING_COMPLETED") && (
+              <span className="absolute inset-0 rounded-full bg-current opacity-50 animate-ping" />
+            )}
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className={`rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.15em] ${tone.badge}`}>
+            {phaseLabel}
+          </span>
+          {mergeLabel && (
+            <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+              {mergeLabel}
+            </span>
+          )}
+        </div>
+
+        <div className="mt-3 grid grid-cols-[1fr_auto] items-end gap-2">
+          <div className="min-w-0 text-[10px] font-mono leading-tight text-slate-400">
+            <div>{node.incoming.length} deps in</div>
+            <div>{node.outgoing.length} deps out</div>
+          </div>
+          <div className="flex flex-col items-end text-[10px] font-mono text-slate-400">
+            {executorLabel && <span>{executorLabel}</span>}
+            {dispatch?.provider && <span>{dispatch.provider}</span>}
+            {!executorLabel && !dispatch?.provider && <Clock3 className="h-3.5 w-3.5 opacity-50" strokeWidth={1.8} />}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}, areDagNodePropsEqual);
 
 export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches, hasSprintContext }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -518,105 +635,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
               {positionedNodes.map((node) => {
                 const tone = getNodeTone(node);
                 const dispatch = dispatchByTaskId.get(node.task.record_id || "") || dispatchByTaskId.get(node.task.id);
-                const executorLabel = formatExecutor(dispatch);
-                const mergeLabel = getMergeLabel(node.task);
-                const phaseLabel = node.phase === "CODING_COMPLETED" ? "Coding Done" : tone.label;
-
-                return (
-                  <div
-                    key={node.task.id}
-                    className={`absolute ${tone.glow} ${tone.dim}`}
-                    style={{
-                      left: `${node.x}px`,
-                      top: `${node.y}px`,
-                      width: `${NODE_W}px`,
-                      height: `${NODE_H}px`,
-                    }}
-                    title={`${node.task.id} · ${node.task.title}`}
-                  >
-                    <div className={`relative h-full rounded-[1.4rem] border ${tone.card} px-4 py-3 backdrop-blur-2xl transition-transform duration-500`}>
-                      <div
-                        className="absolute left-[-7px] top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full border border-white/70 dark:border-white/15"
-                        style={{ backgroundColor: `${tone.accent}CC`, boxShadow: `0 0 18px ${tone.accent}50` }}
-                      />
-                      <div
-                        className="absolute right-[-7px] top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full border border-white/70 dark:border-white/15"
-                        style={{ backgroundColor: `${tone.accent}CC`, boxShadow: `0 0 18px ${tone.accent}50` }}
-                      />
-
-                      <div
-                        className="absolute inset-x-3 top-2 h-[2px] rounded-full opacity-90"
-                        style={{ background: `linear-gradient(90deg, transparent, ${tone.accent}, transparent)` }}
-                      />
-                      <div
-                        className="absolute inset-x-3 bottom-0 h-10 rounded-b-[1.2rem] opacity-60"
-                        style={{ background: `radial-gradient(circle at 50% 0%, ${tone.accent}14 0%, transparent 70%)` }}
-                      />
-
-                      {node.phase === "RUNNING" && (
-                        <div
-                          className="dag-running-ring absolute -inset-1 rounded-[1.65rem] border border-signal-500/30"
-                          style={{ boxShadow: "0 0 32px rgba(0,224,160,0.12)" }}
-                        />
-                      )}
-
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2.5 py-1 font-mono text-[10px] font-bold tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
-                              {node.task.id}
-                            </span>
-                            {node.incoming.length === 0 && (
-                              <span className="rounded-full border border-ember-500/20 bg-ember-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.15em] text-ember-600 dark:text-ember-400">
-                                Root
-                              </span>
-                            )}
-                            {node.isReady && (
-                              <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.15em] text-signal-600 dark:text-signal-300">
-                                Ready
-                              </span>
-                            )}
-                          </div>
-                          <div className="mt-2 line-clamp-2 text-[15px] font-bold leading-tight tracking-tight text-slate-900 dark:text-white">
-                            {node.task.title}
-                          </div>
-                        </div>
-
-                        <div
-                          className="relative mt-1 h-3 w-3 shrink-0 rounded-full"
-                          style={{ backgroundColor: tone.accent, boxShadow: `0 0 18px ${tone.accent}70` }}
-                        >
-                          {(node.phase === "RUNNING" || node.phase === "CODING_COMPLETED") && (
-                            <span className="absolute inset-0 rounded-full bg-current opacity-50 animate-ping" />
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <span className={`rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.15em] ${tone.badge}`}>
-                          {phaseLabel}
-                        </span>
-                        {mergeLabel && (
-                          <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
-                            {mergeLabel}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-[1fr_auto] items-end gap-2">
-                        <div className="min-w-0 text-[10px] font-mono leading-tight text-slate-400">
-                          <div>{node.incoming.length} deps in</div>
-                          <div>{node.outgoing.length} deps out</div>
-                        </div>
-                        <div className="flex flex-col items-end text-[10px] font-mono text-slate-400">
-                          {executorLabel && <span>{executorLabel}</span>}
-                          {dispatch?.provider && <span>{dispatch.provider}</span>}
-                          {!executorLabel && !dispatch?.provider && <Clock3 className="h-3.5 w-3.5 opacity-50" strokeWidth={1.8} />}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
+                return <DagNode key={node.task.id} node={node} dispatch={dispatch} tone={tone} />;
               })}
             </div>
           </div>
