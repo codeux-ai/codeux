@@ -211,6 +211,14 @@ const TaskCard: FunctionComponent<{
       </div>
     </div>
   );
+}, (prev, next) => {
+  return prev.task.recordId === next.task.recordId &&
+         prev.task.status === next.task.status &&
+         prev.task.priority === next.task.priority &&
+         prev.task.title === next.task.title &&
+         prev.dependents === next.dependents &&
+         prev.onEdit === next.onEdit &&
+         prev.onDelete === next.onDelete;
 });
 
 const ColumnHeader: FunctionComponent<{ status: TaskStatus; count: number }> = memo(({ status, count }) => {
@@ -444,7 +452,7 @@ export const TasksPage: FunctionComponent = () => {
 
   const selectedSprintModel = selectedSprintId ? sprints.find((sprint) => sprint.id === selectedSprintId) || null : null;
 
-  const handleTaskSubmit = async (draft: {
+  const handleTaskSubmit = useCallback(async (draft: {
     sprintId: string;
     title: string;
     description: string;
@@ -465,7 +473,7 @@ export const TasksPage: FunctionComponent = () => {
     await Promise.all([refreshTasks(), refreshSprints()]);
     setEditingTask(null);
     setShowComposer(false);
-  };
+  }, [selectedProject, editingTask, refreshTasks, refreshSprints]);
 
   const handleDeleteTask = useCallback(async (task: Task) => {
     await deleteTask(task.recordId);

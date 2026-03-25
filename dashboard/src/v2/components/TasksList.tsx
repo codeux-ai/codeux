@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { TaskRow } from "./ui/TaskRow.js";
 import { FilterStrip } from "./ui/FilterStrip.js";
@@ -32,16 +32,16 @@ export const TasksList: FunctionComponent = () => {
         }
     }, [activeFilter]);
 
-    const activeSprintIds = deriveActiveSprintIds(sprints);
-    const activeTasks = filterTasksToActiveSprints(tasks, activeSprintIds);
+    const activeSprintIds = useMemo(() => deriveActiveSprintIds(sprints), [sprints]);
+    const activeTasks = useMemo(() => filterTasksToActiveSprints(tasks, activeSprintIds), [tasks, activeSprintIds]);
 
-    const filteredTasks = activeTasks.filter(task => {
+    const filteredTasks = useMemo(() => activeTasks.filter(task => {
         if (activeFilter === "All Tasks") return true;
         if (activeFilter === "Running") return task.status === "in_progress";
         if (activeFilter === "Queued") return task.status === "pending";
         if (activeFilter === "Completed") return task.status === "completed";
         return true;
-    });
+    }), [activeTasks, activeFilter]);
 
     return (
         <div className="w-full relative z-10 px-2">

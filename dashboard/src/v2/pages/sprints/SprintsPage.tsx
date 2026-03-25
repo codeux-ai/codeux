@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import {
   Activity,
@@ -110,7 +110,8 @@ export const SprintsPage: FunctionComponent = () => {
     window.addEventListener("resize", closeMenu);
     window.addEventListener("scroll", closeMenu, true);
 
-    return () => {
+
+  return () => {
       document.removeEventListener("click", closeMenu);
       document.removeEventListener("keydown", handleEscape);
       window.removeEventListener("resize", closeMenu);
@@ -118,7 +119,7 @@ export const SprintsPage: FunctionComponent = () => {
     };
   }, [rowMenu, setRowMenu]);
 
-  const animateLatestCell = () => {
+  const animateLatestCell = useCallback(() => {
     requestAnimationFrame(() => {
       if (!bubblesRef.current) {
         return;
@@ -133,16 +134,16 @@ export const SprintsPage: FunctionComponent = () => {
         { scale: 1, opacity: 1, y: 0, duration: 0.8, ease: "elastic.out(1, 0.65)" },
       );
     });
-  };
+  }, []);
 
-  const onSprintSubmit = async (payload: any) => {
+  const onSprintSubmit = useCallback(async (payload: any) => {
     await handleSubmitSprint(payload);
     if (!editingSprint) {
         animateLatestCell();
     }
-  };
+  }, [handleSubmitSprint, editingSprint, animateLatestCell]);
 
-  const openRowActionsMenu = (event: MouseEvent, sprintId: string) => {
+  const openRowActionsMenu = useCallback((event: MouseEvent, sprintId: string) => {
     event.stopPropagation();
     const trigger = event.currentTarget as HTMLElement;
     const rect = trigger.getBoundingClientRect();
@@ -159,11 +160,12 @@ export const SprintsPage: FunctionComponent = () => {
           openUp,
         }
     ));
-  };
+  }, [setRowMenu]);
 
-  const activeRowMenuSprint = rowMenu
+  const activeRowMenuSprint = useMemo(() => rowMenu
     ? sortedSprints.find((sprint) => sprint.id === rowMenu.sprintId) || null
-    : null;
+    : null, [rowMenu, sortedSprints]);
+
 
   return (
     <>
@@ -278,7 +280,8 @@ export const SprintsPage: FunctionComponent = () => {
                     const activeRun = activeRunsBySprintId.get(sprint.id);
                     const pendingActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
                     const pinActionId = `sprint-showcase:${sprint.id}`;
-                    return (
+
+  return (
                       <SprintBubble
                         key={sprint.id}
                         sprint={sprint}
@@ -399,11 +402,11 @@ export const SprintsPage: FunctionComponent = () => {
                 activeRunsBySprintId={activeRunsBySprintId}
                 interventionBySprintId={interventionBySprintId}
                 pendingActionIds={pendingActionIds}
-                onToggleShowcase={(sprint) => { void handleToggleShowcase(sprint); }}
+                onToggleShowcase={handleToggleShowcaseWithSprint}
                 onSprintToggle={handleSprintToggle}
                 onOpenRowMenu={openRowActionsMenu}
-                onBulkStart={(ids) => { for (const id of ids) handleSprintToggle(id); }}
-                onBulkDelete={(ids) => { for (const id of ids) void handleDeleteSprint(id); }}
+                onBulkStart={handleBulkStart}
+                onBulkDelete={handleBulkDelete}
               />
             </div>
           </>
