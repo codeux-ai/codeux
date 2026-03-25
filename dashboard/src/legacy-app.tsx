@@ -9,6 +9,7 @@ import { TaskCard } from "./components/TaskCard.js";
 import { useDashboardRuntimeData } from "./hooks/use-dashboard-runtime-data.js";
 import { useDashboardSettings } from "./hooks/use-dashboard-settings.js";
 import { rerunTask } from "./lib/api/dashboard-api.js";
+import { SkeletonPanel } from "./v2/components/ui/ListSkeletons.js";
 
 const SettingsPage = lazy(() => import("./components/SettingsPage.js").then(m => ({ default: m.SettingsPage })));
 
@@ -107,7 +108,7 @@ export const App: FunctionComponent = () => {
           </>
         ) : (
           <div className="max-w-5xl">
-            <Suspense fallback={<div className="flex items-center justify-center p-12 text-slate-400">Loading settings...</div>}>
+            <Suspense fallback={<div className="p-8"><SkeletonPanel /></div>}>
               <SettingsPage
                 settings={settings}
                 isLoading={isLoading}
