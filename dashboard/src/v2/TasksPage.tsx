@@ -615,7 +615,7 @@ export const TasksPage: FunctionComponent = () => {
             sprints={sprints}
             availableTasks={tasks}
             initialTask={editingTask}
-            initialSprintId={selectedSprint}
+            initialSprintId={selectedSprintId}
             onClose={() => {
               setShowComposer(false);
               setEditingTask(null);
@@ -662,20 +662,6 @@ export const TasksPage: FunctionComponent = () => {
         ))}
       </div>
 
-      {showTaskModal && (
-        <AddTaskModal
-          sprints={sprints}
-          availableTasks={tasks}
-          defaultSprintId={selectedSprintId}
-          initialTask={editingTask}
-          initialSprintId={selectedSprintId}
-          onClose={() => {
-            setShowTaskModal(false);
-            setEditingTask(null);
-          }}
-          onSubmit={(draft) => handleTaskSubmit(draft)}
-        />
-      )}
     </div>
   );
 };
