@@ -59,14 +59,65 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
     gsap.fromTo(cardRef.current, { y: 40, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" });
   }, []);
 
+  const triggerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    triggerRef.current = document.activeElement as HTMLElement | null;
+
+    // Initial focus setup
+    if (cardRef.current) {
+      const focusableElements = Array.from(cardRef.current.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )) as HTMLElement[];
+      if (focusableElements.length > 0) {
+        focusableElements[0].focus();
+      }
+    }
+
+    return () => {
+      if (triggerRef.current) {
+        triggerRef.current.focus();
+      }
+    };
+  }, []); // Run only on mount/unmount
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
+      } else if (event.key === "Tab") {
+        if (!cardRef.current) return;
+
+        const focusableElements = Array.from(cardRef.current.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )) as HTMLElement[];
+
+        if (focusableElements.length === 0) return;
+
+        const first = focusableElements[0];
+        const last = focusableElements[focusableElements.length - 1];
+
+        // If focus has escaped the modal (e.g. user clicked background), force it back in
+        if (!cardRef.current.contains(document.activeElement)) {
+          event.preventDefault();
+          first.focus();
+          return;
+        }
+
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     };
+
     document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
+    return () => {
+      document.removeEventListener("keydown", handler);
+    };
   }, [onClose]);
 
   const dependencyOptions = useMemo(() => {
