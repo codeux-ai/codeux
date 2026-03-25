@@ -25,6 +25,7 @@ import { SprintSettingsOverrideModal } from "../../components/ui/SprintSettingsO
 import { useSprintsPageData } from "./use-sprints-page-data.js";
 import { useProgressiveList } from "../../hooks/use-progressive-list.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "../../lib/list-window.js";
+import { ExecutionTimelineProvider } from "../../../hooks/ExecutionTimelineContext.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 
@@ -179,7 +180,10 @@ export const SprintsPage: FunctionComponent = () => {
   }, [handleDeleteSprint]);
 
   return (
-    <>
+    <ExecutionTimelineProvider
+      execution={execution}
+      pendingActionIds={pendingActionIds}
+    >
       <div className="relative z-10 mx-auto flex max-w-[1920px] flex-col gap-20 px-8 py-24 md:px-20">
         <div ref={headerRef} className="flex flex-wrap items-end justify-between gap-8">
           <div className="flex flex-col gap-5">
@@ -360,7 +364,7 @@ export const SprintsPage: FunctionComponent = () => {
                   <SprintComposer
                     nextId={nextId}
                     initialSprint={editingSprint}
-                    connections={execution.connections}
+
                     virtualProviders={virtualProviders}
                     planningPresets={planningPresets}
                     planningEta={planningEta}
@@ -389,7 +393,7 @@ export const SprintsPage: FunctionComponent = () => {
                     templates={quicksprintTemplates}
                     loading={quicksprintLoading}
                     agentPresets={agentPresets}
-                    connections={execution.connections}
+
                     virtualProviders={virtualProviders}
                     planningEta={planningEta}
                     onExecute={async (templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride) => {
@@ -540,6 +544,6 @@ export const SprintsPage: FunctionComponent = () => {
           onSubmit={handleAppendTask}
         />
       )}
-    </>
+    </ExecutionTimelineProvider>
   );
 };

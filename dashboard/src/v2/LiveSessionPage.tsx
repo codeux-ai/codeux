@@ -23,6 +23,8 @@ import { getTaskProgressPhase } from "../lib/task-progress.js";
 
 import { IntelPanel } from "./components/ui/IntelPanel.js";
 import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
+import { ExecutionTimelineProvider, useExecutionTimeline } from "../hooks/ExecutionTimelineContext.js";
+import { ExecutionTimeline } from "./components/ExecutionTimeline.js";
 import { IdleRuntimeState } from "./components/ui/IdleRuntimeState.js";
 import { SkeletonPanel } from "./components/ui/ListSkeletons.js";
 import {
@@ -391,37 +393,29 @@ const AttentionQueuePanel: FunctionComponent<{
 };
 
 const ExecutionRuntimePanel: FunctionComponent<{
-    snapshot: ExecutionDashboardSnapshot;
-    onOrchestrateSprint: (projectId: string, sprintId: string) => void;
-    onPauseSprintRun: (sprintRunId: string) => void;
-    onCancelSprintRun: (sprintRunId: string) => void;
-    onForceCancelSprintRun: (sprintRunId: string) => void;
-    onCancelTaskDispatch: (dispatchId: string) => void;
-    onForceCancelTaskDispatch: (dispatchId: string) => void;
-    onRetryTaskDispatch: (dispatchId: string) => void;
-    onClaimAttentionItem: (projectId: string, attentionItemId: string) => void;
-    onResolveAttentionItem: (projectId: string, attentionItemId: string) => void;
-    onDismissAttentionItem: (projectId: string, attentionItemId: string) => void;
-    pendingActionIds: Set<string>;
     collapsible?: boolean;
     defaultOpen?: boolean;
 }> = ({
-    snapshot,
-    onOrchestrateSprint,
-    onPauseSprintRun,
-    onCancelSprintRun,
-    onForceCancelSprintRun,
-    onCancelTaskDispatch,
-    onForceCancelTaskDispatch,
-    onRetryTaskDispatch,
-    onClaimAttentionItem,
-    onResolveAttentionItem,
-    onDismissAttentionItem,
-    pendingActionIds,
     collapsible = false,
     defaultOpen = true,
 }) => {
+    const {
+        execution: snapshot,
+        onOrchestrateSprint,
+        onPauseSprintRun,
+        onCancelSprintRun,
+        onForceCancelSprintRun,
+        onCancelTaskDispatch,
+        onForceCancelTaskDispatch,
+        onRetryTaskDispatch,
+        onClaimAttentionItem,
+        onResolveAttentionItem,
+        onDismissAttentionItem,
+        pendingActionIds,
+    } = useExecutionTimeline();
+
     const [open, setOpen] = useState(defaultOpen);
+    if (!snapshot) return null;
     const activeSprintRuns = snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued");
     const activeDispatches = snapshot.taskDispatches.filter((dispatch) => (
         dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running"
@@ -430,7 +424,6 @@ const ExecutionRuntimePanel: FunctionComponent<{
     const workerDispatches = activeDispatches.filter((dispatch) => dispatch.executorType === "mcp_worker");
     const queuedWorkers = workerDispatches.filter((dispatch) => dispatch.status === "queued").length;
     const runningWorkers = workerDispatches.filter((dispatch) => dispatch.status === "claimed" || dispatch.status === "running").length;
-    const timelineEvents = activeSprintRuns.length > 0 ? snapshot.recentEvents.slice(0, 24) : [];
 
     return (
         <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
@@ -714,16 +707,7 @@ const ExecutionRuntimePanel: FunctionComponent<{
 
                 <ConnectionRuntimePanel snapshot={snapshot} />
 
-                <div>
-                    <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 block mb-3">Runtime Timeline</span>
-                    {timelineEvents.length === 0 ? (
-                        <p className="text-[11px] text-slate-400 dark:text-slate-600 font-mono">No task run events recorded yet.</p>
-                    ) : (
-                        <div className="max-h-72 overflow-y-auto dashboard-scrollbar pr-1">
-                            <RuntimeEventFeed events={timelineEvents} />
-                        </div>
-                    )}
-                </div>
+                <ExecutionTimeline activeSprintRuns={activeSprintRuns} />
             </div>
             </div>
             </div>
@@ -1301,8 +1285,8 @@ export const LiveSessionPage: FunctionComponent = () => {
                     <GitCIStatusPanel status={gitStatus} error={gitStatusError} />
 
                     {/* 3. Execution Runtime — collapsible */}
-                    <ExecutionRuntimePanel
-                        snapshot={execution}
+                    <ExecutionTimelineProvider
+                        execution={execution}
                         onOrchestrateSprint={handleOrchestrateSprint}
                         onPauseSprintRun={handlePauseSprintRun}
                         onCancelSprintRun={handleCancelSprintRun}
@@ -1314,9 +1298,12 @@ export const LiveSessionPage: FunctionComponent = () => {
                         onResolveAttentionItem={handleResolveAttentionItem}
                         onDismissAttentionItem={handleDismissAttentionItem}
                         pendingActionIds={pendingActionIds}
-                        collapsible
-                        defaultOpen={hasSprintContext}
-                    />
+                    >
+                        <ExecutionRuntimePanel
+                            collapsible
+                            defaultOpen={hasSprintContext}
+                        />
+                    </ExecutionTimelineProvider>
 
                     {/* 4. Protocol — collapsible */}
                     <CollapsiblePanel

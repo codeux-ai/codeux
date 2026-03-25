@@ -1,0 +1,99 @@
+
+> jules-subagents@1.2.0 start
+> node dist/index.js
+
+[dotenv@17.3.1] injecting env (0) from .env -- tip: 🔐 encrypt with Dotenvx: https://dotenvx.com
+(node:17248) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+2026-03-25T16:48:24.857Z INFO Dashboard server started { service: 'sprint-os', component: 'dashboard-server', port: 4444, localhostUrl: 'http://localhost:4444', loopbackUrl: 'http://127.0.0.1:4444' }
+2026-03-25T16:48:24.858Z WARN Jules API key is not set. Jules-native tools are disabled; Gemini/Codex CLI providers can still run. { service: 'sprint-os' }
+2026-03-25T16:48:24.858Z WARN Jules API key is not configured.
+Set it in one of these locations:
+1. `.env` file (`JULES_API_KEY=...`)
+2. `.settings` file (`.sprint-os/settings.json` with `julesApiKey`)
+3. Dashboard settings at http://localhost:4444
+If your key is already set system-wide, restart this process in that environment.
+After saving the key, retry your command. { service: 'sprint-os' }
+2026-03-25T16:48:24.859Z INFO Sprint OS MCP server running on stdio { service: 'sprint-os', version: '1.2.0' }
+2026-03-25T16:49:53.233Z INFO [correlationId=4051b54a-546b-420d-b334-44f7d5df6db1] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/', statusCode: 200, durationMs: 11 }
+2026-03-25T16:49:53.394Z INFO [correlationId=0254a792-d870-46af-aa73-5d7beaa48997] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-preact-CxxfvV8Z.js', statusCode: 200, durationMs: 7 }
+2026-03-25T16:49:53.398Z INFO [correlationId=a2fb621f-6eb6-4f61-bf35-8e4ba1a8a6c1] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-lucide-9jMkHZTC.js', statusCode: 200, durationMs: 9 }
+2026-03-25T16:49:53.402Z INFO [correlationId=b9e0fb65-7f57-4dec-ab8f-19594c7b62c7] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-router-BjwCySyl.js', statusCode: 200, durationMs: 14 }
+2026-03-25T16:49:53.403Z INFO [correlationId=85713771-27c3-4ad6-ab66-c03d4609eac6] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-gsap-DDlvirwQ.js', statusCode: 200, durationMs: 14 }
+2026-03-25T16:49:53.406Z INFO [correlationId=beb249ba-ec0b-43b7-9be3-dd4d215ffd41] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/index-4VX1JAIV.css', statusCode: 200, durationMs: 19 }
+2026-03-25T16:49:53.406Z INFO [correlationId=bf7475e1-d22f-4cc4-9959-bd9c107487d0] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/index-CAz68GN1.js', statusCode: 200, durationMs: 21 }
+2026-03-25T16:49:53.972Z INFO [correlationId=c571f118-34b8-4ea4-b1a8-28b2b1952cbc] Dashboard request completed { service: 'sprint-os',
+  component: 'dashboard-server',
+  method: 'GET',
+  path: '/assets/OverviewTelemetry-6JxUQWMV.js',
+  statusCode: 200,
+  durationMs: 2 }
+2026-03-25T16:49:54.314Z INFO [correlationId=2e39419a-fec6-49a1-90ee-ad09f82c469a] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/api/projects', statusCode: 200, durationMs: 5 }
+2026-03-25T16:49:54.511Z INFO [correlationId=329d69ad-b0c1-4b35-9bc5-b6296993e830] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/api/telemetry/overview', statusCode: 200, durationMs: 3 }
+2026-03-25T16:49:58.937Z INFO [correlationId=02a7ec50-ce56-49bb-a76c-d5513c6cf231] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/sprints', statusCode: 200, durationMs: 4 }
+2026-03-25T16:49:58.954Z INFO [correlationId=24547d61-eb2f-460e-9321-97cfd02a16f2] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/index-CAz68GN1.js', statusCode: 304, durationMs: 1 }
+2026-03-25T16:49:58.956Z INFO [correlationId=8dedd389-b7cb-4384-a27e-bcf03313250a] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/index-4VX1JAIV.css', statusCode: 304, durationMs: 0 }
+2026-03-25T16:49:58.959Z INFO [correlationId=b95b2f47-c424-4429-afc7-fc509d5b0072] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-preact-CxxfvV8Z.js', statusCode: 304, durationMs: 1 }
+2026-03-25T16:49:58.960Z INFO [correlationId=576a19ba-ad21-4964-9200-a8d34d74fd90] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-router-BjwCySyl.js', statusCode: 304, durationMs: 2 }
+2026-03-25T16:49:58.961Z INFO [correlationId=dd568d29-e444-4c3a-b533-ebddd7631c80] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-gsap-DDlvirwQ.js', statusCode: 304, durationMs: 1 }
+2026-03-25T16:49:58.961Z INFO [correlationId=8ed23779-3508-4320-8dd1-9e9d14be6cae] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-lucide-9jMkHZTC.js', statusCode: 304, durationMs: 1 }
+2026-03-25T16:49:59.005Z INFO [correlationId=4e4c123e-051d-42b6-8aee-9589698dfcc5] Dashboard request completed { service: 'sprint-os',
+  component: 'dashboard-server',
+  method: 'GET',
+  path: '/assets/ListWindowSelector-Fps0kZwV.js',
+  statusCode: 200,
+  durationMs: 8 }
+2026-03-25T16:49:59.006Z INFO [correlationId=5180d18d-a149-49f8-9887-ee7c35f492b1] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/agent-preset-api-BG2pzFjA.js', statusCode: 200, durationMs: 6 }
+2026-03-25T16:49:59.007Z INFO [correlationId=cc31734f-b7e2-4b05-ba3c-cc9a862627b3] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/SettingsSurface-CoXbAHaj.js', statusCode: 200, durationMs: 7 }
+2026-03-25T16:49:59.011Z INFO [correlationId=d8c681ed-8945-4f05-b434-4107ccaf4aa7] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/SprintsPage-BPaxL2J1.js', statusCode: 200, durationMs: 15 }
+2026-03-25T16:49:59.053Z INFO [correlationId=1b97942d-7e76-43d4-854a-4603235a09e3] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/api/projects', statusCode: 304, durationMs: 3 }
+2026-03-25T16:50:49.882Z INFO [correlationId=a4d46e01-daf8-440b-98f0-005a097cab66] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/', statusCode: 200, durationMs: 3 }
+2026-03-25T16:50:49.908Z INFO [correlationId=018d21b5-39a4-4d96-a74d-dea06486c8a6] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-preact-CxxfvV8Z.js', statusCode: 200, durationMs: 7 }
+2026-03-25T16:50:49.914Z INFO [correlationId=16918f5a-1ca1-4bb4-bb7b-b8d8039c1a61] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-lucide-9jMkHZTC.js', statusCode: 200, durationMs: 11 }
+2026-03-25T16:50:49.916Z INFO [correlationId=c388b923-4e8d-446c-b34d-73875d313233] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-router-BjwCySyl.js', statusCode: 200, durationMs: 14 }
+2026-03-25T16:50:49.918Z INFO [correlationId=172d3ff8-5e60-47cc-b50c-09100afc10eb] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-gsap-DDlvirwQ.js', statusCode: 200, durationMs: 14 }
+2026-03-25T16:50:49.919Z INFO [correlationId=f84faa12-3959-4ccf-81fb-7470393ecfd6] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/index-CAz68GN1.js', statusCode: 200, durationMs: 21 }
+2026-03-25T16:50:49.920Z INFO [correlationId=beeb3e2f-fef0-4635-a41f-5ca211c1f1a3] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/index-4VX1JAIV.css', statusCode: 200, durationMs: 20 }
+2026-03-25T16:50:50.016Z INFO [correlationId=0c07f986-5379-46e7-bf44-ecbc91025b96] Dashboard request completed { service: 'sprint-os',
+  component: 'dashboard-server',
+  method: 'GET',
+  path: '/assets/OverviewTelemetry-6JxUQWMV.js',
+  statusCode: 200,
+  durationMs: 3 }
+2026-03-25T16:50:50.193Z INFO [correlationId=596a98a6-32cd-4625-98f0-cd281b8dc967] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/api/projects', statusCode: 200, durationMs: 1 }
+2026-03-25T16:50:50.286Z INFO [correlationId=d7a459f9-24f2-43f1-b8d3-9ed83039159f] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/api/telemetry/overview', statusCode: 200, durationMs: 1 }
+2026-03-25T16:51:20.289Z INFO [correlationId=66bfd609-b848-408b-b321-2ad33a864c12] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/api/telemetry/overview', statusCode: 200, durationMs: 1 }
+2026-03-25T16:51:38.362Z INFO [correlationId=b4d93649-7c27-40d5-bdfe-80d755630ebb] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/', statusCode: 200, durationMs: 3 }
+2026-03-25T16:51:38.392Z INFO [correlationId=78bdc72a-3447-4d6f-957a-9702ea36ff59] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-preact-CxxfvV8Z.js', statusCode: 200, durationMs: 8 }
+2026-03-25T16:51:38.393Z INFO [correlationId=44da4997-39a4-4d01-8b49-622f4d6fb47c] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-lucide-9jMkHZTC.js', statusCode: 200, durationMs: 7 }
+2026-03-25T16:51:38.394Z INFO [correlationId=67f210db-3824-41a4-aabd-f799b670ca70] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-router-BjwCySyl.js', statusCode: 200, durationMs: 9 }
+2026-03-25T16:51:38.395Z INFO [correlationId=4d171ee4-c130-4fb2-897e-f82df32d7fb7] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-gsap-DDlvirwQ.js', statusCode: 200, durationMs: 10 }
+2026-03-25T16:51:38.397Z INFO [correlationId=6d9ce374-76d5-4786-8b3e-22ef44f0d113] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/index-CAz68GN1.js', statusCode: 200, durationMs: 14 }
+2026-03-25T16:51:38.399Z INFO [correlationId=ad6b6f30-b38c-41ad-b9bb-96dbec208396] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/index-4VX1JAIV.css', statusCode: 200, durationMs: 16 }
+2026-03-25T16:51:38.509Z INFO [correlationId=f0003c8f-2455-49e8-9626-694308171eea] Dashboard request completed { service: 'sprint-os',
+  component: 'dashboard-server',
+  method: 'GET',
+  path: '/assets/OverviewTelemetry-6JxUQWMV.js',
+  statusCode: 200,
+  durationMs: 2 }
+2026-03-25T16:51:38.719Z INFO [correlationId=ca2505cc-4e84-4d58-8015-e5bbd18e94f1] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/api/projects', statusCode: 200, durationMs: 1 }
+2026-03-25T16:51:38.788Z INFO [correlationId=e4c98e09-8457-4499-b690-a0b3310dd861] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/api/telemetry/overview', statusCode: 200, durationMs: 1 }
+2026-03-25T16:52:08.789Z INFO [correlationId=d7bc029a-6e3b-4d8b-b751-3257b31a3f3c] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/api/telemetry/overview', statusCode: 200, durationMs: 1 }
+2026-03-25T16:52:12.808Z INFO [correlationId=1c0041f4-29aa-49a1-aa19-7f2066ecbc99] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/sprints', statusCode: 200, durationMs: 2 }
+2026-03-25T16:52:12.828Z INFO [correlationId=6e1e315b-6705-4f4b-bac8-3b3c913695ad] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/index-CAz68GN1.js', statusCode: 304, durationMs: 4 }
+2026-03-25T16:52:12.829Z INFO [correlationId=53d1e3f2-c525-4df8-819a-50f26f62ad02] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-preact-CxxfvV8Z.js', statusCode: 304, durationMs: 4 }
+2026-03-25T16:52:12.833Z INFO [correlationId=94612e28-2d5b-48d3-92ff-a4ad6305eb3e] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-router-BjwCySyl.js', statusCode: 304, durationMs: 3 }
+2026-03-25T16:52:12.839Z INFO [correlationId=c5bc7691-4202-41af-b347-4aafe9411d45] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-lucide-9jMkHZTC.js', statusCode: 304, durationMs: 5 }
+2026-03-25T16:52:12.840Z INFO [correlationId=d0a4370a-721f-43c7-aa87-46ec98e76e67] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/vendor-gsap-DDlvirwQ.js', statusCode: 304, durationMs: 6 }
+2026-03-25T16:52:12.841Z INFO [correlationId=8307671a-236d-4f43-93ec-817e7ea9ce3b] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/index-4VX1JAIV.css', statusCode: 304, durationMs: 1 }
+2026-03-25T16:52:12.890Z INFO [correlationId=63278a3d-7e48-40fd-a33c-7a860148f953] Dashboard request completed { service: 'sprint-os',
+  component: 'dashboard-server',
+  method: 'GET',
+  path: '/assets/ListWindowSelector-Fps0kZwV.js',
+  statusCode: 200,
+  durationMs: 4 }
+2026-03-25T16:52:12.892Z INFO [correlationId=45db379e-264d-4ef4-be3f-6938dc8a713e] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/SettingsSurface-CoXbAHaj.js', statusCode: 200, durationMs: 6 }
+2026-03-25T16:52:12.895Z INFO [correlationId=57ce6493-9fa2-4b98-8dc0-c3b941ed0c93] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/agent-preset-api-BG2pzFjA.js', statusCode: 200, durationMs: 8 }
+2026-03-25T16:52:12.896Z INFO [correlationId=24cc081d-09a9-40a1-80ac-43762a8e7cf6] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/assets/SprintsPage-BPaxL2J1.js', statusCode: 200, durationMs: 11 }
+2026-03-25T16:52:12.929Z INFO [correlationId=fe063260-5a32-4d51-9449-e7e4e95bfeb8] Dashboard request completed { service: 'sprint-os', component: 'dashboard-server', method: 'GET', path: '/api/projects', statusCode: 304, durationMs: 1 }
+Terminated

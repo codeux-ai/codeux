@@ -67,6 +67,7 @@ const ICON_OPTIONS: ReadonlyArray<{ value: string; Icon: FunctionComponent<any> 
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 type Phase = "browse" | "configure" | "editor";
+import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 
 interface QuicksprintPanelProps {
   projectId: string;
@@ -75,7 +76,6 @@ interface QuicksprintPanelProps {
   templates: QuicksprintTemplateRecord[];
   loading?: boolean;
   agentPresets?: AgentPreset[];
-  connections?: ExecutionConnectionSummary[];
   virtualProviders?: Array<{ id: VirtualWorkerProvider; label: string }>;
   planningEta?: number;
   onCreateTemplate?: (data: {
@@ -109,7 +109,6 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   templates,
   loading = false,
   agentPresets = [],
-  connections = [],
   virtualProviders = [],
   planningEta = 180_000,
   onCreateTemplate,
@@ -181,6 +180,9 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
     return parts.join("\n\n");
   }, [selectedTemplate, agentPresets, additionalPrompt, taskCount]);
+
+  const { execution } = useExecutionTimeline();
+  const connections = execution?.connections || [];
 
   /* ── Route options (matching SprintComposer) ────────────────────── */
   const routeOptions = useMemo<PlanningRouteOption[]>(() => {
