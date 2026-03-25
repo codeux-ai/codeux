@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import type { FunctionComponent, RefObject } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { Bell, Command, Search, Moon, Sun, ChevronDown, Activity, FolderOpen, ArrowRight, Cpu, Zap } from "lucide-preact";
@@ -16,6 +16,78 @@ import {
 } from "../lib/project-worker-options.js";
 import { setProjectPreferredWorker } from "../lib/project-api.js";
 import { fetchProjectEffectiveSettings, saveProjectSettings } from "../lib/settings-api.js";
+
+
+export function useDropdownKeyboard(
+    isOpen: boolean,
+    setIsOpen: (open: boolean) => void,
+    containerRef: RefObject<HTMLElement>
+) {
+    const toggleRef = useRef<HTMLButtonElement>(null);
+
+    const onToggleKeyDown = useCallback((e: KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setIsOpen(!isOpen);
+        }
+    }, [isOpen, setIsOpen]);
+
+    const onContainerKeyDown = useCallback((e: KeyboardEvent) => {
+        if (!isOpen || !containerRef.current) return;
+
+        if (e.key === "Escape") {
+            e.preventDefault();
+            setIsOpen(false);
+            toggleRef.current?.focus();
+            return;
+        }
+
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+
+            const focusableElements = Array.from(
+                containerRef.current.querySelectorAll<HTMLElement>(
+                    'button:not([disabled]), a[href]'
+                )
+            ).filter(el => el !== toggleRef.current);
+
+            if (focusableElements.length === 0) return;
+
+            const currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement);
+
+            let nextIndex = 0;
+            if (e.key === "ArrowDown") {
+                nextIndex = currentIndex < focusableElements.length - 1 ? currentIndex + 1 : 0;
+            } else if (e.key === "ArrowUp") {
+                nextIndex = currentIndex > 0 ? currentIndex - 1 : focusableElements.length - 1;
+            }
+
+            focusableElements[nextIndex]?.focus();
+        }
+    }, [isOpen, setIsOpen, containerRef]);
+
+    useEffect(() => {
+        if (isOpen && containerRef.current) {
+            // Give the DOM a moment to render the dropdown
+            setTimeout(() => {
+                if (!containerRef.current) return;
+                const focusableElements = Array.from(
+                    containerRef.current.querySelectorAll<HTMLElement>(
+                        'button:not([disabled]), a[href]'
+                    )
+                ).filter(el => el !== toggleRef.current);
+
+                if (focusableElements.length > 0) {
+                    focusableElements[0]?.focus();
+                }
+            }, 0);
+        } else if (!isOpen && toggleRef.current && document.activeElement && containerRef.current?.contains(document.activeElement)) {
+            toggleRef.current.focus();
+        }
+    }, [isOpen, containerRef]);
+
+    return { toggleRef, onToggleKeyDown, onContainerKeyDown };
+}
 
 const LIVE_WORKER_STATUSES = new Set(["connected", "listening", "idle"]);
 
@@ -47,6 +119,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
     const { execution, loading: executionLoading, refresh: refreshExecution } = useProjectExecution(selectedProject?.id || null);
     const { sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useProjectSprints(selectedProject?.id || null);
     const { options: workerOptions, selectedOption: selectedWorker } = getProjectWorkerOptions(execution, workerRouting, executionLoading);
+
+    const projectKb = useDropdownKeyboard(dropdownOpen, setDropdownOpen, dropdownRef);
+    const sprintKb = useDropdownKeyboard(sprintDropdownOpen, setSprintDropdownOpen, sprintDropdownRef);
+    const workerKb = useDropdownKeyboard(workerDropdownOpen, setWorkerDropdownOpen, workerDropdownRef);
 
     useLayoutEffect(() => {
         if (navRef.current) {
@@ -181,8 +257,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
 
             <div className="flex items-center gap-3">
                 {/* Project Selector */}
-                <div className="relative hidden md:block" ref={dropdownRef}>
+                <div className="relative hidden md:block" ref={dropdownRef} onKeyDown={projectKb.onContainerKeyDown}>
                     <button
+                        ref={projectKb.toggleRef}
+                        onKeyDown={projectKb.onToggleKeyDown}
                         onClick={() => setDropdownOpen(!dropdownOpen)}
                         className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group"
                     >
@@ -245,8 +323,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
 
                 {/* Sprint Selector */}
                 {selectedProject && (
-                    <div className="relative hidden md:block" ref={sprintDropdownRef}>
+                    <div className="relative hidden md:block" ref={sprintDropdownRef} onKeyDown={sprintKb.onContainerKeyDown}>
                         <button
+                            ref={sprintKb.toggleRef}
+                            onKeyDown={sprintKb.onToggleKeyDown}
                             onClick={() => setSprintDropdownOpen(!sprintDropdownOpen)}
                             disabled={sprints.length === 0}
                             className={`flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent rounded-xl transition-all group ${
@@ -308,8 +388,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
 
                 {/* Worker Selector */}
                 {selectedProject && (
-                    <div className="relative hidden lg:block" ref={workerDropdownRef}>
+                    <div className="relative hidden lg:block" ref={workerDropdownRef} onKeyDown={workerKb.onContainerKeyDown}>
                         <button
+                            ref={workerKb.toggleRef}
+                            onKeyDown={workerKb.onToggleKeyDown}
                             onClick={() => setWorkerDropdownOpen(!workerDropdownOpen)}
                             className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group"
                         >
