@@ -11,6 +11,7 @@ import type { SprintOrchestratorDependencies } from "../../../sprint/sprint-orch
 import type { CycleRunner } from "./cycle-runner.js";
 import type { SprintExecutionContext } from "../../../services/sprint-execution-state-service.js";
 import type { MergeFeedbackResult } from "../ci/main-merge-gate.js";
+import type { ProjectAttentionItemRecord } from "../../../contracts/project-attention-types.js";
 import { isCompletedTaskSettled } from "../task-merge-state.js";
 
 export interface WatchLoopRunnerArgs {
@@ -130,30 +131,29 @@ export class WatchLoopRunner {
         workerEscalatedMergeConflictTasks,
       } = cycleResult;
 
-      const runningTasks = subtasks.filter((task) => task.status === "RUNNING");
-      const readyTasks = subtasks.filter((task) => task.status === "PENDING");
       const activeProjectAttentionItems = typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
         ? this.deps.projectAttentionService.listActiveProjectItems(scopedExecutionContext.project.id).filter((item) => (
           item.status === "open" || item.status === "claimed"
         ))
         : [];
-      const activeWorkerAttentionItems = activeProjectAttentionItems.filter((item) => item.ownerType === "worker");
-      const activeWorkerMergeConflictAttention = activeWorkerAttentionItems.some((item) => item.attentionType === "merge_conflict");
-      const activeMainMergeAttentionItems = activeProjectAttentionItems.filter((item) => (
-        item.sprintRunId === sprintRunId && isActiveMainMergeAttentionItem(item)
-      ));
 
-      const allTerminal = subtasks.length > 0 && subtasks.every(
-        (task) => isCompletedTaskSettled(task) || task.status === "FAILED"
-      );
-      const quotaTasks = subtasks.filter((task) => task.status === "QUOTA");
-      const noMoreActionPossible = runningTasks.length === 0 && readyTasks.length === 0 && quotaTasks.length === 0;
-      const needsManualMerge = manualMergeTasks.length > 0;
-      const waitingOnWorkerAttention = workerEscalatedMergeConflictTasks.length > 0
-        || activeWorkerMergeConflictAttention
-        || activeWorkerAttentionItems.length > 0;
+      const {
+        runningTasks,
+        readyTasks,
+        activeMainMergeAttentionItems,
+        allTerminal,
+        noMoreActionPossible,
+        needsManualMerge,
+        allFinished: evaluatedAllFinished,
+      } = evaluateSprintRunState({
+        subtasks,
+        manualMergeTasks,
+        workerEscalatedMergeConflictTasks,
+        activeProjectAttentionItems,
+        sprintRunId,
+      });
 
-      allFinished = allTerminal || ((needsManualMerge || noMoreActionPossible) && !waitingOnWorkerAttention);
+      allFinished = evaluatedAllFinished;
       const elapsedMs = Date.now() - checkpointWindowStartedAt;
       const outputIntervalReached = elapsedMs >= watchLoopOutputIntervalMs;
 
@@ -758,4 +758,48 @@ function buildMainMergeConflictSummary(args: {
   }
 
   return lines.join("\n");
+}
+
+export function evaluateSprintRunState(params: {
+  subtasks: Subtask[];
+  manualMergeTasks: Subtask[];
+  workerEscalatedMergeConflictTasks: Subtask[];
+  activeProjectAttentionItems: ProjectAttentionItemRecord[];
+  sprintRunId: string;
+}) {
+  const { subtasks, manualMergeTasks, workerEscalatedMergeConflictTasks, activeProjectAttentionItems, sprintRunId } = params;
+
+  const runningTasks = subtasks.filter((task) => task.status === "RUNNING");
+  const readyTasks = subtasks.filter((task) => task.status === "PENDING");
+  const activeWorkerAttentionItems = activeProjectAttentionItems.filter((item) => item.ownerType === "worker");
+  const activeWorkerMergeConflictAttention = activeWorkerAttentionItems.some((item) => item.attentionType === "merge_conflict");
+  const activeMainMergeAttentionItems = activeProjectAttentionItems.filter((item) => (
+    item.sprintRunId === sprintRunId && isActiveMainMergeAttentionItem(item)
+  ));
+
+  const allTerminal = subtasks.length > 0 && subtasks.every(
+    (task) => isCompletedTaskSettled(task) || task.status === "FAILED"
+  );
+  const quotaTasks = subtasks.filter((task) => task.status === "QUOTA");
+  const noMoreActionPossible = runningTasks.length === 0 && readyTasks.length === 0 && quotaTasks.length === 0;
+  const needsManualMerge = manualMergeTasks.length > 0;
+  const waitingOnWorkerAttention = workerEscalatedMergeConflictTasks.length > 0
+    || activeWorkerMergeConflictAttention
+    || activeWorkerAttentionItems.length > 0;
+
+  const allFinished = allTerminal || ((needsManualMerge || noMoreActionPossible) && !waitingOnWorkerAttention);
+
+  return {
+    runningTasks,
+    readyTasks,
+    activeWorkerAttentionItems,
+    activeWorkerMergeConflictAttention,
+    activeMainMergeAttentionItems,
+    allTerminal,
+    quotaTasks,
+    noMoreActionPossible,
+    needsManualMerge,
+    waitingOnWorkerAttention,
+    allFinished,
+  };
 }
