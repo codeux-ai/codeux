@@ -1,5 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { useRef, useMemo, useEffect, useCallback, useState } from "preact/hooks";
+import { memo } from "preact/compat";
 import gsap from "gsap";
 import { Anchor } from "lucide-preact";
 import type { Subtask, ExecutionTaskDispatchSummary } from "../../types.js";
@@ -157,7 +158,7 @@ const createInitialShipAnimationState = (shipKey: string, now: number) => {
 
 /* ─── SVG: Container Ship ────────────────────────────────────────────────── */
 
-const ContainerShip: FunctionComponent<{ accentColor: string; dim: boolean; isMoving: boolean; isDark: boolean }> = ({ accentColor, dim, isMoving, isDark }) => {
+const ContainerShip: FunctionComponent<{ accentColor: string; dim: boolean; isMoving: boolean; isDark: boolean }> = memo(({ accentColor, dim, isMoving, isDark }) => {
     const o = dim ? 0.35 : 1;
     const hullFill = isDark ? "#0f1d33" : "#c8d6e5";
     const hullStroke = isDark ? "#1a3050" : "#8395a7";
@@ -221,11 +222,11 @@ const ContainerShip: FunctionComponent<{ accentColor: string; dim: boolean; isMo
             )}
         </g>
     );
-};
+});
 
 /* ─── SVG: Wooden Ship ───────────────────────────────────────────────────── */
 
-const WoodenShip: FunctionComponent<{ accentColor: string; dim: boolean; isMoving: boolean; isDark: boolean }> = ({ accentColor, dim, isMoving, isDark }) => {
+const WoodenShip: FunctionComponent<{ accentColor: string; dim: boolean; isMoving: boolean; isDark: boolean }> = memo(({ accentColor, dim, isMoving, isDark }) => {
     const o = dim ? 0.35 : 1;
     const hullFill = isDark ? "#5C3D0E" : "#8B6914";
     const hullStroke = isDark ? "#7A5518" : "#A67B20";
@@ -307,11 +308,11 @@ const WoodenShip: FunctionComponent<{ accentColor: string; dim: boolean; isMovin
             </circle>
         </g>
     );
-};
+});
 
 /* ─── Tow line: animated dots connecting ship to trailing badge ──────────── */
 
-const TowLine: FunctionComponent<{ color: string; length: number }> = ({ color, length }) => {
+const TowLine: FunctionComponent<{ color: string; length: number }> = memo(({ color, length }) => {
     const dotCount = 5;
     const spacing = length / (dotCount + 1);
     return (
@@ -334,7 +335,7 @@ const TowLine: FunctionComponent<{ color: string; length: number }> = ({ color, 
             })}
         </g>
     );
-};
+});
 
 /* ─── Status badge (trailing behind ship) ────────────────────────────────── */
 
@@ -345,7 +346,7 @@ const ShipBadge: FunctionComponent<{
     mergeIndicator?: string;
     isRunning: boolean;
     isDark: boolean;
-}> = ({ taskId, title, style, mergeIndicator, isRunning, isDark }) => {
+}> = memo(({ taskId, title, style, mergeIndicator, isRunning, isDark }) => {
     const pillBg = isDark ? "rgba(4,8,16,0.92)" : "rgba(255,255,255,0.92)";
     const textColor = isDark ? "white" : "#1e293b";
     return (
@@ -403,11 +404,11 @@ const ShipBadge: FunctionComponent<{
             </text>
         </g>
     );
-};
+});
 
 /* ─── Harbour Building SVG ───────────────────────────────────────────────── */
 
-const HarbourBuilding: FunctionComponent<{ x: number; waitingCount: number; isDark: boolean }> = ({ x, waitingCount, isDark }) => {
+const HarbourBuilding: FunctionComponent<{ x: number; waitingCount: number; isDark: boolean }> = memo(({ x, waitingCount, isDark }) => {
     const buildingFill = isDark ? "#0c1825" : "#c8d6e5";
     const buildingStroke = isDark ? "#162840" : "#8395a7";
     const roofFill = isDark ? "#101c2e" : "#a4b0be";
@@ -509,11 +510,11 @@ const HarbourBuilding: FunctionComponent<{ x: number; waitingCount: number; isDa
             </text>
         </g>
     );
-};
+});
 
 /* ─── Checkpoint Buoy ────────────────────────────────────────────────────── */
 
-const CheckpointBuoy: FunctionComponent<{ x: number; label: string; color: string; isDark: boolean }> = ({ x, color, label, isDark }) => (
+const CheckpointBuoy: FunctionComponent<{ x: number; label: string; color: string; isDark: boolean }> = memo(({ x, color, label, isDark }) => (
     <g>
         {/* Dashed guide line */}
         <line x1={x} y1={LANE_TOP - 5} x2={x} y2={LANE_BOT + 5}
@@ -533,11 +534,11 @@ const CheckpointBuoy: FunctionComponent<{ x: number; label: string; color: strin
             </text>
         </g>
     </g>
-);
+));
 
 /* ─── Finish Line ────────────────────────────────────────────────────────── */
 
-const FinishLine: FunctionComponent<{ x: number; isDark: boolean }> = ({ x, isDark }) => (
+const FinishLine: FunctionComponent<{ x: number; isDark: boolean }> = memo(({ x, isDark }) => (
     <g>
         {/* Radial glow */}
         <ellipse cx={x} cy={SVG_H / 2} rx={60} ry={SVG_H * 0.65} fill="url(#br-finish-glow)" />
@@ -581,11 +582,11 @@ const FinishLine: FunctionComponent<{ x: number; isDark: boolean }> = ({ x, isDa
             FINISH
         </text>
     </g>
-);
+));
 
 /* ─── Celestial body (moon in dark mode, sun in light mode) ──────────────── */
 
-const CelestialBody: FunctionComponent<{ isDark: boolean }> = ({ isDark }) => {
+const CelestialBody: FunctionComponent<{ isDark: boolean }> = memo(({ isDark }) => {
     if (isDark) {
         return (
             <g>
@@ -642,11 +643,11 @@ const CelestialBody: FunctionComponent<{ isDark: boolean }> = ({ isDark }) => {
             ))}
         </g>
     );
-};
+});
 
 /* ─── Subtle wave lines (transparent-friendly, works on any background) ──── */
 
-const SubtleWaves: FunctionComponent<{ isDark: boolean }> = ({ isDark }) => {
+const SubtleWaves: FunctionComponent<{ isDark: boolean }> = memo(({ isDark }) => {
     const waveColor = isDark ? "white" : "#334155";
     return (
         <g>
@@ -671,7 +672,7 @@ const SubtleWaves: FunctionComponent<{ isDark: boolean }> = ({ isDark }) => {
             })}
         </g>
     );
-};
+});
 
 /* ═══════════════════════════════════════════════════════════════════════════ */
 /*  MAIN COMPONENT                                                           */

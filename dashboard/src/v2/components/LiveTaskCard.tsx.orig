@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { useEffect, useRef, useState, useMemo, useCallback } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import {
     Clock, ChevronDown, ChevronRight, Eye, EyeOff,
     FileText, RotateCcw, GitPullRequest, ExternalLink, Timer,
@@ -39,7 +39,7 @@ function extractRetryAfterIso(errorMessage: string): string | null {
     return match?.[1] ?? null;
 }
 
-export const QuotaCountdown: FunctionComponent<{ errorMessage: string }> = memo(({ errorMessage }) => {
+export const QuotaCountdown: FunctionComponent<{ errorMessage: string }> = ({ errorMessage }) => {
     const retryIso = extractRetryAfterIso(errorMessage);
     const [remaining, setRemaining] = useState(() =>
         retryIso ? Math.max(0, Math.floor((new Date(retryIso).getTime() - Date.now()) / 1000)) : null
@@ -71,18 +71,18 @@ export const QuotaCountdown: FunctionComponent<{ errorMessage: string }> = memo(
             </span>
         </div>
     );
-});
+};
 
 export const TaskDuration: FunctionComponent<{
     taskTiming?: LiveTaskTimingSummary | null;
     dispatchTiming?: LiveDurationDispatchTiming | null;
-}> = memo(({ taskTiming, dispatchTiming }) => {
+}> = ({ taskTiming, dispatchTiming }) => {
     const [now, setNow] = useState(() => Date.now());
-    const display = useMemo(() => deriveLiveDurationDisplay({
+    const display = deriveLiveDurationDisplay({
         taskTiming,
         dispatchTiming,
         now,
-    }), [taskTiming, dispatchTiming, now]);
+    });
 
     useEffect(() => {
         setNow(Date.now());
@@ -111,7 +111,7 @@ export const TaskDuration: FunctionComponent<{
             <span>{formatDuration(display.elapsedSeconds)}</span>
         </div>
     );
-});
+};
 
 /* ─── LiveTaskCard ───────────────────────────────────────────────────────── */
 
@@ -148,17 +148,10 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     const mergeCfg = task.merge_indicator ? MERGE_INDICATOR_CFG[task.merge_indicator] : null;
     const sessionLabel = (task.session_id || task.session_name || "").replace(/^sessions\//, "");
 
-    const handleRerun = useCallback(() => {
+    const handleRerun = () => {
         const confirmed = window.confirm(`Rerun task "${task.id}"?\n\nThis resets the task state and discards current progress.`);
         if (confirmed) onRerun(task.record_id || task.id);
-    }, [task.id, task.record_id, onRerun]);
-
-    const renderedPrompt = useMemo(() => renderMarkdown(task.prompt), [task.prompt]);
-    const dispatchTiming = useMemo(() => ({
-        startedAt: dispatchStartedAt ?? null,
-        finishedAt: dispatchFinishedAt ?? null,
-        status: dispatchStatus ?? taskPhase,
-    }), [dispatchStartedAt, dispatchFinishedAt, dispatchStatus, taskPhase]);
+    };
 
     return (
         <div
@@ -231,7 +224,11 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         )}
                         <TaskDuration
                             taskTiming={taskTiming}
-                            dispatchTiming={dispatchTiming}
+                            dispatchTiming={{
+                                startedAt: dispatchStartedAt ?? null,
+                                finishedAt: dispatchFinishedAt ?? null,
+                                status: dispatchStatus ?? taskPhase,
+                            }}
                         />
                         {(hasEventFeed || task.session_id || task.session_name) && (
                             <span className="text-[9px] font-mono text-slate-400 dark:text-slate-600 max-w-[100px] truncate" title={sessionLabel}>
@@ -271,7 +268,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                        prose-strong:text-slate-800 dark:prose-strong:text-slate-200
                                        prose-a:text-signal-600 dark:prose-a:text-signal-400
                                        font-mono text-[12px] leading-relaxed"
-                            dangerouslySetInnerHTML={{ __html: renderedPrompt }}
+                            dangerouslySetInnerHTML={{ __html: renderMarkdown(task.prompt) }}
                         />
                     </div>
                 )}
