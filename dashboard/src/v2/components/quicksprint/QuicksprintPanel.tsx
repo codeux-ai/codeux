@@ -29,11 +29,12 @@ const IconMap: Record<string, FunctionComponent<any>> = {
   Shield, Terminal, TestTube2, Wrench,
 };
 
-const CATEGORY_STYLES: Record<string, string> = {
-  engineering: "bg-signal-500/10 text-signal-500",
-  security:    "bg-ember-500/10 text-ember-500",
-  design:      "bg-purple-400/10 text-purple-400",
-};
+const TAG_COLOR_PALETTE = [
+  "#22c55e", "#f97316", "#a855f7", "#3b82f6", "#ef4444",
+  "#eab308", "#06b6d4", "#ec4899", "#8b5cf6", "#14b8a6",
+  "#f43f5e", "#84cc16", "#6366f1", "#0ea5e9", "#d946ef",
+  "#fb923c", "#a3e635", "#2dd4bf", "#f472b6", "#818cf8",
+];
 
 const ICON_OPTIONS: ReadonlyArray<{ value: string; Icon: FunctionComponent<any> }> = [
   { value: "Sparkles", Icon: Sparkles },
@@ -64,12 +65,6 @@ const ICON_OPTIONS: ReadonlyArray<{ value: string; Icon: FunctionComponent<any> 
   { value: "Wrench", Icon: Wrench },
 ];
 
-const CATEGORY_OPTIONS = [
-  { value: "engineering", label: "Engineering" },
-  { value: "security", label: "Security" },
-  { value: "design", label: "Design" },
-] as const;
-
 /* ─── Types ─────────────────────────────────────────────────────────── */
 type Phase = "browse" | "configure" | "editor";
 
@@ -88,6 +83,7 @@ interface QuicksprintPanelProps {
     description: string;
     icon: string;
     category: string;
+    categoryColor?: string;
     agentInstructionMarkdown: string;
     defaultTaskCount: number;
     agentPresetId?: string;
@@ -97,6 +93,7 @@ interface QuicksprintPanelProps {
     description: string;
     icon: string;
     category: string;
+    categoryColor?: string;
     agentInstructionMarkdown: string;
     defaultTaskCount: number;
     agentPresetId?: string;
@@ -139,6 +136,10 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   const [edDescription, setEdDescription] = useState("");
   const [edIcon, setEdIcon] = useState("Zap");
   const [edCategory, setEdCategory] = useState("engineering");
+  const [edCategoryColor, setEdCategoryColor] = useState("#22c55e");
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showIconPicker, setShowIconPicker] = useState(false);
+  const [pickerPos, setPickerPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [edInstruction, setEdInstruction] = useState("");
   const [edTaskCount, setEdTaskCount] = useState(5);
   const [edAgentPresetId, setEdAgentPresetId] = useState("");
@@ -250,6 +251,9 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     setEdDescription(t?.description || "");
     setEdIcon(t?.icon || "Zap");
     setEdCategory(t?.category || "engineering");
+    setEdCategoryColor(t?.categoryColor || "#22c55e");
+    setShowColorPicker(false);
+    setShowIconPicker(false);
     setEdInstruction(t?.agentInstructionMarkdown || "");
     setEdTaskCount(t?.defaultTaskCount || 5);
     setEdAgentPresetId("");
@@ -268,6 +272,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
         description: edDescription.trim(),
         icon: edIcon,
         category: edCategory,
+        categoryColor: edCategoryColor,
         agentInstructionMarkdown: edInstruction.trim(),
         defaultTaskCount: edTaskCount,
         agentPresetId: edAgentPresetId || undefined,
@@ -281,7 +286,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     } finally {
       setEdSaving(false);
     }
-  }, [edName, edDescription, edIcon, edCategory, edInstruction, edTaskCount, edAgentPresetId, editorTemplate, onCreateTemplate, onUpdateTemplate]);
+  }, [edName, edDescription, edIcon, edCategory, edCategoryColor, edInstruction, edTaskCount, edAgentPresetId, editorTemplate, onCreateTemplate, onUpdateTemplate]);
 
   const handleEditorDelete = useCallback(async () => {
     if (!edConfirmDelete) { setEdConfirmDelete(true); return; }
@@ -626,16 +631,66 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               />
             </label>
 
-            {/* Category + Default Tasks */}
+            {/* Icon + Color + Category Tag + Default Tasks */}
             <div data-qs-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
               <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-2">Category</div>
-                <AvantgardeSelect
-                  variant="compact"
-                  value={edCategory}
-                  onChange={(val) => setEdCategory(val)}
-                  options={CATEGORY_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-                />
+                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-3">Category Tag</div>
+                <div className="flex items-center gap-3">
+                  {/* Icon picker trigger */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      setPickerPos({ top: rect.bottom + 8, left: rect.left });
+                      setShowIconPicker(!showIconPicker);
+                      setShowColorPicker(false);
+                    }}
+                    className="flex h-10 w-10 flex-shrink-0 cursor-pointer items-center justify-center rounded-xl border border-black/[0.08] bg-white/80 text-slate-600 shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-md hover:border-ember-500/30 hover:text-ember-500 active:scale-95 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-300 dark:hover:text-ember-400"
+                    title="Pick icon"
+                  >
+                    {(() => { const Ic = IconMap[edIcon] || Zap; return <Ic className="h-5 w-5" />; })()}
+                  </button>
+
+                  {/* Color dot picker trigger */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                      setPickerPos({ top: rect.bottom + 8, left: rect.left });
+                      setShowColorPicker(!showColorPicker);
+                      setShowIconPicker(false);
+                    }}
+                    className="flex h-10 w-10 flex-shrink-0 cursor-pointer items-center justify-center rounded-xl border border-black/[0.08] bg-white/80 shadow-sm transition-all duration-200 hover:scale-105 hover:shadow-md active:scale-95 dark:border-white/[0.08] dark:bg-white/[0.05]"
+                    title="Pick tag color"
+                  >
+                    <span
+                      className="block h-5 w-5 rounded-full shadow-[inset_0_1px_2px_rgba(255,255,255,0.4),0_0_0_2px_rgba(0,0,0,0.06)] transition-transform duration-200"
+                      style={{ backgroundColor: edCategoryColor }}
+                    />
+                  </button>
+
+                  {/* Category text field */}
+                  <input
+                    type="text"
+                    value={edCategory}
+                    onInput={(e) => setEdCategory((e.target as HTMLInputElement).value)}
+                    placeholder="e.g. engineering..."
+                    className="flex-1 min-w-0 border-0 border-b-2 border-black/[0.06] bg-transparent pb-1 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:border-ember-500/60 dark:border-white/[0.06] dark:text-slate-300 dark:placeholder:text-slate-600"
+                  />
+                </div>
+
+                {/* Live preview tag */}
+                {edCategory.trim() && (
+                  <div className="mt-3 flex items-center">
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]"
+                      style={{ backgroundColor: `${edCategoryColor}15`, color: edCategoryColor }}
+                    >
+                      <span className="block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: edCategoryColor }} />
+                      {edCategory}
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
@@ -649,29 +704,69 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               </div>
             </div>
 
-            {/* Icon picker */}
-            <div data-qs-stagger className="mt-6">
-              <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-3">Icon</div>
-                <div className="grid grid-cols-8 sm:grid-cols-12 gap-1.5">
-                  {ICON_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setEdIcon(opt.value)}
-                      title={opt.value}
-                      className={`flex items-center justify-center rounded-xl p-2 border transition-all ${
-                        edIcon === opt.value
-                          ? "border-ember-500/40 bg-ember-500/10 text-ember-500 shadow-[0_0_12px_rgba(255,107,0,0.15)]"
-                          : "border-transparent text-slate-400 hover:text-slate-600 hover:bg-black/[0.03] dark:hover:text-slate-300 dark:hover:bg-white/[0.04]"
-                      }`}
-                    >
-                      <opt.Icon className="h-4 w-4" />
-                    </button>
-                  ))}
+            {/* Fixed-position picker popups (escape overflow-hidden) */}
+            {showIconPicker && (<>
+              <div className="fixed inset-0 z-[9998] cursor-default" onClick={() => setShowIconPicker(false)} />
+              <div
+                className="fixed z-[9999] w-[17rem] rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95"
+                style={{ top: pickerPos.top, left: pickerPos.left, animation: "qs-picker-in 0.2s cubic-bezier(0.22,1,0.36,1)" }}
+              >
+                <div className="grid grid-cols-6 gap-1">
+                  {ICON_OPTIONS.map((opt) => {
+                    const isActive = edIcon === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => { setEdIcon(opt.value); setShowIconPicker(false); }}
+                        title={opt.value}
+                        className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl transition-all duration-150 ${
+                          isActive
+                            ? "bg-ember-500/20 text-ember-500 shadow-[0_0_10px_rgba(255,107,0,0.15)] scale-110"
+                            : "text-slate-400 hover:bg-white/[0.08] hover:text-white hover:scale-110"
+                        }`}
+                      >
+                        <opt.Icon className="h-4 w-4" />
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
+            </>)}
+
+            {showColorPicker && (<>
+              <div className="fixed inset-0 z-[9998] cursor-default" onClick={() => setShowColorPicker(false)} />
+              <div
+                className="fixed z-[9999] w-52 rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95"
+                style={{ top: pickerPos.top, left: pickerPos.left, animation: "qs-picker-in 0.2s cubic-bezier(0.22,1,0.36,1)" }}
+              >
+                <div className="grid grid-cols-5 gap-2">
+                  {TAG_COLOR_PALETTE.map((color) => {
+                    const isActive = color === edCategoryColor;
+                    return (
+                      <button
+                        key={color}
+                        type="button"
+                        onClick={() => { setEdCategoryColor(color); setShowColorPicker(false); }}
+                        className="group flex h-8 w-8 cursor-pointer items-center justify-center rounded-full transition-all duration-200 hover:scale-125 active:scale-95"
+                      >
+                        <span
+                          className="block rounded-full transition-all duration-200"
+                          style={{
+                            backgroundColor: color,
+                            width: isActive ? "1.5rem" : "1.25rem",
+                            height: isActive ? "1.5rem" : "1.25rem",
+                            boxShadow: isActive
+                              ? `inset 0 1px 3px rgba(255,255,255,0.35), 0 0 0 2.5px ${color}44, 0 0 12px ${color}55`
+                              : "inset 0 1px 3px rgba(255,255,255,0.35)",
+                          }}
+                        />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>)}
 
             {/* Agent Preset */}
             {agentPresets.length > 0 && (
@@ -749,7 +844,7 @@ const TemplateCard: FunctionComponent<{
   onEdit?: () => void;
 }> = ({ template, onSelect, onEdit }) => {
   const Icon = IconMap[template.icon] || Zap;
-  const badge = CATEGORY_STYLES[template.category] || "bg-black/5 text-slate-500";
+  const tagColor = template.categoryColor || "#94a3b8";
 
   return (
     <button
@@ -778,7 +873,11 @@ const TemplateCard: FunctionComponent<{
       <p className="flex-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400 mb-4">{template.description}</p>
 
       <div className="flex items-center justify-between">
-        <span className={`text-[10px] font-bold uppercase tracking-[0.14em] px-2 py-0.5 rounded-full ${badge}`}>
+        <span
+          className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] px-2.5 py-0.5 rounded-full"
+          style={{ backgroundColor: `${tagColor}15`, color: tagColor }}
+        >
+          <span className="block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tagColor }} />
           {template.category}
         </span>
         <span className="text-[10px] font-medium text-slate-400">

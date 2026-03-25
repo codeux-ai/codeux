@@ -5,6 +5,7 @@ export interface QuicksprintTemplateRecord {
   description: string;
   icon: string;
   category: string;
+  categoryColor?: string;
   agentInstructionMarkdown: string;
   defaultTaskCount: number;
   isBuiltIn: boolean;
@@ -18,6 +19,7 @@ export interface CreateQuicksprintTemplateInput {
   description: string;
   icon: string;
   category: string;
+  categoryColor?: string;
   agentInstructionMarkdown: string;
   defaultTaskCount?: number;
   agentPresetId?: string;
@@ -28,6 +30,7 @@ export interface UpdateQuicksprintTemplateInput {
   description?: string;
   icon?: string;
   category?: string;
+  categoryColor?: string;
   agentInstructionMarkdown?: string;
   defaultTaskCount?: number;
   agentPresetId?: string;

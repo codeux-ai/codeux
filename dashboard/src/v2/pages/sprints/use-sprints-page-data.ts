@@ -586,8 +586,8 @@ export function useSprintsPageData() {
   }, [selectedProject]);
 
   const handleCreateQuicksprintTemplate = useCallback(async (data: {
-    name: string; description: string; icon: string; category: string;
-    agentInstructionMarkdown: string; defaultTaskCount: number;
+    name: string; description: string; icon: string; category: string; categoryColor?: string;
+    agentInstructionMarkdown: string; defaultTaskCount: number; agentPresetId?: string;
   }) => {
     if (!selectedProject) return;
     await createCustomQuicksprintTemplate(selectedProject.id, data);
@@ -595,8 +595,8 @@ export function useSprintsPageData() {
   }, [selectedProject, reloadQuicksprintTemplates]);
 
   const handleUpdateQuicksprintTemplate = useCallback(async (templateId: string, data: {
-    name: string; description: string; icon: string; category: string;
-    agentInstructionMarkdown: string; defaultTaskCount: number;
+    name: string; description: string; icon: string; category: string; categoryColor?: string;
+    agentInstructionMarkdown: string; defaultTaskCount: number; agentPresetId?: string;
   }) => {
     if (!selectedProject) return;
     await updateCustomQuicksprintTemplate(selectedProject.id, templateId, data);

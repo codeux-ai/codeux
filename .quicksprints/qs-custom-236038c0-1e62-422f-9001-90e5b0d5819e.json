@@ -1,8 +1,8 @@
 {
   "name": "Test Template",
   "description": "",
-  "icon": "Heart",
-  "category": "security",
+  "icon": "Bug",
+  "category": "LOL",
   "agentInstructionMarkdown": "Test",
   "defaultTaskCount": 5,
   "agentPresetId": "213fae24-55b0-499f-acc2-9ed06d06fba0",
@@ -10,5 +10,6 @@
   "projectId": "4071e4a9-9646-4f4c-a407-23d697e5f562",
   "isBuiltIn": false,
   "createdAt": "2026-03-25T09:04:47.597Z",
-  "updatedAt": "2026-03-25T09:12:36.323Z"
+  "updatedAt": "2026-03-25T09:34:04.696Z",
+  "categoryColor": "#22c55e"
 }
