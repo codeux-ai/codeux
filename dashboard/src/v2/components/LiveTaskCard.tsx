@@ -163,7 +163,8 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     return (
         <div
             ref={cardRef}
-            className="group relative overflow-hidden
+            tabIndex={0}
+            className="group relative overflow-hidden focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-signal-500 focus-visible:ring-offset-4 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800
                        bg-white/70 dark:bg-void-800/60
                        backdrop-blur-2xl
                        border border-black/[0.06] dark:border-white/[0.06]
@@ -175,7 +176,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
             <BorderTrace accentHex={cfg.hex} />
 
             {/* Hover tint */}
-            <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-black/[0.01] dark:group-hover:bg-white/[0.01]" />
+            <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-black/[0.01] dark:group-hover:bg-white/[0.01] group-focus-within:bg-black/[0.01] dark:group-focus-within:bg-white/[0.01]" />
 
             {/* Ghost ID watermark */}
             <div
@@ -248,9 +249,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                     <button
                         type="button"
                         onClick={() => setExpanded(true)}
-                        className="text-[13px] text-slate-400 dark:text-slate-500 line-clamp-1 text-left w-full
-                                   hover:text-slate-600 dark:hover:text-slate-300 transition-colors duration-200
-                                   mb-4 font-medium"
+                        className="text-[13px] text-slate-400 dark:text-slate-500 line-clamp-1 text-left w-full hover:text-slate-600 dark:hover:text-slate-300 transition-colors duration-200 mb-4 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800 focus-visible:rounded"
                     >
                         {task.prompt.substring(0, 140)}...
                     </button>
@@ -269,7 +268,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                        prose-code:text-signal-600 dark:prose-code:text-signal-400
                                        prose-code:bg-signal-500/[0.06] prose-code:px-1.5 prose-code:rounded-md
                                        prose-strong:text-slate-800 dark:prose-strong:text-slate-200
-                                       prose-a:text-signal-600 dark:prose-a:text-signal-400
+                                       prose-a:text-signal-600 dark:prose-a:text-signal-400 prose-a:focus-visible:outline-none prose-a:focus-visible:ring-2 prose-a:focus-visible:ring-signal-500 prose-a:focus-visible:rounded prose-a:focus-visible:ring-offset-1 dark:prose-a:focus-visible:ring-offset-void-800
                                        font-mono text-[12px] leading-relaxed"
                             dangerouslySetInnerHTML={{ __html: renderedPrompt }}
                         />
@@ -295,13 +294,13 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                 )}
 
                 {/* Action bar */}
-                <div className="flex items-center justify-between pt-4 border-t border-black/[0.04] dark:border-white/[0.04]">
+                <div className={`flex items-center justify-between pt-4 border-t border-black/[0.04] dark:border-white/[0.04] transition-opacity duration-200 ${expanded || showFeed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100 group-focus-within:opacity-100'}`}>
                     <div className="flex items-center gap-2">
                         {hasEventFeed && (
                             <button
                                 type="button"
                                 onClick={() => { setShowFeed(!showFeed); if (expanded) setExpanded(false); }}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.1em]
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
                                            transition-all duration-200 border
                                            ${showFeed
                                                ? 'bg-signal-500/10 text-signal-500 border-signal-500/20 shadow-[0_0_12px_rgba(0,224,160,0.08)]'
@@ -315,7 +314,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         <button
                             type="button"
                             onClick={() => { setExpanded(!expanded); if (showFeed) setShowFeed(false); }}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.1em]
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
                                        transition-all duration-200 border
                                        ${expanded
                                            ? 'bg-ember-500/10 text-ember-500 border-ember-500/20'
@@ -329,11 +328,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             type="button"
                             onClick={handleRerun}
                             disabled={isRerunning}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.1em]
-                                       bg-black/[0.03] dark:bg-white/[0.03] text-slate-400 border border-transparent
-                                       hover:text-status-amber hover:border-status-amber/15
-                                       disabled:opacity-40 disabled:pointer-events-none
-                                       transition-all duration-200"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] bg-black/[0.03] dark:bg-white/[0.03] text-slate-400 border border-transparent hover:text-status-amber hover:border-status-amber/15 disabled:opacity-40 disabled:pointer-events-none transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
                         >
                             <RotateCcw className={`w-3 h-3 ${isRerunning ? 'animate-spin' : ''}`} strokeWidth={2} />
                             {isRerunning ? "Rerunning" : "Rerun"}
@@ -344,7 +339,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             href={task.pr_url}
                             target="_blank"
                             rel="noreferrer"
-                            className="flex items-center gap-1.5 text-[10px] font-mono text-signal-500 hover:text-signal-400 transition-colors duration-200"
+                            className="flex items-center gap-1.5 text-[10px] font-mono text-signal-500 hover:text-signal-400 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800 focus-visible:rounded"
                         >
                             <GitPullRequest className="w-3 h-3" strokeWidth={2} />
                             PR
