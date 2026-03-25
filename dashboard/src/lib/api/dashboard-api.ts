@@ -48,6 +48,10 @@ export const fetchLivePayload = async (): Promise<RuntimeDashboardPayload> => {
   return fetchJson<RuntimeDashboardPayload>("/api/live");
 };
 
+export const fetchLiveActivities = async (): Promise<import("../../types.js").LiveActivitiesResponse> => {
+  return fetchJson<import("../../types.js").LiveActivitiesResponse>("/api/live-activities");
+};
+
 export const fetchOverviewTelemetry = async (): Promise<OverviewTelemetrySnapshot> => {
   return fetchJson<OverviewTelemetrySnapshot>("/api/telemetry/overview");
 };

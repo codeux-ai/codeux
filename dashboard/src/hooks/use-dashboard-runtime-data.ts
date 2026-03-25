@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { computeStats } from "../lib/status.js";
-import { fetchExecutionSnapshot, fetchGitTrackingStatus, fetchLivePayload, fetchRuntimeStatus } from "../lib/api/dashboard-api.js";
+import { computeStats, processDashboardTasks } from "../lib/status.js";
+import { fetchExecutionSnapshot, fetchGitTrackingStatus, fetchLivePayload, fetchRuntimeStatus, fetchLiveActivities } from "../lib/api/dashboard-api.js";
 import type {
   DashboardStatus,
   ExecutionDashboardSnapshot,
   GitTrackingStatus,
   DashboardRealtimeServerMessage,
+  LiveActivitiesResponse,
 } from "../types.js";
 import { useDashboardPollManager } from "./use-dashboard-poll-manager.js";
 import { subscribeToDashboardRealtime } from "../lib/realtime/dashboard-realtime-client.js";
@@ -46,6 +47,7 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
   const [error, setError] = useState<string | null>(null);
   const [gitStatus, setGitStatus] = useState<GitTrackingStatus | null>(null);
   const [gitStatusError, setGitStatusError] = useState<string | null>(null);
+  const [liveActivities, setLiveActivities] = useState<LiveActivitiesResponse | null>(null);
   const gitRefreshTimerRef = useRef<number | null>(null);
   const initialFetchDoneRef = useRef(false);
 
@@ -54,9 +56,15 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
     if (!initialFetchDoneRef.current) {
       initialFetchDoneRef.current = true;
       try {
-        const data = await fetchLivePayload();
+        const [data, activitiesData] = await Promise.all([
+          fetchLivePayload(),
+          fetchLiveActivities().catch(() => null)
+        ]);
         setStatus(data.status);
         setExecution(data.execution);
+        if (activitiesData) {
+          setLiveActivities(activitiesData);
+        }
         setError(null);
         return;
       } catch {
@@ -64,9 +72,10 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
       }
     }
 
-    const [statusResult, executionResult] = await Promise.allSettled([
+    const [statusResult, executionResult, activitiesResult] = await Promise.allSettled([
       fetchRuntimeStatus(),
       fetchExecutionSnapshot(),
+      fetchLiveActivities()
     ]);
 
     if (statusResult.status === "fulfilled") {
@@ -74,6 +83,9 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
     }
     if (executionResult.status === "fulfilled") {
       setExecution(executionResult.value);
+    }
+    if (activitiesResult.status === "fulfilled") {
+      setLiveActivities(activitiesResult.value);
     }
 
     if (statusResult.status === "fulfilled" || executionResult.status === "fulfilled") {
@@ -165,9 +177,13 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
     });
   }, [realtimeProjectId, refreshRuntimeStatusAction, scheduleGitStatusRefresh]);
 
-  const tasksWithLiveActivities = useMemo(() => status.subtasks || [], [status.subtasks]);
-
-  const stats = useMemo(() => computeStats(tasksWithLiveActivities), [tasksWithLiveActivities]);
+  const { tasksWithLiveActivities, stats } = useMemo(() => {
+    const result = processDashboardTasks(status.subtasks || [], liveActivities?.activitiesBySession);
+    return {
+      tasksWithLiveActivities: result.tasks,
+      stats: result.stats,
+    };
+  }, [status.subtasks, liveActivities]);
 
   return {
     error,
