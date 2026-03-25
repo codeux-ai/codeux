@@ -1,13 +1,16 @@
 import type { FunctionComponent } from "preact";
+import { lazy, Suspense } from "preact/compat";
 import { useEffect, useState } from "preact/hooks";
 import { ActivitySidebar } from "./components/ActivitySidebar.js";
 import { Header, type DashboardView } from "./components/Header.js";
-import { SettingsPage } from "./components/SettingsPage.js";
 import { StatsGrid } from "./components/StatsGrid.js";
+
 import { TaskCard } from "./components/TaskCard.js";
 import { useDashboardRuntimeData } from "./hooks/use-dashboard-runtime-data.js";
 import { useDashboardSettings } from "./hooks/use-dashboard-settings.js";
 import { rerunTask } from "./lib/api/dashboard-api.js";
+
+const SettingsPage = lazy(() => import("./components/SettingsPage.js").then(m => ({ default: m.SettingsPage })));
 
 export const App: FunctionComponent = () => {
   const [view, setView] = useState<DashboardView>("dashboard");
@@ -104,16 +107,18 @@ export const App: FunctionComponent = () => {
           </>
         ) : (
           <div className="max-w-5xl">
-            <SettingsPage
-              settings={settings}
-              isLoading={isLoading}
-              isSaving={isSaving}
-              error={settingsError}
-              saveMessage={saveMessage}
-              onChange={setSettings}
-              onSave={handleSaveSettings}
-              onImportMissing={importMissingSettings}
-            />
+            <Suspense fallback={<div className="flex items-center justify-center p-12 text-slate-400">Loading settings...</div>}>
+              <SettingsPage
+                settings={settings}
+                isLoading={isLoading}
+                isSaving={isSaving}
+                error={settingsError}
+                saveMessage={saveMessage}
+                onChange={setSettings}
+                onSave={handleSaveSettings}
+                onImportMissing={importMissingSettings}
+              />
+            </Suspense>
           </div>
         )}
       </main>

@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync, StatementSync } from "node:sqlite";
 import { AppDbStorage } from "./app-db-storage.js";
 import type {
   AcquireExecutionLeaseInput,
@@ -342,12 +342,22 @@ function cloneUsageTotals(input?: ExecutionUsageTotals | null): ExecutionUsageTo
 
 export class ExecutionRepository {
   private readonly db: DatabaseSync;
+  private readonly cachedStatements = new Map<string, StatementSync>();
 
   constructor(
     storage: AppDbStorage = new AppDbStorage(),
     private readonly realtimeNotifier?: DashboardRealtimeMutationNotifier,
   ) {
     this.db = storage.getDatabase();
+  }
+
+  private getCachedStatement(sql: string): StatementSync {
+    let stmt = this.cachedStatements.get(sql);
+    if (!stmt) {
+      stmt = this.db.prepare(sql);
+      this.cachedStatements.set(sql, stmt);
+    }
+    return stmt;
   }
 
   createSprintRun(input: CreateSprintRunInput): SprintRunRecord {
@@ -1456,7 +1466,7 @@ export class ExecutionRepository {
     options?: { createdAt?: string; sourceEventKey?: string | null },
   ): boolean {
     this.requireSprintRun(sprintRunId);
-    const result = this.db.prepare(`
+    const result = this.getCachedStatement(`
       INSERT OR IGNORE INTO sprint_run_events (id, sprint_run_id, event_type, originator, payload_json, source_event_key, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
@@ -2240,14 +2250,14 @@ export class ExecutionRepository {
   }
 
   private requireProject(projectId: string): void {
-    const row = this.db.prepare(`SELECT id FROM projects WHERE id = ?`).get(projectId) as { id: string } | undefined;
+    const row = this.getCachedStatement(`SELECT id FROM projects WHERE id = ?`).get(projectId) as { id: string } | undefined;
     if (!row) {
       throw new Error(`Project not found: ${projectId}`);
     }
   }
 
   private requireSprint(sprintId: string, projectId?: string): void {
-    const row = this.db.prepare(`
+    const row = this.getCachedStatement(`
       SELECT id, project_id
       FROM sprints
       WHERE id = ?
@@ -2285,7 +2295,7 @@ export class ExecutionRepository {
   }
 
   private requireConnection(connectionId: string): void {
-    const row = this.db.prepare(`SELECT id FROM mcp_connections WHERE id = ?`).get(connectionId) as { id: string } | undefined;
+    const row = this.getCachedStatement(`SELECT id FROM mcp_connections WHERE id = ?`).get(connectionId) as { id: string } | undefined;
     if (!row) {
       throw new Error(`Connection not found: ${connectionId}`);
     }
