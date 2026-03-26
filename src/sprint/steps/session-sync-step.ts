@@ -175,9 +175,18 @@ const syncExecutionRunState = (
     }
   }
 
-  deps.projectManagementRepository?.updateTask(task.record_id, {
-    status: mapTaskRunStateToPlanningStatus(nextRunState),
-  });
+  const nextPlanningStatus = mapTaskRunStateToPlanningStatus(nextRunState);
+  const skipStatusUpdate = task.status === "COMPLETED" && (nextPlanningStatus as string) !== "completed";
+
+  if (!skipStatusUpdate) {
+    const updatePayload: Record<string, any> = {
+      status: nextPlanningStatus,
+    };
+    if (task.is_merged) {
+      updatePayload.is_merged = true;
+    }
+    deps.projectManagementRepository?.updateTask(task.record_id, updatePayload);
+  }
 
   const sessionSyncKey = [
     "session-sync",
@@ -314,7 +323,9 @@ export const runSessionSyncStep = async (
     );
 
     if (match.state === "COMPLETED") {
-      task.status = "CODING_COMPLETED";
+      if (task.status !== "COMPLETED") {
+        task.status = "CODING_COMPLETED";
+      }
       continue;
     }
 

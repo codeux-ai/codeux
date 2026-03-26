@@ -436,4 +436,69 @@ describe("runSessionSyncStep", () => {
     expect(executionRepository.getTaskRun(run.id)?.finishedAt).toBe("2026-03-09T10:05:00.000Z");
     expect(executionRepository.getTaskDispatch(dispatch.id)?.finishedAt).toBe("2026-03-09T10:05:00.000Z");
   });
+
+  it("does not downgrade a COMPLETED task to CODING_COMPLETED", async () => {
+    const subtasks: Subtask[] = [
+      { id: "task-completed", title: "Task C", prompt: "", depends_on: [], is_independent: true, status: "COMPLETED", record_id: "rec-c" },
+      { id: "task-coding-completed", title: "Task CC", prompt: "", depends_on: [], is_independent: true, status: "CODING_COMPLETED", record_id: "rec-cc" },
+      { id: "task-running", title: "Task R", prompt: "", depends_on: [], is_independent: true, status: "RUNNING", record_id: "rec-r" },
+    ];
+
+    const updateTaskMock = vi.fn();
+    const deps = {
+      listSessions: vi.fn().mockResolvedValue({
+        sessions: [
+          {
+            id: "s-completed",
+            name: "sessions/s-completed",
+            title: "Sprint 1: [run:my-repo/s1/task-completed] [task-completed] Task C",
+            state: "COMPLETED",
+          },
+          {
+            id: "s-coding-completed",
+            name: "sessions/s-coding-completed",
+            title: "Sprint 1: [run:my-repo/s1/task-coding-completed] [task-coding-completed] Task CC",
+            state: "COMPLETED",
+          },
+          {
+            id: "s-running",
+            name: "sessions/s-running",
+            title: "Sprint 1: [run:my-repo/s1/task-running] [task-running] Task R",
+            state: "COMPLETED",
+          },
+        ],
+      }),
+      resolveSessionName: (session: any) => session.name,
+      extractSessionId: (session: any) => session.id,
+      fetchRecentActivities: vi.fn().mockResolvedValue([]),
+      isActionRequiredState: vi.fn().mockReturnValue(false),
+      logger: { warn: vi.fn() },
+      executionRepository: {
+        getLatestTaskRun: vi.fn().mockReturnValue({ id: "run-id", startedAt: "2026-03-09T10:00:00.000Z" }),
+        updateTaskRun: vi.fn(),
+        getTaskDispatch: vi.fn(),
+        updateTaskDispatch: vi.fn(),
+        appendTaskRunEvent: vi.fn(),
+      },
+      sprintRunId: "sprint-run-1",
+      projectManagementRepository: {
+        updateTask: updateTaskMock,
+      },
+    };
+
+    const result = await runSessionSyncStep(
+      subtasks,
+      deps as any,
+      false,
+      { repoPath: "/tmp/my-repo", sprintNumber: 1 }
+    );
+
+    expect(result.subtasks.find(t => t.id === "task-completed")?.status).toBe("COMPLETED");
+    expect(result.subtasks.find(t => t.id === "task-coding-completed")?.status).toBe("CODING_COMPLETED");
+    expect(result.subtasks.find(t => t.id === "task-running")?.status).toBe("CODING_COMPLETED");
+
+    expect(updateTaskMock).not.toHaveBeenCalledWith("rec-c", { status: "coding_completed" });
+    expect(updateTaskMock).toHaveBeenCalledWith("rec-cc", { status: "coding_completed" });
+    expect(updateTaskMock).toHaveBeenCalledWith("rec-r", { status: "coding_completed" });
+  });
 });
