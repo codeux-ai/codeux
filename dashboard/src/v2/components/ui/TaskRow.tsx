@@ -14,7 +14,7 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
 
         <div className="flex-1 grid grid-cols-12 gap-5 items-center">
             {/* ID */}
-            <div className="col-span-1 font-mono text-[10px] font-bold text-slate-300 dark:text-slate-600 group-hover:text-slate-400 dark:group-hover:text-slate-500 transition-colors">
+            <div className="col-span-1 font-mono text-[10px] font-bold text-slate-300 dark:text-slate-500 group-hover:text-slate-400 dark:group-hover:text-slate-500 transition-colors">
                 #{task.id.split('-')[0].substring(0, 4)}
             </div>
 
@@ -26,7 +26,7 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
             </div>
 
             {/* Source */}
-            <div className="col-span-2 flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-500">
+            <div className="col-span-2 flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
                 <FolderGit2 className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600 group-hover:text-signal-500 transition-colors shrink-0" strokeWidth={2} />
                 <span className="truncate group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors font-mono">{task.source}</span>
             </div>
@@ -41,7 +41,7 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
                         <PlayCircle className="w-4 h-4 text-emerald-700 dark:text-signal-500 relative z-10" strokeWidth={2} />
                     </div>
                 )}
-                {task.status === 'pending' && <Circle className="w-4 h-4 text-slate-400 dark:text-slate-500" strokeWidth={2} />}
+                {task.status === 'pending' && <Circle className="w-4 h-4 text-slate-400 dark:text-slate-400" strokeWidth={2} />}
 
                 <span className={`text-[10px] font-bold uppercase tracking-widest ${
                     task.status === 'completed'   ? 'text-emerald-700 dark:text-status-green' :
@@ -57,18 +57,18 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
             <div className="col-span-2 flex items-center justify-end h-full relative overflow-hidden">
                 <div className="flex items-center gap-2 absolute right-0 transition-all duration-300 opacity-100 group-hover:opacity-0 group-hover:translate-x-3">
                     <Clock className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600" strokeWidth={2} />
-                    <span className="text-xs font-mono text-slate-400 dark:text-slate-600">{task.time}</span>
+                    <span className="text-xs font-mono text-slate-400 dark:text-slate-500">{task.time}</span>
                 </div>
 
                 {/* Quick actions */}
                 <div className="flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] absolute right-0 translate-x-[115%] opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-350 ease-[cubic-bezier(0.175,0.885,0.32,1.275)]">
-                    <button className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 rounded-full transition-colors" title="Play/Stop">
+                    <button className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 rounded-full transition-colors" title="Play/Stop">
                         {task.status === 'in_progress' ? <Square className="w-3 h-3" fill="currentColor" /> : <Play className="w-3 h-3" fill="currentColor" />}
                     </button>
-                    <button className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-full transition-colors" title="Configure">
+                    <button className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-full transition-colors" title="Configure">
                         <Settings className="w-3 h-3" />
                     </button>
-                    <button className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-status-green rounded-full transition-colors" title="Expand">
+                    <button className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-status-green rounded-full transition-colors" title="Expand">
                         <Maximize2 className="w-3 h-3" />
                     </button>
                 </div>

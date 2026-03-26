@@ -9,7 +9,7 @@ const statusMap = {
     running:      { ring: 'border-status-green/50 shadow-[0_0_28px_rgba(0,171,132,0.35)]', text: 'text-status-green', icon: Activity,       label: "Running"     },
     failed:       { ring: 'border-status-red/60 shadow-[0_0_28px_rgba(227,0,15,0.35)]',   text: 'text-status-red',   icon: XCircle,        label: "Failed"      },
     intervention: { ring: 'border-status-amber/50 shadow-[0_0_28px_rgba(245,158,11,0.3)]', text: 'text-status-amber', icon: AlertTriangle,  label: "Needs Review" },
-    idle:         { ring: '',                                                               text: 'text-slate-400 dark:text-slate-500', icon: FolderGit2, label: "Idle" },
+    idle:         { ring: '',                                                               text: 'text-slate-400 dark:text-slate-400', icon: FolderGit2, label: "Idle" },
 } as const;
 
 interface SourceCellProps {
@@ -90,7 +90,7 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
 
                 <div className="mt-1.5 flex gap-3 text-xs font-semibold text-slate-500 dark:text-slate-400 group-hover:opacity-0 transition-opacity duration-300">
                     <span>{source.openTasks} open</span>
-                    <span className="text-slate-300 dark:text-slate-600">·</span>
+                    <span className="text-slate-300 dark:text-slate-500">·</span>
                     <span>{source.completedTasks} done</span>
                 </div>
 
