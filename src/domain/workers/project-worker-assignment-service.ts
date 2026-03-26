@@ -1,3 +1,4 @@
+import { isAssignableWorkerStatus } from "./worker-status-utils.js";
 import { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
 import {
   WorkerEndpointRepository,
@@ -8,9 +9,6 @@ import type {
   WorkerEndpointRecord,
 } from "../../contracts/worker-types.js";
 
-function isAssignableWorkerStatus(status: string | null | undefined): boolean {
-  return status !== null && status !== "stale" && status !== "offline";
-}
 
 function isLivePreferredWorkerStatus(status: string | null | undefined): boolean {
   return status === "connected" || status === "idle" || status === "paused";
