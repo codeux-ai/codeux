@@ -119,7 +119,8 @@ export class TaskService {
     dispatchId?: string,
     taskRunId?: string,
   ): Promise<JulesSession> {
-    const provider = this.selectProviderForTask(task, settingsScope);
+    // Respect task.provider if already set (e.g. from a rerun with provider override)
+    const provider = task.provider || this.selectProviderForTask(task, settingsScope);
 
     if (provider !== "jules") {
       const session = await this.deps.cliWorkflowService.startTask({
