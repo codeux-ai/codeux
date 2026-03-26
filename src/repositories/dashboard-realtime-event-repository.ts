@@ -162,6 +162,18 @@ export class DashboardRealtimeEventRepository {
     );
   }
 
+  private buildScopePredicates(count: number): string {
+    return Array(count).fill("(scope_type = ? AND scope_id = ?)").join(" OR ");
+  }
+
+  private buildScopeValues(scopes: { scopeType: string; scopeId: string }[]): string[] {
+    const values: string[] = [];
+    for (const scope of scopes) {
+      values.push(scope.scopeType, scope.scopeId);
+    }
+    return values;
+  }
+
   listEventsSince(scopes: string[], afterSequence: number, limit: number = 200): DashboardRealtimeEvent[] {
     const parsedScopes = this.parseScopes(scopes);
 
@@ -169,12 +181,12 @@ export class DashboardRealtimeEventRepository {
       return [];
     }
 
-    const predicates = parsedScopes.map(() => "(scope_type = ? AND scope_id = ?)").join(" OR ");
-    const values: Array<string | number> = [Math.max(0, afterSequence)];
-    for (const scope of parsedScopes) {
-      values.push(scope.scopeType, scope.scopeId);
-    }
-    values.push(Math.max(1, limit));
+    const predicates = this.buildScopePredicates(parsedScopes.length);
+    const values: Array<string | number> = [
+      Math.max(0, afterSequence),
+      ...this.buildScopeValues(parsedScopes),
+      Math.max(1, limit),
+    ];
 
     const rows = this.db.prepare(`
       SELECT *
@@ -195,11 +207,8 @@ export class DashboardRealtimeEventRepository {
       return null;
     }
 
-    const predicates = parsedScopes.map(() => "(scope_type = ? AND scope_id = ?)").join(" OR ");
-    const values: string[] = [];
-    for (const scope of parsedScopes) {
-      values.push(scope.scopeType, scope.scopeId);
-    }
+    const predicates = this.buildScopePredicates(parsedScopes.length);
+    const values = this.buildScopeValues(parsedScopes);
 
     const row = this.db.prepare(`
       SELECT MAX(sequence) AS max_sequence
@@ -220,11 +229,11 @@ export class DashboardRealtimeEventRepository {
       return false;
     }
 
-    const predicates = parsedScopes.map(() => "(scope_type = ? AND scope_id = ?)").join(" OR ");
-    const values: Array<string | number> = [Math.max(0, afterSequence)];
-    for (const scope of parsedScopes) {
-      values.push(scope.scopeType, scope.scopeId);
-    }
+    const predicates = this.buildScopePredicates(parsedScopes.length);
+    const values: Array<string | number> = [
+      Math.max(0, afterSequence),
+      ...this.buildScopeValues(parsedScopes),
+    ];
 
     const row = this.db.prepare(`
       SELECT 1 AS has_match

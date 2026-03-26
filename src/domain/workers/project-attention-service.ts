@@ -1,11 +1,9 @@
+import { isAssignableWorkerStatus } from "./worker-status-utils.js";
 import { ProjectAttentionRepository, type OpenProjectAttentionItemInput } from "../../repositories/project-attention-repository.js";
 import { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
 import type { ProjectAttentionItemRecord, ProjectAttentionOwnerType, ProjectAttentionType } from "../../contracts/project-attention-types.js";
 import type { WorkerExecutionMode } from "../../contracts/app-types.js";
 
-function isAssignableWorkerStatus(status: string | null | undefined): boolean {
-  return status !== null && status !== "stale" && status !== "offline";
-}
 
 export class ProjectAttentionService {
   private onWorkerAttentionOpenedCallback?: (projectId: string) => void;
