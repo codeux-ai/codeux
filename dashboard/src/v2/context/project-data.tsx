@@ -1,5 +1,5 @@
 import { createContext } from "preact";
-import { useCallback, useContext, useEffect, useState } from "preact/hooks";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { ComponentChildren, FunctionComponent } from "preact";
 import type { CreateProjectInput, Source, UpdateProjectInput } from "../types.js";
 import type { DashboardRealtimeServerMessage } from "../../types.js";
@@ -32,29 +32,38 @@ export const ProjectDataProvider: FunctionComponent<{ children: ComponentChildre
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
-  const refreshProjects = useCallback(async (): Promise<void> => {
-    setLoading(true);
+  const refreshProjectsSilent = useCallback(async (): Promise<void> => {
+    // Only show loading spinner on the very first fetch.
+    // All subsequent refreshes (realtime, polling, user actions) update silently.
+    const isForeground = !hasLoadedRef.current;
+    if (isForeground) {
+      setLoading(true);
+    }
     try {
       const response = await fetchProjects();
       setProjects(response.projects);
       setSelectedProjectId(response.selectedProjectId ?? response.projects[0]?.id ?? null);
+      hasLoadedRef.current = true;
       setError(null);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
     } finally {
-      setLoading(false);
+      if (isForeground) {
+        setLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    void refreshProjects();
-  }, [refreshProjects]);
+    void refreshProjectsSilent();
+  }, [refreshProjectsSilent]);
 
   useEffect(() => (
     subscribeToDashboardRealtime(["projects"], (message: DashboardRealtimeServerMessage) => {
       if (message.type === "snapshot_required") {
-        void refreshProjects();
+        void refreshProjectsSilent();
         return;
       }
 
@@ -65,10 +74,9 @@ export const ProjectDataProvider: FunctionComponent<{ children: ComponentChildre
       const payload = message.event.payload as Awaited<ReturnType<typeof fetchProjects>>;
       setProjects(payload.projects);
       setSelectedProjectId(payload.selectedProjectId ?? payload.projects[0]?.id ?? null);
-      setLoading(false);
       setError(null);
     })
-  ), [refreshProjects]);
+  ), [refreshProjectsSilent]);
 
   const selectProject = async (projectId: string): Promise<void> => {
     const nextProjectId = await selectProjectRequest(projectId);
@@ -77,29 +85,34 @@ export const ProjectDataProvider: FunctionComponent<{ children: ComponentChildre
 
   const createProject = async (input: CreateProjectInput): Promise<Source> => {
     const project = await createProjectRequest(input);
-    await refreshProjects();
+    await refreshProjectsSilent();
     await selectProject(project.id);
     return project;
   };
 
   const updateProject = async (projectId: string, input: UpdateProjectInput): Promise<Source> => {
     const project = await updateProjectRequest(projectId, input);
-    await refreshProjects();
+    await refreshProjectsSilent();
     return project;
   };
 
   const deleteProject = async (projectId: string): Promise<void> => {
     await deleteProjectRequest(projectId);
-    await refreshProjects();
+    await refreshProjectsSilent();
   };
+
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.id === selectedProjectId) || null,
+    [projects, selectedProjectId],
+  );
 
   const value: ProjectDataContextValue = {
     projects,
     selectedProjectId,
-    selectedProject: projects.find((project) => project.id === selectedProjectId) || null,
+    selectedProject,
     loading,
     error,
-    refreshProjects,
+    refreshProjects: refreshProjectsSilent,
     selectProject,
     createProject,
     updateProject,

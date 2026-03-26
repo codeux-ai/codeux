@@ -340,7 +340,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
             </tr>
           </thead>
           <tbody>
-            {isLoading ? (
+            {isLoading && windowedSprints.length === 0 ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b border-black/[0.04] dark:border-white/[0.04]">
                   <td colSpan={9} className="p-4">

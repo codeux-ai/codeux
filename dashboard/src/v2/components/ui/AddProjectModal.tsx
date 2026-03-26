@@ -79,6 +79,9 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         <div
             ref={backdropRef}
             onClick={handleBackdropClick}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-project-modal-title"
             className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-black/50 dark:bg-black/70 backdrop-blur-xl"
         >
             <div
@@ -114,7 +117,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     {/* Header */}
                     <div className="flex items-start justify-between mb-8">
                         <div>
-                            <h2 className="text-[2rem] font-black text-slate-900 dark:text-white tracking-tight font-display leading-none">
+                            <h2 id="add-project-modal-title" className="text-[2rem] font-black text-slate-900 dark:text-white tracking-tight font-display leading-none">
                                 Add Project.
                             </h2>
                             <p className="text-xs font-medium text-slate-400 mt-2 tracking-wide">
@@ -123,6 +126,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         </div>
                         <button
                             onClick={handleClose}
+                            aria-label="Close"
                             className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
                         >
                             <X className="w-4 h-4" />

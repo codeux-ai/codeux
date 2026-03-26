@@ -19,6 +19,8 @@ class DashboardRealtimeClient {
   private lastSequence: number | null = null;
   private readonly subscriptions = new Map<number, RealtimeSubscription>();
   private nextSubscriptionId = 1;
+  private snapshotRequiredLastDispatchedAt: number = 0;
+  private readonly SNAPSHOT_REQUIRED_COOLDOWN_MS = 3000;
 
   subscribe(scopes: string[], listener: RealtimeListener): () => void {
     const subscriptionId = this.nextSubscriptionId++;
@@ -85,6 +87,14 @@ class DashboardRealtimeClient {
   }
 
   private dispatch(message: DashboardRealtimeServerMessage): void {
+    if (message.type === "snapshot_required") {
+      const now = Date.now();
+      if (now - this.snapshotRequiredLastDispatchedAt < this.SNAPSHOT_REQUIRED_COOLDOWN_MS) {
+        return;
+      }
+      this.snapshotRequiredLastDispatchedAt = now;
+    }
+
     for (const subscription of this.subscriptions.values()) {
       if (message.type === "event") {
         if (!subscription.scopes.includes(message.event.scope)) {

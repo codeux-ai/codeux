@@ -1,9 +1,19 @@
 import type { FunctionComponent } from "preact";
+import { memo } from "preact/compat";
 import { FolderGit2, CheckCircle2, Circle, PlayCircle, Clock, Play, Square, Settings, Maximize2 } from "lucide-preact";
 import type { Task } from "../../types.js";
 
-export const TaskRow: FunctionComponent<{ task: Task }> = ({ task }) => (
-    <div className="group relative flex items-center justify-between py-5 cursor-pointer border-b border-black/[0.05] dark:border-white/[0.04] last:border-0">
+export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
+    <div
+        className="group relative flex items-center justify-between py-5 cursor-pointer border-b border-black/[0.05] dark:border-white/[0.04] last:border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 dark:focus-visible:ring-slate-400 focus-visible:z-10 focus-visible:rounded-xl"
+        tabIndex={0}
+        role="button"
+        onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                if (e.key === ' ') e.preventDefault();
+            }
+        }}
+    >
         {/* Hover backdrop */}
         <div className="absolute inset-0 bg-gradient-to-r from-signal-500/0 via-signal-500/[0.03] to-signal-500/0 dark:via-signal-500/[0.05] opacity-0 group-hover:opacity-100 transition-opacity duration-400 -z-10 rounded-xl" />
         <div className="absolute inset-y-1 inset-x-0 bg-white/50 dark:bg-void-700/40 opacity-0 group-hover:opacity-100 transition-all duration-300 -z-10 rounded-xl" />
@@ -29,21 +39,21 @@ export const TaskRow: FunctionComponent<{ task: Task }> = ({ task }) => (
 
             {/* Status */}
             <div className="col-span-2 flex items-center gap-2">
-                {task.status === 'completed' && <CheckCircle2 className="w-4 h-4 text-status-green" strokeWidth={2} />}
-                {task.status === 'coding_completed' && <CheckCircle2 className="w-4 h-4 text-cyan-500" strokeWidth={2} />}
+                {task.status === 'completed' && <CheckCircle2 className="w-4 h-4 text-emerald-700 dark:text-status-green" strokeWidth={2} />}
+                {task.status === 'coding_completed' && <CheckCircle2 className="w-4 h-4 text-cyan-700 dark:text-cyan-500" strokeWidth={2} />}
                 {task.status === 'in_progress' && (
                     <div className="relative flex items-center justify-center w-4 h-4">
                         <div className="absolute inset-0 rounded-full bg-signal-500 animate-[spin_3s_linear_infinite] opacity-30 shadow-[0_0_10px_rgba(0,224,160,0.6)] pointer-events-none" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%', clipPath: 'inset(-2px)' }} />
-                        <PlayCircle className="w-4 h-4 text-signal-500 relative z-10" strokeWidth={2} />
+                        <PlayCircle className="w-4 h-4 text-emerald-700 dark:text-signal-500 relative z-10" strokeWidth={2} />
                     </div>
                 )}
-                {task.status === 'pending' && <Circle className="w-4 h-4 text-slate-300 dark:text-slate-600" strokeWidth={2} />}
+                {task.status === 'pending' && <Circle className="w-4 h-4 text-slate-400 dark:text-slate-500" strokeWidth={2} />}
 
                 <span className={`text-[10px] font-bold uppercase tracking-widest ${
-                    task.status === 'completed'   ? 'text-status-green' :
-                    task.status === 'coding_completed' ? 'text-cyan-500' :
-                    task.status === 'in_progress' ? 'text-signal-500' :
-                    'text-slate-400 dark:text-slate-600'
+                    task.status === 'completed'   ? 'text-emerald-700 dark:text-status-green' :
+                    task.status === 'coding_completed' ? 'text-cyan-700 dark:text-cyan-500' :
+                    task.status === 'in_progress' ? 'text-emerald-700 dark:text-signal-500' :
+                    'text-slate-600 dark:text-slate-400'
                 }`}>
                     {task.status.replace('_', ' ')}
                 </span>
@@ -57,7 +67,7 @@ export const TaskRow: FunctionComponent<{ task: Task }> = ({ task }) => (
                 </div>
 
                 {/* Quick actions */}
-                <div className="flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] absolute right-0 translate-x-[115%] opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-350 ease-[cubic-bezier(0.175,0.885,0.32,1.275)]">
+                <div className="flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] absolute right-0 translate-x-[115%] opacity-0 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100 transition-all duration-350 ease-[cubic-bezier(0.175,0.885,0.32,1.275)]">
                     <button className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 rounded-full transition-colors" title="Play/Stop">
                         {task.status === 'in_progress' ? <Square className="w-3 h-3" fill="currentColor" /> : <Play className="w-3 h-3" fill="currentColor" />}
                     </button>
@@ -71,4 +81,4 @@ export const TaskRow: FunctionComponent<{ task: Task }> = ({ task }) => (
             </div>
         </div>
     </div>
-);
+));

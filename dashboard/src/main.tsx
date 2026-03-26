@@ -11,10 +11,12 @@ import {
 import { KineticDock } from "./v2/components/KineticDock.js";
 import { TopNav } from "./v2/components/TopNav.js";
 import { ProjectDataProvider } from "./v2/context/project-data.js";
+import { SkeletonPanel } from "./v2/components/ui/ListSkeletons.js";
+import { DashboardV2 } from "./v2/DashboardV2.js";
+import { LiveSessionPage } from "./v2/LiveSessionPage.js";
 import "./styles.css";
 
 // Route components — each dynamic import becomes its own chunk in the build
-const DashboardV2   = lazy(() => import("./v2/DashboardV2.js").then(m => ({ default: m.DashboardV2 })));
 const SprintsPage   = lazy(() => import("./v2/pages/sprints/SprintsPage.js").then(m => ({ default: m.SprintsPage })));
 const ProjectsPage  = lazy(() => import("./v2/ProjectsPage.js").then(m => ({ default: m.ProjectsPage })));
 const ChatPage      = lazy(() => import("./v2/ChatPage.js").then(m => ({ default: m.ChatPage })));
@@ -23,7 +25,6 @@ const AgentsPage    = lazy(() => import("./v2/AgentsPage.js").then(m => ({ defau
 const StatsPage     = lazy(() => import("./v2/StatsPage.js").then(m => ({ default: m.StatsPage })));
 const SettingsPage  = lazy(() => import("./v2/SettingsPage.js").then(m => ({ default: m.SettingsPage })));
 const MemoryPage    = lazy(() => import("./v2/MemoryPage.js").then(m => ({ default: m.MemoryPage })));
-const LiveSessionPage = lazy(() => import("./v2/LiveSessionPage.js").then(m => ({ default: m.LiveSessionPage })));
 
 // 1. Root layout route
 const rootRoute = createRootRoute({
@@ -51,7 +52,7 @@ const rootRoute = createRootRoute({
             <TopNav isDark={isDark} toggleTheme={toggleTheme} />
 
             <div className="flex-1 overflow-y-auto dashboard-scrollbar relative pb-32">
-              <Suspense fallback={<div className="flex-1" />}>
+              <Suspense fallback={<div className="flex-1 p-8"><SkeletonPanel /></div>}>
                 <Outlet />
               </Suspense>
             </div>

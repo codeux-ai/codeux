@@ -1109,4 +1109,72 @@ describe("ExecutionRepository", () => {
       }),
     ]);
   });
+
+  it("hydrates multiple dispatches dynamically without N+1 regression", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Bulk Snapshot Project",
+      sourceType: "local",
+      sourceRef: "/workspace/bulk",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Bulk Sprint",
+      number: 1,
+      status: "running",
+    });
+
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "running",
+    });
+
+    // Create 5 tasks and dispatches
+    for (let i = 0; i < 5; i++) {
+      const task = projectRepository.createTask(project.id, {
+        sprintId: sprint.id,
+        title: `Bulk Task ${i}`,
+        executorType: "mcp_worker",
+      });
+
+      const dispatch = executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        executorType: "mcp_worker",
+        status: "running",
+      });
+
+      // Two runs per dispatch to ensure it picks the latest one
+      executionRepository.createTaskRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        dispatchId: dispatch.id,
+        state: "failed",
+        provider: "old-provider",
+      });
+
+      executionRepository.createTaskRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        dispatchId: dispatch.id,
+        state: "RUNNING",
+        provider: "target-provider",
+      });
+    }
+
+    const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
+    expect(snapshot.taskDispatches).toHaveLength(5);
+
+    for (const td of snapshot.taskDispatches) {
+      expect(td.taskRunState).toBe("RUNNING");
+      expect(td.provider).toBe("target-provider");
+    }
+  });
 });

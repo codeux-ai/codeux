@@ -249,9 +249,7 @@ describe("QuicksprintService", () => {
       expect(planSprintMock).toHaveBeenCalledWith(projectId, sprint.id, {
         autoStart: false,
         replan: false,
-        overrides: {
-          virtualModel: undefined,
-        }
+        overrides: undefined,
       });
     });
   });

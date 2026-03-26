@@ -170,7 +170,7 @@ export class ProjectRuntimeRepository {
   private readonly db: DatabaseSync;
 
   constructor(
-    storage: AppDbStorage = new AppDbStorage(),
+    private readonly storage: AppDbStorage = new AppDbStorage(),
     private readonly realtimeNotifier?: DashboardRealtimeMutationNotifier,
   ) {
     this.db = storage.getDatabase();
@@ -530,12 +530,11 @@ export class ProjectRuntimeRepository {
       return [];
     }
 
-    const dependencyRows = this.db.prepare(`
-      SELECT task_id, depends_on_task_id
-      FROM task_dependencies
-      WHERE task_id IN (${taskRows.map(() => "?").join(", ")})
-      ORDER BY depends_on_task_id ASC
-    `).all(...taskRows.map((row) => row.id)) as unknown as DependencyRow[];
+    const dependencyRows = this.storage.executeChunkedInQuery<DependencyRow>({
+      sqlPrefix: "SELECT task_id, depends_on_task_id FROM task_dependencies WHERE task_id",
+      sqlSuffix: "ORDER BY depends_on_task_id ASC",
+      items: taskRows.map((row) => row.id),
+    });
 
     const dependencyMap = new Map<string, string[]>();
     for (const row of dependencyRows) {
@@ -555,19 +554,20 @@ export class ProjectRuntimeRepository {
       return new Map();
     }
 
-    const rows = this.db.prepare(`
-      SELECT tr.*
+    const rows = this.storage.executeChunkedInQuery<TaskRunRow>({
+      sqlPrefix: `SELECT tr.*
       FROM task_runs tr
       INNER JOIN (
         SELECT task_id, MAX(COALESCE(started_at, '')) AS latest_started_at
         FROM task_runs
-        WHERE task_id IN (${taskIds.map(() => "?").join(", ")})
-        GROUP BY task_id
+        WHERE task_id`,
+      sqlSuffix: `GROUP BY task_id
       ) latest
         ON latest.task_id = tr.task_id
        AND COALESCE(tr.started_at, '') = latest.latest_started_at
-      ORDER BY tr.rowid DESC
-    `).all(...taskIds) as unknown as TaskRunRow[];
+      ORDER BY tr.rowid DESC`,
+      items: taskIds,
+    });
 
     const map = new Map<string, TaskRunRow>();
     for (const row of rows) {

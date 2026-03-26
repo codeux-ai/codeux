@@ -42,6 +42,7 @@ export interface QuicksprintExecutionInput {
   submitMode: "plan_only" | "plan_and_start";
   routeOverride?: string;
   modelOverride?: string;
+  planningOverrides?: import("./project-management-types.js").PlanningOverrides;
   agentPresetId?: string;
   additionalPrompt?: string;
 }

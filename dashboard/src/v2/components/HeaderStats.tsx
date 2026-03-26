@@ -1,18 +1,18 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useLayoutEffect, useRef, useMemo } from "preact/hooks";
 import gsap from "gsap";
 import { MetricCard } from "./ui/MetricCard.js";
 import { Sparkline } from "./ui/Sparkline.js";
 import { SkeletonCard } from "./ui/ListSkeletons.js";
 import { useProjectData } from "../context/project-data.js";
-import { useProjectSprints } from "../hooks/use-project-sprints.js";
+import { useSprints } from "../../hooks/useSprints.js";
 import { useProjectTasks } from "../hooks/use-project-tasks.js";
 import { computeOverviewStats } from "../lib/overview-stats.js";
 
 export const HeaderStats: FunctionComponent = () => {
     const containerRef = useRef<HTMLDivElement>(null);
     const { projects, selectedProject, loading: projectsLoading } = useProjectData();
-    const { sprints, loading: sprintsLoading } = useProjectSprints(selectedProject?.id || null);
+    const { data: sprints, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
     const { tasks, loading: tasksLoading } = useProjectTasks(selectedProject?.id || null, projects, sprints);
 
     const isLoading = projectsLoading || sprintsLoading || tasksLoading;
@@ -27,7 +27,7 @@ export const HeaderStats: FunctionComponent = () => {
         }
     }, []);
 
-    const stats = computeOverviewStats(projects, sprints, tasks);
+    const stats = useMemo(() => computeOverviewStats(projects, sprints, tasks), [projects, sprints, tasks]);
 
     if (isLoading) {
         return (

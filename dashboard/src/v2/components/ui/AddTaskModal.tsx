@@ -25,6 +25,8 @@ interface AddTaskModalProps {
   onSubmit: (task: TaskDraft) => Promise<void> | void;
 }
 
+const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
 const PRIORITY_OPTIONS: TaskPriority[] = ["critical", "high", "medium", "low"];
 const STATUS_OPTIONS: TaskStatus[] = ["pending", "in_progress", "completed"];
 const EXECUTOR_OPTIONS: Array<{ value: TaskExecutorType; label: string; description: string }> = [
@@ -59,14 +61,56 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
     gsap.fromTo(cardRef.current, { y: 40, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" });
   }, []);
 
+  const triggerRef = useRef<HTMLElement | null>(null);
+
   useEffect(() => {
+    triggerRef.current = document.activeElement as HTMLElement | null;
+
+    // Initial focus setup
+    if (cardRef.current) {
+      const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
+      if (focusableElements.length > 0) {
+        focusableElements[0].focus();
+      }
+    }
+
     const handler = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
+      } else if (event.key === "Tab") {
+        if (!cardRef.current) return;
+
+        const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
+
+        if (focusableElements.length === 0) return;
+
+        const first = focusableElements[0];
+        const last = focusableElements[focusableElements.length - 1];
+
+        // If focus has escaped the modal (e.g. user clicked background), force it back in
+        if (!cardRef.current.contains(document.activeElement)) {
+          event.preventDefault();
+          first.focus();
+          return;
+        }
+
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     };
+
     document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
+    return () => {
+      document.removeEventListener("keydown", handler);
+      if (triggerRef.current) {
+        triggerRef.current.focus();
+      }
+    };
   }, [onClose]);
 
   const dependencyOptions = useMemo(() => {
@@ -111,6 +155,9 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
     <div
       ref={backdropRef}
       onClick={handleBackdropClick}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="add-task-modal-title"
       className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-black/55 dark:bg-black/75 backdrop-blur-xl"
     >
       <div
@@ -141,7 +188,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
         <div className="flex-1 bg-white/98 dark:bg-void-800/98 p-8 flex flex-col">
           <div className="flex items-start justify-between mb-8">
             <div>
-              <h2 className="text-[2rem] font-black text-slate-900 dark:text-white tracking-tight font-display leading-none">
+              <h2 id="add-task-modal-title" className="text-[2rem] font-black text-slate-900 dark:text-white tracking-tight font-display leading-none">
                 {initialTask ? "Edit Task." : "Create Task."}
               </h2>
               <p className="text-xs font-medium text-slate-400 mt-2 tracking-wide">
@@ -150,6 +197,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             </div>
             <button
               onClick={onClose}
+              aria-label="Close"
               className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
             >
               <X className="w-4 h-4" />

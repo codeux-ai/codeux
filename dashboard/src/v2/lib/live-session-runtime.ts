@@ -16,6 +16,19 @@ export interface LiveSessionRuntimeState {
   hasSprintContext: boolean;
 }
 
+export function resolveLiveSessionSprintScopeId(
+  status: DashboardStatus,
+  selectedSprintId?: string | null,
+): string | null {
+  if (selectedSprintId) {
+    return selectedSprintId;
+  }
+
+  return typeof status.sprint_id === "string" && status.sprint_id.trim().length > 0
+    ? status.sprint_id
+    : null;
+}
+
 export function deriveLiveSessionRuntimeState(
   status: DashboardStatus,
   execution: ExecutionDashboardSnapshot,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveLiveSessionRuntimeState } from "../../../dashboard/src/v2/lib/live-session-runtime.js";
+import { deriveLiveSessionRuntimeState, resolveLiveSessionSprintScopeId } from "../../../dashboard/src/v2/lib/live-session-runtime.js";
 import type { DashboardStatus, ExecutionDashboardSnapshot } from "../../../dashboard/src/types.js";
 
 function createStatus(overrides: Partial<DashboardStatus> = {}): DashboardStatus {
@@ -236,6 +236,20 @@ describe("live session runtime state", () => {
     expect(state.hasActiveSprint).toBe(false);
     expect(state.hasSprintContext).toBe(true);
     expect(state.pausedInterventionRun?.id).toBe("run-2");
+  });
+
+  it("falls back to runtime status sprint_id when selectedSprintId is not loaded yet", () => {
+    expect(resolveLiveSessionSprintScopeId(
+      createStatus({ sprint_id: "sprint-42" }),
+      null,
+    )).toBe("sprint-42");
+  });
+
+  it("prefers selectedSprintId over runtime status sprint_id", () => {
+    expect(resolveLiveSessionSprintScopeId(
+      createStatus({ sprint_id: "sprint-42" }),
+      "sprint-99",
+    )).toBe("sprint-99");
   });
 });
 

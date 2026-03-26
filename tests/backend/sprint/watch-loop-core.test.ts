@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { WatchLoopRunner } from "../../../src/domain/sprint/orchestrator/watch-loop-runner.js";
+import { WatchLoopRunner, evaluateSprintRunState } from "../../../src/domain/sprint/orchestrator/watch-loop-runner.js";
 import { buildMockSettings } from "../../builders/settings-builder.js";
 import { buildMockSubtask } from "../../builders/subtask-builder.js";
 
@@ -1055,5 +1055,56 @@ describe("WatchLoopRunner", () => {
     expect(deps.executionRepository.finalizeSprintRunCancellationIfIdle).toHaveBeenCalledWith("run-1");
     expect(result).toContain("Active work is still shutting down");
     expect(cycleRunner.run).not.toHaveBeenCalled();
+  });
+});
+
+describe("evaluateSprintRunState", () => {
+  it("identifies when all tasks are terminal", () => {
+    const result = evaluateSprintRunState({
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+      activeProjectAttentionItems: [],
+      sprintRunId: "run-1",
+    });
+    expect(result.allTerminal).toBe(true);
+    expect(result.allFinished).toBe(true);
+  });
+
+  it("identifies when no more actions are possible without waiting on attention", () => {
+    const result = evaluateSprintRunState({
+      subtasks: [buildMockSubtask({ status: "BLOCKED", is_merged: false })],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+      activeProjectAttentionItems: [],
+      sprintRunId: "run-1",
+    });
+    expect(result.noMoreActionPossible).toBe(true);
+    expect(result.allFinished).toBe(true);
+  });
+
+  it("identifies when manual merge is needed", () => {
+    const result = evaluateSprintRunState({
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
+      manualMergeTasks: [buildMockSubtask({ status: "COMPLETED", is_merged: false })],
+      workerEscalatedMergeConflictTasks: [],
+      activeProjectAttentionItems: [],
+      sprintRunId: "run-1",
+    });
+    expect(result.needsManualMerge).toBe(true);
+    expect(result.allFinished).toBe(true);
+  });
+
+  it("identifies when waiting on worker attention prevents finishing", () => {
+    const result = evaluateSprintRunState({
+      subtasks: [buildMockSubtask({ status: "BLOCKED", is_merged: false })],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [buildMockSubtask({ status: "BLOCKED", is_merged: false })],
+      activeProjectAttentionItems: [{ ownerType: "worker", attentionType: "merge_conflict", sprintRunId: "run-1" } as any],
+      sprintRunId: "run-1",
+    });
+    expect(result.noMoreActionPossible).toBe(true);
+    expect(result.waitingOnWorkerAttention).toBe(true);
+    expect(result.allFinished).toBe(false);
   });
 });

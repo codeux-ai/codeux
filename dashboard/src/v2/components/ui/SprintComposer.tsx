@@ -24,11 +24,11 @@ import { getProviderModelOptions } from "../../lib/settings-view-models.js";
 import { getPlanningFeedback, type PlanningActionType } from "../../lib/sprint-planning-feedback.js";
 import { ContainerShip, WoodenShip } from "./PlanningShip.js";
 import type { ImprovePromptInput, VirtualWorkerProvider } from "../../types.js";
+import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 
 interface SprintComposerProps {
   nextId: string;
   initialSprint?: Sprint | null;
-  connections: ExecutionConnectionSummary[];
   virtualProviders: Array<{ id: VirtualWorkerProvider; label: string }>;
   planningPresets: AgentPreset[];
   planningEta: number;
@@ -50,7 +50,6 @@ interface SprintComposerProps {
 export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   nextId,
   initialSprint = null,
-  connections,
   virtualProviders,
   planningPresets,
   planningEta,
@@ -198,6 +197,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       setIsSubmitting(false);
     }
   };
+
+  const { execution } = useExecutionTimeline();
+  const connections = execution?.connections || [];
 
   const routeOptions: PlanningRouteOption[] = [
     ...connections.map(c => ({

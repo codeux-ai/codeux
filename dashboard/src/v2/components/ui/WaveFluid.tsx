@@ -7,7 +7,7 @@ import type { FunctionComponent } from "preact";
  * Layer 2 counter-drifts via reverse + negative delay (no second keyframe needed).
  */
 export const WaveFluid: FunctionComponent<{ accentHex: string }> = ({ accentHex }) => (
-    <div className="absolute bottom-0 left-0 right-0 h-16 overflow-hidden pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-700 ease-out">
+    <div className="absolute bottom-0 left-0 right-0 h-16 overflow-hidden pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-700 ease-out">
         {/* Primary wave — 2 cycles, drifts left */}
         <svg
             style={{

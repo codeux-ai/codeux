@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import type { FunctionComponent, RefObject } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { Bell, Command, Search, Moon, Sun, ChevronDown, Activity, FolderOpen, ArrowRight, Cpu, Zap } from "lucide-preact";
@@ -6,8 +6,8 @@ import { Link } from "@tanstack/react-router";
 import { StatusDot } from "./ui/StatusDot.js";
 import { AddProjectModal } from "./ui/AddProjectModal.js";
 import { useProjectData } from "../context/project-data.js";
-import { useProjectExecution } from "../hooks/use-project-execution.js";
-import { useProjectSprints } from "../hooks/use-project-sprints.js";
+import { useExecutions } from "../../hooks/useExecutions.js";
+import { useSprints } from "../../hooks/useSprints.js";
 import { dashboardSettingsToProjectSettings } from "../lib/settings-view-models.js";
 import {
     getProjectWorkerOptions,
@@ -16,6 +16,78 @@ import {
 } from "../lib/project-worker-options.js";
 import { setProjectPreferredWorker } from "../lib/project-api.js";
 import { fetchProjectEffectiveSettings, saveProjectSettings } from "../lib/settings-api.js";
+
+
+export function useDropdownKeyboard(
+    isOpen: boolean,
+    setIsOpen: (open: boolean) => void,
+    containerRef: RefObject<HTMLElement>
+) {
+    const toggleRef = useRef<HTMLButtonElement>(null);
+
+    const onToggleKeyDown = useCallback((e: KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setIsOpen(!isOpen);
+        }
+    }, [isOpen, setIsOpen]);
+
+    const onContainerKeyDown = useCallback((e: KeyboardEvent) => {
+        if (!isOpen || !containerRef.current) return;
+
+        if (e.key === "Escape") {
+            e.preventDefault();
+            setIsOpen(false);
+            toggleRef.current?.focus();
+            return;
+        }
+
+        if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+
+            const focusableElements = Array.from(
+                containerRef.current.querySelectorAll<HTMLElement>(
+                    'button:not([disabled]), a[href]'
+                )
+            ).filter(el => el !== toggleRef.current);
+
+            if (focusableElements.length === 0) return;
+
+            const currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement);
+
+            let nextIndex = 0;
+            if (e.key === "ArrowDown") {
+                nextIndex = currentIndex < focusableElements.length - 1 ? currentIndex + 1 : 0;
+            } else if (e.key === "ArrowUp") {
+                nextIndex = currentIndex > 0 ? currentIndex - 1 : focusableElements.length - 1;
+            }
+
+            focusableElements[nextIndex]?.focus();
+        }
+    }, [isOpen, setIsOpen, containerRef]);
+
+    useEffect(() => {
+        if (isOpen && containerRef.current) {
+            // Give the DOM a moment to render the dropdown
+            setTimeout(() => {
+                if (!containerRef.current) return;
+                const focusableElements = Array.from(
+                    containerRef.current.querySelectorAll<HTMLElement>(
+                        'button:not([disabled]), a[href]'
+                    )
+                ).filter(el => el !== toggleRef.current);
+
+                if (focusableElements.length > 0) {
+                    focusableElements[0]?.focus();
+                }
+            }, 0);
+        } else if (!isOpen && toggleRef.current && document.activeElement && containerRef.current?.contains(document.activeElement)) {
+            toggleRef.current.focus();
+        }
+    }, [isOpen, containerRef]);
+
+    return { toggleRef, onToggleKeyDown, onContainerKeyDown };
+}
 
 const LIVE_WORKER_STATUSES = new Set(["connected", "listening", "idle"]);
 
@@ -44,9 +116,13 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
         loading,
     } = useProjectData();
 
-    const { execution, loading: executionLoading, refresh: refreshExecution } = useProjectExecution(selectedProject?.id || null);
-    const { sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useProjectSprints(selectedProject?.id || null);
+    const { data: execution, loading: executionLoading, refetch: refreshExecution } = useExecutions(selectedProject?.id || null);
+    const { data: sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
     const { options: workerOptions, selectedOption: selectedWorker } = getProjectWorkerOptions(execution, workerRouting, executionLoading);
+
+    const projectKb = useDropdownKeyboard(dropdownOpen, setDropdownOpen, dropdownRef);
+    const sprintKb = useDropdownKeyboard(sprintDropdownOpen, setSprintDropdownOpen, sprintDropdownRef);
+    const workerKb = useDropdownKeyboard(workerDropdownOpen, setWorkerDropdownOpen, workerDropdownRef);
 
     useLayoutEffect(() => {
         if (navRef.current) {
@@ -181,10 +257,14 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
 
             <div className="flex items-center gap-3">
                 {/* Project Selector */}
-                <div className="relative hidden md:block" ref={dropdownRef}>
+                <div className="relative hidden md:block" ref={dropdownRef} onKeyDown={projectKb.onContainerKeyDown}>
                     <button
+                        ref={projectKb.toggleRef}
+                        onKeyDown={projectKb.onToggleKeyDown}
                         onClick={() => setDropdownOpen(!dropdownOpen)}
-                        className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group"
+                        aria-haspopup="listbox"
+                        aria-expanded={dropdownOpen}
+                        className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
                     >
                         <StatusDot status={selectedProject?.status || "idle"} />
                         <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">
@@ -195,13 +275,15 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
 
                     {/* Project Dropdown */}
                     {dropdownOpen && (
-                        <div className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
+                        <div role="listbox" aria-label="Project list" className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
                             <div className="px-3 pt-3 pb-1.5">
                                 <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Projects</span>
                             </div>
                             {projects.map((source) => (
                                 <button
                                     key={source.id}
+                                    role="option"
+                                    aria-selected={selectedProject?.id === source.id}
                                     onClick={() => {
                                         void selectProject(source.id);
                                         setDropdownOpen(false);
@@ -245,11 +327,15 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
 
                 {/* Sprint Selector */}
                 {selectedProject && (
-                    <div className="relative hidden md:block" ref={sprintDropdownRef}>
+                    <div className="relative hidden md:block" ref={sprintDropdownRef} onKeyDown={sprintKb.onContainerKeyDown}>
                         <button
+                            ref={sprintKb.toggleRef}
+                            onKeyDown={sprintKb.onToggleKeyDown}
                             onClick={() => setSprintDropdownOpen(!sprintDropdownOpen)}
+                            aria-haspopup="listbox"
+                            aria-expanded={sprintDropdownOpen}
                             disabled={sprints.length === 0}
-                            className={`flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent rounded-xl transition-all group ${
+                            className={`focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent rounded-xl transition-all group ${
                                 sprints.length > 0
                                     ? 'hover:border-black/[0.08] dark:hover:border-white/[0.08] cursor-pointer'
                                     : 'opacity-50 cursor-not-allowed'
@@ -265,11 +351,13 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
 
                         {/* Sprint Dropdown */}
                         {sprintDropdownOpen && sprints.length > 0 && (
-                            <div className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
+                            <div role="listbox" aria-label="Sprint list" className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
                                 <div className="px-3 pt-3 pb-1.5">
                                     <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Sprint Scope</span>
                                 </div>
                                 <button
+                                    role="option"
+                                    aria-selected={selectedSprintId === null}
                                     onClick={() => {
                                         void selectSprint(null);
                                         setSprintDropdownOpen(false);
@@ -286,6 +374,8 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                 {sprints.map((sprint) => (
                                     <button
                                         key={sprint.id}
+                                        role="option"
+                                        aria-selected={selectedSprintId === sprint.id}
                                         onClick={() => {
                                             void selectSprint(sprint.id);
                                             setSprintDropdownOpen(false);
@@ -308,10 +398,14 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
 
                 {/* Worker Selector */}
                 {selectedProject && (
-                    <div className="relative hidden lg:block" ref={workerDropdownRef}>
+                    <div className="relative hidden lg:block" ref={workerDropdownRef} onKeyDown={workerKb.onContainerKeyDown}>
                         <button
+                            ref={workerKb.toggleRef}
+                            onKeyDown={workerKb.onToggleKeyDown}
                             onClick={() => setWorkerDropdownOpen(!workerDropdownOpen)}
-                            className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group"
+                            aria-haspopup="listbox"
+                            aria-expanded={workerDropdownOpen}
+                            className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
                         >
                             <div className="flex items-center justify-center w-4 h-4 rounded-md bg-signal-500/10 text-signal-500">
                                 <Cpu className="w-3 h-3" strokeWidth={2.5} />
@@ -324,7 +418,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
 
                         {/* Worker Dropdown */}
                         {workerDropdownOpen && (
-                            <div className="absolute right-0 top-full mt-2 w-64 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
+                            <div role="listbox" aria-label="Worker list" className="absolute right-0 top-full mt-2 w-64 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
                                 <div className="px-3 pt-3 pb-1.5">
                                     <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Available Workers</span>
                                 </div>
@@ -332,6 +426,8 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                     {workerOptions.map((option) => (
                                         <button
                                             key={option.id}
+                                            role="option"
+                                            aria-selected={selectedWorker?.id === option.id}
                                             onClick={() => handleWorkerSelect(option)}
                                             disabled={!option.isSelectable || workerSwitchBusy}
                                             className={`w-full flex items-center gap-3 px-3 py-3 text-left transition-colors group ${
@@ -390,15 +486,19 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 <div className="w-px h-5 bg-black/10 dark:bg-white/10 hidden md:block" />
 
                 {/* Notifications */}
-                <button className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group">
+                <button
+                    aria-label="Notifications"
+                    className="relative w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
+                >
                     <Bell className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" strokeWidth={1.5} />
-                    <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-signal-500 shadow-[0_0_6px_rgba(0,224,160,0.8)] ring-1 ring-[#F9F8F4] dark:ring-void-900" />
+                    <span className="absolute top-3 right-3 w-1.5 h-1.5 rounded-full bg-signal-500 shadow-[0_0_6px_rgba(0,224,160,0.8)] ring-1 ring-[#F9F8F4] dark:ring-void-900" />
                 </button>
 
                 {/* Theme Toggle */}
                 <button
                     onClick={toggleTheme}
-                    className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors"
+                    aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                    className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
                 >
                     {isDark
                         ? <Sun className="w-4 h-4 text-slate-400 hover:text-white transition-colors" strokeWidth={1.5} />

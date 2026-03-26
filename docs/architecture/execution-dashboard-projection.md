@@ -148,6 +148,7 @@ The live task timing model now treats the execution snapshot as the source of tr
 - terminal dispatch fields (`status`, `taskRunState`, `finishedAt`) can stop a task timer even before the task snapshot has promoted its visible status
 - terminal runtime events continue to win for late merge settlement and other post-dispatch outcomes
 - merge-backed tasks still stay in `CODING_COMPLETED` until real CI or merge-stage evidence appears, so the live page does not mark them fully complete just because coding finished
+- when CI wait, CI autofix, automerge, or merge-conflict handling temporarily pushes the persisted task status back to `RUNNING`, the live dashboard still projects those tasks as `CODING_COMPLETED` so race positions and task badges do not regress into the coding lane
 - late sync-only events after terminal completion no longer reopen an active timing window
 
 ## Realtime Delivery

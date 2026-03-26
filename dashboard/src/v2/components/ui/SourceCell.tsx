@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useRef } from "preact/hooks";
+import { useRef, useCallback } from "preact/hooks";
 import gsap from "gsap";
 import { FolderGit2, Activity, AlertTriangle, XCircle } from "lucide-preact";
 import type { Source } from "../../types.js";
@@ -24,7 +24,7 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
     const state = statusMap[source.status] ?? statusMap.idle;
     const StatusIcon = state.icon;
 
-    const handleHoverEnter = () => {
+    const handleHoverEnter = useCallback(() => {
         if (!cellRef.current) return;
         gsap.to(cellRef.current, {
             scale: 1.08,
@@ -33,9 +33,9 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
             ease: "back.out(2)",
             overwrite: true,
         });
-    };
+    }, []);
 
-    const handleHoverLeave = () => {
+    const handleHoverLeave = useCallback(() => {
         if (!cellRef.current) return;
         gsap.to(cellRef.current, {
             scale: 1,
@@ -44,14 +44,18 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
             ease: "elastic.out(1, 0.5)",
             overwrite: true,
         });
-    };
+    }, []);
 
     return (
         <div
             ref={cellRef}
             onMouseEnter={handleHoverEnter}
             onMouseLeave={handleHoverLeave}
-            className="relative group cursor-pointer w-56 h-56 flex items-center justify-center shrink-0 perspective-1000"
+            onFocus={handleHoverEnter}
+            onBlur={handleHoverLeave}
+            role="group"
+            tabIndex={0}
+            className="relative group cursor-pointer w-56 h-56 flex items-center justify-center shrink-0 perspective-1000 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-[2rem] focus:outline-none"
             style={{ animationDelay: `${animDelay}s` }}
         >
             {/* Shadow underlay */}

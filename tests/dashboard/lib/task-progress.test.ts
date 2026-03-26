@@ -20,6 +20,36 @@ describe("task progress phase", () => {
     ).toBe("CODING_COMPLETED");
   });
 
+  it("keeps CI-gated running tasks at coding completed for live display", () => {
+    expect(
+      getTaskProgressPhase({
+        id: "1b",
+        title: "Task",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        status: "RUNNING",
+        worker_branch: "worker/task-1b",
+        merge_indicator: "CI",
+      }),
+    ).toBe("CODING_COMPLETED");
+  });
+
+  it("keeps automerge-running tasks in coding completed instead of reverting to running", () => {
+    expect(
+      getTaskProgressPhase({
+        id: "1c",
+        title: "Task",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        status: "RUNNING",
+        worker_branch: "worker/task-1c",
+        merge_indicator: "AUTOMERGE",
+      }),
+    ).toBe("CODING_COMPLETED");
+  });
+
   it("promotes no-output tasks straight to completed", () => {
     expect(
       getTaskProgressPhase({
@@ -130,5 +160,27 @@ describe("task progress phase", () => {
       runtimeTerminalPhase: "COMPLETED",
       runtimeMergeSettled: true,
     })).toBe("COMPLETED");
+  });
+
+  it("keeps live CI-fix dispatches at coding completed when the task store remains in running", () => {
+    expect(getLiveTaskProgressPhase({
+      task: {
+        id: "7",
+        title: "CI autofix",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        status: "RUNNING",
+        worker_branch: "worker/task-7",
+        merge_indicator: "CI",
+      },
+      dispatch: {
+        status: "running",
+        taskRunState: "RUNNING",
+        finishedAt: null,
+        workerBranch: "worker/task-7",
+        prUrl: "https://example.com/pr/7",
+      },
+    })).toBe("CODING_COMPLETED");
   });
 });

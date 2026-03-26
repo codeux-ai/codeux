@@ -405,6 +405,7 @@ describe("action-required-automation", () => {
     // Second call (still within cooldown) — should NOT send
     const result2 = await applyActionRequiredAutomation([{ ...task }], commonArgs);
     expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(result2.subtasks[0].status).toBe("RUNNING");
     expect(result2.subtasks[0].intervention_owner).toBe("AGENT");
     expect(result2.subtasks[0].intervention_hint).toContain("Clarification cooldown active");
   });
@@ -470,6 +471,7 @@ describe("action-required-automation", () => {
     // Second call within cooldown — skips
     const result2 = await applyActionRequiredAutomation([{ ...task }], commonArgs);
     expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(result2.subtasks[0].status).toBe("RUNNING");
     expect(result2.subtasks[0].intervention_hint).toContain("Clarification cooldown active");
   });
 });

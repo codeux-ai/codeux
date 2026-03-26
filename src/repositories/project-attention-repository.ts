@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { AppDbStorage } from "./app-db-storage.js";
+import { requireRecord } from "./repository-utils.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
 import type {
   ProjectAttentionItemRecord,
@@ -245,7 +246,7 @@ export class ProjectAttentionRepository {
   }
 
   claimAttentionItem(itemId: string, input: ClaimProjectAttentionItemInput): ProjectAttentionItemRecord {
-    const current = this.requireItem(itemId);
+    const current = this.mapRow(requireRecord(this.db.prepare('SELECT * FROM project_attention_items WHERE id = ?').get(itemId) as any, "Project attention item", itemId));
     if (current.status === "resolved" || current.status === "dismissed" || current.status === "expired") {
       throw new Error(`Attention item ${itemId} is already closed.`);
     }
@@ -283,7 +284,7 @@ export class ProjectAttentionRepository {
   }
 
   resolveAttentionItem(itemId: string, input: ResolveProjectAttentionItemInput): ProjectAttentionItemRecord {
-    const current = this.requireItem(itemId);
+    const current = this.mapRow(requireRecord(this.db.prepare('SELECT * FROM project_attention_items WHERE id = ?').get(itemId) as any, "Project attention item", itemId));
     if (current.status === "resolved" || current.status === "dismissed" || current.status === "expired") {
       return current;
     }
@@ -317,7 +318,7 @@ export class ProjectAttentionRepository {
   }
 
   private requireAndNotifyItem(itemId: string, projectId: string, includeOverview: boolean): ProjectAttentionItemRecord {
-    const item = this.requireItem(itemId);
+    const item = this.mapRow(requireRecord(this.db.prepare('SELECT * FROM project_attention_items WHERE id = ?').get(itemId) as any, "Project attention item", itemId));
     this.notifyProjectRefresh(projectId, includeOverview);
     return item;
   }
@@ -394,19 +395,6 @@ export class ProjectAttentionRepository {
     return row ? this.mapRow(row) : null;
   }
 
-  private requireItem(itemId: string): ProjectAttentionItemRecord {
-    const row = this.db.prepare(`
-      SELECT *
-      FROM project_attention_items
-      WHERE id = ?
-    `).get(itemId) as ProjectAttentionItemRow | undefined;
-
-    if (!row) {
-      throw new Error(`Project attention item not found: ${itemId}`);
-    }
-
-    return this.mapRow(row);
-  }
 
   private mapRow(row: ProjectAttentionItemRow): ProjectAttentionItemRecord {
     return {

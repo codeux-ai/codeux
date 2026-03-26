@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "preact";
+import { lazy, Suspense } from "preact/compat";
 import { useLayoutEffect, useRef, useState, useEffect, useMemo } from "preact/hooks";
 import gsap from "gsap";
 import {
@@ -7,24 +8,25 @@ import {
     Play, RotateCcw, Bot, Workflow, PauseCircle,
     Ship, BarChart3,
 } from "lucide-preact";
-import { SprintBoatRace } from "./components/SprintBoatRace.js";
-import { SprintDag } from "./components/SprintDag.js";
 import { SprintStatsDeck, useLiveTaskTimingSummaries } from "./components/SprintStatsDeck.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { HumanInterventionBadge } from "./components/ui/HumanInterventionBadge.js";
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
-import { useProjectSprints } from "./hooks/use-project-sprints.js";
+import { useSprints } from "../hooks/useSprints.js";
 import { useLiveSessionActions } from "./hooks/use-live-session-actions.js";
 import { formatTime } from "../lib/time.js";
 import { renderMarkdown } from "../lib/markdown.js";
 import type { Subtask, ExecutionDashboardSnapshot, ExecutionRuntimeEventSummary } from "../types.js";
-import { deriveLiveSessionRuntimeState } from "./lib/live-session-runtime.js";
+import { deriveLiveSessionRuntimeState, resolveLiveSessionSprintScopeId } from "./lib/live-session-runtime.js";
 import { getTaskProgressPhase } from "../lib/task-progress.js";
 
 import { IntelPanel } from "./components/ui/IntelPanel.js";
 import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
+import { ExecutionTimelineProvider, useExecutionTimeline } from "../hooks/ExecutionTimelineContext.js";
+import { ExecutionTimeline } from "./components/ExecutionTimeline.js";
 import { IdleRuntimeState } from "./components/ui/IdleRuntimeState.js";
+import { SkeletonPanel } from "./components/ui/ListSkeletons.js";
 import {
     EMPTY_RUNTIME_STATS,
 } from "./lib/live-session-config.js";
@@ -32,6 +34,9 @@ import { LiveTaskCard, TaskDuration, QuotaCountdown } from "./components/LiveTas
 import { RuntimeEventFeed } from "./components/RuntimeEventFeed.js";
 import { GitCIStatusPanel } from "./components/GitCIStatusPanel.js";
 import { deriveLiveDurationDisplay } from "./lib/live-duration-display.js";
+import { useProjectData } from "./context/project-data.js";
+import { useProjectTasks } from "./hooks/use-project-tasks.js";
+import { buildLiveSessionTasks } from "./lib/live-session-task-structure.js";
 
 const statusTone = (value: string | null): string => {
     if (!value) return "text-slate-400";
@@ -42,6 +47,9 @@ const statusTone = (value: string | null): string => {
     if (n === "FAILURE" || n === "FAILED" || n === "ERROR" || n === "CANCELLED") return "text-status-red";
     return "text-slate-400";
 };
+
+const SprintBoatRace = lazy(() => import("./components/SprintBoatRace.js").then(m => ({ default: m.SprintBoatRace })));
+const SprintDag = lazy(() => import("./components/SprintDag.js").then(m => ({ default: m.SprintDag })));
 
 const EXECUTOR_LABELS: Record<string, string> = {
     docker_cli: "CLI",
@@ -388,37 +396,29 @@ const AttentionQueuePanel: FunctionComponent<{
 };
 
 const ExecutionRuntimePanel: FunctionComponent<{
-    snapshot: ExecutionDashboardSnapshot;
-    onOrchestrateSprint: (projectId: string, sprintId: string) => void;
-    onPauseSprintRun: (sprintRunId: string) => void;
-    onCancelSprintRun: (sprintRunId: string) => void;
-    onForceCancelSprintRun: (sprintRunId: string) => void;
-    onCancelTaskDispatch: (dispatchId: string) => void;
-    onForceCancelTaskDispatch: (dispatchId: string) => void;
-    onRetryTaskDispatch: (dispatchId: string) => void;
-    onClaimAttentionItem: (projectId: string, attentionItemId: string) => void;
-    onResolveAttentionItem: (projectId: string, attentionItemId: string) => void;
-    onDismissAttentionItem: (projectId: string, attentionItemId: string) => void;
-    pendingActionIds: Set<string>;
     collapsible?: boolean;
     defaultOpen?: boolean;
 }> = ({
-    snapshot,
-    onOrchestrateSprint,
-    onPauseSprintRun,
-    onCancelSprintRun,
-    onForceCancelSprintRun,
-    onCancelTaskDispatch,
-    onForceCancelTaskDispatch,
-    onRetryTaskDispatch,
-    onClaimAttentionItem,
-    onResolveAttentionItem,
-    onDismissAttentionItem,
-    pendingActionIds,
     collapsible = false,
     defaultOpen = true,
 }) => {
+    const {
+        execution: snapshot,
+        onOrchestrateSprint,
+        onPauseSprintRun,
+        onCancelSprintRun,
+        onForceCancelSprintRun,
+        onCancelTaskDispatch,
+        onForceCancelTaskDispatch,
+        onRetryTaskDispatch,
+        onClaimAttentionItem,
+        onResolveAttentionItem,
+        onDismissAttentionItem,
+        pendingActionIds,
+    } = useExecutionTimeline();
+
     const [open, setOpen] = useState(defaultOpen);
+    if (!snapshot) return null;
     const activeSprintRuns = snapshot.sprintRuns.filter((run) => run.status === "running" || run.status === "queued");
     const activeDispatches = snapshot.taskDispatches.filter((dispatch) => (
         dispatch.status === "queued" || dispatch.status === "claimed" || dispatch.status === "running"
@@ -427,7 +427,6 @@ const ExecutionRuntimePanel: FunctionComponent<{
     const workerDispatches = activeDispatches.filter((dispatch) => dispatch.executorType === "mcp_worker");
     const queuedWorkers = workerDispatches.filter((dispatch) => dispatch.status === "queued").length;
     const runningWorkers = workerDispatches.filter((dispatch) => dispatch.status === "claimed" || dispatch.status === "running").length;
-    const timelineEvents = activeSprintRuns.length > 0 ? snapshot.recentEvents.slice(0, 24) : [];
 
     return (
         <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
@@ -711,16 +710,7 @@ const ExecutionRuntimePanel: FunctionComponent<{
 
                 <ConnectionRuntimePanel snapshot={snapshot} />
 
-                <div>
-                    <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 block mb-3">Runtime Timeline</span>
-                    {timelineEvents.length === 0 ? (
-                        <p className="text-[11px] text-slate-400 dark:text-slate-600 font-mono">No task run events recorded yet.</p>
-                    ) : (
-                        <div className="max-h-72 overflow-y-auto dashboard-scrollbar pr-1">
-                            <RuntimeEventFeed events={timelineEvents} />
-                        </div>
-                    )}
-                </div>
+                <ExecutionTimeline activeSprintRuns={activeSprintRuns} />
             </div>
             </div>
             </div>
@@ -741,17 +731,40 @@ const FILTER_STATUS_MAP: Record<TaskFilter, string | null> = {
 };
 
 const TASK_FILTERS: TaskFilter[] = ["All", "Running", "Completed", "Failed", "Pending"];
-const EMPTY_TASKS: Subtask[] = [];
 const EMPTY_RUNTIME_EVENTS: ExecutionRuntimeEventSummary[] = [];
+const EMPTY_LIVE_SESSION_RUNTIME_STATE = {
+    liveSprintRun: null,
+    pausedInterventionRun: null,
+    hasActiveSprint: false,
+    hasSprintContext: false,
+} as const;
 
 /* ─── Main Page ──────────────────────────────────────────────────────────── */
 
 export const LiveSessionPage: FunctionComponent = () => {
     const headerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
-    const { error, execution, gitStatus, gitStatusError, refreshRuntimeStatus, refreshGitStatus, status, stats, tasksWithLiveActivities } = useDashboardRuntimeData();
-    const realtimeProjectId = execution.projectId || status.project_id || null;
-    const { selectedSprintId } = useProjectSprints(realtimeProjectId);
+    const { projects, selectedProjectId } = useProjectData();
+    const { error, execution, gitStatus, gitStatusError, initialLoadComplete: legacyInitialLoadComplete, refreshRuntimeStatus, refreshGitStatus, status, stats, tasksWithLiveActivities } = useDashboardRuntimeData(selectedProjectId);
+    const realtimeProjectId = selectedProjectId || execution.projectId || status.project_id || null;
+    const { data: sprints, selectedSprintId, loading: sprintsLoading } = useSprints(realtimeProjectId);
+    const sprintScopeId = useMemo(
+        () => resolveLiveSessionSprintScopeId(status, selectedSprintId),
+        [selectedSprintId, status],
+    );
+    const sprintScopeReady = Boolean(
+        selectedSprintId
+        || sprintScopeId
+        || (legacyInitialLoadComplete && !sprintsLoading)
+    );
+    const { tasks: projectTasks } = useProjectTasks(
+        realtimeProjectId,
+        projects,
+        sprints,
+        sprintScopeReady ? sprintScopeId : undefined,
+        { enabled: sprintScopeReady },
+    );
+    const initialLoadComplete = legacyInitialLoadComplete && !sprintsLoading;
 
     const {
         rerunningIds,
@@ -791,21 +804,52 @@ export const LiveSessionPage: FunctionComponent = () => {
     }, []);
 
     const runtimeState = useMemo(
-        () => deriveLiveSessionRuntimeState(status, execution, selectedSprintId),
-        [status, execution, selectedSprintId],
+        () => sprintScopeReady
+            ? deriveLiveSessionRuntimeState(status, execution, sprintScopeId)
+            : EMPTY_LIVE_SESSION_RUNTIME_STATE,
+        [execution, sprintScopeId, sprintScopeReady, status],
     );
     const liveSprintRun = runtimeState.liveSprintRun;
     const pausedInterventionRun = runtimeState.pausedInterventionRun;
     const pausedIntervention = pausedInterventionRun?.humanIntervention || null;
     const hasLiveSprint = runtimeState.hasActiveSprint;
-    const hasSprintContext = runtimeState.hasSprintContext;
+
+    const rawHasSprintContext = runtimeState.hasSprintContext;
+    const visibleTasksWithLiveActivities = useMemo(
+        () => buildLiveSessionTasks(projectTasks, tasksWithLiveActivities, realtimeProjectId),
+        [projectTasks, realtimeProjectId, tasksWithLiveActivities],
+    );
+
+    const hasSprintContext = rawHasSprintContext || visibleTasksWithLiveActivities.length > 0;
+
     const [nowIso, setNowIso] = useState(() => new Date().toISOString());
-    const visibleTasksWithLiveActivities = useMemo(() => {
-        if (!hasSprintContext) return EMPTY_TASKS;
-        return selectedSprintId
-            ? tasksWithLiveActivities.filter((t) => t.sprint_id === selectedSprintId)
-            : tasksWithLiveActivities;
-    }, [hasSprintContext, tasksWithLiveActivities, selectedSprintId]);
+
+    const sprintDispatches = useMemo(() => {
+        if (!sprintScopeReady) {
+            return [];
+        }
+        return sprintScopeId
+            ? execution.taskDispatches.filter((d) => d.sprintId === sprintScopeId)
+            : execution.taskDispatches;
+    }, [execution.taskDispatches, sprintScopeId, sprintScopeReady]);
+
+    const sprintEvents = useMemo(() => {
+        if (!sprintScopeReady) {
+            return [];
+        }
+        return sprintScopeId
+            ? execution.recentEvents.filter((e) => e.sprintId === sprintScopeId)
+            : execution.recentEvents;
+    }, [execution.recentEvents, sprintScopeId, sprintScopeReady]);
+
+    const sprintRuns = useMemo(() => {
+        if (!sprintScopeReady) {
+            return [];
+        }
+        return sprintScopeId
+            ? execution.sprintRuns.filter((r) => r.sprintId === sprintScopeId)
+            : execution.sprintRuns;
+    }, [execution.sprintRuns, sprintScopeId, sprintScopeReady]);
 
     const visibleStats = useMemo(() => {
         if (!hasSprintContext) return EMPTY_RUNTIME_STATS;
@@ -828,24 +872,6 @@ export const LiveSessionPage: FunctionComponent = () => {
             total: visibleTasksWithLiveActivities.length,
         };
     }, [hasSprintContext, visibleTasksWithLiveActivities, stats]);
-
-    const sprintDispatches = useMemo(() => {
-        return selectedSprintId
-            ? execution.taskDispatches.filter((d) => d.sprintId === selectedSprintId)
-            : execution.taskDispatches;
-    }, [execution.taskDispatches, selectedSprintId]);
-
-    const sprintEvents = useMemo(() => {
-        return selectedSprintId
-            ? execution.recentEvents.filter((e) => e.sprintId === selectedSprintId)
-            : execution.recentEvents;
-    }, [execution.recentEvents, selectedSprintId]);
-
-    const sprintRuns = useMemo(() => {
-        return selectedSprintId
-            ? execution.sprintRuns.filter((r) => r.sprintId === selectedSprintId)
-            : execution.sprintRuns;
-    }, [execution.sprintRuns, selectedSprintId]);
 
     const { sprintTiming, taskTimings, taskTimingMap } = useLiveTaskTimingSummaries({
         tasks: visibleTasksWithLiveActivities,
@@ -982,8 +1008,10 @@ export const LiveSessionPage: FunctionComponent = () => {
         || '<p class="text-slate-400 dark:text-slate-600 italic">No active sprint protocol.</p>'
     ), [hasSprintContext, status.instructions]);
 
-    /* Connection error */
-    if (error) {
+    /* Connection error — only show full-page error if we have NO prior data.
+       If we already loaded sprint data, keep showing it with an inline warning
+       so the view doesn't flicker away on transient network blips. */
+    if (error && !hasSprintContext && !initialLoadComplete) {
         return (
             <div className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex items-center justify-center min-h-[60vh]">
                 <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-status-red/20 rounded-[1.75rem] p-12 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] text-center max-w-lg">
@@ -1002,6 +1030,14 @@ export const LiveSessionPage: FunctionComponent = () => {
 
     return (
         <div className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-16 relative z-10">
+
+            {/* Inline connection warning — shown when we have prior data but lost connection */}
+            {error && (hasSprintContext || initialLoadComplete) && (
+                <div className="flex items-center gap-3 px-5 py-3 rounded-2xl border border-status-red/15 bg-status-red/5 text-sm text-status-red font-medium backdrop-blur-md">
+                    <Zap className="w-4 h-4 shrink-0" strokeWidth={2} />
+                    <span>{error} — showing last known state, reconnecting...</span>
+                </div>
+            )}
 
             {/* ── Page Header ─────────────────────────────────────────── */}
             <div ref={headerRef} className="flex flex-col lg:flex-row items-start lg:items-end justify-between gap-8">
@@ -1039,8 +1075,10 @@ export const LiveSessionPage: FunctionComponent = () => {
                             : pausedIntervention
                                 ? pausedIntervention.instructions
                                 : hasSprintContext
-                                    ? "Loading the latest sprint telemetry snapshot."
-                                    : "Waiting for sprint to start."
+                                    ? "Viewing the latest sprint telemetry snapshot."
+                                    : !initialLoadComplete
+                                        ? "Connecting to orchestrator..."
+                                        : "Waiting for sprint to start."
                         }
                     </p>
                 </div>
@@ -1098,7 +1136,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                             <span className={`w-2 h-2 rounded-full relative ${hasLiveSprint ? "bg-signal-500" : pausedIntervention ? "bg-status-amber" : "bg-slate-400"}`}>
                                 {hasLiveSprint && <span className="absolute inset-0 rounded-full animate-ping bg-signal-400 opacity-60" />}
                             </span>
-                            {hasLiveSprint ? `${visibleStats.running} Running` : pausedIntervention ? "Paused for intervention" : hasSprintContext ? "Snapshot loaded" : "Waiting"}
+                            {hasLiveSprint ? `${visibleStats.running} Running` : pausedIntervention ? "Paused for intervention" : hasSprintContext ? "Snapshot loaded" : !initialLoadComplete ? "Connecting" : "Waiting"}
                         </div>
                         {pausedIntervention && !hasLiveSprint && (
                             <HumanInterventionBadge summary={pausedIntervention} label="Needs you" align="right" />
@@ -1160,17 +1198,21 @@ export const LiveSessionPage: FunctionComponent = () => {
                 />
             ) : headerView === "race" ? (
                 /* ── Boat Race View ───────────────────────────────── */
-                <SprintBoatRace
-                    tasks={visibleTasksWithLiveActivities}
-                    dispatches={sprintDispatches}
-                    hasLiveSprint={hasSprintContext}
-                />
+                <Suspense fallback={<SkeletonPanel />}>
+                    <SprintBoatRace
+                        tasks={visibleTasksWithLiveActivities}
+                        dispatches={sprintDispatches}
+                        hasLiveSprint={hasLiveSprint}
+                    />
+                </Suspense>
             ) : (
-                <SprintDag
-                    tasks={visibleTasksWithLiveActivities}
-                    dispatches={sprintDispatches}
-                    hasSprintContext={hasSprintContext}
-                />
+                <Suspense fallback={<SkeletonPanel />}>
+                    <SprintDag
+                        tasks={visibleTasksWithLiveActivities}
+                        dispatches={sprintDispatches}
+                        hasSprintContext={hasSprintContext}
+                    />
+                </Suspense>
             )}
 
             {/* ── Section Divider ─────────────────────────────────────── */}
@@ -1211,7 +1253,10 @@ export const LiveSessionPage: FunctionComponent = () => {
 
                 {/* Task cards */}
                 <div className="xl:col-span-8 flex flex-col gap-5">
-                    {!hasSprintContext ? (
+                    {!hasSprintContext && !initialLoadComplete ? (
+                        /* Initial load in progress — render nothing to avoid flashing idle placeholder */
+                        null
+                    ) : !hasSprintContext ? (
                         <IdleRuntimeState
                             title={pausedIntervention ? "Human Intervention Needed" : "Waiting for Sprint Start"}
                             subtitle={pausedIntervention
@@ -1256,15 +1301,15 @@ export const LiveSessionPage: FunctionComponent = () => {
                         icon={Activity}
                         accentHex="#00E0A0"
                         content={hasSprintContext ? status.reportText : undefined}
-                        fallback={hasSprintContext ? "Waiting for activity..." : "Waiting for sprint to start."}
+                        fallback={hasSprintContext ? "Waiting for activity..." : !initialLoadComplete ? "Connecting..." : "Waiting for sprint to start."}
                     />
 
                     {/* 2. Git/CI — moved to top, always visible */}
                     <GitCIStatusPanel status={gitStatus} error={gitStatusError} />
 
                     {/* 3. Execution Runtime — collapsible */}
-                    <ExecutionRuntimePanel
-                        snapshot={execution}
+                    <ExecutionTimelineProvider
+                        execution={execution}
                         onOrchestrateSprint={handleOrchestrateSprint}
                         onPauseSprintRun={handlePauseSprintRun}
                         onCancelSprintRun={handleCancelSprintRun}
@@ -1276,9 +1321,12 @@ export const LiveSessionPage: FunctionComponent = () => {
                         onResolveAttentionItem={handleResolveAttentionItem}
                         onDismissAttentionItem={handleDismissAttentionItem}
                         pendingActionIds={pendingActionIds}
-                        collapsible
-                        defaultOpen={hasSprintContext}
-                    />
+                    >
+                        <ExecutionRuntimePanel
+                            collapsible
+                            defaultOpen={hasSprintContext}
+                        />
+                    </ExecutionTimelineProvider>
 
                     {/* 4. Protocol — collapsible */}
                     <CollapsiblePanel

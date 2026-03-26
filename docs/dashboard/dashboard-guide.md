@@ -251,6 +251,11 @@ Legacy runtime:
   - `/api/status` and `/api/execution` now hydrate independently
   - task stats and the race view can render from the latest runtime status snapshot even when execution metadata is still catching up
   - the page only shows the full `Waiting for Sprint Start` empty state when neither runtime status nor execution state has sprint context
+- The Live view now keeps its mounted shell stable during background refresh:
+  - fetch-only execution `updatedAt` changes no longer trigger full runtime rerenders by themselves
+  - the selected project scope is anchored from dashboard project selection instead of transient runtime snapshot identity
+  - sprint structure now comes from the stable project task store, while `/api/status` only overlays live execution state and activity onto those tasks
+  - transient runtime snapshot gaps therefore no longer drop the DAG or task pipeline back to `Awaiting sprint decomposition...` when the sprint tasks themselves still exist
 - The Live view hero now has three interchangeable visualizations:
   - `Stats` for a compact asymmetric telemetry deck with one dominant sprint-time panel, a slimmer runtime intelligence rail, live flow-state deltas, merge pressure, and accumulated stage timing
   - `Race` for stage-based progress across the execution course

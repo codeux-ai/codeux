@@ -13,19 +13,25 @@ interface UseProjectTasksResult {
   refresh: () => Promise<void>;
 }
 
+interface UseProjectTasksOptions {
+  enabled?: boolean;
+}
+
 export function useProjectTasks(
   projectId: string | null,
   sources: Source[],
   sprints: Sprint[],
-  sprintId?: string | null
+  sprintId?: string | null,
+  options?: UseProjectTasksOptions,
 ): UseProjectTasksResult {
   const [taskRecords, setTaskRecords] = useState<TaskRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
+  const enabled = options?.enabled ?? true;
 
   const refreshInternal = useCallback(async (options?: { silent?: boolean }): Promise<void> => {
-    if (!projectId) {
+    if (!projectId || !enabled) {
       setTaskRecords([]);
       setError(null);
       setLoading(false);
@@ -49,15 +55,15 @@ export function useProjectTasks(
         setLoading(false);
       }
     }
-  }, [projectId, sprintId]);
+  }, [enabled, projectId, sprintId]);
 
   useEffect(() => {
     hasLoadedRef.current = false;
     void refreshInternal();
-  }, [projectId, sprintId, refreshInternal]);
+  }, [enabled, projectId, sprintId, refreshInternal]);
 
   useEffect(() => {
-    if (!projectId) {
+    if (!projectId || !enabled) {
       return;
     }
 
@@ -71,7 +77,7 @@ export function useProjectTasks(
         void refreshInternal({ silent: true });
       }
     });
-  }, [projectId, refreshInternal]);
+  }, [enabled, projectId, refreshInternal]);
 
   const tasks = useMemo(() => {
     const sourcesById = new Map(sources.map((source) => [source.id, source]));

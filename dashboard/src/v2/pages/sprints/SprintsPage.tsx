@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import {
   Activity,
@@ -25,6 +25,7 @@ import { SprintSettingsOverrideModal } from "../../components/ui/SprintSettingsO
 import { useSprintsPageData } from "./use-sprints-page-data.js";
 import { useProgressiveList } from "../../hooks/use-progressive-list.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "../../lib/list-window.js";
+import { ExecutionTimelineProvider } from "../../../hooks/ExecutionTimelineContext.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 
@@ -110,7 +111,8 @@ export const SprintsPage: FunctionComponent = () => {
     window.addEventListener("resize", closeMenu);
     window.addEventListener("scroll", closeMenu, true);
 
-    return () => {
+
+  return () => {
       document.removeEventListener("click", closeMenu);
       document.removeEventListener("keydown", handleEscape);
       window.removeEventListener("resize", closeMenu);
@@ -118,7 +120,7 @@ export const SprintsPage: FunctionComponent = () => {
     };
   }, [rowMenu, setRowMenu]);
 
-  const animateLatestCell = () => {
+  const animateLatestCell = useCallback(() => {
     requestAnimationFrame(() => {
       if (!bubblesRef.current) {
         return;
@@ -133,16 +135,16 @@ export const SprintsPage: FunctionComponent = () => {
         { scale: 1, opacity: 1, y: 0, duration: 0.8, ease: "elastic.out(1, 0.65)" },
       );
     });
-  };
+  }, []);
 
-  const onSprintSubmit = async (payload: any) => {
+  const onSprintSubmit = useCallback(async (payload: any) => {
     await handleSubmitSprint(payload);
     if (!editingSprint) {
         animateLatestCell();
     }
-  };
+  }, [handleSubmitSprint, editingSprint, animateLatestCell]);
 
-  const openRowActionsMenu = (event: MouseEvent, sprintId: string) => {
+  const openRowActionsMenu = useCallback((event: MouseEvent, sprintId: string) => {
     event.stopPropagation();
     const trigger = event.currentTarget as HTMLElement;
     const rect = trigger.getBoundingClientRect();
@@ -159,14 +161,29 @@ export const SprintsPage: FunctionComponent = () => {
           openUp,
         }
     ));
-  };
+  }, [setRowMenu]);
 
-  const activeRowMenuSprint = rowMenu
+  const activeRowMenuSprint = useMemo(() => rowMenu
     ? sortedSprints.find((sprint) => sprint.id === rowMenu.sprintId) || null
-    : null;
+    : null, [rowMenu, sortedSprints]);
+
+  const handleToggleShowcaseWithSprint = useCallback((sprint: any) => {
+    void handleToggleShowcase(sprint);
+  }, [handleToggleShowcase]);
+
+  const handleBulkStart = useCallback((ids: string[]) => {
+    for (const id of ids) handleSprintToggle(id);
+  }, [handleSprintToggle]);
+
+  const handleBulkDelete = useCallback((ids: string[]) => {
+    for (const id of ids) void handleDeleteSprint(id);
+  }, [handleDeleteSprint]);
 
   return (
-    <>
+    <ExecutionTimelineProvider
+      execution={execution}
+      pendingActionIds={pendingActionIds}
+    >
       <div className="relative z-10 mx-auto flex max-w-[1920px] flex-col gap-20 px-8 py-24 md:px-20">
         <div ref={headerRef} className="flex flex-wrap items-end justify-between gap-8">
           <div className="flex flex-col gap-5">
@@ -278,7 +295,8 @@ export const SprintsPage: FunctionComponent = () => {
                     const activeRun = activeRunsBySprintId.get(sprint.id);
                     const pendingActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
                     const pinActionId = `sprint-showcase:${sprint.id}`;
-                    return (
+
+  return (
                       <SprintBubble
                         key={sprint.id}
                         sprint={sprint}
@@ -346,7 +364,7 @@ export const SprintsPage: FunctionComponent = () => {
                   <SprintComposer
                     nextId={nextId}
                     initialSprint={editingSprint}
-                    connections={execution.connections}
+
                     virtualProviders={virtualProviders}
                     planningPresets={planningPresets}
                     planningEta={planningEta}
@@ -375,11 +393,11 @@ export const SprintsPage: FunctionComponent = () => {
                     templates={quicksprintTemplates}
                     loading={quicksprintLoading}
                     agentPresets={agentPresets}
-                    connections={execution.connections}
+
                     virtualProviders={virtualProviders}
                     planningEta={planningEta}
-                    onExecute={async (templateId, taskCount, submitMode, additionalPrompt) => {
-                      await handleQuicksprintExecute(templateId, taskCount, submitMode, additionalPrompt);
+                    onExecute={async (templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride) => {
+                      await handleQuicksprintExecute(templateId, taskCount, submitMode, additionalPrompt, routeOverride, modelOverride);
                       animateLatestCell();
                     }}
                     onCreateTemplate={handleCreateQuicksprintTemplate}
@@ -399,11 +417,11 @@ export const SprintsPage: FunctionComponent = () => {
                 activeRunsBySprintId={activeRunsBySprintId}
                 interventionBySprintId={interventionBySprintId}
                 pendingActionIds={pendingActionIds}
-                onToggleShowcase={(sprint) => { void handleToggleShowcase(sprint); }}
+                onToggleShowcase={handleToggleShowcaseWithSprint}
                 onSprintToggle={handleSprintToggle}
                 onOpenRowMenu={openRowActionsMenu}
-                onBulkStart={(ids) => { for (const id of ids) handleSprintToggle(id); }}
-                onBulkDelete={(ids) => { for (const id of ids) void handleDeleteSprint(id); }}
+                onBulkStart={handleBulkStart}
+                onBulkDelete={handleBulkDelete}
               />
             </div>
           </>
@@ -526,6 +544,6 @@ export const SprintsPage: FunctionComponent = () => {
           onSubmit={handleAppendTask}
         />
       )}
-    </>
+    </ExecutionTimelineProvider>
   );
 };

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 
 export interface UseProgressiveListOptions {
   initialCount?: number;
@@ -21,11 +21,30 @@ export function useProgressiveList<T>(
   } = options;
 
   const [visibleCount, setVisibleCount] = useState(initialCount);
+  const prevLengthRef = useRef(items.length);
 
-  // Reset visible count when items change significantly (e.g. project switch)
-  // or if the items array is now smaller than what we're showing.
+  // Only reset visible count on drastic changes (e.g. project switch where the
+  // list shrinks to 0 or changes by more than half).  Small changes like a
+  // sprint being added/removed should NOT reset — that causes visible flicker
+  // as the list briefly collapses and re-expands.
   useEffect(() => {
-    setVisibleCount(initialCount);
+    const prev = prevLengthRef.current;
+    prevLengthRef.current = items.length;
+
+    // List went to 0 (project switch / clear) — reset
+    if (items.length === 0) {
+      setVisibleCount(initialCount);
+      return;
+    }
+
+    // List appeared from nothing — reset to start progressive rendering
+    if (prev === 0 && items.length > 0) {
+      setVisibleCount(initialCount);
+      return;
+    }
+
+    // Clamp visible count if list shrank below it (e.g. deletion)
+    setVisibleCount((current) => Math.min(current, items.length));
   }, [items.length, initialCount]);
 
   useEffect(() => {

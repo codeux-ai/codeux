@@ -1,5 +1,6 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { memo } from "preact/compat";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "preact/hooks";
 import gsap from "gsap";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
@@ -22,9 +23,9 @@ import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { TaskComposer } from "./components/ui/TaskComposer.js";
 import { buildDependentTasksMap, type DependentTaskMetadata } from "./lib/task-relations.js";
-import type { Task, TaskPriority, TaskStatus } from "./types.js";
+import type { Sprint, Task, TaskPriority, TaskStatus } from "./types.js";
 import { useProjectData } from "./context/project-data.js";
-import { useProjectSprints } from "./hooks/use-project-sprints.js";
+import { useSprints } from "../hooks/useSprints.js";
 import { useProjectTasks } from "./hooks/use-project-tasks.js";
 import { createTask, deleteTask, updateTask } from "./lib/project-api.js";
 import { deriveTaskBoardState } from "./lib/task-board-state.js";
@@ -54,6 +55,8 @@ const EXECUTOR_LABEL: Record<Task["executorType"], string> = {
   mcp_worker: "Worker",
 };
 
+const EMPTY_DEPENDENTS: DependentTaskMetadata[] = [];
+
 type StatusFilter = "all" | TaskStatus;
 type PriorityFilter = "all" | TaskPriority;
 
@@ -70,7 +73,7 @@ const TaskCard: FunctionComponent<{
   dependents: DependentTaskMetadata[];
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
-}> = ({ task, dependents, onEdit, onDelete }) => {
+}> = memo(({ task, dependents, onEdit, onDelete }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const pri = PRIORITY_CFG[task.priority];
 
@@ -208,9 +211,17 @@ const TaskCard: FunctionComponent<{
       </div>
     </div>
   );
-};
+}, (prev, next) => {
+  return prev.task.recordId === next.task.recordId &&
+         prev.task.status === next.task.status &&
+         prev.task.priority === next.task.priority &&
+         prev.task.title === next.task.title &&
+         prev.dependents === next.dependents &&
+         prev.onEdit === next.onEdit &&
+         prev.onDelete === next.onDelete;
+});
 
-const ColumnHeader: FunctionComponent<{ status: TaskStatus; count: number }> = ({ status, count }) => {
+const ColumnHeader: FunctionComponent<{ status: TaskStatus; count: number }> = memo(({ status, count }) => {
   const cfg = STATUS_CFG[status];
   const Icon = cfg.icon;
 
@@ -225,15 +236,15 @@ const ColumnHeader: FunctionComponent<{ status: TaskStatus; count: number }> = (
       </span>
     </div>
   );
-};
+});
 
 const SprintSelector: FunctionComponent<{
-  sprints: Array<{ id: string; name: string; date: string; status: string; completion: number; tasksCount: number }>;
+  sprints: Sprint[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-}> = ({ sprints, selectedId, onSelect }) => {
+}> = memo(({ sprints, selectedId, onSelect }) => {
   const [open, setOpen] = useState(false);
-  const selected = selectedId ? sprints.find((sprint) => sprint.id === selectedId) : null;
+  const selected = selectedId ? sprints.find((sprint: Sprint) => sprint.id === selectedId) : null;
 
   return (
     <div className="relative">
@@ -307,12 +318,12 @@ const SprintSelector: FunctionComponent<{
       )}
     </div>
   );
-};
+});
 
 const SprintProgressCard: FunctionComponent<{
   sprint: { id: string; name: string; date: string };
   tasks: Task[];
-}> = ({ sprint, tasks }) => {
+}> = memo(({ sprint, tasks }) => {
   const completed = tasks.filter((task) => task.status === "completed").length;
   const inProgress = tasks.filter((task) => task.status === "in_progress").length;
   const pending = tasks.filter((task) => task.status === "pending").length;
@@ -363,19 +374,19 @@ const SprintProgressCard: FunctionComponent<{
       </Link>
     </div>
   );
-};
+});
 
 export const TasksPage: FunctionComponent = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const boardRef = useRef<HTMLDivElement>(null);
   const { projects, selectedProject } = useProjectData();
   const {
-    sprints,
+    data: sprints,
     loading: sprintsLoading,
     selectedSprintId,
     selectSprint,
-    refresh: refreshSprints,
-  } = useProjectSprints(selectedProject?.id || null);
+    refetch: refreshSprints,
+  } = useSprints(selectedProject?.id || null);
   const locationSearch = useRouterState({ select: (state) => state.location.searchStr });
   const initialSprint = useMemo(() => {
     const params = new URLSearchParams(locationSearch);
@@ -421,7 +432,7 @@ export const TasksPage: FunctionComponent = () => {
     }
 
     if (initialSprint) {
-      if (sprints.some((sprint) => sprint.id === initialSprint)) {
+      if (sprints.some((sprint: Sprint) => sprint.id === initialSprint)) {
         if (initialSprint !== selectedSprintId) {
           void selectSprint(initialSprint);
         }
@@ -439,9 +450,9 @@ export const TasksPage: FunctionComponent = () => {
     return deriveTaskBoardState(tasks, statusFilter, priorityFilter, listWindow);
   }, [tasks, statusFilter, priorityFilter, listWindow]);
 
-  const selectedSprintModel = selectedSprintId ? sprints.find((sprint) => sprint.id === selectedSprintId) || null : null;
+  const selectedSprintModel = selectedSprintId ? sprints.find((sprint: Sprint) => sprint.id === selectedSprintId) || null : null;
 
-  const handleTaskSubmit = async (draft: {
+  const handleTaskSubmit = useCallback(async (draft: {
     sprintId: string;
     title: string;
     description: string;
@@ -462,15 +473,19 @@ export const TasksPage: FunctionComponent = () => {
     await Promise.all([refreshTasks(), refreshSprints()]);
     setEditingTask(null);
     setShowComposer(false);
-  };
+  }, [selectedProject, editingTask, refreshTasks, refreshSprints]);
 
-  const handleDeleteTask = async (task: Task) => {
+  const handleDeleteTask = useCallback(async (task: Task) => {
     await deleteTask(task.recordId);
     await Promise.all([refreshTasks(), refreshSprints()]);
-    if (editingTask?.recordId === task.recordId) {
-      setEditingTask(null);
-    }
-  };
+    setEditingTask((prev) => prev?.recordId === task.recordId ? null : prev);
+  }, [refreshTasks, refreshSprints]);
+
+  const handleEditClick = useCallback((nextTask: Task) => {
+    setEditingTask(nextTask);
+    setShowComposer(true);
+    setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50);
+  }, []);
 
   return (
     <div className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-16 relative z-10">
@@ -540,7 +555,7 @@ export const TasksPage: FunctionComponent = () => {
       </div>
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 -mt-4">
-        <SprintSelector sprints={sprints} selectedId={selectedSprintId} onSelect={(id) => void selectSprint(id)} />
+        <SprintSelector sprints={sprints} selectedId={selectedSprintId} onSelect={selectSprint} />
 
         <div className="flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl">
           {[
@@ -647,13 +662,9 @@ export const TasksPage: FunctionComponent = () => {
                   <TaskCard
                     key={task.recordId}
                     task={task}
-                    dependents={dependenciesMap[task.recordId] || []}
-                    onEdit={(nextTask) => {
-                      setEditingTask(nextTask);
-                      setShowComposer(true);
-                      setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50);
-                    }}
-                    onDelete={(nextTask) => { void handleDeleteTask(nextTask); }}
+                    dependents={dependenciesMap[task.recordId] ?? EMPTY_DEPENDENTS}
+                    onEdit={handleEditClick}
+                    onDelete={handleDeleteTask}
                   />
                 ))
               )}

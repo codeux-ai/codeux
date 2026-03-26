@@ -1,13 +1,16 @@
 import type { FunctionComponent } from "preact";
+import { lazy, Suspense } from "preact/compat";
 import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { HeaderStats } from "./components/HeaderStats.js";
-import { OverviewTelemetry } from "./components/OverviewTelemetry.js";
 import { SourcesGrid } from "./components/SourcesGrid.js";
 import { TasksList } from "./components/TasksList.js";
+import { SkeletonPanel } from "./components/ui/ListSkeletons.js";
+
+const OverviewTelemetry = lazy(() => import("./components/OverviewTelemetry.js").then(m => ({ default: m.OverviewTelemetry })));
 
 export const DashboardV2: FunctionComponent = () => {
-    const mainContentRef = useRef<HTMLDivElement>(null);
+    const mainContentRef = useRef<HTMLElement>(null);
 
     useLayoutEffect(() => {
         if (mainContentRef.current) {
@@ -20,9 +23,9 @@ export const DashboardV2: FunctionComponent = () => {
     }, []);
 
     return (
-        <div ref={mainContentRef} className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-24">
+        <main ref={mainContentRef} className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-24">
             {/* Page Header */}
-            <div className="flex flex-col md:flex-row items-start md:items-end justify-between w-full gap-6">
+            <header className="flex flex-col md:flex-row items-start md:items-end justify-between w-full gap-6">
                 <div>
                     <h2 className="text-5xl md:text-6xl font-black tracking-tighter text-slate-900 dark:text-white mb-4 font-display leading-[0.95]">
                         Overview.
@@ -39,10 +42,10 @@ export const DashboardV2: FunctionComponent = () => {
                         Cluster Optimal
                     </div>
                 </div>
-            </div>
+            </header>
 
             {/* Metrics Section */}
-            <section className="w-full relative z-20">
+            <section aria-label="Metrics" className="w-full relative z-20">
                 <HeaderStats />
             </section>
 
@@ -58,23 +61,25 @@ export const DashboardV2: FunctionComponent = () => {
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-20 flex-grow relative z-20">
                 {/* Sources and Tasks */}
                 <div className="xl:col-span-8 flex flex-col gap-24">
-                    <section className="w-full relative">
+                    <section aria-label="Sources" className="w-full relative">
                         {/* Subtle signal glow — very restrained */}
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-signal-500/3 dark:bg-signal-500/5 rounded-full blur-[100px] pointer-events-none -z-10" />
                         <SourcesGrid />
                     </section>
 
-                    <section className="w-full relative">
+                    <section aria-label="Tasks" className="w-full relative">
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-[130%] bg-ember-500/3 dark:bg-ember-500/4 rounded-full blur-[80px] pointer-events-none -z-10" />
                         <TasksList />
                     </section>
                 </div>
 
                 {/* Live Telemetry */}
-                <div className="xl:col-span-4 h-full relative">
-                    <OverviewTelemetry />
-                </div>
+                <aside aria-label="Live Telemetry" className="xl:col-span-4 h-full relative">
+                    <Suspense fallback={<SkeletonPanel />}>
+                        <OverviewTelemetry />
+                    </Suspense>
+                </aside>
             </div>
-        </div>
+        </main>
     );
 };

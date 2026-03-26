@@ -14,6 +14,9 @@ Data fetching is governed by a unified resource layer rather than ad-hoc `useEff
 - Requests for the same resource key within a page are deduplicated.
 - Reusable cache payloads map project and sprint contexts so switching selected sprints does not repeatedly refetch unchanged baseline data.
 - Stale data is preserved during background refreshes to prevent UI flashing.
+- Live runtime polling keeps the last non-empty sprint status and execution snapshot while active work is still present, preventing the live page from flashing into the empty "Awaiting sprint decomposition" state during transient refresh gaps.
+- Live runtime status aggregation and task activity hydration run through the same `processDashboardTasks` projection so counters, task cards, and race placement stay phase-consistent during post-coding polling.
+- The Live page now waits for the resolved sprint scope from the header selection before loading sprint-filtered task data; while that selection is still hydrating, it uses the runtime status `sprint_id` as the fallback scope instead of widening to project-wide "All Sprints".
 - Cache invalidation is coordinated through realtime websocket events.
 
 ## Resource Keys and Cache Invalidation

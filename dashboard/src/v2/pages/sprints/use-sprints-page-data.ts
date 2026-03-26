@@ -9,8 +9,8 @@ import type {
   VirtualWorkerProvider 
 } from "../../types.js";
 import { useProjectData } from "../../context/project-data.js";
-import { useProjectSprints } from "../../hooks/use-project-sprints.js";
-import { useProjectExecution } from "../../hooks/use-project-execution.js";
+import { useSprints } from "../../../hooks/useSprints.js";
+import { useExecutions } from "../../../hooks/useExecutions.js";
 import {
   createSprint,
   createTask,
@@ -98,8 +98,8 @@ export function useSprintsPageData() {
   const [planningEta, setPlanningEta] = useState(180000);
 
   const { selectedProject } = useProjectData();
-  const { sprints, refresh, loading: sprintsLoading } = useProjectSprints(selectedProject?.id || null);
-  const { execution, refresh: refreshExecution, loading: executionLoading } = useProjectExecution(selectedProject?.id || null);
+  const { data: sprints, refetch: refresh, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
+  const { data: execution, refetch: refreshExecution, loading: executionLoading } = useExecutions(selectedProject?.id || null);
 
   useEffect(() => {
     if (!selectedProject) {
@@ -199,7 +199,7 @@ export function useSprintsPageData() {
   }, [selectedProject?.id]);
 
   const nextSprintNumber = useMemo(() => (
-    sprints.reduce((maxNumber, sprint) => Math.max(maxNumber, sprint.number || 0), 0) + 1
+    sprints.reduce((maxNumber: number, sprint: Sprint) => Math.max(maxNumber, sprint.number || 0), 0) + 1
   ), [sprints]);
   const nextId = `SPR-${String(nextSprintNumber).padStart(2, "0")}`;
 
@@ -248,7 +248,7 @@ export function useSprintsPageData() {
   );
 
   const displaySprints = useMemo(() => (
-    sprints.map((sprint) => ({
+    sprints.map((sprint: Sprint) => ({
       ...sprint,
       status: optimisticStatuses[sprint.id]
         || (suppressedRunningSprintIds.has(sprint.id) && sprint.status === "running" ? "cancelled" : sprint.status),
@@ -477,7 +477,7 @@ export function useSprintsPageData() {
     if (!selectedProject) return;
     try {
       const taskRecords = await fetchTasks(selectedProject.id, sprint.id);
-      const sprintsById = new Map(sprints.map((s) => [s.id, s]));
+      const sprintsById = new Map<string, Sprint>(sprints.map((s: Sprint) => [s.id, s]));
       const tasks = taskRecords.map((t) => toTaskViewModel(t, new Map(), sprintsById));
       setAddTaskSprintTasks(tasks);
       setAddTaskForSprint(sprint);
@@ -502,7 +502,7 @@ export function useSprintsPageData() {
     // Refresh the task list for the modal so new task appears in dependencies
     if (addTaskForSprint) {
       const taskRecords = await fetchTasks(selectedProject.id, addTaskForSprint.id);
-      const sprintsById = new Map(sprints.map((s) => [s.id, s]));
+      const sprintsById = new Map<string, Sprint>(sprints.map((s: Sprint) => [s.id, s]));
       setAddTaskSprintTasks(taskRecords.map((t) => toTaskViewModel(t, new Map(), sprintsById)));
     }
   }, [addTaskForSprint, refresh, selectedProject, sprints]);
@@ -558,7 +558,7 @@ export function useSprintsPageData() {
   }, [refresh, selectedProject]);
 
 
-  const handleQuicksprintExecute = useCallback(async (templateId: string, taskCount: number, submitMode: string, additionalPrompt?: string) => {
+  const handleQuicksprintExecute = useCallback(async (templateId: string, taskCount: number, submitMode: string, additionalPrompt?: string, routeOverride?: PlanningRouteOption | null, modelOverride?: string | null) => {
     if (!selectedProject) return;
     try {
       await executeQuicksprint(selectedProject.id, {
@@ -566,6 +566,7 @@ export function useSprintsPageData() {
         taskCount,
         submitMode: submitMode as "plan_only" | "plan_and_start",
         additionalPrompt,
+        planningOverrides: toPlanningOverrides(routeOverride ?? null, modelOverride ?? null),
       });
       setShowQuicksprint(false);
       await refresh();

@@ -10,6 +10,7 @@ interface PollOptions {
   onError?: (error: Error) => void;
   onSuccess?: () => void;
   enabled?: boolean;
+  shouldSkip?: () => boolean;
 }
 
 export interface PollManager {
@@ -23,6 +24,7 @@ export const useDashboardPollManager = (options: PollOptions): PollManager => {
     onError,
     onSuccess,
     enabled = true,
+    shouldSkip,
   } = options;
 
   const timerRef = useRef<number | null>(null);
@@ -32,12 +34,14 @@ export const useDashboardPollManager = (options: PollOptions): PollManager => {
   const onSuccessRef = useRef(onSuccess);
   const enabledRef = useRef(enabled);
   const intervalMsRef = useRef(intervalMs);
+  const shouldSkipRef = useRef(shouldSkip);
   const isMountedRef = useRef(true);
   onPollRef.current = onPoll;
   onErrorRef.current = onError;
   onSuccessRef.current = onSuccess;
   enabledRef.current = enabled;
   intervalMsRef.current = intervalMs;
+  shouldSkipRef.current = shouldSkip;
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -56,6 +60,11 @@ export const useDashboardPollManager = (options: PollOptions): PollManager => {
     if (!enabledRef.current || !isMountedRef.current) return;
 
     clearTimer();
+
+    if (shouldSkipRef.current?.()) {
+      timerRef.current = window.setTimeout(executePoll, intervalMsRef.current);
+      return;
+    }
 
     try {
       const results = await Promise.allSettled(onPollRef.current.map((fn) => fn()));

@@ -18,6 +18,10 @@ import type {
 import { AppDbStorage } from "./app-db-storage.js";
 import { slugify } from "../shared/slug.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
+import { SettingsRepository } from "./settings-repository.js";
+import { ProjectWorkerAssignmentRepository } from "./project-worker-assignment-repository.js";
+import type { ProjectSettingsOverride } from "../contracts/settings-scope-types.js";
+import type { ProjectWorkerAssignmentRecord } from "../contracts/worker-types.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
 
@@ -90,8 +94,10 @@ export class ProjectManagementRepository {
   private readonly db: DatabaseSync;
 
   constructor(
-    storage: AppDbStorage = new AppDbStorage(),
+    private readonly storage: AppDbStorage = new AppDbStorage(),
     private readonly realtimeNotifier?: DashboardRealtimeMutationNotifier,
+    private readonly settingsRepository: SettingsRepository = new SettingsRepository(),
+    private readonly projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(storage)
   ) {
     this.db = storage.getDatabase();
   }
@@ -121,7 +127,7 @@ export class ProjectManagementRepository {
     `).all() as unknown as ProjectRow[];
 
     return {
-      projects: rows.map((row) => this.mapProjectRow(row)),
+      projects: this.hydrateProjects(rows),
       selectedProjectId: this.getSelectedProjectId(),
     };
   }
@@ -150,7 +156,8 @@ export class ProjectManagementRepository {
       WHERE p.id = ?
     `).get(projectId) as ProjectRow | undefined;
 
-    return row ? this.mapProjectRow(row) : null;
+    if (!row) return null;
+    return this.hydrateProjects([row])[0];
   }
 
   findProjectByBaseDir(repoPath: string): ProjectSummary | null {
@@ -183,7 +190,8 @@ export class ProjectManagementRepository {
       LIMIT 1
     `).get(normalizedRepoPath, withTrailingSlash, normalizedRepoPath, withTrailingSlash) as ProjectRow | undefined;
 
-    return row ? this.mapProjectRow(row) : null;
+    if (!row) return null;
+    return this.hydrateProjects([row])[0];
   }
 
   createProject(input: CreateProjectInput): ProjectSummary {
@@ -750,12 +758,11 @@ export class ProjectManagementRepository {
       return [];
     }
 
-    const dependencyRows = this.db.prepare(`
-      SELECT task_id, depends_on_task_id
-      FROM task_dependencies
-      WHERE task_id IN (${rows.map(() => "?").join(", ")})
-      ORDER BY depends_on_task_id ASC
-    `).all(...rows.map((row) => row.id)) as unknown as DependencyRow[];
+    const dependencyRows = this.storage.executeChunkedInQuery<DependencyRow>({
+      sqlPrefix: "SELECT task_id, depends_on_task_id FROM task_dependencies WHERE task_id",
+      sqlSuffix: "ORDER BY depends_on_task_id ASC",
+      items: rows.map((row) => row.id),
+    });
 
     const dependencyMap = new Map<string, string[]>();
     for (const row of dependencyRows) {
@@ -787,7 +794,27 @@ export class ProjectManagementRepository {
     }));
   }
 
-  private mapProjectRow(row: ProjectRow): ProjectSummary {
+  private hydrateProjects(rows: ProjectRow[]): ProjectSummary[] {
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const projectIds = rows.map((row) => row.id);
+    const settingsOverridesMap = this.settingsRepository.getProjectSettingsBatch(projectIds);
+    const agentBindingsMap = this.projectWorkerAssignmentRepository.listAssignmentsForProjects(projectIds, { activeOnly: true });
+
+    return rows.map((row) => {
+      const settingsOverrides = settingsOverridesMap.get(row.id) || {};
+      const agentBindings = agentBindingsMap.get(row.id) || [];
+      return this.mapProjectRow(row, settingsOverrides, agentBindings);
+    });
+  }
+
+  private mapProjectRow(
+    row: ProjectRow,
+    settingsOverrides: ProjectSettingsOverride,
+    agentBindings: ProjectWorkerAssignmentRecord[]
+  ): ProjectSummary {
     return {
       id: row.id,
       slug: row.slug,
@@ -803,6 +830,8 @@ export class ProjectManagementRepository {
       openTasks: toNumber(row.open_tasks),
       completedTasks: toNumber(row.completed_tasks),
       isRunning: toBoolean(row.has_active_runs),
+      settingsOverrides,
+      agentBindings,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

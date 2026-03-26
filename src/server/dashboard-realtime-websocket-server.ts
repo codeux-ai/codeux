@@ -13,6 +13,7 @@ import type { Logger } from "../shared/logging/logger.js";
 interface RealtimeClientState {
   socket: Socket;
   subscriptions: Set<string>;
+  lastPushedSequence: number | null;
 }
 
 const WS_MAGIC = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -156,6 +157,7 @@ export function bootDashboardRealtimeWebSocketServer(args: {
       if (!client.subscriptions.has(event.scope)) {
         continue;
       }
+      client.lastPushedSequence = event.sequence;
       sendJson(client.socket, {
         type: "event",
         event,
@@ -189,6 +191,7 @@ export function bootDashboardRealtimeWebSocketServer(args: {
     const client: RealtimeClientState = {
       socket,
       subscriptions: new Set<string>(),
+      lastPushedSequence: null,
     };
     clients.set(socket, client);
     sendJson(socket, { type: "ready" });
@@ -218,21 +221,28 @@ export function bootDashboardRealtimeWebSocketServer(args: {
           const afterSequence = Math.max(0, Number(message.lastSequence ?? 0) || 0);
           if (afterSequence > 0 && validScopes.length > 0) {
             const latestSequence = args.realtimeService.getLatestSequenceForScopes(validScopes);
-            const missedNonReplayableSnapshot = args.realtimeService.hasNonReplayableEventsSince(validScopes, afterSequence);
-            const replayEvents = args.realtimeService.replay(validScopes, afterSequence, 200);
-            const replayLastSequence = replayEvents[replayEvents.length - 1]?.sequence ?? afterSequence;
 
-            if (missedNonReplayableSnapshot || (latestSequence !== null && replayLastSequence < latestSequence)) {
-              sendJson(socket, {
-                type: "snapshot_required",
-                reason: missedNonReplayableSnapshot ? "non_replayable_event_missed" : "replay_window_exceeded",
-              });
-            } else {
-              for (const replayEvent of replayEvents) {
+            const isUpToDateWithLatest = latestSequence !== null && afterSequence >= latestSequence;
+            const receivedViaPush = client.lastPushedSequence !== null && afterSequence >= client.lastPushedSequence;
+            const isGenuinelyBehind = !isUpToDateWithLatest && !receivedViaPush;
+
+            if (isGenuinelyBehind) {
+              const missedNonReplayableSnapshot = args.realtimeService.hasNonReplayableEventsSince(validScopes, afterSequence);
+              const replayEvents = args.realtimeService.replay(validScopes, afterSequence, 200);
+              const replayLastSequence = replayEvents[replayEvents.length - 1]?.sequence ?? afterSequence;
+
+              if (missedNonReplayableSnapshot || (latestSequence !== null && replayLastSequence < latestSequence)) {
                 sendJson(socket, {
-                  type: "event",
-                  event: replayEvent,
+                  type: "snapshot_required",
+                  reason: missedNonReplayableSnapshot ? "non_replayable_event_missed" : "replay_window_exceeded",
                 });
+              } else {
+                for (const replayEvent of replayEvents) {
+                  sendJson(socket, {
+                    type: "event",
+                    event: replayEvent,
+                  });
+                }
               }
             }
           }

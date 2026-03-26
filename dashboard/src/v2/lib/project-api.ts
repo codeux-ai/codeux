@@ -88,8 +88,8 @@ export const setProjectPreferredWorker = async (
   });
 };
 
-export const fetchSprints = async (projectId: string): Promise<SprintCollectionResponse> => {
-  return fetchJson<SprintCollectionResponse>(`/api/projects/${encodeURIComponent(projectId)}/sprints`);
+export const fetchSprints = async (projectId: string, signal?: AbortSignal): Promise<SprintCollectionResponse> => {
+  return fetchJson<SprintCollectionResponse>(`/api/projects/${encodeURIComponent(projectId)}/sprints`, { signal });
 };
 
 export const selectSprint = async (projectId: string, sprintId: string | null): Promise<string | null> => {
@@ -104,8 +104,8 @@ export const selectSprint = async (projectId: string, sprintId: string | null): 
   return response.selectedSprintId;
 };
 
-export const fetchProjectExecution = async (projectId: string): Promise<ExecutionDashboardSnapshot> => {
-  return fetchJson<ExecutionDashboardSnapshot>(`/api/projects/${encodeURIComponent(projectId)}/execution`);
+export const fetchProjectExecution = async (projectId: string, signal?: AbortSignal): Promise<ExecutionDashboardSnapshot> => {
+  return fetchJson<ExecutionDashboardSnapshot>(`/api/projects/${encodeURIComponent(projectId)}/execution`, { signal });
 };
 
 export const fetchProjectStats = async (

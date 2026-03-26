@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type {
   DashboardRealtimeServerMessage,
   ProjectExecutionStatsSnapshot,
@@ -23,29 +23,38 @@ export function useProjectStats(
   const [stats, setStats] = useState<ProjectExecutionStatsSnapshot | null>(EMPTY_STATS);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
-  const refresh = useCallback(async (): Promise<void> => {
+  const refreshInternal = useCallback(async (options?: { silent?: boolean }): Promise<void> => {
     if (!projectId) {
       setStats(null);
       setError(null);
       setLoading(false);
+      hasLoadedRef.current = false;
       return;
     }
 
-    setLoading(true);
+    const isForeground = !options?.silent && !hasLoadedRef.current;
+    if (isForeground) {
+      setLoading(true);
+    }
     try {
       setStats(await fetchProjectStats(projectId, statsQuery));
+      hasLoadedRef.current = true;
       setError(null);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
     } finally {
-      setLoading(false);
+      if (isForeground) {
+        setLoading(false);
+      }
     }
   }, [projectId, statsQuery]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    hasLoadedRef.current = false;
+    void refreshInternal();
+  }, [refreshInternal]);
 
   useEffect(() => {
     if (!projectId) {
@@ -57,30 +66,30 @@ export function useProjectStats(
         message.event.eventType === "project.execution.updated"
         || message.event.eventType === "project.structure.updated"
       )) {
-        void refresh();
+        void refreshInternal({ silent: true });
         return;
       }
 
       if (message.type === "snapshot_required") {
-        void refresh();
+        void refreshInternal({ silent: true });
       }
     });
-  }, [projectId, refresh]);
+  }, [projectId, refreshInternal]);
 
   useEffect(() => {
     if (!projectId || pollIntervalMs <= 0) {
       return;
     }
     const intervalId = globalThis.window.setInterval(() => {
-      void refresh();
+      void refreshInternal({ silent: true });
     }, pollIntervalMs);
     return () => globalThis.window.clearInterval(intervalId);
-  }, [pollIntervalMs, projectId, refresh]);
+  }, [pollIntervalMs, projectId, refreshInternal]);
 
   return useMemo(() => ({
     stats,
     loading,
     error,
-    refresh,
-  }), [error, loading, refresh, stats]);
+    refresh: () => refreshInternal({ silent: true }),
+  }), [error, loading, refreshInternal, stats]);
 }

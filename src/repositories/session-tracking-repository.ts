@@ -309,28 +309,31 @@ export class SessionTrackingRepository {
     }
 
     const now = new Date().toISOString();
-    const updateSessionState = this.db.prepare(`
-      UPDATE provider_sessions
-      SET state = ?, update_time = ?
-      WHERE id = ?
-    `);
-    const insertActivity = this.db.prepare(`
-      INSERT INTO provider_activities (session_id, activity_id, create_time, originator, description, payload)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `);
-
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      for (const id of sessionIds) {
-        updateSessionState.run("FAILED", now, id);
-        insertActivity.run(
+      const CHUNK_SIZE = 100;
+      for (let i = 0; i < sessionIds.length; i += CHUNK_SIZE) {
+        const chunk = sessionIds.slice(i, i + CHUNK_SIZE);
+        const updatePlaceholders = chunk.map(() => "?").join(", ");
+        this.db.prepare(`
+          UPDATE provider_sessions
+          SET state = ?, update_time = ?
+          WHERE id IN (${updatePlaceholders})
+        `).run("FAILED", now, ...chunk);
+
+        const insertPlaceholders = chunk.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
+        const insertParams = chunk.flatMap(id => [
           id,
           randomUUID(),
           now,
           "system",
           "Recovered interrupted MCP process. Previous background CLI task is marked FAILED and can be retried safely.",
           JSON.stringify({ recovery: "INTERRUPTED_PROCESS" })
-        );
+        ]);
+        this.db.prepare(`
+          INSERT INTO provider_activities (session_id, activity_id, create_time, originator, description, payload)
+          VALUES ${insertPlaceholders}
+        `).run(...insertParams);
       }
       this.db.exec("COMMIT");
     } catch (error) {

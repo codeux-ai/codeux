@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { AppDbStorage } from "./app-db-storage.js";
+import { requireRecord } from "./repository-utils.js";
 import type {
   ConnectionInboxMessage,
   ConversationMessageRecord,
@@ -141,7 +142,7 @@ export class ConnectionChatRepository {
   }
 
   listConnections(projectId: string): McpConnectionRecord[] {
-    this.requireProject(projectId);
+    requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const rows = this.db.prepare(`
       SELECT
         c.*,
@@ -291,26 +292,31 @@ export class ConnectionChatRepository {
       }
 
       if (normalizedProjectIds.length > 0) {
-        const insertBinding = this.db.prepare(`
-          INSERT INTO connection_project_bindings (
-            connection_id,
-            project_id,
-            is_active,
-            last_attention_cursor,
-            last_assignment_cursor,
-            created_at
-          ) VALUES (?, ?, ?, ?, ?, ?)
-        `);
-        for (const projectId of normalizedProjectIds) {
-          const existingBinding = existingBindingsByProjectId.get(projectId);
-          insertBinding.run(
-            connectionId,
-            projectId,
-            Number(activeProjectIds.includes(projectId)),
-            existingBinding?.last_attention_cursor ?? null,
-            existingBinding?.last_assignment_cursor ?? null,
-            existingBinding?.created_at ?? now,
-          );
+        const CHUNK_SIZE = 100;
+        for (let i = 0; i < normalizedProjectIds.length; i += CHUNK_SIZE) {
+          const chunk = normalizedProjectIds.slice(i, i + CHUNK_SIZE);
+          const placeholders = chunk.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
+          const params = chunk.flatMap((projectId) => {
+            const existingBinding = existingBindingsByProjectId.get(projectId);
+            return [
+              connectionId,
+              projectId,
+              Number(activeProjectIds.includes(projectId)),
+              existingBinding?.last_attention_cursor ?? null,
+              existingBinding?.last_assignment_cursor ?? null,
+              existingBinding?.created_at ?? now,
+            ];
+          });
+          this.db.prepare(`
+            INSERT INTO connection_project_bindings (
+              connection_id,
+              project_id,
+              is_active,
+              last_attention_cursor,
+              last_assignment_cursor,
+              created_at
+            ) VALUES ${placeholders}
+          `).run(...params);
         }
       }
     });
@@ -359,7 +365,7 @@ export class ConnectionChatRepository {
   }
 
   listThreads(projectId: string): ConversationThreadRecord[] {
-    this.requireProject(projectId);
+    requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const rows = this.db.prepare(`
       SELECT
         ct.*,
@@ -382,7 +388,7 @@ export class ConnectionChatRepository {
   }
 
   createThread(projectId: string, input: CreateConversationThreadInput): ConversationThreadRecord {
-    this.requireProject(projectId);
+    requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const connectionId = input.connectionId ?? null;
     if (connectionId) {
       this.requireConnection(connectionId);
@@ -476,7 +482,7 @@ export class ConnectionChatRepository {
   }
 
   postDashboardMessage(projectId: string, input: CreateDashboardConversationMessageInput): ConversationMessageRecord {
-    this.requireProject(projectId);
+    requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const thread = input.threadId
       ? this.requireThread(input.threadId)
       : this.createThread(projectId, {
@@ -533,7 +539,7 @@ export class ConnectionChatRepository {
   }
 
   postSystemMessage(projectId: string, input: CreateSystemConversationMessageInput): ConversationMessageRecord {
-    this.requireProject(projectId);
+    requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const thread = input.threadId
       ? this.requireThread(input.threadId)
       : this.createThread(projectId, {
@@ -1265,7 +1271,7 @@ export class ConnectionChatRepository {
       if (!trimmed || seen.has(trimmed)) {
         continue;
       }
-      this.requireProject(trimmed);
+      requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(trimmed), "Project", trimmed);
       seen.add(trimmed);
       normalized.push(trimmed);
     }
@@ -1288,17 +1294,6 @@ export class ConnectionChatRepository {
     return projectIds.filter((projectId) => activeSet.has(projectId));
   }
 
-  private requireProject(projectId: string): void {
-    const row = this.db.prepare(`
-      SELECT id
-      FROM projects
-      WHERE id = ?
-    `).get(projectId) as { id: string } | undefined;
-
-    if (!row) {
-      throw new Error(`Project not found: ${projectId}`);
-    }
-  }
 
   private getActiveProjectIds(connectionId: string): string[] {
     const rows = this.db.prepare(`
