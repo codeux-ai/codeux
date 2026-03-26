@@ -203,6 +203,7 @@ export const applyActionRequiredAutomation = async (
         const lastReplyAt = args.lastAutoReplyTimestamps?.get(sessionId);
         if (lastReplyAt !== undefined && cooldownMs > 0 && (Date.now() - lastReplyAt) < cooldownMs) {
           const remainingSec = Math.ceil((cooldownMs - (Date.now() - lastReplyAt)) / 1000);
+          task.status = "RUNNING";
           task.intervention_owner = "AGENT";
           task.intervention_hint = `Clarification cooldown active; next auto-reply in ${remainingSec}s.`;
           emitTaskEvent(task, "action_required_cooldown", {

@@ -108,4 +108,103 @@ describe("WorkerInboxReplyService", () => {
 
     expect(result.bodyMarkdown).toContain("worker queue");
   });
+
+  it("unwraps provider response envelopes for dashboard replies", async () => {
+    vi.mocked(runCommandStrict).mockResolvedValue({
+      ok: true,
+      code: 0,
+      stdout: JSON.stringify({
+        session_id: "b0536833-b397-4d12-b39d-b8818bcf5e12",
+        response: "Only the markdown reply body.",
+        stats: { models: {} },
+      }),
+      stderr: "",
+    });
+
+    const service = new WorkerInboxReplyService({
+      projectManagementRepository: {
+        getProject: vi.fn().mockReturnValue({
+          id: "project-1",
+          name: "Sprint OS",
+          baseDir: "/repo",
+        }),
+      } as any,
+      taskService: {
+        selectCliProviderForTask: vi.fn().mockReturnValue("gemini"),
+      } as any,
+      agentPresetSyncService: {
+        getWorkerAgent: vi.fn().mockResolvedValue({
+          instructionMarkdown: "Worker guide fallback",
+        }),
+      } as any,
+      getDashboardSettings: () => settings,
+      getGithubToken: () => undefined,
+    });
+
+    const result = await service.generateReply({
+      projectId: "project-1",
+      threadId: "thread-1",
+      bodyMarkdown: "Reply with the unblocker.",
+    });
+
+    expect(result.bodyMarkdown).toBe("Only the markdown reply body.");
+  });
+
+  it("unwraps provider response envelopes for clarification replies", async () => {
+    vi.mocked(runCommandStrict).mockResolvedValue({
+      ok: true,
+      code: 0,
+      stdout: JSON.stringify({
+        session_id: "b0536833-b397-4d12-b39d-b8818bcf5e12",
+        response: "Only the clarification answer.",
+        stats: { models: {} },
+      }),
+      stderr: "",
+    });
+
+    const service = new WorkerInboxReplyService({
+      projectManagementRepository: {
+        getProject: vi.fn().mockReturnValue({
+          id: "project-1",
+          name: "Sprint OS",
+          baseDir: "/repo",
+        }),
+      } as any,
+      taskService: {
+        selectCliProviderForTask: vi.fn().mockReturnValue("gemini"),
+      } as any,
+      agentPresetSyncService: {
+        getWorkerAgent: vi.fn().mockResolvedValue({
+          instructionMarkdown: "Worker guide fallback",
+        }),
+      } as any,
+      getDashboardSettings: () => settings,
+      getGithubToken: () => undefined,
+    });
+
+    const result = await service.generateClarificationReply({
+      projectId: "project-1",
+      sprintGoal: "Ship the fix",
+      subtasks: [{
+        id: "T1",
+        title: "Fix clarification handling",
+        prompt: "Repair the Jules clarification flow.",
+        depends_on: [],
+        is_independent: true,
+        status: "BLOCKED",
+        session_state: "AWAITING_USER_FEEDBACK",
+      }],
+      task: {
+        id: "T1",
+        title: "Fix clarification handling",
+        prompt: "Repair the Jules clarification flow.",
+        depends_on: [],
+        is_independent: true,
+        status: "BLOCKED",
+        session_state: "AWAITING_USER_FEEDBACK",
+      },
+    });
+
+    expect(result).toBe("Only the clarification answer.");
+  });
 });
