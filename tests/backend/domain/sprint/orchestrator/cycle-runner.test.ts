@@ -593,6 +593,83 @@ describe("CycleRunner attention sync", () => {
     expect(deps.startTask).toHaveBeenCalledWith(expect.objectContaining({ id: "T2" }), expect.anything());
   });
 
+  it("does not open action_required attention while clarification cooldown is active", async () => {
+    const deps = buildDeps();
+    deps.isActionRequiredState = (state?: string) => state === "AWAITING_USER_FEEDBACK";
+    const runner = new CycleRunner(deps);
+    vi.mocked(deps.sprintExecutionStateService.loadSubtasks).mockImplementation(async () => ([
+      {
+        id: "T1",
+        record_id: "task-1",
+        title: "Clarification task",
+        prompt: "Wait for Jules to continue after the clarification reply.",
+        depends_on: [],
+        is_independent: true,
+        status: "BLOCKED",
+        session_id: "sessions/abc123",
+        session_state: "AWAITING_USER_FEEDBACK",
+        provider: "jules",
+      },
+    ] as any));
+
+    const baseArgs = {
+      action: "status" as const,
+      automationLevel: "FULL" as const,
+      automationInterventions: {
+        ...DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
+        autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE" as const,
+        clarificationCooldownSeconds: 300,
+      },
+      executionContext: {
+        project: { id: "project-1", name: "Project 1" } as any,
+        sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+        sprintNumber: 1,
+        repoPath: "/repo/project-1",
+        featureBranch: "feature/sprint-1",
+        defaultBranch: "main",
+      },
+      repoPath: "/repo/project-1",
+      defaultFeatureBranch: "feature/sprint-1",
+      retryFailed: false,
+      loopSteps: {
+        loadSubtasks: true,
+        sessionSync: false,
+        statusDerivation: false,
+        startReadyTasks: false,
+        statusTable: false,
+        mergeProtocol: true,
+        actionRequiredProtocol: true,
+      } as any,
+      ciIntelligence: {
+        enabled: false,
+      } as any,
+      githubMode: "REMOTE" as const,
+      defaultBranch: "main",
+      featureBranchPrefix: "feature/",
+      sprintRunId: "run-1",
+    };
+
+    const firstResult = await runner.run(baseArgs);
+    expect(firstResult.subtasks[0]).toMatchObject({ status: "RUNNING" });
+    expect(deps.sendSessionMessage).toHaveBeenCalledTimes(1);
+
+    vi.mocked(deps.projectAttentionService.openItem).mockClear();
+
+    const secondResult = await runner.run(baseArgs);
+
+    expect(secondResult.subtasks[0]).toMatchObject({
+      status: "RUNNING",
+      intervention_owner: "AGENT",
+    });
+    expect(secondResult.subtasks[0]?.intervention_hint).toContain("Clarification cooldown active");
+    expect(deps.sendSessionMessage).toHaveBeenCalledTimes(1);
+    expect(deps.projectAttentionService.openItem).not.toHaveBeenCalledWith(expect.objectContaining({
+      attentionType: "action_required",
+      taskId: "task-1",
+    }));
+  });
+
   it("persists CI wait status back to task records while checks are still pending", async () => {
     const deps = buildDeps();
     const runner = new CycleRunner(deps);

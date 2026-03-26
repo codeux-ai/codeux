@@ -138,6 +138,7 @@ Dashboard behavior:
 - `autoAnswerClarification` (default `false`): auto-answer `AWAITING_USER_FEEDBACK` sessions in `SEMI_AUTO`
 - `autoResumePaused` (default `false`): auto-send resume nudge for `PAUSED` sessions in `SEMI_AUTO`
 - `clarificationAnswerTemplate`: default response body used for clarification auto-replies
+- `clarificationCooldownSeconds` (default `300`): wait time after an auto-reply/resume before Sprint OS sends another clarification nudge; during this cooldown the task stays in automated recovery and does not open a fresh `action_required` human-escalation path
 
 `cliWorkflow` contains:
 - Retry/cleanup toggles:

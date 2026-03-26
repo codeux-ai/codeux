@@ -63,7 +63,7 @@ export class WorkerInboxReplyService {
       apiKey: providerSettings.apiKey,
       githubToken: this.deps.getGithubToken(),
     });
-    const bodyMarkdown = output.trim();
+    const bodyMarkdown = this.normalizeProviderReply(output);
     if (!bodyMarkdown) {
       throw new Error(`Provider ${provider} returned an empty dashboard reply.`);
     }
@@ -138,7 +138,12 @@ export class WorkerInboxReplyService {
       githubToken: this.deps.getGithubToken(),
     });
 
-    return output.trim();
+    const reply = this.normalizeProviderReply(output);
+    if (!reply) {
+      throw new Error(`Provider ${provider} returned an empty clarification reply.`);
+    }
+
+    return reply;
   }
 
   private getLatestAgentPrompt(task: Subtask): string {
@@ -226,6 +231,24 @@ export class WorkerInboxReplyService {
     const spec = providerSpecs[input.provider](input.model, input.prompt);
     const result = await runCommandStrict(spec.command, spec.args, input.repoPath, env);
     return result.stdout || result.stderr;
+  }
+
+  private normalizeProviderReply(output: string): string {
+    const trimmed = output.trim();
+    if (!trimmed) {
+      return "";
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed) as { response?: unknown };
+      if (typeof parsed?.response === "string") {
+        return parsed.response.trim();
+      }
+    } catch {
+      // Provider returned plain text; keep it as-is.
+    }
+
+    return trimmed;
   }
 
   private async runCodexReply(
