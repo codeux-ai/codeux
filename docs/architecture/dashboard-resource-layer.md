@@ -14,6 +14,7 @@ Data fetching is governed by a unified resource layer rather than ad-hoc `useEff
 - Requests for the same resource key within a page are deduplicated.
 - Reusable cache payloads map project and sprint contexts so switching selected sprints does not repeatedly refetch unchanged baseline data.
 - Stale data is preserved during background refreshes to prevent UI flashing.
+- Live runtime polling keeps the last non-empty sprint status and execution snapshot while active work is still present, preventing the live page from flashing into the empty "Awaiting sprint decomposition" state during transient refresh gaps.
 - Cache invalidation is coordinated through realtime websocket events.
 
 ## Resource Keys and Cache Invalidation

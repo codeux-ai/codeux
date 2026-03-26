@@ -2,6 +2,13 @@ import type { ExecutionTaskDispatchSummary, Subtask } from "../types.js";
 
 export type TaskProgressPhase = NonNullable<Subtask["status"]>;
 
+const POST_CODING_RUNNING_INDICATORS = new Set([
+  "CI",
+  "AUTOMERGE",
+  "MERGE_BLOCKED",
+  "MERGE_CONFLICT",
+]);
+
 function taskHasMergeEvidence(task: Pick<Subtask, "worker_branch" | "pr_url">): boolean {
   const workerBranch = typeof task.worker_branch === "string" ? task.worker_branch.trim() : "";
   const prUrl = typeof task.pr_url === "string" ? task.pr_url.trim() : "";
@@ -26,9 +33,50 @@ function resolveTaskProgressPhase(
     : "CODING_COMPLETED";
 }
 
+function resolveDisplayStatusFromMergeIndicator(
+  rawStatus: TaskProgressPhase,
+  mergeIndicator: Subtask["merge_indicator"] | undefined,
+): TaskProgressPhase {
+  if (rawStatus !== "RUNNING") {
+    return rawStatus;
+  }
+
+  if (mergeIndicator === "MERGED") {
+    return "COMPLETED";
+  }
+
+  return POST_CODING_RUNNING_INDICATORS.has(mergeIndicator ?? "")
+    ? "CODING_COMPLETED"
+    : rawStatus;
+}
+
+function resolveRunningPostCodingPhase(
+  rawStatus: TaskProgressPhase,
+  mergeIndicator: Subtask["merge_indicator"] | undefined,
+): TaskProgressPhase | null {
+  if (rawStatus !== "RUNNING") {
+    return null;
+  }
+
+  if (mergeIndicator === "MERGED") {
+    return "COMPLETED";
+  }
+
+  return POST_CODING_RUNNING_INDICATORS.has(mergeIndicator ?? "")
+    ? "CODING_COMPLETED"
+    : null;
+}
+
 export function getTaskProgressPhase(task: Subtask): TaskProgressPhase {
+  const initialRawStatus = task.status || "PENDING";
+  const runningPostCodingPhase = resolveRunningPostCodingPhase(initialRawStatus, task.merge_indicator);
+  if (runningPostCodingPhase) {
+    return runningPostCodingPhase;
+  }
+
+  const rawStatus = resolveDisplayStatusFromMergeIndicator(initialRawStatus, task.merge_indicator);
   return resolveTaskProgressPhase(
-    task.status || "PENDING",
+    rawStatus,
     taskHasMergeEvidence(task),
     isMergeSettled(task),
   );
@@ -94,9 +142,15 @@ function resolveTerminalExecutionPhase(
 }
 
 export function getLiveTaskProgressPhase(args: LiveTaskProgressPhaseArgs): TaskProgressPhase {
-  const rawStatus = resolveTerminalExecutionPhase(args.dispatch, args.runtimeTerminalPhase)
+  const initialRawStatus = resolveTerminalExecutionPhase(args.dispatch, args.runtimeTerminalPhase)
     ?? args.task.status
     ?? "PENDING";
+  const runningPostCodingPhase = resolveRunningPostCodingPhase(initialRawStatus, args.task.merge_indicator);
+  if (runningPostCodingPhase) {
+    return runningPostCodingPhase;
+  }
+
+  const rawStatus = resolveDisplayStatusFromMergeIndicator(initialRawStatus, args.task.merge_indicator);
   const hasMergeEvidence = taskHasMergeEvidence(args.task) || dispatchHasMergeEvidence(args.dispatch);
   const mergeSettled = isMergeSettled(args.task) || args.runtimeMergeSettled === true;
 
