@@ -160,6 +160,18 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
         status: dispatchStatus ?? taskPhase,
     }), [dispatchStartedAt, dispatchFinishedAt, dispatchStatus, taskPhase]);
 
+    const handleExpandCollapsed = useCallback(() => setExpanded(true), []);
+
+    const handleToggleFeed = useCallback(() => {
+        setShowFeed(prev => !prev);
+        setExpanded(false);
+    }, []);
+
+    const handleToggleExpand = useCallback(() => {
+        setExpanded(prev => !prev);
+        setShowFeed(false);
+    }, []);
+
     return (
         <div
             ref={cardRef}
@@ -248,7 +260,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                 {!expanded && !showFeed && (
                     <button
                         type="button"
-                        onClick={() => setExpanded(true)}
+                        onClick={handleExpandCollapsed}
                         className="text-[13px] text-slate-400 dark:text-slate-500 line-clamp-1 text-left w-full hover:text-slate-600 dark:hover:text-slate-300 transition-colors duration-200 mb-4 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800 focus-visible:rounded"
                     >
                         {task.prompt.substring(0, 140)}...
@@ -299,7 +311,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         {hasEventFeed && (
                             <button
                                 type="button"
-                                onClick={() => { setShowFeed(!showFeed); if (expanded) setExpanded(false); }}
+                                onClick={handleToggleFeed}
                                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
                                            transition-all duration-200 border
                                            ${showFeed
@@ -313,7 +325,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         )}
                         <button
                             type="button"
-                            onClick={() => { setExpanded(!expanded); if (showFeed) setShowFeed(false); }}
+                            onClick={handleToggleExpand}
                             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
                                        transition-all duration-200 border
                                        ${expanded

@@ -1,3 +1,4 @@
+import { isAssignableWorkerStatus } from "./worker-status-utils.js";
 import type {
   ListenAssignmentChangedEvent,
   ListenAttentionItemEvent,
@@ -20,9 +21,6 @@ function compareCursor(left: { updatedAt: string; id: string }, right: { updated
   return makeCursor(left.updatedAt, left.id).localeCompare(makeCursor(right.updatedAt, right.id));
 }
 
-function isAssignableWorkerStatus(status: string | null | undefined): boolean {
-  return status !== null && status !== "stale" && status !== "offline";
-}
 
 export class WorkerListenEventService {
   constructor(

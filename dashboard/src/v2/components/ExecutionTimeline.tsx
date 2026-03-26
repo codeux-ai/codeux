@@ -1,4 +1,5 @@
 import type { FunctionComponent } from "preact";
+import { useMemo } from "preact/hooks";
 import { RuntimeEventFeed } from "./RuntimeEventFeed.js";
 import { useExecutionTimeline } from "../../hooks/ExecutionTimelineContext.js";
 import type { ExecutionSprintRunSummary } from "../../types.js";
@@ -9,7 +10,9 @@ interface ExecutionTimelineProps {
 
 export const ExecutionTimeline: FunctionComponent<ExecutionTimelineProps> = ({ activeSprintRuns }) => {
   const { execution } = useExecutionTimeline();
-  const timelineEvents = execution && activeSprintRuns.length > 0 ? execution.recentEvents.slice(0, 24) : [];
+  const timelineEvents = useMemo(() => {
+    return execution && activeSprintRuns.length > 0 ? execution.recentEvents.slice(0, 24) : [];
+  }, [execution, activeSprintRuns.length]);
 
   return (
     <div>

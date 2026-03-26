@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { AppDbStorage } from "./app-db-storage.js";
+import { requireRecord } from "./repository-utils.js";
 import type {
   AgentSourceScope,
   AgentPresetRecord,
@@ -55,7 +56,7 @@ export class AgentPresetRepository {
   }
 
   listAgentPresets(projectId: string): AgentPresetRecord[] {
-    this.requireProject(projectId);
+    requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const rows = this.db.prepare(`
       SELECT *
       FROM agent_presets
@@ -77,7 +78,7 @@ export class AgentPresetRepository {
   }
 
   createAgentPreset(projectId: string, input: CreateAgentPresetInput): AgentPresetRecord {
-    this.requireProject(projectId);
+    requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const now = new Date().toISOString();
     const id = randomUUID();
     this.db.prepare(`
@@ -108,11 +109,11 @@ export class AgentPresetRepository {
       now,
     );
 
-    return this.requireAgentPreset(id);
+    return requireRecord(this.getAgentPreset(id), "Agent preset", id);
   }
 
   importAgentPresetFromSource(projectId: string, input: CreateAgentPresetInput & AgentPresetSourceMetadata): AgentPresetRecord {
-    this.requireProject(projectId);
+    requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const now = new Date().toISOString();
     const id = randomUUID();
     const importedAt = input.sourceImportedAt ?? input.sourceUpdatedAt;
@@ -145,11 +146,11 @@ export class AgentPresetRepository {
       now,
     );
 
-    return this.requireAgentPreset(id);
+    return requireRecord(this.getAgentPreset(id), "Agent preset", id);
   }
 
   updateAgentPreset(agentPresetId: string, input: UpdateAgentPresetInput): AgentPresetRecord {
-    const current = this.requireAgentPreset(agentPresetId);
+    const current = requireRecord(this.getAgentPreset(agentPresetId), "Agent preset", agentPresetId);
     const now = new Date().toISOString();
     this.db.prepare(`
       UPDATE agent_presets
@@ -163,11 +164,11 @@ export class AgentPresetRepository {
       agentPresetId,
     );
 
-    return this.requireAgentPreset(agentPresetId);
+    return requireRecord(this.getAgentPreset(agentPresetId), "Agent preset", agentPresetId);
   }
 
   linkAgentPresetToSource(agentPresetId: string, input: AgentPresetSourceMetadata): AgentPresetRecord {
-    this.requireAgentPreset(agentPresetId);
+    requireRecord(this.getAgentPreset(agentPresetId), "Agent preset", agentPresetId);
     this.db.prepare(`
       UPDATE agent_presets
       SET source_path = ?, source_scope = ?, source_updated_at = ?
@@ -187,7 +188,7 @@ export class AgentPresetRepository {
       `).run(input.sourceImportedAt, agentPresetId);
     }
 
-    return this.requireAgentPreset(agentPresetId);
+    return requireRecord(this.getAgentPreset(agentPresetId), "Agent preset", agentPresetId);
   }
 
   importLinkedAgentPreset(agentPresetId: string, input: {
@@ -195,7 +196,7 @@ export class AgentPresetRepository {
     instructionMarkdown: string;
     sourceUpdatedAt: string;
   }): AgentPresetRecord {
-    const current = this.requireAgentPreset(agentPresetId);
+    const current = requireRecord(this.getAgentPreset(agentPresetId), "Agent preset", agentPresetId);
     if (!current.sourcePath || !current.sourceScope) {
       throw new Error(`Agent ${agentPresetId} is not linked to a markdown source.`);
     }
@@ -214,11 +215,11 @@ export class AgentPresetRepository {
       agentPresetId,
     );
 
-    return this.requireAgentPreset(agentPresetId);
+    return requireRecord(this.getAgentPreset(agentPresetId), "Agent preset", agentPresetId);
   }
 
   findAgentPresetByName(projectId: string, name: string): AgentPresetRecord | null {
-    this.requireProject(projectId);
+    requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const row = this.db.prepare(`
       SELECT *
       FROM agent_presets
@@ -232,7 +233,7 @@ export class AgentPresetRepository {
   }
 
   deleteAgentPreset(agentPresetId: string): void {
-    this.requireAgentPreset(agentPresetId);
+    requireRecord(this.getAgentPreset(agentPresetId), "Agent preset", agentPresetId);
     this.db.prepare(`
       DELETE FROM agent_presets
       WHERE id = ?
@@ -257,25 +258,7 @@ export class AgentPresetRepository {
     };
   }
 
-  private requireAgentPreset(agentPresetId: string): AgentPresetRecord {
-    const record = this.getAgentPreset(agentPresetId);
-    if (!record) {
-      throw new Error(`Agent preset not found: ${agentPresetId}`);
-    }
-    return record;
-  }
 
-  private requireProject(projectId: string): void {
-    const row = this.db.prepare(`
-      SELECT id
-      FROM projects
-      WHERE id = ?
-    `).get(projectId) as { id: string } | undefined;
-
-    if (!row) {
-      throw new Error(`Project not found: ${projectId}`);
-    }
-  }
 
   private normalizeLabels(labels?: string[]): string[] {
     const seen = new Set<string>();

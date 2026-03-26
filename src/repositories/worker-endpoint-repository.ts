@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { AppDbStorage } from "./app-db-storage.js";
+import { requireRecord } from "./repository-utils.js";
 import { deriveWorkerEndpointStatus } from "./connection-lifecycle.js";
 import type { McpConnectionRecord } from "../contracts/connection-chat-types.js";
 import type { WorkerEndpointCapabilities, WorkerEndpointRecord, WorkerEndpointStatus } from "../contracts/worker-types.js";
@@ -154,7 +155,7 @@ export class WorkerEndpointRepository {
       now,
     );
 
-    return this.requireWorkerEndpoint(id);
+    return requireRecord(this.getWorkerEndpoint(id), "Worker endpoint", id);
   }
 
   updateWorkerEndpoint(endpointId: string, updates: {
@@ -164,7 +165,7 @@ export class WorkerEndpointRepository {
     capabilities?: Partial<WorkerEndpointCapabilities>;
     lastHeartbeatAt?: string | null;
   }): WorkerEndpointRecord {
-    const current = this.requireWorkerEndpoint(endpointId);
+    const current = requireRecord(this.getWorkerEndpoint(endpointId), "Worker endpoint", endpointId);
     const nextCapabilities = updates.capabilities
       ? {
         ...current.capabilities,
@@ -192,7 +193,7 @@ export class WorkerEndpointRepository {
       endpointId,
     );
 
-    return this.requireWorkerEndpoint(endpointId);
+    return requireRecord(this.getWorkerEndpoint(endpointId), "Worker endpoint", endpointId);
   }
 
   touchWorkerEndpointHeartbeat(endpointId: string, status?: WorkerEndpointStatus): WorkerEndpointRecord {
@@ -269,13 +270,6 @@ export class WorkerEndpointRepository {
     `).run(connectionId);
   }
 
-  private requireWorkerEndpoint(endpointId: string): WorkerEndpointRecord {
-    const endpoint = this.getWorkerEndpoint(endpointId);
-    if (!endpoint) {
-      throw new Error(`Worker endpoint not found: ${endpointId}`);
-    }
-    return endpoint;
-  }
 
   private mapRow(row: WorkerEndpointRow): WorkerEndpointRecord {
     return {

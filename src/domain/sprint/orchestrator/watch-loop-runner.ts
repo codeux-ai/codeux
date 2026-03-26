@@ -512,73 +512,75 @@ export class WatchLoopRunner {
           error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
         });
       }
-    } else if (subtasks.some((task) => task.status === "FAILED")) {
-      this.deps.executionRepository.updateSprintRun(sprintRunId, {
-        status: "failed",
-        finishedAt: new Date().toISOString(),
-        lastHeartbeatAt: new Date().toISOString(),
-      });
-      this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_failed", "system", {
-        failedTaskCount: subtasks.filter((task) => task.status === "FAILED").length,
-      }, {
-        sourceEventKey: `sprint-failed:${sprintRunId}`,
-      });
-      report += await this.deps.renderInstruction("cleanupFailed", { planning_target: scopedExecutionContext.sprint.name }, repoPath);
-    } else if (manualMergeTasks.length > 0) {
-      this.deps.executionRepository.updateSprintRun(sprintRunId, {
-        status: "paused",
-        lastHeartbeatAt: new Date().toISOString(),
-      });
-      this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_paused", "system", {
-        reason: "awaiting_merge",
-        awaitingMergeCount: manualMergeTasks.length,
-      }, {
-        sourceEventKey: `sprint-paused:${sprintRunId}:awaiting-merge`,
-      });
-      report += await this.deps.renderInstruction("cleanupDeferred", {}, repoPath);
-    } else if (subtasks.length === 0) {
-      this.deps.executionRepository.updateSprintRun(sprintRunId, {
-        status: "cancelled",
-        finishedAt: new Date().toISOString(),
-        lastHeartbeatAt: new Date().toISOString(),
-      });
-      this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_cancelled", "system", {
-        reason: "empty",
-      }, {
-        sourceEventKey: `sprint-cancelled:${sprintRunId}:empty`,
-      });
-      report += await this.renderInstruction("cleanupEmpty", {}, repoPath);
     } else {
-      this.deps.executionRepository.updateSprintRun(sprintRunId, {
-        status: "paused",
-        lastHeartbeatAt: new Date().toISOString(),
-      });
-      this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_paused", "system", {
-        reason: "manual_attention",
-      }, {
-        sourceEventKey: `sprint-paused:${sprintRunId}:manual-attention`,
-      });
-      this.deps.projectAttentionService.openItem({
-        projectId: scopedExecutionContext.project.id,
-        sprintId: scopedExecutionContext.sprint.id,
-        sprintRunId,
-        attentionType: "manual_attention",
-        severity: "medium",
-        ownerType: "worker",
-        title: `Sprint ${scopedExecutionContext.sprint.name} needs manual attention`,
-        summaryMarkdown: "Sprint execution paused because no further automatic action was available.",
-        payload: {
-          repoPath,
-          featureBranch: defaultFeatureBranch,
-          defaultBranch,
-          sprintNumber: scopedExecutionContext.sprintNumber,
-          runningTaskIds: runningTasks.map((task) => task.record_id || task.id),
-          readyTaskIds: readyTasks.map((task) => task.record_id || task.id),
-          blockedTaskIds: subtasks
-            .filter((task) => task.status === "BLOCKED")
-            .map((task) => task.record_id || task.id),
-        },
-      });
+      const { tasksByStatus, statusCounts } = partitionSubtasksByStatus(subtasks);
+      const failedTaskCount = statusCounts["FAILED"] || 0;
+      if (failedTaskCount > 0) {
+        this.deps.executionRepository.updateSprintRun(sprintRunId, {
+          status: "failed",
+          finishedAt: new Date().toISOString(),
+          lastHeartbeatAt: new Date().toISOString(),
+        });
+        this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_failed", "system", {
+          failedTaskCount,
+        }, {
+          sourceEventKey: `sprint-failed:${sprintRunId}`,
+        });
+        report += await this.deps.renderInstruction("cleanupFailed", { planning_target: scopedExecutionContext.sprint.name }, repoPath);
+      } else if (manualMergeTasks.length > 0) {
+        this.deps.executionRepository.updateSprintRun(sprintRunId, {
+          status: "paused",
+          lastHeartbeatAt: new Date().toISOString(),
+        });
+        this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_paused", "system", {
+          reason: "awaiting_merge",
+          awaitingMergeCount: manualMergeTasks.length,
+        }, {
+          sourceEventKey: `sprint-paused:${sprintRunId}:awaiting-merge`,
+        });
+        report += await this.deps.renderInstruction("cleanupDeferred", {}, repoPath);
+      } else if (subtasks.length === 0) {
+        this.deps.executionRepository.updateSprintRun(sprintRunId, {
+          status: "cancelled",
+          finishedAt: new Date().toISOString(),
+          lastHeartbeatAt: new Date().toISOString(),
+        });
+        this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_cancelled", "system", {
+          reason: "empty",
+        }, {
+          sourceEventKey: `sprint-cancelled:${sprintRunId}:empty`,
+        });
+        report += await this.renderInstruction("cleanupEmpty", {}, repoPath);
+      } else {
+        this.deps.executionRepository.updateSprintRun(sprintRunId, {
+          status: "paused",
+          lastHeartbeatAt: new Date().toISOString(),
+        });
+        this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_paused", "system", {
+          reason: "manual_attention",
+        }, {
+          sourceEventKey: `sprint-paused:${sprintRunId}:manual-attention`,
+        });
+        this.deps.projectAttentionService.openItem({
+          projectId: scopedExecutionContext.project.id,
+          sprintId: scopedExecutionContext.sprint.id,
+          sprintRunId,
+          attentionType: "manual_attention",
+          severity: "medium",
+          ownerType: "worker",
+          title: `Sprint ${scopedExecutionContext.sprint.name} needs manual attention`,
+          summaryMarkdown: "Sprint execution paused because no further automatic action was available.",
+          payload: {
+            repoPath,
+            featureBranch: defaultFeatureBranch,
+            defaultBranch,
+            sprintNumber: scopedExecutionContext.sprintNumber,
+            runningTaskIds: (tasksByStatus.get("RUNNING") || []).map((task) => task.record_id || task.id),
+            readyTaskIds: (tasksByStatus.get("PENDING") || []).map((task) => task.record_id || task.id),
+            blockedTaskIds: (tasksByStatus.get("BLOCKED") || []).map((task) => task.record_id || task.id),
+          },
+        });
+      }
     }
 
     return { status: "continue", report };
@@ -609,14 +611,7 @@ function resolveMainMergeConflictAttentionItems(
     if (item.sprintRunId !== sprintRunId) {
       continue;
     }
-    const payload = item.payload || {};
-    const isMainMergeConflict = item.attentionType === "merge_conflict" && payload.mergeStage === "main";
-    const isMainMergeConflictHandoff = (
-      (item.attentionType === "human_escalation_required" || item.attentionType === "dashboard_reply_required")
-      && payload.sourceAttentionType === "merge_conflict"
-      && payload.mergeStage === "main"
-    );
-    if (!isMainMergeConflict && !isMainMergeConflictHandoff) {
+    if (!isMainMergeAttentionItem(item)) {
       continue;
     }
 
@@ -654,11 +649,11 @@ function collectActiveMainMergeAttentionItems(
   payload: Record<string, unknown> | null;
 }> {
   return projectAttentionService.listActiveProjectItems(projectId).filter((item) => (
-    item.sprintRunId === sprintRunId && isActiveMainMergeAttentionItem(item)
+    item.sprintRunId === sprintRunId && isMainMergeAttentionItem(item)
   ));
 }
 
-function isActiveMainMergeAttentionItem(item: {
+export function isMainMergeAttentionItem(item: {
   attentionType: string;
   payload: Record<string, unknown> | null;
 }): boolean {
@@ -760,6 +755,22 @@ function buildMainMergeConflictSummary(args: {
   return lines.join("\n");
 }
 
+function partitionSubtasksByStatus(subtasks: Subtask[]) {
+  const tasksByStatus = new Map<string, Subtask[]>();
+  const statusCounts: Record<string, number> = {};
+  for (const task of subtasks) {
+    const status = task.status || "UNKNOWN";
+    let list = tasksByStatus.get(status);
+    if (!list) {
+      list = [];
+      tasksByStatus.set(status, list);
+    }
+    list.push(task);
+    statusCounts[status] = (statusCounts[status] || 0) + 1;
+  }
+  return { tasksByStatus, statusCounts };
+}
+
 export function evaluateSprintRunState(params: {
   subtasks: Subtask[];
   manualMergeTasks: Subtask[];
@@ -769,18 +780,25 @@ export function evaluateSprintRunState(params: {
 }) {
   const { subtasks, manualMergeTasks, workerEscalatedMergeConflictTasks, activeProjectAttentionItems, sprintRunId } = params;
 
-  const runningTasks = subtasks.filter((task) => task.status === "RUNNING");
-  const readyTasks = subtasks.filter((task) => task.status === "PENDING");
+  const { tasksByStatus, statusCounts } = partitionSubtasksByStatus(subtasks);
+
+  const runningTasks = tasksByStatus.get("RUNNING") || [];
+  const readyTasks = tasksByStatus.get("PENDING") || [];
   const activeWorkerAttentionItems = activeProjectAttentionItems.filter((item) => item.ownerType === "worker");
   const activeWorkerMergeConflictAttention = activeWorkerAttentionItems.some((item) => item.attentionType === "merge_conflict");
   const activeMainMergeAttentionItems = activeProjectAttentionItems.filter((item) => (
-    item.sprintRunId === sprintRunId && isActiveMainMergeAttentionItem(item)
+    item.sprintRunId === sprintRunId && isMainMergeAttentionItem(item)
   ));
 
-  const allTerminal = subtasks.length > 0 && subtasks.every(
-    (task) => isCompletedTaskSettled(task) || task.status === "FAILED"
-  );
-  const quotaTasks = subtasks.filter((task) => task.status === "QUOTA");
+  let settledCount = 0;
+  for (const task of subtasks) {
+    if (isCompletedTaskSettled(task)) {
+      settledCount++;
+    }
+  }
+
+  const allTerminal = subtasks.length > 0 && ((statusCounts["FAILED"] || 0) + settledCount) === subtasks.length;
+  const quotaTasks = tasksByStatus.get("QUOTA") || [];
   const noMoreActionPossible = runningTasks.length === 0 && readyTasks.length === 0 && quotaTasks.length === 0;
   const needsManualMerge = manualMergeTasks.length > 0;
   const waitingOnWorkerAttention = workerEscalatedMergeConflictTasks.length > 0

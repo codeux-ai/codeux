@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useLayoutEffect, useRef, useMemo } from "preact/hooks";
 import gsap from "gsap";
 import { MetricCard } from "./ui/MetricCard.js";
 import { Sparkline } from "./ui/Sparkline.js";
@@ -27,7 +27,7 @@ export const HeaderStats: FunctionComponent = () => {
         }
     }, []);
 
-    const stats = computeOverviewStats(projects, sprints, tasks);
+    const stats = useMemo(() => computeOverviewStats(projects, sprints, tasks), [projects, sprints, tasks]);
 
     if (isLoading) {
         return (

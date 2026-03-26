@@ -25,6 +25,8 @@ interface AddTaskModalProps {
   onSubmit: (task: TaskDraft) => Promise<void> | void;
 }
 
+const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
 const PRIORITY_OPTIONS: TaskPriority[] = ["critical", "high", "medium", "low"];
 const STATUS_OPTIONS: TaskStatus[] = ["pending", "in_progress", "completed"];
 const EXECUTOR_OPTIONS: Array<{ value: TaskExecutorType; label: string; description: string }> = [
@@ -66,31 +68,19 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
 
     // Initial focus setup
     if (cardRef.current) {
-      const focusableElements = Array.from(cardRef.current.querySelectorAll(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      )) as HTMLElement[];
+      const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
       if (focusableElements.length > 0) {
         focusableElements[0].focus();
       }
     }
 
-    return () => {
-      if (triggerRef.current) {
-        triggerRef.current.focus();
-      }
-    };
-  }, []); // Run only on mount/unmount
-
-  useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
       } else if (event.key === "Tab") {
         if (!cardRef.current) return;
 
-        const focusableElements = Array.from(cardRef.current.querySelectorAll(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )) as HTMLElement[];
+        const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
 
         if (focusableElements.length === 0) return;
 
@@ -117,6 +107,9 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
     document.addEventListener("keydown", handler);
     return () => {
       document.removeEventListener("keydown", handler);
+      if (triggerRef.current) {
+        triggerRef.current.focus();
+      }
     };
   }, [onClose]);
 

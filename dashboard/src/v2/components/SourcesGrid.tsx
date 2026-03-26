@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useLayoutEffect, useRef, useMemo } from "preact/hooks";
 import gsap from "gsap";
 import { Activity } from "lucide-preact";
 import { SectionHeader } from "./ui/SectionHeader.js";
@@ -29,9 +29,11 @@ export const SourcesGrid: FunctionComponent = () => {
         }
     }, []);
 
-    const recentSources = [...projects].sort((a, b) =>
-        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    ).slice(0, 6);
+    const recentSources = useMemo(() => {
+        return [...projects].sort((a, b) =>
+            new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        ).slice(0, 6);
+    }, [projects]);
 
     return (
         <div className="w-full relative z-10">
