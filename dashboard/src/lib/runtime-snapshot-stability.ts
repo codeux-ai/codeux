@@ -1,0 +1,90 @@
+import type { DashboardStatus, ExecutionDashboardSnapshot } from "../types.js";
+
+const ACTIVE_SPRINT_RUN_STATUSES = new Set([
+  "queued",
+  "running",
+  "paused",
+  "cancel_requested",
+]);
+
+const ACTIVE_TASK_DISPATCH_STATUSES = new Set([
+  "queued",
+  "claimed",
+  "running",
+  "blocked",
+  "cancel_requested",
+]);
+
+const ACTIVE_ATTENTION_STATUSES = new Set([
+  "open",
+  "claimed",
+]);
+
+function normalizeValue(value: string | null | undefined): string | null {
+  const normalized = typeof value === "string" ? value.trim() : "";
+  return normalized.length > 0 ? normalized : null;
+}
+
+function isEmptyExecutionSnapshot(snapshot: ExecutionDashboardSnapshot): boolean {
+  return (
+    snapshot.projectId === null
+    && snapshot.projectName === null
+    && snapshot.updatedAt === null
+    && snapshot.sprintRuns.length === 0
+    && snapshot.taskDispatches.length === 0
+    && snapshot.connections.length === 0
+    && snapshot.primaryAssignedWorker === null
+    && snapshot.overflowAssignedWorkers.length === 0
+    && snapshot.attentionItems.length === 0
+    && snapshot.recentEvents.length === 0
+  );
+}
+
+export function hasActiveExecutionSnapshot(snapshot: ExecutionDashboardSnapshot): boolean {
+  return (
+    snapshot.sprintRuns.some((run) => ACTIVE_SPRINT_RUN_STATUSES.has(run.status))
+    || snapshot.taskDispatches.some((dispatch) => ACTIVE_TASK_DISPATCH_STATUSES.has(dispatch.status))
+    || snapshot.attentionItems.some((item) => ACTIVE_ATTENTION_STATUSES.has(item.status))
+  );
+}
+
+export function stabilizeExecutionSnapshot(
+  previous: ExecutionDashboardSnapshot,
+  next: ExecutionDashboardSnapshot,
+): ExecutionDashboardSnapshot {
+  if (!hasActiveExecutionSnapshot(previous)) {
+    return next;
+  }
+
+  const previousProjectId = normalizeValue(previous.projectId);
+  const nextProjectId = normalizeValue(next.projectId);
+  if (previousProjectId && nextProjectId && previousProjectId !== nextProjectId) {
+    return next;
+  }
+
+  return isEmptyExecutionSnapshot(next) ? previous : next;
+}
+
+export function stabilizeStatusSnapshot(
+  previous: DashboardStatus,
+  next: DashboardStatus,
+  execution: ExecutionDashboardSnapshot,
+): DashboardStatus {
+  if (previous.subtasks.length === 0 || next.subtasks.length > 0 || !hasActiveExecutionSnapshot(execution)) {
+    return next;
+  }
+
+  const previousProjectId = normalizeValue(previous.project_id) ?? normalizeValue(previous.subtasks[0]?.project_id);
+  const nextProjectId = normalizeValue(next.project_id) ?? normalizeValue(execution.projectId);
+  if (previousProjectId && nextProjectId && previousProjectId !== nextProjectId) {
+    return next;
+  }
+
+  const previousSprintId = normalizeValue(previous.sprint_id) ?? normalizeValue(previous.subtasks[0]?.sprint_id);
+  const nextSprintId = normalizeValue(next.sprint_id);
+  if (previousSprintId && nextSprintId && previousSprintId !== nextSprintId) {
+    return next;
+  }
+
+  return previous;
+}

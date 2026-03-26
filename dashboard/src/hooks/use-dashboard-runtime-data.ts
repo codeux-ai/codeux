@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "preact/hooks";
 import { computeStats, processDashboardTasks } from "../lib/status.js";
 import { fetchExecutionSnapshot, fetchGitTrackingStatus, fetchLivePayload, fetchRuntimeStatus, fetchLiveActivities } from "../lib/api/dashboard-api.js";
-import { useExecutions } from "./useExecutions.js";
 import type {
   DashboardStatus,
   ExecutionDashboardSnapshot,
@@ -11,6 +10,7 @@ import type {
 } from "../types.js";
 import { useDashboardPollManager } from "./use-dashboard-poll-manager.js";
 import { subscribeToDashboardRealtime } from "../lib/realtime/dashboard-realtime-client.js";
+import { stabilizeExecutionSnapshot, stabilizeStatusSnapshot } from "../lib/runtime-snapshot-stability.js";
 
 const RUNTIME_POLL_INTERVAL_MS = 5_000;
 const GIT_STATUS_POLL_INTERVAL_MS = 30_000;
@@ -57,11 +57,122 @@ const initialState: RuntimeState = {
   initialLoadComplete: false,
 };
 
+function areStatusSnapshotsEquivalent(left: DashboardStatus, right: DashboardStatus): boolean {
+  if (
+    left.timestamp !== right.timestamp
+    || left.project_id !== right.project_id
+    || left.sprint_id !== right.sprint_id
+    || left.feature_branch !== right.feature_branch
+    || left.reportText !== right.reportText
+    || left.instructions !== right.instructions
+    || left.subtasks.length !== right.subtasks.length
+  ) {
+    return false;
+  }
+
+  for (let index = 0; index < left.subtasks.length; index += 1) {
+    const leftTask = left.subtasks[index];
+    const rightTask = right.subtasks[index];
+    if (
+      leftTask.record_id !== rightTask.record_id
+      || leftTask.id !== rightTask.id
+      || leftTask.status !== rightTask.status
+      || leftTask.session_id !== rightTask.session_id
+      || leftTask.worker_branch !== rightTask.worker_branch
+      || leftTask.merge_indicator !== rightTask.merge_indicator
+      || leftTask.is_merged !== rightTask.is_merged
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function areExecutionSnapshotsEquivalent(left: ExecutionDashboardSnapshot, right: ExecutionDashboardSnapshot): boolean {
+  if (
+    left.updatedAt !== right.updatedAt
+    || left.projectId !== right.projectId
+    || left.sprintRuns.length !== right.sprintRuns.length
+    || left.taskDispatches.length !== right.taskDispatches.length
+    || left.connections.length !== right.connections.length
+    || left.attentionItems.length !== right.attentionItems.length
+    || left.recentEvents.length !== right.recentEvents.length
+  ) {
+    return false;
+  }
+
+  for (let index = 0; index < left.sprintRuns.length; index += 1) {
+    const leftRun = left.sprintRuns[index];
+    const rightRun = right.sprintRuns[index];
+    if (
+      leftRun.id !== rightRun.id
+      || leftRun.status !== rightRun.status
+      || leftRun.lastHeartbeatAt !== rightRun.lastHeartbeatAt
+      || leftRun.finishedAt !== rightRun.finishedAt
+    ) {
+      return false;
+    }
+  }
+
+  for (let index = 0; index < left.taskDispatches.length; index += 1) {
+    const leftDispatch = left.taskDispatches[index];
+    const rightDispatch = right.taskDispatches[index];
+    if (
+      leftDispatch.id !== rightDispatch.id
+      || leftDispatch.status !== rightDispatch.status
+      || leftDispatch.taskRunState !== rightDispatch.taskRunState
+      || leftDispatch.lastHeartbeatAt !== rightDispatch.lastHeartbeatAt
+      || leftDispatch.finishedAt !== rightDispatch.finishedAt
+      || leftDispatch.errorMessage !== rightDispatch.errorMessage
+    ) {
+      return false;
+    }
+  }
+
+  for (let index = 0; index < left.connections.length; index += 1) {
+    const leftConnection = left.connections[index];
+    const rightConnection = right.connections[index];
+    if (
+      leftConnection.id !== rightConnection.id
+      || leftConnection.status !== rightConnection.status
+      || leftConnection.lastHeartbeatAt !== rightConnection.lastHeartbeatAt
+    ) {
+      return false;
+    }
+  }
+
+  for (let index = 0; index < left.attentionItems.length; index += 1) {
+    const leftItem = left.attentionItems[index];
+    const rightItem = right.attentionItems[index];
+    if (
+      leftItem.id !== rightItem.id
+      || leftItem.status !== rightItem.status
+      || leftItem.updatedAt !== rightItem.updatedAt
+    ) {
+      return false;
+    }
+  }
+
+  for (let index = 0; index < left.recentEvents.length; index += 1) {
+    if (left.recentEvents[index]?.id !== right.recentEvents[index]?.id) {
+      return false;
+    }
+  }
+
+  return (
+    left.primaryAssignedWorker?.workerEndpointId === right.primaryAssignedWorker?.workerEndpointId
+    && left.overflowAssignedWorkers.length === right.overflowAssignedWorkers.length
+  );
+}
+
 function runtimeReducer(state: RuntimeState, action: RuntimeAction): RuntimeState {
   switch (action.type) {
     case "SET_LIVE_PAYLOAD": {
-      const nextStatus = state.status.timestamp === action.status.timestamp ? state.status : action.status;
-      const nextExecution = state.execution.updatedAt === action.execution.updatedAt ? state.execution : action.execution;
+      const executionCandidate = stabilizeExecutionSnapshot(state.execution, action.execution);
+      const nextExecution = areExecutionSnapshotsEquivalent(state.execution, executionCandidate) ? state.execution : executionCandidate;
+      const statusCandidate = stabilizeStatusSnapshot(state.status, action.status, nextExecution);
+      const nextStatus = areStatusSnapshotsEquivalent(state.status, statusCandidate) ? state.status : statusCandidate;
       const nextActivities = action.liveActivities !== undefined ? (action.liveActivities ?? state.liveActivities) : state.liveActivities;
       if (nextStatus === state.status && nextExecution === state.execution && nextActivities === state.liveActivities && state.error === null && state.initialLoadComplete) {
         return state;
@@ -70,12 +181,14 @@ function runtimeReducer(state: RuntimeState, action: RuntimeAction): RuntimeStat
     }
 
     case "SET_POLL_RESULT": {
-      const nextStatus = action.status
-        ? (state.status.timestamp === action.status.timestamp ? state.status : action.status)
-        : state.status;
-      const nextExecution = action.execution
-        ? (state.execution.updatedAt === action.execution.updatedAt ? state.execution : action.execution)
+      const executionCandidate = action.execution
+        ? stabilizeExecutionSnapshot(state.execution, action.execution)
         : state.execution;
+      const nextExecution = areExecutionSnapshotsEquivalent(state.execution, executionCandidate) ? state.execution : executionCandidate;
+      const statusCandidate = action.status
+        ? stabilizeStatusSnapshot(state.status, action.status, nextExecution)
+        : state.status;
+      const nextStatus = areStatusSnapshotsEquivalent(state.status, statusCandidate) ? state.status : statusCandidate;
       const nextActivities = action.liveActivities !== undefined ? (action.liveActivities ?? state.liveActivities) : state.liveActivities;
       if (nextStatus === state.status && nextExecution === state.execution && nextActivities === state.liveActivities && state.error === null && state.initialLoadComplete) {
         return state;
@@ -84,13 +197,15 @@ function runtimeReducer(state: RuntimeState, action: RuntimeAction): RuntimeStat
     }
 
     case "SET_STATUS": {
-      const nextStatus = state.status.timestamp === action.status.timestamp ? state.status : action.status;
+      const statusCandidate = stabilizeStatusSnapshot(state.status, action.status, state.execution);
+      const nextStatus = areStatusSnapshotsEquivalent(state.status, statusCandidate) ? state.status : statusCandidate;
       if (nextStatus === state.status && state.error === null) return state;
       return { ...state, status: nextStatus, error: null };
     }
 
     case "SET_EXECUTION": {
-      const nextExecution = state.execution.updatedAt === action.execution.updatedAt ? state.execution : action.execution;
+      const executionCandidate = stabilizeExecutionSnapshot(state.execution, action.execution);
+      const nextExecution = areExecutionSnapshotsEquivalent(state.execution, executionCandidate) ? state.execution : executionCandidate;
       if (nextExecution === state.execution && state.error === null) return state;
       return { ...state, execution: nextExecution, error: null };
     }
@@ -226,7 +341,6 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
   });
 
   const realtimeProjectId = state.execution.projectId || state.status.project_id || null;
-  const { data: executionData } = useExecutions(realtimeProjectId);
 
   useEffect(() => {
     return () => {
@@ -285,7 +399,7 @@ export const useDashboardRuntimeData = (): UseDashboardRuntimeDataResult => {
     refreshGitStatus: refreshGitStatusAction,
     refreshRuntimeStatus: refreshRuntimeStatusAction,
     status: state.status,
-    execution: executionData,
+    execution: state.execution,
     stats,
     tasksWithLiveActivities,
   };
