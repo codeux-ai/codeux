@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { computeStats, mergeLiveActivities } from "../../../dashboard/src/lib/status.js";
+import { computeStats, mergeLiveActivities, processDashboardTasks } from "../../../dashboard/src/lib/status.js";
 
 describe("dashboard status helpers", () => {
-  it("computes stats by status", () => {
+  it("computes stats by display phase", () => {
     const stats = computeStats([
       { id: "1", title: "a", prompt: "", depends_on: [], is_independent: true, status: "RUNNING", merge_indicator: "CI" },
       { id: "2", title: "b", prompt: "", depends_on: [], is_independent: true, status: "COMPLETED", is_merged: true, merge_indicator: "AUTOMERGE" },
@@ -13,8 +13,8 @@ describe("dashboard status helpers", () => {
 
     expect(stats).toEqual({
       total: 5,
-      running: 2,
-      codingCompleted: 1,
+      running: 0,
+      codingCompleted: 3,
       completed: 1,
       failed: 1,
       ci: 1,
@@ -33,5 +33,17 @@ describe("dashboard status helpers", () => {
 
     expect(merged[0].session_name).toBe("sessions/abc");
     expect(merged[0].activities?.[0]?.id).toBe("act-1");
+  });
+
+  it("processes stats and live activities in one pass", () => {
+    const result = processDashboardTasks(
+      [{ id: "1", title: "a", prompt: "", depends_on: [], is_independent: true, status: "RUNNING", merge_indicator: "CI", session_id: "abc" }],
+      { "sessions/abc": [{ id: "act-1", name: "x", createTime: "t" }] },
+    );
+
+    expect(result.stats.running).toBe(0);
+    expect(result.stats.codingCompleted).toBe(1);
+    expect(result.tasks[0]?.session_name).toBe("sessions/abc");
+    expect(result.tasks[0]?.activities?.[0]?.id).toBe("act-1");
   });
 });
