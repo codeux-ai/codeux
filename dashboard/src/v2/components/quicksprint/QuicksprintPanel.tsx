@@ -346,14 +346,14 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             </div>
             <div className="flex items-center justify-center gap-6">
               <div className="flex flex-col items-center">
-                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">ETA</div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">ETA</div>
                 <div className="font-mono text-xl font-medium tracking-tight text-slate-900 dark:text-white">
                   {Math.floor(Math.max(0, planningEta - elapsedMs) / 60000)}:{String(Math.floor((Math.max(0, planningEta - elapsedMs) % 60000) / 1000)).padStart(2, "0")}
                 </div>
               </div>
               <div className="h-8 w-px bg-black/[0.08] dark:bg-white/[0.08]" />
               <div className="flex flex-col items-center">
-                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Elapsed</div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Elapsed</div>
                 <div className="font-mono text-xl font-medium tracking-tight text-slate-500">
                   {Math.floor(elapsedMs / 60000)}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")}
                 </div>
@@ -393,7 +393,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex min-h-[44px] min-w-[44px] h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/78 text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-white"
+                className="inline-flex min-h-[44px] min-w-[44px] h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/78 text-slate-500 dark:text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-white"
                 aria-label="Close quicksprint"
               >
                 <X className="h-4 w-4" />
@@ -408,7 +408,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               <>
                 {/* Built-in templates */}
                 <div data-qs-stagger className="mt-10">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-5">Built-in Templates</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400 mb-5">Built-in Templates</div>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                     {builtinTemplates.map((t) => (
                       <TemplateCard key={t.id} template={t} onSelect={() => handleSelectTemplate(t)} />
@@ -419,7 +419,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                 {/* Custom templates */}
                 <div data-qs-stagger className="mt-10">
                   <div className="flex items-center justify-between mb-5">
-                    <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Custom Templates</div>
+                    <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Custom Templates</div>
                     <button
                       onClick={() => openEditor(null)}
                       className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-ember-500/20 bg-ember-500/[0.06] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-ember-600 transition-colors hover:bg-ember-500/[0.12] dark:text-ember-400"
@@ -438,7 +438,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                         <Plus className="h-5 w-5 text-ember-500" />
                       </div>
                       <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">Create your first custom template</div>
-                      <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">Combine agent presets with custom prompts for reusable sprint flows</div>
+                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Combine agent presets with custom prompts for reusable sprint flows</div>
                     </button>
                   ) : (
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -461,7 +461,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               <div data-qs-stagger className="flex items-center gap-3">
                 <button
                   onClick={() => setPhase("browse")}
-                  className="inline-flex min-h-[44px] min-w-[44px] h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:hover:text-white"
+                  className="inline-flex min-h-[44px] min-w-[44px] h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] text-slate-500 dark:text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:hover:text-white"
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </button>
@@ -481,7 +481,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               {/* Planning Route + Model Override */}
               <div data-qs-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
                 <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Planning Route</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Planning Route</div>
                   <div className="mt-2">
                     <AvantgardeSelect
                       variant="compact"
@@ -505,7 +505,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                     ? "border-signal-500/20 bg-signal-500/[0.04] dark:bg-signal-500/[0.08]"
                     : "border-black/[0.06] bg-black/[0.025] opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03]"
                 }`}>
-                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Model Override</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Model Override</div>
                   <div className="mt-2">
                     <AvantgardeSelect
                       variant="compact"
@@ -524,7 +524,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
               {/* Additional prompt for this run */}
               <div data-qs-stagger className="mt-8 space-y-2">
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Additional Instructions (optional)</label>
+                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Additional Instructions (optional)</label>
                 <textarea
                   value={additionalPrompt}
                   onInput={(e) => setAdditionalPrompt((e.target as HTMLTextAreaElement).value)}
@@ -538,7 +538,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               <div data-qs-stagger className="mt-6">
                 <button
                   onClick={() => setShowPrompt(!showPrompt)}
-                  className="inline-flex min-h-[44px] min-w-[44px] items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-300"
+                  className="inline-flex min-h-[44px] min-w-[44px] items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400 transition-colors hover:text-slate-600 dark:hover:text-slate-300"
                 >
                   {showPrompt ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                   {showPrompt ? "Hide Combined Prompt" : "View Combined Prompt"}
@@ -562,7 +562,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             <div className="flex flex-col p-6 sm:p-8">
               {/* Subtask count */}
               <div data-qs-stagger>
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-4">Subtask Count</div>
+                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400 mb-4">Subtask Count</div>
                 <SubtaskSlider value={taskCount} onChange={setTaskCount} />
               </div>
 
@@ -598,7 +598,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             <div data-qs-stagger className="flex items-center gap-3">
               <button
                 onClick={() => setPhase("browse")}
-                className="inline-flex min-h-[44px] min-w-[44px] h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:hover:text-white"
+                className="inline-flex min-h-[44px] min-w-[44px] h-8 w-8 items-center justify-center rounded-full border border-black/[0.06] text-slate-500 dark:text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:hover:text-white"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
@@ -610,7 +610,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
             {/* Name */}
             <label data-qs-stagger className="mt-8 block space-y-2">
-              <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Template Name</span>
+              <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Template Name</span>
               <input
                 type="text"
                 value={edName}
@@ -623,7 +623,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
             {/* Description */}
             <label data-qs-stagger className="mt-6 block space-y-2">
-              <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Description</span>
+              <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Description</span>
               <input
                 type="text"
                 value={edDescription}
@@ -636,7 +636,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             {/* Icon + Color + Category Tag + Default Tasks */}
             <div data-qs-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
               <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-3">Category Tag</div>
+                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400 mb-3">Category Tag</div>
                 <div className="flex items-center gap-3">
                   {/* Icon picker trigger */}
                   <button
@@ -698,12 +698,12 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               </div>
 
               <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-2">Default Tasks</div>
+                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400 mb-2">Default Tasks</div>
                 <div className="font-mono text-2xl font-black tracking-tight text-slate-900 dark:text-white">{edTaskCount}</div>
                 <input
                   type="range" min="1" max="15" value={edTaskCount}
                   onInput={(e) => setEdTaskCount(parseInt((e.target as HTMLInputElement).value, 10))}
-                  className="mt-2 w-full h-1.5 bg-black/[0.06] rounded-full appearance-none cursor-pointer accent-ember-500 dark:bg-white/[0.08]"
+                  className="mt-2 py-3 w-full h-1.5 bg-black/[0.06] rounded-full appearance-none cursor-pointer accent-ember-500 dark:bg-white/[0.08]"
                 />
               </div>
             </div>
@@ -712,7 +712,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             {showIconPicker && (<>
               <div className="fixed inset-0 z-[9998] cursor-default" onClick={() => setShowIconPicker(false)} />
               <div
-                className="absolute z-[9999] w-[17rem] rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95"
+                className="absolute z-[9999] w-[calc(100vw-2rem)] max-w-[17rem] rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95"
                 style={{ top: pickerPos.top, left: pickerPos.left, animation: "qs-picker-in 0.2s cubic-bezier(0.22,1,0.36,1)" }}
               >
                 <div className="grid grid-cols-6 gap-1">
@@ -727,7 +727,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                         className={`flex min-h-[44px] min-w-[44px] h-9 w-9 cursor-pointer items-center justify-center rounded-xl transition-all duration-150 ${
                           isActive
                             ? "bg-ember-500/20 text-ember-500 shadow-[0_0_10px_rgba(255,107,0,0.15)] scale-110"
-                            : "text-slate-400 hover:bg-white/[0.08] hover:text-white hover:scale-110"
+                            : "text-slate-500 dark:text-slate-400 hover:bg-white/[0.08] hover:text-white hover:scale-110"
                         }`}
                       >
                         <opt.Icon className="h-4 w-4" />
@@ -741,7 +741,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             {showColorPicker && (<>
               <div className="fixed inset-0 z-[9998] cursor-default" onClick={() => setShowColorPicker(false)} />
               <div
-                className="absolute z-[9999] w-52 rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95"
+                className="absolute z-[9999] w-[calc(100vw-2rem)] max-w-[13rem] rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95"
                 style={{ top: pickerPos.top, left: pickerPos.left, animation: "qs-picker-in 0.2s cubic-bezier(0.22,1,0.36,1)" }}
               >
                 <div className="grid grid-cols-5 gap-2">
@@ -776,8 +776,8 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             {agentPresets.length > 0 && (
               <div data-qs-stagger className="mt-6">
                 <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-2">Agent Preset (optional)</div>
-                  <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
+                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400 mb-2">Agent Preset (optional)</div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
                     Attach an agent's instructions to this template. The agent's prompt will be prepended to the template instructions.
                   </p>
                   <AvantgardeSelect
@@ -796,7 +796,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
             {/* Instructions */}
             <div data-qs-stagger className="mt-6 space-y-2">
-              <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Agent Instructions</span>
+              <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Agent Instructions</span>
               <textarea
                 value={edInstruction}
                 onInput={(e) => setEdInstruction((e.target as HTMLTextAreaElement).value)}
@@ -884,7 +884,7 @@ const TemplateCard: FunctionComponent<{
           <span className="block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tagColor }} />
           {template.category}
         </span>
-        <span className="text-[10px] font-medium text-slate-400">
+        <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
           {template.defaultTaskCount} subtask{template.defaultTaskCount !== 1 ? "s" : ""}
         </span>
       </div>
@@ -923,7 +923,7 @@ const SubtaskSlider: FunctionComponent<{
         <span className="font-mono text-[3.5rem] font-black leading-none tracking-tighter text-slate-900 dark:text-white tabular-nums">
           {String(value).padStart(2, "0")}
         </span>
-        <span className="text-sm font-medium text-slate-400">
+        <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
           subtask{value !== 1 ? "s" : ""}
         </span>
       </div>
@@ -931,7 +931,7 @@ const SubtaskSlider: FunctionComponent<{
       {/* Track */}
       <div
         ref={trackRef}
-        className="relative h-10 cursor-pointer touch-none"
+        className="relative h-[44px] cursor-pointer touch-none"
         onPointerDown={handlePointerDown as any}
         onPointerMove={(e: any) => { if (e.buttons === 1) handlePointer(e); }}
       >
