@@ -262,7 +262,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                         ref={projectKb.toggleRef}
                         onKeyDown={projectKb.onToggleKeyDown}
                         onClick={() => setDropdownOpen(!dropdownOpen)}
-                        className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group"
+                        className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
                     >
                         <StatusDot status={selectedProject?.status || "idle"} />
                         <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">
@@ -329,7 +329,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                             onKeyDown={sprintKb.onToggleKeyDown}
                             onClick={() => setSprintDropdownOpen(!sprintDropdownOpen)}
                             disabled={sprints.length === 0}
-                            className={`flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent rounded-xl transition-all group ${
+                            className={`focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent rounded-xl transition-all group ${
                                 sprints.length > 0
                                     ? 'hover:border-black/[0.08] dark:hover:border-white/[0.08] cursor-pointer'
                                     : 'opacity-50 cursor-not-allowed'
@@ -393,7 +393,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                             ref={workerKb.toggleRef}
                             onKeyDown={workerKb.onToggleKeyDown}
                             onClick={() => setWorkerDropdownOpen(!workerDropdownOpen)}
-                            className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group"
+                            className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
                         >
                             <div className="flex items-center justify-center w-4 h-4 rounded-md bg-signal-500/10 text-signal-500">
                                 <Cpu className="w-3 h-3" strokeWidth={2.5} />
@@ -472,7 +472,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 <div className="w-px h-5 bg-black/10 dark:bg-white/10 hidden md:block" />
 
                 {/* Notifications */}
-                <button className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group">
+                <button className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50">
                     <Bell className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" strokeWidth={1.5} />
                     <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-signal-500 shadow-[0_0_6px_rgba(0,224,160,0.8)] ring-1 ring-[#F9F8F4] dark:ring-void-900" />
                 </button>
@@ -480,7 +480,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 {/* Theme Toggle */}
                 <button
                     onClick={toggleTheme}
-                    className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors"
+                    className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
                 >
                     {isDark
                         ? <Sun className="w-4 h-4 text-slate-400 hover:text-white transition-colors" strokeWidth={1.5} />

@@ -7,6 +7,12 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
     <div
         className="group relative flex items-center justify-between py-5 cursor-pointer border-b border-black/[0.05] dark:border-white/[0.04] last:border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 dark:focus-visible:ring-slate-400 focus-visible:z-10 focus-visible:rounded-xl"
         tabIndex={0}
+        role="button"
+        onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                if (e.key === ' ') e.preventDefault();
+            }
+        }}
     >
         {/* Hover backdrop */}
         <div className="absolute inset-0 bg-gradient-to-r from-signal-500/0 via-signal-500/[0.03] to-signal-500/0 dark:via-signal-500/[0.05] opacity-0 group-hover:opacity-100 transition-opacity duration-400 -z-10 rounded-xl" />
@@ -61,7 +67,7 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
                 </div>
 
                 {/* Quick actions */}
-                <div className="flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] absolute right-0 translate-x-[115%] opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-350 ease-[cubic-bezier(0.175,0.885,0.32,1.275)]">
+                <div className="flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] absolute right-0 translate-x-[115%] opacity-0 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100 transition-all duration-350 ease-[cubic-bezier(0.175,0.885,0.32,1.275)]">
                     <button className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 rounded-full transition-colors" title="Play/Stop">
                         {task.status === 'in_progress' ? <Square className="w-3 h-3" fill="currentColor" /> : <Play className="w-3 h-3" fill="currentColor" />}
                     </button>
