@@ -397,6 +397,12 @@ describe("VirtualWorkerService", () => {
       sourceRef: "/workspace/merge-required-skip",
       defaultBranch: "main",
     });
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: {
+        executionMode: "VIRTUAL",
+        virtualWorkerProvider: "codex",
+      },
+    });
 
     // Create a merge_required item — should be skipped by virtual worker
     projectAttentionService.openItem({
@@ -573,6 +579,191 @@ describe("VirtualWorkerService", () => {
     });
 
     expect((virtualWorkerService as any).projectNeedsVirtualWorker(project.id)).toBe(true);
+  });
+
+  it("projectNeedsVirtualWorker ignores claimed worker attention that is still owned by an active worker", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const project = projectManagementRepository.createProject({
+      name: "Active Claimed Attention Project",
+      sourceType: "local",
+      sourceRef: "/workspace/active-claimed-attention",
+      defaultBranch: "main",
+    });
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: {
+        executionMode: "VIRTUAL",
+        virtualWorkerProvider: "codex",
+      },
+    });
+
+    const assignmentService = new ProjectWorkerAssignmentService(
+      projectWorkerAssignmentRepository,
+      workerEndpointRepository,
+    );
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:active-claimed",
+      displayName: "Active Claimed Worker",
+      status: "connected",
+      transport: "internal",
+    });
+    assignmentService.ensureWorkerAssignment(project.id, endpoint.id);
+
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge conflict",
+      summaryMarkdown: "Currently owned by an active worker.",
+      payload: null,
+    });
+    projectAttentionService.claimItem(item.id, endpoint.id, "active_claim");
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: assignmentService,
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: { startTask: vi.fn() } as any,
+    });
+
+    expect((virtualWorkerService as any).pickNextWorkerAttention(project.id)).toBeNull();
+    expect((virtualWorkerService as any).projectNeedsVirtualWorker(project.id)).toBe(false);
+  });
+
+  it("reclaims stale claimed worker attention after the assigned virtual worker disappears", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const project = projectManagementRepository.createProject({
+      name: "Stale Claimed Attention Project",
+      sourceType: "local",
+      sourceRef: "/workspace/stale-claimed-attention",
+      defaultBranch: "main",
+    });
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: {
+        executionMode: "VIRTUAL",
+        virtualWorkerProvider: "codex",
+      },
+    });
+
+    const assignmentService = new ProjectWorkerAssignmentService(
+      projectWorkerAssignmentRepository,
+      workerEndpointRepository,
+    );
+    const staleEndpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:stale-claimed",
+      displayName: "Stale Claimed Worker",
+      status: "connected",
+      transport: "internal",
+    });
+    assignmentService.ensureWorkerAssignment(project.id, staleEndpoint.id);
+
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge conflict",
+      summaryMarkdown: "Needs reclaim after worker exit.",
+      payload: {
+        repoPath: "/workspace/stale-claimed-attention",
+        conflictingBranches: { source: "feature/task", target: "feature/sprint" },
+      },
+    });
+    projectAttentionService.claimItem(item.id, staleEndpoint.id, "initial_claim");
+
+    assignmentService.releaseWorkerAssignment(project.id, staleEndpoint.id, "worker_cycle_complete");
+    workerEndpointRepository.deleteWorkerEndpoint(staleEndpoint.id);
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: assignmentService,
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: { startTask: vi.fn() } as any,
+    });
+
+    const picked = (virtualWorkerService as any).pickNextWorkerAttention(project.id);
+    expect(picked?.id).toBe(item.id);
+    expect((virtualWorkerService as any).projectNeedsVirtualWorker(project.id)).toBe(true);
+  });
+
+  it("does not reschedule immediately when a cycle finds no actionable work", async () => {
+    const {
+      settingsRepository,
+      sessionTracking,
+      projectManagementRepository,
+      executionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+      workerTaskDispatchService,
+    } = await createFixture();
+
+    const project = projectManagementRepository.createProject({
+      name: "No-Op Cycle Project",
+      sourceType: "local",
+      sourceRef: "/workspace/no-op-cycle",
+      defaultBranch: "main",
+    });
+
+    const virtualWorkerService = new VirtualWorkerService({
+      settingsRepository,
+      sessionTracking,
+      executionRepository,
+      projectManagementRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectWorkerAssignmentService: new ProjectWorkerAssignmentService(
+        projectWorkerAssignmentRepository,
+        workerEndpointRepository,
+      ),
+      projectAttentionService,
+      workerTaskDispatchService,
+      cliWorkflowService: { startTask: vi.fn() } as any,
+    });
+
+    const createEndpointSpy = vi.spyOn(workerEndpointRepository, "createVirtualEndpoint");
+    vi.spyOn(virtualWorkerService as any, "projectNeedsVirtualWorker").mockReturnValue(true);
+    vi.spyOn(virtualWorkerService as any, "pickNextWorkerAttention").mockReturnValue(null);
+    vi.spyOn(workerTaskDispatchService, "claimNextDispatchForWorker").mockReturnValue(null);
+
+    virtualWorkerService.scheduleProject(project.id, "test_no_actionable_work");
+    await vi.runAllTicks();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(createEndpointSpy).toHaveBeenCalledTimes(1);
+    expect(projectWorkerAssignmentRepository.listAssignmentsForProject(project.id, { activeOnly: true })).toHaveLength(0);
   });
 
   it("start and stop manage the reconcile timer", async () => {

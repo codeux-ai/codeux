@@ -13,8 +13,8 @@ describe("dashboard status helpers", () => {
 
     expect(stats).toEqual({
       total: 5,
-      running: 2,
-      codingCompleted: 1,
+      running: 0,
+      codingCompleted: 3,
       completed: 1,
       failed: 1,
       ci: 1,

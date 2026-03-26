@@ -8,6 +8,7 @@ import { ProjectAttentionRepository } from "../../../../src/repositories/project
 import { ProjectManagementRepository } from "../../../../src/repositories/project-management-repository.js";
 import { ProjectWorkerAssignmentRepository } from "../../../../src/repositories/project-worker-assignment-repository.js";
 import { WorkerEndpointRepository } from "../../../../src/repositories/worker-endpoint-repository.js";
+import { ProjectWorkerAssignmentService } from "../../../../src/domain/workers/project-worker-assignment-service.js";
 import { ProjectAttentionService } from "../../../../src/domain/workers/project-attention-service.js";
 
 const tempDirs: string[] = [];
@@ -137,5 +138,56 @@ describe("ProjectAttentionService", () => {
     });
 
     expect(item.assignedWorkerEndpointId).toBeNull();
+  });
+
+  it("allows reclaiming a claimed worker item when the assigned worker is no longer active on the project", async () => {
+    const {
+      projectRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionService,
+    } = await createFixture();
+    const project = projectRepository.createProject({
+      name: "Reclaimable Worker Attention Project",
+      sourceType: "local",
+      sourceRef: "/workspace/reclaimable-worker-attention-project",
+    });
+
+    const assignmentService = new ProjectWorkerAssignmentService(
+      projectWorkerAssignmentRepository,
+      workerEndpointRepository,
+    );
+    const staleEndpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:stale",
+      displayName: "Stale Virtual Worker",
+      status: "connected",
+      transport: "internal",
+    });
+    assignmentService.ensureWorkerAssignment(project.id, staleEndpoint.id);
+
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge conflict for T7",
+      summaryMarkdown: "Originally claimed by a stale worker.",
+    });
+    projectAttentionService.claimItem(item.id, staleEndpoint.id, "initial_claim");
+
+    assignmentService.releaseWorkerAssignment(project.id, staleEndpoint.id, "worker_gone");
+    workerEndpointRepository.deleteWorkerEndpoint(staleEndpoint.id);
+
+    const replacementEndpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:replacement",
+      displayName: "Replacement Virtual Worker",
+      status: "connected",
+      transport: "internal",
+    });
+    assignmentService.ensureWorkerAssignment(project.id, replacementEndpoint.id);
+
+    const reclaimed = projectAttentionService.claimItem(item.id, replacementEndpoint.id, "reclaim_after_stale_assignment");
+    expect(reclaimed.assignedWorkerEndpointId).toBe(replacementEndpoint.id);
+    expect(reclaimed.status).toBe("claimed");
   });
 });

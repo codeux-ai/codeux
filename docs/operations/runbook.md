@@ -52,6 +52,10 @@ Checks:
   - scope-aware websocket replay checks
 - If the live view updates task state but Git/CI panels lag, confirm `/api/git-status` is healthy; that surface is rate-limited to avoid external API spam, so it may trail runtime updates by a couple of seconds under heavy activity.
 - If the dashboard still degrades under load, inspect whether debug file logging is enabled; file logging now uses async streams, but sustained log volume is still a useful signal that a hot loop is too noisy.
+- If the server becomes CPU-bound after a virtual merge-conflict or CI-fix handoff, inspect active worker attention:
+  - stale `claimed` worker items assigned to a deleted `virtual_cli` endpoint used to trigger a no-op reschedule loop that starved the dashboard
+  - current builds recover those claims automatically and refuse to immediately reschedule when a cycle does not actually claim work
+  - if you still see the pattern, capture the active `project_attention_items`, `project_worker_assignments`, and `worker_endpoints` rows before restarting
 
 ### 2. No PR/CI data in remote mode
 Checks:
@@ -129,6 +133,18 @@ Checks:
 - Verify startup logs for a recovery line:
   - `[Recovery] Marked <N> interrupted CLI session(s) as FAILED ...`
 - Restart the sprint from the dashboard so failed tasks are retried on a fresh orchestration attempt.
+
+### 8. Virtual merge-conflict attention was claimed, but no worker/container activity followed
+Symptoms:
+- Session tracking shows only `Virtual worker claimed merge conflict ...`
+- No `provider_invocations` row is created for that attention item
+- Stopping the server is slow and the dashboard may stop responding
+
+Checks:
+- Inspect the most recent merge-conflict session in `~/.sprint-os/session-tracking.db`
+- Compare active `project_attention_items` rows for the task with active `project_worker_assignments` and `worker_endpoints`
+- If the worker-owned attention item is still `claimed` by a deleted or inactive endpoint, restart onto a build that includes the March 26, 2026 stale-claim recovery
+- If the last completed merge-conflict session failed on `git push ... (non-fast-forward)`, expect a human escalation item to remain open alongside the stale worker claim until recovery code or operator cleanup resolves the stale claim
 
 ## Recovery Techniques
 

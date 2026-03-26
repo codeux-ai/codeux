@@ -32,6 +32,11 @@ Extended on March 15, 2026:
 - added create/update/delete lifecycle helpers for non-MCP endpoints
 - virtual worker startup now prunes orphaned `virtual_cli` endpoints from previous runs
 
+Extended on March 26, 2026:
+
+- stale worker-owned attention claims can now be recovered when their assigned endpoint is no longer actively assigned to the project
+- virtual worker scheduling now refuses to immediately requeue a project after a cycle that did not actually claim an attention item or task dispatch, preventing dashboard-starving no-op loops
+
 Primary files:
 
 - `src/contracts/worker-types.ts`

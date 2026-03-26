@@ -36,6 +36,10 @@ function isTerminalSessionState(state: string | undefined): boolean {
   return state === "COMPLETED" || state === "FAILED" || state === "CANCELLED" || state === "QUOTA";
 }
 
+function isAssignableWorkerStatus(status: string | null | undefined): boolean {
+  return status !== null && status !== "stale" && status !== "offline";
+}
+
 function extractPullRequest(session: JulesSession): { url?: string; workerBranch?: string } | null {
   const output = (session.outputs || [])
     .map((entry) => entry.pullRequest)
@@ -124,9 +128,9 @@ export class VirtualWorkerService {
         .catch((error) => {
           this.deps.logger?.error("Virtual worker cycle failed", { projectId, reason, error });
         })
-        .finally(() => {
+        .then((didClaimWork) => {
           this.activeCycles.delete(projectId);
-          if (this.projectNeedsVirtualWorker(projectId)) {
+          if (didClaimWork && this.projectNeedsVirtualWorker(projectId)) {
             this.scheduleProject(projectId, "remaining_worker_work");
           }
         });
@@ -167,7 +171,7 @@ export class VirtualWorkerService {
     }
 
     const openWorkerAttention = this.deps.projectAttentionService.listActiveProjectItems(projectId)
-      .some((item) => item.ownerType === "worker");
+      .some((item) => this.isActionableWorkerAttentionItem(item));
     if (openWorkerAttention) {
       return true;
     }
@@ -180,7 +184,7 @@ export class VirtualWorkerService {
       ));
   }
 
-  private async runProjectCycle(projectId: string, reason: string): Promise<void> {
+  private async runProjectCycle(projectId: string, reason: string): Promise<boolean> {
     const cycleSettings = this.resolveCycleSettings(projectId);
     const endpoint = this.deps.workerEndpointRepository.createVirtualEndpoint({
       endpointKey: `virtual:${projectId}:${Date.now().toString(36)}:${sanitizeToken(randomUUID().slice(0, 8))}`,
@@ -199,7 +203,7 @@ export class VirtualWorkerService {
       const attentionItem = this.pickNextWorkerAttention(projectId);
       if (attentionItem) {
         await this.handleAttentionItem(endpoint.id, attentionItem, reason);
-        return;
+        return true;
       }
 
       const dispatchClaim = this.deps.workerTaskDispatchService.claimNextDispatchForWorker({
@@ -210,7 +214,9 @@ export class VirtualWorkerService {
       });
       if (dispatchClaim) {
         await this.handleTaskDispatch(endpoint.id, dispatchClaim);
+        return true;
       }
+      return false;
     } finally {
       this.deps.projectWorkerAssignmentService.releaseWorkerAssignment(projectId, endpoint.id, "virtual_worker_cycle_complete");
       this.deps.workerEndpointRepository.deleteWorkerEndpoint(endpoint.id);
@@ -220,10 +226,38 @@ export class VirtualWorkerService {
   private pickNextWorkerAttention(projectId: string): ProjectAttentionItemRecord | null {
     return this.deps.projectAttentionService.listActiveProjectItems(projectId)
       .find((item) => (
-        item.ownerType === "worker"
-        && item.attentionType !== "merge_required"
-        && (item.status === "open" || (item.status === "claimed" && !item.assignedWorkerEndpointId))
+        this.isActionableWorkerAttentionItem(item)
       )) || null;
+  }
+
+  private isActionableWorkerAttentionItem(item: ProjectAttentionItemRecord): boolean {
+    return (
+      item.ownerType === "worker"
+      && item.attentionType !== "merge_required"
+      && this.projectUsesVirtualWorkers(item.projectId, item.sprintId)
+      && (
+        item.status === "open"
+        || this.isRecoverableClaimedAttentionItem(item)
+      )
+    );
+  }
+
+  private isRecoverableClaimedAttentionItem(item: ProjectAttentionItemRecord): boolean {
+    if (item.status !== "claimed") {
+      return false;
+    }
+    if (!item.assignedWorkerEndpointId) {
+      return true;
+    }
+
+    const assignments = this.deps.projectWorkerAssignmentRepository.listAssignmentsForProject(item.projectId, {
+      activeOnly: true,
+    });
+    return !assignments.some((assignment) => (
+      assignment.workerEndpointId === item.assignedWorkerEndpointId
+      && assignment.capabilities.canSuperviseProjects
+      && isAssignableWorkerStatus(assignment.workerStatus)
+    ));
   }
 
   private async handleTaskDispatch(workerEndpointId: string, claim: WorkerTaskDispatchClaim): Promise<void> {
