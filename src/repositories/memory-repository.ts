@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { AppDbStorage } from "./app-db-storage.js";
+import { requireRecord } from "./repository-utils.js";
 import type {
   MemoryRecord,
   MemoryScope,
@@ -59,7 +60,7 @@ export class MemoryRepository {
   }
 
   createMemory(projectId: string, input: CreateMemoryInput): MemoryRecord {
-    this.requireProject(projectId);
+    requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const now = new Date().toISOString();
     const id = randomUUID();
     const source: MemorySource = input.source ?? { type: "manual" };
@@ -84,7 +85,7 @@ export class MemoryRepository {
       now,
     );
 
-    return this.requireMemory(id);
+    return requireRecord(this.getMemory(id), "Memory", id);
   }
 
   getMemory(memoryId: string): MemoryRecord | null {
@@ -96,7 +97,7 @@ export class MemoryRepository {
   }
 
   updateMemory(memoryId: string, input: UpdateMemoryInput): MemoryRecord {
-    const current = this.requireMemory(memoryId);
+    const current = requireRecord(this.getMemory(memoryId), "Memory", memoryId);
     const now = new Date().toISOString();
 
     this.db.prepare(`
@@ -111,7 +112,7 @@ export class MemoryRepository {
       memoryId,
     );
 
-    return this.requireMemory(memoryId);
+    return requireRecord(this.getMemory(memoryId), "Memory", memoryId);
   }
 
   deleteMemory(memoryId: string): void {
@@ -286,7 +287,7 @@ export class MemoryRepository {
       now,
     );
 
-    return this.requireMemory(id);
+    return requireRecord(this.getMemory(id), "Memory", id);
   }
 
   // --- Embedding model status ---
@@ -391,21 +392,5 @@ export class MemoryRepository {
     return { type: "manual" };
   }
 
-  private requireMemory(memoryId: string): MemoryRecord {
-    const record = this.getMemory(memoryId);
-    if (!record) {
-      throw new Error(`Memory not found: ${memoryId}`);
-    }
-    return record;
-  }
 
-  private requireProject(projectId: string): void {
-    const row = this.db.prepare(`
-      SELECT id FROM projects WHERE id = ?
-    `).get(projectId) as { id: string } | undefined;
-
-    if (!row) {
-      throw new Error(`Project not found: ${projectId}`);
-    }
-  }
 }
