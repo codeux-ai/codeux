@@ -472,7 +472,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 <div className="w-px h-5 bg-black/10 dark:bg-white/10 hidden md:block" />
 
                 {/* Notifications */}
-                <button className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50">
+                <button className="relative w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50">
                     <Bell className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" strokeWidth={1.5} />
                     <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-signal-500 shadow-[0_0_6px_rgba(0,224,160,0.8)] ring-1 ring-[#F9F8F4] dark:ring-void-900" />
                 </button>
@@ -480,7 +480,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 {/* Theme Toggle */}
                 <button
                     onClick={toggleTheme}
-                    className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
+                    className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
                 >
                     {isDark
                         ? <Sun className="w-4 h-4 text-slate-400 hover:text-white transition-colors" strokeWidth={1.5} />
