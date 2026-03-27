@@ -47,6 +47,7 @@ interface ProjectRow {
 interface SprintRow {
   id: string;
   project_id: string;
+  sprint_key: string | null;
   number: number | string | null;
   slug: string;
   name: string;
@@ -297,6 +298,7 @@ export class ProjectManagementRepository {
       SELECT
         s.id,
         s.project_id,
+        s.sprint_key,
         s.number,
         s.slug,
         s.name,
@@ -339,14 +341,16 @@ export class ProjectManagementRepository {
     const number = input.number ?? this.getNextSprintNumber(projectId);
     const name = input.name.trim();
     const slug = this.createUniqueSprintSlug(projectId, name);
+    const sprintKey = input.sprintKey || null;
 
     this.db.prepare(`
       INSERT INTO sprints (
-        id, project_id, number, slug, name, original_prompt, goal, status, showcase_pinned, start_date, end_date, feature_branch, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, project_id, sprint_key, number, slug, name, original_prompt, goal, status, showcase_pinned, start_date, end_date, feature_branch, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
+      sprintKey,
       number,
       slug,
       name,
@@ -376,9 +380,10 @@ export class ProjectManagementRepository {
 
     this.db.prepare(`
       UPDATE sprints
-      SET number = ?, slug = ?, name = ?, original_prompt = ?, goal = ?, status = ?, showcase_pinned = ?, start_date = ?, end_date = ?, feature_branch = ?, updated_at = ?
+      SET sprint_key = ?, number = ?, slug = ?, name = ?, original_prompt = ?, goal = ?, status = ?, showcase_pinned = ?, start_date = ?, end_date = ?, feature_branch = ?, updated_at = ?
       WHERE id = ?
     `).run(
+      input.sprintKey === undefined ? current.sprintKey : input.sprintKey,
       input.number === undefined ? current.number : input.number,
       nextSlug,
       nextName,
@@ -653,6 +658,7 @@ export class ProjectManagementRepository {
       SELECT
         s.id,
         s.project_id,
+        s.sprint_key,
         s.number,
         s.slug,
         s.name,
@@ -704,6 +710,7 @@ export class ProjectManagementRepository {
       SELECT
         s.id,
         s.project_id,
+        s.sprint_key,
         s.number,
         s.slug,
         s.name,
@@ -844,6 +851,7 @@ export class ProjectManagementRepository {
     return {
       id: row.id,
       projectId: row.project_id,
+      sprintKey: row.sprint_key || null,
       number: row.number === null ? null : toNumber(row.number),
       slug: row.slug,
       name: row.name,

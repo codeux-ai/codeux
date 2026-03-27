@@ -33,6 +33,7 @@ export interface ProjectSummary {
 export interface SprintRecord {
   id: string;
   projectId: string;
+  sprintKey: string | null;
   number: number | null;
   slug: string;
   name: string;
@@ -103,6 +104,7 @@ export interface UpdateProjectInput {
 
 export interface CreateSprintInput {
   name: string;
+  sprintKey?: string | null;
   originalPrompt?: string | null;
   goal?: string;
   number?: number;
@@ -115,6 +117,7 @@ export interface CreateSprintInput {
 
 export interface UpdateSprintInput {
   name?: string;
+  sprintKey?: string | null;
   originalPrompt?: string | null;
   goal?: string;
   number?: number | null;

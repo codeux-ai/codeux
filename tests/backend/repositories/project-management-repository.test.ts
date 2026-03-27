@@ -134,6 +134,35 @@ describe("ProjectManagementRepository", () => {
     });
   });
 
+  it("persists sprintKey in sprints", async () => {
+    const { repository } = await createRepository();
+
+    const project = repository.createProject({
+      name: "Sprint Key Project",
+      sourceType: "local",
+      sourceRef: "/workspace/sprint-key",
+    });
+
+    const sprint = repository.createSprint(project.id, {
+      name: "Planning Sprint",
+      sprintKey: "PLN-1",
+    });
+
+    expect(sprint.sprintKey).toBe("PLN-1");
+
+    const retrieved = repository.getSprint(sprint.id);
+    expect(retrieved?.sprintKey).toBe("PLN-1");
+
+    const updated = repository.updateSprint(sprint.id, {
+      sprintKey: "PLN-1-UPDATED",
+    });
+
+    expect(updated.sprintKey).toBe("PLN-1-UPDATED");
+
+    const retrievedUpdated = repository.getSprint(sprint.id);
+    expect(retrievedUpdated?.sprintKey).toBe("PLN-1-UPDATED");
+  });
+
   it("handles originalPrompt in sprints and supports clearing tasks", async () => {
     const { repository } = await createRepository();
 
