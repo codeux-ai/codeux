@@ -582,7 +582,7 @@ function resolveMainBranchPrTitle(args: {
   return `Merge ${args.featureBranch} into ${args.defaultBranch}`;
 }
 
-function resolveMainBranchPrBody(args: {
+export function resolveMainBranchPrBody(args: {
   featureBranch: string;
   defaultBranch: string;
   sprintNumber?: number;
