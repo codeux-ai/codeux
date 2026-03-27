@@ -70,7 +70,7 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
                 {state.ring && (
                     <div
                         className={`absolute inset-0 rounded-full bg-transparent border-2 animate-[spin_5s_linear_infinite] scale-105 pointer-events-none mix-blend-screen ${state.ring}`}
-                        style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%', clipPath: 'inset(-10px)' }}
+                        style={{ clipPath: 'inset(-10px)' }}
                     />
                 )}
             </div>

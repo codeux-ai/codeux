@@ -109,7 +109,7 @@ const ConnectionRuntimePanel: FunctionComponent<{
     const workerConnections = activeConnections.filter((connection) => connection.role === "worker");
 
     return (
-        <div className="rounded-[1.4rem] border border-black/[0.04] bg-black/[0.015] p-4 dark:border-white/[0.04] dark:bg-white/[0.015]">
+        <div className="rounded-xl border border-black/[0.04] bg-black/[0.015] p-4 dark:border-white/[0.04] dark:bg-white/[0.015]">
             <div className="mb-4 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
                     <Radio className="h-4 w-4 text-signal-500" strokeWidth={1.5} />
@@ -430,7 +430,7 @@ const ExecutionRuntimePanel: FunctionComponent<{
     const runningWorkers = workerDispatches.filter((dispatch) => dispatch.status === "claimed" || dispatch.status === "running").length;
 
     return (
-        <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+        <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-xl shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
             <WaveFluid accentHex="#00E0A0" />
             <BorderTrace accentHex="#00E0A0" />
 
@@ -1004,10 +1004,10 @@ export const LiveSessionPage: FunctionComponent = () => {
     if (error && !hasSprintContext && !initialLoadComplete) {
         return (
             <div className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex items-center justify-center min-h-[60vh]">
-                <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-status-red/20 rounded-[1.75rem] p-12 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] text-center max-w-lg">
+                <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-status-red/20 rounded-xl p-12 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] text-center max-w-lg">
                     <WaveFluid accentHex="#E3000F" />
                     <div className="relative z-10">
-                        <div className="w-16 h-16 rounded-[1.25rem] bg-status-red/10 flex items-center justify-center mx-auto mb-5">
+                        <div className="w-16 h-16 rounded-xl bg-status-red/10 flex items-center justify-center mx-auto mb-5">
                             <Zap className="w-8 h-8 text-status-red" strokeWidth={1} />
                         </div>
                         <h2 className="text-2xl font-black tracking-tighter font-display text-slate-900 dark:text-white mb-3">Connection Lost</h2>
@@ -1023,7 +1023,7 @@ export const LiveSessionPage: FunctionComponent = () => {
 
             {/* Inline connection warning — shown when we have prior data but lost connection */}
             {error && (hasSprintContext || initialLoadComplete) && (
-                <div className="flex items-center gap-3 px-5 py-3 rounded-2xl border border-status-red/15 bg-status-red/5 text-sm text-status-red font-medium backdrop-blur-md">
+                <div className="flex items-center gap-3 px-5 py-3 rounded-xl border border-status-red/15 bg-status-red/5 text-sm text-status-red font-medium backdrop-blur-md">
                     <Zap className="w-4 h-4 shrink-0" strokeWidth={2} />
                     <span>{error} — showing last known state, reconnecting...</span>
                 </div>
@@ -1081,7 +1081,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                             <button
                                 type="button"
                                 onClick={() => setHeaderView("stats")}
-                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[10px] font-bold uppercase tracking-[0.12em] transition-all duration-300 ${
+                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-md text-[10px] font-bold uppercase tracking-[0.12em] transition-all duration-300 ${
                                     headerView === "stats"
                                         ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_2px_10px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]"
                                         : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
@@ -1093,7 +1093,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                             <button
                                 type="button"
                                 onClick={() => setHeaderView("race")}
-                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[10px] font-bold uppercase tracking-[0.12em] transition-all duration-300 ${
+                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-md text-[10px] font-bold uppercase tracking-[0.12em] transition-all duration-300 ${
                                     headerView === "race"
                                         ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_2px_10px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]"
                                         : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
@@ -1105,7 +1105,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                             <button
                                 type="button"
                                 onClick={() => setHeaderView("dag")}
-                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[10px] font-bold uppercase tracking-[0.12em] transition-all duration-300 ${
+                                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-md text-[10px] font-bold uppercase tracking-[0.12em] transition-all duration-300 ${
                                     headerView === "dag"
                                         ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_2px_10px_rgba(0,0,0,0.08)] dark:shadow-[0_2px_10px_rgba(0,0,0,0.3)]"
                                         : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
@@ -1151,7 +1151,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             </div>
 
             {pausedIntervention && !hasLiveSprint && (
-                <div className="relative overflow-hidden rounded-[1.75rem] border border-status-amber/18 bg-status-amber/8 p-6 shadow-[0_12px_30px_rgba(245,158,11,0.08)]">
+                <div className="relative overflow-hidden rounded-xl border border-status-amber/18 bg-status-amber/8 p-6 shadow-[0_12px_30px_rgba(245,158,11,0.08)]">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0">
                             <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-status-amber">
@@ -1254,7 +1254,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                                 : "Launch a sprint to activate live task telemetry, protocol output, and runtime activity for this project."}
                         />
                     ) : taskCardItems.length === 0 ? (
-                        <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border-2 border-dashed border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-16 text-center">
+                        <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border-2 border-dashed border-black/[0.06] dark:border-white/[0.06] rounded-xl p-16 text-center">
                             <div className="relative z-10">
                                 <Play className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-4" strokeWidth={1} />
                                 <p className="text-sm text-slate-400 dark:text-slate-600 font-medium">
