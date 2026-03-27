@@ -323,4 +323,25 @@
   .dag-running-ring {
     animation: dag-running-ring 2.4s ease-in-out infinite;
   }
+
+  /* Text overflow breaking utilities */
+  .break-words {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* Accessible touch target helpers */
+  .touch-target {
+    position: relative;
+  }
+  .touch-target::after {
+    content: '';
+    position: absolute;
+    inset: -8px; /* Expand hit area by 8px on all sides */
+    min-width: 44px;
+    min-height: 44px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
 }
