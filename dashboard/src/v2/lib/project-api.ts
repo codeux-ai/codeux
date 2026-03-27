@@ -138,7 +138,7 @@ export const improveSprintPrompt = async (
   projectId: string,
   input: ImprovePromptInput,
   signal?: AbortSignal,
-): Promise<{ goal: string; threadId: string; agentId: string; workerConnectionId: string | null }> => {
+): Promise<{ goal: string; invocationId: string; agentId: string; workerConnectionId: string | null }> => {
   return fetchJson(`/api/projects/${encodeURIComponent(projectId)}/planning/improve-sprint-prompt`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -152,7 +152,7 @@ export const planSprint = async (
   sprintId: string,
   input: PlanSprintOptions,
   signal?: AbortSignal,
-): Promise<{ ok: true; threadId: string; agentId: string; createdTaskIds: string[]; started: boolean }> => {
+): Promise<{ ok: true; invocationId: string; agentId: string; createdTaskIds: string[]; started: boolean }> => {
   return fetchJson(`/api/projects/${encodeURIComponent(projectId)}/sprints/${encodeURIComponent(sprintId)}/plan`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
