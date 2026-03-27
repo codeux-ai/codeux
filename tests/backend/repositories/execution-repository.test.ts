@@ -29,7 +29,7 @@ async function createRepositories(): Promise<{
 
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
-});
+  });
 
 describe("ExecutionRepository", () => {
 
@@ -1257,4 +1257,33 @@ describe("ExecutionRepository", () => {
       expect(td.provider).toBe("target-provider");
     }
   });
-});
+  });
+
+  describe("ExecutionInvocationMessageRecord Metadata", () => {
+    it("persists and retrieves metadata for execution messages", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Test Project Execution",
+        sourceType: "local",
+        sourceRef: "/tmp/exec",
+      });
+
+      const invocation = executionRepository.createExecutionInvocation({
+        projectId: project.id,
+        type: "test_invocation",
+      });
+
+      const messageMetadata = { invocationSpecific: true, tokens: 42 };
+
+      const message = executionRepository.appendExecutionInvocationMessage(invocation.id, {
+        role: "user",
+        contentMarkdown: "Test prompt",
+        metadata: messageMetadata,
+      });
+
+      expect(message.metadata).toEqual(messageMetadata);
+
+      const messages = executionRepository.listExecutionInvocationMessages(invocation.id);
+      expect(messages[0].metadata).toEqual(messageMetadata);
+    });
+  });

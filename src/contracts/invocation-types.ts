@@ -30,6 +30,7 @@ export interface ExecutionInvocationMessageRecord {
   role: "system" | "user" | "assistant" | "tool";
   contentMarkdown: string;
   toolCallsJson: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
   createdAt: string;
 }
 
@@ -65,5 +66,6 @@ export interface AppendExecutionInvocationMessageInput {
   role: "system" | "user" | "assistant" | "tool";
   contentMarkdown: string;
   toolCallsJson?: Record<string, unknown> | null;
+  metadata?: Record<string, unknown> | null;
   createdAt?: string;
 }

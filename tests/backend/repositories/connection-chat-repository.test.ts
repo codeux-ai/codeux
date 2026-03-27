@@ -30,7 +30,7 @@ async function createRepositories(): Promise<{
 afterEach(async () => {
   vi.useRealTimers();
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
-});
+  });
 
 async function createRepositoriesWithRealtime(): Promise<{
   storage: AppDbStorage;
@@ -546,4 +546,53 @@ describe("ConnectionChatRepository", () => {
       event.eventType === "conversation.thread.deleted" && event.entityId === thread.id
     ))).toBe(true);
   });
-});
+  });
+
+  describe("ConversationRuntimeState and Metadata", () => {
+    it("creates, retrieves, and updates thread with runtimeState and persists message metadata", async () => {
+      const { projectRepository, connectionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Test Project",
+        sourceType: "local",
+        sourceRef: "/tmp/test",
+      });
+
+      const runtimeState = {
+        replayRequired: true,
+        routeKind: "worker",
+        virtualProvider: "openai",
+        compactionSummary: { tokenCount: 100 },
+      };
+
+      const thread = connectionRepository.createThread(project.id, {
+        title: "Test Thread",
+        runtimeState,
+      });
+
+      expect(thread.runtimeState).toEqual(runtimeState);
+
+      const threads = connectionRepository.listThreads(project.id);
+      expect(threads[0].runtimeState).toEqual(runtimeState);
+
+      const updatedState = { ...runtimeState, replayRequired: false };
+      const updatedThread = connectionRepository.updateThread(thread.id, {
+        runtimeState: updatedState,
+      });
+
+      expect(updatedThread.runtimeState).toEqual(updatedState);
+      const rehydratedThreads = connectionRepository.listThreads(project.id);
+      expect(rehydratedThreads[0].runtimeState).toEqual(updatedState);
+
+      const messageMetadata = { testKey: "testValue", numericKey: 123 };
+      const message = connectionRepository.postDashboardMessage(project.id, {
+        threadId: thread.id,
+        bodyMarkdown: "Hello",
+        metadata: messageMetadata,
+      });
+
+      expect(message.metadata).toEqual(messageMetadata);
+
+      const messages = connectionRepository.listMessages(thread.id);
+      expect(messages[0].metadata).toEqual(messageMetadata);
+    });
+  });

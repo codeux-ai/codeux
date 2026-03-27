@@ -67,6 +67,7 @@ export interface CreateSystemConversationMessageInput {
   title?: string;
   connectionId?: string | null;
   bodyMarkdown: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 interface ThreadRow {
@@ -75,6 +76,7 @@ interface ThreadRow {
   connection_id: string | null;
   scope: string;
   title: string;
+  runtime_state_json?: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -92,6 +94,7 @@ interface MessageRow {
   author_connection_id: string | null;
   body_markdown: string;
   delivery_status: string;
+  metadata_json?: string | null;
   created_at: string;
 }
 
@@ -397,14 +400,15 @@ export class ConnectionChatRepository {
     const now = new Date().toISOString();
     const threadId = randomUUID();
     this.db.prepare(`
-      INSERT INTO conversation_threads (id, project_id, connection_id, scope, title, status, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO conversation_threads (id, project_id, connection_id, scope, title, runtime_state_json, status, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       threadId,
       projectId,
       connectionId || null,
       input.scope || "project",
       input.title.trim(),
+      input.runtimeState ? JSON.stringify(input.runtimeState) : null,
       "open",
       now,
       now
@@ -448,9 +452,14 @@ export class ConnectionChatRepository {
     this.runInTransaction(() => {
       this.db.prepare(`
         UPDATE conversation_threads
-        SET connection_id = ?, updated_at = ?
+        SET connection_id = ?, runtime_state_json = ?, updated_at = ?
         WHERE id = ?
-      `).run(normalizedConnectionId || null, now, thread.id);
+      `).run(
+        normalizedConnectionId || null,
+        input.runtimeState !== undefined ? (input.runtimeState ? JSON.stringify(input.runtimeState) : null) : (thread.runtimeState ? JSON.stringify(thread.runtimeState) : null),
+        now,
+        thread.id
+      );
 
       if (normalizedConnectionId !== thread.connectionId) {
         this.db.prepare(`
@@ -514,8 +523,8 @@ export class ConnectionChatRepository {
 
       this.db.prepare(`
         INSERT INTO conversation_messages (
-          id, thread_id, direction, author_type, author_connection_id, body_markdown, delivery_status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          id, thread_id, direction, author_type, author_connection_id, body_markdown, delivery_status, metadata_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         randomUUID(),
         thread.id,
@@ -524,6 +533,7 @@ export class ConnectionChatRepository {
         null,
         input.bodyMarkdown.trim(),
         "pending",
+        input.metadata ? JSON.stringify(input.metadata) : null,
         now
       );
     });
@@ -572,8 +582,8 @@ export class ConnectionChatRepository {
 
       this.db.prepare(`
         INSERT INTO conversation_messages (
-          id, thread_id, direction, author_type, author_connection_id, body_markdown, delivery_status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          id, thread_id, direction, author_type, author_connection_id, body_markdown, delivery_status, metadata_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         messageId,
         thread.id,
@@ -582,7 +592,8 @@ export class ConnectionChatRepository {
         null,
         input.bodyMarkdown.trim(),
         "processed",
-        now,
+        input.metadata ? JSON.stringify(input.metadata) : null,
+        now
       );
     });
 
@@ -730,8 +741,8 @@ export class ConnectionChatRepository {
 
       this.db.prepare(`
         INSERT INTO conversation_messages (
-          id, thread_id, direction, author_type, author_connection_id, body_markdown, delivery_status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          id, thread_id, direction, author_type, author_connection_id, body_markdown, delivery_status, metadata_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         messageId,
         thread.id,
@@ -740,6 +751,7 @@ export class ConnectionChatRepository {
         connection.id,
         input.bodyMarkdown.trim(),
         "processed",
+        input.metadata ? JSON.stringify(input.metadata) : null,
         now
       );
 
@@ -1162,6 +1174,7 @@ export class ConnectionChatRepository {
       pendingMessageCount: toNumber(row.pending_message_count),
       lastMessageAt: row.last_message_at,
       lastMessagePreview: row.last_message_preview,
+      runtimeState: row.runtime_state_json ? JSON.parse(row.runtime_state_json) : null,
     };
   }
 
@@ -1174,6 +1187,7 @@ export class ConnectionChatRepository {
       authorConnectionId: row.author_connection_id,
       bodyMarkdown: row.body_markdown,
       deliveryStatus: row.delivery_status as ConversationMessageRecord["deliveryStatus"],
+      metadata: row.metadata_json ? JSON.parse(row.metadata_json) : null,
       createdAt: row.created_at,
     };
   }

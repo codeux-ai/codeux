@@ -11,6 +11,7 @@ import type {
   ConnectionInboxMessage,
   ConversationMessageRecord,
   ConversationThreadRecord,
+  ConversationRuntimeState,
   CreateConversationThreadInput,
   CreateDashboardConversationMessageInput,
   McpConnectionCapabilities,

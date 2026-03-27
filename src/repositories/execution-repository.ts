@@ -582,14 +582,15 @@ export class ExecutionRepository {
       role: input.role,
       contentMarkdown: input.contentMarkdown,
       toolCallsJson: input.toolCallsJson || null,
+      metadata: input.metadata || null,
       createdAt: now,
     };
 
     const stmt = this.getCachedStatement(`
       INSERT INTO execution_invocation_messages (
-        id, invocation_id, role, content_markdown, tool_calls_json, created_at
+        id, invocation_id, role, content_markdown, tool_calls_json, metadata_json, created_at
       )
-      VALUES (?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -598,6 +599,7 @@ export class ExecutionRepository {
       record.role,
       record.contentMarkdown,
       record.toolCallsJson ? JSON.stringify(record.toolCallsJson) : null,
+      record.metadata ? JSON.stringify(record.metadata) : null,
       record.createdAt
     );
 
@@ -647,6 +649,7 @@ export class ExecutionRepository {
       role: row.role,
       contentMarkdown: row.content_markdown,
       toolCallsJson: row.tool_calls_json ? JSON.parse(row.tool_calls_json) : null,
+      metadata: row.metadata_json ? JSON.parse(row.metadata_json) : null,
       createdAt: row.created_at,
     };
   }

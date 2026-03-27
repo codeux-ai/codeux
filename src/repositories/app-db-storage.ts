@@ -293,6 +293,7 @@ export class AppDbStorage {
         connection_id TEXT,
         scope TEXT NOT NULL,
         title TEXT NOT NULL,
+        runtime_state_json TEXT,
         status TEXT NOT NULL DEFAULT 'open',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
@@ -308,6 +309,7 @@ export class AppDbStorage {
         author_connection_id TEXT,
         body_markdown TEXT NOT NULL,
         delivery_status TEXT NOT NULL DEFAULT 'pending',
+        metadata_json TEXT,
         created_at TEXT NOT NULL,
         FOREIGN KEY (thread_id) REFERENCES conversation_threads(id) ON DELETE CASCADE,
         FOREIGN KEY (author_connection_id) REFERENCES mcp_connections(id) ON DELETE SET NULL
@@ -453,6 +455,7 @@ export class AppDbStorage {
         role TEXT NOT NULL,
         content_markdown TEXT NOT NULL,
         tool_calls_json TEXT,
+        metadata_json TEXT,
         created_at TEXT NOT NULL,
         FOREIGN KEY (invocation_id) REFERENCES execution_invocations(id) ON DELETE CASCADE
       );
@@ -492,6 +495,9 @@ export class AppDbStorage {
     this.ensureColumn("connection_project_bindings", "last_attention_cursor", "TEXT");
     this.ensureColumn("connection_project_bindings", "last_assignment_cursor", "TEXT");
     this.ensureColumn("dashboard_realtime_events", "is_replayable", "INTEGER NOT NULL DEFAULT 1");
+    this.ensureColumn("conversation_threads", "runtime_state_json", "TEXT");
+    this.ensureColumn("conversation_messages", "metadata_json", "TEXT");
+    this.ensureColumn("execution_invocation_messages", "metadata_json", "TEXT");
     this.ensureUniqueIndex("idx_tasks_sprint_key", "tasks", "sprint_id, task_key");
     this.ensureIndex("idx_sprint_runs_project_sprint", "sprint_runs", "project_id, sprint_id, created_at DESC");
     this.ensureIndex("idx_tasks_project_sprint_sort", "tasks", "project_id, sprint_id, sort_order ASC, created_at ASC, task_key ASC");
