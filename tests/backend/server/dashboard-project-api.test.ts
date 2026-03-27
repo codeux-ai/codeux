@@ -383,7 +383,7 @@ async function createServerHandle(): Promise<{
     improveSprintPrompt: async (projectId, input) => {
       return {
         goal: `Improved: ${input.goal}`,
-        threadId: "thread-1",
+        invocationId: "invocation-1",
         agentId: "agent-1",
         workerConnectionId: input.overrides?.workerId || null,
         planningAgentPresetId: input.planningAgentPresetId,
@@ -397,7 +397,7 @@ async function createServerHandle(): Promise<{
         sprintId,
         title: `Planned from ${options.overrides?.virtualProvider || "default"}:${options.overrides?.virtualModel || "default"} using ${options.planningAgentPresetId || "default-preset"}`,
       });
-      return { ok: true, threadId: "thread-2", agentId: "agent-2", createdTaskIds: ["task-1"], started: options.autoStart };
+      return { ok: true, invocationId: "invocation-2", agentId: "agent-2", createdTaskIds: ["task-1"], started: options.autoStart };
     },
   });
   serversToClose.push(handle.server);

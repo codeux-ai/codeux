@@ -82,10 +82,10 @@ Behavior:
 
 1. dashboard resolves the `Planning agent` from the DB.
 2. dashboard selects an active listen-mode planning connection, preferring `worker` and then falling back to `listener`.
-3. dashboard creates a thread targeted at that worker.
-4. dashboard posts a planning request message containing the agent instructions.
-5. the worker claims the inbox message and generates the reply.
-6. Sprint OS parses the reply and applies the result.
+3. dashboard creates an execution invocation. If using a connected worker, it also opens a background, non-chat-visible thread (`scope: "connection"`) targeted at that worker.
+4. dashboard posts a planning request message. It records the prompt, routing information, and any JSON-retry attempts as system/user/assistant messages in the invocation audit trail.
+5. the worker (or virtual provider) processes the request and generates the reply.
+6. Sprint OS captures the reply in the invocation, parses the payload, and applies the result.
 
 ### Prompt Lineage
 

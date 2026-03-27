@@ -37,14 +37,14 @@ interface PlanningAgentServiceDeps {
 
 interface ImprovePromptResult {
   goal: string;
-  threadId: string;
+  invocationId: string;
   agentId: string;
   workerConnectionId: string | null;
 }
 
 interface PlanSprintResult {
   ok: true;
-  threadId: string;
+  invocationId: string;
   agentId: string;
   createdTaskIds: string[];
   started: boolean;
@@ -177,9 +177,24 @@ export class PlanningAgentService {
     );
     const runtime = this.resolvePlanningRuntime(projectId, input.overrides);
     const worker = runtime.mode === "CONNECTED_MCP" ? runtime.connection : null;
-    const thread = this.deps.connectionChatRepository.createThread(projectId, {
-      title: `Planning agent · ${input.name.trim() || "Untitled sprint"} · Improve`,
-      connectionId: worker?.id,
+
+    let threadId: string | undefined;
+    if (worker) {
+      const thread = this.deps.connectionChatRepository.createThread(projectId, {
+        title: `Planning agent · ${input.name.trim() || "Untitled sprint"} · Improve`,
+        connectionId: worker.id,
+        scope: "connection",
+      });
+      threadId = thread.id;
+    }
+
+    const invocation = this.deps.executionRepository?.createExecutionInvocation({
+      projectId,
+      sprintId: null,
+      type: "planning",
+      status: "running",
+      provider: runtime.mode === "VIRTUAL" ? runtime.settings.workers.virtualWorkerProvider : worker?.displayName || null,
+      systemPrompt: null,
     });
 
     const memoryContext = this.buildMemoryContext(projectId, null, planningAgent.id);
@@ -190,33 +205,66 @@ export class PlanningAgentService {
       goal: input.goal,
       memoryContext,
     });
-    signal?.throwIfAborted();
-    let payload: { goal?: string };
-    if (worker) {
-      const reply = await this.postRequestAndWaitForReply(projectId, thread.id, worker.id, prompt, signal);
-      payload = this.parseJsonReply<{ goal?: string }>(reply.bodyMarkdown);
-    } else {
-      const virtualResult = await this.runVirtualPlanningRequest({
-        projectId,
-        sprintId: null,
-        threadId: thread.id,
-        repoPath: project.baseDir,
-        settings: runtime.settings,
-        rawPrompt: prompt,
-        overrides: input.overrides,
-        signal,
-      });
-      payload = await this.parseWithJsonRetry({
-        initialResult: virtualResult,
-        parseFn: (body) => this.parseJsonReply<{ goal?: string }>(body),
-        projectId,
-        sprintId: null,
-        threadId: thread.id,
-        repoPath: project.baseDir,
-        settings: runtime.settings,
-        signal,
+
+    if (invocation) {
+      this.deps.executionRepository?.appendExecutionInvocationMessage(invocation.id, {
+        role: "user",
+        contentMarkdown: prompt,
       });
     }
+
+    signal?.throwIfAborted();
+    let payload: { goal?: string };
+    try {
+      if (worker && threadId) {
+        const reply = await this.postRequestAndWaitForReply(projectId, threadId, worker.id, prompt, signal);
+        if (invocation) {
+          this.deps.executionRepository?.appendExecutionInvocationMessage(invocation.id, {
+            role: "assistant",
+            contentMarkdown: reply.bodyMarkdown,
+          });
+        }
+        payload = this.parseJsonReply<{ goal?: string }>(reply.bodyMarkdown);
+      } else {
+        const virtualResult = await this.runVirtualPlanningRequest({
+          projectId,
+          sprintId: null,
+          invocationId: invocation?.id,
+          repoPath: project.baseDir,
+          settings: runtime.settings,
+          rawPrompt: prompt,
+          overrides: input.overrides,
+          signal,
+        });
+        payload = await this.parseWithJsonRetry({
+          initialResult: virtualResult,
+          parseFn: (body) => this.parseJsonReply<{ goal?: string }>(body),
+          projectId,
+          sprintId: null,
+          invocationId: invocation?.id,
+          repoPath: project.baseDir,
+          settings: runtime.settings,
+          signal,
+        });
+      }
+
+      if (invocation) {
+        this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
+          status: "completed",
+          finishedAt: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      if (invocation) {
+        this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
+          status: "failed",
+          errorMessage: error instanceof Error ? error.message : String(error),
+          finishedAt: new Date().toISOString(),
+        });
+      }
+      throw error;
+    }
+
     const goal = String(payload.goal || "").trim();
     if (!goal) {
       throw new Error("Planning agent reply did not include an improved sprint prompt.");
@@ -229,7 +277,7 @@ export class PlanningAgentService {
 
     return {
       goal,
-      threadId: thread.id,
+      invocationId: invocation?.id || "",
       agentId: planningAgent.id,
       workerConnectionId: worker?.id || null,
     };
@@ -250,9 +298,23 @@ export class PlanningAgentService {
       throw new Error(`Sprint ${sprint.name} already has ${existingTasks.length} task(s). Clear or edit them before running Planning agent.`);
     }
 
-    const thread = this.deps.connectionChatRepository.createThread(projectId, {
-      title: `Planning agent · ${sprint.name} · Plan`,
-      connectionId: worker?.id,
+    let threadId: string | undefined;
+    if (worker) {
+      const thread = this.deps.connectionChatRepository.createThread(projectId, {
+        title: `Planning agent · ${sprint.name} · Plan`,
+        connectionId: worker.id,
+        scope: "connection",
+      });
+      threadId = thread.id;
+    }
+
+    const invocation = this.deps.executionRepository?.createExecutionInvocation({
+      projectId,
+      sprintId,
+      type: "planning",
+      status: "running",
+      provider: runtime.mode === "VIRTUAL" ? runtime.settings.workers.virtualWorkerProvider : worker?.displayName || null,
+      systemPrompt: null,
     });
 
     signal?.throwIfAborted();
@@ -265,31 +327,63 @@ export class PlanningAgentService {
       goal: sprint.goal,
       memoryContext,
     });
+
+    if (invocation) {
+      this.deps.executionRepository?.appendExecutionInvocationMessage(invocation.id, {
+        role: "user",
+        contentMarkdown: prompt,
+      });
+    }
+
     let payload: PlannedSprintPayload;
-    if (worker) {
-      const reply = await this.postRequestAndWaitForReply(projectId, thread.id, worker.id, prompt, signal);
-      payload = this.parsePlannedSprintReply(reply.bodyMarkdown);
-    } else {
-      const virtualResult = await this.runVirtualPlanningRequest({
-        projectId,
-        sprintId,
-        threadId: thread.id,
-        repoPath: project.baseDir,
-        settings: runtime.settings,
-        rawPrompt: prompt,
-        overrides: options.overrides,
-        signal,
-      });
-      payload = await this.parseWithJsonRetry({
-        initialResult: virtualResult,
-        parseFn: (body) => this.parsePlannedSprintReply(body),
-        projectId,
-        sprintId,
-        threadId: thread.id,
-        repoPath: project.baseDir,
-        settings: runtime.settings,
-        signal,
-      });
+    try {
+      if (worker && threadId) {
+        const reply = await this.postRequestAndWaitForReply(projectId, threadId, worker.id, prompt, signal);
+        if (invocation) {
+          this.deps.executionRepository?.appendExecutionInvocationMessage(invocation.id, {
+            role: "assistant",
+            contentMarkdown: reply.bodyMarkdown,
+          });
+        }
+        payload = this.parsePlannedSprintReply(reply.bodyMarkdown);
+      } else {
+        const virtualResult = await this.runVirtualPlanningRequest({
+          projectId,
+          sprintId,
+          invocationId: invocation?.id,
+          repoPath: project.baseDir,
+          settings: runtime.settings,
+          rawPrompt: prompt,
+          overrides: options.overrides,
+          signal,
+        });
+        payload = await this.parseWithJsonRetry({
+          initialResult: virtualResult,
+          parseFn: (body) => this.parsePlannedSprintReply(body),
+          projectId,
+          sprintId,
+          invocationId: invocation?.id,
+          repoPath: project.baseDir,
+          settings: runtime.settings,
+          signal,
+        });
+      }
+
+      if (invocation) {
+        this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
+          status: "completed",
+          finishedAt: new Date().toISOString(),
+        });
+      }
+    } catch (error) {
+      if (invocation) {
+        this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
+          status: "failed",
+          errorMessage: error instanceof Error ? error.message : String(error),
+          finishedAt: new Date().toISOString(),
+        });
+      }
+      throw error;
     }
 
     if (options.replan) {
@@ -343,7 +437,7 @@ export class PlanningAgentService {
 
     return {
       ok: true,
-      threadId: thread.id,
+      invocationId: invocation?.id || "",
       agentId: planningAgent.id,
       createdTaskIds,
       started: options.autoStart,
@@ -434,7 +528,7 @@ export class PlanningAgentService {
   private async runVirtualPlanningRequest(args: {
     projectId: string;
     sprintId: string | null;
-    threadId: string;
+    invocationId?: string;
     repoPath: string;
     settings: DashboardSettings;
     rawPrompt: string;
@@ -458,10 +552,12 @@ export class PlanningAgentService {
     const sessionId = `planning-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     const providerPrompt = buildProviderPrompt(args.rawPrompt, providerSettings.thinkingMode);
 
-    this.deps.connectionChatRepository.postSystemMessage(args.projectId, {
-      threadId: args.threadId,
-      bodyMarkdown: `Planning request routed through virtual ${this.getProviderLabel(provider)} worker (model: ${providerSettings.model}).`,
-    });
+    if (args.invocationId) {
+      this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
+        role: "system",
+        contentMarkdown: `Planning request routed through virtual ${this.getProviderLabel(provider)} worker (model: ${providerSettings.model}).`,
+      });
+    }
 
     const runProvider = async (prompt: string, currentSessionId: string, retry: boolean) => {
       args.signal?.throwIfAborted();
@@ -491,7 +587,7 @@ export class PlanningAgentService {
         onActivity: (description, originator) => {
           this.deps.logger?.debug(retry ? "Virtual planning worker retry activity" : "Virtual planning worker activity", {
             projectId: args.projectId,
-            threadId: args.threadId,
+            invocationId: args.invocationId,
             provider,
             originator: originator || "system",
             description,
@@ -525,7 +621,7 @@ export class PlanningAgentService {
     if (!result.ok && workflowSettings.retryOnReadFileNotFound && isReadFileNotFoundToolError(result)) {
       this.deps.logger?.info("Retrying virtual planning request with file-discovery guidance", {
         projectId: args.projectId,
-        threadId: args.threadId,
+        invocationId: args.invocationId,
         provider,
       });
       result = await runProvider(buildReadFileRetryPrompt(providerPrompt), `${sessionId}-retry`, true);
@@ -552,14 +648,12 @@ export class PlanningAgentService {
       throw new Error(`Virtual ${this.getProviderLabel(provider)} worker returned an empty Planning agent reply.`);
     }
 
-    this.deps.connectionChatRepository.postSystemMessage(args.projectId, {
-      threadId: args.threadId,
-      bodyMarkdown: [
-        `Virtual ${this.getProviderLabel(provider)} worker reply:`,
-        "",
-        bodyMarkdown,
-      ].join("\n"),
-    });
+    if (args.invocationId) {
+      this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
+        role: "assistant",
+        contentMarkdown: bodyMarkdown,
+      });
+    }
 
     return {
       bodyMarkdown,
@@ -578,7 +672,7 @@ export class PlanningAgentService {
   private async runVirtualPlanningFollowUp(args: {
     projectId: string;
     sprintId: string | null;
-    threadId: string;
+    invocationId?: string;
     repoPath: string;
     settings: DashboardSettings;
     previousResult: VirtualPlanningResult;
@@ -588,10 +682,16 @@ export class PlanningAgentService {
     const { previousResult } = args;
     const { provider, sessionId, workflowSettings, providerSettings } = previousResult;
 
-    this.deps.connectionChatRepository.postSystemMessage(args.projectId, {
-      threadId: args.threadId,
-      bodyMarkdown: `Retrying JSON parse in same ${this.getProviderLabel(provider)} session (session: ${sessionId}).`,
-    });
+    if (args.invocationId) {
+      this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
+        role: "system",
+        contentMarkdown: `Retrying JSON parse in same ${this.getProviderLabel(provider)} session (session: ${sessionId}).`,
+      });
+      this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
+        role: "user",
+        contentMarkdown: args.followUpPrompt,
+      });
+    }
 
     args.signal?.throwIfAborted();
     const startedAt = new Date().toISOString();
@@ -622,7 +722,7 @@ export class PlanningAgentService {
       onActivity: (description, originator) => {
         this.deps.logger?.debug("Virtual planning JSON retry activity", {
           projectId: args.projectId,
-          threadId: args.threadId,
+          invocationId: args.invocationId,
           provider,
           originator: originator || "system",
           description,
@@ -653,14 +753,12 @@ export class PlanningAgentService {
       throw new Error(`Virtual ${this.getProviderLabel(provider)} worker JSON retry returned no usable output.`);
     }
 
-    this.deps.connectionChatRepository.postSystemMessage(args.projectId, {
-      threadId: args.threadId,
-      bodyMarkdown: [
-        `Virtual ${this.getProviderLabel(provider)} worker JSON retry reply:`,
-        "",
-        bodyMarkdown,
-      ].join("\n"),
-    });
+    if (args.invocationId) {
+      this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
+        role: "assistant",
+        contentMarkdown: bodyMarkdown,
+      });
+    }
 
     return {
       bodyMarkdown,
@@ -677,7 +775,7 @@ export class PlanningAgentService {
     parseFn: (bodyMarkdown: string) => T;
     projectId: string;
     sprintId: string | null;
-    threadId: string;
+    invocationId?: string;
     repoPath: string;
     settings: DashboardSettings;
     signal?: AbortSignal;
@@ -714,7 +812,7 @@ export class PlanningAgentService {
         currentResult = await this.runVirtualPlanningFollowUp({
           projectId: args.projectId,
           sprintId: args.sprintId,
-          threadId: args.threadId,
+          invocationId: args.invocationId,
           repoPath: args.repoPath,
           settings: args.settings,
           previousResult: currentResult,

@@ -617,16 +617,18 @@ describe("PlanningAgentService", () => {
       projectIds: [project.id],
     });
 
+    const originalPostDashboardMessage = connectionRepository.postDashboardMessage.bind(connectionRepository);
     vi.spyOn(connectionRepository, "postDashboardMessage").mockImplementation((projectId, input) => {
+      const message = originalPostDashboardMessage(projectId, input);
       setTimeout(() => {
         connectionRepository.postListenReply({
           connectionKey: "custom-worker",
           threadId: input.threadId,
           bodyMarkdown: '{"goal":"Improved by custom worker."}',
-          replyToMessageId: "any",
+          replyToMessageId: message.id,
         });
       }, 10);
-      return { id: "msg-1", threadId: input.threadId, createdAt: new Date().toISOString() } as any;
+      return message;
     });
 
     const improved = await service.improveSprintPrompt(project.id, {
