@@ -1,13 +1,8 @@
+// @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import { renderHook, act } from "@testing-library/preact";
 import { useTaskComposerState } from "../../../dashboard/src/v2/lib/task-composer-state.js";
 import type { Task, Sprint, TaskExecutorType, TaskPriority, TaskStatus } from "../../../dashboard/src/v2/types.js";
-
-// Mock the environment for Preact hooks testing without needing a full DOM/browser environment test run locally
-import { Window } from 'happy-dom';
-const window = new Window();
-global.document = window.document as any;
-global.window = window as any;
 
 describe("Task Composer State Helper", () => {
   const mockSprints: Sprint[] = [
