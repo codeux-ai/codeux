@@ -95,9 +95,9 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         ADD
                     </span>
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div className="w-44 h-44 bg-ember-500/[0.08] animate-organic" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%' }} />
-                        <div className="absolute w-32 h-32 bg-ember-500/[0.12] animate-organic-reverse" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%' }} />
-                        <div className="absolute w-20 h-20 bg-ember-500/[0.18] animate-organic" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%' }} />
+                        <div className="w-44 h-44 bg-ember-500/[0.08] rounded-full"  />
+                        <div className="absolute w-32 h-32 bg-ember-500/[0.12] rounded-full"  />
+                        <div className="absolute w-20 h-20 bg-ember-500/[0.18] rounded-full"  />
                     </div>
                     <div className="relative z-10 flex items-center gap-2 text-ember-500 font-mono font-bold text-[10px] tracking-[0.2em] uppercase">
                         <FolderOpen className="w-3.5 h-3.5" strokeWidth={2.5} />

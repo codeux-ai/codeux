@@ -84,7 +84,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
   const StatusIcon = state.icon;
   const isCompleted = sprint.status === "completed";
   const isRunning = sprint.status === "running";
-  const animationClass = isCompleted ? "" : isEven ? "animate-organic" : "animate-organic-reverse";
+  const animationClass = isCompleted ? "" : "rounded-full";
 
   const handleHoverEnter = () => {
     if (!bubbleRef.current || isCompleted) {
@@ -121,7 +121,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
     >
       <div
         className={`pointer-events-none absolute inset-0 shadow-[0_24px_48px_rgba(0,0,0,0.07)] transition-all duration-700 dark:shadow-[0_24px_48px_rgba(0,0,0,0.5)] ${animationClass}`}
-        style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }}
+
       />
 
       <div
@@ -138,7 +138,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
         {state.ring && !isCompleted && (
           <div
             className={`absolute inset-0 border-2 bg-transparent pointer-events-none mix-blend-screen scale-105 animate-[spin_5s_linear_infinite] ${state.ring}`}
-            style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%", clipPath: "inset(-10px)" }}
+            style={{ clipPath: "inset(-10px)" }}
           />
         )}
       </div>

@@ -112,7 +112,7 @@ const TaskCard: FunctionComponent<{
       ref={cardRef}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      className="group relative flex flex-col bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.25rem] p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden cursor-default"
+      className="group relative flex flex-col bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-xl p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden cursor-default"
       style={{ transformStyle: "preserve-3d", willChange: "transform" }}
     >
       <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-signal-500/[0.02]" />
@@ -250,7 +250,7 @@ const SprintSelector: FunctionComponent<{
     <div className="relative">
       <button
         onClick={() => setOpen((current) => !current)}
-        className={`group flex items-center gap-3 px-5 py-3 rounded-2xl border transition-all duration-300 ${
+        className={`group flex items-center gap-3 px-5 py-3 rounded-xl border transition-all duration-300 ${
           selected
             ? "bg-ember-500/[0.06] dark:bg-ember-500/[0.08] border-ember-500/20 dark:border-ember-500/25 shadow-[0_0_20px_rgba(255,184,0,0.06)]"
             : "bg-black/[0.03] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06]"
@@ -264,7 +264,7 @@ const SprintSelector: FunctionComponent<{
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-2 w-80 z-50 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden">
+        <div className="absolute left-0 top-full mt-2 w-80 z-50 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden">
           <button
             onClick={() => { onSelect(null); setOpen(false); }}
             className={`w-full flex items-center gap-3 px-5 py-3.5 text-left transition-colors duration-200 ${
@@ -331,7 +331,7 @@ const SprintProgressCard: FunctionComponent<{
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   return (
-    <div className="relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+    <div className="relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-xl p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
       <div aria-hidden className="absolute -right-4 -bottom-6 text-[6rem] font-black tracking-tighter text-black/[0.025] dark:text-white/[0.02] pointer-events-none select-none font-display leading-none">
         {pct}%
       </div>
@@ -546,7 +546,7 @@ export const TasksPage: FunctionComponent = () => {
               }
             }}
             disabled={!selectedProject || sprints.length === 0}
-            className="group flex items-center gap-2.5 px-6 py-3.5 bg-signal-500 hover:bg-signal-400 disabled:opacity-50 disabled:cursor-not-allowed text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.45)] hover:-translate-y-px shrink-0"
+            className="group flex items-center gap-2.5 px-6 py-3.5 bg-signal-500 hover:bg-signal-400 disabled:opacity-50 disabled:cursor-not-allowed text-void-900 font-bold text-sm rounded-xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.45)] hover:-translate-y-px shrink-0"
           >
             {(showComposer || editingTask) ? <X className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" strokeWidth={2.3} /> : <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" strokeWidth={2.3} />}
             {(showComposer || editingTask) ? "Close Composer" : "New Task"}
@@ -612,13 +612,13 @@ export const TasksPage: FunctionComponent = () => {
       )}
 
       {!selectedProject && (
-        <div className="px-6 py-8 rounded-[1.75rem] border border-black/[0.06] dark:border-white/[0.06] bg-white/55 dark:bg-void-800/55 text-slate-500 dark:text-slate-400 text-sm max-w-xl">
+        <div className="px-6 py-8 rounded-xl border border-black/[0.06] dark:border-white/[0.06] bg-white/55 dark:bg-void-800/55 text-slate-500 dark:text-slate-400 text-sm max-w-xl">
           Projects, sprints, and tasks are now linked in the database. Select a project first, then create a sprint before adding tasks.
         </div>
       )}
 
       {error && (
-        <div className="px-6 py-4 rounded-2xl border border-status-red/20 bg-status-red/[0.06] text-status-red text-sm">
+        <div className="px-6 py-4 rounded-xl border border-status-red/20 bg-status-red/[0.06] text-status-red text-sm">
           {error}
         </div>
       )}
@@ -648,7 +648,7 @@ export const TasksPage: FunctionComponent = () => {
         {columns.map(({ status, count, tasks: columnTasks }) => (
           <div key={status} className="flex flex-col">
             <ColumnHeader status={status} count={count} />
-            <div className="flex-1 flex flex-col gap-4 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border border-black/[0.03] dark:border-white/[0.03]">
+            <div className="flex-1 flex flex-col gap-4 p-4 rounded-xl min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border border-black/[0.03] dark:border-white/[0.03]">
               {loading ? (
                 <>
                   <SkeletonCard />

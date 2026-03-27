@@ -83,7 +83,7 @@ const ProjectCard: FunctionComponent<{
                        bg-white/70 dark:bg-void-800/60
                        backdrop-blur-2xl
                        border dark:border-white/[0.06]
-                       rounded-[1.75rem]
+                       rounded-xl
                        p-7
                        shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
                        overflow-hidden cursor-pointer"
@@ -112,7 +112,7 @@ const ProjectCard: FunctionComponent<{
             {/* ── Header ────────────────────────────────────────────── */}
             <div className="flex items-start justify-between mb-6 relative z-10">
                 <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-11 h-11 rounded-2xl bg-ember-500/[0.08] dark:bg-ember-500/[0.1] flex items-center justify-center group-hover:bg-ember-500/[0.18] transition-colors duration-300 shrink-0">
+                    <div className="w-11 h-11 rounded-xl bg-ember-500/[0.08] dark:bg-ember-500/[0.1] flex items-center justify-center group-hover:bg-ember-500/[0.18] transition-colors duration-300 shrink-0">
                         <FolderOpen className="w-5 h-5 text-ember-600 dark:text-ember-400" strokeWidth={1.75} />
                     </div>
                     <div className="min-w-0">
@@ -138,7 +138,7 @@ const ProjectCard: FunctionComponent<{
                 ] as const).map(({ label: l, value }) => (
                     <div
                         key={l}
-                        className="flex flex-col items-center py-3.5 rounded-[1rem]
+                        className="flex flex-col items-center py-3.5 rounded-xl
                                    bg-black/[0.03] dark:bg-white/[0.03]
                                    border border-black/[0.04] dark:border-white/[0.04]
                                    group-hover:border-ember-500/[0.08] transition-colors duration-300"
@@ -230,7 +230,7 @@ const AddCard: FunctionComponent<{ onClick: () => void }> = ({ onClick }) => (
         onClick={onClick}
         className="group relative flex flex-col items-center justify-center gap-5
                    border-2 border-dashed border-ember-500/20 hover:border-ember-500/50
-                   rounded-[1.75rem] min-h-[260px]
+                   rounded-xl min-h-[260px]
                    transition-colors duration-500
                    hover:bg-ember-500/[0.02] cursor-pointer"
     >
@@ -239,11 +239,11 @@ const AddCard: FunctionComponent<{ onClick: () => void }> = ({ onClick }) => (
             className="relative w-16 h-16 flex items-center justify-center
                        border-2 border-dashed border-ember-500/25
                        group-hover:border-ember-500 group-hover:bg-ember-500/[0.1]
-                       transition-all duration-400 animate-organic"
+                       transition-all duration-400 rounded-full"
         >
             <div
                 className="absolute inset-0 bg-ember-500/0 group-hover:bg-ember-500/[0.08]
-                           transition-colors duration-300 animate-organic-reverse"
+                           transition-colors duration-300 rounded-full"
             />
             <Plus
                 className="w-6 h-6 text-ember-500/40 group-hover:text-ember-500
@@ -398,7 +398,7 @@ export const ProjectsPage: FunctionComponent = () => {
                             onClick={() => setShowModal(true)}
                             className="group flex items-center gap-2.5 px-6 py-3.5
                                        bg-ember-500 hover:bg-ember-400
-                                       text-void-900 font-bold text-sm rounded-2xl
+                                       text-void-900 font-bold text-sm rounded-xl
                                        transition-colors duration-300
                                        shadow-[0_4px_20px_rgba(255,184,0,0.25)]
                                        hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)]

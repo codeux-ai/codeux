@@ -169,8 +169,8 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             {initialTask ? "EDIT" : "TASK"}
           </span>
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-44 h-44 bg-signal-500/[0.08] animate-organic" style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }} />
-            <div className="absolute w-28 h-28 bg-signal-500/[0.14] animate-organic-reverse" style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }} />
+            <div className="w-44 h-44 bg-signal-500/[0.08] rounded-full"  />
+            <div className="absolute w-28 h-28 bg-signal-500/[0.14] rounded-full"  />
           </div>
           <div className="relative z-10 flex items-center gap-2 text-signal-500 font-mono font-bold text-[10px] tracking-[0.2em] uppercase">
             <ListChecks className="w-3.5 h-3.5" strokeWidth={2.5} />

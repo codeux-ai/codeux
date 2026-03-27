@@ -328,12 +328,12 @@ export const SprintsPage: FunctionComponent = () => {
                     className="group relative flex h-72 w-72 shrink-0 cursor-pointer items-center justify-center perspective-1000 lg:h-80 lg:w-80"
                   >
                     <div
-                      className="absolute inset-0 animate-organic border-2 border-dashed border-signal-500/25 transition-all duration-500 group-hover:border-signal-500/60"
-                      style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }}
+                      className="absolute inset-0 rounded-full border-2 border-dashed border-signal-500/25 transition-all duration-500 group-hover:border-signal-500/60"
+
                     />
                     <div
-                      className="absolute inset-0 animate-organic-reverse bg-signal-500/0 transition-all duration-500 group-hover:bg-signal-500/[0.04]"
-                      style={{ borderRadius: "40% 60% 70% 30% / 40% 50% 60% 50%" }}
+                      className="absolute inset-0 rounded-full bg-signal-500/0 transition-all duration-500 group-hover:bg-signal-500/[0.04]"
+
                     />
                     <div className="relative z-10 flex flex-col items-center gap-4">
                       <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-dashed border-signal-500/30 transition-all duration-400 group-hover:border-signal-500 group-hover:bg-signal-500/10">
@@ -360,7 +360,7 @@ export const SprintsPage: FunctionComponent = () => {
                 }`}
               >
                 <div className="relative">
-                  <div className="pointer-events-none absolute inset-0 -z-10 rounded-[2.2rem] bg-[radial-gradient(circle_at_top,rgba(0,224,160,0.08),transparent_46%)] dark:bg-[radial-gradient(circle_at_top,rgba(0,224,160,0.12),transparent_46%)]" />
+                  <div className="pointer-events-none absolute inset-0 -z-10 rounded-xl bg-[radial-gradient(circle_at_top,rgba(0,224,160,0.08),transparent_46%)] dark:bg-[radial-gradient(circle_at_top,rgba(0,224,160,0.12),transparent_46%)]" />
                   <SprintComposer
                     nextId={nextId}
                     initialSprint={editingSprint}
@@ -408,7 +408,7 @@ export const SprintsPage: FunctionComponent = () => {
               </div>
             </div>
 
-            <div className="rounded-[2.2rem] border border-black/[0.06] bg-white/70 shadow-[0_12px_36px_rgba(15,23,42,0.05)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_14px_40px_rgba(0,0,0,0.22)]">
+            <div className="rounded-xl border border-black/[0.06] bg-white/70 shadow-[0_12px_36px_rgba(15,23,42,0.05)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/62 dark:shadow-[0_14px_40px_rgba(0,0,0,0.22)]">
               <SprintLedger
                 sprints={progressiveSprints}
                 isLoading={loading}
@@ -426,7 +426,7 @@ export const SprintsPage: FunctionComponent = () => {
             </div>
           </>
         ) : (
-          <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 px-6 py-8 text-sm text-slate-500 dark:border-white/[0.06] dark:bg-void-800/55 dark:text-slate-400">
+          <div className="rounded-xl border border-black/[0.06] bg-white/70 px-6 py-8 text-sm text-slate-500 dark:border-white/[0.06] dark:bg-void-800/55 dark:text-slate-400">
             Projects scope the sprint gallery. Select a project from the top navigation before creating or planning sprints.
           </div>
         )}
@@ -442,7 +442,7 @@ export const SprintsPage: FunctionComponent = () => {
           }}
           onClick={(event) => event.stopPropagation()}
         >
-          <div className="min-w-[11.5rem] rounded-[1.2rem] border border-black/[0.08] bg-white p-2 shadow-[0_18px_38px_rgba(15,23,42,0.18)] ring-1 ring-black/[0.03] dark:border-white/[0.08] dark:bg-void-800 dark:ring-white/[0.03]">
+          <div className="min-w-[11.5rem] rounded-xl border border-black/[0.08] bg-white p-2 shadow-[0_18px_38px_rgba(15,23,42,0.18)] ring-1 ring-black/[0.03] dark:border-white/[0.08] dark:bg-void-800 dark:ring-white/[0.03]">
             <button
               type="button"
               onClick={() => {
@@ -450,7 +450,7 @@ export const SprintsPage: FunctionComponent = () => {
                 setEditingSprint(activeRowMenuSprint);
                 setShowCreateComposer(false);
               }}
-              className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
             >
               <Pencil className="h-3.5 w-3.5" strokeWidth={2.1} />
               Edit
@@ -461,7 +461,7 @@ export const SprintsPage: FunctionComponent = () => {
                 setRowMenu(null);
                 void handleOpenExport(activeRowMenuSprint.id, activeRowMenuSprint.name);
               }}
-              className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
             >
               <Download className="h-3.5 w-3.5" strokeWidth={2.1} />
               Export
@@ -473,7 +473,7 @@ export const SprintsPage: FunctionComponent = () => {
                 void handleToggleShowcase(activeRowMenuSprint);
               }}
               disabled={pendingActionIds.has(`sprint-showcase:${activeRowMenuSprint.id}`)}
-              className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
             >
               <Heart className="h-3.5 w-3.5" fill={activeRowMenuSprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
               {activeRowMenuSprint.showcasePinned ? "Remove" : "Add"}
@@ -484,7 +484,7 @@ export const SprintsPage: FunctionComponent = () => {
                 setRowMenu(null);
                 setOverrideSprint(activeRowMenuSprint);
               }}
-              className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
             >
               <Sparkles className="h-3.5 w-3.5" strokeWidth={2.1} />
               Overrides
@@ -495,7 +495,7 @@ export const SprintsPage: FunctionComponent = () => {
                 setRowMenu(null);
                 void handleDeleteSprint(activeRowMenuSprint.id);
               }}
-              className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-status-red transition-colors hover:bg-status-red/10"
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-medium text-status-red transition-colors hover:bg-status-red/10"
             >
               <XCircle className="h-3.5 w-3.5" strokeWidth={2.1} />
               Delete
