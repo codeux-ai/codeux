@@ -58,9 +58,12 @@ interface SprintBubbleProps {
   onToggleShowcase?: () => void;
 }
 
-const formatSprintKey = (sprint: Sprint): string => (
-  sprint.number ? `SPR-${sprint.number}` : sprint.slug.toUpperCase()
-);
+const formatSprintKey = (sprint: Sprint): string => {
+  if (sprint.sprintKey) {
+    return sprint.sprintKey;
+  }
+  return sprint.number ? `SPR-${sprint.number}` : sprint.slug.toUpperCase();
+};
 
 const formatCardDate = (value: string): string => CARD_DATE_FORMATTER.format(new Date(value));
 

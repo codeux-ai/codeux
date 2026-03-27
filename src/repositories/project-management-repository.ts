@@ -49,6 +49,7 @@ interface SprintRow {
   project_id: string;
   number: number | string | null;
   slug: string;
+  sprint_key: string | null;
   name: string;
   original_prompt: string | null;
   goal: string | null;
@@ -846,6 +847,7 @@ export class ProjectManagementRepository {
       projectId: row.project_id,
       number: row.number === null ? null : toNumber(row.number),
       slug: row.slug,
+      sprintKey: row.sprint_key || null,
       name: row.name,
       originalPrompt: row.original_prompt || null,
       goal: row.goal || "",

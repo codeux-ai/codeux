@@ -35,6 +35,7 @@ export interface SprintRecord {
   projectId: string;
   number: number | null;
   slug: string;
+  sprintKey: string | null;
   name: string;
   originalPrompt: string | null;
   goal: string;

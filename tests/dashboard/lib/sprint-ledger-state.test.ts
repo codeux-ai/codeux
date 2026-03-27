@@ -22,6 +22,7 @@ function makeSprint(overrides: Partial<Sprint>): Sprint {
     projectId: "proj-1",
     number: 1,
     slug: "sprint-1",
+    sprintKey: null,
     name: "Sprint One",
     originalPrompt: null,
     goal: "Build the feature",
@@ -44,9 +45,13 @@ const sprints: Sprint[] = [
   makeSprint({ id: "b", number: 2, slug: "beta", name: "Beta Sprint", goal: "Dashboard UI", status: "idle", showcasePinned: false, tasksCount: 3, completion: 0, createdAt: "2024-01-02T00:00:00Z" }),
   makeSprint({ id: "c", number: 3, slug: "gamma", name: "Gamma Sprint", goal: "API endpoints", status: "completed", showcasePinned: true, tasksCount: 8, completion: 100, createdAt: "2024-01-03T00:00:00Z" }),
   makeSprint({ id: "d", number: null, slug: "hotfix", name: "Hotfix Deploy", goal: "Fix production bug", status: "failed", showcasePinned: false, tasksCount: 1, completion: 50, createdAt: "2024-01-04T00:00:00Z" }),
+  makeSprint({ id: "e", number: 4, slug: "delta", sprintKey: "CUST-123", name: "Custom Sprint", goal: "Custom Key", status: "idle", showcasePinned: false, tasksCount: 2, completion: 0, createdAt: "2024-01-05T00:00:00Z" }),
 ];
 
 describe("sprint-ledger-state", () => {
+  // Take only the first 4 for standard filtering/sorting tests that assume 4 items
+  const baseSprints = sprints.slice(0, 4);
+
   describe("formatSprintKey", () => {
     it("formats numbered sprints as SPR-N", () => {
       expect(formatSprintKey(sprints[0])).toBe("SPR-1");
@@ -55,6 +60,10 @@ describe("sprint-ledger-state", () => {
 
     it("formats slug-based sprints as uppercase slug", () => {
       expect(formatSprintKey(sprints[3])).toBe("HOTFIX");
+    });
+
+    it("returns explicit sprintKey if present, overriding number and slug", () => {
+      expect(formatSprintKey(sprints[4])).toBe("CUST-123");
     });
   });
 
@@ -75,102 +84,102 @@ describe("sprint-ledger-state", () => {
 
   describe("filterSprints", () => {
     it("returns all sprints for empty query", () => {
-      expect(filterSprints(sprints, "")).toHaveLength(4);
-      expect(filterSprints(sprints, "  ")).toHaveLength(4);
+      expect(filterSprints(baseSprints, "")).toHaveLength(4);
+      expect(filterSprints(baseSprints, "  ")).toHaveLength(4);
     });
 
     it("filters by sprint key (SPR-N)", () => {
-      const result = filterSprints(sprints, "SPR-1");
+      const result = filterSprints(baseSprints, "SPR-1");
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe("a");
     });
 
     it("filters by slug-based key", () => {
-      const result = filterSprints(sprints, "HOTFIX");
+      const result = filterSprints(baseSprints, "HOTFIX");
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe("d");
     });
 
     it("filters by name (case-insensitive)", () => {
-      const result = filterSprints(sprints, "alpha");
+      const result = filterSprints(baseSprints, "alpha");
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe("a");
     });
 
     it("filters by status label", () => {
-      const result = filterSprints(sprints, "Draft");
+      const result = filterSprints(baseSprints, "Draft");
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe("b");
     });
 
     it("filters by goal text", () => {
-      const result = filterSprints(sprints, "production bug");
+      const result = filterSprints(baseSprints, "production bug");
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe("d");
     });
 
     it("matches partial strings", () => {
-      const result = filterSprints(sprints, "sprint");
+      const result = filterSprints(baseSprints, "sprint");
       expect(result).toHaveLength(3); // Alpha Sprint, Beta Sprint, Gamma Sprint
     });
 
     it("is case-insensitive", () => {
-      expect(filterSprints(sprints, "RUNNING")).toHaveLength(1);
-      expect(filterSprints(sprints, "running")).toHaveLength(1);
+      expect(filterSprints(baseSprints, "RUNNING")).toHaveLength(1);
+      expect(filterSprints(baseSprints, "running")).toHaveLength(1);
     });
   });
 
   describe("sortSprints", () => {
     it("sorts by name ascending", () => {
-      const result = sortSprints(sprints, { key: "name", direction: "asc" });
+      const result = sortSprints(baseSprints, { key: "name", direction: "asc" });
       expect(result.map((s) => s.name)).toEqual([
         "Alpha Sprint", "Beta Sprint", "Gamma Sprint", "Hotfix Deploy",
       ]);
     });
 
     it("sorts by name descending", () => {
-      const result = sortSprints(sprints, { key: "name", direction: "desc" });
+      const result = sortSprints(baseSprints, { key: "name", direction: "desc" });
       expect(result.map((s) => s.name)).toEqual([
         "Hotfix Deploy", "Gamma Sprint", "Beta Sprint", "Alpha Sprint",
       ]);
     });
 
     it("sorts by status using STATUS_ORDER", () => {
-      const result = sortSprints(sprints, { key: "status", direction: "asc" });
+      const result = sortSprints(baseSprints, { key: "status", direction: "asc" });
       expect(result.map((s) => s.status)).toEqual(["running", "idle", "completed", "failed"]);
     });
 
     it("sorts by tasksCount ascending", () => {
-      const result = sortSprints(sprints, { key: "tasksCount", direction: "asc" });
+      const result = sortSprints(baseSprints, { key: "tasksCount", direction: "asc" });
       expect(result.map((s) => s.tasksCount)).toEqual([1, 3, 5, 8]);
     });
 
     it("sorts by completion descending", () => {
-      const result = sortSprints(sprints, { key: "completion", direction: "desc" });
+      const result = sortSprints(baseSprints, { key: "completion", direction: "desc" });
       expect(result.map((s) => s.completion)).toEqual([100, 50, 40, 0]);
     });
 
     it("sorts by createdAt descending", () => {
-      const result = sortSprints(sprints, { key: "createdAt", direction: "desc" });
+      const result = sortSprints(baseSprints, { key: "createdAt", direction: "desc" });
       expect(result[0].id).toBe("d");
       expect(result[3].id).toBe("a");
     });
 
     it("sorts by showcasePinned descending (pinned first)", () => {
-      const result = sortSprints(sprints, { key: "showcasePinned", direction: "desc" });
+      const result = sortSprints(baseSprints, { key: "showcasePinned", direction: "desc" });
       // Comparator: Number(right) - Number(left), desc reverses → pinned first
       expect(result[0].showcasePinned).toBe(false);
       expect(result[result.length - 1].showcasePinned).toBe(true);
     });
 
     it("sorts by showcasePinned ascending (pinned first in natural order)", () => {
-      const result = sortSprints(sprints, { key: "showcasePinned", direction: "asc" });
+      const result = sortSprints(baseSprints, { key: "showcasePinned", direction: "asc" });
       // Comparator: Number(right) - Number(left), natural order puts pinned first
       expect(result[0].showcasePinned).toBe(true);
     });
 
     it("sorts by sprintKey with numbered sprints ascending", () => {
-      const result = sortSprints(sprints, { key: "sprintKey", direction: "asc" });
+      const result = sortSprints(baseSprints, { key: "sprintKey", direction: "asc" });
       // When one sprint has null number, falls through to string compare
       // "HOTFIX" < "SPR-1" lexically, so HOTFIX comes first
       expect(result[0].id).toBe("d"); // HOTFIX
@@ -182,7 +191,7 @@ describe("sprint-ledger-state", () => {
 
   describe("getLedgerSprints", () => {
     it("filters then sorts", () => {
-      const result = getLedgerSprints(sprints, "sprint", { key: "name", direction: "asc" });
+      const result = getLedgerSprints(baseSprints, "sprint", { key: "name", direction: "asc" });
       expect(result).toHaveLength(3);
       expect(result[0].name).toBe("Alpha Sprint");
       expect(result[2].name).toBe("Gamma Sprint");
@@ -191,14 +200,14 @@ describe("sprint-ledger-state", () => {
 
   describe("sliceLedgerSprints", () => {
     it("slices the array up to the limit", () => {
-      const result = sliceLedgerSprints(sprints, 2);
+      const result = sliceLedgerSprints(baseSprints, 2);
       expect(result).toHaveLength(2);
       expect(result[0].id).toBe("a");
       expect(result[1].id).toBe("b");
     });
 
     it("returns all if limit exceeds length", () => {
-      const result = sliceLedgerSprints(sprints, 10);
+      const result = sliceLedgerSprints(baseSprints, 10);
       expect(result).toHaveLength(4);
     });
   });
@@ -244,14 +253,14 @@ describe("sprint-ledger-state", () => {
   describe("pruneSelection", () => {
     it("keeps only ids that exist in filtered set", () => {
       const selected = new Set(["a", "b", "c"]);
-      const filtered = [sprints[0], sprints[2]]; // a and c
+      const filtered = [baseSprints[0], baseSprints[2]]; // a and c
       const result = pruneSelection(selected, filtered);
       expect(result).toEqual(new Set(["a", "c"]));
     });
 
     it("returns empty if no overlap", () => {
       const selected = new Set(["x", "y"]);
-      const result = pruneSelection(selected, sprints);
+      const result = pruneSelection(selected, baseSprints);
       expect(result).toEqual(new Set());
     });
   });
@@ -259,14 +268,14 @@ describe("sprint-ledger-state", () => {
   describe("getSelectedFilteredSprints", () => {
     it("returns sprint objects that are both selected and filtered", () => {
       const selected = new Set(["a", "c", "x"]);
-      const filtered = [sprints[0], sprints[1], sprints[2]]; // a, b, c
+      const filtered = [baseSprints[0], baseSprints[1], baseSprints[2]]; // a, b, c
       const result = getSelectedFilteredSprints(selected, filtered);
       expect(result).toHaveLength(2);
       expect(result.map((s) => s.id)).toEqual(["a", "c"]);
     });
 
     it("returns empty if nothing selected", () => {
-      expect(getSelectedFilteredSprints(new Set(), sprints)).toEqual([]);
+      expect(getSelectedFilteredSprints(new Set(), baseSprints)).toEqual([]);
     });
   });
 

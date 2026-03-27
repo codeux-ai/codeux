@@ -28,9 +28,12 @@ const STATUS_ORDER: Record<SprintStatus, number> = {
 
 export { STATUS_LABELS, STATUS_ORDER };
 
-export const formatSprintKey = (sprint: Sprint): string => (
-  sprint.number ? `SPR-${sprint.number}` : sprint.slug.toUpperCase()
-);
+export const formatSprintKey = (sprint: Sprint): string => {
+  if (sprint.sprintKey) {
+    return sprint.sprintKey;
+  }
+  return sprint.number ? `SPR-${sprint.number}` : sprint.slug.toUpperCase();
+};
 
 const compareString = (left: string, right: string): number => (
   left.localeCompare(right, undefined, { sensitivity: "base" })
