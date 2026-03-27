@@ -211,15 +211,7 @@ export class SprintOrchestrator {
     sprintDescription?: string;
     ciIntelligence: CiIntelligenceSettings;
     githubMode: "REMOTE" | "LOCAL";
-    subtasks?: Array<{
-    id: string;
-    title: string;
-    status?: string;
-    provider?: string;
-    pr_url?: string;
-    is_merged?: boolean;
-    merge_indicator?: string;
-  }>;
+    subtasks?: Subtask[];
 }): Promise<MergeFeedbackResult> {
     if (!this.deps.getCiStatusForScope) {
       return {
@@ -263,7 +255,7 @@ export class SprintOrchestrator {
         featureBranch: args.featureBranch,
         defaultBranch: args.defaultBranch,
         title: resolveMainBranchPrTitle(args),
-        body: resolveMainBranchPrBody(args),
+        body: resolveMainBranchPrBody({ ...args, subtasks: args.subtasks }),
       });
       if (pr?.prUrl || pr?.prNumber) {
         createdPrNote = `\n🤖 **Main PR ${pr.created ? "Created" : "Resolved"}:** ${formatMainPrReference(pr, args.featureBranch, args.defaultBranch)}\n`;
@@ -588,15 +580,7 @@ export function resolveMainBranchPrBody(args: {
   sprintNumber?: number;
   sprintName?: string;
   sprintDescription?: string;
-  subtasks?: Array<{
-    id: string;
-    title: string;
-    status?: string;
-    provider?: string;
-    pr_url?: string;
-    is_merged?: boolean;
-    merge_indicator?: string;
-  }>;
+  subtasks?: Subtask[];
 }): string {
   const scopeLine = typeof args.sprintNumber === "number" && Number.isFinite(args.sprintNumber)
     ? `Sprint: ${args.sprintNumber}`
