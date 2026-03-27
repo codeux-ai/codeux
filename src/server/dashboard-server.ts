@@ -37,6 +37,10 @@ import type {
   UpdateAgentPresetInput,
 } from "../contracts/agent-preset-types.js";
 import type {
+  ExecutionInvocationRecord,
+  ExecutionInvocationMessageRecord,
+} from "../contracts/invocation-types.js";
+import type {
   ConversationMessageRecord,
   ConversationThreadRecord,
   CreateConversationThreadInput,
@@ -143,6 +147,10 @@ export interface DashboardServerOptions {
   deleteConversationThread: (threadId: string) => void;
   listConversationMessages: (threadId: string) => ConversationMessageRecord[];
   postConversationMessage: (projectId: string, input: CreateDashboardConversationMessageInput) => ConversationMessageRecord;
+
+  listProjectInvocations: (projectId: string) => ExecutionInvocationRecord[];
+  listInvocationMessages: (invocationId: string) => ExecutionInvocationMessageRecord[];
+
   rerunTask: (taskId: string, options?: { provider?: string; clearWorktree?: boolean }) => Promise<unknown>;
   orchestrateSprint: (projectId: string, sprintId: string) => Promise<unknown>;
 
@@ -701,6 +709,22 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       res.json(options.updateConnection(String(req.params.connectionId || "").trim(), req.body as UpdateMcpConnectionInput));
     } catch (error) {
       res.status(400).json({ error: toErrorMessage(error, "Failed to update connection") });
+    }
+  });
+
+  app.get("/api/projects/:projectId/execution/invocations", (req, res) => {
+    try {
+      res.json(options.listProjectInvocations(String(req.params.projectId || "").trim()));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to list project invocations") });
+    }
+  });
+
+  app.get("/api/execution/invocations/:invocationId/messages", (req, res) => {
+    try {
+      res.json(options.listInvocationMessages(String(req.params.invocationId || "").trim()));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to list invocation messages") });
     }
   });
 

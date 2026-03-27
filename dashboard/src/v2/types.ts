@@ -4,6 +4,10 @@ import type {
   UpdateAgentPresetInput,
 } from "../../../src/contracts/agent-preset-types.js";
 import type {
+  ExecutionInvocationRecord,
+  ExecutionInvocationMessageRecord,
+} from "../../../src/contracts/invocation-types.js";
+import type {
   ConnectionInboxMessage,
   ConversationMessageRecord,
   ConversationThreadRecord,
@@ -97,6 +101,8 @@ export interface Task {
 }
 
 export type {
+  ExecutionInvocationRecord,
+  ExecutionInvocationMessageRecord,
   AgentPresetRecord,
   CreateProjectInput,
   CreateAgentPresetInput,

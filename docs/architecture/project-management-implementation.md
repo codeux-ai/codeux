@@ -91,6 +91,8 @@ The dashboard now has project-scoped CRUD endpoints:
 - `POST /api/projects/:projectId/conversations/threads`
 - `GET /api/conversations/threads/:threadId/messages`
 - `POST /api/projects/:projectId/conversations/messages`
+- `GET /api/projects/:projectId/execution/invocations`
+- `GET /api/execution/invocations/:invocationId/messages`
 
 Legacy runtime endpoints still exist for the old live runtime/status surfaces:
 - `GET /api/status`

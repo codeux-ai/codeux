@@ -149,6 +149,8 @@ describe("dashboard-lifecycle-service", () => {
           recentEvents: [],
           updatedAt: "2026-03-09T00:00:00.000Z",
         }),
+        listExecutionInvocations: vi.fn().mockReturnValue([{ id: "inv-1" }]),
+        listExecutionInvocationMessages: vi.fn().mockReturnValue([{ id: "msg-1" }]),
       } as any,
       activityCacheService: {
         invalidateGitStatusCache: vi.fn(),
@@ -347,6 +349,19 @@ describe("dashboard-lifecycle-service", () => {
 
       expect(setupArgs.isReady).toBe(mockDeps.isReady);
       expect(setupArgs.isHealthy).toBe(mockDeps.isHealthy);
+    });
+
+    it("handles invocation API callbacks correctly", async () => {
+      await bootDashboard(mockDeps);
+      const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+
+      const invocations = setupArgs.listProjectInvocations!("project-1");
+      expect(mockDeps.executionRepository.listExecutionInvocations).toHaveBeenCalledWith({ projectId: "project-1" });
+      expect(invocations).toEqual([{ id: "inv-1" }]);
+
+      const messages = setupArgs.listInvocationMessages!("inv-1");
+      expect(mockDeps.executionRepository.listExecutionInvocationMessages).toHaveBeenCalledWith("inv-1");
+      expect(messages).toEqual([{ id: "msg-1" }]);
     });
   });
 });
