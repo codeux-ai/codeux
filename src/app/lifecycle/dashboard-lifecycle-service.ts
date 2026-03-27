@@ -7,6 +7,7 @@ import type { Logger } from "../../shared/logging/logger.js";
 import type { RuntimeContext } from "../runtime-context.js";
 import type {
   ExecutionAttentionItemSummary,
+  DockerContainer,
   ExecutionConnectionSummary,
   ExecutionAssignedWorkerSummary,
   ExternalSettingsHints,
@@ -70,6 +71,7 @@ export interface BootDashboardDeps {
   getGitStatus: () => Promise<GitTrackingStatus>;
   isReady: () => ReadinessProbeStatus;
   isHealthy: () => ReadinessProbeStatus;
+  listDockerContainers: () => Promise<DockerContainer[]>;
   syncGitSettingsFromDashboard: () => void;
   refreshJulesApiKey: () => void;
   setLogger: (logger: Logger) => void;
@@ -578,6 +580,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     logger: deps.logger.child({ component: "dashboard-server" }),
     isReady: deps.isReady,
     isHealthy: deps.isHealthy,
+    listDockerContainers: deps.listDockerContainers,
   });
 
   deps.runtimeContext.dashboardRuntimePort = handle.port;

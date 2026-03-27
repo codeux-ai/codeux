@@ -91,6 +91,9 @@ export class DockerRunner implements IDockerRunner {
 
     const dockerArgs = [
       "run", "--rm", "-i", "--network", "host", "--workdir", cwd,
+      "--label", `sprint-os.session-id=${sessionId}`,
+      "--label", `sprint-os.command=${command}`,
+      "--label", `sprint-os.args=${args.join(" ")}`,
       "--mount", toDockerMountArg({ source: repoSource, destination: repoPath, readonly: repoMountReadonly }),
       "--mount", toDockerMountArg({ source: runtimeSource, destination: runtimeRoot, readonly: false }),
       "-e", `HOME=${runtimeHome}`

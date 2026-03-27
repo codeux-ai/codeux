@@ -8,6 +8,7 @@ import { AddProjectModal } from "./ui/AddProjectModal.js";
 import { useProjectData } from "../context/project-data.js";
 import { useExecutions } from "../../hooks/useExecutions.js";
 import { useSprints } from "../../hooks/useSprints.js";
+import { DockerStatusMenu } from "./DockerStatusMenu.js";
 import { dashboardSettingsToProjectSettings } from "../lib/settings-view-models.js";
 import {
     getProjectWorkerOptions,
@@ -485,6 +486,9 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 )}
 
                 <div className="w-px h-5 bg-black/10 dark:bg-white/10 hidden md:block" />
+
+                {/* Docker Status */}
+                <DockerStatusMenu />
 
                 {/* Notifications */}
                 <button
