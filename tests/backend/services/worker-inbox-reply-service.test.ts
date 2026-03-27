@@ -1,13 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkerInboxReplyService } from "../../../src/services/worker-inbox-reply-service.js";
 
-vi.mock("../../../src/services/cli-process-runner.js", () => ({
-  runCommandStrict: vi.fn(),
-}));
-
-import { runCommandStrict } from "../../../src/services/cli-process-runner.js";
 
 describe("WorkerInboxReplyService", () => {
+  const mockRunProviderForText = vi.fn();
   const settings = {
     aiProvider: {
       invocationRouting: {},
@@ -29,15 +25,11 @@ describe("WorkerInboxReplyService", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRunProviderForText.mockReset();
   });
 
   it("generates a markdown reply with worker agent context", async () => {
-    vi.mocked(runCommandStrict).mockResolvedValue({
-      ok: true,
-      code: 0,
-      stdout: "Current status: one task is running.",
-      stderr: "",
-    });
+    mockRunProviderForText.mockResolvedValue({ text: "Current status: one task is running." });
 
     const service = new WorkerInboxReplyService({
       projectManagementRepository: {
@@ -65,6 +57,7 @@ describe("WorkerInboxReplyService", () => {
       } as any,
       getDashboardSettings: () => settings,
       getGithubToken: () => "gh-token",
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
     });
 
     const result = await service.generateReply({
@@ -85,25 +78,19 @@ describe("WorkerInboxReplyService", () => {
       contentMarkdown: "Current status: one task is running.",
     });
     expect(result.provider).toBe("gemini");
-    expect(runCommandStrict).toHaveBeenCalledWith(
-      "gemini",
-      expect.arrayContaining(["--yolo", "--p", expect.stringContaining("What is the current worker status?")]),
-      "/repo",
+    expect(mockRunProviderForText).toHaveBeenCalledWith(
       expect.objectContaining({
-        GEMINI_API_KEY: "g-key",
-        GEMINI_MODEL: "gemini-2.5-pro",
-        GITHUB_TOKEN: "gh-token",
-      }),
+        provider: "gemini",
+        cwd: "/repo",
+        apiKey: "g-key",
+        model: "gemini-2.5-pro",
+        githubToken: "gh-token",
+      })
     );
   });
 
   it("includes the editable worker agent instructions in the reply prompt", async () => {
-    vi.mocked(runCommandStrict).mockResolvedValue({
-      ok: true,
-      code: 0,
-      stdout: "Use the worker queue view in Live.",
-      stderr: "",
-    });
+    mockRunProviderForText.mockResolvedValue({ text: "Use the worker queue view in Live." });
 
     const service = new WorkerInboxReplyService({
       projectManagementRepository: {
@@ -131,6 +118,7 @@ describe("WorkerInboxReplyService", () => {
       } as any,
       getDashboardSettings: () => settings,
       getGithubToken: () => undefined,
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
     });
 
     const result = await service.generateReply({
@@ -143,16 +131,11 @@ describe("WorkerInboxReplyService", () => {
   });
 
   it("unwraps provider response envelopes for dashboard replies", async () => {
-    vi.mocked(runCommandStrict).mockResolvedValue({
-      ok: true,
-      code: 0,
-      stdout: JSON.stringify({
+    mockRunProviderForText.mockResolvedValue({ text: JSON.stringify({
         session_id: "b0536833-b397-4d12-b39d-b8818bcf5e12",
         response: "Only the markdown reply body.",
         stats: { models: {} },
-      }),
-      stderr: "",
-    });
+      }) });
 
     const service = new WorkerInboxReplyService({
       projectManagementRepository: {
@@ -180,6 +163,7 @@ describe("WorkerInboxReplyService", () => {
       } as any,
       getDashboardSettings: () => settings,
       getGithubToken: () => undefined,
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
     });
 
     const result = await service.generateReply({
@@ -192,16 +176,11 @@ describe("WorkerInboxReplyService", () => {
   });
 
   it("builds clarification replies from the editable project manager agent and the latest Jules request", async () => {
-    vi.mocked(runCommandStrict).mockResolvedValue({
-      ok: true,
-      code: 0,
-      stdout: JSON.stringify({
+    mockRunProviderForText.mockResolvedValue({ text: JSON.stringify({
         session_id: "b0536833-b397-4d12-b39d-b8818bcf5e12",
         response: "Only the clarification answer.",
         stats: { models: {} },
-      }),
-      stderr: "",
-    });
+      }) });
 
     const service = new WorkerInboxReplyService({
       projectManagementRepository: {
@@ -226,6 +205,7 @@ describe("WorkerInboxReplyService", () => {
       } as any,
       getDashboardSettings: () => settings,
       getGithubToken: () => undefined,
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
     });
 
     const result = await service.generateClarificationReply({
@@ -307,12 +287,7 @@ describe("WorkerInboxReplyService", () => {
   });
 
   it("falls back to the latest activity summary when Jules did not emit an explicit clarification message", async () => {
-    vi.mocked(runCommandStrict).mockResolvedValue({
-      ok: true,
-      code: 0,
-      stdout: "Use the persisted session semantics.",
-      stderr: "",
-    });
+    mockRunProviderForText.mockResolvedValue({ text: "Use the persisted session semantics." });
 
     const appendMessage = vi.fn();
     const service = new WorkerInboxReplyService({
@@ -338,6 +313,7 @@ describe("WorkerInboxReplyService", () => {
       } as any,
       getDashboardSettings: () => settings,
       getGithubToken: () => undefined,
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
     });
 
     await service.generateClarificationReply({

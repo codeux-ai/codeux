@@ -37,7 +37,12 @@ import { createLogger, type Logger } from "../../shared/logging/logger.js";
 import { ServerContext } from "../dependency-factory.js";
 import { getRepoDebugLogPath, SPRINT_OS_SERVICE_NAME } from "../../shared/config/sprint-os-paths.js";
 
+import { ProviderRunner } from "../../infrastructure/providers/cli/provider-runner.js";
+import { DockerRunner } from "../../infrastructure/providers/cli/docker-runner.js";
+import type { IProviderRunner } from "../../infrastructure/providers/cli/provider-runner.js";
+
 export interface CoreDependencies {
+  providerRunner: IProviderRunner;
   logger: Logger;
   server: Server;
   julesApi: JulesApiClient;
@@ -170,6 +175,7 @@ export function createCoreDependencies(
     dockerRuntimePruneService,
     logger.child({ component: "runtime-cleanup-service" }),
   );
+  const providerRunner = new ProviderRunner(new DockerRunner());
   const julesSourceResolver = new JulesSourceResolver(julesApi);
   const activitySummary = new ActivitySummaryService();
   const memoryRepository = new MemoryRepository(appDbStorage);
@@ -196,6 +202,7 @@ export function createCoreDependencies(
   });
 
   return {
+    providerRunner,
     logger,
     server,
     julesApi,

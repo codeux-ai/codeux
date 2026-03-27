@@ -79,6 +79,7 @@ export function createSprintDependencies(
     getDashboardSettings: resolveDashboardSettings,
     agentPresetSyncService,
     getGithubToken: () => context.getEffectiveGithubToken(),
+
     logger: logger.child({ component: "cli-workflow-service" }),
   });
 
@@ -153,6 +154,7 @@ export function createSprintDependencies(
     executionRepository,
     getDashboardSettings: resolveDashboardSettings,
     getGithubToken: () => context.getEffectiveGithubToken(),
+    providerRunner: coreDeps.providerRunner,
     logger: logger.child({ component: "worker-inbox-reply-service" }),
   });
 
