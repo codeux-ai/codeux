@@ -4,8 +4,8 @@ import { randomUUID } from "crypto";
 import type { DashboardSettings, ProviderId, Subtask } from "../contracts/app-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
-import { providerSpecs } from "../infrastructure/providers/cli/provider-runner.js";
-import { runCommandStrict } from "./cli-process-runner.js";
+import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
+
 import { getRepoSprintOsPath } from "../shared/config/sprint-os-paths.js";
 import type { TaskService } from "./task-service.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
@@ -32,6 +32,7 @@ interface WorkerInboxReplyServiceDependencies {
   executionRepository: ExecutionRepository;
   getDashboardSettings: () => DashboardSettings;
   getGithubToken: () => string | undefined;
+  providerRunner: IProviderRunner;
   logger?: Logger;
 }
 
@@ -315,14 +316,21 @@ export class WorkerInboxReplyService {
     apiKey: string;
     githubToken?: string;
   }): Promise<string> {
-    const env = this.withProviderEnv(input.provider, input.model, input.apiKey, input.githubToken);
-    if (input.provider === "codex") {
-      return await this.runCodexReply(input.repoPath, input.model, input.prompt, env);
-    }
+    const workflowSettings = this.deps.getDashboardSettings().cliWorkflow;
 
-    const spec = providerSpecs[input.provider](input.model, input.prompt);
-    const result = await runCommandStrict(spec.command, spec.args, input.repoPath, env);
-    return result.stdout || result.stderr;
+    const result = await this.deps.providerRunner.runProviderForText({
+      provider: input.provider,
+      prompt: input.prompt,
+      cwd: input.repoPath,
+      model: input.model,
+      apiKey: input.apiKey,
+      sessionId: "worker-reply-" + randomUUID(),
+      workflowSettings,
+      repoPath: input.repoPath,
+      githubToken: input.githubToken,
+      onActivity: () => {},
+    });
+    return result.text;
   }
 
   private normalizeProviderReply(output: string): string {
@@ -343,63 +351,4 @@ export class WorkerInboxReplyService {
     return trimmed;
   }
 
-  private async runCodexReply(
-    repoPath: string,
-    model: string,
-    prompt: string,
-    env: NodeJS.ProcessEnv,
-  ): Promise<string> {
-    const outputDir = getRepoSprintOsPath(repoPath, "tmp");
-    await fs.mkdir(outputDir, { recursive: true });
-    const outputPath = path.join(outputDir, `worker-reply-${randomUUID()}.txt`);
-
-    const args = ["exec", "--yolo", "--output-last-message", outputPath];
-    if (model && model !== "default") {
-      args.push("--model", model);
-    }
-    args.push(prompt);
-
-    try {
-      const result = await runCommandStrict("codex", args, repoPath, env);
-      const fileOutput = await fs.readFile(outputPath, "utf8").catch(() => "");
-      return fileOutput.trim() || result.stdout || result.stderr;
-    } finally {
-      await fs.rm(outputPath, { force: true }).catch(() => undefined);
-    }
   }
-
-  private withProviderEnv(
-    provider: ProviderId,
-    model: string,
-    apiKey: string,
-    githubToken?: string,
-  ): NodeJS.ProcessEnv {
-    const env: NodeJS.ProcessEnv = { ...process.env };
-    if (githubToken) {
-      env.GH_TOKEN = githubToken;
-      env.GITHUB_TOKEN = githubToken;
-    }
-
-    if (provider === "gemini") {
-      if (model && model !== "default") {
-        env.GEMINI_MODEL = model;
-      }
-      if (apiKey) {
-        env.GEMINI_API_KEY = apiKey;
-      }
-    } else if (provider === "claude-code") {
-      if (apiKey) {
-        env.ANTHROPIC_API_KEY = apiKey;
-      }
-    } else if (provider === "codex") {
-      if (model && model !== "default") {
-        env.CODEX_MODEL = model;
-      }
-      if (apiKey) {
-        env.OPENAI_API_KEY = apiKey;
-      }
-    }
-
-    return env;
-  }
-}

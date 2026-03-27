@@ -133,6 +133,7 @@ export class JulesAgentServer {
   private executionControlService: ExecutionControlService;
   private planningAgentService: PlanningAgentService;
   private quicksprintService: import("../services/quicksprint-service.js").QuicksprintService;
+  private chatThreadRuntimeService: import("../services/chat-thread-runtime-service.js").ChatThreadRuntimeService;
   private runtimeCleanupService: RuntimeCleanupService;
   private dashboardRealtimeService: DashboardRealtimeService;
   private memoryService: import("../services/memory-service.js").MemoryService;
@@ -181,6 +182,7 @@ export class JulesAgentServer {
     this.executionControlService = deps.executionControlService;
     this.planningAgentService = deps.planningAgentService;
     this.quicksprintService = deps.quicksprintService;
+    this.chatThreadRuntimeService = deps.chatThreadRuntimeService;
     this.runtimeCleanupService = deps.runtimeCleanupService;
     this.dashboardRealtimeService = deps.dashboardRealtimeService;
     this.memoryService = deps.memoryService;
@@ -796,6 +798,7 @@ export class JulesAgentServer {
         executionControlService: this.executionControlService,
         planningAgentService: this.planningAgentService,
         quicksprintService: this.quicksprintService,
+        chatThreadRuntimeService: this.chatThreadRuntimeService,
         dashboardRealtimeService: this.dashboardRealtimeService,
         logger: this.logger,
         getLiveActivitiesForActiveTasks: () => this.getLiveActivitiesForActiveTasks(),

@@ -146,7 +146,7 @@ export interface DashboardServerOptions {
   updateConversationThread: (threadId: string, input: UpdateConversationThreadInput) => ConversationThreadRecord;
   deleteConversationThread: (threadId: string) => void;
   listConversationMessages: (threadId: string) => ConversationMessageRecord[];
-  postConversationMessage: (projectId: string, input: CreateDashboardConversationMessageInput) => ConversationMessageRecord;
+  postConversationMessage: (projectId: string, input: CreateDashboardConversationMessageInput) => Promise<ConversationMessageRecord> | ConversationMessageRecord;
 
   listProjectInvocations: (projectId: string) => ExecutionInvocationRecord[];
   listInvocationMessages: (invocationId: string) => ExecutionInvocationMessageRecord[];
