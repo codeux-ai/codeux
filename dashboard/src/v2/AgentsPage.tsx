@@ -17,11 +17,11 @@ import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
 
 const EmptyState: FunctionComponent<{ hasProject: boolean; onCreate?: () => void }> = ({ hasProject, onCreate }) => (
-  <div className="relative overflow-hidden rounded-[2rem] border border-dashed border-signal-500/25 bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:bg-void-800/60 dark:border-signal-500/20 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+  <div className="relative overflow-hidden rounded-xl border border-dashed border-signal-500/25 bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:bg-void-800/60 dark:border-signal-500/20 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
     <WaveFluid accentHex="#00E0A0" />
     <BorderTrace accentHex="#00E0A0" />
     <div className="relative z-10 flex flex-col items-center gap-4">
-      <div className="flex h-14 w-14 items-center justify-center rounded-[1.25rem] bg-signal-500/10 text-signal-500">
+      <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-signal-500/10 text-signal-500">
         <Bot className="h-6 w-6" strokeWidth={1.6} />
       </div>
       <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
@@ -115,7 +115,7 @@ const AgentPresetCard: FunctionComponent<{
   return (
     <div
       ref={cardRef}
-      className="group relative overflow-hidden rounded-[1.85rem] border border-black/[0.06] bg-white/70 p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
+      className="group relative overflow-hidden rounded-xl border border-black/[0.06] bg-white/70 p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
     >
       <WaveFluid accentHex="#00E0A0" />
       <BorderTrace accentHex="#00E0A0" />
@@ -123,7 +123,7 @@ const AgentPresetCard: FunctionComponent<{
       <div className="relative z-10 flex flex-col gap-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-[1rem] bg-signal-500/10 text-signal-500">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-signal-500/10 text-signal-500">
               <Brain className="h-5 w-5" strokeWidth={1.6} />
             </div>
             <div>
@@ -169,7 +169,7 @@ const AgentPresetCard: FunctionComponent<{
           <input
             value={name}
             onInput={(event) => setName((event.target as HTMLInputElement).value)}
-            className="w-full rounded-[1.2rem] border border-black/[0.08] bg-black/[0.03] px-4 py-3 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200"
+            className="w-full rounded-xl border border-black/[0.08] bg-black/[0.03] px-4 py-3 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200"
             placeholder="Planning agent"
           />
         </label>
@@ -182,7 +182,7 @@ const AgentPresetCard: FunctionComponent<{
           <input
             value={labels}
             onInput={(event) => setLabels((event.target as HTMLInputElement).value)}
-            className="w-full rounded-[1.2rem] border border-black/[0.08] bg-black/[0.03] px-4 py-3 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200"
+            className="w-full rounded-xl border border-black/[0.08] bg-black/[0.03] px-4 py-3 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200"
             placeholder="planning, review, worker"
           />
         </label>
@@ -193,13 +193,13 @@ const AgentPresetCard: FunctionComponent<{
             value={instructionMarkdown}
             onInput={(event) => setInstructionMarkdown((event.target as HTMLTextAreaElement).value)}
             rows={9}
-            className="min-h-[220px] w-full rounded-[1.2rem] border border-black/[0.08] bg-black/[0.03] px-4 py-3 text-sm leading-relaxed text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200"
+            className="min-h-[220px] w-full rounded-xl border border-black/[0.08] bg-black/[0.03] px-4 py-3 text-sm leading-relaxed text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200"
             placeholder="Describe how this preset should plan, communicate, or execute work."
           />
         </label>
 
         {preset.sourcePath && (
-          <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
+          <div className="rounded-xl border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
             <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Markdown Source</div>
             <div className="mt-2 break-all font-mono text-[11px]">{preset.sourcePath}</div>
           </div>
@@ -422,13 +422,13 @@ export const AgentsPage: FunctionComponent = () => {
       </div>
 
       {error && (
-        <div className="rounded-[1.5rem] border border-status-red/20 bg-status-red/10 px-5 py-4 text-sm text-status-red">
+        <div className="rounded-xl border border-status-red/20 bg-status-red/10 px-5 py-4 text-sm text-status-red">
           {error}
         </div>
       )}
 
       {selectedProject && (
-        <div className="rounded-[1.5rem] border border-black/[0.06] bg-white/60 px-5 py-4 text-sm leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
+        <div className="rounded-xl border border-black/[0.06] bg-white/60 px-5 py-4 text-sm leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
           {projectFileSavingEnabled
             ? "Project markdown mirroring is enabled. Saving an agent from the dashboard writes its markdown companion under `.sprint-os/agents` for this project."
             : "Project markdown mirroring is disabled for this project. Dashboard edits stay in the database, but local `.sprint-os/agents` markdown is still discovered and can be imported."}

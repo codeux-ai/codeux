@@ -117,7 +117,7 @@ const ProviderLogo: FunctionComponent<{
 
   return (
     <div
-      className={`flex h-11 w-11 items-center justify-center rounded-lg border border-black/[0.08] bg-[#F9F8F4] font-display text-sm font-black tracking-[0.16em] text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] dark:border-white/[0.08] dark:bg-void-900 dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${disabled ? "opacity-60" : ""}`}
+      className={`flex h-11 w-11 items-center justify-center rounded-xl border border-black/[0.08] bg-[#F9F8F4] font-display text-sm font-black tracking-[0.16em] text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] dark:border-white/[0.08] dark:bg-void-900 dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${disabled ? "opacity-60" : ""}`}
       aria-hidden
     >
       {token.logoLabel}
@@ -235,7 +235,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                 onClick={() => update({
                   automationInterventions: { ...settings.automationInterventions, autoAnswerClarificationMode: "TEMPLATE" },
                 })}
-                className={`px-3 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all duration-200 ${
+                className={`px-3 py-1.5 text-xs font-semibold tracking-wide rounded-xl transition-all duration-200 ${
                   settings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE"
                     ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
                     : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
@@ -247,7 +247,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                 onClick={() => update({
                   automationInterventions: { ...settings.automationInterventions, autoAnswerClarificationMode: "WORKER" },
                 })}
-                className={`px-3 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all duration-200 ${
+                className={`px-3 py-1.5 text-xs font-semibold tracking-wide rounded-xl transition-all duration-200 ${
                   settings.automationInterventions.autoAnswerClarificationMode === "WORKER"
                     ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
                     : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"

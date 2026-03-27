@@ -164,9 +164,9 @@ const toAgentConnection = (connection: ExecutionConnectionSummary): AgentConnect
 });
 
 const EmptyChat: FunctionComponent<{ message: string }> = ({ message }) => (
-  <div className="flex h-full min-h-[360px] items-center justify-center rounded-[1.9rem] border border-dashed border-signal-500/20 bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-signal-500/20 dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+  <div className="flex h-full min-h-[360px] items-center justify-center rounded-xl border border-dashed border-signal-500/20 bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-signal-500/20 dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
     <div className="space-y-3">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[1.2rem] bg-signal-500/10 text-signal-500">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-signal-500/10 text-signal-500">
         <MessageCircle className="h-6 w-6" strokeWidth={1.6} />
       </div>
       <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">No Chat Thread Yet</h3>
@@ -176,7 +176,7 @@ const EmptyChat: FunctionComponent<{ message: string }> = ({ message }) => (
 );
 
 const LoadingChat: FunctionComponent<{ label: string }> = ({ label }) => (
-  <div className="flex h-full min-h-[360px] items-center justify-center rounded-[1.9rem] border border-dashed border-black/[0.06] bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+  <div className="flex h-full min-h-[360px] items-center justify-center rounded-xl border border-dashed border-black/[0.06] bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
     <div className="space-y-4">
       <div className="mx-auto flex items-center justify-center gap-1.5">
         <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-signal-500" />
@@ -200,11 +200,11 @@ const ThreadList: FunctionComponent<{
 }> = ({ threads, selectedThreadId, onSelect, onDelete, deletingThreadId }) => (
   <div className="space-y-3">
     {threads.map((thread) => (
-      <div key={thread.id} className="group relative overflow-hidden rounded-[1.25rem]">
+      <div key={thread.id} className="group relative overflow-hidden rounded-xl">
         <button
           type="button"
           onClick={() => onSelect(thread.id)}
-          className={`w-full rounded-[1.25rem] border px-4 py-3 pr-16 text-left transition-colors duration-150 ${
+          className={`w-full rounded-xl border px-4 py-3 pr-16 text-left transition-colors duration-150 ${
             selectedThreadId === thread.id
               ? "border-signal-500/30 bg-signal-500/10"
               : "border-black/[0.05] bg-black/[0.03] hover:border-slate-300 hover:bg-black/[0.05] dark:border-white/[0.05] dark:bg-white/[0.03] dark:hover:border-white/[0.12] dark:hover:bg-white/[0.05]"
@@ -249,11 +249,11 @@ const InvocationList: FunctionComponent<{
 }> = ({ invocations, selectedInvocationId, onSelect }) => (
   <div className="space-y-3">
     {invocations.map((invocation) => (
-      <div key={invocation.id} className="relative overflow-hidden rounded-[1.25rem]">
+      <div key={invocation.id} className="relative overflow-hidden rounded-xl">
         <button
           type="button"
           onClick={() => onSelect(invocation.id)}
-          className={`w-full rounded-[1.25rem] border px-4 py-3 text-left transition-colors duration-150 ${
+          className={`w-full rounded-xl border px-4 py-3 text-left transition-colors duration-150 ${
             selectedInvocationId === invocation.id
               ? "border-signal-500/30 bg-signal-500/10"
               : "border-black/[0.05] bg-black/[0.03] hover:border-slate-300 hover:bg-black/[0.05] dark:border-white/[0.05] dark:bg-white/[0.03] dark:hover:border-white/[0.12] dark:hover:bg-white/[0.05]"
@@ -264,7 +264,7 @@ const InvocationList: FunctionComponent<{
               <div className="flex items-center gap-2">
                 <div className="truncate font-display text-lg font-black tracking-tight text-slate-900 dark:text-white capitalize">{invocation.type}</div>
                 {(invocation.sprintId || invocation.taskId) && (
-                  <div className="rounded border border-black/[0.06] bg-black/[0.03] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
+                  <div className="rounded-xl border border-black/[0.06] bg-black/[0.03] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
                     {invocation.taskId ? "Task" : "Sprint"}
                   </div>
                 )}
@@ -295,7 +295,7 @@ const InvocationMessageBubble: FunctionComponent<{ message: ExecutionInvocationM
   return (
     <div className={`flex ${fromUser || fromTool ? "justify-end" : "justify-start"}`}>
       <div className={`flex max-w-[760px] items-start gap-3 ${fromUser || fromTool ? "flex-row-reverse" : "flex-row"}`}>
-        <div className={`mt-1 flex h-9 w-9 items-center justify-center rounded-[0.9rem] ${
+        <div className={`mt-1 flex h-9 w-9 items-center justify-center rounded-xl ${
           fromUser || fromTool
             ? "border border-black/[0.06] bg-white text-slate-500 dark:border-white/[0.06] dark:bg-void-700 dark:text-slate-300"
             : "border border-signal-500/20 bg-signal-500/10 text-signal-500"
@@ -303,17 +303,17 @@ const InvocationMessageBubble: FunctionComponent<{ message: ExecutionInvocationM
           {fromUser || fromTool ? <UserCircle2 className="h-4 w-4" strokeWidth={1.6} /> : <Sparkles className="h-4 w-4" strokeWidth={1.6} />}
         </div>
         <div className="space-y-2">
-          <div className={`rounded-[1.5rem] px-5 py-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${
+          <div className={`rounded-xl px-5 py-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${
             fromUser || fromTool
-              ? "rounded-tr-sm border border-signal-500/20 bg-signal-500/10 text-slate-900 dark:text-white"
-              : "rounded-tl-sm border border-black/[0.06] bg-white/75 text-slate-700 dark:border-white/[0.06] dark:bg-void-800/70 dark:text-slate-200"
+              ? "rounded-sm border border-signal-500/20 bg-signal-500/10 text-slate-900 dark:text-white"
+              : "rounded-sm border border-black/[0.06] bg-white/75 text-slate-700 dark:border-white/[0.06] dark:bg-void-800/70 dark:text-slate-200"
           }`}>
             <div
               className="prose prose-sm max-w-none text-[14px] leading-7 text-inherit prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(message.contentMarkdown || "*(No message content)*") }}
             />
             {message.toolCallsJson && (
-              <div className="mt-4 rounded border border-black/[0.06] bg-black/[0.03] p-3 text-xs dark:border-white/[0.06] dark:bg-white/[0.03]">
+              <div className="mt-4 rounded-xl border border-black/[0.06] bg-black/[0.03] p-3 text-xs dark:border-white/[0.06] dark:bg-white/[0.03]">
                 <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-slate-600 dark:text-slate-400">
                   {JSON.stringify(message.toolCallsJson, null, 2)}
                 </pre>
@@ -335,7 +335,7 @@ const MessageBubble: FunctionComponent<{ message: ChatMessageRecord }> = ({ mess
   return (
     <div className={`flex ${fromDashboard ? "justify-end" : "justify-start"}`}>
       <div className={`flex max-w-[760px] items-start gap-3 ${fromDashboard ? "flex-row-reverse" : "flex-row"}`}>
-        <div className={`mt-1 flex h-9 w-9 items-center justify-center rounded-[0.9rem] ${
+        <div className={`mt-1 flex h-9 w-9 items-center justify-center rounded-xl ${
           fromDashboard
             ? "border border-black/[0.06] bg-white text-slate-500 dark:border-white/[0.06] dark:bg-void-700 dark:text-slate-300"
             : "border border-signal-500/20 bg-signal-500/10 text-signal-500"
@@ -343,10 +343,10 @@ const MessageBubble: FunctionComponent<{ message: ChatMessageRecord }> = ({ mess
           {fromDashboard ? <UserCircle2 className="h-4 w-4" strokeWidth={1.6} /> : <Sparkles className="h-4 w-4" strokeWidth={1.6} />}
         </div>
         <div className="space-y-2">
-          <div className={`rounded-[1.5rem] px-5 py-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${
+          <div className={`rounded-xl px-5 py-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${
             fromDashboard
-              ? "rounded-tr-sm border border-signal-500/20 bg-signal-500/10 text-slate-900 dark:text-white"
-              : "rounded-tl-sm border border-black/[0.06] bg-white/75 text-slate-700 dark:border-white/[0.06] dark:bg-void-800/70 dark:text-slate-200"
+              ? "rounded-sm border border-signal-500/20 bg-signal-500/10 text-slate-900 dark:text-white"
+              : "rounded-sm border border-black/[0.06] bg-white/75 text-slate-700 dark:border-white/[0.06] dark:bg-void-800/70 dark:text-slate-200"
           }`}>
             <div
               className="prose prose-sm max-w-none text-[14px] leading-7 text-inherit prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit"
@@ -366,11 +366,11 @@ const MessageBubble: FunctionComponent<{ message: ChatMessageRecord }> = ({ mess
 const WorkingBubble: FunctionComponent<{ displayName: string | null }> = ({ displayName }) => (
   <div className="flex justify-start">
     <div className="flex max-w-[760px] items-start gap-3">
-      <div className="mt-1 flex h-9 w-9 items-center justify-center rounded-[0.9rem] border border-signal-500/20 bg-signal-500/10 text-signal-500">
+      <div className="mt-1 flex h-9 w-9 items-center justify-center rounded-xl border border-signal-500/20 bg-signal-500/10 text-signal-500">
         <Sparkles className="h-4 w-4" strokeWidth={1.6} />
       </div>
       <div className="space-y-2">
-        <div className="rounded-[1.5rem] rounded-tl-sm border border-black/[0.06] bg-white/75 px-5 py-4 text-slate-700 shadow-[0_2px_16px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/70 dark:text-slate-200">
+        <div className="rounded-sm border border-black/[0.06] bg-white/75 px-5 py-4 text-slate-700 shadow-[0_2px_16px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/70 dark:text-slate-200">
           <div className="flex items-center gap-2">
             <span className="text-[13px] font-medium text-slate-500 dark:text-slate-400">
               {displayName || "Listener"} is preparing a reply
@@ -1130,7 +1130,7 @@ export const ChatPage: FunctionComponent = () => {
       </div>
 
       {error && (
-        <div className="rounded-[1.4rem] border border-status-red/20 bg-status-red/10 px-5 py-4 text-sm text-status-red">
+        <div className="rounded-xl border border-status-red/20 bg-status-red/10 px-5 py-4 text-sm text-status-red">
           {error}
         </div>
       )}
@@ -1139,7 +1139,7 @@ export const ChatPage: FunctionComponent = () => {
         <EmptyChat message="Choose a project from the top navigation to load its stored chat threads and messages." />
       ) : (
         <div className="grid min-h-[720px] grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <aside className="rounded-[1.9rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+          <aside className="rounded-xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
             {chatMode === "threads" ? (
               <>
                 <div className="mb-5 flex items-center justify-between">
@@ -1199,7 +1199,7 @@ export const ChatPage: FunctionComponent = () => {
             )}
           </aside>
 
-          <section className="flex min-h-[720px] flex-col rounded-[1.9rem] border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+          <section className="flex min-h-[720px] flex-col rounded-xl border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
             {chatMode === "threads" ? (
               <>
                 <div className="border-b border-black/[0.05] px-6 py-5 dark:border-white/[0.05]">
@@ -1250,7 +1250,7 @@ export const ChatPage: FunctionComponent = () => {
                 </div>
 
                 <div className="border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
-                  <div className="rounded-[1.5rem] border border-black/[0.06] bg-black/[0.03] p-3 focus-within:border-signal-500/30 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                  <div className="rounded-xl border border-black/[0.06] bg-black/[0.03] p-3 focus-within:border-signal-500/30 dark:border-white/[0.06] dark:bg-white/[0.03]">
                     <textarea
                       ref={composerRef}
                       value={input}
@@ -1283,7 +1283,7 @@ export const ChatPage: FunctionComponent = () => {
                         type="button"
                         onClick={() => void handleSend()}
                         disabled={!selectedProject || !input.trim() || sending}
-                        className="inline-flex h-11 w-11 items-center justify-center rounded-[1rem] bg-signal-500 text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-black/[0.06] disabled:text-slate-400 disabled:shadow-none dark:disabled:bg-white/[0.06]"
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-signal-500 text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-black/[0.06] disabled:text-slate-400 disabled:shadow-none dark:disabled:bg-white/[0.06]"
                       >
                         {sending ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.2} /> : <ArrowUp className="h-4 w-4" strokeWidth={2.5} />}
                       </button>
@@ -1324,7 +1324,7 @@ export const ChatPage: FunctionComponent = () => {
                 </div>
 
                 <div className="border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
-                  <div className="rounded-[1.5rem] border border-black/[0.06] bg-black/[0.03] p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                  <div className="rounded-xl border border-black/[0.06] bg-black/[0.03] p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
                     <div className="min-h-[38px] w-full px-2 py-2 text-[15px] leading-relaxed text-slate-400 dark:text-slate-600">
                       Invocation execution logs are read-only. Switch to Threads to communicate.
                     </div>
