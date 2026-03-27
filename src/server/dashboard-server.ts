@@ -6,6 +6,7 @@ import { createServer } from "http";
 import type {
   ExecutionAttentionItemSummary,
   ExecutionAssignedWorkerSummary,
+  DockerContainer,
   ExecutionDashboardSnapshot,
   ExternalSettingsHints,
     GitTrackingStatus,
@@ -168,6 +169,7 @@ export interface DashboardServerOptions {
   logger?: Logger;
   isReady?: () => ReadinessProbeStatus;
   isHealthy?: () => ReadinessProbeStatus;
+  listDockerContainers: () => Promise<DockerContainer[]>;
 }
 
 export interface DashboardServerHandle {
@@ -239,6 +241,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     retryTaskDispatch,
     logger,
     isReady,
+    listDockerContainers,
   } = options;
 
   const dashboardLogger = logger ?? createLogger({ bindings: { component: "dashboard-server" } });
@@ -283,6 +286,15 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
 
   app.get("/api/execution", (req, res) => {
     res.json(options.getExecutionSnapshot());
+  });
+
+  app.get("/api/docker/containers", async (req, res) => {
+    try {
+      const containers = await listDockerContainers();
+      res.json(containers);
+    } catch (error) {
+      res.json([]);
+    }
   });
 
   // Combined endpoint — single HTTP call for live page initial load

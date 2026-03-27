@@ -35,6 +35,7 @@ import { CoreToolHandler } from "../mcp/core-tool-handler.js";
 import { AgentToolHandler } from "../mcp/agent-tool-handler.js";
 import { buildMissingJulesApiKeyMessage } from "../mcp/api-key-guidance.js";
 import { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
+import { DockerService } from "../services/docker-service.js";
 import { CliWorkflowService } from "../services/cli-workflow-service.js";
 import { ActivityCacheService } from "./activity-cache-service.js";
 import { registerMcpRequestHandlers } from "./mcp-request-router.js";
@@ -118,6 +119,7 @@ export class JulesAgentServer {
   private projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   private projectAttentionRepository: ProjectAttentionRepository;
   private agentPresetRepository: AgentPresetRepository;
+  private dockerService: DockerService;
   private agentPresetSyncService: AgentPresetSyncService;
   private executionRepository: ExecutionRepository;
   private sprintMarkdownService: SprintMarkdownService;
@@ -147,6 +149,7 @@ export class JulesAgentServer {
   constructor(options: JulesAgentServerOptions) {
     this.projectRoot = options.projectRoot;
     this.appConfig = options.appConfig;
+    this.dockerService = new DockerService();
 
     const deps = createRuntimeDependencies(options, this.createContext());
 
@@ -802,6 +805,7 @@ export class JulesAgentServer {
         getGitStatus: () => this.getGitStatus(),
         isReady: () => this.isReady(),
         isHealthy: () => this.isHealthy(),
+        listDockerContainers: () => this.dockerService.listContainers(),
         syncGitSettingsFromDashboard: () => syncGitSettingsFromDashboard(this.runtimeContext),
         refreshJulesApiKey: () => this.refreshJulesApiKey(),
         setLogger: (logger) => { this.logger = logger; },
