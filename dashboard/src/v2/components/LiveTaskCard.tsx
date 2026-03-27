@@ -210,7 +210,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                 className="absolute -right-3 -top-6 font-black font-display
                            text-[7rem] leading-none tracking-tighter
                            text-black/[0.02] dark:text-white/[0.015]
-                           pointer-events-none select-none"
+                           pointer-events-none select-none truncate max-w-full"
             >
                 #{task.id}
             </div>

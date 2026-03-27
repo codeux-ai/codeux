@@ -403,13 +403,13 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                       </button>
                     </td>
                     <td className="px-4 py-3 min-w-[8rem] align-top">
-                      <div className="font-mono text-sm font-bold text-slate-700 dark:text-white">{formatSprintKey(sprint)}</div>
-                      <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                      <div className="font-mono text-sm font-bold text-slate-700 dark:text-white truncate">{formatSprintKey(sprint)}</div>
+                      <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 truncate">
                         {shortenId(sprint.id)}
                       </div>
                     </td>
-                    <td className="px-4 py-3 min-w-[22rem] align-top">
-                      <div className={`font-display text-lg font-black tracking-tight ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-slate-900 dark:text-white"}`}>{sprint.name}</div>
+                    <td className="px-4 py-3 min-w-0 max-w-full align-top">
+                      <div className={`font-display text-lg font-black tracking-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-slate-900 dark:text-white"}`}>{sprint.name}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
                         <span>Updated {formatMetaDate(sprint.updatedAt)}</span>
                         <span>·</span>
