@@ -215,6 +215,9 @@ Legacy runtime:
 - Markdown-backed agents now show sync state and support both manual single-agent re-import and bulk `Sync All`
 - The first built-in role is `Planning agent`, which is editable under Agents like any other DB-backed agent
 - Chat page is DB-backed and stores project conversation threads/messages in sqlite
+- Chat page now provides a `Threads / Invocations` toggle to switch between human conversation threads and read-only execution invocations.
+- Chat page filters the "Threads" mode to show user-facing conversation threads (`scope === "project"`).
+- Chat page "Invocations" mode provides a read-only list with metadata for active/completed execution invocations without cluttering the main thread rail.
 - Chat page now receives websocket updates for thread assignment changes and incoming thread messages in the active thread
 - Chat page now shows a live "working" bubble once a listener has picked up a dashboard message and is preparing a reply
 - Chat threads can now be deleted directly from the history rail; deletion is realtime-aware and removes the thread across open dashboard views

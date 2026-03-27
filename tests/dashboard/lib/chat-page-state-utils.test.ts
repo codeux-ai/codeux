@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import type { ChatThread } from "../../../dashboard/src/v2/types.js";
+import type { ChatThread, ExecutionInvocationRecord } from "../../../dashboard/src/v2/types.js";
 import {
-  isThreadListLoading,
-  isThreadMessagesLoading,
-  resolveSelectedThreadId,
+  isDetailLoading,
+  isListLoading,
+  resolveSelectedItemId,
 } from "../../../dashboard/src/v2/lib/chat-page-state-utils.js";
 
 const createThread = (id: string): ChatThread => ({
@@ -21,27 +21,58 @@ const createThread = (id: string): ChatThread => ({
   lastMessagePreview: null,
 });
 
+const createInvocation = (id: string): ExecutionInvocationRecord => ({
+  id,
+  projectId: "project-1",
+  sprintId: null,
+  taskId: null,
+  sprintRunId: null,
+  dispatchId: null,
+  taskRunId: null,
+  attentionItemId: null,
+  providerInvocationId: null,
+  type: "planning",
+  status: "completed",
+  provider: "mock",
+  model: "mock",
+  systemPrompt: null,
+  startedAt: "2026-03-10T12:00:00.000Z",
+  finishedAt: "2026-03-10T12:05:00.000Z",
+  errorMessage: null,
+  messageCount: 0,
+  lastMessageAt: null,
+  createdAt: "2026-03-10T12:00:00.000Z",
+  updatedAt: "2026-03-10T12:00:00.000Z",
+});
+
 describe("chat-page-state-utils", () => {
-  it("preserves the selected thread when it still exists", () => {
+  it("preserves the selected item when it still exists", () => {
     const threads = [createThread("thread-1"), createThread("thread-2")];
-    expect(resolveSelectedThreadId(threads, "thread-2")).toBe("thread-2");
+    expect(resolveSelectedItemId(threads, "thread-2")).toBe("thread-2");
+
+    const invocations = [createInvocation("inv-1"), createInvocation("inv-2")];
+    expect(resolveSelectedItemId(invocations, "inv-2")).toBe("inv-2");
   });
 
-  it("falls back to the first thread when the current selection is missing", () => {
+  it("falls back to the first item when the current selection is missing", () => {
     const threads = [createThread("thread-1"), createThread("thread-2")];
-    expect(resolveSelectedThreadId(threads, "thread-missing")).toBe("thread-1");
-    expect(resolveSelectedThreadId([], "thread-missing")).toBeNull();
+    expect(resolveSelectedItemId(threads, "thread-missing")).toBe("thread-1");
+    expect(resolveSelectedItemId([], "thread-missing")).toBeNull();
+
+    const invocations = [createInvocation("inv-1"), createInvocation("inv-2")];
+    expect(resolveSelectedItemId(invocations, "inv-missing")).toBe("inv-1");
+    expect(resolveSelectedItemId([], "inv-missing")).toBeNull();
   });
 
-  it("treats thread list as loading until the selected project snapshot is loaded", () => {
-    expect(isThreadListLoading("project-1", false, false)).toBe(false);
-    expect(isThreadListLoading("project-1", false, true)).toBe(true);
-    expect(isThreadListLoading("project-1", true, true)).toBe(false);
+  it("treats list as loading until the selected project snapshot is loaded", () => {
+    expect(isListLoading("project-1", false, false)).toBe(false);
+    expect(isListLoading("project-1", false, true)).toBe(true);
+    expect(isListLoading("project-1", true, true)).toBe(false);
   });
 
-  it("treats messages as loading until the selected thread snapshot is loaded", () => {
-    expect(isThreadMessagesLoading("thread-1", false, false)).toBe(false);
-    expect(isThreadMessagesLoading("thread-1", false, true)).toBe(true);
-    expect(isThreadMessagesLoading("thread-1", true, true)).toBe(false);
+  it("treats detail as loading until the selected item snapshot is loaded", () => {
+    expect(isDetailLoading("thread-1", false, false)).toBe(false);
+    expect(isDetailLoading("thread-1", false, true)).toBe(true);
+    expect(isDetailLoading("thread-1", true, true)).toBe(false);
   });
 });

@@ -1,24 +1,22 @@
-import type { ChatThread } from "../types.js";
-
-export const resolveSelectedThreadId = (
-  threads: ChatThread[],
-  currentSelectedThreadId: string | null,
+export const resolveSelectedItemId = <T extends { id: string }>(
+  items: T[],
+  currentSelectedId: string | null,
 ): string | null => {
-  if (currentSelectedThreadId && threads.some((thread) => thread.id === currentSelectedThreadId)) {
-    return currentSelectedThreadId;
+  if (currentSelectedId && items.some((item) => item.id === currentSelectedId)) {
+    return currentSelectedId;
   }
 
-  return threads[0]?.id || null;
+  return items[0]?.id || null;
 };
 
-export const isThreadListLoading = (
+export const isListLoading = (
   selectedProjectId: string | null,
   hasProjectSnapshot: boolean,
   loading: boolean,
 ): boolean => Boolean(selectedProjectId) && loading && !hasProjectSnapshot;
 
-export const isThreadMessagesLoading = (
-  selectedThreadId: string | null,
-  hasThreadSnapshot: boolean,
+export const isDetailLoading = (
+  selectedItemId: string | null,
+  hasItemSnapshot: boolean,
   loading: boolean,
-): boolean => Boolean(selectedThreadId) && loading && !hasThreadSnapshot;
+): boolean => Boolean(selectedItemId) && loading && !hasItemSnapshot;
