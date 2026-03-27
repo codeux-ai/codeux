@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "preact/hooks";
 import { computeStats, processDashboardTasks } from "../lib/status.js";
-import { fetchExecutionSnapshot, fetchGitTrackingStatus, fetchLivePayload, fetchRuntimeStatus, fetchLiveActivities } from "../lib/api/dashboard-api.js";
+import { fetchGitTrackingStatus, fetchLivePayload } from "../lib/api/dashboard-api.js";
 import type {
   DashboardStatus,
   ExecutionDashboardSnapshot,
   GitTrackingStatus,
   DashboardRealtimeServerMessage,
-  LiveActivitiesResponse,
 } from "../types.js";
 import { useDashboardPollManager } from "./use-dashboard-poll-manager.js";
 import { subscribeToDashboardRealtime } from "../lib/realtime/dashboard-realtime-client.js";
@@ -39,24 +38,20 @@ const EMPTY_EXECUTION: ExecutionDashboardSnapshot = {
 interface RuntimeState {
   status: DashboardStatus;
   execution: ExecutionDashboardSnapshot;
-  liveActivities: LiveActivitiesResponse | null;
   error: string | null;
   initialLoadComplete: boolean;
 }
 
 type RuntimeAction =
-  | { type: "SET_LIVE_PAYLOAD"; status: DashboardStatus; execution: ExecutionDashboardSnapshot; liveActivities?: LiveActivitiesResponse | null }
+  | { type: "SET_LIVE_PAYLOAD"; status: DashboardStatus; execution: ExecutionDashboardSnapshot }
   | { type: "SET_STATUS"; status: DashboardStatus }
   | { type: "SET_EXECUTION"; execution: ExecutionDashboardSnapshot }
-  | { type: "SET_POLL_RESULT"; status?: DashboardStatus; execution?: ExecutionDashboardSnapshot; liveActivities?: LiveActivitiesResponse | null }
-  | { type: "SET_LIVE_ACTIVITIES"; liveActivities: LiveActivitiesResponse }
   | { type: "SET_ERROR"; error: string }
   | { type: "CLEAR_ERROR" };
 
 const initialState: RuntimeState = {
   status: EMPTY_STATUS,
   execution: EMPTY_EXECUTION,
-  liveActivities: null,
   error: null,
   initialLoadComplete: false,
 };
@@ -100,27 +95,10 @@ function runtimeReducer(state: RuntimeState, action: RuntimeAction): RuntimeStat
       const nextExecution = areExecutionSnapshotsEquivalent(state.execution, executionCandidate) ? state.execution : executionCandidate;
       const statusCandidate = stabilizeStatusSnapshot(state.status, action.status, nextExecution);
       const nextStatus = areStatusSnapshotsEquivalent(state.status, statusCandidate) ? state.status : statusCandidate;
-      const nextActivities = action.liveActivities !== undefined ? (action.liveActivities ?? state.liveActivities) : state.liveActivities;
-      if (nextStatus === state.status && nextExecution === state.execution && nextActivities === state.liveActivities && state.error === null && state.initialLoadComplete) {
+      if (nextStatus === state.status && nextExecution === state.execution && state.error === null && state.initialLoadComplete) {
         return state;
       }
-      return { ...state, status: nextStatus, execution: nextExecution, liveActivities: nextActivities, error: null, initialLoadComplete: true };
-    }
-
-    case "SET_POLL_RESULT": {
-      const executionCandidate = action.execution
-        ? stabilizeExecutionSnapshot(state.execution, action.execution)
-        : state.execution;
-      const nextExecution = areExecutionSnapshotsEquivalent(state.execution, executionCandidate) ? state.execution : executionCandidate;
-      const statusCandidate = action.status
-        ? stabilizeStatusSnapshot(state.status, action.status, nextExecution)
-        : state.status;
-      const nextStatus = areStatusSnapshotsEquivalent(state.status, statusCandidate) ? state.status : statusCandidate;
-      const nextActivities = action.liveActivities !== undefined ? (action.liveActivities ?? state.liveActivities) : state.liveActivities;
-      if (nextStatus === state.status && nextExecution === state.execution && nextActivities === state.liveActivities && state.error === null && state.initialLoadComplete) {
-        return state;
-      }
-      return { ...state, status: nextStatus, execution: nextExecution, liveActivities: nextActivities, error: null, initialLoadComplete: true };
+      return { ...state, status: nextStatus, execution: nextExecution, error: null, initialLoadComplete: true };
     }
 
     case "SET_STATUS": {
@@ -135,10 +113,6 @@ function runtimeReducer(state: RuntimeState, action: RuntimeAction): RuntimeStat
       const nextExecution = areExecutionSnapshotsEquivalent(state.execution, executionCandidate) ? state.execution : executionCandidate;
       if (nextExecution === state.execution && state.error === null) return state;
       return { ...state, execution: nextExecution, error: null };
-    }
-
-    case "SET_LIVE_ACTIVITIES": {
-      return { ...state, liveActivities: action.liveActivities };
     }
 
     case "SET_ERROR":
@@ -180,49 +154,17 @@ export const useDashboardRuntimeData = (projectIdHint: string | null = null): Us
   );
 
   const gitRefreshTimerRef = useRef<number | null>(null);
-  const initialFetchDoneRef = useRef(false);
   const lastRealtimeEventAtRef = useRef<number>(0);
 
   const refreshRuntimeStatusAction = useCallback(async (): Promise<void> => {
-    // First call uses combined /api/live endpoint (single HTTP roundtrip)
-    if (!initialFetchDoneRef.current) {
-      initialFetchDoneRef.current = true;
-      try {
-        const [data, activitiesData] = await Promise.all([
-          fetchLivePayload(),
-          fetchLiveActivities().catch(() => null)
-        ]);
-        // Single atomic dispatch — status + execution + activities updated together
-        dispatch({ type: "SET_LIVE_PAYLOAD", status: data.status, execution: data.execution, liveActivities: activitiesData });
-        return;
-      } catch {
-        // Fall through to parallel fetch below
-      }
-    }
-
-    const [statusResult, executionResult, activitiesResult] = await Promise.allSettled([
-      fetchRuntimeStatus(),
-      fetchExecutionSnapshot(),
-      fetchLiveActivities()
-    ]);
-
-    const hasStatus = statusResult.status === "fulfilled";
-    const hasExecution = executionResult.status === "fulfilled";
-    const hasActivities = activitiesResult.status === "fulfilled";
-
-    if (hasStatus || hasExecution) {
-      // Single atomic dispatch — all available results applied together
-      dispatch({
-        type: "SET_POLL_RESULT",
-        status: hasStatus ? statusResult.value : undefined,
-        execution: hasExecution ? executionResult.value : undefined,
-        liveActivities: hasActivities ? activitiesResult.value : undefined,
-      });
+    try {
+      const data = await fetchLivePayload();
+      dispatch({ type: "SET_LIVE_PAYLOAD", status: data.status, execution: data.execution });
       return;
+    } catch (error) {
+      dispatch({ type: "SET_ERROR", error: "Unable to connect to Orchestrator API" });
+      throw error;
     }
-
-    dispatch({ type: "SET_ERROR", error: "Unable to connect to Orchestrator API" });
-    throw (statusResult.reason || executionResult.reason || new Error("Unable to connect to Orchestrator API"));
   }, []);
 
   const refreshGitStatusAction = useCallback(async (): Promise<void> => {
@@ -311,12 +253,12 @@ export const useDashboardRuntimeData = (projectIdHint: string | null = null): Us
   }, [projectIdHint, realtimeProjectId, refreshRuntimeStatusAction, scheduleGitStatusRefresh]);
 
   const { tasksWithLiveActivities, stats } = useMemo(() => {
-    const result = processDashboardTasks(state.status.subtasks || [], state.liveActivities?.activitiesBySession);
+    const result = processDashboardTasks(state.status.subtasks || []);
     return {
       tasksWithLiveActivities: result.tasks,
       stats: result.stats,
     };
-  }, [state.status.subtasks, state.liveActivities]);
+  }, [state.status.subtasks]);
 
   return {
     error: state.error,

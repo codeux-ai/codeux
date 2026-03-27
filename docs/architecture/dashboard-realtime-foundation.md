@@ -102,7 +102,7 @@ Behavior:
 - sprint and task pages now react to project-structure invalidation events
 - sprint and task hooks now treat realtime invalidation as silent background refresh, which avoids foreground loading flicker while the browser is already showing current data
 - execution snapshot consumers now diff snapshots semantically instead of treating every fetch-time `updatedAt` stamp as a meaningful change
-- the v2 Live page now derives DAG/task structure from the project task resource layer and overlays runtime state from `/api/status`, so transient runtime snapshot gaps do not collapse the live task graph or remount the page shell
+- the v2 Live page now restores from one combined `/api/live` snapshot, with task activities projected directly into `/api/status` from sqlite and runtime feeds rendered from durable execution events instead of a separate `/api/live-activities` merge
 - polling remains as recovery fallback, now on a slower `30s` default cadence for websocket-backed dashboard surfaces
 
 ## Current Backend Integration Points

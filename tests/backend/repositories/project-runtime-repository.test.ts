@@ -3,6 +3,7 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
+import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { ProjectRuntimeRepository } from "../../../src/repositories/project-runtime-repository.js";
 
@@ -10,6 +11,7 @@ const tempDirs: string[] = [];
 
 async function createRepositories(): Promise<{
   storage: AppDbStorage;
+  executionRepository: ExecutionRepository;
   projectRepository: ProjectManagementRepository;
   runtimeRepository: ProjectRuntimeRepository;
   realtimeNotifier: {
@@ -24,6 +26,7 @@ async function createRepositories(): Promise<{
   };
   return {
     storage,
+    executionRepository: new ExecutionRepository(storage),
     projectRepository: new ProjectManagementRepository(storage),
     runtimeRepository: new ProjectRuntimeRepository(storage, realtimeNotifier as any),
     realtimeNotifier,
@@ -278,5 +281,98 @@ describe("ProjectRuntimeRepository", () => {
     expect(status2.subtasks).toHaveLength(1);
     expect(status2.subtasks[0].id).toBe("S2T1");
     expect(status2.subtasks[0].status).toBe("PENDING");
+  });
+
+  it("projects recent provider activity into task activities without a secondary fetch path", async () => {
+    const { executionRepository, projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Activity Projection",
+      sourceType: "local",
+      sourceRef: "/workspace/activity-projection",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 9",
+      number: 9,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "A01",
+      title: "Hydrate runtime feed",
+      promptMarkdown: "Show the latest provider messages.",
+      status: "in_progress",
+    });
+
+    projectRepository.setSelectedProjectId(project.id);
+
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "running",
+    });
+    const run = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "jules",
+      sessionId: "session-activity-1",
+      sessionName: "sessions/session-activity-1",
+      state: "RUNNING",
+      startedAt: "2026-03-27T10:00:00.000Z",
+    });
+
+    executionRepository.appendTaskRunEvent(run.id, "provider_activity", "agent", {
+      activityId: "activity-1",
+      activityName: "sessions/session-activity-1/activities/activity-1",
+      preview: "Need the repo root clarified.",
+      description: "Need the repo root clarified.",
+      agentMessaged: {
+        agentMessage: "Need the repo root clarified.",
+      },
+    }, {
+      createdAt: "2026-03-27T10:05:00.000Z",
+      sourceEventKey: "activity:activity-1",
+    });
+    executionRepository.appendTaskRunEvent(run.id, "provider_activity", "user", {
+      activityId: "activity-2",
+      activityName: "sessions/session-activity-1/activities/activity-2",
+      preview: "Repo root is /workspace/activity-projection.",
+      userMessaged: {
+        userMessage: "Repo root is /workspace/activity-projection.",
+      },
+    }, {
+      createdAt: "2026-03-27T10:06:00.000Z",
+      sourceEventKey: "activity:activity-2",
+    });
+
+    const status = runtimeRepository.getSelectedProjectStatus();
+
+    expect(status.subtasks).toHaveLength(1);
+    expect(status.subtasks[0]?.activities).toEqual([
+      expect.objectContaining({
+        id: "activity-1",
+        originator: "agent",
+        agentMessaged: {
+          agentMessage: "Need the repo root clarified.",
+        },
+      }),
+      expect.objectContaining({
+        id: "activity-2",
+        originator: "user",
+        userMessaged: {
+          userMessage: "Repo root is /workspace/activity-projection.",
+        },
+      }),
+    ]);
   });
 });

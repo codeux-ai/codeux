@@ -20,6 +20,7 @@ import { renderMarkdown } from "../lib/markdown.js";
 import type { Subtask, ExecutionDashboardSnapshot, ExecutionRuntimeEventSummary } from "../types.js";
 import { deriveLiveSessionRuntimeState, resolveLiveSessionSprintScopeId } from "./lib/live-session-runtime.js";
 import { getTaskProgressPhase } from "../lib/task-progress.js";
+import { computeStats } from "../lib/status.js";
 
 import { IntelPanel } from "./components/ui/IntelPanel.js";
 import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
@@ -745,7 +746,7 @@ export const LiveSessionPage: FunctionComponent = () => {
     const headerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     const { projects, selectedProjectId } = useProjectData();
-    const { error, execution, gitStatus, gitStatusError, initialLoadComplete: legacyInitialLoadComplete, refreshRuntimeStatus, refreshGitStatus, status, stats, tasksWithLiveActivities } = useDashboardRuntimeData(selectedProjectId);
+    const { error, execution, gitStatus, gitStatusError, initialLoadComplete: legacyInitialLoadComplete, refreshRuntimeStatus, refreshGitStatus, status, tasksWithLiveActivities } = useDashboardRuntimeData(selectedProjectId);
     const realtimeProjectId = selectedProjectId || execution.projectId || status.project_id || null;
     const { data: sprints, selectedSprintId, loading: sprintsLoading } = useSprints(realtimeProjectId);
     const sprintScopeId = useMemo(
@@ -859,25 +860,8 @@ export const LiveSessionPage: FunctionComponent = () => {
 
     const visibleStats = useMemo(() => {
         if (!hasSprintContext) return EMPTY_RUNTIME_STATS;
-
-        let running = 0;
-        let completed = 0;
-        let failed = 0;
-        for (const task of visibleTasksWithLiveActivities) {
-            const phase = getTaskProgressPhase(task);
-            if (phase === "RUNNING") running++;
-            else if (phase === "COMPLETED") completed++;
-            else if (phase === "FAILED") failed++;
-        }
-
-        return {
-            ...stats,
-            running,
-            completed,
-            failed,
-            total: visibleTasksWithLiveActivities.length,
-        };
-    }, [hasSprintContext, visibleTasksWithLiveActivities, stats]);
+        return computeStats(visibleTasksWithLiveActivities);
+    }, [hasSprintContext, visibleTasksWithLiveActivities]);
 
     const { sprintTiming, taskTimings, taskTimingMap } = useLiveTaskTimingSummaries({
         tasks: visibleTasksWithLiveActivities,

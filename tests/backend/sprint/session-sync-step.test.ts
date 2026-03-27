@@ -332,6 +332,14 @@ describe("runSessionSyncStep", () => {
       "provider_activity",
     ]);
     expect(events[1]?.sourceEventKey).toBe("activity:activity-1");
+    expect(events[1]?.payload).toMatchObject({
+      activityId: "activity-1",
+      kind: "progress_updated",
+      preview: "Runtime synced",
+      progressUpdated: {
+        title: "Runtime synced",
+      },
+    });
   });
 
   it("preserves the first terminal finishedAt during later completed-session syncs", async () => {

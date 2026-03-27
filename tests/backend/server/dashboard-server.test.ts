@@ -343,6 +343,94 @@ describe("setupDashboardServer", () => {
     expect(await readyResponse.json()).toEqual(probeResponse);
   });
 
+  it("returns a project-aligned combined live snapshot from /api/live", async () => {
+    const app = express();
+
+    const handle = await setupDashboardServer({
+      app,
+      dashboardDir: "dashboard",
+      port: await getAvailablePort(),
+      liveActivityCacheMs: 1000,
+      getStatus: () => ({
+        project_id: "project-1",
+        subtasks: [
+          { id: "T01", title: "Task", prompt: "", depends_on: [], is_independent: true, status: "RUNNING" },
+        ],
+        timestamp: "2026-03-27T10:00:00.000Z",
+      }),
+      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getProjectExecutionSnapshot: (projectId: string) => ({
+        projectId,
+        projectName: "Project 1",
+        sprintRuns: [],
+        taskDispatches: [],
+        connections: [],
+        primaryAssignedWorker: null,
+        overflowAssignedWorkers: [],
+        attentionItems: [],
+        recentEvents: [],
+        updatedAt: "2026-03-27T10:00:00.000Z",
+      }),
+      getProjectStatsSnapshot: () => ({
+        projectId: "project-1",
+        projectName: "Project 1",
+        window: "7d",
+        generatedAt: new Date().toISOString(),
+        usage: {
+          invocationCount: 0,
+          activeTimeMs: 0,
+          wallTimeMs: 0,
+          inputTokens: 0,
+          cachedInputTokens: 0,
+          outputTokens: 0,
+          reasoningOutputTokens: 0,
+          totalTokens: 0,
+          reportedInvocationCount: 0,
+          estimatedInvocationCount: 0,
+          unavailableInvocationCount: 0,
+          unsupportedInvocationCount: 0,
+        },
+        activeSprint: null,
+        buckets: [],
+        sprints: [],
+        tasks: [],
+        providers: [],
+        purposes: [],
+        tokenSources: [],
+      }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+      getLiveActivities: async () => ({}),
+      getGitStatus: async () => ({} as any),
+      getExternalSettingsHints: () => ({} as any),
+      ...buildSettingsServerOptions(),
+      listAgentPresets: () => [],
+      createAgentPreset: () => ({ id: "agent-1" } as any),
+      updateAgentPreset: () => ({ id: "agent-1" } as any),
+      deleteAgentPreset: () => {},
+      rerunTask: async () => ({ ok: true }),
+      orchestrateSprint: async () => ({ ok: true }),
+      pauseSprintRun: async () => ({ ok: true }),
+      cancelSprintRun: async () => ({ ok: true }),
+      cancelTaskDispatch: async () => ({ ok: true }),
+      retryTaskDispatch: async () => ({ ok: true }),
+    });
+    serversToClose.push(handle.server);
+
+    const response = await fetch(`http://127.0.0.1:${handle.port}/api/live`);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      status: {
+        project_id: "project-1",
+      },
+      execution: {
+        projectId: "project-1",
+        projectName: "Project 1",
+      },
+    });
+  });
+
   it("resets the database through the system reset endpoint", async () => {
     const app = express();
     let resetCalls = 0;

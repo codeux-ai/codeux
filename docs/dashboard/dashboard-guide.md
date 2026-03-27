@@ -106,8 +106,6 @@ Legacy runtime:
   - Claims an active worker-owned attention item on behalf of the assigned project worker
 - `POST /api/projects/:projectId/attention-items/:attentionItemId/resolve`
   - Resolves or dismisses an active attention item from the dashboard runtime surface
-- `GET /api/live-activities`
-  - Session activity stream for running tasks in the selected project
 - `GET /api/system-settings`
   - Persisted system-wide settings (`runtime`, `integrations`, `defaults`, `mcpTools`)
 - `PUT /api/system-settings`
@@ -256,8 +254,8 @@ Legacy runtime:
   - `Connected MCP` keeps worker dispatches and worker-owned attention on live MCP listeners
   - `Virtual on-demand` hands that same work to short-lived internal CLI workers that do not create MCP connection rows
 - The Live view no longer blocks task stats and task cards on the execution snapshot finishing first:
-  - `/api/status` and `/api/execution` now hydrate independently
-  - task stats and the race view can render from the latest runtime status snapshot even when execution metadata is still catching up
+  - `/api/live` now restores the selected-project runtime in one roundtrip instead of stitching `/api/status`, `/api/execution`, and `/api/live-activities` in the browser
+  - task stats, DAG state, and the race view now derive from the same projected task list, so the hero visualizations stay in sync during refresh and websocket recovery
   - the page only shows the full `Waiting for Sprint Start` empty state when neither runtime status nor execution state has sprint context
 - The Live view now keeps its mounted shell stable during background refresh:
   - fetch-only execution `updatedAt` changes no longer trigger full runtime rerenders by themselves
@@ -372,6 +370,7 @@ Live view behavior:
 - `project.runtime_status.updated` replaces the runtime task state immediately
 - `project.structure.updated` triggers a silent background reload for structural changes that are not already embedded in the execution payload
 - attention queue changes now flow through the same realtime execution snapshot path, so merge-conflict escalation, worker claims, and resolution actions appear without waiting for a poll tick
+- provider-backed runtime feeds now render the persisted agent/user message text from `provider_activity` events, so clarification requests and other Jules messages show up directly instead of collapsing to a generic provider label
 
 The old legacy settings hook remains outside the active v2 flow; the live dashboard now uses the scoped settings API above.
 

@@ -287,9 +287,14 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
 
   // Combined endpoint — single HTTP call for live page initial load
   app.get("/api/live", (req, res) => {
+    const status = getStatus() as { project_id?: string | null };
+    const projectId = typeof status?.project_id === "string" && status.project_id.trim().length > 0
+      ? status.project_id.trim()
+      : null;
+
     res.json({
-      status: getStatus(),
-      execution: options.getExecutionSnapshot(),
+      status,
+      execution: projectId ? options.getProjectExecutionSnapshot(projectId) : options.getExecutionSnapshot(),
     });
   });
 

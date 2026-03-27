@@ -58,7 +58,7 @@ This is still a bridge layer, not the final runtime architecture.
 
 Current limitations:
 - the orchestrator still keeps a process-local `lastStatus` copy for readiness and compatibility
-- live activity messages are fetched on demand from provider sessions, not yet persisted into `task_run_events`
+- selected-project status still remains a bridge over the orchestrator payload rather than the only runtime write path
 - worker MCP assignment and multi-MCP scheduling are not implemented yet
 - listen mode now has project-scoped connection/thread/message storage and a pull-based MCP tool loop, but not autonomous server-side dispatch
 
@@ -66,6 +66,7 @@ Recent tightening:
 - dashboard rerun no longer rewrites the selected-project runtime snapshot optimistically
 - dashboard cancel no longer patches selected-project subtasks directly
 - task planning status is now updated from execution owners (`cli_workflow`, worker dispatch completion, and Jules session sync) instead of relying only on snapshot mirroring
+- recent provider activity is now persisted into `task_run_events` and projected back into `/api/status`, so legacy task cards and the Live page no longer need a second live-activities fetch to show real provider messages
 
 ## Why This Matters
 

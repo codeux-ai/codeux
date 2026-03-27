@@ -98,6 +98,11 @@ It now also:
 
 This keeps provider-backed execution on the same runtime contract as worker-backed execution.
 
+`provider_activity` payloads now store normalized activity content, including agent messages, user replies, progress titles/descriptions, plan metadata, and failure/completion markers. That lets:
+
+- the Live page runtime feed render the real Jules message instead of a generic "provider activity" label
+- `/api/status` project recent task activities directly from sqlite without calling a separate provider-activity endpoint
+
 ## Direct CLI Runtime Events
 
 Docker/CLI-backed execution no longer waits for a later poll to become visible in the runtime timeline.
