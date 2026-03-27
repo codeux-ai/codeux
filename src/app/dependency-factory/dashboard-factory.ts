@@ -63,11 +63,10 @@ export function createDashboardDependencies(
       }
       const runtimeStatus = projectRuntimeRepository.getProjectStatus(taskRecord.projectId);
       const runtimeTask = (runtimeStatus.subtasks || []).find((task) => task.record_id === taskId || task.id === taskRecord.taskKey);
-      const featureBranch = runtimeStatus.feature_branch || sprint.featureBranch || null;
-      const repoPath = runtimeStatus.repo_path || project.baseDir || null;
-      const sprintNumber = typeof runtimeStatus.sprint_number === "number"
-        ? runtimeStatus.sprint_number
-        : sprint.number;
+      // Prefer sprint record data — runtime status may be stale from a different sprint
+      const featureBranch = sprint.featureBranch || runtimeStatus.feature_branch || null;
+      const repoPath = project.baseDir || runtimeStatus.repo_path || null;
+      const sprintNumber = sprint.number ?? runtimeStatus.sprint_number ?? null;
 
       if (!featureBranch || !repoPath || sprintNumber === null || sprintNumber === undefined) {
         return null;
