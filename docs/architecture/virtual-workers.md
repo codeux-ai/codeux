@@ -83,6 +83,7 @@ The background reconcile loop stays conservative (`3s`) to avoid unnecessary sql
 
 Today virtual workers handle:
 
+- Dashboard chat conversations via `routeKind === "virtual"` and `virtualProvider`
 - Planning agent prompt improvement
 - Planning agent sprint planning
 - queued `mcp_worker` task dispatches
