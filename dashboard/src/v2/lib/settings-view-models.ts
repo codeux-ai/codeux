@@ -70,6 +70,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
     autoCreatePr: settings.git.autoCreatePr,
     featureBranchPrefix: settings.git.featureBranchPrefix,
     sprintBranchScheme: settings.git.sprintBranchScheme,
+    defaultSprintKey: settings.git.defaultSprintKey,
   },
   ciIntelligence: {
     ...settings.ciIntelligence,

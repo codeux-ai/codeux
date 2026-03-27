@@ -501,6 +501,7 @@ export interface GitSettings {
   autoCreatePr: boolean;
   featureBranchPrefix: string;
   sprintBranchScheme: string;
+  defaultSprintKey: string;
 }
 
 export interface CiIntelligenceSettings {

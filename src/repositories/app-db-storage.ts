@@ -485,6 +485,7 @@ export class AppDbStorage {
     this.ensureColumn("task_run_events", "source_event_key", "TEXT");
     this.ensureColumn("sprints", "showcase_pinned", "INTEGER NOT NULL DEFAULT 0");
     this.ensureColumn("sprints", "original_prompt", "TEXT");
+    this.ensureColumn("sprints", "sprint_key", "TEXT");
     this.ensureColumn("agent_presets", "source_path", "TEXT");
     this.ensureColumn("agent_presets", "source_scope", "TEXT");
     this.ensureColumn("agent_presets", "source_updated_at", "TEXT");

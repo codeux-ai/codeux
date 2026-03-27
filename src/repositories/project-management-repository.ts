@@ -47,6 +47,7 @@ interface ProjectRow {
 interface SprintRow {
   id: string;
   project_id: string;
+  sprint_key: string | null;
   number: number | string | null;
   slug: string;
   name: string;
@@ -338,15 +339,17 @@ export class ProjectManagementRepository {
     const now = new Date().toISOString();
     const number = input.number ?? this.getNextSprintNumber(projectId);
     const name = input.name.trim();
+    const sprintKey = input.sprintKey?.trim() || null;
     const slug = this.createUniqueSprintSlug(projectId, name);
 
     this.db.prepare(`
       INSERT INTO sprints (
-        id, project_id, number, slug, name, original_prompt, goal, status, showcase_pinned, start_date, end_date, feature_branch, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, project_id, sprint_key, number, slug, name, original_prompt, goal, status, showcase_pinned, start_date, end_date, feature_branch, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
+      sprintKey,
       number,
       slug,
       name,
@@ -372,14 +375,16 @@ export class ProjectManagementRepository {
     const current = this.requireSprint(sprintId);
     const now = new Date().toISOString();
     const nextName = input.name?.trim() || current.name;
+    const nextSprintKey = input.sprintKey !== undefined ? (input.sprintKey?.trim() || null) : current.sprintKey;
     const nextSlug = nextName === current.name ? current.slug : this.createUniqueSprintSlug(current.projectId, nextName, sprintId);
 
     this.db.prepare(`
       UPDATE sprints
-      SET number = ?, slug = ?, name = ?, original_prompt = ?, goal = ?, status = ?, showcase_pinned = ?, start_date = ?, end_date = ?, feature_branch = ?, updated_at = ?
+      SET number = ?, sprint_key = ?, slug = ?, name = ?, original_prompt = ?, goal = ?, status = ?, showcase_pinned = ?, start_date = ?, end_date = ?, feature_branch = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.number === undefined ? current.number : input.number,
+      nextSprintKey,
       nextSlug,
       nextName,
       input.originalPrompt === undefined ? current.originalPrompt : input.originalPrompt,
@@ -844,6 +849,7 @@ export class ProjectManagementRepository {
     return {
       id: row.id,
       projectId: row.project_id,
+      sprintKey: row.sprint_key || null,
       number: row.number === null ? null : toNumber(row.number),
       slug: row.slug,
       name: row.name,

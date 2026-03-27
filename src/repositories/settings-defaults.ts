@@ -222,6 +222,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     autoCreatePr: true,
     featureBranchPrefix: "feature/",
     sprintBranchScheme: DEFAULT_SPRINT_BRANCH_SCHEME,
+    defaultSprintKey: "SPR",
   },
   ciIntelligence: {
     enabled: true,

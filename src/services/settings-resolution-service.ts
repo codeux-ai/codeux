@@ -244,6 +244,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
       autoCreatePr: git.autoCreatePr,
       featureBranchPrefix: git.featureBranchPrefix,
       sprintBranchScheme: git.sprintBranchScheme,
+      defaultSprintKey: git.defaultSprintKey,
     },
     ciIntelligence: sanitizeCiIntelligence(DEFAULT_DASHBOARD_SETTINGS, git.githubMode),
     sprintLoopSteps: sanitizeSprintLoopSteps(DEFAULT_DASHBOARD_SETTINGS),
@@ -334,6 +335,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       autoCreatePr: git.autoCreatePr,
       featureBranchPrefix: git.featureBranchPrefix,
       sprintBranchScheme: git.sprintBranchScheme,
+      defaultSprintKey: git.defaultSprintKey,
     },
     ciIntelligence: sanitizeCiIntelligence({
       ...DEFAULT_DASHBOARD_SETTINGS,
