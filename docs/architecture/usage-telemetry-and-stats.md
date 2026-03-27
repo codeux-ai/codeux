@@ -23,7 +23,7 @@ This telemetry currently covers:
 
 ## Storage Model
 
-Usage is persisted in the `provider_invocations` table.
+Usage is persisted in the `provider_invocations` table, which is tightly linked to `execution_invocations` (where the exact prompt and response history, i.e., the transcript, is stored as an invocation thread).
 
 Each row represents one provider invocation and stores:
 
@@ -35,7 +35,7 @@ Each row represents one provider invocation and stores:
 - `usage_source`
 - provider-native raw usage payload when available
 
-This makes usage first-class instead of trying to infer it from task status rows after the fact.
+This makes usage first-class instead of trying to infer it from task status rows after the fact. Because usage rows map to an explicit invocation thread via `providerInvocationId`, Sprint OS preserves full-fidelity drill-downs for every tracked execution context.
 
 ## Normalized Usage Fields
 

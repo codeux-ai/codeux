@@ -10,6 +10,7 @@ import { getRepoSprintOsPath } from "../shared/config/sprint-os-paths.js";
 import type { TaskService } from "./task-service.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { Logger } from "../shared/logging/logger.js";
+import type { ExecutionRepository } from "../repositories/execution-repository.js";
 
 export interface GenerateDashboardReplyInput {
   projectId: string;
@@ -28,6 +29,7 @@ interface WorkerInboxReplyServiceDependencies {
   projectManagementRepository: ProjectManagementRepository;
   taskService: TaskService;
   agentPresetSyncService: AgentPresetSyncService;
+  executionRepository: ExecutionRepository;
   getDashboardSettings: () => DashboardSettings;
   getGithubToken: () => string | undefined;
   logger?: Logger;
@@ -55,15 +57,55 @@ export class WorkerInboxReplyService {
     });
     const prompt = buildProviderPrompt(rawPrompt, providerSettings.thinkingMode);
 
-    const output = await this.runProvider({
+    const execInvocation = this.deps.executionRepository.createExecutionInvocation({
+      projectId: input.projectId,
+      type: "worker_reply",
       provider,
-      prompt,
-      repoPath: project.baseDir,
       model: providerSettings.model,
-      apiKey: providerSettings.apiKey,
-      githubToken: this.deps.getGithubToken(),
+      startedAt: new Date().toISOString(),
+      attentionItemId: null,
+      dispatchId: null,
+      providerInvocationId: null,
+      sprintId: null,
+      sprintRunId: null,
+      taskId: null,
+      taskRunId: null,
     });
+
+    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
+      role: "user",
+      contentMarkdown: rawPrompt,
+    });
+
+    let output: string;
+    try {
+      output = await this.runProvider({
+        provider,
+        prompt,
+        repoPath: project.baseDir,
+        model: providerSettings.model,
+        apiKey: providerSettings.apiKey,
+        githubToken: this.deps.getGithubToken(),
+      });
+    } catch (err) {
+      this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
+        status: "failed",
+        finishedAt: new Date().toISOString(),
+      });
+      throw err;
+    }
+
     const bodyMarkdown = this.normalizeProviderReply(output);
+
+    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
+      role: "assistant",
+      contentMarkdown: bodyMarkdown,
+    });
+    this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
+      status: "completed",
+      finishedAt: new Date().toISOString(),
+    });
+
     if (!bodyMarkdown) {
       throw new Error(`Provider ${provider} returned an empty dashboard reply.`);
     }
@@ -129,16 +171,55 @@ export class WorkerInboxReplyService {
 
     const prompt = buildProviderPrompt(fullContextPrompt, providerSettings.thinkingMode);
 
-    const output = await this.runProvider({
+    const execInvocation = this.deps.executionRepository.createExecutionInvocation({
+      projectId: args.projectId,
+      type: "worker_reply",
       provider,
-      prompt,
-      repoPath: project.baseDir,
       model: providerSettings.model,
-      apiKey: providerSettings.apiKey,
-      githubToken: this.deps.getGithubToken(),
+      startedAt: new Date().toISOString(),
+      attentionItemId: null,
+      dispatchId: null,
+      providerInvocationId: null,
+      sprintId: null,
+      sprintRunId: null,
+      taskId: args.task.id,
+      taskRunId: null,
     });
 
+    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
+      role: "user",
+      contentMarkdown: fullContextPrompt,
+    });
+
+    let output: string;
+    try {
+      output = await this.runProvider({
+        provider,
+        prompt,
+        repoPath: project.baseDir,
+        model: providerSettings.model,
+        apiKey: providerSettings.apiKey,
+        githubToken: this.deps.getGithubToken(),
+      });
+    } catch (err) {
+      this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
+        status: "failed",
+        finishedAt: new Date().toISOString(),
+      });
+      throw err;
+    }
+
     const reply = this.normalizeProviderReply(output);
+
+    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
+      role: "assistant",
+      contentMarkdown: reply,
+    });
+    this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
+      status: "completed",
+      finishedAt: new Date().toISOString(),
+    });
+
     if (!reply) {
       throw new Error(`Provider ${provider} returned an empty clarification reply.`);
     }

@@ -668,8 +668,40 @@ export class VirtualWorkerService {
     apiKey: string;
     githubToken: string;
   }): Promise<void> {
-    const runProvider = async (prompt: string) => {
+    let execInvocation: { id: string } | undefined = undefined;
+
+    const runProvider = async (prompt: string, retrySystemMessage?: string) => {
       const startedAt = new Date().toISOString();
+
+      if (!execInvocation) {
+        execInvocation = this.deps.executionRepository.createExecutionInvocation({
+          projectId: args.attentionItem.projectId,
+          sprintId: args.attentionItem.sprintId,
+          taskId: args.attentionItem.taskId,
+          sprintRunId: args.attentionItem.sprintRunId,
+          dispatchId: args.attentionItem.dispatchId,
+          attentionItemId: args.attentionItem.id,
+          type: args.purpose,
+          provider: args.provider,
+          model: args.model,
+          startedAt,
+        });
+      }
+
+      if (execInvocation && retrySystemMessage) {
+        this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
+          role: "system",
+          contentMarkdown: retrySystemMessage,
+        });
+      }
+
+      if (execInvocation) {
+        this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
+          role: "user",
+          contentMarkdown: prompt,
+        });
+      }
+
       const invocation = this.deps.executionRepository.createProviderInvocationUsage({
         projectId: args.attentionItem.projectId,
         sprintId: args.attentionItem.sprintId,
@@ -684,6 +716,11 @@ export class VirtualWorkerService {
         startedAt,
         promptChars: prompt.length,
       });
+
+      this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
+        providerInvocationId: invocation.id,
+      });
+
       const startedMs = Date.now();
       const result = await this.providerRunner.runProvider({
         provider: args.provider,
@@ -717,6 +754,25 @@ export class VirtualWorkerService {
         usageSource: result.usageTelemetry.usageSource,
         rawUsageJson: result.usageTelemetry.rawUsageJson,
       });
+
+      if (execInvocation) {
+        this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
+          status: result.ok ? "completed" : "failed",
+          finishedAt: new Date().toISOString(),
+        });
+        if (!result.ok) {
+          this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
+            role: "tool",
+            contentMarkdown: result.stderr || result.stdout || "Provider failed without output.",
+          });
+        } else {
+          this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
+            role: "assistant",
+            contentMarkdown: result.usageTelemetry.transcriptText,
+          });
+        }
+      }
+
       return result;
     };
 
@@ -726,7 +782,7 @@ export class VirtualWorkerService {
         originator: "system",
         description: "Retrying merge-conflict resolution with file-discovery guidance.",
       });
-      result = await runProvider(buildReadFileRetryPrompt(args.providerPrompt));
+      result = await runProvider(buildReadFileRetryPrompt(args.providerPrompt), "Retrying merge-conflict resolution with file-discovery guidance.");
     }
     if (!result.ok) {
       const classification = classifyProviderError(args.provider, result);

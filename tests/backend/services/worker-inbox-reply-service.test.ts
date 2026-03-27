@@ -47,6 +47,11 @@ describe("WorkerInboxReplyService", () => {
           instructionMarkdown: "Always answer with operational clarity.",
         }),
       } as any,
+      executionRepository: {
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-1" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+      } as any,
       getDashboardSettings: () => settings,
       getGithubToken: () => "gh-token",
     });
@@ -59,6 +64,15 @@ describe("WorkerInboxReplyService", () => {
     });
 
     expect(result.bodyMarkdown).toBe("Current status: one task is running.");
+    expect((service as any).deps.executionRepository.createExecutionInvocation).toHaveBeenCalled();
+    expect((service as any).deps.executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-inv-1", {
+      role: "user",
+      contentMarkdown: expect.stringContaining("What is the current worker status?"),
+    });
+    expect((service as any).deps.executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-inv-1", {
+      role: "assistant",
+      contentMarkdown: "Current status: one task is running.",
+    });
     expect(result.provider).toBe("gemini");
     expect(runCommandStrict).toHaveBeenCalledWith(
       "gemini",
@@ -95,6 +109,11 @@ describe("WorkerInboxReplyService", () => {
         getWorkerAgent: vi.fn().mockResolvedValue({
           instructionMarkdown: "Worker guide fallback",
         }),
+      } as any,
+      executionRepository: {
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-2" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
       } as any,
       getDashboardSettings: () => settings,
       getGithubToken: () => undefined,
@@ -137,6 +156,11 @@ describe("WorkerInboxReplyService", () => {
           instructionMarkdown: "Worker guide fallback",
         }),
       } as any,
+      executionRepository: {
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-3" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+      } as any,
       getDashboardSettings: () => settings,
       getGithubToken: () => undefined,
     });
@@ -178,6 +202,11 @@ describe("WorkerInboxReplyService", () => {
           instructionMarkdown: "Worker guide fallback",
         }),
       } as any,
+      executionRepository: {
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-4" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+      } as any,
       getDashboardSettings: () => settings,
       getGithubToken: () => undefined,
     });
@@ -206,5 +235,14 @@ describe("WorkerInboxReplyService", () => {
     });
 
     expect(result).toBe("Only the clarification answer.");
+    expect((service as any).deps.executionRepository.createExecutionInvocation).toHaveBeenCalled();
+    expect((service as any).deps.executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-inv-4", {
+      role: "user",
+      contentMarkdown: expect.stringContaining("Repair the Jules clarification flow."),
+    });
+    expect((service as any).deps.executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-inv-4", {
+      role: "assistant",
+      contentMarkdown: "Only the clarification answer.",
+    });
   });
 });

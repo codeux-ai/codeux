@@ -134,6 +134,15 @@ const createMockContext = (): PipelineContext => {
     deps: {
       sessionTracking: { appendActivity: vi.fn(), updateSession: vi.fn() } as any,
       projectManagementRepository: { getSprint: vi.fn().mockReturnValue({ goal: "Mock Sprint Goal" }) } as any,
+      executionRepository: {
+        createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "usage-1" }),
+        updateProviderInvocationUsage: vi.fn(),
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-1" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+        getTaskRun: vi.fn().mockReturnValue({ id: "tr-1", projectId: "p-1" }),
+        appendTaskRunEvent: vi.fn(),
+      } as any,
       getDashboardSettings: vi.fn(),
       getWorkerInstruction: vi.fn(),
       getGithubToken: vi.fn(),
@@ -180,9 +189,19 @@ describe("executeProviderStage", () => {
   it("throws an error if provider run fails without retry conditions", async () => {
     const ctx = createMockContext();
     ctx.workflowSettings.retryOnReadFileNotFound = false;
-    vi.mocked(ctx.providerRunner.runProvider).mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "fatal provider error" });
+    vi.mocked(ctx.providerRunner.runProvider).mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "fatal provider error", usageTelemetry: { transcriptText: "error transcript" } as any });
 
     await expect(executeProviderStage(ctx, "prompt")).rejects.toThrow("Gemini failed with an unexpected error.");
+    expect(ctx.deps.executionRepository?.createExecutionInvocation).toHaveBeenCalled();
+    expect(ctx.deps.executionRepository?.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-1", {
+      role: "user",
+      contentMarkdown: "prompt",
+    });
+    expect(ctx.deps.executionRepository?.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-1", {
+      role: "tool",
+      contentMarkdown: "fatal provider error",
+    });
+    expect(ctx.deps.executionRepository?.updateExecutionInvocation).toHaveBeenCalledWith("exec-1", expect.objectContaining({ status: "failed" }));
   });
 
   it("retries if retryOnReadFileNotFound is true and error is a read file not found error", async () => {
@@ -193,15 +212,22 @@ describe("executeProviderStage", () => {
     vi.mocked(ctx.providerRunner.runProvider).mockResolvedValueOnce({
       ok: false,
       stdout: "",
-      stderr: "error executing tool read_file: file not found"
+      stderr: "error executing tool read_file: file not found",
+      usageTelemetry: { transcriptText: "fail1 transcript" } as any,
     });
     // Simulate second success
-    vi.mocked(ctx.providerRunner.runProvider).mockResolvedValueOnce({ ok: true, stdout: "success", stderr: "" });
+    vi.mocked(ctx.providerRunner.runProvider).mockResolvedValueOnce({ ok: true, stdout: "success", stderr: "", usageTelemetry: { transcriptText: "success transcript" } as any });
 
     await executeProviderStage(ctx, "prompt");
     expect(ctx.providerRunner.runProvider).toHaveBeenCalledTimes(2);
     expect(ctx.deps.sessionTracking.appendActivity).toHaveBeenCalledWith(ctx.sessionId, expect.objectContaining({
       description: "Retrying with file-discovery guidance."
+    }));
+
+    // Check system fallback message for retry
+    expect(ctx.deps.executionRepository?.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-1", expect.objectContaining({
+      role: "system",
+      contentMarkdown: "Retrying with file-discovery guidance.",
     }));
   });
 });

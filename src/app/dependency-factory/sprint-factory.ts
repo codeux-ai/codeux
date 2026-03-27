@@ -150,6 +150,7 @@ export function createSprintDependencies(
     projectManagementRepository,
     taskService,
     agentPresetSyncService,
+    executionRepository,
     getDashboardSettings: resolveDashboardSettings,
     getGithubToken: () => context.getEffectiveGithubToken(),
     logger: logger.child({ component: "worker-inbox-reply-service" }),

@@ -900,6 +900,12 @@ describe("VirtualWorkerService", () => {
     vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("guidance");
     vi.spyOn((virtualWorkerService as any).workspaceManager, "removeWorktree").mockResolvedValue(undefined);
     vi.spyOn((virtualWorkerService as any), "runProviderWithRetry").mockResolvedValue(undefined);
+
+    const execRepo = (virtualWorkerService as any).deps.executionRepository;
+    vi.spyOn(execRepo, "createExecutionInvocation").mockReturnValue({ id: "exec-inv-1" });
+    vi.spyOn(execRepo, "appendExecutionInvocationMessage").mockReturnValue({});
+    vi.spyOn(execRepo, "updateExecutionInvocation").mockReturnValue({});
+
     // runCommandStrict is imported in cli-process-runner. We'll mock the whole module or just bypass it.
     // Instead of bypassing runCommandStrict, we can mock runMergeIntoSource and ensureMergeConflictResolved and runCommandStrict if we mock it at the top,
     // but since we didn't, let's just mock resolveCiFixAttention directly if needed? No, we want to cover resolveCiFixAttention.
@@ -943,6 +949,12 @@ describe("VirtualWorkerService", () => {
     vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("guidance");
     vi.spyOn((virtualWorkerService as any).workspaceManager, "removeWorktree").mockResolvedValue(undefined);
     vi.spyOn((virtualWorkerService as any), "runProviderWithRetry").mockResolvedValue(undefined);
+
+    const execRepo = (virtualWorkerService as any).deps.executionRepository;
+    vi.spyOn(execRepo, "createExecutionInvocation").mockReturnValue({ id: "exec-inv-2" });
+    vi.spyOn(execRepo, "appendExecutionInvocationMessage").mockReturnValue({});
+    vi.spyOn(execRepo, "updateExecutionInvocation").mockReturnValue({});
+
     vi.spyOn((virtualWorkerService as any), "runMergeIntoSource").mockResolvedValue(true);
     vi.spyOn((virtualWorkerService as any), "ensureMergeConflictResolved").mockResolvedValue(undefined);
     vi.spyOn((virtualWorkerService as any), "finalizeMergeCommit").mockResolvedValue(undefined);
