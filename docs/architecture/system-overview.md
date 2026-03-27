@@ -80,7 +80,7 @@ flowchart TD
   D --> J[src/services/task-service.ts]
   R --> L[src/server/dashboard-server.ts]
   L --> M[Dashboard UI dashboard/src/*]
-  M -->|poll| N[/api/status + /api/live-activities + /api/git-status/]
+  M -->|poll| N[/api/live + /api/git-status/]
   L --> O[src/repositories/settings-repository.ts]
   O --> P[(~/.sprint-os/settings.db)]
 ```
@@ -91,7 +91,7 @@ flowchart TD
 2. Server dispatches tool to core or agent handler.
 3. Handler invokes the DB-backed dispatch engine, inbox system, and provider execution layer.
 4. Orchestrator runs atomic steps and updates `lastStatus`.
-5. Dashboard polls `/api/status` and `/api/live-activities`.
+5. Dashboard polls `/api/live` for one combined runtime snapshot, while websocket updates and the execution event log keep task feeds fresh between polls.
 6. UI renders task pipeline, protocol instructions, and git/CI state.
 
 ## Configuration Priority Model

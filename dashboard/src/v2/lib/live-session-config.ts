@@ -55,6 +55,39 @@ export const EMPTY_RUNTIME_STATS = {
     mergeConflicts: 0,
 };
 
+const getProviderActivityText = (payload: Record<string, unknown>): string => {
+    const agentMessage = typeof (payload.agentMessaged as { agentMessage?: unknown } | null | undefined)?.agentMessage === "string"
+        ? (payload.agentMessaged as { agentMessage: string }).agentMessage
+        : null;
+    if (agentMessage) {
+        return agentMessage;
+    }
+
+    const userMessage = typeof (payload.userMessaged as { userMessage?: unknown } | null | undefined)?.userMessage === "string"
+        ? (payload.userMessaged as { userMessage: string }).userMessage
+        : null;
+    if (userMessage) {
+        return userMessage;
+    }
+
+    const progressUpdated = payload.progressUpdated as { title?: unknown; description?: unknown } | null | undefined;
+    if (typeof progressUpdated?.title === "string" && progressUpdated.title.trim().length > 0) {
+        return progressUpdated.title;
+    }
+    if (typeof progressUpdated?.description === "string" && progressUpdated.description.trim().length > 0) {
+        return progressUpdated.description;
+    }
+
+    if (typeof payload.preview === "string" && payload.preview.trim().length > 0) {
+        return payload.preview;
+    }
+    if (typeof payload.description === "string" && payload.description.trim().length > 0) {
+        return payload.description;
+    }
+
+    return "Provider activity";
+};
+
 export const getExecutionEventText = (event: ExecutionRuntimeEventSummary): string => {
     const payload = event.payload || {};
 
@@ -78,7 +111,7 @@ export const getExecutionEventText = (event: ExecutionRuntimeEventSummary): stri
         case "session_state_synced":
             return `Session ${String(payload.sessionState || event.taskRunState || "updated").toLowerCase()}`;
         case "provider_activity":
-            return String(payload.preview || payload.description || "Provider activity");
+            return getProviderActivityText(payload);
         case "dispatch_failed":
             return String(payload.error || "Dispatch failed");
         case "cli_prepare_started":

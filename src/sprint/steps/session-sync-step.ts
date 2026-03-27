@@ -94,6 +94,29 @@ const getActivityKind = (activity: JulesActivity): string => {
   return "activity";
 };
 
+const buildProviderActivityEventPayload = (
+  activity: JulesActivity,
+  sessionId: string | null,
+  sessionName: string | null,
+  provider: string | null,
+): Record<string, unknown> => ({
+  activityId: activity.id,
+  activityName: activity.name,
+  sessionId,
+  sessionName,
+  provider,
+  kind: getActivityKind(activity),
+  preview: getActivityPreview(activity),
+  description: typeof activity.description === "string" ? activity.description : null,
+  agentMessaged: activity.agentMessaged || null,
+  userMessaged: activity.userMessaged || null,
+  progressUpdated: activity.progressUpdated || null,
+  planGenerated: activity.planGenerated || null,
+  planApproved: activity.planApproved || null,
+  sessionFailed: activity.sessionFailed || null,
+  sessionCompleted: activity.sessionCompleted ?? null,
+});
+
 const resolveWorkerBranch = (session: JulesSession): string | null => {
   const output = Array.isArray(session.outputs)
     ? session.outputs.find((entry) => entry && typeof entry === "object" && "pullRequest" in entry)
@@ -214,13 +237,7 @@ const syncExecutionRunState = (
     }
 
     deps.executionRepository.appendTaskRunEvent(taskRun.id, "provider_activity", activity.originator || "provider", {
-      activityId: activity.id,
-      sessionId,
-      sessionName,
-      provider,
-      kind: getActivityKind(activity),
-      preview: getActivityPreview(activity),
-      description: typeof activity.description === "string" ? activity.description : null,
+      ...buildProviderActivityEventPayload(activity, sessionId, sessionName, provider),
     }, {
       createdAt: typeof activity.createTime === "string" && activity.createTime.trim().length > 0 ? activity.createTime : undefined,
       sourceEventKey: `activity:${activity.id}`,

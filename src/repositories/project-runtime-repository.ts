@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import * as path from "path";
 import type { DatabaseSync } from "node:sqlite";
-import type { DashboardStatus, Subtask, SubtaskMergeIndicator, SubtaskStatus } from "../contracts/app-types.js";
+import type { DashboardStatus, JulesActivity, Subtask, SubtaskMergeIndicator, SubtaskStatus } from "../contracts/app-types.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
 
@@ -10,6 +10,7 @@ const RUNTIME_CONTEXT_PREFIX = "runtime_context:";
 type PlanningTaskStatus = "pending" | "in_progress" | "coding_completed" | "completed";
 type ProjectStatus = "running" | "failed" | "intervention" | "idle";
 type TaskRunState = Exclude<SubtaskStatus, undefined>;
+type JulesPlan = { steps?: Array<{ title?: string }> };
 
 interface ProjectRow {
   id: string;
@@ -56,6 +57,18 @@ interface TaskRunRow {
   started_at: string | null;
   finished_at: string | null;
   duration_ms: number | string | null;
+}
+
+interface TaskActivityRow {
+  task_id: string;
+  session_id: string | null;
+  session_name: string | null;
+  provider: string | null;
+  activity_id: string | null;
+  activity_name: string | null;
+  created_at: string;
+  originator: string | null;
+  payload_json: string | null;
 }
 
 interface RuntimeContextPayload {
@@ -164,6 +177,27 @@ function toMergeIndicator(value: string | null | undefined): SubtaskMergeIndicat
     default:
       return undefined;
   }
+}
+
+function parsePayloadJson(value: string | null | undefined): Record<string, unknown> | null {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
+  } catch {
+    return null;
+  }
+}
+
+function asString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" ? value as Record<string, unknown> : undefined;
 }
 
 export class ProjectRuntimeRepository {
@@ -290,6 +324,7 @@ export class ProjectRuntimeRepository {
     const sprintIdToLoad = explicitSprintId ?? context?.sprintId ?? null;
     const tasks = this.getMappedTasks(projectId, sprintIdToLoad);
     const latestRuns = this.getLatestRuns(tasks.map((task) => task.row.id));
+    const recentActivitiesByTaskId = this.getRecentActivitiesByTask(tasks.map((task) => task.row.id));
     const taskKeyByRecordId = new Map(tasks.map((task) => [task.row.id, task.row.task_key]));
 
     const subtasks: Subtask[] = tasks.map((task) => {
@@ -310,6 +345,7 @@ export class ProjectRuntimeRepository {
         provider: run?.provider ? run.provider as Subtask["provider"] : undefined,
         worker_branch: run?.worker_branch || undefined,
         pr_url: run?.pr_url || undefined,
+        activities: recentActivitiesByTaskId.get(task.row.id),
         is_independent: toBoolean(task.row.is_independent),
         is_merged: task.row.merge_indicator === "MERGED"
           || task.row.merge_indicator === "AUTOMERGE"
@@ -576,6 +612,96 @@ export class ProjectRuntimeRepository {
       }
     }
     return map;
+  }
+
+  private getRecentActivitiesByTask(taskIds: string[], limitPerTask: number = 5): Map<string, JulesActivity[]> {
+    if (taskIds.length === 0) {
+      return new Map();
+    }
+
+    const rows = this.storage.executeChunkedInQuery<TaskActivityRow>({
+      sqlPrefix: `SELECT
+        task_id,
+        session_id,
+        session_name,
+        provider,
+        activity_id,
+        activity_name,
+        created_at,
+        originator,
+        payload_json
+      FROM (
+        SELECT
+          tr.task_id,
+          tr.session_id,
+          tr.session_name,
+          tr.provider,
+          json_extract(tre.payload_json, '$.activityId') AS activity_id,
+          json_extract(tre.payload_json, '$.activityName') AS activity_name,
+          tre.created_at,
+          tre.originator,
+          tre.payload_json,
+          ROW_NUMBER() OVER (
+            PARTITION BY tr.task_id
+            ORDER BY tre.created_at DESC, tre.id DESC
+          ) AS activity_rank
+        FROM task_run_events tre
+        INNER JOIN task_runs tr ON tr.id = tre.task_run_id
+        WHERE tr.task_id`,
+      sqlSuffix: `AND tre.event_type = 'provider_activity'
+      )
+      WHERE activity_rank <= ?
+      ORDER BY task_id ASC, created_at ASC`,
+      items: taskIds,
+      bindParamsAfter: [limitPerTask],
+    });
+
+    const activitiesByTaskId = new Map<string, JulesActivity[]>();
+    for (const row of rows) {
+      const activity = this.mapTaskActivityRow(row);
+      if (!activity) {
+        continue;
+      }
+      const existing = activitiesByTaskId.get(row.task_id) || [];
+      existing.push(activity);
+      activitiesByTaskId.set(row.task_id, existing);
+    }
+
+    return activitiesByTaskId;
+  }
+
+  private mapTaskActivityRow(row: TaskActivityRow): JulesActivity | null {
+    const payload = parsePayloadJson(row.payload_json);
+    const agentMessaged = asRecord(payload?.agentMessaged);
+    const userMessaged = asRecord(payload?.userMessaged);
+    const progressUpdated = asRecord(payload?.progressUpdated);
+    const planGenerated = asRecord(payload?.planGenerated);
+    const planApproved = asRecord(payload?.planApproved);
+    const sessionFailed = asRecord(payload?.sessionFailed);
+    const activityId = asString(row.activity_id) || asString(payload?.activityId);
+    const sessionName = asString(row.session_name) || asString(payload?.sessionName);
+
+    if (!activityId) {
+      return null;
+    }
+
+    return {
+      id: activityId,
+      name: asString(row.activity_name) || asString(payload?.activityName) || (sessionName ? `${sessionName}/activities/${activityId}` : `activities/${activityId}`),
+      createTime: row.created_at,
+      originator: asString(row.originator) || asString(payload?.originator) || "provider",
+      description: asString(payload?.description),
+      agentMessaged: agentMessaged ? { agentMessage: asString(agentMessaged.agentMessage) } : undefined,
+      userMessaged: userMessaged ? { userMessage: asString(userMessaged.userMessage) } : undefined,
+      progressUpdated: progressUpdated ? {
+        title: asString(progressUpdated.title),
+        description: asString(progressUpdated.description),
+      } : undefined,
+      planGenerated: planGenerated ? { plan: asRecord(planGenerated.plan) as JulesPlan | undefined } : undefined,
+      planApproved: planApproved ? { planId: asString(planApproved.planId) } : undefined,
+      sessionFailed: sessionFailed ? { reason: asString(sessionFailed.reason) } : undefined,
+      sessionCompleted: payload?.sessionCompleted ?? undefined,
+    };
   }
 
   private resolveMappedTask(
