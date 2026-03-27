@@ -82,11 +82,11 @@ const EMPTY_USAGE: ExecutionUsageTotals = {
   unsupportedInvocationCount: 0,
 };
 
-const PANEL_CLASS = "relative overflow-hidden rounded-[1.9rem] border border-black/[0.06] bg-white/70 p-6 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]";
-const SUBPANEL_CLASS = "rounded-[1.45rem] border border-black/[0.05] bg-white/68 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.045)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)]";
+const PANEL_CLASS = "relative overflow-hidden rounded-xl border border-black/[0.06] bg-white/70 p-6 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]";
+const SUBPANEL_CLASS = "rounded-xl border border-black/[0.05] bg-white/68 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.045)] backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)]";
 const CHIP_CLASS = "rounded-full border border-black/[0.06] bg-white/70 shadow-[0_1px_3px_rgba(0,0,0,0.04)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:shadow-[0_1px_3px_rgba(0,0,0,0.18)]";
-const INPUT_CLASS = "h-11 rounded-2xl border border-black/[0.06] bg-white/72 px-4 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-200";
-const LEDGER_ROW_CLASS = "group rounded-[1.5rem] border border-black/[0.05] bg-white/68 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.045)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-signal-500/18 hover:shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-white/[0.05] dark:bg-void-900/35 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)] dark:hover:bg-void-900/45";
+const INPUT_CLASS = "h-11 rounded-lg border border-black/[0.06] bg-white/72 px-4 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-200";
+const LEDGER_ROW_CLASS = "group rounded-xl border border-black/[0.05] bg-white/68 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.045)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-1 hover:border-signal-500/18 hover:shadow-[0_18px_42px_rgba(15,23,42,0.08)] dark:border-white/[0.05] dark:bg-void-900/35 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)] dark:hover:bg-void-900/45";
 
 const DATE_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
   month: "short",
@@ -490,7 +490,7 @@ const RangeToggle: FunctionComponent<{
       <button
         type="button"
         onClick={onApplyCustom}
-        className="inline-flex h-11 items-center justify-center rounded-2xl bg-white/78 px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900"
+        className="inline-flex h-11 items-center justify-center rounded-lg bg-white/78 px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900"
       >
         Apply
       </button>
@@ -581,10 +581,10 @@ const SeriesLegendButton: FunctionComponent<{
     type="button"
     onClick={onToggle}
     disabled={disabled}
-    className={`rounded-[1.25rem] border px-4 py-3 text-left transition-all ${
+    className={`rounded-lg border px-4 py-3 text-left transition-all ${
       active
         ? `${SUBPANEL_CLASS} border-signal-500/18`
-        : "rounded-[1.25rem] border border-black/[0.05] bg-white/60 px-4 py-3 text-left opacity-72 backdrop-blur-xl hover:opacity-100 dark:border-white/[0.05] dark:bg-void-900/30"
+        : "rounded-lg border border-black/[0.05] bg-white/60 px-4 py-3 text-left opacity-72 backdrop-blur-xl hover:opacity-100 dark:border-white/[0.05] dark:bg-void-900/30"
     } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
   >
     <div className="flex items-center gap-3">
@@ -719,7 +719,7 @@ const InteractiveUsageChart: FunctionComponent<{
   }, [enabledSeries.tokens, enabledSeries.active, enabledSeries.invocations, visibleBuckets.length, stats.range.from, stats.range.to]);
 
   return (
-    <div ref={panelRef} className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
+    <div ref={panelRef} className={`${PANEL_CLASS} rounded-xl p-6 md:p-7`}>
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.14]" />
       <div className="relative flex flex-col gap-6">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
@@ -782,7 +782,7 @@ const InteractiveUsageChart: FunctionComponent<{
             <div className="relative">
               {activeBucket ? (
                 <div
-                  className="pointer-events-none absolute top-3 z-10 w-56 -translate-x-1/2 rounded-[1.25rem] border border-black/[0.06] bg-white/88 px-4 py-3 shadow-[0_18px_38px_rgba(15,23,42,0.12)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-900/88 dark:shadow-[0_20px_40px_rgba(0,0,0,0.32)]"
+                  className="pointer-events-none absolute top-3 z-10 w-56 -translate-x-1/2 rounded-lg border border-black/[0.06] bg-white/88 px-4 py-3 shadow-[0_18px_38px_rgba(15,23,42,0.12)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-900/88 dark:shadow-[0_20px_40px_rgba(0,0,0,0.32)]"
                   style={{ left: `${Math.min(92, Math.max(8, tooltipLeft))}%` }}
                 >
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{activeBucket.label}</div>
@@ -965,22 +965,22 @@ const InteractiveUsageChart: FunctionComponent<{
               <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
                 {activeBucket ? `${formatDateTime(activeBucket.bucketStart)} to ${formatDateTime(activeBucket.bucketEnd)}` : "No bucket data yet."}
               </div>
-              <div className="mt-4 rounded-2xl border border-black/[0.05] bg-white/70 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:border-white/[0.05] dark:bg-void-900/40 dark:text-slate-300">
+              <div className="mt-4 rounded-lg border border-black/[0.05] bg-white/70 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:border-white/[0.05] dark:bg-void-900/40 dark:text-slate-300">
                 {zoomRange
                   ? `${visibleBuckets.length} buckets in zoom`
                   : `${stats.range.bucketCount} buckets in ${stats.range.label.toLowerCase()}`}
               </div>
               {activeBucket ? (
                 <div className="mt-5 space-y-3">
-                  <div className="flex items-center justify-between rounded-2xl border border-signal-500/16 bg-signal-500/10 px-4 py-3">
+                  <div className="flex items-center justify-between rounded-lg border border-signal-500/16 bg-signal-500/10 px-4 py-3">
                     <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:text-signal-400">Tokens</div>
                     <div className="text-sm font-black text-slate-900 dark:text-white">{formatTokens(activeBucket.usage.totalTokens)}</div>
                   </div>
-                  <div className="flex items-center justify-between rounded-2xl border border-amber-500/16 bg-amber-500/10 px-4 py-3">
+                  <div className="flex items-center justify-between rounded-lg border border-amber-500/16 bg-amber-500/10 px-4 py-3">
                     <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-600 dark:text-amber-400">Active Time</div>
                     <div className="text-sm font-black text-slate-900 dark:text-white">{formatDuration(activeBucket.usage.activeTimeMs)}</div>
                   </div>
-                  <div className="flex items-center justify-between rounded-2xl border border-cyan-500/16 bg-cyan-500/10 px-4 py-3">
+                  <div className="flex items-center justify-between rounded-lg border border-cyan-500/16 bg-cyan-500/10 px-4 py-3">
                     <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-600 dark:text-cyan-400">Invocations</div>
                     <div className="text-sm font-black text-slate-900 dark:text-white">{activeBucket.usage.invocationCount.toLocaleString()}</div>
                   </div>
@@ -1089,7 +1089,7 @@ const DonutCard: FunctionComponent<{
           </div>
           <div className="space-y-3">
             {segments.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-8 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+              <div className="rounded-lg border border-dashed border-black/[0.08] px-4 py-8 text-center text-sm text-slate-400 dark:border-white/[0.08]">
                 No telemetry landed in this composition yet.
               </div>
             ) : slices.map((segment, index) => {
@@ -1153,7 +1153,7 @@ const PurposeRibbon: FunctionComponent<{
             <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
               {purpose.label.replace(/_/g, " ")}
             </div>
-            <div className={`inline-flex h-8 w-8 items-center justify-center rounded-2xl ${tones[index % tones.length]!}`}>
+            <div className={`inline-flex h-8 w-8 items-center justify-center rounded-lg ${tones[index % tones.length]!}`}>
               <Sparkles className="h-3.5 w-3.5" strokeWidth={2} />
             </div>
           </div>
@@ -1194,7 +1194,7 @@ const TrendStudio: FunctionComponent<{
   planningUsage: ExecutionStatsEntitySummary | null;
 }> = ({ stats, planningUsage }) => (
   <section className="space-y-6">
-    <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
+    <div className={`${PANEL_CLASS} rounded-xl p-6 md:p-7`}>
       <div className="flex flex-col gap-6">
         <StudioHeader
           icon={Activity}
@@ -1278,7 +1278,7 @@ const CompositionStudio: FunctionComponent<{
   tokenSegments: SegmentDefinition[];
 }> = ({ stats, providerSegments, tokenSegments }) => (
   <section className="space-y-6">
-    <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
+    <div className={`${PANEL_CLASS} rounded-xl p-6 md:p-7`}>
       <div className="flex flex-col gap-6">
         <StudioHeader
           icon={PieChart}
@@ -1326,28 +1326,28 @@ const CompositionStudio: FunctionComponent<{
           <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Token Flight</div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-4">
-          <div className="rounded-2xl border border-signal-500/16 bg-signal-500/10 p-4">
+          <div className="rounded-lg border border-signal-500/16 bg-signal-500/10 p-4">
             <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:text-signal-400">
               <ArrowDownRight className="h-3.5 w-3.5" strokeWidth={2.1} />
               Input
             </div>
             <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{formatTokens(stats.usage.inputTokens)}</div>
           </div>
-          <div className="rounded-2xl border border-cyan-500/16 bg-cyan-500/10 p-4">
+          <div className="rounded-lg border border-cyan-500/16 bg-cyan-500/10 p-4">
             <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-600 dark:text-cyan-400">
               <Database className="h-3.5 w-3.5" strokeWidth={2.1} />
               Cached
             </div>
             <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{formatTokens(stats.usage.cachedInputTokens)}</div>
           </div>
-          <div className="rounded-2xl border border-amber-500/16 bg-amber-500/10 p-4">
+          <div className="rounded-lg border border-amber-500/16 bg-amber-500/10 p-4">
             <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-600 dark:text-amber-400">
               <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={2.1} />
               Output
             </div>
             <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{formatTokens(stats.usage.outputTokens)}</div>
           </div>
-          <div className="rounded-2xl border border-rose-500/16 bg-rose-500/10 p-4">
+          <div className="rounded-lg border border-rose-500/16 bg-rose-500/10 p-4">
             <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-rose-600 dark:text-rose-400">
               <Brain className="h-3.5 w-3.5" strokeWidth={2.1} />
               Reasoning
@@ -1366,7 +1366,7 @@ const ReliabilityStudio: FunctionComponent<{
   sourceSegments: SegmentDefinition[];
 }> = ({ stats, providerSegments, sourceSegments }) => (
   <section className="space-y-6">
-    <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
+    <div className={`${PANEL_CLASS} rounded-xl p-6 md:p-7`}>
       <div className="flex flex-col gap-6">
         <StudioHeader
           icon={ShieldCheck}
@@ -1401,19 +1401,19 @@ const ReliabilityStudio: FunctionComponent<{
           <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Confidence Board</div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-4">
-          <div className="rounded-2xl border border-status-green/16 bg-status-green/10 p-4">
+          <div className="rounded-lg border border-status-green/16 bg-status-green/10 p-4">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-status-green">Reported</div>
             <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{stats.usage.reportedInvocationCount}</div>
           </div>
-          <div className="rounded-2xl border border-amber-500/16 bg-amber-500/10 p-4">
+          <div className="rounded-lg border border-amber-500/16 bg-amber-500/10 p-4">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-600 dark:text-amber-400">Estimated</div>
             <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{stats.usage.estimatedInvocationCount}</div>
           </div>
-          <div className="rounded-2xl border border-rose-500/16 bg-rose-500/10 p-4">
+          <div className="rounded-lg border border-rose-500/16 bg-rose-500/10 p-4">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-rose-600 dark:text-rose-400">Unavailable</div>
             <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{stats.usage.unavailableInvocationCount}</div>
           </div>
-          <div className="rounded-2xl border border-slate-500/16 bg-slate-500/10 p-4">
+          <div className="rounded-lg border border-slate-500/16 bg-slate-500/10 p-4">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600 dark:text-slate-300">Unsupported</div>
             <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white">{stats.usage.unsupportedInvocationCount}</div>
           </div>
@@ -1583,7 +1583,7 @@ const TelemetryLedger: FunctionComponent<{
         </div>
 
         {filteredItems.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+          <div className="rounded-lg border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
             {emptyLabel}
           </div>
         ) : (
@@ -1595,7 +1595,7 @@ const TelemetryLedger: FunctionComponent<{
                 return (
                   <div key={item.id} className={LEDGER_ROW_CLASS}>
                     <div className="flex items-start gap-4">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-black/[0.06] bg-white/75 text-sm font-black text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.07)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:text-white dark:shadow-[0_12px_28px_rgba(0,0,0,0.22)]">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-black/[0.06] bg-white/75 text-sm font-black text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.07)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:text-white dark:shadow-[0_12px_28px_rgba(0,0,0,0.22)]">
                         {index + 1}
                       </div>
                       <div className="min-w-0 flex-1">
@@ -1674,7 +1674,7 @@ const TelemetryLedger: FunctionComponent<{
                 );
               })}
               {visibleCount < filteredItems.length ? (
-                <div ref={sentinelRef} className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:border-white/[0.08]">
+                <div ref={sentinelRef} className="rounded-lg border border-dashed border-black/[0.08] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:border-white/[0.08]">
                   Loading more telemetry lanes...
                 </div>
               ) : null}
@@ -1820,7 +1820,7 @@ export const StatsPage: FunctionComponent = () => {
 
   return (
     <div ref={rootRef} className="mx-auto flex max-w-[2400px] flex-col gap-16 px-8 py-20 md:px-20">
-      <section className={`${PANEL_CLASS} rounded-[2.5rem] p-8 md:p-10`}>
+      <section className={`${PANEL_CLASS} rounded-xl p-8 md:p-10`}>
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.14]" />
         <div className="relative flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-4xl">
@@ -1867,15 +1867,15 @@ export const StatsPage: FunctionComponent = () => {
       </section>
 
       {!selectedProject ? (
-        <div className="rounded-[2rem] border border-dashed border-black/[0.08] bg-white/68 px-8 py-16 text-center text-base text-slate-400 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/55 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+        <div className="rounded-xl border border-dashed border-black/[0.08] bg-white/68 px-8 py-16 text-center text-base text-slate-400 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/55 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
           Select a project to load telemetry.
         </div>
       ) : loading && !stats ? (
-        <div className="rounded-[2rem] border border-black/[0.05] bg-white/68 px-8 py-16 text-center text-base text-slate-500 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.05] dark:bg-void-800/55 dark:text-slate-400 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+        <div className="rounded-xl border border-black/[0.05] bg-white/68 px-8 py-16 text-center text-base text-slate-500 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.05] dark:bg-void-800/55 dark:text-slate-400 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
           Loading the telemetry field for {selectedProject.name}.
         </div>
       ) : error ? (
-        <div className="rounded-[2rem] border border-red-500/20 bg-red-500/10 px-8 py-12 text-base text-red-600 dark:text-red-300">
+        <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-8 py-12 text-base text-red-600 dark:text-red-300">
           {error}
         </div>
       ) : stats ? (
@@ -1943,7 +1943,7 @@ export const StatsPage: FunctionComponent = () => {
           ) : null}
 
           <section className="space-y-6">
-            <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
+            <div className={`${PANEL_CLASS} rounded-xl p-6 md:p-7`}>
               <StudioHeader
                 icon={Layers3}
                 eyebrow="Telemetry Ledgers"

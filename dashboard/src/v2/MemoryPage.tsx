@@ -177,7 +177,7 @@ const ModelCard: FunctionComponent<{
     reembedding: boolean;
     staleCount: number;
 }> = ({ model, onDownload, onSelect, onDelete, onReembed, reembedding, staleCount }) => (
-    <div className="flex flex-col gap-3 p-4 rounded-[1.25rem]
+    <div className="flex flex-col gap-3 p-4 rounded-lg
                    bg-white/60 dark:bg-void-800/50 backdrop-blur-xl
                    border border-black/[0.06] dark:border-white/[0.06]
                    shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.2)]">
@@ -394,7 +394,7 @@ const AddMemoryModal: FunctionComponent<{
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/50 backdrop-blur-sm"
             onClick={onClose}>
-            <div className="w-full max-w-md bg-white dark:bg-void-800 rounded-[1.5rem] p-6 flex flex-col gap-4
+            <div className="w-full max-w-md bg-white dark:bg-void-800 rounded-xl p-6 flex flex-col gap-4
                            border border-black/[0.06] dark:border-white/[0.06]
                            shadow-[0_24px_80px_rgba(0,0,0,0.15)] dark:shadow-[0_24px_80px_rgba(0,0,0,0.5)]"
                 onClick={e => e.stopPropagation()}>
@@ -1236,7 +1236,7 @@ export const MemoryPage: FunctionComponent = () => {
 
             {/* ── Re-embed banner ─────────────────────────────────────── */}
             {showModels && stats.staleEmbeddings > 0 && !reembed?.active && (
-                <div className="flex items-center gap-4 px-5 py-4 rounded-2xl
+                <div className="flex items-center gap-4 px-5 py-4 rounded-lg
                                bg-amber-500/[0.06] border border-amber-500/20
                                dark:bg-amber-500/[0.04] dark:border-amber-400/15">
                     <AlertTriangle className="w-4 h-4 shrink-0 text-amber-500" strokeWidth={2.5} />
@@ -1260,7 +1260,7 @@ export const MemoryPage: FunctionComponent = () => {
 
             {/* ── Re-embed progress ───────────────────────────────────── */}
             {showModels && reembed?.active && (
-                <div className="flex flex-col gap-3 px-5 py-4 rounded-2xl
+                <div className="flex flex-col gap-3 px-5 py-4 rounded-lg
                                bg-signal-500/[0.06] border border-signal-500/20
                                dark:bg-signal-500/[0.04] dark:border-signal-500/15">
                     <div className="flex items-center justify-between">
@@ -1281,7 +1281,7 @@ export const MemoryPage: FunctionComponent = () => {
 
             {/* ── Re-embed complete ───────────────────────────────────── */}
             {showModels && reembed && !reembed.active && reembed.completed > 0 && stats.staleEmbeddings === 0 && (
-                <div className="flex items-center gap-3 px-5 py-3 rounded-2xl
+                <div className="flex items-center gap-3 px-5 py-3 rounded-lg
                                bg-signal-500/[0.06] border border-signal-500/20">
                     <Check className="w-4 h-4 text-signal-500" strokeWidth={2.5} />
                     <p className="text-xs font-bold text-signal-600 dark:text-signal-400">
@@ -1292,7 +1292,7 @@ export const MemoryPage: FunctionComponent = () => {
 
             {/* ── Lobotomize warning ──────────────────────────────────── */}
             {lobotomize && (
-                <div className="flex items-center gap-3 px-5 py-3 rounded-2xl
+                <div className="flex items-center gap-3 px-5 py-3 rounded-lg
                                bg-status-red/[0.08] border border-status-red/25 text-status-red"
                     style={{ animation: "lobotomize-pulse 2s ease-in-out infinite" }}>
                     <AlertTriangle className="w-4 h-4 shrink-0" strokeWidth={2.5} />
@@ -1306,7 +1306,7 @@ export const MemoryPage: FunctionComponent = () => {
             {/* ── Neural Canvas ───────────────────────────────────────── */}
             <div
                 ref={wrapRef}
-                className="relative w-full rounded-[2rem] overflow-hidden
+                className="relative w-full rounded-xl overflow-hidden
                            bg-white/50 dark:bg-void-800/40 backdrop-blur-2xl
                            border border-black/[0.05] dark:border-white/[0.05]
                            shadow-[0_8px_48px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_48px_rgba(0,0,0,0.4)]"
@@ -1418,7 +1418,7 @@ export const MemoryPage: FunctionComponent = () => {
                     const total = records.filter(r => r.category === key).length;
                     return (
                         <div key={key}
-                            className="relative overflow-hidden flex flex-col gap-2 p-4 rounded-[1.25rem]
+                            className="relative overflow-hidden flex flex-col gap-2 p-4 rounded-lg
                                        bg-white/60 dark:bg-void-800/50 backdrop-blur-xl
                                        border border-black/[0.06] dark:border-white/[0.06]
                                        shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.2)]">
