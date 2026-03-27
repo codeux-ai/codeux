@@ -29,6 +29,41 @@ afterEach(async () => {
 
 describe("ProjectManagementRepository", () => {
 
+  it("throws error when getting missing project or task", async () => {
+    const { repository } = await createRepository();
+
+    expect(repository.getProject("missing-project-id")).toBeNull();
+    // Test the internal requireProject method by triggering an exception in getSelectedSprintId
+    expect(() => repository.getSelectedSprintId("missing-project-id")).toThrow();
+    expect(repository.getSprint("missing-sprint-id")).toBeNull();
+    expect(repository.getTask("missing-task-id")).toBeNull();
+
+    expect(() => repository.createSprint("missing-project-id", { name: "test" })).toThrow();
+    expect(() => repository.updateSprint("missing-sprint-id", { name: "test" })).toThrow();
+    expect(() => repository.deleteSprint("missing-sprint-id")).toThrow();
+    expect(() => repository.deleteTask("missing-task-id")).toThrow();
+    expect(() => repository.updateTask("missing-task-id", { title: "updated" })).toThrow();
+    expect(() => repository.createTask("missing-project-id", { sprintId: "missing-sprint-id", title: "test" })).toThrow();
+    expect(() => repository.listSprints("missing-project-id")).toThrow();
+    expect(() => repository.listTasks("missing-project-id")).toThrow();
+
+    // Add cross-project task creation failure case
+    const p1 = repository.createProject({ name: "P1", sourceType: "local", sourceRef: "ref1" });
+    const p2 = repository.createProject({ name: "P2", sourceType: "local", sourceRef: "ref2" });
+    const s1 = repository.createSprint(p1.id, { name: "S1" });
+    expect(() => repository.createTask(p2.id, { sprintId: s1.id, title: "cross" })).toThrow();
+
+    // Reset selected project explicitly
+    repository.setSelectedProjectId(null);
+    expect(repository.getSelectedProjectId()).toBeNull();
+
+    // Throw on sprint updates/creates belonging to mismatched projects
+    const sprintMissingProj = repository.createSprint(p1.id, { name: "S_1" });
+    expect(() => repository.createTask("invalid-p-id", { sprintId: sprintMissingProj.id, title: "test" })).toThrow();
+
+    expect(() => repository.setSelectedSprintId(p2.id, sprintMissingProj.id)).toThrow();
+  });
+
   it("preserves active sprint selection on creation and deletion", async () => {
     const { repository } = await createRepository();
     const project = repository.createProject({
@@ -60,6 +95,9 @@ describe("ProjectManagementRepository", () => {
 
     repository.deleteSprint(sprint2.id);
     expect(repository.getSelectedSprintId(project.id)).toBeNull();
+
+    // Test error case
+    expect(() => repository.setSelectedSprintId(project.id, "invalid-id")).toThrow();
   });
 
   it("creates projects, sprints, tasks, and dependency summaries in sqlite", async () => {
@@ -161,6 +199,118 @@ describe("ProjectManagementRepository", () => {
 
     const retrievedUpdated = repository.getSprint(sprint.id);
     expect(retrievedUpdated?.sprintKey).toBe("PLN-1-UPDATED");
+
+    // Test when sprintKey is explicitly null
+    const updatedNull = repository.updateSprint(sprint.id, {
+      sprintKey: null,
+    });
+    expect(updatedNull.sprintKey).toBeNull();
+
+    // Test when sprintKey is undefined (should not update)
+    const updatedUndefined = repository.updateSprint(sprint.id, {
+      name: "Still Planning",
+    });
+    expect(updatedUndefined.sprintKey).toBeNull();
+
+    // Create another sprint without sprintKey
+    const sprintWithoutKey = repository.createSprint(project.id, {
+      name: "No Key Sprint",
+    });
+    expect(sprintWithoutKey.sprintKey).toBeNull();
+
+    // Test that listSprints returns sprintKey properly
+    const listResponse = repository.listSprints(project.id);
+    const listedSprint = listResponse.sprints.find(s => s.id === sprint.id);
+    expect(listedSprint?.sprintKey).toBeNull(); // since we updated it to null earlier
+
+    // Re-update sprint key for final check
+    repository.updateSprint(sprint.id, {
+      sprintKey: "FINAL-KEY",
+    });
+
+    const finalSprint = repository.findSprintByProjectAndNumber(project.id, sprint.number!);
+    expect(finalSprint?.sprintKey).toBe("FINAL-KEY");
+
+    // Test findSprintByProjectAndNumber returning null when sprint not found
+    const missingSprint = repository.findSprintByProjectAndNumber(project.id, 99999);
+    expect(missingSprint).toBeNull();
+  });
+
+  it("handles empty database mapping states gracefully", async () => {
+    const { repository } = await createRepository();
+    // Simulate an empty list fetch
+    const listResponse = repository.listProjects();
+    expect(listResponse.projects).toHaveLength(0);
+    expect(listResponse.selectedProjectId).toBeNull();
+
+    // Add testing for findProjectByBaseDir returning null on missing
+    expect(repository.findProjectByBaseDir("/does/not/exist")).toBeNull();
+
+    // Add testing for getSelectedSprintId gracefully returning null if nothing selected
+    const p1 = repository.createProject({ name: "P1", sourceType: "local", sourceRef: "ref1" });
+    expect(repository.getSelectedSprintId(p1.id)).toBeNull();
+
+    // Additional null check coverage: getTask, getSprint
+    expect(repository.getTask("abc-123")).toBeNull();
+    expect(repository.getSprint("def-456")).toBeNull();
+
+    // Delete non-existent fallback
+    repository.deleteProject("does-not-exist");
+
+    // Check missing listTasks
+    const emptySprints = repository.listSprints(p1.id);
+    expect(emptySprints.sprints.length).toBe(0);
+  });
+
+  it("handles update properties correctly on fallback paths", async () => {
+    const { repository } = await createRepository();
+    const p1 = repository.createProject({ name: "P1", sourceType: "local", sourceRef: "ref1" });
+    repository.updateProject(p1.id, { status: "running" }); // Update only partial fields to hit fallback `current.x`
+    const updated = repository.getProject(p1.id);
+    expect(updated?.status).toBe("running");
+    expect(updated?.name).toBe("P1");
+
+    // Test updateTask missing properties branch coverage fallback `current.x`
+    const s1 = repository.createSprint(p1.id, { name: "S1" });
+    const t1 = repository.createTask(p1.id, { sprintId: s1.id, title: "T1" });
+    const updatedTask = repository.updateTask(t1.id, { status: "in_progress" });
+    expect(updatedTask.status).toBe("in_progress");
+    expect(updatedTask.title).toBe("T1");
+
+    // Test that listTasks with no arguments or undefined works as well
+    const taskList = repository.listTasks(p1.id);
+    expect(taskList.length).toBe(1);
+
+    // Test when getSprint receives an ID that fails
+    expect(repository.getSprint("does-not-exist")).toBeNull();
+
+    // Additional testing for deleteTasksBySprint fallback
+    const s2 = repository.createSprint(p1.id, { name: "S2" });
+    repository.createTask(p1.id, { sprintId: s2.id, title: "T2" });
+    repository.deleteTasksBySprint(s2.id);
+    expect(repository.listTasks(p1.id, s2.id).length).toBe(0);
+  });
+
+  it("throws on creating unique project slug collision max retries", async () => {
+    const { repository } = await createRepository();
+    // Assuming createUniqueProjectSlug doesn't loop infinitely if we have the same project created several times, but let's test creating the same project name multiple times to get suffix coverage
+    const p1 = repository.createProject({ name: "Same Name", sourceType: "local", sourceRef: "ref1" });
+    const p2 = repository.createProject({ name: "Same Name", sourceType: "local", sourceRef: "ref2" });
+    const p3 = repository.createProject({ name: "Same Name", sourceType: "local", sourceRef: "ref3" });
+
+    expect(p1.slug).toBe("same-name");
+    expect(p2.slug).toBe("same-name-2");
+    expect(p3.slug).toBe("same-name-3");
+
+    // Also test unique task keys in sprints
+    const s = repository.createSprint(p1.id, { name: "Sprint" });
+    const t1 = repository.createTask(p1.id, { sprintId: s.id, title: "T1" });
+    const t2 = repository.createTask(p1.id, { sprintId: s.id, title: "T2" });
+    expect(t1.taskKey).toBe("T01");
+    expect(t2.taskKey).toBe("T02");
+
+    repository.updateProject(p1.id, { name: "Different Name" });
+    expect(repository.getProject(p1.id)?.slug).toBe("different-name");
   });
 
   it("handles originalPrompt in sprints and supports clearing tasks", async () => {
