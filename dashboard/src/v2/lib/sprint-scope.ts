@@ -23,3 +23,12 @@ export const resolveSelectedSprint = (sprints: Sprint[], selectedSprintId: strin
   }
   return sprints.find(s => s.id === selectedSprintId) || null;
 };
+
+export function isSprintScopeEqual(
+  currentProjectId: string | null,
+  currentSprintId: string | undefined | null,
+  nextProjectId: string | null,
+  nextSprintId: string | undefined | null
+): boolean {
+  return currentProjectId === nextProjectId && currentSprintId === nextSprintId;
+}
