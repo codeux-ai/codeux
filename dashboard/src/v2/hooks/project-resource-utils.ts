@@ -4,6 +4,13 @@ export function shouldUseForegroundLoading(hasLoaded: boolean, silent = false): 
   return !silent && !hasLoaded;
 }
 
+export function shouldClearTasksOnScopeChange(
+  currentScope: { projectId: string | null; sprintId: string | null | undefined },
+  nextScope: { projectId: string | null; sprintId: string | null | undefined }
+): boolean {
+  return nextScope.projectId !== currentScope.projectId;
+}
+
 export function areSprintListsEqual(current: Sprint[], next: Sprint[]): boolean {
   if (current === next) {
     return true;

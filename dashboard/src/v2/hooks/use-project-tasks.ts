@@ -4,7 +4,7 @@ import type { DashboardRealtimeServerMessage } from "../../types.js";
 import { fetchTasks } from "../lib/project-api.js";
 import { toTaskViewModel } from "../lib/view-models.js";
 import { subscribeToDashboardRealtime } from "../../lib/realtime/dashboard-realtime-client.js";
-import { areTaskRecordListsEqual, shouldUseForegroundLoading } from "./project-resource-utils.js";
+import { areTaskRecordListsEqual, shouldUseForegroundLoading, shouldClearTasksOnScopeChange } from "./project-resource-utils.js";
 
 interface UseProjectTasksResult {
   tasks: Task[];
@@ -29,8 +29,9 @@ export function useProjectTasks(
   const [error, setError] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
   const enabled = options?.enabled ?? true;
+  const resolvedScopeRef = useRef({ projectId, sprintId });
 
-  const refreshInternal = useCallback(async (options?: { silent?: boolean }): Promise<void> => {
+  const refreshInternal = useCallback(async (options?: { silent?: boolean; signal?: AbortSignal }): Promise<void> => {
     if (!projectId || !enabled) {
       setTaskRecords([]);
       setError(null);
@@ -44,22 +45,35 @@ export function useProjectTasks(
       setLoading(true);
     }
     try {
-      const nextTaskRecords = await fetchTasks(projectId, sprintId || undefined);
+      const nextTaskRecords = await fetchTasks(projectId, sprintId || undefined, options?.signal);
+      if (options?.signal?.aborted) return;
       setTaskRecords((current) => (areTaskRecordListsEqual(current, nextTaskRecords) ? current : nextTaskRecords));
+      resolvedScopeRef.current = { projectId, sprintId };
       hasLoadedRef.current = true;
       setError(null);
-    } catch (fetchError) {
+    } catch (fetchError: any) {
+      if (fetchError.name === "AbortError") return;
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
     } finally {
-      if (shouldUseForegroundState) {
+      if (shouldUseForegroundState && !options?.signal?.aborted) {
         setLoading(false);
       }
     }
   }, [enabled, projectId, sprintId]);
 
   useEffect(() => {
-    hasLoadedRef.current = false;
-    void refreshInternal();
+    const currentScope = resolvedScopeRef.current;
+    const nextScope = { projectId, sprintId };
+
+    if (shouldClearTasksOnScopeChange(currentScope, nextScope)) {
+      setTaskRecords([]);
+      hasLoadedRef.current = false;
+    }
+    resolvedScopeRef.current = nextScope;
+
+    const controller = new AbortController();
+    void refreshInternal({ signal: controller.signal });
+    return () => controller.abort();
   }, [enabled, projectId, sprintId, refreshInternal]);
 
   useEffect(() => {

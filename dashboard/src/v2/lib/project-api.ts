@@ -195,12 +195,12 @@ export const exportSprintMarkdown = async (
   );
 };
 
-export const fetchTasks = async (projectId: string, sprintId?: string): Promise<TaskRecord[]> => {
+export const fetchTasks = async (projectId: string, sprintId?: string, signal?: AbortSignal): Promise<TaskRecord[]> => {
   const url = new URL(`/api/projects/${encodeURIComponent(projectId)}/tasks`, window.location.origin);
   if (sprintId) {
     url.searchParams.set("sprintId", sprintId);
   }
-  return fetchJson<TaskRecord[]>(`${url.pathname}${url.search}`);
+  return fetchJson<TaskRecord[]>(`${url.pathname}${url.search}`, { signal });
 };
 
 export const createTask = async (projectId: string, input: CreateTaskInput): Promise<TaskRecord> => {

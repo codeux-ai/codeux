@@ -24,6 +24,7 @@ export function useSprints(projectId: string | null): UseSprintsResult {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
+  const resolvedProjectIdRef = useRef<string | null>(projectId);
 
   const refreshInternal = useCallback(async (options?: { silent?: boolean; signal?: AbortSignal }): Promise<void> => {
     if (!projectId) {
@@ -60,6 +61,18 @@ export function useSprints(projectId: string | null): UseSprintsResult {
   }, [projectId]);
 
   useEffect(() => {
+    if (projectId !== resolvedProjectIdRef.current) {
+      const cachedCollection = sprintCache.get(projectId || "");
+      if (!cachedCollection) {
+        setCollection(null);
+        setLoading(false);
+        setError(null);
+      } else {
+        setCollection(cachedCollection);
+      }
+      resolvedProjectIdRef.current = projectId;
+    }
+
     if (!projectId) {
       hasLoadedRef.current = false;
       void refreshInternal();
