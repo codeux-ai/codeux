@@ -739,3 +739,13 @@ export interface ReadinessProbeStatus {
     mcpService: "UP" | "DOWN";
   };
 }
+
+export interface DockerContainer {
+  id: string;
+  names: string;
+  image: string;
+  status: string;
+  state: string;
+  runningFor: string;
+  labels: Record<string, string>;
+}
