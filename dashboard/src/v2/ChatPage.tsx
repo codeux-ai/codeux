@@ -41,6 +41,11 @@ import { upsertChatThread } from "./lib/chat-thread-utils.js";
 import { fetchInvocationMessages, fetchProjectInvocations } from "./lib/invocation-api.js";
 import { renderMarkdown } from "../lib/markdown.js";
 import { subscribeToDashboardRealtime } from "../lib/realtime/dashboard-realtime-client.js";
+import { ChatIdentityAvatar } from "./components/chat/ChatIdentityAvatar.js";
+import { ChatActivityWidget } from "./components/chat/ChatActivityWidget.js";
+import { ChatSurfaceCard } from "./components/chat/ChatSurfaceCard.js";
+import { ChatRouteBadge } from "./components/chat/ChatRouteBadge.js";
+
 
 const formatTime = (iso: string): string => (
   new Date(iso).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
@@ -287,27 +292,16 @@ const InvocationList: FunctionComponent<{
 );
 
 const InvocationMessageBubble: FunctionComponent<{ message: ExecutionInvocationMessageRecord }> = ({ message }) => {
-  const fromSystem = message.role === "system";
   const fromUser = message.role === "user";
   const fromTool = message.role === "tool";
-  const fromAssistant = message.role === "assistant";
+  const isUserSide = fromUser || fromTool;
 
   return (
-    <div className={`flex ${fromUser || fromTool ? "justify-end" : "justify-start"}`}>
-      <div className={`flex max-w-[760px] items-start gap-3 ${fromUser || fromTool ? "flex-row-reverse" : "flex-row"}`}>
-        <div className={`mt-1 flex h-9 w-9 items-center justify-center rounded-[0.9rem] ${
-          fromUser || fromTool
-            ? "border border-black/[0.06] bg-white text-slate-500 dark:border-white/[0.06] dark:bg-void-700 dark:text-slate-300"
-            : "border border-signal-500/20 bg-signal-500/10 text-signal-500"
-        }`}>
-          {fromUser || fromTool ? <UserCircle2 className="h-4 w-4" strokeWidth={1.6} /> : <Sparkles className="h-4 w-4" strokeWidth={1.6} />}
-        </div>
+    <div className={`flex ${isUserSide ? "justify-end" : "justify-start"}`}>
+      <div className={`flex max-w-[760px] items-start gap-3 ${isUserSide ? "flex-row-reverse" : "flex-row"}`}>
+        <ChatIdentityAvatar role={message.role} className="mt-1" />
         <div className="space-y-2">
-          <div className={`rounded-[1.5rem] px-5 py-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${
-            fromUser || fromTool
-              ? "rounded-tr-sm border border-signal-500/20 bg-signal-500/10 text-slate-900 dark:text-white"
-              : "rounded-tl-sm border border-black/[0.06] bg-white/75 text-slate-700 dark:border-white/[0.06] dark:bg-void-800/70 dark:text-slate-200"
-          }`}>
+          <ChatSurfaceCard isUser={isUserSide}>
             <div
               className="prose prose-sm max-w-none text-[14px] leading-7 text-inherit prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(message.contentMarkdown || "*(No message content)*") }}
@@ -319,8 +313,8 @@ const InvocationMessageBubble: FunctionComponent<{ message: ExecutionInvocationM
                 </pre>
               </div>
             )}
-          </div>
-          <div className={`px-1 text-[10px] font-mono text-slate-400 flex items-center gap-2 ${fromUser || fromTool ? "justify-end" : "justify-start"}`}>
+          </ChatSurfaceCard>
+          <div className={`px-1 text-[10px] font-mono text-slate-400 flex items-center gap-2 ${isUserSide ? "justify-end" : "justify-start"}`}>
             <span>{formatTime(message.createdAt)}</span>
             <span className="capitalize">{message.role}</span>
           </div>
@@ -335,24 +329,14 @@ const MessageBubble: FunctionComponent<{ message: ChatMessageRecord }> = ({ mess
   return (
     <div className={`flex ${fromDashboard ? "justify-end" : "justify-start"}`}>
       <div className={`flex max-w-[760px] items-start gap-3 ${fromDashboard ? "flex-row-reverse" : "flex-row"}`}>
-        <div className={`mt-1 flex h-9 w-9 items-center justify-center rounded-[0.9rem] ${
-          fromDashboard
-            ? "border border-black/[0.06] bg-white text-slate-500 dark:border-white/[0.06] dark:bg-void-700 dark:text-slate-300"
-            : "border border-signal-500/20 bg-signal-500/10 text-signal-500"
-        }`}>
-          {fromDashboard ? <UserCircle2 className="h-4 w-4" strokeWidth={1.6} /> : <Sparkles className="h-4 w-4" strokeWidth={1.6} />}
-        </div>
+        <ChatIdentityAvatar role={fromDashboard ? "dashboard_user" : "connection"} className="mt-1" />
         <div className="space-y-2">
-          <div className={`rounded-[1.5rem] px-5 py-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${
-            fromDashboard
-              ? "rounded-tr-sm border border-signal-500/20 bg-signal-500/10 text-slate-900 dark:text-white"
-              : "rounded-tl-sm border border-black/[0.06] bg-white/75 text-slate-700 dark:border-white/[0.06] dark:bg-void-800/70 dark:text-slate-200"
-          }`}>
+          <ChatSurfaceCard isUser={fromDashboard}>
             <div
               className="prose prose-sm max-w-none text-[14px] leading-7 text-inherit prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(message.bodyMarkdown) }}
             />
-          </div>
+          </ChatSurfaceCard>
           <div className="flex items-center gap-3 px-1 text-[10px] font-mono text-slate-400">
             <span>{formatTime(message.createdAt)}</span>
             <span>{message.deliveryStatus}</span>
