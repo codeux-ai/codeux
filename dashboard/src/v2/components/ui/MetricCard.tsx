@@ -9,7 +9,7 @@ interface MetricCardProps {
 }
 
 export const MetricCard: FunctionComponent<MetricCardProps> = ({ children, hoverTint, accentHex }) => (
-    <div className="relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] flex flex-col justify-between group">
+    <div className="relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-xl p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] flex flex-col justify-between group">
         {/* Hover tint */}
         <div className={`absolute inset-0 bg-transparent ${hoverTint} transition-colors duration-500 pointer-events-none`} />
         <WaveFluid accentHex={accentHex} />

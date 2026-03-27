@@ -34,7 +34,7 @@ export const HumanInterventionBadge: FunctionComponent<HumanInterventionBadgePro
       </div>
 
       <div
-        className={`pointer-events-none absolute top-[calc(100%+0.75rem)] z-40 w-80 max-w-[80vw] rounded-[1.3rem] border border-status-amber/20 bg-white/94 p-4 text-left shadow-[0_20px_44px_rgba(15,23,42,0.14)] backdrop-blur-xl opacity-0 transition-all duration-200 group-hover/intervention:translate-y-0 group-hover/intervention:opacity-100 dark:border-status-amber/20 dark:bg-void-800/94 ${
+        className={`pointer-events-none absolute top-[calc(100%+0.75rem)] z-40 w-80 max-w-[80vw] rounded-xl border border-status-amber/20 bg-white/94 p-4 text-left shadow-[0_20px_44px_rgba(15,23,42,0.14)] backdrop-blur-xl opacity-0 transition-all duration-200 group-hover/intervention:translate-y-0 group-hover/intervention:opacity-100 dark:border-status-amber/20 dark:bg-void-800/94 ${
           compact ? "translate-y-1" : "translate-y-2"
         } ${tooltipAlignment}`}
       >

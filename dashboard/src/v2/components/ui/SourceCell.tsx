@@ -55,7 +55,7 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
             onBlur={handleHoverLeave}
             role="group"
             tabIndex={0}
-            className="relative group cursor-pointer w-56 h-56 flex items-center justify-center shrink-0 perspective-1000 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-[2rem] focus:outline-none"
+            className="relative group cursor-pointer w-56 h-56 flex items-center justify-center shrink-0 perspective-1000 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-xl focus:outline-none"
             style={{ animationDelay: `${animDelay}s` }}
         >
             {/* Shadow underlay */}
@@ -69,7 +69,7 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
                 <div className={`absolute inset-0 pointer-events-none shadow-[inset_0_0_0_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] ${anim}`} />
                 {state.ring && (
                     <div
-                        className={`absolute inset-0 rounded-[50%] bg-transparent border-2 animate-[spin_5s_linear_infinite] scale-105 pointer-events-none mix-blend-screen ${state.ring}`}
+                        className={`absolute inset-0 rounded-full bg-transparent border-2 animate-[spin_5s_linear_infinite] scale-105 pointer-events-none mix-blend-screen ${state.ring}`}
                         style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%', clipPath: 'inset(-10px)' }}
                     />
                 )}

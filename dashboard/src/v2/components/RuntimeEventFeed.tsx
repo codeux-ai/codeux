@@ -34,7 +34,7 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
             {events.map((event) => {
                 const cfg = getOriginatorCfg(event.originator || "system");
                 return (
-                    <div key={event.id} className={`flex gap-3 border-l-2 ${cfg.border} pl-3 py-2 group/entry hover:bg-black/[0.02] dark:hover:bg-white/[0.02] rounded-r-lg transition-colors duration-200`}>
+                    <div key={event.id} className={`flex gap-3 border-l-2 ${cfg.border} pl-3 py-2 group/entry hover:bg-black/[0.02] dark:hover:bg-white/[0.02] rounded-lg transition-colors duration-200`}>
                         <div className="flex-grow min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
                                 <span className={`text-[9px] font-bold uppercase tracking-[0.12em] ${cfg.text}`}>

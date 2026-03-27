@@ -72,7 +72,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="rerun-modal-title"
-                className="w-full max-w-md rounded-[2rem] bg-white shadow-[0_32px_80px_rgba(0,0,0,0.18)] dark:bg-void-900 dark:shadow-[0_32px_80px_rgba(0,0,0,0.6)] overflow-hidden"
+                className="w-full max-w-md rounded-xl bg-white shadow-[0_32px_80px_rgba(0,0,0,0.18)] dark:bg-void-900 dark:shadow-[0_32px_80px_rgba(0,0,0,0.6)] overflow-hidden"
             >
                 {/* Header */}
                 <div className="flex items-center justify-between px-7 pt-6 pb-4">

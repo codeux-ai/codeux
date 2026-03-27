@@ -70,7 +70,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
   return (
     <section
       ref={cardRef}
-      className="relative w-full overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/78 shadow-[0_20px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/72 dark:shadow-[0_24px_56px_rgba(0,0,0,0.28)]"
+      className="relative w-full overflow-hidden rounded-xl border border-black/[0.06] bg-white/78 shadow-[0_20px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/72 dark:shadow-[0_24px_56px_rgba(0,0,0,0.28)]"
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,224,160,0.08),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(255,184,0,0.08),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(0,224,160,0.1),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(255,184,0,0.09),transparent_34%)]" />
 
@@ -107,7 +107,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
           </div>
 
           <div data-composer-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+            <div className="rounded-xl border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
               <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-2">Sprint</div>
               <select
                 value={state.sprintId}
@@ -122,7 +122,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               </select>
             </div>
 
-            <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+            <div className="rounded-xl border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
               <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-2">Status</div>
               <div className="flex gap-2 flex-wrap">
                 {STATUS_OPTIONS.map((option) => (
@@ -162,21 +162,21 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
             </div>
 
             <div className="grid gap-4 xl:grid-cols-2">
-              <div className="rounded-[1.7rem] border border-black/[0.07] bg-black/[0.025] dark:border-white/[0.08] dark:bg-white/[0.03]">
+              <div className="rounded-xl border border-black/[0.07] bg-black/[0.025] dark:border-white/[0.08] dark:bg-white/[0.03]">
                 <textarea
                   value={state.description}
                   onInput={(event) => state.setDescription((event.target as HTMLTextAreaElement).value)}
                   placeholder="Summarize the intent and outcome."
-                  className="min-h-[160px] w-full resize-none rounded-[1.7rem] bg-transparent px-4 py-4 text-sm leading-relaxed text-slate-700 outline-none placeholder:text-slate-300 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-slate-300 dark:placeholder:text-slate-600 sm:px-5"
+                  className="min-h-[160px] w-full resize-none rounded-xl bg-transparent px-4 py-4 text-sm leading-relaxed text-slate-700 outline-none placeholder:text-slate-300 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-slate-300 dark:placeholder:text-slate-600 sm:px-5"
                 />
               </div>
 
-              <div className="rounded-[1.7rem] border border-black/[0.07] bg-black/[0.025] dark:border-white/[0.08] dark:bg-white/[0.03]">
+              <div className="rounded-xl border border-black/[0.07] bg-black/[0.025] dark:border-white/[0.08] dark:bg-white/[0.03]">
                 <textarea
                   value={state.promptMarkdown}
                   onInput={(event) => state.setPromptMarkdown((event.target as HTMLTextAreaElement).value)}
                   placeholder="Detailed markdown instructions for the agent."
-                  className="min-h-[160px] w-full resize-none rounded-[1.7rem] bg-transparent px-4 py-4 text-sm leading-relaxed font-mono text-slate-700 outline-none placeholder:text-slate-300 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-slate-300 dark:placeholder:text-slate-600 sm:px-5"
+                  className="min-h-[160px] w-full resize-none rounded-xl bg-transparent px-4 py-4 text-sm leading-relaxed font-mono text-slate-700 outline-none placeholder:text-slate-300 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-slate-300 dark:placeholder:text-slate-600 sm:px-5"
                 />
               </div>
             </div>
@@ -188,7 +188,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Dependencies</label>
             </div>
             {state.dependencyOptions.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-black/[0.08] dark:border-white/[0.08] px-4 py-4 text-xs text-slate-400">
+              <div className="rounded-xl border border-dashed border-black/[0.08] dark:border-white/[0.08] px-4 py-4 text-xs text-slate-400">
                 No existing tasks in this sprint yet.
               </div>
             ) : (
@@ -200,7 +200,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                       key={task.recordId}
                       type="button"
                       onClick={() => state.toggleDependency(task.recordId)}
-                      className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
+                      className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
                         active
                           ? "border-ember-500/45 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400"
                           : "border-black/[0.07] dark:border-white/[0.07] bg-black/[0.02] dark:bg-white/[0.02] text-slate-500"
@@ -228,7 +228,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                   key={option}
                   type="button"
                   onClick={() => state.setPriority(option)}
-                  className={`px-3 py-2 rounded-[1.1rem] border text-[10px] font-bold uppercase tracking-[0.12em] transition-all text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
+                  className={`px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-[0.12em] transition-all text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
                     state.priority === option
                       ? "border-ember-500/45 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400"
                       : "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"
@@ -253,7 +253,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                     key={option.value}
                     type="button"
                     onClick={() => state.setExecutorType(option.value)}
-                    className={`rounded-[1.35rem] border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
+                    className={`rounded-xl border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
                       isActive
                         ? "border-signal-500/30 bg-signal-500/[0.08] shadow-[0_12px_24px_rgba(0,224,160,0.08)]"
                         : "border-black/[0.06] bg-white/66 hover:border-black/[0.1] hover:bg-white dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:border-white/[0.1]"
@@ -276,7 +276,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
             <button
               type="submit"
               disabled={!state.isValid}
-              className="inline-flex items-center justify-center gap-2.5 rounded-[1.2rem] bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-px hover:opacity-92 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:bg-white dark:text-void-900 dark:focus-visible:ring-offset-void-900"
+              className="inline-flex items-center justify-center gap-2.5 rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-px hover:opacity-92 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:bg-white dark:text-void-900 dark:focus-visible:ring-offset-void-900"
             >
               {state.isEditing ? <Save className="h-4 w-4" strokeWidth={2.3} /> : <Plus className="h-4 w-4" strokeWidth={2.3} />}
               {state.isEditing ? "Save Task" : "Create Task"}
@@ -284,7 +284,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-[1.2rem] border border-black/[0.06] bg-white/66 px-5 py-3 text-sm font-semibold text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:text-white dark:focus-visible:ring-offset-void-900"
+              className="rounded-xl border border-black/[0.06] bg-white/66 px-5 py-3 text-sm font-semibold text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:text-white dark:focus-visible:ring-offset-void-900"
             >
               Cancel
             </button>

@@ -316,7 +316,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   return (
     <section
       ref={cardRef}
-      className={`relative w-full rounded-[2rem] border border-black/[0.06] bg-white/78 shadow-[0_20px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/72 dark:shadow-[0_24px_56px_rgba(0,0,0,0.28)] ${showIconPicker || showColorPicker ? "" : "overflow-hidden"}`}
+      className={`relative w-full rounded-xl border border-black/[0.06] bg-white/78 shadow-[0_20px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/72 dark:shadow-[0_24px_56px_rgba(0,0,0,0.28)] ${showIconPicker || showColorPicker ? "" : "overflow-hidden"}`}
     >
       {/* Radial accents */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.07),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,224,160,0.06),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.09),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,224,160,0.07),transparent_34%)]" />
@@ -432,7 +432,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                   {customTemplates.length === 0 ? (
                     <button
                       onClick={() => openEditor(null)}
-                      className="w-full rounded-[1.4rem] border border-dashed border-black/[0.08] bg-black/[0.015] p-8 text-center transition-colors hover:border-ember-500/30 hover:bg-ember-500/[0.03] dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:border-ember-500/30"
+                      className="w-full rounded-xl border border-dashed border-black/[0.08] bg-black/[0.015] p-8 text-center transition-colors hover:border-ember-500/30 hover:bg-ember-500/[0.03] dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:border-ember-500/30"
                     >
                       <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-ember-500/10">
                         <Plus className="h-5 w-5 text-ember-500" />
@@ -480,7 +480,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
               {/* Planning Route + Model Override */}
               <div data-qs-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
-                <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                <div className="rounded-xl border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
                   <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Planning Route</div>
                   <div className="mt-2">
                     <AvantgardeSelect
@@ -500,7 +500,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                   </div>
                 </div>
 
-                <div className={`rounded-[1.4rem] border p-4 transition-all ${
+                <div className={`rounded-xl border p-4 transition-all ${
                   showModelOverride
                     ? "border-signal-500/20 bg-signal-500/[0.04] dark:bg-signal-500/[0.08]"
                     : "border-black/[0.06] bg-black/[0.025] opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03]"
@@ -530,7 +530,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                   onInput={(e) => setAdditionalPrompt((e.target as HTMLTextAreaElement).value)}
                   placeholder="Add extra context or requirements for this specific run — e.g. 'Focus only on the auth module' or 'Include migration scripts'..."
                   rows={4}
-                  className="w-full rounded-[1.7rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-ember-500/40 focus:shadow-[0_0_0_1px_rgba(255,107,0,0.16),0_0_30px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
+                  className="w-full rounded-xl border border-black/[0.06] bg-black/[0.025] p-5 text-sm leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-ember-500/40 focus:shadow-[0_0_0_1px_rgba(255,107,0,0.16),0_0_30px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
                 />
               </div>
 
@@ -549,7 +549,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                     showPrompt ? "mt-4 max-h-[600px] opacity-100" : "max-h-0 opacity-0"
                   }`}
                 >
-                  <div className="rounded-[1.4rem] border border-black/[0.05] bg-black/[0.02] p-5 dark:border-white/[0.05] dark:bg-white/[0.02]">
+                  <div className="rounded-xl border border-black/[0.05] bg-black/[0.02] p-5 dark:border-white/[0.05] dark:bg-white/[0.02]">
                     <pre className="max-h-80 overflow-y-auto text-xs font-mono leading-relaxed text-slate-500 dark:text-slate-400 whitespace-pre-wrap break-words scrollbar-thin scrollbar-thumb-black/10 dark:scrollbar-thumb-white/10">
                       {combinedPrompt}
                     </pre>
@@ -574,7 +574,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                 <button
                   onClick={() => handleExecute("plan_and_start")}
                   disabled={isBusy}
-                  className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] bg-ember-600 px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(255,107,0,0.25)] transition-all hover:bg-ember-500 hover:shadow-[0_0_28px_rgba(255,107,0,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-xl bg-ember-600 px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(255,107,0,0.25)] transition-all hover:bg-ember-500 hover:shadow-[0_0_28px_rgba(255,107,0,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Rocket className="h-4 w-4" />
                   Plan & Start
@@ -582,7 +582,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                 <button
                   onClick={() => handleExecute("plan_only")}
                   disabled={isBusy}
-                  className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-[1.35rem] border border-black/[0.08] bg-white/66 px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-black/[0.04] disabled:opacity-50 disabled:cursor-not-allowed dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06]"
+                  className="flex min-h-[44px] w-full items-center justify-center gap-2.5 rounded-xl border border-black/[0.08] bg-white/66 px-5 py-3.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:bg-black/[0.04] disabled:opacity-50 disabled:cursor-not-allowed dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06]"
                 >
                   <ClipboardList className="h-4 w-4" />
                   Plan Only
@@ -635,7 +635,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
             {/* Icon + Color + Category Tag + Default Tasks */}
             <div data-qs-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+              <div className="rounded-xl border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
                 <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-3">Category Tag</div>
                 <div className="flex items-center gap-3">
                   {/* Icon picker trigger */}
@@ -697,7 +697,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                 )}
               </div>
 
-              <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+              <div className="rounded-xl border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
                 <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-2">Default Tasks</div>
                 <div className="font-mono text-2xl font-black tracking-tight text-slate-900 dark:text-white">{edTaskCount}</div>
                 <input
@@ -712,7 +712,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             {showIconPicker && (<>
               <div className="fixed inset-0 z-[9998] cursor-default" onClick={() => setShowIconPicker(false)} />
               <div
-                className="absolute z-[9999] w-[17rem] rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95"
+                className="absolute z-[9999] w-[17rem] rounded-xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95"
                 style={{ top: pickerPos.top, left: pickerPos.left, animation: "qs-picker-in 0.2s cubic-bezier(0.22,1,0.36,1)" }}
               >
                 <div className="grid grid-cols-6 gap-1">
@@ -741,7 +741,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             {showColorPicker && (<>
               <div className="fixed inset-0 z-[9998] cursor-default" onClick={() => setShowColorPicker(false)} />
               <div
-                className="absolute z-[9999] w-52 rounded-2xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95"
+                className="absolute z-[9999] w-52 rounded-xl border border-white/[0.08] p-3 shadow-2xl backdrop-blur-2xl bg-[#1a1d24]/95"
                 style={{ top: pickerPos.top, left: pickerPos.left, animation: "qs-picker-in 0.2s cubic-bezier(0.22,1,0.36,1)" }}
               >
                 <div className="grid grid-cols-5 gap-2">
@@ -775,7 +775,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             {/* Agent Preset */}
             {agentPresets.length > 0 && (
               <div data-qs-stagger className="mt-6">
-                <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                <div className="rounded-xl border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
                   <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-2">Agent Preset (optional)</div>
                   <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
                     Attach an agent's instructions to this template. The agent's prompt will be prepended to the template instructions.
@@ -802,7 +802,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                 onInput={(e) => setEdInstruction((e.target as HTMLTextAreaElement).value)}
                 placeholder="Write detailed instructions for the planning agent. Leave empty to use only the agent preset's instructions..."
                 rows={10}
-                className="w-full rounded-[1.7rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm font-mono leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-ember-500/40 focus:shadow-[0_0_0_1px_rgba(255,107,0,0.16),0_0_30px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
+                className="w-full rounded-xl border border-black/[0.06] bg-black/[0.025] p-5 text-sm font-mono leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-ember-500/40 focus:shadow-[0_0_0_1px_rgba(255,107,0,0.16),0_0_30px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
               />
             </div>
 
@@ -827,7 +827,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               <button
                 onClick={handleEditorSave}
                 disabled={edSaving || (!edName.trim() || (!edInstruction.trim() && !edAgentPresetId))}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-[1.35rem] bg-ember-600 px-6 py-3 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(255,107,0,0.25)] transition-all hover:bg-ember-500 hover:shadow-[0_0_28px_rgba(255,107,0,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-ember-600 px-6 py-3 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(255,107,0,0.25)] transition-all hover:bg-ember-500 hover:shadow-[0_0_28px_rgba(255,107,0,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {edSaving ? "Saving..." : editorTemplate ? "Save Changes" : "Create Template"}
               </button>
@@ -854,7 +854,7 @@ const TemplateCard: FunctionComponent<{
     <button
       type="button"
       onClick={onSelect}
-      className="group relative flex flex-col rounded-[1.4rem] border border-black/[0.06] bg-white/60 p-5 text-left transition-all hover:border-ember-500/30 hover:shadow-[0_0_24px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.025] dark:hover:border-ember-500/30"
+      className="group relative flex flex-col rounded-xl border border-black/[0.06] bg-white/60 p-5 text-left transition-all hover:border-ember-500/30 hover:shadow-[0_0_24px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.025] dark:hover:border-ember-500/30"
     >
       {!template.isBuiltIn && onEdit && (
         <button

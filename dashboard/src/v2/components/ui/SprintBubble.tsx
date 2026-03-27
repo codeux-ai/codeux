@@ -233,14 +233,14 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
             <MoreVertical className="h-3.5 w-3.5" />
           </button>
 
-          <div className={`absolute bottom-12 right-6 z-30 min-w-[10rem] origin-bottom-right rounded-[1.2rem] border border-black/[0.08] bg-white/92 p-2 shadow-[0_16px_36px_rgba(15,23,42,0.14)] backdrop-blur-xl transition-all duration-300 dark:border-white/[0.08] dark:bg-void-800/92 ${menuOpen ? "pointer-events-auto translate-y-0 scale-100 opacity-100" : "pointer-events-none translate-y-3 scale-95 opacity-0"}`}>
+          <div className={`absolute bottom-12 right-6 z-30 min-w-[10rem] origin-bottom-right rounded-xl border border-black/[0.08] bg-white/92 p-2 shadow-[0_16px_36px_rgba(15,23,42,0.14)] backdrop-blur-xl transition-all duration-300 dark:border-white/[0.08] dark:bg-void-800/92 ${menuOpen ? "pointer-events-auto translate-y-0 scale-100 opacity-100" : "pointer-events-none translate-y-3 scale-95 opacity-0"}`}>
             <button
               type="button"
               onClick={() => {
                 setMenuOpen(false);
                 onEdit?.();
               }}
-              className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
             >
               <Pencil className="h-3.5 w-3.5" strokeWidth={2.1} />
               Edit
@@ -251,7 +251,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
                 setMenuOpen(false);
                 onExport?.();
               }}
-              className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
             >
               <Download className="h-3.5 w-3.5" strokeWidth={2.1} />
               Export
@@ -263,7 +263,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
                 onToggleShowcase?.();
               }}
               disabled={showcaseBusy}
-              className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
             >
               <Heart className="h-3.5 w-3.5" fill={sprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
               {sprint.showcasePinned ? "Remove" : "Add"}
@@ -274,7 +274,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
                 setMenuOpen(false);
                 onOverrides?.();
               }}
-              className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
             >
               <Sparkles className="h-3.5 w-3.5" strokeWidth={2.1} />
               Overrides
@@ -285,7 +285,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
                 setMenuOpen(false);
                 onDelete?.();
               }}
-              className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-status-red transition-colors hover:bg-status-red/10"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-status-red transition-colors hover:bg-status-red/10"
             >
               <XCircle className="h-3.5 w-3.5" strokeWidth={2.1} />
               Delete

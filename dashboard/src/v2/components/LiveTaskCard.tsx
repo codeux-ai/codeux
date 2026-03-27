@@ -194,7 +194,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                        bg-white/70 dark:bg-void-800/60
                        backdrop-blur-2xl
                        border border-black/[0.06] dark:border-white/[0.06]
-                       rounded-[1.75rem] p-7
+                       rounded-xl p-7
                        shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
                        transition-[border-color] duration-300"
         >
@@ -221,7 +221,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                     <div className="flex items-start gap-3.5 min-w-0 flex-1">
                         {/* Status icon blob */}
                         <div
-                            className="w-10 h-10 rounded-[0.875rem] flex items-center justify-center shrink-0 mt-0.5"
+                            className="w-10 h-10 rounded-md flex items-center justify-center shrink-0 mt-0.5"
                             style={{ backgroundColor: `${cfg.hex}14` }}
                         >
                             <span style={{ color: cfg.hex }}><StatusIcon className="w-5 h-5" strokeWidth={1.5} /></span>
@@ -283,7 +283,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
 
                 {/* Expanded prompt */}
                 {expanded && (
-                    <div className="mb-5 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
+                    <div className="mb-5 p-5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
                         <div className="flex items-center gap-2 mb-3">
                             <FileText className="w-3 h-3 text-slate-400" strokeWidth={2} />
                             <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Task Prompt</span>
@@ -303,7 +303,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
 
                 {/* Live session feed */}
                 {showFeed && (
-                    <div className="mb-5 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
+                    <div className="mb-5 p-5 rounded-xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
                         <div className="flex items-center gap-2 mb-3">
                             <span className="w-1.5 h-1.5 rounded-full bg-signal-500 animate-pulse" />
                             <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Runtime Feed</span>

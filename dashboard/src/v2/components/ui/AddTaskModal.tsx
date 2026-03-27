@@ -162,7 +162,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
     >
       <div
         ref={cardRef}
-        className="relative w-full max-w-4xl overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)] flex"
+        className="relative w-full max-w-4xl overflow-hidden rounded-xl shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)] flex"
       >
         <div className="relative w-56 shrink-0 bg-void-900 dark:bg-void-950 flex flex-col justify-between p-8 overflow-hidden">
           <span className="absolute -top-2 -left-4 text-[7.5rem] font-black text-white/[0.035] font-display leading-none pointer-events-none select-none tracking-tighter">
@@ -211,7 +211,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                 <select
                   value={sprintId}
                   onInput={(event) => setSprintId((event.target as HTMLSelectElement).value)}
-                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500"
+                  className="mt-2.5 w-full rounded-xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500"
                   required
                 >
                   <option value="" disabled>Select sprint</option>
@@ -227,7 +227,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                   type="text"
                   value={title}
                   onInput={(event) => setTitle((event.target as HTMLInputElement).value)}
-                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500"
+                  className="mt-2.5 w-full rounded-xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500"
                   placeholder="Define the task scope"
                   required
                 />
@@ -237,7 +237,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>
                 <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 block mb-2.5">Status</label>
-                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
+                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl gap-1 flex-wrap">
                   {STATUS_OPTIONS.map((option) => (
                     <button
                       key={option}
@@ -257,7 +257,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
 
               <div>
                 <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 block mb-2.5">Priority</label>
-                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
+                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl gap-1 flex-wrap">
                   {PRIORITY_OPTIONS.map((option) => (
                     <button
                       key={option}
@@ -287,7 +287,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     key={option.value}
                     type="button"
                     onClick={() => setExecutorType(option.value)}
-                    className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+                    className={`rounded-xl border px-4 py-3 text-left transition-all ${
                       executorType === option.value
                         ? "border-signal-500/45 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300"
                         : "border-black/[0.08] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] text-slate-500 dark:text-slate-400"
@@ -305,7 +305,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               <textarea
                 value={description}
                 onInput={(event) => setDescription((event.target as HTMLTextAreaElement).value)}
-                className="mt-2.5 w-full min-h-[110px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none"
+                className="mt-2.5 w-full min-h-[110px] rounded-xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none"
                 placeholder="Summarize the intent and outcome."
               />
             </div>
@@ -315,7 +315,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               <textarea
                 value={promptMarkdown}
                 onInput={(event) => setPromptMarkdown((event.target as HTMLTextAreaElement).value)}
-                className="mt-2.5 w-full min-h-[150px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none font-mono"
+                className="mt-2.5 w-full min-h-[150px] rounded-xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none font-mono"
                 placeholder="Detailed markdown instructions for the agent."
               />
             </div>
@@ -326,7 +326,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                 <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Dependencies</label>
               </div>
               {dependencyOptions.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-black/[0.08] dark:border-white/[0.08] px-4 py-4 text-xs text-slate-400">
+                <div className="rounded-xl border border-dashed border-black/[0.08] dark:border-white/[0.08] px-4 py-4 text-xs text-slate-400">
                   No existing tasks in this sprint yet.
                 </div>
               ) : (
@@ -338,7 +338,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                         key={task.recordId}
                         type="button"
                         onClick={() => toggleDependency(task.recordId)}
-                        className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-left transition-all ${
+                        className={`flex items-center justify-between gap-3 px-4 py-3 rounded-xl border text-left transition-all ${
                           active
                             ? "border-ember-500/45 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400"
                             : "border-black/[0.07] dark:border-white/[0.07] bg-black/[0.02] dark:bg-white/[0.02] text-slate-500"
@@ -366,7 +366,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               </button>
               <button
                 type="submit"
-                className="group/btn flex items-center gap-2.5 px-6 py-3 bg-signal-500 hover:bg-signal-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] hover:-translate-y-px"
+                className="group/btn flex items-center gap-2.5 px-6 py-3 bg-signal-500 hover:bg-signal-400 text-void-900 font-bold text-sm rounded-xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] hover:-translate-y-px"
               >
                 <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                 {initialTask ? "Save Task" : "Create Task"}

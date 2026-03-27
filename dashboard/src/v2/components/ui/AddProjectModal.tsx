@@ -86,7 +86,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         >
             <div
                 ref={cardRef}
-                className="relative w-full max-w-2xl overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)] flex"
+                className="relative w-full max-w-2xl overflow-hidden rounded-xl shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)] flex"
                 style={{ minHeight: '520px' }}
             >
                 {/* ── Left decorative panel ── */}
@@ -158,7 +158,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 block mb-2.5">
                                     Source Type
                                 </label>
-                                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1">
+                                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl gap-1">
                                     {(['local', 'git'] as SourceType[]).map((type) => (
                                         <button
                                             key={type}
@@ -240,7 +240,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 </button>
                                 <button
                                     type="submit"
-                                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] hover:-translate-y-px"
+                                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 text-void-900 font-bold text-sm rounded-xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] hover:-translate-y-px"
                                 >
                                     <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                                     Add Project

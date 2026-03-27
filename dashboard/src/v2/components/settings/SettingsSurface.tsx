@@ -13,7 +13,7 @@ export const NoticePanel: FunctionComponent<{
       : "border-black/[0.06] bg-black/[0.03] text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300";
 
   return (
-    <div className={`rounded-[1.35rem] border px-5 py-4 ${toneClass}`}>
+    <div className={`rounded-xl border px-5 py-4 ${toneClass}`}>
       <div className="text-[11px] font-bold uppercase tracking-[0.16em]">{title}</div>
       <div className="mt-2 text-sm font-medium leading-relaxed">{children}</div>
     </div>

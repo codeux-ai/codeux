@@ -25,7 +25,7 @@ const Card: FunctionComponent<{ title: string; description: string; badge?: stri
   badge,
   children,
 }) => (
-  <section className="rounded-[2rem] border border-black/[0.06] bg-white/72 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_12px_36px_rgba(0,0,0,0.22)]">
+  <section className="rounded-xl border border-black/[0.06] bg-white/72 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_12px_36px_rgba(0,0,0,0.22)]">
     <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
       <div>
         <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</h3>
@@ -56,7 +56,7 @@ const Row: FunctionComponent<{ label: string; description: string; children: Com
   children,
   badge,
 }) => (
-  <div className="flex flex-col gap-3 rounded-[1.35rem] border border-black/[0.05] bg-black/[0.015] px-4 py-4 dark:border-white/[0.05] dark:bg-white/[0.02] lg:flex-row lg:items-center lg:justify-between">
+  <div className="flex flex-col gap-3 rounded-xl border border-black/[0.05] bg-black/[0.015] px-4 py-4 dark:border-white/[0.05] dark:bg-white/[0.02] lg:flex-row lg:items-center lg:justify-between">
     <div className="max-w-2xl">
       <div className="flex flex-wrap items-center gap-2">
         <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{label}</div>
@@ -81,7 +81,7 @@ const TextAreaField: FunctionComponent<{ value: string; onChange: (value: string
   <textarea
     value={value}
     onInput={(event) => onChange((event.currentTarget as HTMLTextAreaElement).value)}
-    className="min-h-[112px] w-full rounded-2xl border border-black/[0.08] bg-white px-3 py-3 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-void-900 dark:text-slate-200"
+    className="min-h-[112px] w-full rounded-xl border border-black/[0.08] bg-white px-3 py-3 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-void-900 dark:text-slate-200"
   />
 );
 
@@ -117,7 +117,7 @@ const ProviderLogo: FunctionComponent<{
 
   return (
     <div
-      className={`flex h-11 w-11 items-center justify-center rounded-[1rem] border border-black/[0.08] bg-[#F9F8F4] font-display text-sm font-black tracking-[0.16em] text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] dark:border-white/[0.08] dark:bg-void-900 dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${disabled ? "opacity-60" : ""}`}
+      className={`flex h-11 w-11 items-center justify-center rounded-lg border border-black/[0.08] bg-[#F9F8F4] font-display text-sm font-black tracking-[0.16em] text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] dark:border-white/[0.08] dark:bg-void-900 dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${disabled ? "opacity-60" : ""}`}
       aria-hidden
     >
       {token.logoLabel}
@@ -422,10 +422,10 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             return (
             <div
               key={providerId}
-              className={`group relative overflow-hidden rounded-[1.6rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_10px_24px_rgba(15,23,42,0.045)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/65 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)] ${provider.enabled ? "" : "opacity-60"}`}
+              className={`group relative overflow-hidden rounded-xl border border-black/[0.06] bg-white/72 p-5 shadow-[0_10px_24px_rgba(15,23,42,0.045)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/65 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)] ${provider.enabled ? "" : "opacity-60"}`}
             >
                 <div aria-hidden className={`pointer-events-none absolute inset-0 ${cardTokens.glowClassName}`} />
-                <div aria-hidden className={`absolute left-0 top-5 bottom-5 w-1 rounded-r-full ${cardTokens.railClassName}`} />
+                <div aria-hidden className={`absolute left-0 top-5 bottom-5 w-1 rounded-full ${cardTokens.railClassName}`} />
                 <div aria-hidden className="pointer-events-none absolute -right-2 -top-3 select-none font-display text-[4.75rem] font-black leading-none tracking-tighter text-black/[0.035] dark:text-white/[0.03]">
                   {cardTokens.watermark}
                 </div>
@@ -466,7 +466,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                 />
               </div>
               {!supportsModelSelection || !supportsThinkingMode ? (
-                <div className={`relative z-10 mb-3 rounded-2xl border px-4 py-3 text-xs font-medium leading-relaxed ${cardTokens.noteClassName}`}>
+                <div className={`relative z-10 mb-3 rounded-xl border px-4 py-3 text-xs font-medium leading-relaxed ${cardTokens.noteClassName}`}>
                   Jules API currently does not expose model selection or thinking controls, so this provider uses Jules-managed defaults.
                 </div>
               ) : null}

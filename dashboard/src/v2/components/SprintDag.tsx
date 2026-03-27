@@ -199,7 +199,7 @@ const DagNode = memo(({ node, dispatch, tone }: { node: SprintDagNodeModel & { x
       }}
       title={`${node.task.id} · ${node.task.title}`}
     >
-      <div className={`relative h-full rounded-[1.4rem] border ${tone.card} px-4 py-3 backdrop-blur-2xl transition-transform duration-500`}>
+      <div className={`relative h-full rounded-xl border ${tone.card} px-4 py-3 backdrop-blur-2xl transition-transform duration-500`}>
         <div
           className="absolute left-[-7px] top-1/2 h-3.5 w-3.5 -translate-y-1/2 rounded-full border border-white/70 dark:border-white/15"
           style={{ backgroundColor: `${tone.accent}CC`, boxShadow: `0 0 18px ${tone.accent}50` }}
@@ -214,13 +214,13 @@ const DagNode = memo(({ node, dispatch, tone }: { node: SprintDagNodeModel & { x
           style={{ background: `linear-gradient(90deg, transparent, ${tone.accent}, transparent)` }}
         />
         <div
-          className="absolute inset-x-3 bottom-0 h-10 rounded-b-[1.2rem] opacity-60"
+          className="absolute inset-x-3 bottom-0 h-10 rounded-xl opacity-60"
           style={{ background: `radial-gradient(circle at 50% 0%, ${tone.accent}14 0%, transparent 70%)` }}
         />
 
         {node.phase === "RUNNING" && (
           <div
-            className="dag-running-ring absolute -inset-1 rounded-[1.65rem] border border-signal-500/30"
+            className="dag-running-ring absolute -inset-1 rounded-xl border border-signal-500/30"
             style={{ boxShadow: "0 0 32px rgba(0,224,160,0.12)" }}
           />
         )}
@@ -372,11 +372,11 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
 
   if (!hasSprintContext || tasks.length === 0) {
     return (
-      <div className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/70 p-8 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+      <div className="relative overflow-hidden rounded-xl border border-black/[0.06] bg-white/70 p-8 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
         <WaveFluid accentHex="#00E0A0" />
         <BorderTrace accentHex="#00E0A0" />
         <div className="relative z-10 flex min-h-[22rem] flex-col items-center justify-center text-center">
-          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-[1.3rem] border border-signal-500/20 bg-signal-500/10 text-signal-500 shadow-[0_0_24px_rgba(0,224,160,0.16)]">
+          <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-xl border border-signal-500/20 bg-signal-500/10 text-signal-500 shadow-[0_0_24px_rgba(0,224,160,0.16)]">
             <Workflow className="h-8 w-8" strokeWidth={1.4} />
           </div>
           <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">Dependency Graph</div>
@@ -392,7 +392,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
   }
 
   return (
-    <div className="group relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] md:p-6">
+    <div className="group relative overflow-hidden rounded-xl border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] md:p-6">
       <WaveFluid accentHex="#00E0A0" />
       <BorderTrace accentHex="#00E0A0" />
 
@@ -431,7 +431,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
               ].map(({ label, value, icon: Icon, accent }) => (
                 <div
                   key={label}
-                  className="rounded-[1.1rem] border border-black/[0.05] bg-white/65 px-3 py-3 backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35"
+                  className="rounded-xl border border-black/[0.05] bg-white/65 px-3 py-3 backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35"
                 >
                   <div className={`mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em] ${accent}`}>
                     <Icon className="h-3.5 w-3.5" strokeWidth={1.8} />
@@ -444,7 +444,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
           </div>
         </div>
 
-        <div className="rounded-[1.6rem] border border-black/[0.05] bg-black/[0.02] p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
+        <div className="rounded-xl border border-black/[0.05] bg-black/[0.02] p-3 dark:border-white/[0.05] dark:bg-white/[0.02]">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3 px-2">
             <div className="flex flex-wrap items-center gap-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
               <span className="rounded-full border border-black/[0.06] bg-white/70 px-3 py-1 dark:border-white/[0.06] dark:bg-void-900/55">Scrollable canvas</span>
@@ -469,7 +469,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
 
           <div
             ref={scrollRef}
-            className="dag-scroll-shell h-[38rem] overflow-auto rounded-[1.35rem] border border-black/[0.05] bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(249,248,244,0.56))] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] dark:border-white/[0.04] dark:bg-[linear-gradient(180deg,rgba(24,20,17,0.88),rgba(8,6,5,0.76))] md:h-[46rem]"
+            className="dag-scroll-shell h-[38rem] overflow-auto rounded-xl border border-black/[0.05] bg-[linear-gradient(180deg,rgba(255,255,255,0.72),rgba(249,248,244,0.56))] shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] dark:border-white/[0.04] dark:bg-[linear-gradient(180deg,rgba(24,20,17,0.88),rgba(8,6,5,0.76))] md:h-[46rem]"
           >
             <div className="relative" style={{ width: `${canvasWidth}px`, height: `${canvasHeight}px` }}>
               <svg

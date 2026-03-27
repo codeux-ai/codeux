@@ -41,7 +41,7 @@ export const OverviewTelemetry: FunctionComponent = () => {
 
   if (error) {
     return (
-      <aside className="sticky top-24 flex flex-col h-[760px] overflow-hidden group rounded-[1.75rem] border border-status-red/20 bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl p-8">
+      <aside className="sticky top-24 flex flex-col h-[760px] overflow-hidden group rounded-xl border border-status-red/20 bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl p-8">
         <div className="flex items-center gap-3">
           <Radio className="w-5 h-5 text-status-red" strokeWidth={1.5} />
           <div>
@@ -75,7 +75,7 @@ export const OverviewTelemetry: FunctionComponent = () => {
         Telemetry.
       </h3>
 
-      <div className="relative flex-1 overflow-hidden rounded-[2rem] border border-black/[0.06] dark:border-white/[0.06] bg-white/65 dark:bg-void-800/60 backdrop-blur-2xl p-7">
+      <div className="relative flex-1 overflow-hidden rounded-xl border border-black/[0.06] dark:border-white/[0.06] bg-white/65 dark:bg-void-800/60 backdrop-blur-2xl p-7">
         {isLoading ? (
           <div className="flex flex-col gap-6">
             <SkeletonPanel />
@@ -89,7 +89,7 @@ export const OverviewTelemetry: FunctionComponent = () => {
               <div className="w-[22rem] h-[22rem] rounded-full border border-black/[0.02] dark:border-white/[0.03] absolute animate-[ping_10s_cubic-bezier(0.1,0.5,0.8,1)_infinite]" />
             </div>
             <div className="text-center relative z-10">
-              <div className="w-14 h-14 rounded-[1.25rem] border border-black/[0.07] dark:border-white/[0.07] shadow-[0_0_28px_rgba(100,116,139,0.12)] mx-auto mb-5 flex items-center justify-center">
+              <div className="w-14 h-14 rounded-xl border border-black/[0.07] dark:border-white/[0.07] shadow-[0_0_28px_rgba(100,116,139,0.12)] mx-auto mb-5 flex items-center justify-center">
                 <FolderKanban className="w-7 h-7 text-slate-400 dark:text-slate-500" strokeWidth={1.5} />
               </div>
               <span className="text-slate-500 dark:text-slate-500 font-semibold text-sm tracking-widest block uppercase font-display">Awaiting Runtime</span>
@@ -99,29 +99,29 @@ export const OverviewTelemetry: FunctionComponent = () => {
         ) : (
           <div className="relative z-10 h-full flex flex-col">
             <div className="grid grid-cols-3 gap-3 mb-6">
-              <div className="rounded-2xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-4">
+              <div className="rounded-xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-4">
                 <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active Projects</div>
                 <div className="mt-2 text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry.activeProjects.length}</div>
               </div>
-              <div className="rounded-2xl border border-status-amber/15 bg-status-amber/8 p-4">
+              <div className="rounded-xl border border-status-amber/15 bg-status-amber/8 p-4">
                 <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-status-amber">Needs Attention</div>
                 <div className="mt-2 text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry.attentionProjects.length}</div>
               </div>
-              <div className="rounded-2xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-4">
+              <div className="rounded-xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-4">
                 <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Timeline Events</div>
                 <div className="mt-2 text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry.recentEvents.length}</div>
               </div>
             </div>
 
             {telemetry.attentionProjects.length > 0 && (
-              <div className="mb-6 rounded-[1.6rem] border border-status-amber/18 bg-status-amber/8 p-4">
+              <div className="mb-6 rounded-xl border border-status-amber/18 bg-status-amber/8 p-4">
                 <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-status-amber">
                   <AlertTriangle className="w-3.5 h-3.5" strokeWidth={2.1} />
                   Human Intervention Needed
                 </div>
                 <div className="mt-3 space-y-3">
                   {telemetry.attentionProjects.slice(0, 3).map((project) => (
-                    <div key={project.sprintRunId} className="rounded-2xl border border-status-amber/15 bg-white/75 p-4 dark:bg-void-800/55">
+                    <div key={project.sprintRunId} className="rounded-xl border border-status-amber/15 bg-white/75 p-4 dark:bg-void-800/55">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="text-sm font-bold tracking-tight text-slate-900 dark:text-white truncate">
@@ -157,7 +157,7 @@ export const OverviewTelemetry: FunctionComponent = () => {
             {telemetry.activeProjects.length > 0 && (
               <div className="space-y-2 mb-6">
               {telemetry.activeProjects.slice(0, 4).map((project) => (
-                <div key={project.sprintRunId} className="rounded-2xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-4">
+                <div key={project.sprintRunId} className="rounded-xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-sm font-bold tracking-tight text-slate-900 dark:text-white truncate">{project.projectName}</div>
@@ -181,7 +181,7 @@ export const OverviewTelemetry: FunctionComponent = () => {
               <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 mb-3">Runtime Timeline</div>
               <div className="h-full overflow-y-auto dashboard-scrollbar pr-1 space-y-2">
                 {telemetry.recentEvents.map((event) => (
-                  <div key={event.id} className="rounded-2xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-3">
+                  <div key={event.id} className="rounded-xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-3">
                     <div className="flex items-center justify-between gap-2">
                       <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-status-red">{describeEvent(event.eventType)}</div>
                       <div className="text-[10px] font-mono text-slate-400">{formatTime(event.createdAt)}</div>

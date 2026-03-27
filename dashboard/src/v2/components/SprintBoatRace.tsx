@@ -968,7 +968,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                     </div>
                     <div className="flex items-center gap-5 text-[7px] font-mono text-slate-400 dark:text-white/20 uppercase tracking-wider">
                         <span className="flex items-center gap-1.5">
-                            <span className="inline-block w-2.5 h-1.5 rounded-[1px] bg-gradient-to-r from-[#E74C3C]/60 to-[#3498DB]/60" />
+                            <span className="inline-block w-2.5 h-1.5 rounded-sm bg-gradient-to-r from-[#E74C3C]/60 to-[#3498DB]/60" />
                             Container
                         </span>
                         <span className="flex items-center gap-1.5">

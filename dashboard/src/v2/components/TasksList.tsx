@@ -71,7 +71,7 @@ export const TasksList: FunctionComponent = () => {
                         <TaskRow key={task.id} task={task} />
                     ))
                 ) : (
-                    <div className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
+                    <div className="flex flex-col items-center justify-center py-12 text-center rounded-xl border border-dashed border-slate-300 dark:border-slate-700">
                         <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">No active tasks</div>
                         <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">There are no tasks currently matching the selected filter in active sprints.</div>
                     </div>

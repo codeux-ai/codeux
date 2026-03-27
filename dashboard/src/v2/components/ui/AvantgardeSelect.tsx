@@ -151,7 +151,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
             : "cursor-pointer text-signal-600 hover:text-signal-500 dark:text-signal-300 dark:hover:text-signal-200"
         }`
       : variant === "card"
-        ? `flex w-full items-center justify-between gap-2 rounded-[1.2rem] border border-black/[0.06] bg-white/66 px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] outline-none transition-all ${
+        ? `flex w-full items-center justify-between gap-2 rounded-xl border border-black/[0.06] bg-white/66 px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] outline-none transition-all ${
             disabled
               ? "cursor-not-allowed text-slate-400 opacity-60"
               : "cursor-pointer text-signal-600 hover:border-black/[0.1] dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-signal-300 dark:hover:border-white/[0.1]"
@@ -175,7 +175,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
             width: `${position.width}px`,
             zIndex: 9999,
           }}
-          className="overflow-hidden rounded-2xl border border-black/[0.06] bg-white/[0.97] shadow-[0_20px_40px_rgba(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.03)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/[0.97] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4),0_0_0_1px_rgba(255,255,255,0.04)]"
+          className="overflow-hidden rounded-xl border border-black/[0.06] bg-white/[0.97] shadow-[0_20px_40px_rgba(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.03)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/[0.97] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4),0_0_0_1px_rgba(255,255,255,0.04)]"
         >
           <div className="max-h-[17rem] overflow-y-auto overscroll-contain py-1.5">
             {options.map((option) => {

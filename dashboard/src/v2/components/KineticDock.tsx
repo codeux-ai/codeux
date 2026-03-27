@@ -93,9 +93,9 @@ export const KineticDock: FunctionComponent = () => {
                 key={item.label}
                 to={item.path}
                 ref={(el: HTMLAnchorElement | null) => { itemRefs.current[globalIndex] = el; }}
-                className="relative group flex flex-col items-center justify-center w-[52px] h-[52px] rounded-[1.4rem] transition-colors duration-300 decoration-none"
+                className="relative group flex flex-col items-center justify-center w-[52px] h-[52px] rounded-xl transition-colors duration-300 decoration-none"
             >
-                <div className="absolute inset-0 bg-transparent group-hover:bg-black/[0.04] dark:group-hover:bg-white/[0.05] rounded-[1.4rem] pointer-events-none transition-colors duration-300" />
+                <div className="absolute inset-0 bg-transparent group-hover:bg-black/[0.04] dark:group-hover:bg-white/[0.05] rounded-xl pointer-events-none transition-colors duration-300" />
 
                 <item.icon
                     className={`w-5 h-5 relative z-10 transition-all duration-300
@@ -132,9 +132,9 @@ export const KineticDock: FunctionComponent = () => {
                 className="relative pointer-events-auto flex items-center gap-1.5 p-2.5
                            bg-white/60 dark:bg-void-800/70 backdrop-blur-3xl
                            border border-black/[0.06] dark:border-white/[0.08]
-                           rounded-[2rem]
+                           rounded-full
                            shadow-[0_20px_50px_rgba(0,0,0,0.08)] dark:shadow-[0_20px_50px_rgba(0,0,0,0.5)]
-                           before:absolute before:inset-0 before:rounded-[2rem]
+                           before:absolute before:inset-0 before:rounded-full
                            before:shadow-[inset_0_1px_1px_rgba(255,255,255,0.6)] dark:before:shadow-[inset_0_1px_1px_rgba(255,255,255,0.06)]"
             >
                 {/* Active Signal Indicator */}
