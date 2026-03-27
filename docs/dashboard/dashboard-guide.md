@@ -493,6 +493,14 @@ For provider-backed runs, session polling is now used to ingest durable runtime 
   - then external hint fallback
 - Markdown rendering now strips raw inline HTML before inserting into the DOM, reducing script injection risk from activity/prompt content.
 
+## UI Styling Guidelines
+
+- **Border Radius Policy**: New UI work must strictly adhere to the default Tailwind border-radius scale (`rounded-sm`, `rounded-md`, `rounded-lg`, `rounded-xl`, `rounded-full`).
+  - Do not use oversized radii (`rounded-2xl`, `rounded-3xl`).
+  - Do not use arbitrary values (`rounded-[...]`).
+  - Do not use unsupported directional radii (e.g., `rounded-t-`, `rounded-tl-`, etc.).
+  - Exceptions are extremely rare and require explicit documentation (e.g., `SprintBubble.tsx` requires inline `borderRadius` for complex animation curves).
+
 ## Frontend Architecture Notes
 
 - `dashboard/src/app.tsx` now focuses on view composition only.

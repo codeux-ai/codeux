@@ -50,7 +50,7 @@ export const TaskCard: FunctionComponent<TaskCardProps> = memo(
     const renderedPrompt = useMemo(() => renderMarkdown(task.prompt), [task.prompt]);
 
     return (
-      <div className="bg-slate-900/50 backdrop-blur-md border border-slate-800 p-5 rounded-2xl hover:bg-slate-900/80 transition-all duration-300 group">
+      <div className="bg-slate-900/50 backdrop-blur-md border border-slate-800 p-5 rounded-xl hover:bg-slate-900/80 transition-all duration-300 group">
         <div className="flex items-start justify-between gap-4">
           <div className="flex-grow max-w-full overflow-hidden">
             <TaskHeader

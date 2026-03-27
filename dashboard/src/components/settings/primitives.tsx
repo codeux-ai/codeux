@@ -8,7 +8,7 @@ interface SettingsCardProps {
 
 export const SettingsCard: FunctionComponent<SettingsCardProps> = ({ title, description, children }) => {
   return (
-    <article className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-2xl p-5 space-y-4">
+    <article className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-xl p-5 space-y-4">
       <h3 className="text-sm font-bold text-white">{title}</h3>
       {description ? <p className="text-xs text-slate-500">{description}</p> : null}
       {children}

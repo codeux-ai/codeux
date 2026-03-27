@@ -6,7 +6,7 @@ interface StatsGridProps {
 }
 
 const Tile: FunctionComponent<{ label: string; value: number; tone: string }> = ({ label, value, tone }) => (
-  <div className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-2xl p-4">
+  <div className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-xl p-4">
     <p className="text-[10px] tracking-[0.2em] uppercase text-slate-500 mb-2">{label}</p>
     <p className={`text-2xl font-bold ${tone}`}>{value}</p>
   </div>

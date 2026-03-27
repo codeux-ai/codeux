@@ -49,7 +49,7 @@ export const App: FunctionComponent = () => {
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="bg-slate-900/50 backdrop-blur-md border border-slate-800 p-8 rounded-2xl text-center max-w-md">
+        <div className="bg-slate-900/50 backdrop-blur-md border border-slate-800 p-8 rounded-xl text-center max-w-md">
           <div className="text-red-400 text-5xl mb-4">⚠️</div>
           <h2 className="text-xl font-bold mb-2 text-white">Connection Lost</h2>
           <p className="text-slate-400">{error}</p>
@@ -87,7 +87,7 @@ export const App: FunctionComponent = () => {
 
                 <div className="space-y-4">
                   {stats.total === 0 ? (
-                    <div className="bg-slate-900/50 backdrop-blur-md border border-slate-800 border-dashed p-12 rounded-2xl text-center">
+                    <div className="bg-slate-900/50 backdrop-blur-md border border-slate-800 border-dashed p-12 rounded-xl text-center">
                       <p className="text-slate-500">Awaiting sprint decomposition...</p>
                     </div>
                   ) : (

@@ -19,7 +19,7 @@ const statusTone = (value: string | null): string => {
 export const GitStatusPanel: FunctionComponent<GitStatusPanelProps> = ({ status, error }) => {
   if (error) {
     return (
-      <section className="bg-slate-900/50 backdrop-blur-md border border-red-500/30 rounded-2xl p-6">
+      <section className="bg-slate-900/50 backdrop-blur-md border border-red-500/30 rounded-xl p-6">
         <h4 className="text-[10px] font-bold text-red-300 uppercase tracking-[0.2em] mb-3">Git Tracking Error</h4>
         <p className="text-sm text-red-200">{error}</p>
       </section>
@@ -28,7 +28,7 @@ export const GitStatusPanel: FunctionComponent<GitStatusPanelProps> = ({ status,
 
   if (!status) {
     return (
-      <section className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-2xl p-6">
+      <section className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-xl p-6">
         <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-3">Git Tracking</h4>
         <p className="text-sm text-slate-500">Loading git status...</p>
       </section>
@@ -36,7 +36,7 @@ export const GitStatusPanel: FunctionComponent<GitStatusPanelProps> = ({ status,
   }
 
   return (
-    <section className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-2xl p-6 space-y-4">
+    <section className="bg-slate-900/50 backdrop-blur-md border border-slate-800 rounded-xl p-6 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">Git / CI / PR Tracking</h4>
         <span className={`text-[10px] font-bold uppercase ${status.mode === "REMOTE" ? "text-sky-400" : "text-slate-400"}`}>
