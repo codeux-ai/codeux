@@ -320,7 +320,8 @@ export const ProjectsPage: FunctionComponent = () => {
 
     return (
         <>
-            <div
+            <main
+                aria-label="Projects"
                 ref={mainRef}
                 className="max-w-[1920px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-16 relative z-10"
             >
@@ -447,7 +448,7 @@ export const ProjectsPage: FunctionComponent = () => {
                     ))}
                     <AddCard onClick={() => setShowModal(true)} />
                 </div>
-            </div>
+            </main>
 
             {showModal && (
                 <AddProjectModal

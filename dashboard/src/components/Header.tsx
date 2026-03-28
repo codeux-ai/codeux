@@ -21,7 +21,7 @@ export const Header: FunctionComponent<HeaderProps> = ({ sprintNumber, featureBr
           </p>
         </div>
         <div className="flex items-end gap-6">
-          <nav className="flex items-center rounded-lg border border-slate-700/60 bg-slate-900/50 p-1">
+          <nav aria-label="View Navigation" className="flex items-center rounded-lg border border-slate-700/60 bg-slate-900/50 p-1">
             <button
               type="button"
               onClick={() => onChangeView("dashboard")}

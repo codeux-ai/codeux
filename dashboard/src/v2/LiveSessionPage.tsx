@@ -1019,7 +1019,7 @@ export const LiveSessionPage: FunctionComponent = () => {
     }
 
     return (
-        <div className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-16 relative z-10">
+        <main aria-label="Live Session" className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-16 relative z-10">
 
             {/* Inline connection warning — shown when we have prior data but lost connection */}
             {error && (hasSprintContext || initialLoadComplete) && (
@@ -1336,6 +1336,6 @@ export const LiveSessionPage: FunctionComponent = () => {
                     </CollapsiblePanel>
                 </div>
             </div>
-        </div>
+        </main>
     );
 };

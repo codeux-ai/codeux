@@ -23,7 +23,7 @@ export const DashboardV2: FunctionComponent = () => {
     }, []);
 
     return (
-        <main ref={mainContentRef} className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-24">
+        <main aria-label="Overview" ref={mainContentRef} className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-24">
             {/* Page Header */}
             <header className="flex flex-col md:flex-row items-start md:items-end justify-between w-full gap-6">
                 <div>

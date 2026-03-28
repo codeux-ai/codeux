@@ -1819,7 +1819,7 @@ export const StatsPage: FunctionComponent = () => {
   };
 
   return (
-    <div ref={rootRef} className="mx-auto flex max-w-[2400px] flex-col gap-16 px-8 py-20 md:px-20">
+    <main aria-label="Stats" ref={rootRef} className="mx-auto flex max-w-[2400px] flex-col gap-16 px-8 py-20 md:px-20">
       <section className={`${PANEL_CLASS} rounded-[2.5rem] p-8 md:p-10`}>
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.14]" />
         <div className="relative flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
@@ -1991,6 +1991,6 @@ export const StatsPage: FunctionComponent = () => {
           </section>
         </>
       ) : null}
-    </div>
+    </main>
   );
 };

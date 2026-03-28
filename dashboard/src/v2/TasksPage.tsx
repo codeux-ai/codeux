@@ -488,7 +488,7 @@ export const TasksPage: FunctionComponent = () => {
   }, []);
 
   return (
-    <div className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-16 relative z-10">
+    <main aria-label="Tasks" className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-16 relative z-10">
       <div ref={headerRef} className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
         <div className="flex flex-col gap-5">
           <div className="flex items-center gap-2.5 text-signal-500 font-mono text-[10px] font-bold uppercase tracking-[0.2em]">
@@ -673,6 +673,6 @@ export const TasksPage: FunctionComponent = () => {
         ))}
       </div>
 
-    </div>
+    </main>
   );
 };

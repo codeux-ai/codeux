@@ -51,11 +51,11 @@ const rootRoute = createRootRoute({
           <div className="flex-1 flex flex-col h-full relative z-10 overflow-hidden">
             <TopNav isDark={isDark} toggleTheme={toggleTheme} />
 
-            <main aria-label="Main content" className="flex-1 overflow-y-auto dashboard-scrollbar relative pb-32">
+            <div className="flex-1 overflow-y-auto dashboard-scrollbar relative pb-32">
               <Suspense fallback={<div className="flex-1 p-8"><SkeletonPanel /></div>}>
                 <Outlet />
               </Suspense>
-            </main>
+            </div>
           </div>
 
           <KineticDock />

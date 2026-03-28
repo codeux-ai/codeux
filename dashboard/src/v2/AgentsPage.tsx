@@ -354,7 +354,7 @@ export const AgentsPage: FunctionComponent = () => {
   };
 
   return (
-    <div className="relative z-10 mx-auto flex max-w-[1880px] flex-col gap-12 px-8 py-20 md:px-20">
+    <main aria-label="Agents" className="relative z-10 mx-auto flex max-w-[1880px] flex-col gap-12 px-8 py-20 md:px-20">
       <div ref={headerRef} className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
         <div className="space-y-5">
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
@@ -455,6 +455,6 @@ export const AgentsPage: FunctionComponent = () => {
           ))}
         </div>
       )}
-    </div>
+    </main>
   );
 };

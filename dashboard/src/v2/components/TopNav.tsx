@@ -257,7 +257,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <nav aria-label="User Menu" className="flex items-center gap-3">
                 {/* Project Selector */}
                 <div className="relative hidden md:block" ref={dropdownRef} onKeyDown={projectKb.onContainerKeyDown}>
                     <button
@@ -515,7 +515,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                         </div>
                     </div>
                 </div>
-            </div>
+            </nav>
             </nav>
         </header>
 

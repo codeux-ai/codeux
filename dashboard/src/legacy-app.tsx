@@ -77,7 +77,7 @@ export const App: FunctionComponent = () => {
             <StatsGrid stats={stats} />
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              <div className="lg:col-span-8">
+              <section aria-label="Task Pipeline" className="lg:col-span-8">
                 <div className="flex items-center justify-between mb-6">
                   <h2 className="text-xl font-bold text-white flex items-center gap-2">
                     Task Pipeline
@@ -94,16 +94,16 @@ export const App: FunctionComponent = () => {
                     tasksWithLiveActivities.map((task) => <TaskCard key={task.id} task={task} onRerunTask={handleRerunTask} />)
                   )}
                 </div>
-              </div>
+              </section>
 
-              <div className="lg:col-span-4">
+              <aside aria-label="Activity Sidebar" className="lg:col-span-4">
                 <ActivitySidebar
                   reportText={status.reportText}
                   instructions={status.instructions}
                   gitStatus={gitStatus}
                   gitStatusError={gitStatusError}
                 />
-              </div>
+              </aside>
             </div>
           </>
         ) : (
