@@ -222,6 +222,7 @@ Legacy runtime:
 - Chat page now shows a live "working" bubble once a listener has picked up a dashboard message and is preparing a reply
 - Chat page now force-refreshes the selected thread when realtime thread updates arrive, so virtual replies clear stale `pending` delivery badges and sidebar counts as soon as the reply lands
 - Chat message and thread timestamp chrome now suppresses malformed timestamps instead of rendering `Invalid Date`
+- Thread compaction now creates an execution invocation that asks the selected virtual chat worker for a reusable markdown summary, then replays future fresh sessions from that compacted handoff instead of the full original transcript
 - Chat threads can now be deleted directly from the history rail; deletion is realtime-aware and removes the thread across open dashboard views
 - New thread creation now deduplicates optimistic UI insertion against realtime thread updates, so the sidebar count no longer briefly overstates the number of chats
 - Chat page now hydrates thread lists and conversation panes from cache first, so revisiting a project or switching between already-seen threads is immediate instead of blocking on a fresh fetch

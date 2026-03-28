@@ -11,7 +11,7 @@ expect.extend(matchers);
 describe("ChatThreadHeader", () => {
   const mockOptions = [
     { id: "conn-1", label: "Worker 1", status: "online", isPrimary: false, type: "connection", isSelectable: true },
-    { id: "virtual:gemini", label: "Virtual Gemini", status: "available", isPrimary: true, type: "virtual", isSelectable: true },
+    { id: "virtual:gemini", label: "Virtual Gemini", status: "available", isPrimary: true, type: "virtual", isSelectable: true, providerId: "gemini" },
   ];
 
   const baseThread = {
@@ -105,6 +105,31 @@ describe("ChatThreadHeader", () => {
       fireEvent.click(compactButton);
     }
     expect(onCompact).toHaveBeenCalledOnce();
+  });
+
+  it("shows the selected virtual worker for an explicitly routed thread", () => {
+    const thread = {
+      ...baseThread,
+      runtimeState: {
+        routeKind: "virtual",
+        virtualProvider: "gemini",
+      },
+    };
+
+    render(
+      <ChatThreadHeader
+        thread={thread}
+        workerOptions={mockOptions as any}
+        isAssigning={false}
+        onAssignRoute={() => {}}
+        onCompact={() => {}}
+        isCompacting={false}
+      />
+    );
+
+    const selects = screen.getAllByRole("combobox");
+    const select = selects[selects.length - 1] as HTMLSelectElement;
+    expect(select.value).toBe("virtual:gemini");
   });
 
   it("disables select when assigning", () => {

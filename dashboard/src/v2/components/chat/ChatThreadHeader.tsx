@@ -3,6 +3,33 @@ import { AlertCircle, Zap, Activity } from "lucide-preact";
 import type { ChatThread } from "../../types.js";
 import type { WorkerOption } from "../../lib/project-worker-options.js";
 
+const resolveSelectedRouteId = (thread: ChatThread | null, workerOptions: WorkerOption[]): string => {
+  const defaultOption = workerOptions.find((option) => option.isPrimary) || null;
+  if (!thread) {
+    return defaultOption?.id || "";
+  }
+
+  if (thread.runtimeState?.routeKind === "virtual" && thread.runtimeState.virtualProvider) {
+    return workerOptions.find((option) => option.providerId === thread.runtimeState?.virtualProvider)?.id || "";
+  }
+
+  if (thread.runtimeState?.routeKind === "worker") {
+    const explicitWorkerOption = workerOptions.find((option) => (
+      (thread.runtimeState?.workerEndpointId && option.workerEndpointId === thread.runtimeState.workerEndpointId)
+      || (thread.connectionId && option.connectionId === thread.connectionId)
+    ));
+    if (explicitWorkerOption) {
+      return explicitWorkerOption.id;
+    }
+  }
+
+  if (thread.connectionId) {
+    return workerOptions.find((option) => option.connectionId === thread.connectionId)?.id || "";
+  }
+
+  return defaultOption?.id || "";
+};
+
 interface ChatThreadHeaderProps {
   thread: ChatThread | null;
   workerOptions: WorkerOption[];
@@ -20,12 +47,7 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
   onCompact,
   isCompacting,
 }) => {
-  const defaultOption = workerOptions.find((o) => o.isPrimary);
-  const selectedRouteId = thread?.runtimeState?.workerEndpointId
-    || thread?.runtimeState?.virtualProvider
-    || thread?.connectionId
-    || defaultOption?.id
-    || "";
+  const selectedRouteId = resolveSelectedRouteId(thread, workerOptions);
 
   const isReplayRequired = thread?.runtimeState?.replayRequired;
   const hasActiveSession = thread?.runtimeState?.sessionIds && thread.runtimeState.sessionIds.length > 0;
@@ -65,27 +87,16 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
           </div>
           <div className="flex items-center justify-end gap-2">
             {thread && thread.messageCount > 0 && (
-              <div className="relative group inline-block">
-                 <button
-                  type="button"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:bg-black/[0.03] hover:text-slate-900 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
-                  title="Actions"
-                >
-                  Actions
-                </button>
-                <div className="absolute right-0 mt-2 hidden flex-col w-48 rounded-md border border-black/[0.08] bg-white shadow-lg group-hover:flex dark:border-white/[0.08] dark:bg-void-900 z-50">
-                  <button
-                    type="button"
-                    onClick={onCompact}
-                    disabled={isCompacting}
-                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-[12px] font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800"
-                    title="Compact Conversation"
-                  >
-                    <Zap className="h-3.5 w-3.5" />
-                    {isCompacting ? "Compacting..." : "Compact Conversation"}
-                  </button>
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={onCompact}
+                disabled={isCompacting}
+                className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:bg-black/[0.03] hover:text-slate-900 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
+                title="Compact Conversation"
+              >
+                <Zap className={`h-3.5 w-3.5 ${isCompacting ? "animate-pulse" : ""}`} />
+                {isCompacting ? "Compacting..." : "Compact"}
+              </button>
             )}
             <label className="inline-flex items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Worker:</span>

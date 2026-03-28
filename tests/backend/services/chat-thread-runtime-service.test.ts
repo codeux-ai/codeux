@@ -9,6 +9,7 @@ describe("ChatThreadRuntimeService", () => {
     deps = {
       connectionChatRepository: {
         postDashboardMessage: vi.fn(),
+        getThread: vi.fn(),
         listThreads: vi.fn(),
         updateThread: vi.fn(),
         listMessages: vi.fn(),
@@ -152,5 +153,109 @@ describe("ChatThreadRuntimeService", () => {
         apiKey: "codex-key",
       })
     );
+  });
+
+  it("compacts a virtual thread into a stored summary and clears the active session", async () => {
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      projectId: "p1",
+      title: "Thread",
+      connectionId: null,
+      runtimeState: {
+        routeKind: "virtual",
+        virtualProvider: "claude-code",
+        sessionIds: ["session-1"],
+      },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { id: "m1", authorType: "dashboard_user", bodyMarkdown: "hello" },
+      { id: "m2", authorType: "connection", bodyMarkdown: "world" },
+    ]);
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "claude-code",
+      providers: { "claude-code": { model: "claude-3", apiKey: "key", thinkingMode: "HIGH" } },
+    });
+    deps.agentPresetSyncService.getWorkerAgent.mockResolvedValue({ instructionMarkdown: "" });
+    deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-compact" });
+    deps.providerRunner.runProviderForText.mockResolvedValue({ text: "## Current Objective\nKeep context", nativeSessionId: "ignored" });
+    deps.connectionChatRepository.updateThread.mockImplementation((threadId: string, input: any) => ({
+      id: threadId,
+      projectId: "p1",
+      title: "Thread",
+      runtimeState: input.runtimeState,
+    }));
+
+    const updated = await service.compactThreadSession("t1");
+
+    expect(deps.executionRepository.createExecutionInvocation).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "p1",
+      type: "chat_compaction",
+      provider: "claude-code",
+      model: "claude-3",
+    }));
+    expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      provider: "claude-code",
+      continueSessionId: null,
+      sessionId: "t1:compaction",
+    }));
+    expect(updated.runtimeState).toMatchObject({
+      replayRequired: true,
+      sessionIds: [],
+      compactionSummary: {
+        markdown: "## Current Objective\nKeep context",
+        provider: "claude-code",
+        model: "claude-3",
+        sourceMessageId: "m2",
+        sourceMessageCount: 2,
+      },
+    });
+  });
+
+  it("replays from the stored compaction summary on the next fresh virtual turn", async () => {
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-5", threadId: "t1", bodyMarkdown: "next question" });
+    deps.connectionChatRepository.listThreads.mockReturnValue([{
+      id: "t1",
+      projectId: "p1",
+      title: "Thread",
+      connectionId: null,
+      runtimeState: {
+        routeKind: "virtual",
+        virtualProvider: "claude-code",
+        replayRequired: true,
+        sessionIds: [],
+        compactionSummary: {
+          markdown: "## Current Objective\nKeep context",
+          generatedAt: "2026-03-28T00:00:00.000Z",
+          provider: "claude-code",
+          model: "claude-3",
+          sourceMessageId: "m1",
+          sourceMessageCount: 1,
+        },
+      },
+    }]);
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "claude-code",
+      providers: { "claude-code": { model: "claude-3", apiKey: "key", thinkingMode: "HIGH" } },
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { id: "m1", authorType: "dashboard_user", bodyMarkdown: "historic prompt" },
+      { id: "msg-5", authorType: "dashboard_user", bodyMarkdown: "next question" },
+    ]);
+    deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-summary-replay" });
+    deps.providerRunner.runProviderForText.mockResolvedValue({ text: "reply", nativeSessionId: "fresh-session" });
+
+    await service.postMessage("p1", { bodyMarkdown: "next question" });
+
+    expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining("## COMPACTED HISTORY"),
+    }));
+    expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining("## Current Objective\nKeep context"),
+    }));
+    expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.not.stringContaining("historic prompt"),
+    }));
   });
 });

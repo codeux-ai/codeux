@@ -8,7 +8,7 @@ import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import type { Logger } from "../shared/logging/logger.js";
-import type { CreateDashboardConversationMessageInput, ConversationThreadRecord, ConversationMessageRecord, ConversationRuntimeState, UpdateConversationThreadRouteInput } from "../contracts/connection-chat-types.js";
+import type { ConversationCompactionSummary, CreateDashboardConversationMessageInput, ConversationThreadRecord, ConversationMessageRecord, ConversationRuntimeState, UpdateConversationThreadRouteInput } from "../contracts/connection-chat-types.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
 
 interface ChatThreadRuntimeServiceDependencies {
@@ -47,7 +47,8 @@ export class ChatThreadRuntimeService {
     if (runtimeState?.routeKind === "worker") {
       const explicitWorker = runtimeState.workerEndpointId
         ? liveAssignments.find((assignment) => (
-          assignment.workerEndpointId === runtimeState.workerEndpointId
+          (assignment.workerEndpointId === runtimeState.workerEndpointId
+          || assignment.connectionId === runtimeState.workerEndpointId)
           && assignment.workerStatus !== "offline"
           && assignment.workerStatus !== "stale"
           && assignment.connectionId
@@ -115,7 +116,10 @@ export class ChatThreadRuntimeService {
         throw new Error("workerEndpointId is required for worker route.");
       }
       const assignments = this.deps.projectWorkerAssignmentRepository.listAssignmentsForProject(thread.projectId, { activeOnly: true });
-      const worker = assignments.find((a) => a.workerEndpointId === input.workerEndpointId);
+      const worker = assignments.find((a) => (
+        a.workerEndpointId === input.workerEndpointId
+        || a.connectionId === input.workerEndpointId
+      ));
       if (!worker) {
         throw new Error(`Worker not found or not active: ${input.workerEndpointId}`);
       }
@@ -140,7 +144,9 @@ export class ChatThreadRuntimeService {
       routeKind: input.routeKind,
       virtualProvider: input.virtualProvider,
       modelLabel: input.virtualModel,
-      workerEndpointId: input.workerEndpointId,
+      workerEndpointId: input.routeKind === "worker"
+        ? connectionId || input.workerEndpointId
+        : undefined,
       replayRequired: true,
     };
 
@@ -150,13 +156,37 @@ export class ChatThreadRuntimeService {
     });
   }
 
-  public compactThreadSession(threadId: string): ConversationThreadRecord {
+  public async compactThreadSession(threadId: string): Promise<ConversationThreadRecord> {
     const thread = this.deps.connectionChatRepository.getThread(threadId);
+    const project = this.deps.projectManagementRepository.getProject(thread.projectId);
+    if (!project) {
+      throw new Error(`Project not found: ${thread.projectId}`);
+    }
+    const messages = this.deps.connectionChatRepository.listMessages(thread.id);
+    if (messages.length === 0) {
+      return this.deps.connectionChatRepository.updateThread(thread.id, {
+        runtimeState: {
+          ...thread.runtimeState,
+          replayRequired: true,
+          sessionIds: [],
+        },
+      });
+    }
+
+    const assignments = this.deps.projectWorkerAssignmentRepository.listAssignmentsForProject(thread.projectId, { activeOnly: true });
+    const settings = this.deps.getDashboardSettings();
+    const route = this.resolveThreadRoute(thread, assignments, settings, messages[messages.length - 1]?.bodyMarkdown || thread.title);
+    if (route.mode !== "VIRTUAL" || !route.providerId || !route.model || !route.apiKey) {
+      throw new Error("Thread compaction currently requires a virtual chat route. Re-route the thread to a virtual worker first.");
+    }
+
+    const compacted = await this.generateThreadCompaction(project.id, project.baseDir, project.name, thread, messages, route);
 
     const newRuntimeState: ConversationRuntimeState = {
       ...thread.runtimeState,
       replayRequired: true,
       sessionIds: [],
+      compactionSummary: compacted,
     };
 
     return this.deps.connectionChatRepository.updateThread(thread.id, {
@@ -312,6 +342,10 @@ export class ChatThreadRuntimeService {
 
   private async buildReplayPrompt(projectId: string, repoPath: string, projectName: string, thread: ConversationThreadRecord, messages: ConversationMessageRecord[]): Promise<string> {
     const workerInstructions = (await this.deps.agentPresetSyncService.getWorkerAgent(projectId)).instructionMarkdown.trim();
+    const compactionSummary = this.getCompactionSummary(thread.runtimeState);
+    const replayMessages = compactionSummary
+      ? this.getMessagesAfterCompaction(messages, compactionSummary)
+      : messages;
 
     const instructions = [
       "You are a Sprint OS connected worker replying to a dashboard chat message.",
@@ -321,7 +355,7 @@ export class ChatThreadRuntimeService {
       "Do not start implementation from this message. This is a reply-only interaction.",
     ].join("\\n");
 
-    const history = messages.map(m => {
+    const history = replayMessages.map(m => {
       const role = m.authorType === "dashboard_user" ? "User" : "Worker";
       return `### ${role}\\n${m.bodyMarkdown.trim()}`;
     }).join("\\n\\n");
@@ -337,8 +371,15 @@ export class ChatThreadRuntimeService {
       `Thread ID: ${thread.id}`,
       thread.title ? `Thread Title: ${thread.title}` : "",
       "",
-      "## CONVERSATION HISTORY",
-      history,
+      ...(compactionSummary ? [
+        "## COMPACTED HISTORY",
+        compactionSummary.markdown,
+        "",
+        "## MESSAGES SINCE COMPACTION",
+      ] : [
+        "## CONVERSATION HISTORY",
+      ]),
+      history || "_No new messages since the compaction summary was generated._",
       "",
       "## REQUIRED OUTPUT",
       "Return only the reply body in markdown. No JSON. No code fences unless the reply truly needs them.",
@@ -369,5 +410,156 @@ export class ChatThreadRuntimeService {
 
   private isVirtualProvider(value: string | undefined | null): value is Extract<ProviderId, "gemini" | "codex" | "claude-code"> {
     return value === "gemini" || value === "codex" || value === "claude-code";
+  }
+
+  private async generateThreadCompaction(
+    projectId: string,
+    repoPath: string,
+    projectName: string,
+    thread: ConversationThreadRecord,
+    messages: ConversationMessageRecord[],
+    route: ThreadRouteResolution,
+  ): Promise<ConversationCompactionSummary> {
+    const provider = route.providerId!;
+    const model = route.model!;
+    const apiKey = route.apiKey!;
+    const thinkingMode = route.thinkingMode;
+    const workflowSettings = this.deps.getDashboardSettings().cliWorkflow;
+    const githubToken = this.deps.getGithubToken();
+    const promptContent = await this.buildCompactionPrompt(projectId, repoPath, projectName, thread, messages);
+    const finalPrompt = buildProviderPrompt(promptContent, thinkingMode as any);
+    const execInvocation = this.deps.executionRepository.createExecutionInvocation({
+      projectId,
+      type: "chat_compaction",
+      provider,
+      model,
+      startedAt: new Date().toISOString(),
+      attentionItemId: null,
+      dispatchId: null,
+      providerInvocationId: null,
+      sprintId: null,
+      sprintRunId: null,
+      taskId: null,
+      taskRunId: null,
+    });
+
+    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
+      role: "user",
+      contentMarkdown: finalPrompt,
+    });
+
+    try {
+      const result = await this.deps.providerRunner.runProviderForText({
+        provider,
+        prompt: finalPrompt,
+        cwd: repoPath,
+        model,
+        apiKey,
+        sessionId: `${thread.id}:compaction`,
+        workflowSettings,
+        repoPath,
+        githubToken,
+        continueSessionId: null,
+        onActivity: (desc, originator) => {
+          this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
+            role: originator === "user" ? "user" : "assistant",
+            contentMarkdown: `[Status] ${desc}`,
+          });
+        },
+      });
+
+      const markdown = this.normalizeProviderReply(result.text);
+      if (!markdown) {
+        throw new Error(`Provider ${provider} returned an empty compaction summary.`);
+      }
+
+      this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
+        role: "assistant",
+        contentMarkdown: markdown,
+      });
+      this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
+        status: "completed",
+        finishedAt: new Date().toISOString(),
+      });
+
+      return {
+        markdown,
+        generatedAt: new Date().toISOString(),
+        provider,
+        model,
+        sourceMessageId: messages[messages.length - 1]?.id || null,
+        sourceMessageCount: messages.length,
+      };
+    } catch (err: any) {
+      this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
+        status: "failed",
+        finishedAt: new Date().toISOString(),
+      });
+      throw err;
+    }
+  }
+
+  private async buildCompactionPrompt(
+    projectId: string,
+    repoPath: string,
+    projectName: string,
+    thread: ConversationThreadRecord,
+    messages: ConversationMessageRecord[],
+  ): Promise<string> {
+    const workerInstructions = (await this.deps.agentPresetSyncService.getWorkerAgent(projectId)).instructionMarkdown.trim();
+    const history = messages.map((message) => {
+      const role = message.authorType === "dashboard_user" ? "User" : "Worker";
+      return `### ${role}\n${message.bodyMarkdown.trim()}`;
+    }).join("\n\n");
+
+    return [
+      workerInstructions ? `## WORKER INSTRUCTIONS\n\n${workerInstructions}` : "",
+      "## ROLE",
+      "You are compacting a Sprint OS dashboard chat thread into a reusable handoff summary for a fresh worker session.",
+      "Preserve durable context, decisions, constraints, known facts, repo-specific details, and the user's standing goals.",
+      "Do not claim code changes, PRs, or completed work unless they are explicitly stated in the conversation.",
+      "Call out unresolved questions or pending follow-ups clearly.",
+      "",
+      "## CONTEXT",
+      `Project: ${projectName}`,
+      `Repo Path: ${repoPath}`,
+      `Thread ID: ${thread.id}`,
+      thread.title ? `Thread Title: ${thread.title}` : "",
+      `Message Count: ${messages.length}`,
+      "",
+      "## CONVERSATION HISTORY",
+      history,
+      "",
+      "## REQUIRED OUTPUT",
+      "Return only markdown.",
+      "Structure the summary with these sections in order:",
+      "1. Current Objective",
+      "2. Important Context",
+      "3. Decisions And Constraints",
+      "4. Open Questions Or Risks",
+      "5. Latest User Intent",
+    ].filter((part) => part.trim().length > 0).join("\n");
+  }
+
+  private getCompactionSummary(runtimeState: ConversationRuntimeState | null | undefined): ConversationCompactionSummary | null {
+    const summary = runtimeState?.compactionSummary;
+    if (!summary || typeof summary.markdown !== "string" || !summary.markdown.trim()) {
+      return null;
+    }
+    return summary;
+  }
+
+  private getMessagesAfterCompaction(
+    messages: ConversationMessageRecord[],
+    summary: ConversationCompactionSummary,
+  ): ConversationMessageRecord[] {
+    if (!summary.sourceMessageId) {
+      return messages;
+    }
+    const index = messages.findIndex((message) => message.id === summary.sourceMessageId);
+    if (index === -1) {
+      return messages;
+    }
+    return messages.slice(index + 1);
   }
 }

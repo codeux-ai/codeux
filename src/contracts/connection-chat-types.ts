@@ -53,7 +53,16 @@ export interface ConversationRuntimeState {
   sessionIds?: string[];
   continuationStatus?: string;
   replayRequired?: boolean;
-  compactionSummary?: Record<string, unknown>;
+  compactionSummary?: ConversationCompactionSummary | null;
+}
+
+export interface ConversationCompactionSummary {
+  markdown: string;
+  generatedAt: string;
+  provider: string;
+  model: string;
+  sourceMessageId: string | null;
+  sourceMessageCount: number;
 }
 
 export interface ConversationThreadRecord {

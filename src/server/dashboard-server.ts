@@ -147,7 +147,7 @@ export interface DashboardServerOptions {
   createConversationThread: (projectId: string, input: CreateConversationThreadInput) => ConversationThreadRecord;
   updateConversationThread: (threadId: string, input: UpdateConversationThreadInput) => ConversationThreadRecord;
   updateThreadRoute: (threadId: string, input: UpdateConversationThreadRouteInput) => ConversationThreadRecord;
-  compactThreadSession: (threadId: string) => ConversationThreadRecord;
+  compactThreadSession: (threadId: string) => Promise<ConversationThreadRecord> | ConversationThreadRecord;
   deleteConversationThread: (threadId: string) => void;
   listConversationMessages: (threadId: string) => ConversationMessageRecord[];
   postConversationMessage: (projectId: string, input: CreateDashboardConversationMessageInput) => Promise<ConversationMessageRecord> | ConversationMessageRecord;
@@ -795,13 +795,13 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     }
   });
 
-  app.post("/api/conversations/threads/:threadId/compact", (req, res) => {
+  app.post("/api/conversations/threads/:threadId/compact", async (req, res) => {
     if (!options.compactThreadSession) {
       res.status(404).json({ error: "Thread compaction is not enabled." });
       return;
     }
     try {
-      res.json(options.compactThreadSession(String(req.params.threadId || "").trim()));
+      res.json(await options.compactThreadSession(String(req.params.threadId || "").trim()));
     } catch (error) {
       res.status(400).json({ error: toErrorMessage(error, "Failed to compact thread session") });
     }

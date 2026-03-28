@@ -44,7 +44,13 @@ On the next message, the orchestration engine intercepts the request, concatenat
 
 Long-running conversations accumulate large prompt histories, risking context window exhaustion or unbounded token costs. The chat runtime introduces a compact-conversation action (`compactThreadSession`).
 
-When triggered, the system preserves the historical thread records in the database for the user's dashboard view but forcefully clears the provider's active context.
-- It resets the native provider `sessionIds` to empty.
-- It sets `replayRequired` to `true` (if a replay threshold is deemed appropriate, or simply forces the next interaction to start fresh).
-This capability effectively truncates the prompt history sent to the LLM without deleting the historical `ConversationMessageRecord` items from the visible chat UI.
+When triggered on a virtual chat route, the system now runs a dedicated execution invocation against the selected virtual chat worker and asks it to produce a compacted markdown handoff of the full thread history.
+
+The compact action then:
+- stores that generated handoff in `runtimeState.compactionSummary`
+- resets the native provider `sessionIds` to empty
+- sets `replayRequired` to `true`
+
+The original `ConversationMessageRecord` history remains visible in the dashboard, but the next fresh virtual session replays from the compacted summary plus only the messages created after that summary was generated.
+
+Connected MCP chat routes do not yet have a synchronous request-response path for this action, so compaction currently requires routing the thread to a virtual worker first.

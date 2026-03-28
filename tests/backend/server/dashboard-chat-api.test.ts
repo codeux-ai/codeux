@@ -1,6 +1,7 @@
 import express from "express";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Server } from "http";
+import { createServer } from "net";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -11,10 +12,33 @@ import { ProjectManagementRepository } from "../../../src/repositories/project-m
 import { ChatThreadRuntimeService } from "../../../src/services/chat-thread-runtime-service.js";
 import { ProjectWorkerAssignmentRepository } from "../../../src/repositories/project-worker-assignment-repository.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
+import { vi } from "vitest";
 
 // Mock dependencies minimally
 const serversToClose: Server[] = [];
 const tempDirs: string[] = [];
+
+async function getAvailablePort(): Promise<number> {
+  return await new Promise<number>((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close(() => reject(new Error("Failed to allocate an available port.")));
+        return;
+      }
+      const { port } = address;
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(port);
+      });
+    });
+  });
+}
 
 afterEach(async () => {
   for (const server of serversToClose) {
@@ -42,12 +66,23 @@ describe("Dashboard Chat API", () => {
       connectionChatRepository,
       projectWorkerAssignmentRepository,
       executionRepository,
-      taskService: {} as any,
+      taskService: {
+        resolveInvocationProvider: () => ({
+          provider: "codex",
+          providers: {
+            codex: { model: "gpt-4", apiKey: "key", thinkingMode: "HIGH" },
+          },
+        }),
+      } as any,
       getDashboardSettings: () => ({ cliWorkflow: {} } as any),
       getGithubToken: () => undefined,
-      agentPresetSyncService: {} as any,
+      agentPresetSyncService: {
+        getWorkerAgent: async () => ({ instructionMarkdown: "" }),
+      } as any,
       projectManagementRepository,
-      providerRunner: {} as any,
+      providerRunner: {
+        runProviderForText: vi.fn().mockResolvedValue({ text: "## Current Objective\nCompact thread" }),
+      } as any,
     });
 
     const project = projectManagementRepository.createProject({
@@ -59,12 +94,17 @@ describe("Dashboard Chat API", () => {
     const thread = connectionChatRepository.createThread(project.id, {
       title: "Test Thread",
     });
+    connectionChatRepository.postDashboardMessage(project.id, {
+      threadId: thread.id,
+      bodyMarkdown: "Please keep the important context.",
+    });
+    const port = await getAvailablePort();
 
     const app = express();
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
-      port: 41001,
+      port,
       liveActivityCacheMs: 1000,
       getStatus: () => ({}),
       getExecutionSnapshot: () => ({} as any),
@@ -156,6 +196,11 @@ describe("Dashboard Chat API", () => {
     expect(compactedThread.runtimeState).toMatchObject({
       replayRequired: true,
       sessionIds: [],
+      compactionSummary: {
+        markdown: "## Current Objective\nCompact thread",
+        provider: "codex",
+        model: "gpt-4",
+      },
     });
   });
 
@@ -190,12 +235,13 @@ describe("Dashboard Chat API", () => {
     const thread = connectionChatRepository.createThread(project.id, {
       title: "Test Thread",
     });
+    const port = await getAvailablePort();
 
     const app = express();
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
-      port: 41003,
+      port,
       liveActivityCacheMs: 1000,
       getStatus: () => ({}),
       getExecutionSnapshot: () => ({} as any),
@@ -290,11 +336,12 @@ describe("Dashboard Chat API", () => {
   });
 
   it("returns 400 on invalid route mapping inputs", async () => {
+    const port = await getAvailablePort();
     const app = express();
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
-      port: 41002,
+      port,
       liveActivityCacheMs: 1000,
       getStatus: () => ({}),
       getExecutionSnapshot: () => ({} as any),
