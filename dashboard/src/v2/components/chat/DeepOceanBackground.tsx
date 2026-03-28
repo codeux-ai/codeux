@@ -77,29 +77,34 @@ const causticFrag = /* glsl */ `
 
     float c1 = caustic(uv, uTime);
     float c2 = caustic(uv * 0.7 + 3.5, uTime * 0.8);
-    float c  = c1 * 0.6 + c2 * 0.4;
-    c = smoothstep(0.28, 0.72, c);
-    c = pow(c, 2.6);
+    float cRaw = c1 * 0.6 + c2 * 0.4;
 
-    /* ── dark palette: deep abyss + jade ── */
+    /* dark mode: tight contrast for subtle caustic glow */
+    float cDark = smoothstep(0.28, 0.72, cRaw);
+    cDark = pow(cDark, 2.6);
+
     vec3 dBase   = vec3(0.024, 0.032, 0.038);
     vec3 dDeep   = vec3(0.012, 0.05, 0.048);
     vec3 dBright = vec3(0.0, 0.878, 0.627);
 
     vec3 darkColor = dBase;
-    darkColor = mix(darkColor, dDeep,   c * 0.7);
-    darkColor = mix(darkColor, dBright, c * c * 0.08);
+    darkColor = mix(darkColor, dDeep,   cDark * 0.7);
+    darkColor = mix(darkColor, dBright, cDark * cDark * 0.08);
 
-    /* ── light palette: visible pool caustics on warm surface ── */
-    vec3 lBase   = vec3(0.955, 0.948, 0.930);         /* warm cream */
-    vec3 lPool   = vec3(0.78, 0.92, 0.90);             /* aqua tint */
-    vec3 lJade   = vec3(0.0, 0.72, 0.52);              /* jade accent */
-    vec3 lGold   = vec3(0.95, 0.82, 0.45);             /* warm gold */
+    /* light mode: soft cloudy sky — wide contrast, cloud-like formations */
+    float cLight = smoothstep(0.18, 0.82, cRaw);  /* wider band = softer clouds */
+    cLight = pow(cLight, 1.2);                     /* gentle curve, preserve volume */
 
-    vec3 lightColor = lBase;
-    lightColor = mix(lightColor, lPool,   c * 0.8);
-    lightColor = mix(lightColor, lGold,   c * c * 0.35);
-    lightColor = mix(lightColor, lJade,   c * c * 0.15);
+    vec3 skyBase   = vec3(0.86, 0.91, 0.97);       /* soft sky blue */
+    vec3 cloudWhite = vec3(0.97, 0.98, 1.0);       /* bright cloud white */
+    vec3 cloudGray  = vec3(0.78, 0.83, 0.90);      /* cloud shadow */
+    vec3 skyDeep    = vec3(0.72, 0.82, 0.95);       /* deeper blue between clouds */
+    vec3 warmEdge   = vec3(0.92, 0.88, 0.82);       /* warm sunlit edge */
+
+    vec3 lightColor = mix(skyBase, skyDeep, (1.0 - cLight) * 0.6);
+    lightColor = mix(lightColor, cloudWhite, cLight * 0.85);
+    lightColor = mix(lightColor, cloudGray,  (1.0 - cLight) * cLight * 0.5);
+    lightColor = mix(lightColor, warmEdge,   cLight * cLight * 0.15);
 
     /* ── blend by mode ── */
     vec3 color = mix(lightColor, darkColor, uDark);
@@ -151,7 +156,7 @@ const particleFrag = /* glsl */ `
 
     /* dark: jade glow, light: warm gold-jade shimmer */
     vec3 darkCol  = vec3(0.0, 0.88, 0.63);
-    vec3 lightCol = vec3(0.3, 0.7, 0.5);
+    vec3 lightCol = vec3(0.6, 0.75, 0.9);
     vec3 col = mix(lightCol, darkCol, uDark);
 
     float opacity = mix(0.25, 0.22, uDark);
@@ -191,7 +196,7 @@ export const DeepOceanBackground = () => {
       powerPreference: "low-power",
     });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5) * RENDER_SCALE);
-    renderer.setClearColor(isDarkMode() ? 0x060a0d : 0xf7f5f0, 1);
+    renderer.setClearColor(isDarkMode() ? 0x060a0d : 0xdbe8f8, 1);
     renderer.setSize(el.clientWidth, el.clientHeight);
     el.appendChild(renderer.domElement);
     Object.assign(renderer.domElement.style, {
@@ -278,7 +283,7 @@ export const DeepOceanBackground = () => {
 
       /* interpolate clear color */
       const darkClear = new THREE.Color(0x060a0d);
-      const lightClear = new THREE.Color(0xf7f5f0);
+      const lightClear = new THREE.Color(0xdbe8f8);
       renderer.setClearColor(darkClear.lerp(lightClear, 1.0 - currentDark));
 
       renderer.autoClear = true;
@@ -317,7 +322,7 @@ export const DeepOceanBackground = () => {
     <div
       ref={containerRef}
       aria-hidden="true"
-      className="fixed inset-0 overflow-hidden bg-[#F9F8F4] dark:bg-[#060a0d]"
+      className="fixed inset-0 overflow-hidden bg-[#dbe8f8] dark:bg-[#060a0d]"
       style={{ zIndex: 0 }}
     />
   );
