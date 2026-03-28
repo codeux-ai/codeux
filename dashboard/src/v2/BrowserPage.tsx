@@ -20,29 +20,18 @@ import type { SprintPreviewScript, SprintPreviewSession } from "../types.js";
 import {
   fetchPreviewLogs,
   fetchPreviewScript,
-  fetchPreviewSessions,
   rebuildPreviewSession,
   savePreviewScript,
   startPreviewSession,
   stopPreviewSession,
 } from "./lib/browser-api.js";
+import { normalizePath, buildPreviewOrigin } from "./lib/preview-origin.js";
+import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
 
 const PREVIEW_MESSAGE_TYPE = "sprint-preview:state";
 const PREVIEW_NAVIGATION_TYPE = "sprint-preview:navigate";
 
-const normalizePath = (value: string | null | undefined): string => {
-  const trimmed = String(value || "").trim();
-  if (!trimmed) return "/";
-  if (/^https?:\/\//i.test(trimmed)) {
-    try {
-      const url = new URL(trimmed);
-      return `${url.pathname || "/"}${url.search}${url.hash}` || "/";
-    } catch {
-      return "/";
-    }
-  }
-  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-};
+
 
 const statusTone: Record<SprintPreviewSession["status"], string> = {
   running: "border-signal-500/30 bg-signal-500/10 text-signal-500",
@@ -72,26 +61,18 @@ const formatPortMapping = (session: SprintPreviewSession): string => {
   return "port pending";
 };
 
-const buildPreviewOrigin = (sessionId: string): string => {
-  const protocol = window.location.protocol;
-  const port = window.location.port ? `:${window.location.port}` : "";
-  const currentHost = window.location.hostname;
-  const host = currentHost === "localhost" || currentHost === "127.0.0.1"
-    ? `preview-${sessionId}.localhost`
-    : `preview-${sessionId}.${currentHost}`;
-  return `${protocol}//${host}${port}`;
-};
+
 
 export const BrowserPage: FunctionComponent = () => {
   const shellRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const { selectedProject } = useProjectData();
   const { data: sprints, selectedSprint, selectedSprintId } = useSprints(selectedProject?.id || null);
-  const [sessions, setSessions] = useState<SprintPreviewSession[]>([]);
+
   const [script, setScript] = useState<SprintPreviewScript | null>(null);
   const [scriptDraft, setScriptDraft] = useState("");
   const [logs, setLogs] = useState("");
-  const [loading, setLoading] = useState(false);
+
   const [mutating, setMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [addressValue, setAddressValue] = useState("/");
@@ -105,48 +86,19 @@ export const BrowserPage: FunctionComponent = () => {
     }
   }, []);
 
-  const refreshSessions = async (silent = false): Promise<void> => {
-    if (!selectedProject) {
-      setSessions([]);
-      return;
-    }
-    if (!silent) {
-      setLoading(true);
-    }
-    try {
-      const data = await fetchPreviewSessions(selectedProject.id);
-      setSessions(data);
+  const { sessions, selectedSession, loading, error: fetchError, refresh: refreshSessions } = usePreviewSessions({
+    projectId: selectedProject?.id || null,
+    selectedSprintId,
+    activeSessionId,
+  });
+
+  useEffect(() => {
+    if (fetchError) {
+      setError(fetchError);
+    } else {
       setError(null);
-    } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
-    } finally {
-      if (!silent) {
-        setLoading(false);
-      }
     }
-  };
-
-  useEffect(() => {
-    void refreshSessions();
-  }, [selectedProject?.id]);
-
-  useEffect(() => {
-    if (!selectedProject) return;
-    const timer = window.setInterval(() => {
-      void refreshSessions(true);
-    }, 8000);
-    return () => window.clearInterval(timer);
-  }, [selectedProject?.id]);
-
-  const selectedSession = useMemo(() => {
-    if (activeSessionId) {
-      return sessions.find((session) => session.id === activeSessionId) || null;
-    }
-    if (selectedSprintId) {
-      return sessions.find((session) => session.sprintId === selectedSprintId) || null;
-    }
-    return sessions[0] || null;
-  }, [activeSessionId, selectedSprintId, sessions]);
+  }, [fetchError]);
 
   const scriptTargetSprint = useMemo(() => {
     if (selectedSession) {
