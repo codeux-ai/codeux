@@ -66,4 +66,22 @@ describe("correlation-id", () => {
             expect(getCorrelationId()).toMatch(/^[0-9a-f-]+$/);
         });
     });
+
+    it("generateCorrelationId generates a uuid", () => {
+        expect(generateCorrelationId()).toMatch(/^[0-9a-f-]+$/);
+    });
+
+    it("correlationIdMiddleware fallback to x-request-id", () => {
+        const middleware = correlationIdMiddleware();
+        const req = {
+            header: (name: string) => {
+                if (name === "x-request-id") return "fallback-id";
+                return undefined;
+            }
+        };
+        const res = { setHeader: vi.fn() };
+        middleware(req as any, res as any, () => {
+            expect(getCorrelationId()).toBe("fallback-id");
+        });
+    });
 });

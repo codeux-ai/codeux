@@ -36,7 +36,44 @@ describe('waitUntil', () => {
     ).rejects.toThrow('Timeout waiting for test condition after 50ms');
   });
 
-  it('should support AbortSignal', async () => {
+  it('should abort if already aborted before starting', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      const action = async () => 'pending';
+      const predicate = () => false;
+
+      await expect(
+        waitUntil({
+          action,
+          predicate,
+          signal: controller.signal,
+          description: 'aborted task',
+        })
+      ).rejects.toThrow('Wait for aborted task aborted');
+  });
+
+  it('should abort if aborted after action but before predicate', async () => {
+    const controller = new AbortController();
+    const action = async () => {
+      controller.abort();
+      return 'pending';
+    };
+    const predicate = () => false;
+
+    await expect(
+      waitUntil({
+        action,
+        predicate,
+        intervalMs: 10,
+        timeoutMs: 100,
+        signal: controller.signal,
+        description: 'aborted task',
+      })
+    ).rejects.toThrow('Wait for aborted task aborted');
+  });
+
+  it('should support AbortSignal during sleep interval', async () => {
     const controller = new AbortController();
     const action = async () => 'pending';
     const predicate = () => false;
@@ -47,8 +84,8 @@ describe('waitUntil', () => {
       waitUntil({
         action,
         predicate,
-        intervalMs: 10,
-        timeoutMs: 100,
+        intervalMs: 100,
+        timeoutMs: 1000,
         signal: controller.signal,
         description: 'aborted task',
       })
