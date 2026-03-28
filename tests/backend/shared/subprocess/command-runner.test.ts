@@ -1,8 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { CommandRunner } from "../../../../src/shared/subprocess/command-runner.js";
+import { CommandRunner, commandRunner } from "../../../../src/shared/subprocess/command-runner.js";
 
 describe("CommandRunner", () => {
   const runner = new CommandRunner();
+
+  it("exports singleton commandRunner", () => {
+     expect(commandRunner).toBeInstanceOf(CommandRunner);
+  });
 
   it("should run a simple command (echo)", async () => {
     const result = await runner.run("echo", ["hello"]);
@@ -44,19 +48,26 @@ describe("CommandRunner", () => {
     expect(result.stderr).toContain("aborted");
   });
 
+  it("should abort immediately if signal is already aborted", async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const result = await runner.run("node", ["-e", "setTimeout(() => {}, 10_000)"], {
+        signal: controller.signal,
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.stderr).toContain("aborted");
+  });
+
   it("should call streaming callbacks", async () => {
     const stdoutLines: string[] = [];
-    await runner.run("echo", ["line1\nline2"], {
+    const stderrLines: string[] = [];
+    await runner.run("sh", ["-c", "echo line1; echo line2 >&2"], {
       onStdoutLine: (line) => stdoutLines.push(line),
-    });
-    // Depending on how echo handles newlines, it might be one or two lines
-    // In many shells echo "line1\nline2" might not interpret \n without -e
-    // Let's use printf or multiple echoes
-    const result = await runner.run("sh", ["-c", "echo line1; echo line2"], {
-      onStdoutLine: (line) => stdoutLines.push(line),
+      onStderrLine: (line) => stderrLines.push(line)
     });
     expect(stdoutLines).toContain("line1");
-    expect(stdoutLines).toContain("line2");
+    expect(stderrLines).toContain("line2");
   });
 
   it("should buffer and emit correct line boundaries for partial chunks", async () => {
@@ -96,6 +107,11 @@ describe("CommandRunner", () => {
 
   it("runStrict should throw on failure", async () => {
     await expect(runner.runStrict("sh", ["-c", "exit 1"])).rejects.toThrow("sh -c exit 1 failed");
+  });
+
+  it("runStrict should throw with fallback Unknown error if no output", async () => {
+      // Create a scenario where it fails but emits nothing.
+      await expect(runner.runStrict("sh", ["-c", "exit 1 > /dev/null 2>&1"])).rejects.toThrow("sh -c exit 1 > /dev/null 2>&1 failed");
   });
 
   it("runStrict should return result on success", async () => {
