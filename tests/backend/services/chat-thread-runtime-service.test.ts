@@ -212,6 +212,95 @@ describe("ChatThreadRuntimeService", () => {
     });
   });
 
+  it("compacts a connected worker thread through a hidden worker inbox request", async () => {
+    let requestId = "";
+    deps.projectWorkerAssignmentRepository.listAssignmentsForProject.mockReturnValue([
+      {
+        assignmentRole: "primary",
+        capabilities: { canSuperviseProjects: true },
+        workerStatus: "online",
+        connectionId: "conn-1",
+        workerEndpointId: "conn-1",
+      },
+    ]);
+    deps.connectionChatRepository.getThread.mockReturnValue({
+      id: "t1",
+      projectId: "p1",
+      title: "Thread",
+      connectionId: "conn-1",
+      runtimeState: {
+        routeKind: "worker",
+        workerEndpointId: "conn-1",
+        sessionIds: ["worker-session"],
+      },
+    });
+    deps.connectionChatRepository.listMessages.mockImplementation((_threadId: string, options?: { includeHidden?: boolean }) => {
+      if (options?.includeHidden) {
+        return [
+          { id: "m1", authorType: "dashboard_user", bodyMarkdown: "hello" },
+          { id: "m2", authorType: "connection", bodyMarkdown: "world" },
+          {
+            id: "m-hidden-result",
+            authorType: "connection",
+            bodyMarkdown: "## Current Objective\nKeep context",
+            metadata: {
+              internalOperation: "thread_compaction_result",
+              requestId,
+              provider: "gemini",
+              model: "gemini-2.5-pro",
+              generatedAt: "2026-03-28T05:00:00.000Z",
+            },
+          },
+        ];
+      }
+      return [
+        { id: "m1", authorType: "dashboard_user", bodyMarkdown: "hello" },
+        { id: "m2", authorType: "connection", bodyMarkdown: "world" },
+      ];
+    });
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.connectionChatRepository.postDashboardMessage.mockImplementation((_projectId: string, input: any) => {
+      requestId = input.metadata.requestId;
+      return {
+        id: "m-hidden-request",
+        threadId: input.threadId,
+        bodyMarkdown: input.bodyMarkdown,
+        metadata: input.metadata,
+      };
+    });
+    deps.connectionChatRepository.updateThread.mockImplementation((threadId: string, input: any) => ({
+      id: threadId,
+      projectId: "p1",
+      title: "Thread",
+      connectionId: input.connectionId ?? "conn-1",
+      runtimeState: input.runtimeState,
+    }));
+
+    const updated = await service.compactThreadSession("t1");
+
+    expect(deps.connectionChatRepository.postDashboardMessage).toHaveBeenCalledWith("p1", expect.objectContaining({
+      threadId: "t1",
+      connectionId: "conn-1",
+      metadata: expect.objectContaining({
+        internalVisibility: "hidden",
+        internalOperation: "thread_compaction_request",
+      }),
+    }));
+    expect(updated.runtimeState).toMatchObject({
+      routeKind: "worker",
+      workerEndpointId: "conn-1",
+      replayRequired: true,
+      sessionIds: [],
+      compactionSummary: {
+        markdown: "## Current Objective\nKeep context",
+        provider: "gemini",
+        model: "gemini-2.5-pro",
+        sourceMessageId: "m2",
+        sourceMessageCount: 2,
+      },
+    });
+  });
+
   it("replays from the stored compaction summary on the next fresh virtual turn", async () => {
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-5", threadId: "t1", bodyMarkdown: "next question" });
     deps.connectionChatRepository.listThreads.mockReturnValue([{

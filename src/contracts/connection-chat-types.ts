@@ -99,6 +99,7 @@ export interface ConnectionInboxMessage {
   threadTitle: string;
   projectId: string;
   bodyMarkdown: string;
+  metadata?: Record<string, unknown> | null;
   createdAt: string;
   deliveryStatus: ConversationDeliveryStatus;
 }
@@ -205,6 +206,7 @@ export interface ListenDashboardMessagePayload {
   threadId: string;
   projectId: string;
   bodyMarkdown: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface ListenProjectPayload {

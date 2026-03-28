@@ -62,6 +62,8 @@ interface ReportAttentionOutcomeResponse {
 
 const ACTION_REQUIRED_STATES = new Set(["AWAITING_PLAN_APPROVAL", "AWAITING_USER_FEEDBACK", "PAUSED"]);
 const FAILED_STATES = new Set(["FAILED", "CANCELLED"]);
+const THREAD_COMPACTION_REQUEST = "thread_compaction_request";
+const THREAD_COMPACTION_RESULT = "thread_compaction_result";
 
 const delay = async (ms: number, signal?: AbortSignal): Promise<void> => {
   if (ms <= 0) {
@@ -317,16 +319,30 @@ export class SprintOsWorker {
     event: ListenDashboardMessageEvent,
   ): Promise<void> {
     try {
+      const metadata = event.message.metadata && typeof event.message.metadata === "object"
+        ? event.message.metadata
+        : null;
+      const isCompactionRequest = metadata?.internalOperation === THREAD_COMPACTION_REQUEST;
+      const requestId = typeof metadata?.requestId === "string" ? metadata.requestId : null;
       const reply = await this.callJsonTool<GenerateDashboardReplyResponse>(localExecutorClient, "generate_dashboard_reply", {
         project_id: event.message.projectId,
         thread_id: event.message.threadId,
         body_markdown: event.message.bodyMarkdown,
+        mode: isCompactionRequest ? "compact_thread" : "reply",
       });
       await this.callJsonTool(controlPlaneClient, "post_listen_reply", {
         connection_key: this.config.connectionKey,
         thread_id: event.message.threadId,
         body_markdown: reply.bodyMarkdown,
         reply_to_message_id: event.message.id,
+        metadata: isCompactionRequest ? {
+          internalVisibility: "hidden",
+          internalOperation: THREAD_COMPACTION_RESULT,
+          requestId,
+          provider: reply.provider,
+          model: reply.model,
+          generatedAt: new Date().toISOString(),
+        } : undefined,
       });
     } catch (error) {
       console.error("[sprint-os-worker] Failed to process inbox message", {

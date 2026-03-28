@@ -39,6 +39,12 @@ describe("WorkerInboxReplyService", () => {
           baseDir: "/repo",
         }),
       } as any,
+      connectionChatRepository: {
+        getThread: vi.fn().mockReturnValue({ id: "thread-1", title: "Status", runtimeState: null }),
+        listMessages: vi.fn().mockReturnValue([
+          { id: "m1", authorType: "dashboard_user", bodyMarkdown: "What is the current worker status?" },
+        ]),
+      } as any,
       taskService: {
         resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute),
       } as any,
@@ -100,6 +106,12 @@ describe("WorkerInboxReplyService", () => {
           baseDir: "/repo",
         }),
       } as any,
+      connectionChatRepository: {
+        getThread: vi.fn().mockReturnValue({ id: "thread-1", title: "Thread", runtimeState: null }),
+        listMessages: vi.fn().mockReturnValue([
+          { id: "m1", authorType: "dashboard_user", bodyMarkdown: "How do I inspect the queue?" },
+        ]),
+      } as any,
       taskService: {
         resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute),
       } as any,
@@ -145,6 +157,12 @@ describe("WorkerInboxReplyService", () => {
           baseDir: "/repo",
         }),
       } as any,
+      connectionChatRepository: {
+        getThread: vi.fn().mockReturnValue({ id: "thread-1", title: "Thread", runtimeState: null }),
+        listMessages: vi.fn().mockReturnValue([
+          { id: "m1", authorType: "dashboard_user", bodyMarkdown: "Reply with the unblocker." },
+        ]),
+      } as any,
       taskService: {
         resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute),
       } as any,
@@ -175,6 +193,136 @@ describe("WorkerInboxReplyService", () => {
     expect(result.bodyMarkdown).toBe("Only the markdown reply body.");
   });
 
+  it("runs compact_thread mode as a chat compaction invocation without reply wrapping", async () => {
+    mockRunProviderForText.mockResolvedValue({ text: "## Current Objective\nCompact summary" });
+
+    const service = new WorkerInboxReplyService({
+      projectManagementRepository: {
+        getProject: vi.fn().mockReturnValue({
+          id: "project-1",
+          name: "Sprint OS",
+          baseDir: "/repo",
+        }),
+      } as any,
+      connectionChatRepository: {
+        getThread: vi.fn().mockReturnValue({ id: "thread-1", title: "Thread", runtimeState: null }),
+        listMessages: vi.fn().mockReturnValue([
+          { id: "m1", authorType: "dashboard_user", bodyMarkdown: "## ROLE\nCompact this thread." },
+        ]),
+      } as any,
+      taskService: {
+        resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute),
+      } as any,
+      agentPresetSyncService: {
+        getWorkerAgent: vi.fn().mockResolvedValue({
+          instructionMarkdown: "Worker guide fallback",
+        }),
+        getProjectManagerAgent: vi.fn().mockResolvedValue({
+          instructionMarkdown: "Project manager guide fallback",
+        }),
+      } as any,
+      executionRepository: {
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-compact" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+      } as any,
+      getDashboardSettings: () => settings,
+      getGithubToken: () => undefined,
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
+    });
+
+    const result = await service.generateReply({
+      projectId: "project-1",
+      threadId: "thread-1",
+      bodyMarkdown: "## ROLE\nCompact this thread.",
+      mode: "compact_thread",
+    });
+
+    expect(result.bodyMarkdown).toBe("## Current Objective\nCompact summary");
+    expect((service as any).deps.executionRepository.createExecutionInvocation).toHaveBeenCalledWith(expect.objectContaining({
+      type: "chat_compaction",
+    }));
+    expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining("## ROLE\nCompact this thread."),
+    }));
+    expect((service as any).deps.executionRepository.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-inv-compact", {
+      role: "user",
+      contentMarkdown: "## ROLE\nCompact this thread.",
+    });
+  });
+
+  it("replays connected worker replies from the stored compaction summary", async () => {
+    mockRunProviderForText.mockResolvedValue({ text: "Use the compact handoff." });
+
+    const service = new WorkerInboxReplyService({
+      projectManagementRepository: {
+        getProject: vi.fn().mockReturnValue({
+          id: "project-1",
+          name: "Sprint OS",
+          baseDir: "/repo",
+        }),
+      } as any,
+      connectionChatRepository: {
+        getThread: vi.fn().mockReturnValue({
+          id: "thread-1",
+          title: "Thread",
+          runtimeState: {
+            compactionSummary: {
+              markdown: "## Current Objective\nKeep context",
+              generatedAt: "2026-03-28T05:00:00.000Z",
+              provider: "gemini",
+              model: "gemini-2.5-pro",
+              sourceMessageId: "m1",
+              sourceMessageCount: 1,
+            },
+          },
+        }),
+        listMessages: vi.fn().mockReturnValue([
+          { id: "m1", authorType: "dashboard_user", bodyMarkdown: "Historic request" },
+          { id: "m2", authorType: "dashboard_user", bodyMarkdown: "Latest request" },
+        ]),
+      } as any,
+      taskService: {
+        resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute),
+      } as any,
+      agentPresetSyncService: {
+        getWorkerAgent: vi.fn().mockResolvedValue({
+          instructionMarkdown: "Worker guide fallback",
+        }),
+        getProjectManagerAgent: vi.fn().mockResolvedValue({
+          instructionMarkdown: "Project manager guide fallback",
+        }),
+      } as any,
+      executionRepository: {
+        createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-summary" }),
+        appendExecutionInvocationMessage: vi.fn(),
+        updateExecutionInvocation: vi.fn(),
+      } as any,
+      getDashboardSettings: () => settings,
+      getGithubToken: () => undefined,
+      providerRunner: { runProviderForText: mockRunProviderForText } as any,
+    });
+
+    await service.generateReply({
+      projectId: "project-1",
+      threadId: "thread-1",
+      bodyMarkdown: "Latest request",
+    });
+
+    expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining("## COMPACTED HISTORY"),
+    }));
+    expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining("## Current Objective\nKeep context"),
+    }));
+    expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining("Latest request"),
+    }));
+    expect(mockRunProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: expect.not.stringContaining("Historic request"),
+    }));
+  });
+
   it("builds clarification replies from the editable project manager agent and the latest Jules request", async () => {
     mockRunProviderForText.mockResolvedValue({ text: JSON.stringify({
         session_id: "b0536833-b397-4d12-b39d-b8818bcf5e12",
@@ -189,6 +337,10 @@ describe("WorkerInboxReplyService", () => {
           name: "Sprint OS",
           baseDir: "/repo",
         }),
+      } as any,
+      connectionChatRepository: {
+        getThread: vi.fn(),
+        listMessages: vi.fn(),
       } as any,
       taskService: {
         resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute),
@@ -297,6 +449,10 @@ describe("WorkerInboxReplyService", () => {
           name: "Sprint OS",
           baseDir: "/repo",
         }),
+      } as any,
+      connectionChatRepository: {
+        getThread: vi.fn(),
+        listMessages: vi.fn(),
       } as any,
       taskService: {
         resolveInvocationProvider: vi.fn().mockReturnValue(geminiRoute),

@@ -212,6 +212,87 @@ describe("ConnectionChatRepository", () => {
     });
   });
 
+  it("keeps hidden control messages out of visible chat counts while still delivering them to workers", async () => {
+    const { projectRepository, connectionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Hidden Control Message Project",
+      sourceType: "local",
+      sourceRef: "/workspace/hidden-control-message-project",
+    });
+
+    const listen = connectionRepository.startListen({
+      connectionKey: "worker-hidden-control",
+      displayName: "Worker Hidden Control",
+      role: "worker",
+      projectId: project.id,
+    });
+
+    const thread = connectionRepository.createThread(project.id, {
+      title: "Compaction Thread",
+      connectionId: listen.connection.id,
+    });
+
+    const request = connectionRepository.postDashboardMessage(project.id, {
+      threadId: thread.id,
+      connectionId: listen.connection.id,
+      bodyMarkdown: "Hidden compaction request",
+      metadata: {
+        internalVisibility: "hidden",
+        internalOperation: "thread_compaction_request",
+        requestId: "req-1",
+      },
+    });
+
+    expect(connectionRepository.listMessages(thread.id)).toEqual([]);
+    expect(connectionRepository.listMessages(thread.id, { includeHidden: true })).toHaveLength(1);
+    expect(connectionRepository.listThreads(project.id)[0]).toMatchObject({
+      messageCount: 0,
+      pendingMessageCount: 0,
+      lastMessageAt: null,
+      lastMessagePreview: null,
+    });
+
+    const inbox = connectionRepository.pullInbox({
+      connectionKey: "worker-hidden-control",
+      projectId: project.id,
+    });
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0]).toMatchObject({
+      id: request.id,
+      threadId: thread.id,
+      metadata: {
+        internalVisibility: "hidden",
+        internalOperation: "thread_compaction_request",
+        requestId: "req-1",
+      },
+    });
+
+    connectionRepository.postListenReply({
+      connectionKey: "worker-hidden-control",
+      threadId: thread.id,
+      bodyMarkdown: "Compacted summary",
+      replyToMessageId: request.id,
+      metadata: {
+        internalVisibility: "hidden",
+        internalOperation: "thread_compaction_result",
+        requestId: "req-1",
+      },
+    });
+
+    expect(connectionRepository.listMessages(thread.id)).toEqual([]);
+    expect(connectionRepository.listMessages(thread.id, { includeHidden: true })).toHaveLength(2);
+    expect(connectionRepository.listThreads(project.id)[0]).toMatchObject({
+      messageCount: 0,
+      pendingMessageCount: 0,
+      lastMessageAt: null,
+      lastMessagePreview: null,
+    });
+    expect(connectionRepository.listConnections(project.id)[0]).toMatchObject({
+      pendingInboxCount: 0,
+      messageCount: 0,
+    });
+  });
+
   it("derives stale and offline connection states from heartbeat age", async () => {
     const { storage, projectRepository, connectionRepository } = await createRepositories();
     const project = projectRepository.createProject({

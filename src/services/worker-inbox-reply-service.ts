@@ -2,7 +2,14 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { randomUUID } from "crypto";
 import type { DashboardSettings, ProviderId, Subtask } from "../contracts/app-types.js";
+import type {
+  ConversationCompactionSummary,
+  ConversationMessageRecord,
+  ConversationRuntimeState,
+  ConversationThreadRecord,
+} from "../contracts/connection-chat-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
+import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
 import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 
@@ -17,6 +24,7 @@ export interface GenerateDashboardReplyInput {
   threadId: string;
   threadTitle?: string;
   bodyMarkdown: string;
+  mode?: "reply" | "compact_thread";
 }
 
 export interface GenerateDashboardReplyResult {
@@ -27,6 +35,7 @@ export interface GenerateDashboardReplyResult {
 
 interface WorkerInboxReplyServiceDependencies {
   projectManagementRepository: ProjectManagementRepository;
+  connectionChatRepository: ConnectionChatRepository;
   taskService: TaskService;
   agentPresetSyncService: AgentPresetSyncService;
   executionRepository: ExecutionRepository;
@@ -46,19 +55,24 @@ export class WorkerInboxReplyService {
     }
 
     const route = this.resolveProviderRoute("dashboard_reply", input.bodyMarkdown);
-    const rawPrompt = await this.buildPrompt({
-      projectId: input.projectId,
-      repoPath: project.baseDir,
-      projectName: project.name,
-      threadId: input.threadId,
-      threadTitle: input.threadTitle,
-      bodyMarkdown: input.bodyMarkdown,
-    });
+    const thread = this.deps.connectionChatRepository.getThread(input.threadId);
+    const messages = this.deps.connectionChatRepository.listMessages(input.threadId);
+    const rawPrompt = input.mode === "compact_thread"
+      ? input.bodyMarkdown.trim()
+      : await this.buildPrompt({
+        projectId: input.projectId,
+        repoPath: project.baseDir,
+        projectName: project.name,
+        thread,
+        threadTitle: input.threadTitle || thread.title,
+        messages,
+        bodyMarkdown: input.bodyMarkdown,
+      });
     const prompt = buildProviderPrompt(rawPrompt, route.providers[route.provider].thinkingMode);
 
     const execInvocation = this.deps.executionRepository.createExecutionInvocation({
       projectId: input.projectId,
-      type: "worker_reply",
+      type: input.mode === "compact_thread" ? "chat_compaction" : "worker_reply",
       provider: route.provider,
       model: route.providers[route.provider].model,
       startedAt: new Date().toISOString(),
@@ -106,7 +120,11 @@ export class WorkerInboxReplyService {
     });
 
     if (!bodyMarkdown) {
-      throw new Error(`Provider ${route.provider} returned an empty dashboard reply.`);
+      throw new Error(
+        input.mode === "compact_thread"
+          ? `Provider ${route.provider} returned an empty thread compaction summary.`
+          : `Provider ${route.provider} returned an empty dashboard reply.`
+      );
     }
 
     this.deps.logger?.info("Generated dashboard reply for worker connection", {
@@ -273,13 +291,18 @@ export class WorkerInboxReplyService {
     projectId: string;
     repoPath: string;
     projectName: string;
-    threadId: string;
+    thread: ConversationThreadRecord;
     threadTitle?: string;
+    messages: ConversationMessageRecord[];
     bodyMarkdown: string;
   }): Promise<string> {
     const workerInstructions = (await this.deps.agentPresetSyncService.getWorkerAgent(args.projectId))
       .instructionMarkdown
       .trim();
+    const compactionSummary = this.getCompactionSummary(args.thread.runtimeState);
+    const replayMessages = args.messages.length > 0
+      ? (compactionSummary ? this.getMessagesAfterCompaction(args.messages, compactionSummary) : args.messages)
+      : [{ authorType: "dashboard_user", bodyMarkdown: args.bodyMarkdown } as ConversationMessageRecord];
 
     const instructions = [
       "You are a Sprint OS connected worker replying to a dashboard chat message.",
@@ -297,11 +320,21 @@ export class WorkerInboxReplyService {
       "## CONTEXT",
       `Project: ${args.projectName}`,
       `Repo Path: ${args.repoPath}`,
-      `Thread ID: ${args.threadId}`,
+      `Thread ID: ${args.thread.id}`,
       args.threadTitle ? `Thread Title: ${args.threadTitle}` : "",
       "",
-      "## DASHBOARD MESSAGE",
-      args.bodyMarkdown.trim(),
+      ...(compactionSummary ? [
+        "## COMPACTED HISTORY",
+        compactionSummary.markdown,
+        "",
+        "## MESSAGES SINCE COMPACTION",
+      ] : [
+        "## CONVERSATION HISTORY",
+      ]),
+      replayMessages.map((message) => {
+        const role = message.authorType === "dashboard_user" ? "User" : "Worker";
+        return `### ${role}\n${message.bodyMarkdown.trim()}`;
+      }).join("\n\n") || args.bodyMarkdown.trim(),
       "",
       "## REQUIRED OUTPUT",
       "Return only the reply body in markdown. No JSON. No code fences unless the reply truly needs them.",
@@ -349,6 +382,28 @@ export class WorkerInboxReplyService {
     }
 
     return trimmed;
+  }
+
+  private getCompactionSummary(runtimeState: ConversationRuntimeState | null | undefined): ConversationCompactionSummary | null {
+    const summary = runtimeState?.compactionSummary;
+    if (!summary || typeof summary.markdown !== "string" || !summary.markdown.trim()) {
+      return null;
+    }
+    return summary;
+  }
+
+  private getMessagesAfterCompaction(
+    messages: ConversationMessageRecord[],
+    summary: ConversationCompactionSummary,
+  ): ConversationMessageRecord[] {
+    if (!summary.sourceMessageId) {
+      return messages;
+    }
+    const index = messages.findIndex((message) => message.id === summary.sourceMessageId);
+    if (index === -1) {
+      return messages;
+    }
+    return messages.slice(index + 1);
   }
 
   }

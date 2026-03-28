@@ -104,6 +104,16 @@ interface InboxRow extends MessageRow {
 }
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
+const HIDDEN_INTERNAL_VISIBILITY = "hidden";
+
+function visibleConversationMessageFilter(alias: string): string {
+  return `(COALESCE(json_extract(${alias}.metadata_json, '$.internalVisibility'), '') != '${HIDDEN_INTERNAL_VISIBILITY}')`;
+}
+
+function isHiddenConversationMessage(metadata?: Record<string, unknown> | null): boolean {
+  return metadata?.internalVisibility === HIDDEN_INTERNAL_VISIBILITY;
+}
+
 export interface ConnectionLifecycleCleanupResult {
   staleConnectionIds: string[];
   offlineConnectionIds: string[];
@@ -157,6 +167,7 @@ export class ConnectionChatRepository {
           INNER JOIN conversation_threads ct ON ct.id = cm.thread_id
           WHERE ct.project_id = ?
             AND ct.connection_id = c.id
+            AND ${visibleConversationMessageFilter("cm")}
         ) AS message_count,
         (
           SELECT COUNT(*)
@@ -166,6 +177,7 @@ export class ConnectionChatRepository {
             AND (ct.connection_id = c.id OR ct.connection_id IS NULL)
             AND cm.direction = 'dashboard_to_connection'
             AND cm.delivery_status = 'pending'
+            AND ${visibleConversationMessageFilter("cm")}
         ) AS pending_inbox_count
         ,
         (
@@ -372,16 +384,36 @@ export class ConnectionChatRepository {
     const rows = this.db.prepare(`
       SELECT
         ct.*,
-        (SELECT COUNT(*) FROM conversation_messages cm WHERE cm.thread_id = ct.id) AS message_count,
+        (
+          SELECT COUNT(*)
+          FROM conversation_messages cm
+          WHERE cm.thread_id = ct.id
+            AND ${visibleConversationMessageFilter("cm")}
+        ) AS message_count,
         (
           SELECT COUNT(*)
           FROM conversation_messages cm
           WHERE cm.thread_id = ct.id
             AND cm.direction = 'dashboard_to_connection'
             AND cm.delivery_status IN ('pending', 'delivered')
+            AND ${visibleConversationMessageFilter("cm")}
         ) AS pending_message_count,
-        (SELECT cm.created_at FROM conversation_messages cm WHERE cm.thread_id = ct.id ORDER BY cm.created_at DESC LIMIT 1) AS last_message_at,
-        (SELECT cm.body_markdown FROM conversation_messages cm WHERE cm.thread_id = ct.id ORDER BY cm.created_at DESC LIMIT 1) AS last_message_preview
+        (
+          SELECT cm.created_at
+          FROM conversation_messages cm
+          WHERE cm.thread_id = ct.id
+            AND ${visibleConversationMessageFilter("cm")}
+          ORDER BY cm.created_at DESC, cm.id DESC
+          LIMIT 1
+        ) AS last_message_at,
+        (
+          SELECT cm.body_markdown
+          FROM conversation_messages cm
+          WHERE cm.thread_id = ct.id
+            AND ${visibleConversationMessageFilter("cm")}
+          ORDER BY cm.created_at DESC, cm.id DESC
+          LIMIT 1
+        ) AS last_message_preview
       FROM conversation_threads ct
       WHERE ct.project_id = ?
       ORDER BY COALESCE(last_message_at, ct.updated_at) DESC, ct.created_at DESC
@@ -420,12 +452,14 @@ export class ConnectionChatRepository {
     return thread;
   }
 
-  listMessages(threadId: string): ConversationMessageRecord[] {
+  listMessages(threadId: string, options?: { includeHidden?: boolean }): ConversationMessageRecord[] {
     this.requireThread(threadId);
+    const includeHidden = options?.includeHidden === true;
     const rows = this.db.prepare(`
       SELECT *
       FROM conversation_messages
       WHERE thread_id = ?
+        ${includeHidden ? "" : `AND ${visibleConversationMessageFilter("conversation_messages")}`}
       ORDER BY created_at ASC, id ASC
     `).all(threadId) as unknown as MessageRow[];
 
@@ -509,6 +543,8 @@ export class ConnectionChatRepository {
 
     const preferredConnectionId = thread.connectionId || input.connectionId || null;
     const now = new Date().toISOString();
+    const messageId = randomUUID();
+    const hiddenMessage = isHiddenConversationMessage(input.metadata);
 
     this.runInTransaction(() => {
       if (!thread.connectionId && preferredConnectionId) {
@@ -530,7 +566,7 @@ export class ConnectionChatRepository {
           id, thread_id, direction, author_type, author_connection_id, body_markdown, delivery_status, metadata_json, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        randomUUID(),
+        messageId,
         thread.id,
         "dashboard_to_connection",
         "dashboard_user",
@@ -542,10 +578,9 @@ export class ConnectionChatRepository {
       );
     });
 
-    const messages = this.listMessages(thread.id);
+    const created = this.requireMessage(messageId);
     this.notifyProjects([projectId]);
-    const created = messages[messages.length - 1];
-    if (created) {
+    if (!hiddenMessage) {
       this.publishThreadUpdatedEvent(this.requireThread(thread.id));
       this.publishMessageCreatedEvent(projectId, thread.id, created);
     }
@@ -602,9 +637,12 @@ export class ConnectionChatRepository {
     });
 
     const message = this.requireMessage(messageId);
+    const hiddenMessage = isHiddenConversationMessage(input.metadata);
     this.notifyProjects([projectId]);
-    this.publishThreadUpdatedEvent(this.requireThread(thread.id));
-    this.publishMessageCreatedEvent(projectId, thread.id, message);
+    if (!hiddenMessage) {
+      this.publishThreadUpdatedEvent(this.requireThread(thread.id));
+      this.publishMessageCreatedEvent(projectId, thread.id, message);
+    }
     return message;
   }
 
@@ -749,12 +787,16 @@ export class ConnectionChatRepository {
       threadTitle: row.title,
       projectId: row.project_id,
       bodyMarkdown: row.body_markdown,
+      metadata: row.metadata_json ? JSON.parse(row.metadata_json) as Record<string, unknown> : null,
       createdAt: row.created_at,
       deliveryStatus: "delivered" as const,
     }));
     this.notifyProjects(scopedProjectIds);
     for (const row of rows) {
-      this.publishThreadUpdatedEvent(this.requireThread(row.thread_id));
+      const metadata = row.metadata_json ? JSON.parse(row.metadata_json) as Record<string, unknown> : null;
+      if (!isHiddenConversationMessage(metadata)) {
+        this.publishThreadUpdatedEvent(this.requireThread(row.thread_id));
+      }
     }
     return inbox;
   }
@@ -820,9 +862,12 @@ export class ConnectionChatRepository {
 
     this.touchConnection(connection, "listening");
     const message = this.requireMessage(messageId);
+    const hiddenMessage = isHiddenConversationMessage(input.metadata);
     this.notifyProjects([thread.projectId]);
-    this.publishThreadUpdatedEvent(this.requireThread(thread.id));
-    this.publishMessageCreatedEvent(thread.projectId, thread.id, message);
+    if (!hiddenMessage) {
+      this.publishThreadUpdatedEvent(this.requireThread(thread.id));
+      this.publishMessageCreatedEvent(thread.projectId, thread.id, message);
+    }
     return message;
   }
 
@@ -1258,16 +1303,36 @@ export class ConnectionChatRepository {
     const row = this.db.prepare(`
       SELECT
         ct.*,
-        (SELECT COUNT(*) FROM conversation_messages cm WHERE cm.thread_id = ct.id) AS message_count,
+        (
+          SELECT COUNT(*)
+          FROM conversation_messages cm
+          WHERE cm.thread_id = ct.id
+            AND ${visibleConversationMessageFilter("cm")}
+        ) AS message_count,
         (
           SELECT COUNT(*)
           FROM conversation_messages cm
           WHERE cm.thread_id = ct.id
             AND cm.direction = 'dashboard_to_connection'
             AND cm.delivery_status IN ('pending', 'delivered')
+            AND ${visibleConversationMessageFilter("cm")}
         ) AS pending_message_count,
-        (SELECT cm.created_at FROM conversation_messages cm WHERE cm.thread_id = ct.id ORDER BY cm.created_at DESC LIMIT 1) AS last_message_at,
-        (SELECT cm.body_markdown FROM conversation_messages cm WHERE cm.thread_id = ct.id ORDER BY cm.created_at DESC LIMIT 1) AS last_message_preview
+        (
+          SELECT cm.created_at
+          FROM conversation_messages cm
+          WHERE cm.thread_id = ct.id
+            AND ${visibleConversationMessageFilter("cm")}
+          ORDER BY cm.created_at DESC, cm.id DESC
+          LIMIT 1
+        ) AS last_message_at,
+        (
+          SELECT cm.body_markdown
+          FROM conversation_messages cm
+          WHERE cm.thread_id = ct.id
+            AND ${visibleConversationMessageFilter("cm")}
+          ORDER BY cm.created_at DESC, cm.id DESC
+          LIMIT 1
+        ) AS last_message_preview
       FROM conversation_threads ct
       WHERE ct.id = ?
     `).get(threadId) as ThreadRow | undefined;

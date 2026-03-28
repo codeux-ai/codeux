@@ -149,6 +149,7 @@ export function createSprintDependencies(
 
   const workerInboxReplyService = new WorkerInboxReplyService({
     projectManagementRepository,
+    connectionChatRepository: coreDeps.connectionChatRepository,
     taskService,
     agentPresetSyncService,
     executionRepository,

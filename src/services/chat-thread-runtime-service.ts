@@ -33,6 +33,12 @@ export interface ThreadRouteResolution {
   thinkingMode?: string;
 }
 
+const THREAD_COMPACTION_REQUEST = "thread_compaction_request";
+const THREAD_COMPACTION_RESULT = "thread_compaction_result";
+const HIDDEN_INTERNAL_VISIBILITY = "hidden";
+const CONNECTED_COMPACTION_TIMEOUT_MS = 45_000;
+const CONNECTED_COMPACTION_POLL_MS = 500;
+
 export class ChatThreadRuntimeService {
   constructor(private readonly deps: ChatThreadRuntimeServiceDependencies) {}
 
@@ -176,8 +182,12 @@ export class ChatThreadRuntimeService {
     const assignments = this.deps.projectWorkerAssignmentRepository.listAssignmentsForProject(thread.projectId, { activeOnly: true });
     const settings = this.deps.getDashboardSettings();
     const route = this.resolveThreadRoute(thread, assignments, settings, messages[messages.length - 1]?.bodyMarkdown || thread.title);
+    if (route.mode === "CONNECTED_MCP" && route.connectionId) {
+      return await this.runConnectedWorkerCompaction(project.id, project.baseDir, project.name, thread, messages, route.connectionId);
+    }
+
     if (route.mode !== "VIRTUAL" || !route.providerId || !route.model || !route.apiKey) {
-      throw new Error("Thread compaction currently requires a virtual chat route. Re-route the thread to a virtual worker first.");
+      throw new Error("Failed to resolve a chat worker for thread compaction.");
     }
 
     const compacted = await this.generateThreadCompaction(project.id, project.baseDir, project.name, thread, messages, route);
@@ -499,6 +509,79 @@ export class ChatThreadRuntimeService {
     }
   }
 
+  private async runConnectedWorkerCompaction(
+    projectId: string,
+    repoPath: string,
+    projectName: string,
+    thread: ConversationThreadRecord,
+    messages: ConversationMessageRecord[],
+    connectionId: string,
+  ): Promise<ConversationThreadRecord> {
+    const requestId = randomUUID();
+    const compactionPrompt = await this.buildCompactionPrompt(projectId, repoPath, projectName, thread, messages);
+    const boundThread = thread.connectionId === connectionId
+      ? thread
+      : this.deps.connectionChatRepository.updateThread(thread.id, { connectionId });
+
+    this.deps.connectionChatRepository.postDashboardMessage(projectId, {
+      threadId: boundThread.id,
+      connectionId,
+      bodyMarkdown: compactionPrompt,
+      metadata: {
+        internalVisibility: HIDDEN_INTERNAL_VISIBILITY,
+        internalOperation: THREAD_COMPACTION_REQUEST,
+        requestId,
+      },
+    });
+
+    const reply = await this.waitForConnectedCompactionReply(boundThread.id, requestId);
+    const provider = typeof reply.metadata?.provider === "string" ? reply.metadata.provider : "connected-worker";
+    const model = typeof reply.metadata?.model === "string" ? reply.metadata.model : "unknown";
+    const generatedAt = typeof reply.metadata?.generatedAt === "string"
+      ? reply.metadata.generatedAt
+      : new Date().toISOString();
+
+    return this.deps.connectionChatRepository.updateThread(boundThread.id, {
+      runtimeState: {
+        ...boundThread.runtimeState,
+        routeKind: "worker",
+        workerEndpointId: connectionId,
+        replayRequired: true,
+        sessionIds: [],
+        compactionSummary: {
+          markdown: reply.bodyMarkdown,
+          generatedAt,
+          provider,
+          model,
+          sourceMessageId: messages[messages.length - 1]?.id || null,
+          sourceMessageCount: messages.length,
+        },
+      },
+    });
+  }
+
+  private async waitForConnectedCompactionReply(
+    threadId: string,
+    requestId: string,
+  ): Promise<ConversationMessageRecord> {
+    const deadline = Date.now() + CONNECTED_COMPACTION_TIMEOUT_MS;
+
+    while (Date.now() < deadline) {
+      const messages = this.deps.connectionChatRepository.listMessages(threadId, { includeHidden: true });
+      const reply = messages.find((message) => (
+        message.authorType === "connection"
+        && message.metadata?.internalOperation === THREAD_COMPACTION_RESULT
+        && message.metadata?.requestId === requestId
+      ));
+      if (reply) {
+        return reply;
+      }
+      await this.sleep(CONNECTED_COMPACTION_POLL_MS);
+    }
+
+    throw new Error("Timed out waiting for the selected chat worker to return a compaction summary.");
+  }
+
   private async buildCompactionPrompt(
     projectId: string,
     repoPath: string,
@@ -561,5 +644,9 @@ export class ChatThreadRuntimeService {
       return messages;
     }
     return messages.slice(index + 1);
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

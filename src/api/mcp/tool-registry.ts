@@ -21,6 +21,7 @@ export interface GenerateDashboardReplyArgs {
   thread_id: string;
   thread_title?: string;
   body_markdown: string;
+  mode?: "reply" | "compact_thread";
 }
 
 export interface StartListenArgs {
@@ -61,6 +62,7 @@ export interface PostListenReplyArgs {
   thread_id: string;
   body_markdown: string;
   reply_to_message_id?: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface PullTaskDispatchArgs {
