@@ -202,7 +202,6 @@ export interface DashboardServerHandle {
 
 const PREVIEW_BRIDGE_PATH = "/_sprint_os/preview-bridge.js";
 const PREVIEW_HOST_PREFIX = "preview-";
-const LOCAL_PREVIEW_HOST_SUFFIX = ".localhost";
 
 function parsePreviewSessionIdFromHost(hostHeader: string | undefined): string | null {
   const rawHost = String(hostHeader || "").trim().toLowerCase();
@@ -210,10 +209,18 @@ function parsePreviewSessionIdFromHost(hostHeader: string | undefined): string |
     return null;
   }
   const hostWithoutPort = rawHost.split(":")[0] || "";
-  if (!hostWithoutPort.startsWith(PREVIEW_HOST_PREFIX) || !hostWithoutPort.endsWith(LOCAL_PREVIEW_HOST_SUFFIX)) {
+  if (!hostWithoutPort.startsWith(PREVIEW_HOST_PREFIX)) {
     return null;
   }
-  const sessionId = hostWithoutPort.slice(PREVIEW_HOST_PREFIX.length, hostWithoutPort.length - LOCAL_PREVIEW_HOST_SUFFIX.length).trim();
+  const firstDotIndex = hostWithoutPort.indexOf(".");
+  if (firstDotIndex === -1) {
+    return null; // Must have a domain suffix
+  }
+  const firstSegment = hostWithoutPort.slice(0, firstDotIndex);
+  if (firstSegment === PREVIEW_HOST_PREFIX) {
+    return null;
+  }
+  const sessionId = firstSegment.slice(PREVIEW_HOST_PREFIX.length).trim();
   return sessionId || null;
 }
 
@@ -222,10 +229,17 @@ function buildDashboardOriginForPreviewHost(req: express.Request): string {
   const rawHost = String(req.headers.host || "").trim();
   const hostWithoutPort = rawHost.split(":")[0] || "localhost";
   const port = rawHost.includes(":") ? rawHost.slice(rawHost.lastIndexOf(":")) : "";
-  const dashboardHost = hostWithoutPort.startsWith(PREVIEW_HOST_PREFIX) && hostWithoutPort.endsWith(LOCAL_PREVIEW_HOST_SUFFIX)
-    ? `localhost${port}`
-    : rawHost;
-  return `${protocol}://${dashboardHost}`;
+
+  if (hostWithoutPort.startsWith(PREVIEW_HOST_PREFIX)) {
+    const firstDotIndex = hostWithoutPort.indexOf(".");
+    if (firstDotIndex !== -1) {
+      const dashboardHostWithoutPort = hostWithoutPort.slice(firstDotIndex + 1);
+      const finalHost = dashboardHostWithoutPort === "localhost" ? `localhost${port}` : `${dashboardHostWithoutPort}${port}`;
+      return `${protocol}://${finalHost}`;
+    }
+  }
+
+  return `${protocol}://${rawHost}`;
 }
 
 function buildPreviewBridgeScript(): string {
@@ -1457,7 +1471,12 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   // 2. SPA Fallback: For any GET request that isn't for an API and doesn't have an extension,
   // serve the index.html to allow client-side routing (TanStack Router) to take over.
   app.use((req, res, next) => {
-    if (req.method === "GET" && !req.path.startsWith("/api/") && !req.path.startsWith("/health") && !req.path.startsWith("/ready")) {
+    const isGet = req.method === "GET";
+    const isApi = req.path.startsWith("/api/") || req.path.startsWith("/health") || req.path.startsWith("/ready");
+    const isExtensionless = !req.path.split("/").pop()?.includes(".");
+    const isPreviewHost = parsePreviewSessionIdFromHost(req.headers.host) !== null;
+
+    if (isGet && !isApi && isExtensionless && !isPreviewHost) {
       const indexPath = path.join(staticDir, "index.html");
       if (fs.existsSync(indexPath)) {
         res.sendFile(indexPath);
