@@ -4,13 +4,14 @@ import * as THREE from "three";
 /* ─────────────────────────────────────────────────────────────────────────────
  * DeepOceanBackground
  * ─────────────────────────────────────────────────────────────────────────────
- * A full-screen Three.js background rendered behind the chat UI.
- * Effect: dark abyssal water with slowly morphing caustic light patterns
- * and faint drifting bioluminescent particles.
+ * Full-viewport Three.js animated background.
+ *
+ * Dark mode : abyssal water — deep black with morphing jade caustic light
+ * Light mode: sun-through-water — warm ivory with golden/jade caustics on marble
  *
  * Performance budget:
- *  - Renders at 0.5× device resolution (configurable via RENDER_SCALE)
- *  - 1 fullscreen quad (caustic shader) + 1 instanced draw (particles)
+ *  - Renders at 0.5× device resolution
+ *  - 1 fullscreen quad (caustic shader) + 1 points draw (particles)
  *  - Targets 60 fps on integrated GPUs; gracefully degrades
  * ───────────────────────────────────────────────────────────────────────────── */
 
@@ -30,14 +31,13 @@ const causticFrag = /* glsl */ `
   precision mediump float;
   uniform float uTime;
   uniform vec2  uResolution;
+  uniform float uDark;          /* 1.0 = dark mode, 0.0 = light mode */
   varying vec2  vUv;
 
-  /* ─ fast pseudo-random hash ─ */
   float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
   }
 
-  /* ─ value noise ─ */
   float noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
@@ -49,10 +49,8 @@ const causticFrag = /* glsl */ `
     return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
   }
 
-  /* ─ fractal Brownian motion (3 octaves for perf) ─ */
   float fbm(vec2 p) {
-    float v = 0.0;
-    float a = 0.5;
+    float v = 0.0, a = 0.5;
     vec2 shift = vec2(100.0);
     mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
     for (int i = 0; i < 3; i++) {
@@ -63,7 +61,6 @@ const causticFrag = /* glsl */ `
     return v;
   }
 
-  /* ─ caustic pattern using warped domain ─ */
   float caustic(vec2 uv, float t) {
     float s = 0.18 * t;
     vec2 p = uv * 3.0;
@@ -77,31 +74,41 @@ const causticFrag = /* glsl */ `
     vec2 uv = vUv;
     float aspect = uResolution.x / uResolution.y;
     uv.x *= aspect;
-    float t = uTime;
 
-    /* two caustic layers at different scales for depth */
-    float c1 = caustic(uv, t);
-    float c2 = caustic(uv * 0.7 + 3.5, t * 0.8);
+    float c1 = caustic(uv, uTime);
+    float c2 = caustic(uv * 0.7 + 3.5, uTime * 0.8);
     float c  = c1 * 0.6 + c2 * 0.4;
-
-    /* remap to tight bright range */
     c = smoothstep(0.28, 0.72, c);
     c = pow(c, 2.6);
 
-    /* jade / teal tinted caustic highlights */
-    vec3 base   = vec3(0.024, 0.032, 0.038);          /* almost black */
-    vec3 deep   = vec3(0.012, 0.05, 0.048);            /* deep teal */
-    vec3 bright = vec3(0.0, 0.878, 0.627);             /* signal-500 jade */
+    /* ── dark palette: deep abyss + jade ── */
+    vec3 dBase   = vec3(0.024, 0.032, 0.038);
+    vec3 dDeep   = vec3(0.012, 0.05, 0.048);
+    vec3 dBright = vec3(0.0, 0.878, 0.627);
 
-    vec3 color = base;
-    color = mix(color, deep,   c * 0.7);
-    color = mix(color, bright, c * c * 0.08);
+    vec3 darkColor = dBase;
+    darkColor = mix(darkColor, dDeep,   c * 0.7);
+    darkColor = mix(darkColor, dBright, c * c * 0.08);
+
+    /* ── light palette: warm ivory + golden jade caustics ── */
+    vec3 lBase   = vec3(0.965, 0.960, 0.945);         /* warm off-white #F7F5F0 */
+    vec3 lPool   = vec3(0.88, 0.95, 0.94);             /* pale aqua tint */
+    vec3 lBright = vec3(0.0, 0.75, 0.55);              /* muted jade */
+    vec3 lGold   = vec3(0.98, 0.88, 0.60);             /* warm gold */
+
+    vec3 lightColor = lBase;
+    lightColor = mix(lightColor, lPool,   c * 0.35);
+    lightColor = mix(lightColor, lGold,   c * c * 0.12);
+    lightColor = mix(lightColor, lBright, c * c * c * 0.06);
+
+    /* ── blend by mode ── */
+    vec3 color = mix(lightColor, darkColor, uDark);
 
     /* subtle vignette */
     vec2 vigUv = vUv * 2.0 - 1.0;
     float vig = 1.0 - dot(vigUv * 0.5, vigUv * 0.5);
     vig = smoothstep(0.0, 1.0, vig);
-    color *= vig;
+    color = mix(color * 0.92, color, vig);
 
     gl_FragColor = vec4(color, 1.0);
   }
@@ -118,13 +125,11 @@ const particleVert = /* glsl */ `
   void main() {
     vAlpha = aAlpha;
 
-    /* gentle drift: slowly float upward and sway */
     vec3 pos = offset;
     float t = uTime * 0.08;
     pos.y = mod(pos.y + t * aSize * 0.5, 2.0) - 1.0;
     pos.x += sin(pos.y * 3.0 + uTime * 0.15 + offset.z * 6.0) * 0.02;
 
-    /* fade near edges */
     float edgeFade = smoothstep(-1.0, -0.7, pos.y) * smoothstep(1.0, 0.7, pos.y);
     vAlpha *= edgeFade;
 
@@ -136,35 +141,47 @@ const particleVert = /* glsl */ `
 
 const particleFrag = /* glsl */ `
   precision mediump float;
+  uniform float uDark;
   varying float vAlpha;
 
   void main() {
-    /* soft circle */
     float d = length(gl_PointCoord - 0.5);
     float a = 1.0 - smoothstep(0.3, 0.5, d);
-    /* jade tint */
-    gl_FragColor = vec4(0.0, 0.88, 0.63, a * vAlpha * 0.35);
+
+    /* dark: jade glow, light: warm gold-jade shimmer */
+    vec3 darkCol  = vec3(0.0, 0.88, 0.63);
+    vec3 lightCol = vec3(0.55, 0.78, 0.62);
+    vec3 col = mix(lightCol, darkCol, uDark);
+
+    float opacity = mix(0.18, 0.35, uDark);
+    gl_FragColor = vec4(col, a * vAlpha * opacity);
   }
 `;
+
+/* ── Helpers ──────────────────────────────────────────────────────────────── */
+function isDarkMode(): boolean {
+  return document.documentElement.classList.contains("dark");
+}
 
 /* ── Component ────────────────────────────────────────────────────────────── */
 export const DeepOceanBackground = () => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const cleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
-    /* respect reduced-motion preference */
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-    /* bail out gracefully when WebGL is unavailable (e.g. test env) */
     try {
-      const testCanvas = document.createElement("canvas");
-      const ctx = testCanvas.getContext("webgl") || testCanvas.getContext("experimental-webgl");
+      const tc = document.createElement("canvas");
+      const ctx = tc.getContext("webgl") || tc.getContext("experimental-webgl");
       if (!ctx) return;
     } catch { return; }
+
+    /* ── state ── */
+    let currentDark = isDarkMode() ? 1.0 : 0.0;
+    let targetDark = currentDark;
 
     /* ── renderer ── */
     const renderer = new THREE.WebGLRenderer({
@@ -173,55 +190,44 @@ export const DeepOceanBackground = () => {
       powerPreference: "low-power",
     });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5) * RENDER_SCALE);
-    renderer.setClearColor(0x060a0d, 1);
+    renderer.setClearColor(isDarkMode() ? 0x060a0d : 0xf7f5f0, 1);
     renderer.setSize(el.clientWidth, el.clientHeight);
     el.appendChild(renderer.domElement);
-    renderer.domElement.style.position = "absolute";
-    renderer.domElement.style.inset = "0";
-    renderer.domElement.style.width = "100%";
-    renderer.domElement.style.height = "100%";
+    Object.assign(renderer.domElement.style, {
+      position: "absolute", inset: "0", width: "100%", height: "100%",
+    });
 
-    /* ── scene & camera ── */
+    /* ── caustic scene ── */
     const scene = new THREE.Scene();
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
-    /* ── caustic quad ── */
     const causticMat = new THREE.ShaderMaterial({
       vertexShader: causticVert,
       fragmentShader: causticFrag,
       uniforms: {
         uTime: { value: 0 },
-        uResolution: {
-          value: new THREE.Vector2(el.clientWidth, el.clientHeight),
-        },
+        uResolution: { value: new THREE.Vector2(el.clientWidth, el.clientHeight) },
+        uDark: { value: currentDark },
       },
       depthWrite: false,
       depthTest: false,
     });
-    const quad = new THREE.Mesh(
-      new THREE.PlaneGeometry(2, 2),
-      causticMat,
-    );
-    scene.add(quad);
+    const quadGeo = new THREE.PlaneGeometry(2, 2);
+    scene.add(new THREE.Mesh(quadGeo, causticMat));
 
-    /* ── particles (separate scene, perspective camera) ── */
+    /* ── particle scene ── */
     const particleScene = new THREE.Scene();
-    const pCam = new THREE.PerspectiveCamera(
-      60,
-      el.clientWidth / el.clientHeight,
-      0.1,
-      10,
-    );
+    const pCam = new THREE.PerspectiveCamera(60, el.clientWidth / el.clientHeight, 0.1, 10);
     pCam.position.z = 1.8;
 
     const offsets = new Float32Array(PARTICLE_COUNT * 3);
     const sizes = new Float32Array(PARTICLE_COUNT);
     const alphas = new Float32Array(PARTICLE_COUNT);
     for (let i = 0; i < PARTICLE_COUNT; i++) {
-      offsets[i * 3] = (Math.random() - 0.5) * 3;
+      offsets[i * 3]     = (Math.random() - 0.5) * 3;
       offsets[i * 3 + 1] = (Math.random() - 0.5) * 2;
       offsets[i * 3 + 2] = (Math.random() - 0.5) * 2;
-      sizes[i] = 1.5 + Math.random() * 3;
+      sizes[i]  = 1.5 + Math.random() * 3;
       alphas[i] = 0.2 + Math.random() * 0.8;
     }
 
@@ -234,24 +240,43 @@ export const DeepOceanBackground = () => {
     const pMat = new THREE.ShaderMaterial({
       vertexShader: particleVert,
       fragmentShader: particleFrag,
-      uniforms: { uTime: { value: 0 } },
+      uniforms: {
+        uTime: { value: 0 },
+        uDark: { value: currentDark },
+      },
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     });
+    particleScene.add(new THREE.Points(pGeo, pMat));
 
-    const points = new THREE.Points(pGeo, pMat);
-    particleScene.add(points);
+    /* ── dark/light observer ── */
+    const mo = new MutationObserver(() => {
+      targetDark = isDarkMode() ? 1.0 : 0.0;
+    });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
 
     /* ── animation loop ── */
     let animId = 0;
-    let startTime = performance.now();
+    const startTime = performance.now();
 
     const animate = () => {
       animId = requestAnimationFrame(animate);
       const elapsed = (performance.now() - startTime) * 0.001;
+
+      /* smoothly lerp dark mode uniform */
+      currentDark += (targetDark - currentDark) * 0.03;
+      if (Math.abs(currentDark - targetDark) < 0.001) currentDark = targetDark;
+
       causticMat.uniforms.uTime.value = elapsed;
+      causticMat.uniforms.uDark.value = currentDark;
       pMat.uniforms.uTime.value = elapsed;
+      pMat.uniforms.uDark.value = currentDark;
+
+      /* interpolate clear color */
+      const darkClear = new THREE.Color(0x060a0d);
+      const lightClear = new THREE.Color(0xf7f5f0);
+      renderer.setClearColor(darkClear.lerp(lightClear, 1.0 - currentDark));
 
       renderer.autoClear = true;
       renderer.render(scene, camera);
@@ -260,11 +285,10 @@ export const DeepOceanBackground = () => {
     };
     animate();
 
-    /* ── resize observer ── */
+    /* ── resize ── */
     const ro = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      const { width, height } = entry.contentRect;
+      const { width, height } = entries[0]!.contentRect;
+      if (width === 0 || height === 0) return;
       renderer.setSize(width, height);
       causticMat.uniforms.uResolution.value.set(width, height);
       pCam.aspect = width / height;
@@ -273,28 +297,24 @@ export const DeepOceanBackground = () => {
     ro.observe(el);
 
     /* ── cleanup ── */
-    const cleanup = () => {
+    return () => {
       cancelAnimationFrame(animId);
+      mo.disconnect();
       ro.disconnect();
       renderer.dispose();
       causticMat.dispose();
       pMat.dispose();
       pGeo.dispose();
-      quad.geometry.dispose();
-      if (el.contains(renderer.domElement)) {
-        el.removeChild(renderer.domElement);
-      }
+      quadGeo.dispose();
+      if (el.contains(renderer.domElement)) el.removeChild(renderer.domElement);
     };
-    cleanupRef.current = cleanup;
-
-    return cleanup;
   }, []);
 
   return (
     <div
       ref={containerRef}
       aria-hidden="true"
-      className="absolute inset-0 overflow-hidden"
+      className="fixed inset-0 overflow-hidden"
       style={{ zIndex: 0 }}
     />
   );

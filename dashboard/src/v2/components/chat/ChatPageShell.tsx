@@ -3,7 +3,6 @@ import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { MessageCircle, RefreshCw, Plus } from "lucide-preact";
 import type { Source } from "../../types.js";
-import { DeepOceanBackground } from "./DeepOceanBackground.js";
 
 export const ChatPageShell: FunctionComponent<{
   selectedProject: Source | null;
@@ -42,9 +41,7 @@ export const ChatPageShell: FunctionComponent<{
   }, []);
 
   return (
-    <div className="relative h-[calc(100vh-48px)]">
-      <DeepOceanBackground />
-    <div className="relative z-10 mx-auto flex h-full max-w-[1900px] flex-col gap-8 px-8 py-12 md:px-20">
+    <div className="relative z-10 mx-auto flex h-[calc(100vh-48px)] max-w-[1900px] flex-col gap-8 px-8 py-12 md:px-20">
       <div ref={headerRef} className="shrink-0 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
@@ -140,7 +137,6 @@ export const ChatPageShell: FunctionComponent<{
           {detailSlot}
         </section>
       </div>
-    </div>
     </div>
   );
 };
