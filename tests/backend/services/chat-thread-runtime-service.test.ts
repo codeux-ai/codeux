@@ -83,6 +83,7 @@ describe("ChatThreadRuntimeService", () => {
     );
     expect(deps.connectionChatRepository.updateThread).toHaveBeenCalledWith("t1", expect.objectContaining({
       runtimeState: expect.objectContaining({
+        routeKind: "virtual",
         virtualProvider: "claude-code",
         sessionIds: ["new-session"],
       })
@@ -110,6 +111,41 @@ describe("ChatThreadRuntimeService", () => {
       expect.objectContaining({
         provider: "claude-code",
         continueSessionId: "existing-session",
+      })
+    );
+  });
+
+  it("honors an explicitly routed virtual provider before falling back to global routing", async () => {
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ threadId: "t1", bodyMarkdown: "hello" });
+    deps.connectionChatRepository.listThreads.mockReturnValue([{
+      id: "t1",
+      connectionId: null,
+      runtimeState: {
+        routeKind: "virtual",
+        virtualProvider: "codex",
+      }
+    }]);
+    deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
+    deps.taskService.resolveInvocationProvider.mockReturnValue({
+      provider: "jules",
+      providers: {
+        jules: { model: "default", apiKey: "", thinkingMode: "MEDIUM" },
+        codex: { model: "gpt-5.3-codex", apiKey: "codex-key", thinkingMode: "HIGH" },
+      }
+    });
+    deps.connectionChatRepository.listMessages.mockReturnValue([
+      { authorType: "dashboard_user", bodyMarkdown: "first" },
+    ]);
+    deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec1" });
+    deps.providerRunner.runProviderForText.mockResolvedValue({ text: "codex reply", nativeSessionId: "codex-session" });
+
+    await service.postMessage("p1", { bodyMarkdown: "hello" });
+
+    expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "codex",
+        model: "gpt-5.3-codex",
+        apiKey: "codex-key",
       })
     );
   });

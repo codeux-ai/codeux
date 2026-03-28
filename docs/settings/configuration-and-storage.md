@@ -159,11 +159,11 @@ Dashboard behavior:
   - default profiles:
     - `task_coding`: `GLOBAL`
     - `planning`: `WORKER`
-    - `dashboard_reply`: `GLOBAL`
+    - `dashboard_reply`: `WORKER`
     - `clarification_reply`: `WORKER`
     - `ci_fix`: `WORKER`
     - `merge_conflict`: `WORKER`
-  - clarification auto-answer in `WORKER` mode now follows the preferred worker CLI provider/model by default instead of accidentally inheriting whichever global CLI provider happened to match.
+  - dashboard replies and clarification auto-answer in `WORKER` mode now follow the preferred worker CLI provider/model by default instead of accidentally inheriting whichever global provider happened to match.
 
 `automationInterventions` contains:
 - `autoApprovePlan` (default `true`): auto-approve `AWAITING_PLAN_APPROVAL` sessions in `SEMI_AUTO`

@@ -202,7 +202,12 @@ export class ProviderRunner implements IProviderRunner {
       };
     }
 
-    return providerSpecs[provider](model, prompt);
+    const providerSpec = providerSpecs[provider];
+    if (!providerSpec) {
+      throw new Error(`Unsupported CLI provider: ${provider}`);
+    }
+
+    return providerSpec(model, prompt);
   }
 
   private withProviderEnv(

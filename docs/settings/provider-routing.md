@@ -61,12 +61,12 @@ Each `aiProvider.invocationRouting.<routeId>` entry contains:
 
 - `task_coding` uses `GLOBAL`
 - `planning` uses `WORKER`
-- `dashboard_reply` uses `GLOBAL`
+- `dashboard_reply` uses `WORKER`
 - `clarification_reply` uses `WORKER`
 - `ci_fix` uses `WORKER`
 - `merge_conflict` uses `WORKER`
 
-That means clarification auto-answer now follows the preferred worker CLI provider/model by default.
+That means dashboard chat replies and clarification auto-answer both follow the preferred worker CLI provider/model by default instead of inheriting the global primary provider.
 
 ## Services Using Invocation Routing
 

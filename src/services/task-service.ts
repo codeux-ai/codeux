@@ -67,6 +67,10 @@ export class TaskService {
       }
     }
 
+    if (options?.cliOnly && resolved.provider === "jules") {
+      throw new Error(`Invocation ${invocation} requires a CLI provider, but no eligible CLI provider is enabled.`);
+    }
+
     return resolved;
   }
 

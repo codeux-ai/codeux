@@ -157,4 +157,48 @@ describe("TaskService", () => {
 
     expect(createSession).not.toHaveBeenCalled();
   });
+
+  it("throws a clear error when a CLI-only invocation has no eligible CLI providers", () => {
+    const cliOnlyService = new TaskService({
+      julesApi: { createSession } as any,
+      agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: getWorkerAgent } as any,
+      resolveJulesSourceId,
+      getDashboardSettings: () => ({
+        aiProvider: {
+          provider: "jules",
+          strategy: "MANUAL",
+          julesApiKey: "",
+          providers: {
+            jules: { enabled: true, model: "default", weight: 60, thinkingMode: "MEDIUM", apiKey: "" },
+            gemini: { enabled: false, model: "default", weight: 20, thinkingMode: "MEDIUM", apiKey: "" },
+            codex: { enabled: false, model: "gpt-5.3-codex", weight: 20, thinkingMode: "HIGH", apiKey: "" },
+            "claude-code": { enabled: false, model: "default", weight: 0, thinkingMode: "HIGH", apiKey: "" },
+          },
+          invocationRouting: {
+            dashboard_reply: {
+              profile: "GLOBAL",
+              strategy: "MANUAL",
+              provider: null,
+              allowedProviders: [],
+              providers: {},
+            },
+          },
+        },
+        git: { defaultBranch: "main" },
+      }) as any,
+      isJulesApiConfigured: () => true,
+      cliWorkflowService: { startTask: startCliTask } as any,
+    });
+
+    expect(() => cliOnlyService.resolveInvocationProvider("dashboard_reply", {
+      id: "chat",
+      title: "Chat",
+      prompt: "hello",
+      depends_on: [],
+      is_independent: true,
+      status: "PENDING",
+    }, {
+      cliOnly: true,
+    })).toThrow("requires a CLI provider");
+  });
 });

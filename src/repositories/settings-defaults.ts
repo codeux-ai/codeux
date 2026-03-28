@@ -155,7 +155,7 @@ export const DEFAULT_INVOCATION_ROUTING: Record<InvocationRoutingId, InvocationR
     providers: {},
   },
   dashboard_reply: {
-    profile: "GLOBAL",
+    profile: "WORKER",
     strategy: "MANUAL",
     provider: null,
     allowedProviders: [],

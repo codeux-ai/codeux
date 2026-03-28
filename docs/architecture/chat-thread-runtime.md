@@ -26,6 +26,14 @@ Threads can dynamically shift their underlying execution backend:
 
 Automatic worker pickup occurs seamlessly. If a project has an inherited worker mode (`VIRTUAL` or `CONNECTED_MCP`), new chat threads inherit this routing configuration automatically.
 
+Route resolution now follows this precedence on each posted message:
+- honor an explicit thread-level worker route when the targeted worker endpoint is still live
+- otherwise honor an explicit thread-level virtual provider route using the stored provider plus current `dashboard_reply` provider settings for model, API key, and thinking mode
+- otherwise fall back to automatic live-worker pickup (`connectionId`, primary assignment, then overflow assignment)
+- finally resolve the `dashboard_reply` invocation route and require a CLI-capable provider
+
+This keeps the chat page's explicit route selector authoritative for new-thread first messages instead of accidentally re-resolving through the global provider default.
+
 ### First-Message Replay & Worker Switching
 
 A thread's conversation history is independent of the provider processing it. If a user switches the active worker mid-conversation (e.g., from a Claude CLI to a connected Gemini MCP worker), the `ChatThreadRuntimeService` marks the `runtimeState.replayRequired` flag as `true`.

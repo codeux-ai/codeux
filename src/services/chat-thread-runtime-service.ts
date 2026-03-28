@@ -37,23 +37,33 @@ export class ChatThreadRuntimeService {
   constructor(private readonly deps: ChatThreadRuntimeServiceDependencies) {}
 
   public resolveThreadRoute(
-    thread: Pick<ConversationThreadRecord, 'connectionId'>,
+    thread: Pick<ConversationThreadRecord, "connectionId" | "runtimeState">,
     liveAssignments: ReturnType<ProjectWorkerAssignmentRepository["listAssignmentsForProject"]>,
     settings: DashboardSettings,
     latestMessageBody: string,
   ): ThreadRouteResolution {
+    const runtimeState = thread.runtimeState || null;
+
+    if (runtimeState?.routeKind === "worker") {
+      const explicitWorker = runtimeState.workerEndpointId
+        ? liveAssignments.find((assignment) => (
+          assignment.workerEndpointId === runtimeState.workerEndpointId
+          && assignment.workerStatus !== "offline"
+          && assignment.workerStatus !== "stale"
+          && assignment.connectionId
+        ))
+        : null;
+      if (explicitWorker?.connectionId) {
+        return { mode: "CONNECTED_MCP", connectionId: explicitWorker.connectionId };
+      }
+    }
+
     if (thread.connectionId) {
       const isLive = liveAssignments.some((a) => a.connectionId === thread.connectionId && a.workerStatus !== "offline" && a.workerStatus !== "stale");
       if (isLive) {
         return { mode: "CONNECTED_MCP", connectionId: thread.connectionId };
       }
     }
-
-    const primary = liveAssignments.find((a) => a.assignmentRole === "primary" && a.capabilities.canSuperviseProjects && a.workerStatus !== "stale" && a.workerStatus !== "offline");
-    if (primary && primary.connectionId) return { mode: "CONNECTED_MCP", connectionId: primary.connectionId };
-
-    const overflow = liveAssignments.find((a) => a.assignmentRole === "overflow" && a.capabilities.canSuperviseProjects && a.workerStatus !== "stale" && a.workerStatus !== "offline");
-    if (overflow && overflow.connectionId) return { mode: "CONNECTED_MCP", connectionId: overflow.connectionId };
 
     const pseudoTask: Subtask = {
       id: "dashboard-reply",
@@ -65,6 +75,26 @@ export class ChatThreadRuntimeService {
     };
 
     const route = this.deps.taskService.resolveInvocationProvider("dashboard_reply", pseudoTask, { cliOnly: true });
+
+    if (this.isVirtualProvider(runtimeState?.virtualProvider) && runtimeState?.routeKind === "virtual") {
+      const providerId = runtimeState.virtualProvider;
+      const providerSettings = route.providers[providerId];
+
+      return {
+        mode: "VIRTUAL",
+        providerId,
+        model: runtimeState.modelLabel || providerSettings.model,
+        apiKey: providerSettings.apiKey,
+        thinkingMode: providerSettings.thinkingMode,
+      };
+    }
+
+    const primary = liveAssignments.find((a) => a.assignmentRole === "primary" && a.capabilities.canSuperviseProjects && a.workerStatus !== "stale" && a.workerStatus !== "offline");
+    if (primary && primary.connectionId) return { mode: "CONNECTED_MCP", connectionId: primary.connectionId };
+
+    const overflow = liveAssignments.find((a) => a.assignmentRole === "overflow" && a.capabilities.canSuperviseProjects && a.workerStatus !== "stale" && a.workerStatus !== "offline");
+    if (overflow && overflow.connectionId) return { mode: "CONNECTED_MCP", connectionId: overflow.connectionId };
+
     const providerId = route.provider as Extract<ProviderId, "gemini" | "codex" | "claude-code">;
 
     return {
@@ -250,7 +280,7 @@ export class ChatThreadRuntimeService {
 
       const newRuntimeState: ConversationRuntimeState = {
         ...runtimeState,
-        routeKind: "VIRTUAL",
+        routeKind: "virtual",
         virtualProvider: provider,
         modelLabel: model,
         sessionIds: result.nativeSessionId ? [result.nativeSessionId] : [],
@@ -331,5 +361,9 @@ export class ChatThreadRuntimeService {
     }
 
     return trimmed;
+  }
+
+  private isVirtualProvider(value: string | undefined | null): value is Extract<ProviderId, "gemini" | "codex" | "claude-code"> {
+    return value === "gemini" || value === "codex" || value === "claude-code";
   }
 }
