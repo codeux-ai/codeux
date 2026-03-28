@@ -19,7 +19,8 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ["preact", "react", "react-dom"]
+          vendor: ["preact", "react", "react-dom"],
+          three: ["three"],
         },
       },
     },

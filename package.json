@@ -37,7 +37,8 @@
     "lucide-preact": "^0.577.0",
     "marked": "^17.0.3",
     "onnxruntime-node": "^1.24.3",
-    "preact": "^10.29.0"
+    "preact": "^10.29.0",
+    "three": "^0.183.2"
   },
   "overrides": {
     "hono": "^4.12.7"
@@ -51,6 +52,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^25.3.2",
     "@types/supertest": "^7.2.0",
+    "@types/three": "^0.183.1",
     "@vitest/coverage-v8": "^4.0.18",
     "happy-dom": "^20.8.9",
     "jsdom": "^29.0.1",
