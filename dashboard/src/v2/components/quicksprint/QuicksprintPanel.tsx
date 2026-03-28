@@ -500,11 +500,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                   </div>
                 </div>
 
-                <div className={`rounded-[1.4rem] border p-4 transition-all ${
-                  showModelOverride
-                    ? "border-signal-500/20 bg-signal-500/[0.04] dark:bg-signal-500/[0.08]"
-                    : "border-black/[0.06] bg-black/[0.025] opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03]"
-                }`}>
+                <div className={`rounded-[1.4rem] border p-4 transition-all ${ showModelOverride ? "border-signal-500/20 bg-signal-500/[0.04] dark:bg-signal-500/[0.08]" : "border-black/[0.06] bg-black/[0.025] opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03]" }`}>
                   <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Model Override</div>
                   <div className="mt-2">
                     <AvantgardeSelect
@@ -545,9 +541,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                 </button>
 
                 <div
-                  className={`overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${
-                    showPrompt ? "mt-4 max-h-[600px] opacity-100" : "max-h-0 opacity-0"
-                  }`}
+                  className={`overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] ${ showPrompt ? "mt-4 max-h-[600px] opacity-100" : "max-h-0 opacity-0" }`}
                 >
                   <div className="rounded-[1.4rem] border border-black/[0.05] bg-black/[0.02] p-5 dark:border-white/[0.05] dark:bg-white/[0.02]">
                     <pre className="max-h-80 overflow-y-auto text-xs font-mono leading-relaxed text-slate-500 dark:text-slate-400 whitespace-pre-wrap break-words scrollbar-thin scrollbar-thumb-black/10 dark:scrollbar-thumb-white/10">
@@ -724,11 +718,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                         type="button"
                         onClick={() => { setEdIcon(opt.value); setShowIconPicker(false); }}
                         title={opt.value}
-                        className={`flex min-h-[44px] min-w-[44px] h-9 w-9 cursor-pointer items-center justify-center rounded-xl transition-all duration-150 ${
-                          isActive
-                            ? "bg-ember-500/20 text-ember-500 shadow-[0_0_10px_rgba(255,107,0,0.15)] scale-110"
-                            : "text-slate-400 hover:bg-white/[0.08] hover:text-white hover:scale-110"
-                        }`}
+                        className={`flex min-h-[44px] min-w-[44px] h-9 w-9 cursor-pointer items-center justify-center rounded-xl transition-all duration-150 ${ isActive ? "bg-ember-500/20 text-ember-500 shadow-[0_0_10px_rgba(255,107,0,0.15)] scale-110" : "text-slate-400 hover:bg-white/[0.08] hover:text-white hover:scale-110" }`}
                       >
                         <opt.Icon className="h-4 w-4" />
                       </button>
@@ -813,11 +803,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                   <button
                     type="button"
                     onClick={handleEditorDelete}
-                    className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${
-                      edConfirmDelete
-                        ? "bg-red-600 text-white hover:bg-red-500"
-                        : "text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                    }`}
+                    className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${ edConfirmDelete ? "bg-red-600 text-white hover:bg-red-500" : "text-red-400 hover:text-red-300 hover:bg-red-500/10" }`}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                     {edConfirmDelete ? "Confirm Delete" : "Delete"}
@@ -953,9 +939,7 @@ const SubtaskSlider: FunctionComponent<{
             return (
               <div
                 key={n}
-                className={`rounded-full transition-all ${
-                  isMajor ? "h-3 w-1" : "h-1.5 w-0.5"
-                } ${isActive ? "bg-ember-500/60" : "bg-black/[0.08] dark:bg-white/[0.08]"}`}
+                className={`rounded-full transition-all ${ isMajor ? "h-3 w-1" : "h-1.5 w-0.5" } ${isActive ? "bg-ember-500/60" : "bg-black/[0.08] dark:bg-white/[0.08]"}`}
               />
             );
           })}

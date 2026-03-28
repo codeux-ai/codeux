@@ -34,11 +34,7 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({ m
           <ChatAvatar role={role} provider={providerLabel} agentName={senderName} />
         </div>
 
-        <div className={`flex flex-col w-full max-w-[calc(100%-3rem)] rounded-2xl border bg-white/5 backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${
-          fromDashboard
-            ? "rounded-tr-sm border-signal-500/20"
-            : "rounded-tl-sm border-white/10"
-        }`}>
+        <div className={`flex flex-col w-full max-w-[calc(100%-3rem)] rounded-2xl border bg-white/5 backdrop-blur-md p-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${ fromDashboard ? "rounded-tr-sm border-signal-500/20" : "rounded-tl-sm border-white/10" }`}>
           {/* Header Row */}
           <div className={`flex items-center gap-3 mb-2 text-[11px] font-mono text-slate-400 ${fromDashboard ? "justify-end flex-row-reverse" : "justify-start"}`}>
             <span className="font-semibold text-slate-300">{senderName}</span>

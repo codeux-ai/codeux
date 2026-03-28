@@ -5,7 +5,7 @@ import type { Task } from "../../types.js";
 
 export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
     <div
-        className="group relative flex items-center justify-between py-5 cursor-pointer border-b border-black/[0.05] dark:border-white/[0.04] last:border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 dark:focus-visible:ring-slate-400 focus-visible:z-10 focus-visible:rounded-xl"
+        className="group relative flex items-center justify-between py-5 cursor-pointer border-b border-black/[0.05] dark:border-white/[0.04] last:border-0 focus-visible:z-10"
         tabIndex={0}
         role="button"
         onKeyDown={(e) => {
@@ -49,12 +49,7 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
                 )}
                 {task.status === 'pending' && <Circle className="w-4 h-4 text-slate-500 dark:text-slate-400" strokeWidth={2} />}
 
-                <span className={`text-[10px] font-bold uppercase tracking-widest ${
-                    task.status === 'completed'   ? 'text-emerald-700 dark:text-status-green' :
-                    task.status === 'coding_completed' ? 'text-cyan-700 dark:text-cyan-500' :
-                    task.status === 'in_progress' ? 'text-emerald-700 dark:text-signal-500' :
-                    'text-slate-600 dark:text-slate-400'
-                }`}>
+                <span className={`text-[10px] font-bold uppercase tracking-widest ${ task.status === 'completed' ? 'text-emerald-700 dark:text-status-green' : task.status === 'coding_completed' ? 'text-cyan-700 dark:text-cyan-500' : task.status === 'in_progress' ? 'text-emerald-700 dark:text-signal-500' : 'text-slate-600 dark:text-slate-400' }`}>
                     {task.status.replace('_', ' ')}
                 </span>
             </div>

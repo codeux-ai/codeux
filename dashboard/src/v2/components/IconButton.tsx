@@ -11,7 +11,7 @@ export const IconButton: FunctionComponent<IconButtonProps> = memo(({ children, 
     return (
         <button
             {...props}
-            className={`flex items-center justify-center p-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 touch-target ${className}`}
+            className={`flex items-center justify-center p-2 transition-colors touch-target ${className}`}
         >
             {children}
         </button>

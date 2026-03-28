@@ -111,7 +111,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                             id="rerun-provider"
                             value={provider}
                             onChange={(e) => setProvider((e.target as HTMLSelectElement).value)}
-                            className="w-full rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.03] px-4 py-2.5 text-[13px] font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-signal-500 focus:border-transparent transition-shadow"
+                            className="w-full rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.03] px-4 py-2.5 text-[13px] font-medium text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-signal-500 focus:border-transparent transition-shadow"
                         >
                             {PROVIDER_OPTIONS.map(opt => (
                                 <option key={opt.value} value={opt.value}>{opt.label}</option>

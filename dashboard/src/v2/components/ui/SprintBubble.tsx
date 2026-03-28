@@ -202,11 +202,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
               onPrimaryAction?.();
             }}
             disabled={!onPrimaryAction || primaryBusy}
-            className={`touch-target flex h-9 w-9 items-center justify-center rounded-full text-slate-800 transition-all duration-300 dark:text-white ${
-              isRunning
-                ? "bg-status-red/[0.12] shadow-[0_0_18px_rgba(227,0,15,0.16)] hover:bg-status-red/[0.18]"
-                : "bg-signal-500/[0.12] shadow-[0_0_18px_rgba(0,224,160,0.16)] hover:bg-signal-500/[0.18]"
-            } disabled:cursor-not-allowed disabled:opacity-60`}
+            className={`touch-target flex h-9 w-9 items-center justify-center rounded-full text-slate-800 transition-all duration-300 dark:text-white ${ isRunning ? "bg-status-red/[0.12] shadow-[0_0_18px_rgba(227,0,15,0.16)] hover:bg-status-red/[0.18]" : "bg-signal-500/[0.12] shadow-[0_0_18px_rgba(0,224,160,0.16)] hover:bg-signal-500/[0.18]" } disabled:cursor-not-allowed disabled:opacity-60`}
             title={isRunning ? "Stop" : "Start"}
           >
             {isRunning

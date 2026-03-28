@@ -22,11 +22,7 @@ export const ThreadListCard: FunctionComponent<{
         <button
           type="button"
           onClick={() => onSelect(thread.id)}
-          className={`w-full rounded-[1.25rem] border px-4 py-3 pr-16 text-left transition-colors duration-150 ${
-            selectedThreadId === thread.id
-              ? "border-signal-500/30 bg-signal-500/10"
-              : "border-black/[0.05] bg-black/[0.03] hover:border-slate-300 hover:bg-black/[0.05] dark:border-white/[0.05] dark:bg-white/[0.03] dark:hover:border-white/[0.12] dark:hover:bg-white/[0.05]"
-          }`}
+          className={`w-full rounded-[1.25rem] border px-4 py-3 pr-16 text-left transition-colors duration-150 ${ selectedThreadId === thread.id ? "border-signal-500/30 bg-signal-500/10" : "border-black/[0.05] bg-black/[0.03] hover:border-slate-300 hover:bg-black/[0.05] dark:border-white/[0.05] dark:bg-white/[0.03] dark:hover:border-white/[0.12] dark:hover:bg-white/[0.05]" }`}
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex flex-1 items-start gap-3 min-w-0">

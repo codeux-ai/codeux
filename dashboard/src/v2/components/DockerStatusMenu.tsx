@@ -74,18 +74,10 @@ export const DockerStatusMenu: FunctionComponent = () => {
                 aria-label="Docker Status"
                 aria-haspopup="dialog"
                 aria-expanded={isHovered}
-                className={`w-11 h-11 flex items-center justify-center rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
-                    isHovered
-                        ? "bg-black/[0.05] dark:bg-white/[0.05]"
-                        : "hover:bg-black/[0.05] dark:hover:bg-white/[0.05]"
-                }`}
+                className={`w-11 h-11 flex items-center justify-center rounded-xl transition-colors ${ isHovered ? "bg-black/[0.05] dark:bg-white/[0.05]" : "hover:bg-black/[0.05] dark:hover:bg-white/[0.05]" }`}
             >
                 <div className="relative">
-                    <Box aria-hidden="true" className={`w-4 h-4 transition-colors ${
-                        activeContainers.length > 0
-                            ? "text-signal-500 dark:text-signal-400"
-                            : "text-slate-500 dark:text-slate-400"
-                        } group-hover:text-slate-900 dark:group-hover:text-white`} strokeWidth={1.5} />
+                    <Box aria-hidden="true" className={`w-4 h-4 transition-colors ${ activeContainers.length > 0 ? "text-signal-500 dark:text-signal-400" : "text-slate-500 dark:text-slate-400" } group-hover:text-slate-900 dark:group-hover:text-white`} strokeWidth={1.5} />
                     {activeContainers.length > 0 && (
                         <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-signal-500 shadow-[0_0_6px_rgba(0,224,160,0.8)] ring-1 ring-[#F9F8F4] dark:ring-void-900" />
                     )}

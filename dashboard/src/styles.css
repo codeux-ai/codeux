@@ -399,3 +399,10 @@
     }
   }
 }
+
+@layer base {
+  *:focus-visible {
+    outline: 2px solid theme('colors.signal.500');
+    outline-offset: 2px;
+  }
+}

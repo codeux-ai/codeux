@@ -57,20 +57,8 @@ export const OverviewTelemetry: FunctionComponent = () => {
     <aside className="sticky top-24 flex flex-col h-[760px] overflow-hidden group">
       <h3 className="text-3xl font-black tracking-tighter text-slate-900 dark:text-white mb-12 flex items-center gap-4 font-display">
         <div className="relative flex items-center justify-center">
-          <div className={`absolute inset-0 rounded-full blur-[10px] animate-[pulse_2s_ease-in-out_infinite] ${
-            hasActiveProjects
-              ? "bg-status-red opacity-70"
-              : hasAttentionProjects
-                ? "bg-status-amber opacity-70"
-                : "bg-slate-300 dark:bg-slate-700 opacity-50"
-          }`} />
-          <div className={`w-3.5 h-3.5 rounded-full relative z-10 ${
-            hasActiveProjects
-              ? "bg-status-red"
-              : hasAttentionProjects
-                ? "bg-status-amber"
-                : "bg-slate-400 dark:bg-slate-500"
-          }`} />
+          <div className={`absolute inset-0 rounded-full blur-[10px] animate-[pulse_2s_ease-in-out_infinite] ${ hasActiveProjects ? "bg-status-red opacity-70" : hasAttentionProjects ? "bg-status-amber opacity-70" : "bg-slate-300 dark:bg-slate-700 opacity-50" }`} />
+          <div className={`w-3.5 h-3.5 rounded-full relative z-10 ${ hasActiveProjects ? "bg-status-red" : hasAttentionProjects ? "bg-status-amber" : "bg-slate-400 dark:bg-slate-500" }`} />
         </div>
         Telemetry.
       </h3>

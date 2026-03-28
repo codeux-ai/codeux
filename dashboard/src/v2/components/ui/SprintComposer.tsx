@@ -350,11 +350,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
               </div>
             </div>
 
-            <div className={`rounded-[1.4rem] border p-4 transition-all ${
-              showModelOverride 
-                ? "border-signal-500/20 bg-signal-500/[0.04] dark:bg-signal-500/[0.08]" 
-                : "border-black/[0.06] bg-black/[0.025] opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03]"
-            }`}>
+            <div className={`rounded-[1.4rem] border p-4 transition-all ${ showModelOverride ? "border-signal-500/20 bg-signal-500/[0.04] dark:bg-signal-500/[0.08]" : "border-black/[0.06] bg-black/[0.025] opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03]" }`}>
               <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Model Override</div>
               <div className="mt-2">
                 <AvantgardeSelect
@@ -400,11 +396,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             </div>
 
             <div className={state.originalPrompt ? "grid gap-4 xl:grid-cols-2" : "grid gap-4"}>
-              <div className={`rounded-[1.7rem] border bg-black/[0.025] transition-all dark:bg-white/[0.03] ${
-                isImproving
-                  ? "border-signal-500/35 shadow-[0_0_0_1px_rgba(0,224,160,0.16),0_0_30px_rgba(0,224,160,0.1)]"
-                  : "border-black/[0.07] dark:border-white/[0.08]"
-              }`}>
+              <div className={`rounded-[1.7rem] border bg-black/[0.025] transition-all dark:bg-white/[0.03] ${ isImproving ? "border-signal-500/35 shadow-[0_0_0_1px_rgba(0,224,160,0.16),0_0_30px_rgba(0,224,160,0.1)]" : "border-black/[0.07] dark:border-white/[0.08]" }`}>
                 <textarea
                   value={state.goal}
                   onInput={(event) => state.setGoal((event.target as HTMLTextAreaElement).value)}
@@ -453,11 +445,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                     key={mode.id}
                     type="button"
                     onClick={() => state.setSubmitMode(mode.id)}
-                    className={`rounded-[1.35rem] border p-4 text-left transition-all ${
-                      isActive
-                        ? "border-signal-500/30 bg-signal-500/[0.08] shadow-[0_12px_24px_rgba(0,224,160,0.08)]"
-                        : "border-black/[0.06] bg-white/66 hover:border-black/[0.1] hover:bg-white dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:border-white/[0.1]"
-                    }`}
+                    className={`rounded-[1.35rem] border p-4 text-left transition-all ${ isActive ? "border-signal-500/30 bg-signal-500/[0.08] shadow-[0_12px_24px_rgba(0,224,160,0.08)]" : "border-black/[0.06] bg-white/66 hover:border-black/[0.1] hover:bg-white dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:border-white/[0.1]" }`}
                   >
                     <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-700 dark:text-white">
                       <ModeIcon className={`h-3.5 w-3.5 ${isActive ? "text-signal-500" : "text-slate-400"}`} strokeWidth={2.1} />

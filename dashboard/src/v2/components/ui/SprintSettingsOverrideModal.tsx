@@ -157,11 +157,7 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
                 type="button"
                 onClick={() => { void handleSave(); }}
                 disabled={!dirty || saving}
-                className={`group inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${
-                  message && !error
-                    ? "bg-status-green text-white shadow-[0_4px_20px_rgba(0,171,132,0.3)]"
-                    : "bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100"
-                }`}
+                className={`group inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-xs font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${ message && !error ? "bg-status-green text-white shadow-[0_4px_20px_rgba(0,171,132,0.3)]" : "bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100" }`}
               >
                 {saving ? (
                   <>

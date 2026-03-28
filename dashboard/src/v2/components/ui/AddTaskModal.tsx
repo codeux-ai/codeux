@@ -211,7 +211,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                 <select
                   value={sprintId}
                   onInput={(event) => setSprintId((event.target as HTMLSelectElement).value)}
-                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500"
+                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:border-signal-500"
                   required
                 >
                   <option value="" disabled>Select sprint</option>
@@ -227,7 +227,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                   type="text"
                   value={title}
                   onInput={(event) => setTitle((event.target as HTMLInputElement).value)}
-                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500"
+                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:border-signal-500"
                   placeholder="Define the task scope"
                   required
                 />
@@ -243,11 +243,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                       key={option}
                       type="button"
                       onClick={() => setStatus(option)}
-                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition-all ${
-                        status === option
-                          ? "bg-signal-500 text-void-900 shadow-[0_2px_12px_rgba(0,224,160,0.3)]"
-                          : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                      }`}
+                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition-all ${ status === option ? "bg-signal-500 text-void-900 shadow-[0_2px_12px_rgba(0,224,160,0.3)]" : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200" }`}
                     >
                       {option.replace("_", " ")}
                     </button>
@@ -263,11 +259,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                       key={option}
                       type="button"
                       onClick={() => setPriority(option)}
-                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition-all ${
-                        priority === option
-                          ? "bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]"
-                          : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
-                      }`}
+                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition-all ${ priority === option ? "bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]" : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200" }`}
                     >
                       {option}
                     </button>
@@ -287,11 +279,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     key={option.value}
                     type="button"
                     onClick={() => setExecutorType(option.value)}
-                    className={`rounded-2xl border px-4 py-3 text-left transition-all ${
-                      executorType === option.value
-                        ? "border-signal-500/45 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300"
-                        : "border-black/[0.08] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] text-slate-500 dark:text-slate-400"
-                    }`}
+                    className={`rounded-2xl border px-4 py-3 text-left transition-all ${ executorType === option.value ? "border-signal-500/45 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300" : "border-black/[0.08] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] text-slate-500 dark:text-slate-400" }`}
                   >
                     <div className="text-[10px] font-bold uppercase tracking-[0.14em]">{option.label}</div>
                     <div className="mt-1 text-xs leading-relaxed">{option.description}</div>
@@ -305,7 +293,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               <textarea
                 value={description}
                 onInput={(event) => setDescription((event.target as HTMLTextAreaElement).value)}
-                className="mt-2.5 w-full min-h-[110px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none"
+                className="mt-2.5 w-full min-h-[110px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:border-signal-500 resize-none"
                 placeholder="Summarize the intent and outcome."
               />
             </div>
@@ -315,7 +303,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               <textarea
                 value={promptMarkdown}
                 onInput={(event) => setPromptMarkdown((event.target as HTMLTextAreaElement).value)}
-                className="mt-2.5 w-full min-h-[150px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none font-mono"
+                className="mt-2.5 w-full min-h-[150px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:border-signal-500 resize-none font-mono"
                 placeholder="Detailed markdown instructions for the agent."
               />
             </div>
@@ -338,11 +326,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                         key={task.recordId}
                         type="button"
                         onClick={() => toggleDependency(task.recordId)}
-                        className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-left transition-all ${
-                          active
-                            ? "border-ember-500/45 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400"
-                            : "border-black/[0.07] dark:border-white/[0.07] bg-black/[0.02] dark:bg-white/[0.02] text-slate-500"
-                        }`}
+                        className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-left transition-all ${ active ? "border-ember-500/45 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400" : "border-black/[0.07] dark:border-white/[0.07] bg-black/[0.02] dark:bg-white/[0.02] text-slate-500" }`}
                       >
                         <div className="min-w-0">
                           <div className="text-[10px] font-mono uppercase tracking-[0.14em]">{task.id}</div>

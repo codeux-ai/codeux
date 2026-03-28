@@ -72,11 +72,7 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
             <GitBranch className="h-4 w-4 text-signal-500" strokeWidth={1.5} />
             <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Git / CI / PR</span>
           </div>
-          <span className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${
-            status.mode === "REMOTE"
-              ? "border border-signal-500/15 bg-signal-500/8 text-signal-500"
-              : "bg-black/[0.04] text-slate-400 dark:bg-white/[0.04]"
-          }`}>
+          <span className={`rounded-full px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.12em] ${ status.mode === "REMOTE" ? "border border-signal-500/15 bg-signal-500/8 text-signal-500" : "bg-black/[0.04] text-slate-400 dark:bg-white/[0.04]" }`}>
             {status.mode}
           </span>
         </div>
