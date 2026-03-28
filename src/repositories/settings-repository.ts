@@ -218,6 +218,7 @@ export class SettingsRepository {
             autoCreatePr: legacySettings.git.autoCreatePr,
             featureBranchPrefix: legacySettings.git.featureBranchPrefix,
             sprintBranchScheme: legacySettings.git.sprintBranchScheme,
+            defaultSprintKey: legacySettings.git.defaultSprintKey || defaults.git.defaultSprintKey,
           },
           ciIntelligence: legacySettings.ciIntelligence,
           sprintLoopSteps: legacySettings.sprintLoopSteps,

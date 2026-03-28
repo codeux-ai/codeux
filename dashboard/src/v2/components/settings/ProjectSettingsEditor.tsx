@@ -625,6 +625,18 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             />
           </Row>
         </div>
+        <Row label="Default sprint key" description="Prefix used for new sprints, e.g., 'SPR' or 'DEV'." badge={getBadge("git.defaultSprintKey")}>
+          <TextField
+            value={settings.git.defaultSprintKey}
+            onChange={(value) => update({
+              git: {
+                ...settings.git,
+                defaultSprintKey: value,
+              },
+            })}
+            mono
+          />
+        </Row>
         <Row label="Auto-create PRs" description="Open pull requests automatically for remote git workflows." badge={getBadge("git.autoCreatePr")}>
           <ToggleField
             checked={settings.git.autoCreatePr}

@@ -6,6 +6,15 @@ import {
   runWithCorrelationId,
 } from "../../../../src/shared/logging/correlation-id.js";
 import { createLogger } from "../../../../src/shared/logging/logger.js";
+import * as fs from "fs";
+
+vi.mock("fs", async () => {
+    const actualFs = await vi.importActual<typeof import("fs")>("fs");
+    return {
+        ...actualFs,
+        createWriteStream: vi.fn(),
+    };
+});
 
 describe("createLogger", () => {
   afterEach(() => {
@@ -56,6 +65,53 @@ describe("createLogger", () => {
     const output = String(stderrSpy.mock.calls[0][0]);
     expect(output).not.toContain("skip this");
     expect(output).toContain("keep this");
+  });
+
+  it("supports creating child loggers", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const logger = createLogger({ environment: "production", level: "debug", bindings: { parent: "yes" } });
+    const childLogger = logger.child({ child: "yes" });
+
+    childLogger.debug("child message");
+
+    expect(stderrSpy).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(String(stderrSpy.mock.calls[0][0]));
+    expect(payload.metadata).toEqual({ parent: "yes", child: "yes" });
+  });
+
+  it("normalizes metadata values", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const logger = createLogger({ environment: "production", level: "debug" });
+
+    const error = new Error("test error");
+    error.stack = "test stack";
+
+    logger.error("error happened", {
+        err: error,
+        arr: [1, new Error("inner")],
+        nested: { val: 123 },
+        big: BigInt(9007199254740991)
+    });
+
+    expect(stderrSpy).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(String(stderrSpy.mock.calls[0][0]));
+    expect(payload.metadata.err.message).toBe("test error");
+    expect(payload.metadata.err.name).toBe("Error");
+    expect(payload.metadata.arr[1].message).toBe("inner");
+    expect(payload.metadata.nested.val).toBe(123);
+    expect(payload.metadata.big).toBe("9007199254740991");
+  });
+
+  it("supports file logging", () => {
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const mockWriteStream = { write: vi.fn(), on: vi.fn() };
+    vi.mocked(fs.createWriteStream).mockReturnValue(mockWriteStream as any);
+
+    const logger = createLogger({ environment: "production", level: "info", logFilePath: "test.log" });
+    logger.info("file test");
+
+    expect(fs.createWriteStream).toHaveBeenCalledWith("test.log", { flags: "a" });
+    expect(mockWriteStream.write).toHaveBeenCalledWith(expect.stringContaining("file test"));
   });
 });
 

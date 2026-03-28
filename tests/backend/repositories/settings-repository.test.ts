@@ -84,6 +84,7 @@ describe("SettingsRepository", () => {
           autoCreatePr: true,
           featureBranchPrefix: "feature/",
           sprintBranchScheme: "feature/sprint{sprint}",
+          defaultSprintKey: "SPR",
         },
         ciIntelligence: {
           enabled: true,
@@ -291,6 +292,7 @@ describe("SettingsRepository", () => {
         autoCreatePr: false,
         featureBranchPrefix: "work/",
         sprintBranchScheme: "feature/sprint{sprint}",
+        defaultSprintKey: "DEV",
       },
       ciIntelligence: {
         enabled: true,

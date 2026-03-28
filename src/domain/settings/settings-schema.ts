@@ -198,6 +198,9 @@ const validateGitSettings = (
   if (typeof value.sprintBranchScheme !== "string") {
     issues.push({ path: `${path}.sprintBranchScheme`, message: "Expected a string" });
   }
+  if (typeof value.defaultSprintKey !== "string") {
+    issues.push({ path: `${path}.defaultSprintKey`, message: "Expected a string" });
+  }
 };
 
 const validateCiIntelligence = (

@@ -117,6 +117,7 @@ describe("validateSettingsPayload", () => {
         autoCreatePr: "bad",
         featureBranchPrefix: 3,
         sprintBranchScheme: 4,
+        defaultSprintKey: 5,
       },
       ciIntelligence: {
         enabled: "bad",
@@ -194,6 +195,7 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("aiProvider.providers.gemini");
     expect(paths).toContain("aiProvider.providers.codex");
     expect(paths).toContain("git.githubMode");
+    expect(paths).toContain("git.defaultSprintKey");
     expect(paths).toContain("ciIntelligence.featurePrAutoMergeMode");
     expect(paths).toContain("sprintLoopSteps.watchLoopOutputIntervalSeconds");
     expect(paths).toContain("cliWorkflow.executionMode");

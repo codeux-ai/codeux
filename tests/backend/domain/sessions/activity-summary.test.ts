@@ -62,6 +62,21 @@ describe("ActivitySummaryService", () => {
       expect((summary.preview as string).length).toBe(180);
       expect((summary.preview as string).endsWith("…")).toBe(true);
     });
+
+    it("should correctly assign kinds for all flags", () => {
+      expect(service.toActivitySummary({ sessionCompleted: {} } as any).kind).toBe("session_completed");
+      expect(service.toActivitySummary({ sessionFailed: {} } as any).kind).toBe("session_failed");
+      expect(service.toActivitySummary({ planApproved: {} } as any).kind).toBe("plan_approved");
+      expect(service.toActivitySummary({ planGenerated: {} } as any).kind).toBe("plan_generated");
+      expect(service.toActivitySummary({ userMessaged: { userMessage: "test" } } as any).kind).toBe("user_message");
+      expect(service.toActivitySummary({ description: "test" } as any).kind).toBe("activity");
+    });
+
+    it("should fallback preview generation gracefully", () => {
+      expect(service.toActivitySummary({ userMessaged: { userMessage: "test" } } as any).preview).toBe("test");
+      expect(service.toActivitySummary({ description: "test" } as any).preview).toBe("test");
+      expect(service.toActivitySummary({} as any).preview).toBeUndefined();
+    });
   });
 
   describe("toSessionSummary", () => {
@@ -137,6 +152,40 @@ describe("ActivitySummaryService", () => {
     });
   });
 
+  describe("toActivityCollectionSummary", () => {
+    it("should summarize activity collection", () => {
+      const result = service.toActivityCollectionSummary("sessions/abc", [
+        { createTime: "t1", sessionCompleted: {} } as any,
+        { createTime: "t2", sessionFailed: {} } as any
+      ]);
+      expect(result.sessionId).toBe("abc");
+      expect(result.totalActivities).toBe(2);
+      expect(result.firstActivityTime).toBe("t1");
+      expect(result.lastActivityTime).toBe("t2");
+      expect(result.activityTypeCounts).toEqual({ "session_completed": 1, "session_failed": 1 });
+      expect((result.recentActivities as any).length).toBe(2);
+    });
+  });
+
+  describe("toActivityPageSummary", () => {
+    it("should summarize activity page", () => {
+      const result = service.toActivityPageSummary({
+         sessionId: "sessions/abc",
+         activities: [{ sessionCompleted: {} } as any],
+         pageSize: 10,
+         pageToken: "pt1",
+         nextPageToken: "nt1"
+      });
+      expect(result.sessionId).toBe("abc");
+      expect(result.returnedCount).toBe(1);
+      expect(result.pageSize).toBe(10);
+      expect(result.pageToken).toBe("pt1");
+      expect(result.nextPageToken).toBe("nt1");
+      expect(result.activityTypeCounts).toEqual({ "session_completed": 1 });
+      expect((result.activities as any).length).toBe(1);
+    });
+  });
+
   describe("toSourceSummary", () => {
     it("should summarize a source", () => {
       const source: JulesSource = {
@@ -154,12 +203,58 @@ describe("ActivitySummaryService", () => {
     });
   });
 
+  describe("toSingleSourceSummary", () => {
+    it("should handle null payload", () => {
+      expect(service.toSingleSourceSummary(null, "fallback")).toEqual({ id: "sources/fallback", name: "sources/fallback" });
+    });
+
+    it("should handle valid payload with string id", () => {
+      expect(service.toSingleSourceSummary({ id: "custom" }, "fallback")).toEqual({ id: "custom", name: "custom" });
+      expect(service.toSingleSourceSummary({ id: "custom", name: "custom-name" }, "fallback")).toEqual({ id: "custom", name: "custom-name" });
+    });
+
+    it("should handle valid payload with implicit id from name", () => {
+      expect(service.toSingleSourceSummary({ name: "sources/valid" }, "fallback")).toEqual({ id: "sources/valid", name: "sources/valid" });
+    });
+  });
+
+  describe("toSourcePageSummary", () => {
+    it("should summarize source page", () => {
+       const result = service.toSourcePageSummary({
+          sources: [{ id: "s1", name: "s1" } as any],
+          nextPageToken: "npt",
+          pageSize: 10,
+          pageToken: "pt",
+          filter: "f1"
+       });
+       expect(result.returnedCount).toBe(1);
+       expect(result.filter).toBe("f1");
+       expect(result.pageSize).toBe(10);
+       expect(result.pageToken).toBe("pt");
+       expect(result.nextPageToken).toBe("npt");
+       expect((result.sources as any).length).toBe(1);
+    });
+  });
+
+  describe("extractSourceListResponse", () => {
+     it("should extract default values on empty input", () => {
+        expect(service.extractSourceListResponse(null)).toEqual({ sources: [] });
+     });
+
+     it("should extract correctly", () => {
+        expect(service.extractSourceListResponse({ sources: [{ id: "1" }], nextPageToken: "npt" })).toEqual({ sources: [{ id: "1" }], nextPageToken: "npt" });
+     });
+  });
+
   describe("toActionResponseSummary", () => {
     it("should summarize an action response", () => {
       const payload = {
         id: "sessions/abc",
         state: "RUNNING",
         message: "Action accepted",
+        title: "Test title",
+        updateTime: "2026",
+        done: true,
         somethingElse: "hidden",
       };
 
@@ -170,7 +265,20 @@ describe("ActivitySummaryService", () => {
         id: "sessions/abc",
         state: "RUNNING",
         message: "Action accepted",
+        title: "Test title",
+        updateTime: "2026",
+        done: true,
       });
     });
+
+    it("should fallback gracefully to action only", () => {
+       expect(service.toActionResponseSummary(null, "action")).toEqual({ action: "action" });
+    });
+  });
+
+  describe("getActivityRecentLimit", () => {
+     it("returns correct value", () => {
+        expect(service.getActivityRecentLimit()).toBe(10);
+     });
   });
 });

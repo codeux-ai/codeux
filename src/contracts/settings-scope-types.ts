@@ -48,6 +48,7 @@ export interface ProjectGitSettings {
   autoCreatePr: boolean;
   featureBranchPrefix: string;
   sprintBranchScheme: string;
+  defaultSprintKey: string;
 }
 
 export interface ProjectSettings {

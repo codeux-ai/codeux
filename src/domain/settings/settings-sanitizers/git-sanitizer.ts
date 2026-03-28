@@ -20,5 +20,8 @@ export const sanitizeGit = (
     sprintBranchScheme: typeof gitInput.sprintBranchScheme === "string" && gitInput.sprintBranchScheme.trim().length > 0
       ? gitInput.sprintBranchScheme.trim()
       : DEFAULT_DASHBOARD_SETTINGS.git.sprintBranchScheme,
+    defaultSprintKey: typeof gitInput.defaultSprintKey === "string" && gitInput.defaultSprintKey.trim().length > 0
+      ? gitInput.defaultSprintKey.trim()
+      : DEFAULT_DASHBOARD_SETTINGS.git.defaultSprintKey,
   };
 };
