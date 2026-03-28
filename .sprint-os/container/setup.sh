@@ -51,7 +51,14 @@ echo "[setup] gemini: $(gemini --version 2>/dev/null || true)"
 echo "[setup] codex: $(codex --version 2>/dev/null || true)"
 
 # Cache browsers at a stable path for image layer reuse.
-export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-/ms-playwright}"
+# Non-root preview containers cannot write to /ms-playwright, so fall back to HOME.
+if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ]; then
+  if [ "$(id -u)" -eq 0 ]; then
+    export PLAYWRIGHT_BROWSERS_PATH="/ms-playwright"
+  else
+    export PLAYWRIGHT_BROWSERS_PATH="$HOME/.cache/ms-playwright"
+  fi
+fi
 mkdir -p "${PLAYWRIGHT_BROWSERS_PATH}"
 
 if compgen -G "${PLAYWRIGHT_BROWSERS_PATH}/chromium-*" > /dev/null; then

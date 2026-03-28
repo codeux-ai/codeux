@@ -12,6 +12,7 @@ export interface DockerSetupImageCacheInput {
   baseImage: string;
   setupScriptPath?: string;
   cacheEnabled: boolean;
+  buildIfMissing?: boolean;
   runtimeRoot: string;
   repoPath: string;
   signal?: AbortSignal;
@@ -25,6 +26,7 @@ export class DockerSetupImageCache {
       baseImage,
       setupScriptPath,
       cacheEnabled,
+      buildIfMissing = true,
       runtimeRoot,
       repoPath,
       signal,
@@ -69,6 +71,11 @@ export class DockerSetupImageCache {
     if (inspectResult.ok) {
       onActivity(`Using cached Docker setup image ${imageTag}.`);
       return { image: imageTag, runSetupScriptAtRuntime: false };
+    }
+
+    if (!buildIfMissing) {
+      onActivity(`Cached Docker setup image ${imageTag} is missing. Falling back to runtime setup script.`);
+      return { image: baseImage, runSetupScriptAtRuntime: true };
     }
 
     const dockerCacheDir = mapSourcePathForDaemon(cacheDir, "setup image cache");

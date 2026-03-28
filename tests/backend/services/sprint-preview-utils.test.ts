@@ -36,7 +36,7 @@ describe("sprint-preview-utils", () => {
     await expect(detectPackageManager(repoDir)).resolves.toBe("pnpm");
   });
 
-  it("uses no-frozen-lockfile for pnpm preview installs", async () => {
+  it("uses prefer-offline no-frozen-lockfile for pnpm preview installs", async () => {
     const repoDir = await createTempRepo();
     await fs.writeFile(path.join(repoDir, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n", "utf8");
     await fs.writeFile(path.join(repoDir, "package.json"), JSON.stringify({
@@ -47,7 +47,7 @@ describe("sprint-preview-utils", () => {
 
     const detection = await detectSprintPreviewCommands(repoDir);
 
-    expect(detection.installCommand).toContain("pnpm install --no-frozen-lockfile");
+    expect(detection.installCommand).toContain("pnpm install --prefer-offline --no-frozen-lockfile");
     expect(detection.installCommand).not.toContain("--frozen-lockfile");
   });
 
@@ -67,6 +67,7 @@ describe("sprint-preview-utils", () => {
     expect(detection.installCommand).toContain("yarn install");
     expect(detection.buildCommand).toBe("yarn build");
     expect(detection.runCommand).toContain("yarn preview --host 0.0.0.0 --port \"$SPRINT_PREVIEW_PORT\"");
+    expect(detection.runCommand).toContain("DASHBOARD_PORT=\"$SPRINT_PREVIEW_PORT\"");
   });
 
   it("falls back to serving built static output when no runtime script exists", async () => {
@@ -88,10 +89,19 @@ describe("sprint-preview-utils", () => {
   it("generates a startup script that installs, builds, and runs with static fallback", () => {
     const script = buildGeneratedSprintPreviewScript();
 
+    expect(script).toContain("SPRINT_PREVIEW_WORKSPACE");
     expect(script).toContain("SPRINT_PREVIEW_WORKTREE");
+    expect(script).toContain("SPRINT_PREVIEW_PROXY_PORT");
     expect(script).toContain("SPRINT_PREVIEW_INSTALL_COMMAND");
     expect(script).toContain("SPRINT_PREVIEW_BUILD_COMMAND");
     expect(script).toContain("SPRINT_PREVIEW_RUN_COMMAND");
+    expect(script).toContain("DASHBOARD_HOST");
+    expect(script).toContain("DASHBOARD_PORT");
+    expect(script).toContain("start_preview_port_proxy");
+    expect(script).toContain("const resolveUpstreamPort = () => {");
+    expect(script).toContain("start_preview_port_proxy \"$SPRINT_PREVIEW_PROXY_PORT\" \"$SPRINT_PREVIEW_PORT\"");
+    expect(script).toContain("bash -c \"$SPRINT_PREVIEW_INSTALL_COMMAND\"");
+    expect(script).not.toContain("bash -lc \"$SPRINT_PREVIEW_INSTALL_COMMAND\"");
     expect(script).toContain("serve -s \"$candidate\" -l \"$SPRINT_PREVIEW_PORT\"");
   });
 });

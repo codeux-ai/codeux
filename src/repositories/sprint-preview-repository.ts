@@ -220,12 +220,12 @@ export class SprintPreviewRepository {
       WHERE id = ?
     `).run(
       patch.status ?? current.status,
-      patch.hostPort ?? current.hostPort,
+      patch.hostPort === undefined ? current.hostPort : patch.hostPort,
       patch.containerAppPort ?? current.containerAppPort,
-      patch.containerId ?? current.containerId,
-      patch.containerName ?? current.containerName,
-      patch.worktreePath ?? current.worktreePath,
-      patch.featureBranch ?? current.featureBranch,
+      patch.containerId === undefined ? current.containerId : patch.containerId,
+      patch.containerName === undefined ? current.containerName : patch.containerName,
+      patch.worktreePath === undefined ? current.worktreePath : patch.worktreePath,
+      patch.featureBranch === undefined ? current.featureBranch : patch.featureBranch,
       patch.startupScriptPath ?? current.startupScriptPath,
       patch.startupMode ?? current.startupMode,
       patch.installCommand === undefined ? current.installCommand : patch.installCommand,

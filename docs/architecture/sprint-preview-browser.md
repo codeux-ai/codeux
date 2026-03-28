@@ -28,11 +28,14 @@ The feature is designed for:
 Each preview session is scoped to one `(projectId, sprintId)` pair.
 
 Key rules:
-- every sprint preview runs from a dedicated git worktree prepared by `WorkspaceManager`
-- the preview container reuses the same Docker bootstrap and optional cached setup-image flow used by CLI execution
+- every sprint preview runs from a dedicated exported branch snapshot under the preview runtime root, not a registered git worktree
+- the preview container reuses the same Docker bootstrap and can reuse an already-built cached setup image, but preview startup no longer builds setup-cache images inline or runs the full worker setup script at runtime
 - the app inside the container listens on `sprintPreview.containerAppPort`
 - the host-facing port is allocated from `sprintPreview.hostPortRangeStart..hostPortRangeEnd`
 - host ports bind to `127.0.0.1` only
+- preview startup injects `HOST`, `PORT`, `DASHBOARD_HOST`, `DASHBOARD_PORT`, and `SPRINT_PREVIEW_WORKSPACE` so containerized apps can bind to the published preview port and boot from the exported snapshot directory
+- preview startup is serialized per `(projectId, sprintId)` so manual starts, rebuilds, and auto-start reconciliation cannot spawn duplicate session containers
+- if the previewed app still binds a loopback-only internal port, the generated preview bootstrap keeps a dedicated in-container bridge open on the published preview proxy port and forwards requests to the live app listener
 - containers are labeled with sprint-preview metadata so runtime reconciliation can rediscover them
 
 Preview session state is persisted in sqlite instead of staying process-local.
@@ -47,7 +50,7 @@ The table stores:
 - preview status and health
 - host/container port mapping
 - container id/name
-- worktree path and feature branch
+- preview workspace path and feature branch
 - resolved startup mode and detected commands
 - task-count and sprint-status markers used by reconciliation
 - timestamps and last error state
@@ -68,7 +71,9 @@ Command detection reads `package.json` and lockfiles to infer:
 - runtime command
 
 Install behavior:
-- pnpm prefers `--frozen-lockfile` first, then falls back to `--no-frozen-lockfile` for preview environments where the worktree manifest and lockfile are temporarily out of sync
+- preview runtime now uses `pnpm install --prefer-offline --no-frozen-lockfile` so non-fatal manifest/lockfile drift does not spam container logs and warmed runtime caches are reused before going back to the registry
+- preview containers now reuse the shared Docker runtime package caches instead of mounting host `node_modules`, and pnpm is pinned to a persistent store under that runtime cache so exported workspaces do not trigger cold installs on every rebuild
+- preview fallback now prefers the base image plus app-level install/build commands over re-running the worker-oriented setup script, which avoids unrelated provider/Playwright bootstrap work from blocking app previews
 
 Runtime command preference:
 1. `preview`
@@ -106,14 +111,22 @@ It supports:
 
 These behaviors are controlled through scoped settings under `sprintPreview`.
 
+Startup hygiene:
+- Sprint OS now removes any existing `sprint-os.preview=true` containers on server startup before the preview reconciliation loop begins
+- Sprint OS also removes orphaned unlabeled setup-helper containers that were created by older inline setup-image preview flows
+- persisted preview sessions are reset back to `stopped` during that startup cleanup so stale containers do not survive process restarts
+- any legacy repo-local preview worktree directories under `.sprint-os/worktrees/preview-*` are removed on startup so older preview implementations stop polluting the repository checkout
+
 ## Dashboard Surface
 
 The dashboard now exposes:
 - `/browser` route for the in-app browser workspace
 - dock and top-nav entry points for the browser
 - sprint-preview controls in the `Sprint Engine` settings category
+- project-level `Sprint Browser` settings in the project settings editor for port range, startup script path, and automation overrides
 - per-sprint startup script editing in the browser page itself
 - preview logs, rebuild, stop, and open actions
+- port routing status on preview cards, including container-port to host-port mappings such as `:4444 -> :5653`
 
 ## API Surface
 

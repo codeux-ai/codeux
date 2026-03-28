@@ -300,6 +300,90 @@ describe("setupDashboardServer", () => {
     expect(await readyResponse.json()).toEqual(probeResponse);
   });
 
+  it("binds to DASHBOARD_HOST when provided", async () => {
+    const previousHost = process.env.DASHBOARD_HOST;
+    process.env.DASHBOARD_HOST = "0.0.0.0";
+
+    try {
+      const app = express();
+      const port = await getAvailablePort();
+      const handle = await setupDashboardServer({
+        app,
+        dashboardDir: "dashboard",
+        port,
+        liveActivityCacheMs: 1000,
+        getStatus: () => ({ ok: true }),
+        getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+        getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+        getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+        getProjectStatsSnapshot: () => ({
+          projectId: "project-test",
+          projectName: "Project Test",
+          window: "7d",
+          generatedAt: new Date().toISOString(),
+          usage: {
+            invocationCount: 0,
+            activeTimeMs: 0,
+            wallTimeMs: 0,
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            outputTokens: 0,
+            reasoningOutputTokens: 0,
+            totalTokens: 0,
+            reportedInvocationCount: 0,
+            estimatedInvocationCount: 0,
+            unavailableInvocationCount: 0,
+            unsupportedInvocationCount: 0,
+          },
+          activeSprint: null,
+          buckets: [],
+          sprints: [],
+          tasks: [],
+          providers: [],
+          purposes: [],
+          tokenSources: [],
+        }),
+        getLiveActivities: async () => ({}),
+        getGitStatus: async () => ({
+          mode: "LOCAL",
+          available: true,
+          repositoryRoot: null,
+          branch: null,
+          hasRemote: false,
+          dirty: false,
+          openPullRequests: [],
+          ciRuns: [],
+          mergedPullRequests: [],
+          tracking: { scope: "REPOSITORY", label: "Repository", branch: null },
+          warnings: [],
+          lastUpdated: new Date().toISOString(),
+        }),
+        getExternalSettingsHints: () => ({
+          env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+          settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+          resolved: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+        }),
+        ...buildSettingsServerOptions(),
+        listAgentPresets: () => [],
+        createAgentPreset: () => ({ id: "agent-1" } as any),
+        updateAgentPreset: () => ({ id: "agent-1" } as any),
+        deleteAgentPreset: () => {},
+        rerunTask: async () => ({ ok: true }),
+        orchestrateSprint: async () => ({ ok: true }),
+        pauseSprintRun: async () => ({ ok: true }),
+        cancelSprintRun: async () => ({ ok: true }),
+        cancelTaskDispatch: async () => ({ ok: true }),
+        retryTaskDispatch: async () => ({ ok: true }),
+      });
+
+      serversToClose.push(handle.server);
+      expect((handle.server.address() as AddressInfo).address).toBe("0.0.0.0");
+    } finally {
+      if (typeof previousHost === "string") process.env.DASHBOARD_HOST = previousHost;
+      else delete process.env.DASHBOARD_HOST;
+    }
+  });
+
   it("returns 503 for /ready when server is not ready", async () => {
     const app = express();
     const probeResponse = {

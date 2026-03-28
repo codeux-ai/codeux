@@ -399,6 +399,10 @@ export class JulesAgentServer {
 
   private getDashboardPort(): number {
     if (this.runtimeContext.dashboardRuntimePort !== null) return this.runtimeContext.dashboardRuntimePort;
+    const explicitEnvPort = Number.parseInt(String(process.env.DASHBOARD_PORT || "").trim(), 10);
+    if (Number.isFinite(explicitEnvPort) && explicitEnvPort > 0) {
+      return explicitEnvPort;
+    }
     const settings = this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
     return settings.dashboardPort || (this.runtimeContext.settings.dashboardPort as number) || this.appConfig.dashboardPort;
   }
@@ -809,6 +813,11 @@ export class JulesAgentServer {
       }
     } catch (error) {
       this.logger.error("Failed to prune disconnected MCP connections on startup", { error });
+    }
+    try {
+      await this.sprintPreviewService.cleanupStaleContainersOnStartup();
+    } catch (error) {
+      this.logger.error("Failed to clean up stale sprint preview containers on startup", { error });
     }
 
     if (this.isDashboardEnabled()) {

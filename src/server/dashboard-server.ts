@@ -201,13 +201,14 @@ const bindDashboardServer = async (
   startPort: number,
   logger: Logger
 ): Promise<DashboardServerHandle> => {
+  const host = (process.env.DASHBOARD_HOST || "127.0.0.1").trim() || "127.0.0.1";
   let port = Math.max(1, Math.min(65535, Math.round(startPort)));
 
   while (port <= 65535) {
     try {
       const server = await new Promise<Server>((resolve, reject) => {
         const listeningServer = createServer(app);
-        listeningServer.listen(port, "127.0.0.1", () => resolve(listeningServer));
+        listeningServer.listen(port, host, () => resolve(listeningServer));
         listeningServer.on("error", reject);
       });
       return { port, server };

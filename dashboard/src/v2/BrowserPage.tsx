@@ -54,6 +54,21 @@ const healthTone: Record<SprintPreviewSession["healthStatus"], string> = {
   unknown: "text-slate-400",
 };
 
+const formatPortMapping = (session: SprintPreviewSession): string => {
+  const sourcePort = typeof session.containerAppPort === "number" ? session.containerAppPort : null;
+  const routedPort = typeof session.hostPort === "number" ? session.hostPort : null;
+  if (sourcePort && routedPort) {
+    return `:${sourcePort} -> :${routedPort}`;
+  }
+  if (sourcePort) {
+    return `:${sourcePort} -> pending`;
+  }
+  if (routedPort) {
+    return `pending -> :${routedPort}`;
+  }
+  return "port pending";
+};
+
 export const BrowserPage: FunctionComponent = () => {
   const shellRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -278,7 +293,7 @@ export const BrowserPage: FunctionComponent = () => {
             Build previews per sprint, isolated by container.
           </h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-            Each sprint preview runs from its own worktree and container, bound to a private host port and surfaced through the in-app browser.
+            Each sprint preview runs from its own exported sprint snapshot and container, bound to a private host port and surfaced through the in-app browser.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -337,7 +352,10 @@ export const BrowserPage: FunctionComponent = () => {
                     </div>
                     <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
                       <Globe className={`h-3.5 w-3.5 ${healthTone[session.healthStatus]}`} strokeWidth={2} />
-                      <span>{session.hostPort ? `127.0.0.1:${session.hostPort}` : "port pending"}</span>
+                      <span>{formatPortMapping(session)}</span>
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                      {session.hostPort ? `127.0.0.1:${session.hostPort}` : "waiting for routed port"}
                     </div>
                   </button>
                 );
@@ -363,7 +381,13 @@ export const BrowserPage: FunctionComponent = () => {
               Script
             </button>
           </div>
-          <div className="mt-4 space-y-3 text-sm">
+            <div className="mt-4 space-y-3 text-sm">
+            {selectedSession && (
+              <div className="rounded-2xl border border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Port routing</div>
+                <div className="mt-1 font-mono text-[12px] text-slate-700 dark:text-slate-300">{formatPortMapping(selectedSession)}</div>
+              </div>
+            )}
             <div className="rounded-2xl border border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
               <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Script path</div>
               <div className="mt-1 break-all font-mono text-[12px] text-slate-700 dark:text-slate-300">{script?.path || "Loading..."}</div>
@@ -479,7 +503,7 @@ export const BrowserPage: FunctionComponent = () => {
             <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Runtime notes</div>
             <div className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">
               <p>Ports are assigned from the sprint preview range and bound to `127.0.0.1` to avoid conflicts with the main dashboard.</p>
-              <p>Each preview container runs from a dedicated sprint worktree, so multiple active sprints from the same project stay isolated.</p>
+              <p>Each preview container runs from a dedicated sprint snapshot directory, so multiple active sprints from the same project stay isolated without registering git worktrees.</p>
             </div>
           </div>
 

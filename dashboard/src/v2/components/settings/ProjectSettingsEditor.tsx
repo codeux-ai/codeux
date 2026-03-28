@@ -185,6 +185,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
   const ciSource = sources ? getSectionSource(sources, "ciIntelligence") : undefined;
   const loopSource = sources ? getSectionSource(sources, "sprintLoopSteps") : undefined;
   const cliSource = sources ? getSectionSource(sources, "cliWorkflow") : undefined;
+  const sprintPreviewSource = sources ? getSectionSource(sources, "sprintPreview") : undefined;
   const workerSource = sources ? getSectionSource(sources, "workers") : undefined;
   const skillsSource = sources ? getSectionSource(sources, "skills") : undefined;
 
@@ -878,6 +879,86 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               />
             </Row>
           ))}
+        </div>
+      </Card>
+
+      <Card
+        title="Sprint Browser"
+        description="Preview container behavior, routing range, and startup script overrides for the in-app browser."
+        badge={sprintPreviewSource ? sourceLabel(sprintPreviewSource) : undefined}
+      >
+        <div className="grid gap-3 xl:grid-cols-2">
+          {[
+            ["autoStartOnRunningSprint", "Auto-start running sprint previews"],
+            ["rebuildOnTaskCompletion", "Rebuild after task completion"],
+            ["rebuildOnSprintCompletion", "Rebuild after sprint completion"],
+            ["autoStopOnTerminalSprint", "Auto-stop on terminal sprint"],
+          ].map(([field, label]) => (
+            <Row key={field} label={label} description={`Enable ${label.toLowerCase()} for this scope.`} badge={getBadge(`sprintPreview.${field}`)}>
+              <ToggleField
+                checked={settings.sprintPreview[field as keyof ProjectSettings["sprintPreview"]] as boolean}
+                onChange={(value) => update({
+                  sprintPreview: {
+                    ...settings.sprintPreview,
+                    [field]: value,
+                  },
+                })}
+              />
+            </Row>
+          ))}
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Row label="Host port range start" description="Lower bound for localhost preview port allocation." badge={getBadge("sprintPreview.hostPortRangeStart")}>
+            <NumberField
+              value={settings.sprintPreview.hostPortRangeStart}
+              onChange={(value) => update({
+                sprintPreview: {
+                  ...settings.sprintPreview,
+                  hostPortRangeStart: value,
+                },
+              })}
+              min={1}
+              max={65535}
+            />
+          </Row>
+          <Row label="Host port range end" description="Upper bound for localhost preview port allocation." badge={getBadge("sprintPreview.hostPortRangeEnd")}>
+            <NumberField
+              value={settings.sprintPreview.hostPortRangeEnd}
+              onChange={(value) => update({
+                sprintPreview: {
+                  ...settings.sprintPreview,
+                  hostPortRangeEnd: value,
+                },
+              })}
+              min={1}
+              max={65535}
+            />
+          </Row>
+          <Row label="Container app port" description="Published container port used by the browser proxy." badge={getBadge("sprintPreview.containerAppPort")}>
+            <NumberField
+              value={settings.sprintPreview.containerAppPort}
+              onChange={(value) => update({
+                sprintPreview: {
+                  ...settings.sprintPreview,
+                  containerAppPort: value,
+                },
+              })}
+              min={1}
+              max={65535}
+            />
+          </Row>
+          <Row label="Startup script path" description="Optional project-relative browser startup override script." badge={getBadge("sprintPreview.startupScriptPath")}>
+            <TextField
+              value={settings.sprintPreview.startupScriptPath}
+              onChange={(value) => update({
+                sprintPreview: {
+                  ...settings.sprintPreview,
+                  startupScriptPath: value,
+                },
+              })}
+              mono
+            />
+          </Row>
         </div>
       </Card>
 
