@@ -125,7 +125,8 @@ export const KineticDock: FunctionComponent = () => {
 
     return (
         <div className="fixed bottom-7 left-1/2 -translate-x-1/2 z-50 flex justify-center items-end h-28 pointer-events-none">
-            <div
+            <nav
+                aria-label="Dock navigation"
                 ref={dockRef}
                 onMouseMove={handleMouseMove}
                 onMouseLeave={handleMouseLeave}
@@ -153,7 +154,7 @@ export const KineticDock: FunctionComponent = () => {
 
                 {/* Main nav items */}
                 {RIGHT_ITEMS.map((item, i) => renderItem(item, LEFT_ITEMS.length + i))}
-            </div>
+            </nav>
         </div>
     );
 };
