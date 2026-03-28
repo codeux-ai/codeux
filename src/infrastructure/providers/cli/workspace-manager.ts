@@ -80,9 +80,10 @@ export class WorkspaceManager implements IWorkspaceManager {
         await this.removeWorktreeInternal(repoPath, existingWorktree);
       }
       await runCommandStrict("git", ["worktree", "prune"], repoPath);
+      const startRef = await this.resolveWorktreeStartRef(repoPath, featureBranch);
       await runCommandStrict(
         "git",
-        ["worktree", "add", "--force", "-B", workerBranch, finalWorktreePath, `origin/${featureBranch}`],
+        ["worktree", "add", "--force", "-B", workerBranch, finalWorktreePath, startRef],
         repoPath
       );
     });
@@ -207,6 +208,25 @@ export class WorkspaceManager implements IWorkspaceManager {
       if (line.length === 0) currentPath = undefined;
     }
     return undefined;
+  }
+
+  private async resolveWorktreeStartRef(repoPath: string, branch: string): Promise<string> {
+    if (await this.refExists(repoPath, `refs/remotes/origin/${branch}`)) {
+      return `origin/${branch}`;
+    }
+    if (await this.refExists(repoPath, `refs/heads/${branch}`)) {
+      return branch;
+    }
+    throw new Error(`Cannot prepare worktree: branch ${branch} does not exist locally or on origin.`);
+  }
+
+  private async refExists(repoPath: string, ref: string): Promise<boolean> {
+    try {
+      await runCommandStrict("git", ["show-ref", "--verify", "--quiet", ref], repoPath);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private async repairStaleGitState(repoPath: string): Promise<void> {

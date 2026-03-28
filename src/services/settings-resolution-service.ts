@@ -198,6 +198,40 @@ function sanitizeInstructionTemplates(value: unknown): Record<InstructionTemplat
   return nextTemplates;
 }
 
+function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintPreview"] {
+  const input = toRecord(value);
+  const defaults = DEFAULT_DASHBOARD_SETTINGS.sprintPreview;
+  const hostPortRangeStart = typeof input.hostPortRangeStart === "number" && Number.isFinite(input.hostPortRangeStart)
+    ? Math.max(1, Math.min(65535, Math.round(input.hostPortRangeStart)))
+    : defaults.hostPortRangeStart;
+  const hostPortRangeEndCandidate = typeof input.hostPortRangeEnd === "number" && Number.isFinite(input.hostPortRangeEnd)
+    ? Math.max(1, Math.min(65535, Math.round(input.hostPortRangeEnd)))
+    : defaults.hostPortRangeEnd;
+
+  return {
+    autoStartOnRunningSprint: typeof input.autoStartOnRunningSprint === "boolean"
+      ? input.autoStartOnRunningSprint
+      : defaults.autoStartOnRunningSprint,
+    rebuildOnTaskCompletion: typeof input.rebuildOnTaskCompletion === "boolean"
+      ? input.rebuildOnTaskCompletion
+      : defaults.rebuildOnTaskCompletion,
+    rebuildOnSprintCompletion: typeof input.rebuildOnSprintCompletion === "boolean"
+      ? input.rebuildOnSprintCompletion
+      : defaults.rebuildOnSprintCompletion,
+    autoStopOnTerminalSprint: typeof input.autoStopOnTerminalSprint === "boolean"
+      ? input.autoStopOnTerminalSprint
+      : defaults.autoStopOnTerminalSprint,
+    hostPortRangeStart,
+    hostPortRangeEnd: Math.max(hostPortRangeStart, hostPortRangeEndCandidate),
+    containerAppPort: typeof input.containerAppPort === "number" && Number.isFinite(input.containerAppPort)
+      ? Math.max(1, Math.min(65535, Math.round(input.containerAppPort)))
+      : defaults.containerAppPort,
+    startupScriptPath: typeof input.startupScriptPath === "string" && input.startupScriptPath.trim().length > 0
+      ? input.startupScriptPath.trim()
+      : defaults.startupScriptPath,
+  };
+}
+
 export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHints): ProjectSettings {
   const aiProvider = sanitizeAiProvider(DEFAULT_DASHBOARD_SETTINGS, externalHints);
   const git = sanitizeGit(DEFAULT_DASHBOARD_SETTINGS, externalHints);
@@ -248,6 +282,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     ciIntelligence: sanitizeCiIntelligence(DEFAULT_DASHBOARD_SETTINGS, git.githubMode),
     sprintLoopSteps: sanitizeSprintLoopSteps(DEFAULT_DASHBOARD_SETTINGS),
     cliWorkflow: sanitizeCliWorkflow(DEFAULT_DASHBOARD_SETTINGS),
+    sprintPreview: { ...DEFAULT_DASHBOARD_SETTINGS.sprintPreview },
     workers: sanitizeWorkers(DEFAULT_DASHBOARD_SETTINGS),
     agents: {
       saveToProjectDirectory: DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
@@ -347,6 +382,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
       ...DEFAULT_DASHBOARD_SETTINGS,
       cliWorkflow: deepMerge(DEFAULT_DASHBOARD_SETTINGS.cliWorkflow, input.cliWorkflow),
     }),
+    sprintPreview: sanitizeSprintPreviewSettings(deepMerge(DEFAULT_DASHBOARD_SETTINGS.sprintPreview, input.sprintPreview)),
     workers: sanitizeWorkers({
       ...DEFAULT_DASHBOARD_SETTINGS,
       workers: deepMerge(DEFAULT_DASHBOARD_SETTINGS.workers, input.workers),
@@ -460,6 +496,7 @@ export function resolveDashboardSettings(args: {
     ciIntelligence: { ...sprintSettings.ciIntelligence },
     sprintLoopSteps: { ...sprintSettings.sprintLoopSteps },
     cliWorkflow: { ...sprintSettings.cliWorkflow },
+    sprintPreview: { ...sprintSettings.sprintPreview },
     workers: { ...sprintSettings.workers },
     agents: { ...sprintSettings.agents },
     skills: cloneSkills(sprintSettings.skills),

@@ -26,6 +26,7 @@ const AgentsPage    = lazy(() => import("./v2/AgentsPage.js").then(m => ({ defau
 const StatsPage     = lazy(() => import("./v2/StatsPage.js").then(m => ({ default: m.StatsPage })));
 const SettingsPage  = lazy(() => import("./v2/SettingsPage.js").then(m => ({ default: m.SettingsPage })));
 const MemoryPage    = lazy(() => import("./v2/MemoryPage.js").then(m => ({ default: m.MemoryPage })));
+const BrowserPage   = lazy(() => import("./v2/BrowserPage.js").then(m => ({ default: m.BrowserPage })));
 
 // 1. Root layout route
 const rootRoute = createRootRoute({
@@ -127,7 +128,13 @@ const memoryRoute = createRoute({
   component: MemoryPage,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, statsRoute, configRoute, memoryRoute, liveRoute]);
+const browserRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/browser",
+  component: BrowserPage,
+});
+
+const routeTree = rootRoute.addChildren([indexRoute, sprintsRoute, tasksRoute, projectsRoute, chatRoute, agentsRoute, statsRoute, configRoute, memoryRoute, browserRoute, liveRoute]);
 const router = createRouter({ routeTree });
 
 // 4. Entry

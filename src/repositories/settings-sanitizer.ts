@@ -111,6 +111,9 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   cliWorkflow: {
     ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow,
   },
+  sprintPreview: {
+    ...DEFAULT_DASHBOARD_SETTINGS.sprintPreview,
+  },
   workers: {
     ...DEFAULT_DASHBOARD_SETTINGS.workers,
   },
@@ -164,6 +167,49 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const ciIntelligence = sanitizeCiIntelligence(input, git.githubMode);
   const sprintLoopSteps = sanitizeSprintLoopSteps(input);
   const cliWorkflow = sanitizeCliWorkflow(input);
+  const sprintPreviewInput = (input.sprintPreview && typeof input.sprintPreview === "object"
+    ? input.sprintPreview
+    : {}) as Partial<DashboardSettings["sprintPreview"]>;
+  const sprintPreview = {
+    autoStartOnRunningSprint: readBoolean(
+      sprintPreviewInput.autoStartOnRunningSprint,
+      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.autoStartOnRunningSprint,
+    ),
+    rebuildOnTaskCompletion: readBoolean(
+      sprintPreviewInput.rebuildOnTaskCompletion,
+      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.rebuildOnTaskCompletion,
+    ),
+    rebuildOnSprintCompletion: readBoolean(
+      sprintPreviewInput.rebuildOnSprintCompletion,
+      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.rebuildOnSprintCompletion,
+    ),
+    autoStopOnTerminalSprint: readBoolean(
+      sprintPreviewInput.autoStopOnTerminalSprint,
+      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.autoStopOnTerminalSprint,
+    ),
+    hostPortRangeStart: Math.max(1, Math.min(65535,
+      typeof sprintPreviewInput.hostPortRangeStart === "number" && Number.isFinite(sprintPreviewInput.hostPortRangeStart)
+        ? Math.round(sprintPreviewInput.hostPortRangeStart)
+        : DEFAULT_DASHBOARD_SETTINGS.sprintPreview.hostPortRangeStart
+    )),
+    hostPortRangeEnd: Math.max(1, Math.min(65535,
+      typeof sprintPreviewInput.hostPortRangeEnd === "number" && Number.isFinite(sprintPreviewInput.hostPortRangeEnd)
+        ? Math.round(sprintPreviewInput.hostPortRangeEnd)
+        : DEFAULT_DASHBOARD_SETTINGS.sprintPreview.hostPortRangeEnd
+    )),
+    containerAppPort: Math.max(1, Math.min(65535,
+      typeof sprintPreviewInput.containerAppPort === "number" && Number.isFinite(sprintPreviewInput.containerAppPort)
+        ? Math.round(sprintPreviewInput.containerAppPort)
+        : DEFAULT_DASHBOARD_SETTINGS.sprintPreview.containerAppPort
+    )),
+    startupScriptPath: readString(
+      sprintPreviewInput.startupScriptPath,
+      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.startupScriptPath,
+    ).trim() || DEFAULT_DASHBOARD_SETTINGS.sprintPreview.startupScriptPath,
+  };
+  if (sprintPreview.hostPortRangeEnd < sprintPreview.hostPortRangeStart) {
+    sprintPreview.hostPortRangeEnd = sprintPreview.hostPortRangeStart;
+  }
   const workers = sanitizeWorkers(input);
   const agentsInput = (input.agents && typeof input.agents === "object")
     ? input.agents as Partial<DashboardSettings["agents"]>
@@ -197,6 +243,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     ciIntelligence,
     sprintLoopSteps,
     cliWorkflow,
+    sprintPreview,
     workers,
     agents,
     skills: normalizedSkills,

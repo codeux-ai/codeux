@@ -14,7 +14,9 @@ import type {
   GitTrackingStatus,
   JulesActivity,
   ProjectStatsQuery,
-  ReadinessProbeStatus
+  ReadinessProbeStatus,
+  SprintPreviewScript,
+  SprintPreviewSession,
 } from "../../contracts/app-types.js";
 import type { McpConnectionRecord } from "../../contracts/connection-chat-types.js";
 import type { AppDbStorage } from "../../repositories/app-db-storage.js";
@@ -74,6 +76,21 @@ export interface BootDashboardDeps {
   isReady: () => ReadinessProbeStatus;
   isHealthy: () => ReadinessProbeStatus;
   listDockerContainers: () => Promise<DockerContainer[]>;
+  listSprintPreviewSessions: (projectId: string) => Promise<SprintPreviewSession[]>;
+  getSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession | null>;
+  startSprintPreviewSession: (projectId: string, sprintId: string) => Promise<SprintPreviewSession>;
+  rebuildSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession>;
+  stopSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession>;
+  getSprintPreviewScript: (projectId: string, sprintId: string) => Promise<SprintPreviewScript>;
+  saveSprintPreviewScript: (projectId: string, sprintId: string, content: string) => Promise<SprintPreviewScript>;
+  getSprintPreviewLogs: (sessionId: string, tail?: number) => Promise<{ logs: string }>;
+  proxySprintPreviewRequest: (args: {
+    sessionId: string;
+    method: string;
+    path: string;
+    headers?: Record<string, string | undefined>;
+    body?: Buffer;
+  }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
   syncGitSettingsFromDashboard: () => void;
   refreshJulesApiKey: () => void;
   setLogger: (logger: Logger) => void;
@@ -585,6 +602,15 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     isReady: deps.isReady,
     isHealthy: deps.isHealthy,
     listDockerContainers: deps.listDockerContainers,
+    listSprintPreviewSessions: deps.listSprintPreviewSessions,
+    getSprintPreviewSession: deps.getSprintPreviewSession,
+    startSprintPreviewSession: deps.startSprintPreviewSession,
+    rebuildSprintPreviewSession: deps.rebuildSprintPreviewSession,
+    stopSprintPreviewSession: deps.stopSprintPreviewSession,
+    getSprintPreviewScript: deps.getSprintPreviewScript,
+    saveSprintPreviewScript: deps.saveSprintPreviewScript,
+    getSprintPreviewLogs: deps.getSprintPreviewLogs,
+    proxySprintPreviewRequest: deps.proxySprintPreviewRequest,
   });
 
   deps.runtimeContext.dashboardRuntimePort = handle.port;

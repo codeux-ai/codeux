@@ -272,6 +272,16 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     maxPlanningJsonRetries: 3,
     maxQuotaRetriesWithoutTimer: 5,
   },
+  sprintPreview: {
+    autoStartOnRunningSprint: true,
+    rebuildOnTaskCompletion: true,
+    rebuildOnSprintCompletion: true,
+    autoStopOnTerminalSprint: false,
+    hostPortRangeStart: 5555,
+    hostPortRangeEnd: 6666,
+    containerAppPort: 3000,
+    startupScriptPath: ".sprint-os/browser/start-preview.sh",
+  },
   workers: {
     executionMode: "CONNECTED_MCP",
     virtualWorkerProvider: "codex",

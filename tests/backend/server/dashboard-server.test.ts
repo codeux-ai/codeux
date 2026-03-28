@@ -2,6 +2,7 @@ import express from "express";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AddressInfo } from "net";
 import type { Server } from "http";
+import { request as httpRequest } from "http";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -61,6 +62,36 @@ async function getAvailablePort(): Promise<number> {
   const port = (blocker.address() as AddressInfo).port;
   await closeServer(blocker);
   return port;
+}
+
+async function makeHostRequest(args: {
+  port: number;
+  host: string;
+  path: string;
+}): Promise<{ statusCode: number; headers: Record<string, string | string[] | undefined>; body: string }> {
+  return await new Promise((resolve, reject) => {
+    const request = httpRequest({
+      hostname: "127.0.0.1",
+      port: args.port,
+      path: args.path,
+      method: "GET",
+      headers: {
+        Host: args.host,
+      },
+    }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
+      response.on("end", () => {
+        resolve({
+          statusCode: response.statusCode || 0,
+          headers: response.headers,
+          body: Buffer.concat(chunks).toString("utf8"),
+        });
+      });
+    });
+    request.on("error", reject);
+    request.end();
+  });
 }
 
 function buildSettingsServerOptions() {
@@ -244,6 +275,124 @@ describe("setupDashboardServer", () => {
     expect(handle.port).toBe(blockedPort + 1);
   });
 
+  it("routes preview hosts to the matching preview session and injects the browser bridge", async () => {
+    const upstream = express();
+    upstream.use((req, res) => {
+      res.type("html").send("<!doctype html><html><head><title>Preview</title></head><body><div id='app'>ok</div></body></html>");
+    });
+    const upstreamServer = await new Promise<Server>((resolve) => {
+      const server = upstream.listen(0, "127.0.0.1", () => resolve(server));
+    });
+    serversToClose.push(upstreamServer);
+    const upstreamPort = (upstreamServer.address() as AddressInfo).port;
+
+    const app = express();
+    const handle = await setupDashboardServer({
+      app,
+      dashboardDir: "dashboard",
+      port: await getAvailablePort(),
+      liveActivityCacheMs: 1000,
+      getStatus: () => ({ ok: true }),
+      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getProjectStatsSnapshot: () => ({
+        projectId: "project-test",
+        projectName: "Project Test",
+        window: "7d",
+        generatedAt: new Date().toISOString(),
+        usage: { invocationCount: 0, activeTimeMs: 0, wallTimeMs: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, reportedInvocationCount: 0, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 },
+        activeSprint: null,
+        buckets: [],
+        sprints: [],
+        tasks: [],
+        providers: [],
+        purposes: [],
+        tokenSources: [],
+      }),
+      getLiveActivities: async () => ({}),
+      getGitStatus: async () => ({
+        mode: "LOCAL",
+        available: true,
+        repositoryRoot: null,
+        branch: null,
+        hasRemote: false,
+        dirty: false,
+        openPullRequests: [],
+        ciRuns: [],
+        mergedPullRequests: [],
+        tracking: { scope: "REPOSITORY", label: "Repository", branch: null },
+        warnings: [],
+        lastUpdated: new Date().toISOString(),
+      }),
+      getExternalSettingsHints: () => ({
+        env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+        settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+        resolved: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+      }),
+      ...buildSettingsServerOptions(),
+      listAgentPresets: () => [],
+      createAgentPreset: () => ({ id: "agent-1" } as any),
+      updateAgentPreset: () => ({ id: "agent-1" } as any),
+      deleteAgentPreset: () => {},
+      rerunTask: async () => ({ ok: true }),
+      orchestrateSprint: async () => ({ ok: true }),
+      pauseSprintRun: async () => ({ ok: true }),
+      cancelSprintRun: async () => ({ ok: true }),
+      cancelTaskDispatch: async () => ({ ok: true }),
+      retryTaskDispatch: async () => ({ ok: true }),
+      getSprintPreviewSession: async (sessionId) => sessionId === "test-session"
+        ? {
+          id: "test-session",
+          projectId: "project-1",
+          sprintId: "sprint-1",
+          projectName: "Project",
+          sprintName: "Sprint",
+          sprintNumber: 1,
+          status: "running",
+          hostPort: upstreamPort,
+          containerAppPort: 4444,
+          containerId: "container-1",
+          containerName: "preview-1",
+          worktreePath: "/tmp/preview",
+          featureBranch: "feature/sprint-1",
+          startupScriptPath: ".sprint-os/browser/start-preview.sh",
+          startupMode: "auto",
+          installCommand: null,
+          buildCommand: null,
+          runCommand: null,
+          lastCompletedTaskCount: 0,
+          lastSeenSprintStatus: "running",
+          lastKnownPath: "/",
+          healthStatus: "healthy",
+          lastError: null,
+          lastBuildAt: null,
+          lastStartedAt: null,
+          lastStoppedAt: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+        : null,
+    });
+    serversToClose.push(handle.server);
+
+    const previewResponse = await makeHostRequest({
+      port: handle.port,
+      host: `preview-test-session.localhost:${handle.port}`,
+      path: "/",
+    });
+    expect(previewResponse.statusCode).toBe(200);
+    expect(previewResponse.body).toContain("/_sprint_os/preview-bridge.js");
+
+    const bridgeResponse = await makeHostRequest({
+      port: handle.port,
+      host: `preview-test-session.localhost:${handle.port}`,
+      path: "/_sprint_os/preview-bridge.js",
+    });
+    expect(bridgeResponse.statusCode).toBe(200);
+    expect(bridgeResponse.body).toContain("sprint-preview:state");
+  });
+
   it("serves /health and /ready endpoints with detailed probe payload", async () => {
     const app = express();
     const probeResponse = {
@@ -298,6 +447,90 @@ describe("setupDashboardServer", () => {
     const readyResponse = await fetch(`http://127.0.0.1:${handle.port}/ready`);
     expect(readyResponse.status).toBe(200);
     expect(await readyResponse.json()).toEqual(probeResponse);
+  });
+
+  it("binds to DASHBOARD_HOST when provided", async () => {
+    const previousHost = process.env.DASHBOARD_HOST;
+    process.env.DASHBOARD_HOST = "0.0.0.0";
+
+    try {
+      const app = express();
+      const port = await getAvailablePort();
+      const handle = await setupDashboardServer({
+        app,
+        dashboardDir: "dashboard",
+        port,
+        liveActivityCacheMs: 1000,
+        getStatus: () => ({ ok: true }),
+        getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+        getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+        getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+        getProjectStatsSnapshot: () => ({
+          projectId: "project-test",
+          projectName: "Project Test",
+          window: "7d",
+          generatedAt: new Date().toISOString(),
+          usage: {
+            invocationCount: 0,
+            activeTimeMs: 0,
+            wallTimeMs: 0,
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            outputTokens: 0,
+            reasoningOutputTokens: 0,
+            totalTokens: 0,
+            reportedInvocationCount: 0,
+            estimatedInvocationCount: 0,
+            unavailableInvocationCount: 0,
+            unsupportedInvocationCount: 0,
+          },
+          activeSprint: null,
+          buckets: [],
+          sprints: [],
+          tasks: [],
+          providers: [],
+          purposes: [],
+          tokenSources: [],
+        }),
+        getLiveActivities: async () => ({}),
+        getGitStatus: async () => ({
+          mode: "LOCAL",
+          available: true,
+          repositoryRoot: null,
+          branch: null,
+          hasRemote: false,
+          dirty: false,
+          openPullRequests: [],
+          ciRuns: [],
+          mergedPullRequests: [],
+          tracking: { scope: "REPOSITORY", label: "Repository", branch: null },
+          warnings: [],
+          lastUpdated: new Date().toISOString(),
+        }),
+        getExternalSettingsHints: () => ({
+          env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+          settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+          resolved: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+        }),
+        ...buildSettingsServerOptions(),
+        listAgentPresets: () => [],
+        createAgentPreset: () => ({ id: "agent-1" } as any),
+        updateAgentPreset: () => ({ id: "agent-1" } as any),
+        deleteAgentPreset: () => {},
+        rerunTask: async () => ({ ok: true }),
+        orchestrateSprint: async () => ({ ok: true }),
+        pauseSprintRun: async () => ({ ok: true }),
+        cancelSprintRun: async () => ({ ok: true }),
+        cancelTaskDispatch: async () => ({ ok: true }),
+        retryTaskDispatch: async () => ({ ok: true }),
+      });
+
+      serversToClose.push(handle.server);
+      expect((handle.server.address() as AddressInfo).address).toBe("0.0.0.0");
+    } finally {
+      if (typeof previousHost === "string") process.env.DASHBOARD_HOST = previousHost;
+      else delete process.env.DASHBOARD_HOST;
+    }
   });
 
   it("returns 503 for /ready when server is not ready", async () => {

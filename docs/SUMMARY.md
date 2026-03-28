@@ -21,6 +21,7 @@
 - [Execution Dashboard Controls](./architecture/execution-dashboard-controls.md)
 - [Project Management Implementation](./architecture/project-management-implementation.md)
 - [Project Runtime Integration](./architecture/project-runtime-integration.md)
+- [Sprint Preview Browser](./architecture/sprint-preview-browser.md)
 - [Multi-Project Agentic Refactor Plan](./architecture/multi-project-agentic-refactor-plan.md)
 - [Worker Endpoint Foundation](./architecture/worker-endpoint-foundation.md)
 - [Project Worker Assignment Foundation](./architecture/project-worker-assignment-foundation.md)

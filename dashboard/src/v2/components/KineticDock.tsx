@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useRef, useEffect, useState } from "preact/hooks";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { MessageCircle, Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, BarChart3 } from "lucide-preact";
+import { MessageCircle, Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, BarChart3, Compass } from "lucide-preact";
 import gsap from "gsap";
 
 /* Chat sits left of the divider — the rest are standard nav */
@@ -16,6 +16,7 @@ const RIGHT_ITEMS = [
     { icon: Cpu,        label: "Agents",   path: "/agents",  color: "text-signal-400" },
     { icon: BarChart3,  label: "Stats",    path: "/stats",   color: "text-amber-500"  },
     { icon: Inbox,    label: "Memory",   path: "/memory",  color: "text-ember-400"  },
+    { icon: Compass,  label: "Browser",  path: "/browser", color: "text-sky-500"    },
     { icon: Zap,      label: "Live",     path: "/live",    color: "text-status-red" },
     { icon: Settings, label: "Config",   path: "/config",  color: "text-slate-400 dark:text-slate-400" },
 ] as const;

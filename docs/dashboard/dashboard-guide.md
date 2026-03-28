@@ -126,6 +126,22 @@ Legacy runtime:
   - Reset sprint overrides
 - `GET /api/projects/:projectId/sprints/:sprintId/settings/effective`
   - Resolved sprint settings plus source metadata
+- `GET /api/projects/:projectId/preview/sessions`
+  - Lists persisted sprint preview container sessions for the selected project
+- `POST /api/projects/:projectId/sprints/:sprintId/preview/start`
+  - Starts or reuses the sprint-scoped preview container for one sprint
+- `POST /api/browser/sessions/:sessionId/rebuild`
+  - Rebuilds and restarts one sprint preview session
+- `POST /api/browser/sessions/:sessionId/stop`
+  - Stops one sprint preview session
+- `GET /api/projects/:projectId/sprints/:sprintId/preview/script`
+  - Loads the editable preview startup script or generated fallback for one sprint
+- `PUT /api/projects/:projectId/sprints/:sprintId/preview/script`
+  - Saves the sprint-local preview startup script override
+- `GET /api/browser/sessions/:sessionId/logs`
+  - Returns recent preview container logs
+- `ALL /api/browser/sessions/:sessionId/proxy/*`
+  - Same-origin proxy used by the in-app browser to render the sprint preview app
 - `GET /api/settings/import-sources`
   - External key hints from env/json
 - `GET /api/git-status`
@@ -197,6 +213,11 @@ Legacy runtime:
 - Tasks page also stores explicit task executor preference (`auto`, `docker_cli`, `jules`, `mcp_worker`)
 - The Tasks board entrance animation now replays only for project/view/filter changes instead of every background task refresh
 - Stats page is project-scoped and visualizes tracked token/time usage for the selected project with `24h`, `7d`, `30d`, `all time`, and custom date windows
+- Browser page is project-scoped and provides a polished in-app browser surface for sprint preview containers:
+  - one preview session per sprint
+  - same-origin iframe navigation with back, forward, refresh, and editable URL
+  - rebuild, stop, open-in-tab, startup-script editing, and log viewing
+  - sprint previews are proxied through the dashboard instead of embedding raw localhost origins directly
 - Stats page now matches the high-interaction v2 dashboard card language more closely:
   - animated metric cards
   - a unified glass-panel system that mirrors the premium live card surfaces instead of using a separate visual treatment
@@ -232,6 +253,7 @@ Legacy runtime:
 - Chat composer now sends on `Enter` and inserts a newline on `Shift+Enter`
 - Thread assignment control is explicitly labeled as `Worker:` in the thread header to make routing intent clearer
 - Worker-routed tasks are created from the same task modal and appear in the same board; the executor badge shows whether work is automatic, CLI-backed, Jules-backed, or queued for a connected worker
+- Settings page `Sprint Engine` now includes sprint-preview controls for auto-start, rebuild cadence, auto-stop, container app port, preview host port range, and the project-relative preview startup script path
 
 ### Dashboard view
 - Task statistics

@@ -62,6 +62,8 @@ import { getSprintSubtasksDir, SPRINT_OS_SERVICE_NAME } from "../shared/config/s
 import { SprintMarkdownService } from "../services/sprint-markdown-service.js";
 import { VirtualWorkerService } from "../services/virtual-worker-service.js";
 import type { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
+import { SprintPreviewRepository } from "../repositories/sprint-preview-repository.js";
+import { SprintPreviewService } from "../services/sprint-preview-service.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -120,6 +122,8 @@ export class JulesAgentServer {
   private projectAttentionRepository: ProjectAttentionRepository;
   private agentPresetRepository: AgentPresetRepository;
   private dockerService: DockerService;
+  private sprintPreviewRepository: SprintPreviewRepository;
+  private sprintPreviewService: SprintPreviewService;
   private agentPresetSyncService: AgentPresetSyncService;
   private executionRepository: ExecutionRepository;
   private sprintMarkdownService: SprintMarkdownService;
@@ -144,6 +148,7 @@ export class JulesAgentServer {
   private embeddingService: import("../services/embedding-service.js").EmbeddingService;
   private memoryRepository: import("../repositories/memory-repository.js").MemoryRepository;
   private runtimeCleanupInterval: ReturnType<typeof setInterval> | null = null;
+  private sprintPreviewInterval: ReturnType<typeof setInterval> | null = null;
   private mcpHttpHandle: McpHttpTransportHandle | null = null;
   private mcpServiceBound = false;
 
@@ -172,6 +177,14 @@ export class JulesAgentServer {
     this.agentPresetRepository = deps.agentPresetRepository;
     this.agentPresetSyncService = deps.agentPresetSyncService;
     this.executionRepository = deps.executionRepository;
+    this.sprintPreviewRepository = new SprintPreviewRepository(this.appDbStorage);
+    this.sprintPreviewService = new SprintPreviewService({
+      sprintPreviewRepository: this.sprintPreviewRepository,
+      projectManagementRepository: this.projectManagementRepository,
+      executionRepository: this.executionRepository,
+      settingsRepository: this.settingsRepository,
+      logger: this.logger.child({ component: "sprint-preview-service" }),
+    });
     this.sprintMarkdownService = deps.sprintMarkdownService;
     this.virtualWorkerService = deps.virtualWorkerService;
     this.externalSettingsHints = deps.externalSettingsHints;
@@ -200,6 +213,10 @@ export class JulesAgentServer {
       if (this.runtimeCleanupInterval) {
         clearInterval(this.runtimeCleanupInterval);
         this.runtimeCleanupInterval = null;
+      }
+      if (this.sprintPreviewInterval) {
+        clearInterval(this.sprintPreviewInterval);
+        this.sprintPreviewInterval = null;
       }
       if (this.mcpHttpHandle) {
         await this.mcpHttpHandle.close().catch(() => undefined);
@@ -263,6 +280,23 @@ export class JulesAgentServer {
     initialTimer.unref?.();
     this.runtimeCleanupInterval = setInterval(runCleanup, JulesAgentServer.RUNTIME_CLEANUP_INTERVAL_MS);
     this.runtimeCleanupInterval.unref?.();
+  }
+
+  private startSprintPreviewLoop(): void {
+    if (this.appConfig.runtimeRole !== "project_manager" || this.sprintPreviewInterval) {
+      return;
+    }
+
+    const reconcile = (): void => {
+      void this.sprintPreviewService.reconcileSessions().catch((error) => {
+        this.logger.error("Sprint preview reconciliation failed", { error });
+      });
+    };
+
+    const initialTimer = setTimeout(reconcile, 0);
+    initialTimer.unref?.();
+    this.sprintPreviewInterval = setInterval(reconcile, JulesAgentServer.RUNTIME_CLEANUP_INTERVAL_MS);
+    this.sprintPreviewInterval.unref?.();
   }
 
   private createContext(): ServerContext {
@@ -365,6 +399,10 @@ export class JulesAgentServer {
 
   private getDashboardPort(): number {
     if (this.runtimeContext.dashboardRuntimePort !== null) return this.runtimeContext.dashboardRuntimePort;
+    const explicitEnvPort = Number.parseInt(String(process.env.DASHBOARD_PORT || "").trim(), 10);
+    if (Number.isFinite(explicitEnvPort) && explicitEnvPort > 0) {
+      return explicitEnvPort;
+    }
     const settings = this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
     return settings.dashboardPort || (this.runtimeContext.settings.dashboardPort as number) || this.appConfig.dashboardPort;
   }
@@ -776,6 +814,11 @@ export class JulesAgentServer {
     } catch (error) {
       this.logger.error("Failed to prune disconnected MCP connections on startup", { error });
     }
+    try {
+      await this.sprintPreviewService.cleanupStaleContainersOnStartup();
+    } catch (error) {
+      this.logger.error("Failed to clean up stale sprint preview containers on startup", { error });
+    }
 
     if (this.isDashboardEnabled()) {
       await bootDashboard({
@@ -809,6 +852,15 @@ export class JulesAgentServer {
         isReady: () => this.isReady(),
         isHealthy: () => this.isHealthy(),
         listDockerContainers: () => this.dockerService.listContainers(),
+        listSprintPreviewSessions: (projectId) => this.sprintPreviewService.listSessions(projectId),
+        getSprintPreviewSession: (sessionId: string) => this.sprintPreviewService.getSession(sessionId),
+        startSprintPreviewSession: (projectId, sprintId) => this.sprintPreviewService.startSession(projectId, sprintId),
+        rebuildSprintPreviewSession: (sessionId) => this.sprintPreviewService.rebuildSession(sessionId),
+        stopSprintPreviewSession: (sessionId) => this.sprintPreviewService.stopSession(sessionId),
+        getSprintPreviewScript: (projectId, sprintId) => this.sprintPreviewService.getScript(projectId, sprintId),
+        saveSprintPreviewScript: (projectId, sprintId, content) => this.sprintPreviewService.saveScript(projectId, sprintId, content),
+        getSprintPreviewLogs: (sessionId, tail) => this.sprintPreviewService.getLogs(sessionId, tail),
+        proxySprintPreviewRequest: (args) => this.sprintPreviewService.proxyRequest(args),
         syncGitSettingsFromDashboard: () => syncGitSettingsFromDashboard(this.runtimeContext),
         refreshJulesApiKey: () => this.refreshJulesApiKey(),
         setLogger: (logger) => { this.logger = logger; },
@@ -842,6 +894,7 @@ export class JulesAgentServer {
     });
     this.mcpServiceBound = true;
     this.startRuntimeCleanupLoop();
+    this.startSprintPreviewLoop();
     this.virtualWorkerService.start();
   }
 }

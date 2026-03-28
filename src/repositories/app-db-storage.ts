@@ -480,6 +480,37 @@ export class AppDbStorage {
         payload_json TEXT,
         created_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS sprint_preview_sessions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        host_port INTEGER,
+        container_app_port INTEGER NOT NULL,
+        container_id TEXT,
+        container_name TEXT,
+        worktree_path TEXT,
+        feature_branch TEXT,
+        startup_script_path TEXT NOT NULL,
+        startup_mode TEXT NOT NULL,
+        install_command TEXT,
+        build_command TEXT,
+        run_command TEXT,
+        last_completed_task_count INTEGER NOT NULL DEFAULT 0,
+        last_seen_sprint_status TEXT,
+        last_known_path TEXT,
+        health_status TEXT NOT NULL DEFAULT 'unknown',
+        last_error TEXT,
+        last_build_at TEXT,
+        last_started_at TEXT,
+        last_stopped_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+        UNIQUE (project_id, sprint_id)
+      );
     `);
 
     this.ensureColumn("task_runs", "sprint_run_id", "TEXT");
@@ -544,6 +575,8 @@ export class AppDbStorage {
     this.ensureIndex("idx_project_attention_items_project_status", "project_attention_items", "project_id, status, opened_at DESC");
     this.ensureIndex("idx_project_attention_items_sprint_run_status", "project_attention_items", "sprint_run_id, status, opened_at DESC");
     this.ensureIndex("idx_project_attention_items_dispatch_status", "project_attention_items", "dispatch_id, status, opened_at DESC");
+    this.ensureIndex("idx_sprint_preview_sessions_project_updated", "sprint_preview_sessions", "project_id, updated_at DESC");
+    this.ensureIndex("idx_sprint_preview_sessions_sprint", "sprint_preview_sessions", "sprint_id, updated_at DESC");
   }
 
   getPath(): string {
