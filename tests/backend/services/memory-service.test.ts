@@ -135,6 +135,9 @@ describe("MemoryService", () => {
 
       const result = await service.createMemory("proj-1", input);
 
+      // Wait a tick for async embedding catch block to execute
+      await new Promise(resolve => setTimeout(resolve, 0));
+
       expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining("Failed to embed memory mem-fail"));
       expect(result).toEqual(created);
     });
@@ -165,6 +168,80 @@ describe("MemoryService", () => {
       expect(service.updateMemory("mem-1", input)).toEqual(updated);
       expect(mockRepo.updateMemory).toHaveBeenCalledWith("mem-1", input);
     });
+
+    it("triggers embedding asynchronously for project-scoped memories when model is loaded", async () => {
+      const updated = makeMemoryRecord({ id: "mem-proj", scope: "project", content: "updated proj content" });
+      const input: UpdateMemoryInput = { content: "updated proj content" };
+
+      mockRepo.updateMemory.mockReturnValue(updated);
+      mockEmbeddingService.isLoaded.mockReturnValue(true);
+      mockEmbeddingService.getLoadedModelId.mockReturnValue("bge-small-en-v1.5");
+      mockEmbeddingService.getDimension.mockReturnValue(384);
+      mockEmbeddingService.embed.mockResolvedValue(new Float32Array(384));
+
+      const result = service.updateMemory("mem-proj", input);
+
+      expect(result).toEqual(updated);
+      expect(mockRepo.updateMemory).toHaveBeenCalledWith("mem-proj", input);
+
+      // Wait a tick for async embedding to be called
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(mockEmbeddingService.embed).toHaveBeenCalledWith("updated proj content");
+      expect(mockRepo.saveEmbedding).toHaveBeenCalledWith(
+        "mem-proj",
+        "bge-small-en-v1.5",
+        384,
+        expect.any(Buffer)
+      );
+    });
+
+    it("logs warning if embedding update fails", async () => {
+      const updated = makeMemoryRecord({ id: "mem-proj", scope: "project", content: "updated proj content" });
+      const input: UpdateMemoryInput = { content: "updated proj content" };
+
+      mockRepo.updateMemory.mockReturnValue(updated);
+      mockEmbeddingService.isLoaded.mockReturnValue(true);
+      mockEmbeddingService.getLoadedModelId.mockReturnValue("bge-small-en-v1.5");
+      mockEmbeddingService.getDimension.mockReturnValue(384);
+      mockEmbeddingService.embed.mockRejectedValue(new Error("embed failed"));
+
+      service.updateMemory("mem-proj", input);
+
+      // Wait a tick for async embedding to execute catch block
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining("Failed to embed updated memory mem-proj: Error: embed failed"));
+    });
+
+    it("does not trigger embedding for sprint-scoped memories", async () => {
+      const updated = makeMemoryRecord({ id: "mem-sprint", scope: "sprint", content: "updated sprint content" });
+      const input: UpdateMemoryInput = { content: "updated sprint content" };
+
+      mockRepo.updateMemory.mockReturnValue(updated);
+      mockEmbeddingService.isLoaded.mockReturnValue(true);
+
+      const result = service.updateMemory("mem-sprint", input);
+
+      expect(result).toEqual(updated);
+      expect(mockRepo.updateMemory).toHaveBeenCalledWith("mem-sprint", input);
+
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      expect(mockEmbeddingService.embed).not.toHaveBeenCalled();
+    });
+
+    it("does not trigger embedding if model is not loaded", () => {
+      const updated = makeMemoryRecord({ id: "mem-proj", scope: "project", content: "updated proj content" });
+      const input: UpdateMemoryInput = { content: "updated proj content" };
+
+      mockRepo.updateMemory.mockReturnValue(updated);
+      mockEmbeddingService.isLoaded.mockReturnValue(false);
+
+      service.updateMemory("mem-proj", input);
+
+      expect(mockEmbeddingService.embed).not.toHaveBeenCalled();
+    });
   });
 
   describe("deleteMemory", () => {
@@ -181,6 +258,14 @@ describe("MemoryService", () => {
 
       expect(service.listByProject("proj-1", "sprint", 10)).toEqual(records);
       expect(mockRepo.listByProject).toHaveBeenCalledWith("proj-1", "sprint", 10);
+    });
+
+    it("passes through to repository without scope or limit", () => {
+      const records = [makeMemoryRecord()];
+      mockRepo.listByProject.mockReturnValue(records);
+
+      expect(service.listByProject("proj-1")).toEqual(records);
+      expect(mockRepo.listByProject).toHaveBeenCalledWith("proj-1", undefined, undefined);
     });
   });
 
@@ -212,6 +297,14 @@ describe("MemoryService", () => {
       expect(service.listBySprintAndAgent("proj-1", "s-1", "agent-1", 10)).toEqual(records);
       expect(mockRepo.listBySprintAndAgent).toHaveBeenCalledWith("proj-1", "s-1", "agent-1", 10);
     });
+
+    it("passes through to repository without limit", () => {
+      const records = [makeMemoryRecord({ sprintId: "s-1", agentPresetId: "agent-1" })];
+      mockRepo.listBySprintAndAgent = vi.fn().mockReturnValue(records);
+
+      expect(service.listBySprintAndAgent("proj-1", "s-1", "agent-1")).toEqual(records);
+      expect(mockRepo.listBySprintAndAgent).toHaveBeenCalledWith("proj-1", "s-1", "agent-1", undefined);
+    });
   });
 
   describe("listLongTermByAgent", () => {
@@ -221,6 +314,14 @@ describe("MemoryService", () => {
 
       expect(service.listLongTermByAgent("proj-1", "agent-1", 10)).toEqual(records);
       expect(mockRepo.listLongTermByAgent).toHaveBeenCalledWith("proj-1", "agent-1", 10);
+    });
+
+    it("passes through to repository without limit", () => {
+      const records = [makeMemoryRecord({ scope: "project", agentPresetId: "agent-1" })];
+      mockRepo.listLongTermByAgent = vi.fn().mockReturnValue(records);
+
+      expect(service.listLongTermByAgent("proj-1", "agent-1")).toEqual(records);
+      expect(mockRepo.listLongTermByAgent).toHaveBeenCalledWith("proj-1", "agent-1", undefined);
     });
   });
 
@@ -391,11 +492,37 @@ describe("MemoryService", () => {
       });
       expect(service.getReembedProgress()!.completed).toBe(1);
     });
+
+    it("continues and logs warning if individual embed fails", async () => {
+      const memories = [makeMemoryRecord({ id: "mem-fail" })];
+      mockEmbeddingService.isLoaded.mockReturnValue(true);
+      mockEmbeddingService.getLoadedModelId.mockReturnValue("bge-small-en-v1.5");
+      mockEmbeddingService.getDimension.mockReturnValue(384);
+      mockEmbeddingService.embed.mockRejectedValue(new Error("embed error"));
+      mockRepo.listByProject.mockReturnValue(memories);
+
+      service.startReembedProject("proj-1");
+
+      await vi.waitFor(() => {
+        expect(service.getReembedProgress()!.active).toBe(false);
+      });
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining("Failed to re-embed memory mem-fail"));
+      expect(service.getReembedProgress()!.completed).toBe(0);
+    });
   });
 
   describe("getReembedProgress", () => {
     it("returns null when no reembed has started", () => {
       expect(service.getReembedProgress()).toBeNull();
+    });
+  });
+
+  describe("countByScope", () => {
+    it("passes through to repository", () => {
+      mockRepo.countByScope.mockReturnValue(42);
+      expect(service.countByScope("proj-1", "sprint")).toBe(42);
+      expect(mockRepo.countByScope).toHaveBeenCalledWith("proj-1", "sprint");
     });
   });
 
@@ -418,6 +545,31 @@ describe("MemoryService", () => {
       mockEmbeddingService.getLoadedModelId.mockReturnValue(null);
       const result = service.getEmbeddingMap("proj-1");
       expect(result).toEqual({ nodes: [], edges: [], hasEmbeddings: false });
+    });
+
+    it("handles single node without crashing", () => {
+      mockEmbeddingService.getLoadedModelId.mockReturnValue("bge-small-en-v1.5");
+      mockEmbeddingService.getDimension.mockReturnValue(3);
+      mockRepo.loadEmbeddingsForScope.mockReturnValue([
+        { id: "m1", embeddingBlob: makeFloat32Buffer([1, 0, 0]), embeddingDimension: 3 },
+      ]);
+      const result = service.getEmbeddingMap("proj-1");
+      expect(result.nodes).toHaveLength(1);
+      expect(result.edges).toHaveLength(0);
+      // ((0 / 1) - 0.5) * 600 = -300
+      expect(result.nodes[0].x).toBe(-300);
+      expect(result.nodes[0].y).toBe(-300);
+    });
+
+    it("handles Uint8Array embeddings instead of Buffer", () => {
+      mockEmbeddingService.getLoadedModelId.mockReturnValue("bge-small-en-v1.5");
+      mockEmbeddingService.getDimension.mockReturnValue(1);
+      mockRepo.loadEmbeddingsForScope.mockReturnValue([
+        // Float32 1.0 is 0x3f800000 in little-endian => [0, 0, 128, 63]
+        { id: "m1", embeddingBlob: new Uint8Array([0, 0, 128, 63]), embeddingDimension: 1 },
+      ]);
+      const result = service.getEmbeddingMap("proj-1");
+      expect(result.nodes).toHaveLength(1);
     });
 
     it("returns empty result when no dimension", () => {
