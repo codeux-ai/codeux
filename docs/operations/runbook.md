@@ -107,19 +107,30 @@ Checks:
 - To continue retries in the same failed workspace:
   - `Settings -> CLI Workflow -> Resume failed task in same workspace` should remain enabled (default).
 
-### 5. Orchestration stuck with blocked tasks
+### 5. Planning retry message appears but no provider work is visible
+Checks:
+- A system message like "Retrying JSON parse in same <Provider> session..." indicates a parsing failure and a virtual planning JSON retry. If no new provider invocation record or response follows:
+- Verify your Execution Mode (`Settings -> CLI Workflow -> Execution Mode`). If it's set to `DOCKER`:
+  - Check whether Docker is running (`docker ps`).
+  - Verify container settings (`Settings -> CLI Workflow`) like `Container setup script path` and `Container image` to ensure the container can launch properly.
+  - Review dashboard server logs for container launch or permission errors that might have abruptly stopped the provider execution before a usage record could be created.
+- If it's `HOST`:
+  - Check if the provider CLI is still available and functioning on the host machine.
+- Verify provider API keys or auth mounts are correct and the provider service is not experiencing downtime.
+
+### 6. Orchestration stuck with blocked tasks
 Checks:
 - Are dependencies in final `completed`, or in `coding_completed` with no remaining merge work?
 - Any action-required session states (`AWAITING_*`, `PAUSED`)?
 - Is merge protocol disabled in step toggles?
 
-### 6. Tasks completed but pipeline not progressing
+### 7. Tasks completed but pipeline not progressing
 Checks:
 - Does the DB task record still show `coding_completed` because a feature PR or worker branch is still unresolved?
 - Did the merge settle on the feature branch, or was this a no-output task that should auto-promote to final `completed`?
 - Are CI / review gates still intentionally holding the task before final completion?
 
-### 7. Tasks show RUNNING after MCP was interrupted
+### 8. Tasks show RUNNING after MCP was interrupted
 Symptoms:
 - Old activity logs keep appearing.
 - New orchestration cycles do not start fresh background CLI runs.
