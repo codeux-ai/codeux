@@ -198,6 +198,74 @@ describe("executePrepareStage", () => {
     expect(ctx.workspaceManager.prepareWorktree).toHaveBeenCalledWith("/repo", "/repo/worktree", "worker-branch", "feature-branch", undefined);
   });
 
+  it("includes default memory learnings instruction when memory capture is enabled without override", async () => {
+    const ctx = createMockContext();
+    ctx.settings.memory = {
+      enabled: true,
+      autoCaptureSprint: true,
+      workerLearningsInstruction: "Default Settings Instruction",
+      maxLongTermPerProject: 50,
+      minLongTermRelevance: 0.7,
+      shortTermRetentionSprints: 3,
+    };
+    vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
+    vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
+    vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
+    vi.mocked(ctx.deps.getWorkerInstruction).mockResolvedValue("");
+
+    const result = await executePrepareStage(ctx);
+
+    expect(result.providerPrompt).toContain("## LEARNINGS CAPTURE (Required)");
+    expect(result.providerPrompt).toContain("Default Settings Instruction");
+  });
+
+  it("uses preset override memory learnings instruction when override is enabled and non-empty", async () => {
+    const ctx = createMockContext();
+    ctx.settings.memory = {
+      enabled: true,
+      autoCaptureSprint: true,
+      workerLearningsInstruction: "Default Settings Instruction",
+      maxLongTermPerProject: 50,
+      minLongTermRelevance: 0.7,
+      shortTermRetentionSprints: 3,
+    };
+    ctx.memoryTemplateOverrideEnabled = true;
+    ctx.memoryTemplateMarkdown = "Preset Override Instruction";
+    vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
+    vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
+    vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
+    vi.mocked(ctx.deps.getWorkerInstruction).mockResolvedValue("");
+
+    const result = await executePrepareStage(ctx);
+
+    expect(result.providerPrompt).toContain("## LEARNINGS CAPTURE (Required)");
+    expect(result.providerPrompt).toContain("Preset Override Instruction");
+    expect(result.providerPrompt).not.toContain("Default Settings Instruction");
+  });
+
+  it("falls back to default memory learnings instruction when override is enabled but template is empty", async () => {
+    const ctx = createMockContext();
+    ctx.settings.memory = {
+      enabled: true,
+      autoCaptureSprint: true,
+      workerLearningsInstruction: "Default Settings Instruction",
+      maxLongTermPerProject: 50,
+      minLongTermRelevance: 0.7,
+      shortTermRetentionSprints: 3,
+    };
+    ctx.memoryTemplateOverrideEnabled = true;
+    ctx.memoryTemplateMarkdown = "   \n"; // empty string behavior
+    vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
+    vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
+    vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
+    vi.mocked(ctx.deps.getWorkerInstruction).mockResolvedValue("");
+
+    const result = await executePrepareStage(ctx);
+
+    expect(result.providerPrompt).toContain("## LEARNINGS CAPTURE (Required)");
+    expect(result.providerPrompt).toContain("Default Settings Instruction");
+  });
+
   it("handles FF-merge during resume properly", async () => {
     const ctx = createMockContext();
     vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: true });
