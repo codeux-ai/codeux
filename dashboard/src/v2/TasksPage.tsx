@@ -484,7 +484,7 @@ export const TasksPage: FunctionComponent = () => {
   const handleEditClick = useCallback((nextTask: Task) => {
     setEditingTask(nextTask);
     setShowComposer(true);
-    setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50);
+    setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   }, []);
 
   return (
@@ -542,7 +542,7 @@ export const TasksPage: FunctionComponent = () => {
                 setEditingTask(null);
               } else {
                 setShowComposer(true);
-                setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50);
+                setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
               }
             }}
             disabled={!selectedProject || sprints.length === 0}
