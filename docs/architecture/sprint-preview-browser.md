@@ -86,9 +86,9 @@ The setup script configured in `cliWorkflow.containerSetupScriptPath` still prep
 ## Browser Delivery
 
 The browser now serves each preview session on its own local origin:
-- `http://preview-<sessionId>.localhost:<dashboardPort>/...`
+- `http://preview-<sessionId>.<dashboard-host>:<dashboardPort>/...`
 
-The dashboard server routes that host to the matching preview container by session id. This replaces the older path-proxy page delivery model and gives each preview its own origin by default.
+The dashboard server routes that host to the matching preview container by session id, generalizing beyond just `.localhost` to support tunneled or hosted environments (e.g. `preview-123.example.com`). This replaces the older path-proxy page delivery model and gives each preview its own origin by default.
 
 Benefits:
 - relative `/api/...` and websocket calls stay inside the preview container instead of hitting the main dashboard APIs

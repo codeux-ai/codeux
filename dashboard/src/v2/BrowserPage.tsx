@@ -4,14 +4,11 @@ import gsap from "gsap";
 import {
   Compass,
   ExternalLink,
-  Globe,
   Play,
   RefreshCw,
   RotateCcw,
   Save,
   Square,
-  ChevronLeft,
-  ChevronRight,
   FileCode2,
 } from "lucide-preact";
 import { useProjectData } from "./context/project-data.js";
@@ -20,42 +17,18 @@ import type { SprintPreviewScript, SprintPreviewSession } from "../types.js";
 import {
   fetchPreviewLogs,
   fetchPreviewScript,
-  fetchPreviewSessions,
   rebuildPreviewSession,
   savePreviewScript,
   startPreviewSession,
   stopPreviewSession,
 } from "./lib/browser-api.js";
+import { normalizePath, buildPreviewOrigin } from "./lib/preview-origin.js";
+import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
+import { PreviewSessionSlider } from "./components/browser/PreviewSessionSlider.js";
+import { PreviewWindowChrome } from "./components/browser/PreviewWindowChrome.js";
 
 const PREVIEW_MESSAGE_TYPE = "sprint-preview:state";
 const PREVIEW_NAVIGATION_TYPE = "sprint-preview:navigate";
-
-const normalizePath = (value: string | null | undefined): string => {
-  const trimmed = String(value || "").trim();
-  if (!trimmed) return "/";
-  if (/^https?:\/\//i.test(trimmed)) {
-    try {
-      const url = new URL(trimmed);
-      return `${url.pathname || "/"}${url.search}${url.hash}` || "/";
-    } catch {
-      return "/";
-    }
-  }
-  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-};
-
-const statusTone: Record<SprintPreviewSession["status"], string> = {
-  running: "border-signal-500/30 bg-signal-500/10 text-signal-500",
-  starting: "border-amber-500/30 bg-amber-500/10 text-amber-500",
-  stopped: "border-black/[0.08] bg-black/[0.04] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400",
-  error: "border-status-red/30 bg-status-red/10 text-status-red",
-};
-
-const healthTone: Record<SprintPreviewSession["healthStatus"], string> = {
-  healthy: "text-signal-500",
-  unreachable: "text-status-red",
-  unknown: "text-slate-400",
-};
 
 const formatPortMapping = (session: SprintPreviewSession): string => {
   const sourcePort = typeof session.containerAppPort === "number" ? session.containerAppPort : null;
@@ -72,26 +45,18 @@ const formatPortMapping = (session: SprintPreviewSession): string => {
   return "port pending";
 };
 
-const buildPreviewOrigin = (sessionId: string): string => {
-  const protocol = window.location.protocol;
-  const port = window.location.port ? `:${window.location.port}` : "";
-  const currentHost = window.location.hostname;
-  const host = currentHost === "localhost" || currentHost === "127.0.0.1"
-    ? `preview-${sessionId}.localhost`
-    : `preview-${sessionId}.${currentHost}`;
-  return `${protocol}//${host}${port}`;
-};
+
 
 export const BrowserPage: FunctionComponent = () => {
   const shellRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const { selectedProject } = useProjectData();
   const { data: sprints, selectedSprint, selectedSprintId } = useSprints(selectedProject?.id || null);
-  const [sessions, setSessions] = useState<SprintPreviewSession[]>([]);
+
   const [script, setScript] = useState<SprintPreviewScript | null>(null);
   const [scriptDraft, setScriptDraft] = useState("");
   const [logs, setLogs] = useState("");
-  const [loading, setLoading] = useState(false);
+
   const [mutating, setMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [addressValue, setAddressValue] = useState("/");
@@ -105,48 +70,19 @@ export const BrowserPage: FunctionComponent = () => {
     }
   }, []);
 
-  const refreshSessions = async (silent = false): Promise<void> => {
-    if (!selectedProject) {
-      setSessions([]);
-      return;
-    }
-    if (!silent) {
-      setLoading(true);
-    }
-    try {
-      const data = await fetchPreviewSessions(selectedProject.id);
-      setSessions(data);
+  const { sessions, selectedSession, loading, error: fetchError, refresh: refreshSessions } = usePreviewSessions({
+    projectId: selectedProject?.id || null,
+    selectedSprintId,
+    activeSessionId,
+  });
+
+  useEffect(() => {
+    if (fetchError) {
+      setError(fetchError);
+    } else {
       setError(null);
-    } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
-    } finally {
-      if (!silent) {
-        setLoading(false);
-      }
     }
-  };
-
-  useEffect(() => {
-    void refreshSessions();
-  }, [selectedProject?.id]);
-
-  useEffect(() => {
-    if (!selectedProject) return;
-    const timer = window.setInterval(() => {
-      void refreshSessions(true);
-    }, 8000);
-    return () => window.clearInterval(timer);
-  }, [selectedProject?.id]);
-
-  const selectedSession = useMemo(() => {
-    if (activeSessionId) {
-      return sessions.find((session) => session.id === activeSessionId) || null;
-    }
-    if (selectedSprintId) {
-      return sessions.find((session) => session.sprintId === selectedSprintId) || null;
-    }
-    return sessions[0] || null;
-  }, [activeSessionId, selectedSprintId, sessions]);
+  }, [fetchError]);
 
   const scriptTargetSprint = useMemo(() => {
     if (selectedSession) {
@@ -354,45 +290,11 @@ export const BrowserPage: FunctionComponent = () => {
       )}
 
       <div className="mb-5 grid gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-3 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
-          <div className="flex flex-wrap gap-2">
-            {sessionCards.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-3 text-sm text-slate-500 dark:border-white/[0.08] dark:text-slate-400">
-                No preview containers yet. Start the selected sprint to open a browser session.
-              </div>
-            ) : (
-              sessionCards.map((session) => {
-                const active = selectedSession?.id === session.id;
-                return (
-                  <button
-                    key={session.id}
-                    type="button"
-                    onClick={() => setActiveSessionId(session.id)}
-                    className={`min-w-[180px] rounded-2xl border px-4 py-3 text-left transition ${
-                      active
-                        ? "border-signal-500/30 bg-signal-500/10"
-                        : "border-black/[0.06] bg-black/[0.02] hover:border-black/[0.12] dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:border-white/[0.14]"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{session.sprintName}</span>
-                      <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] ${statusTone[session.status]}`}>
-                        {session.status}
-                      </span>
-                    </div>
-                    <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-                      <Globe className={`h-3.5 w-3.5 ${healthTone[session.healthStatus]}`} strokeWidth={2} />
-                      <span>{formatPortMapping(session)}</span>
-                    </div>
-                    <div className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
-                      {session.hostPort ? `127.0.0.1:${session.hostPort}` : "waiting for routed port"}
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
+        <PreviewSessionSlider
+          sessions={sessionCards}
+          selectedSessionId={activeSessionId}
+          onSelectSession={setActiveSessionId}
+        />
 
         <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
           <div className="flex items-start justify-between gap-3">
@@ -456,76 +358,29 @@ export const BrowserPage: FunctionComponent = () => {
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/70 shadow-[0_30px_80px_rgba(15,23,42,0.08)] dark:border-white/[0.06] dark:bg-[#05080d]/90 dark:shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
-          <div className="border-b border-black/[0.06] bg-[#f5f1e8] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <div className="h-2.5 w-2.5 rounded-full bg-status-red/80" />
-                <div className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
-                <div className="h-2.5 w-2.5 rounded-full bg-signal-500/90" />
-              </div>
-              {selectedSession && (
-                <div className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] ${statusTone[selectedSession.status]}`}>
-                  {selectedSession.status}
-                </div>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => postNavigationCommand("back")}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
-              >
-                <ChevronLeft className="h-4 w-4" strokeWidth={2.2} />
-              </button>
-              <button
-                type="button"
-                onClick={() => postNavigationCommand("forward")}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
-              >
-                <ChevronRight className="h-4 w-4" strokeWidth={2.2} />
-              </button>
-              <button
-                type="button"
-                onClick={() => postNavigationCommand("reload")}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
-              >
-                <RefreshCw className="h-4 w-4" strokeWidth={2.2} />
-              </button>
-              <form
-                className="flex min-w-[240px] flex-1 items-center"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  navigate();
-                }}
-              >
-                <input
-                  value={addressValue}
-                  onInput={(event) => setAddressValue((event.currentTarget as HTMLInputElement).value)}
-                  className="h-10 w-full rounded-2xl border border-black/[0.08] bg-white/80 px-4 font-mono text-sm text-slate-800 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100"
-                />
-              </form>
-            </div>
-          </div>
-          <div className="relative h-[calc(100vh-23rem)] min-h-[540px] bg-[#f6f8fb] dark:bg-[#04070b]">
-            {selectedSession ? (
-              <iframe
-                ref={frameRef}
-                title={`Sprint preview ${selectedSession.sprintName}`}
-                src={currentFrameSrc}
-                className="h-full w-full border-0 bg-white"
-              />
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center px-8 text-center">
-                <Compass className="h-12 w-12 text-slate-300 dark:text-slate-600" strokeWidth={1.5} />
-                <h2 className="mt-4 text-xl font-semibold text-slate-800 dark:text-slate-100">No preview active</h2>
-                <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-                  Start a sprint preview to build the selected sprint into its own isolated container and browse it directly from the dashboard.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+        <PreviewWindowChrome
+          session={selectedSession}
+          onNavigateBack={() => postNavigationCommand("back")}
+          onNavigateForward={() => postNavigationCommand("forward")}
+          onReload={() => postNavigationCommand("reload")}
+          addressValue={addressValue}
+          onAddressChange={setAddressValue}
+          onAddressSubmit={(value) => {
+            const nextPath = normalizePath(value);
+            setCurrentPath(nextPath);
+            setAddressValue(nextPath);
+            postNavigationCommand("push", nextPath);
+          }}
+        >
+          {selectedSession && (
+            <iframe
+              ref={frameRef}
+              title={`Sprint preview ${selectedSession.sprintName}`}
+              src={currentFrameSrc}
+              className="h-full w-full border-0 bg-white"
+            />
+          )}
+        </PreviewWindowChrome>
 
         <div className="space-y-5">
           <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">

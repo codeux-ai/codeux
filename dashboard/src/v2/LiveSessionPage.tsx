@@ -14,6 +14,8 @@ import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { HumanInterventionBadge } from "./components/ui/HumanInterventionBadge.js";
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
 import { useSprints } from "../hooks/useSprints.js";
+import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
+import { LivePreviewLink } from "./components/ui/LivePreviewLink.js";
 import { useLiveSessionActions } from "./hooks/use-live-session-actions.js";
 import { formatTime } from "../lib/time.js";
 import { renderMarkdown } from "../lib/markdown.js";
@@ -753,6 +755,10 @@ export const LiveSessionPage: FunctionComponent = () => {
         () => resolveLiveSessionSprintScopeId(status, selectedSprintId),
         [selectedSprintId, status],
     );
+    const { selectedSession } = usePreviewSessions({
+        projectId: realtimeProjectId,
+        selectedSprintId: sprintScopeId
+    });
     const sprintScopeReady = Boolean(
         selectedSprintId
         || sprintScopeId
@@ -1076,6 +1082,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                 {/* Right: pills + view toggle + timestamp */}
                 <div className="flex flex-col items-start lg:items-end gap-4 shrink-0">
                     <div className="flex items-center gap-2.5 flex-wrap">
+                        <LivePreviewLink session={selectedSession} />
                         {/* ── View Toggle ─────────────────────────────── */}
                         <div className="flex gap-0.5 p-0.5 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl backdrop-blur-md">
                             <button

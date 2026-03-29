@@ -277,6 +277,12 @@ describe("setupDashboardServer", () => {
 
   it("routes preview hosts to the matching preview session and injects the browser bridge", async () => {
     const upstream = express();
+    upstream.use("/assets", (req, res) => {
+      res.type("application/javascript").send("console.log('asset');");
+    });
+    upstream.use("/deep/link", (req, res) => {
+      res.type("html").send("<!doctype html><html><head><title>Deep</title></head><body>Deep Link</body></html>");
+    });
     upstream.use((req, res) => {
       res.type("html").send("<!doctype html><html><head><title>Preview</title></head><body><div id='app'>ok</div></body></html>");
     });
@@ -341,9 +347,9 @@ describe("setupDashboardServer", () => {
       cancelSprintRun: async () => ({ ok: true }),
       cancelTaskDispatch: async () => ({ ok: true }),
       retryTaskDispatch: async () => ({ ok: true }),
-      getSprintPreviewSession: async (sessionId) => sessionId === "test-session"
+      getSprintPreviewSession: async (sessionId) => sessionId === "test-session" || sessionId === "test-session-hosted"
         ? {
-          id: "test-session",
+          id: sessionId,
           projectId: "project-1",
           sprintId: "sprint-1",
           projectName: "Project",
@@ -391,6 +397,30 @@ describe("setupDashboardServer", () => {
     });
     expect(bridgeResponse.statusCode).toBe(200);
     expect(bridgeResponse.body).toContain("sprint-preview:state");
+
+    const hostedPreviewResponse = await makeHostRequest({
+      port: handle.port,
+      host: `preview-test-session-hosted.example.com:${handle.port}`,
+      path: "/",
+    });
+    expect(hostedPreviewResponse.statusCode).toBe(200);
+    expect(hostedPreviewResponse.body).toContain("<div id='app'>ok</div>");
+
+    const deepLinkResponse = await makeHostRequest({
+      port: handle.port,
+      host: `preview-test-session.localhost:${handle.port}`,
+      path: "/deep/link",
+    });
+    expect(deepLinkResponse.statusCode).toBe(200);
+    expect(deepLinkResponse.body).toContain("Deep Link");
+
+    const assetResponse = await makeHostRequest({
+      port: handle.port,
+      host: `preview-test-session.localhost:${handle.port}`,
+      path: "/assets/app.js",
+    });
+    expect(assetResponse.statusCode).toBe(200);
+    expect(assetResponse.body).toContain("console.log('asset');");
   });
 
   it("serves /health and /ready endpoints with detailed probe payload", async () => {

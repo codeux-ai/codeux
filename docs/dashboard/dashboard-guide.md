@@ -214,7 +214,9 @@ Legacy runtime:
 - The Tasks board entrance animation now replays only for project/view/filter changes instead of every background task refresh
 - Stats page is project-scoped and visualizes tracked token/time usage for the selected project with `24h`, `7d`, `30d`, `all time`, and custom date windows
 - Browser page is project-scoped and provides a polished in-app browser surface for sprint preview containers:
+  - floating horizontal slider with large-screen five-card visibility for preview selection
   - one preview session per sprint
+  - browser window chrome state for fullscreen, minimize, and close
   - same-origin iframe navigation with back, forward, refresh, and editable URL
   - rebuild, stop, open-in-tab, startup-script editing, and log viewing
   - sprint previews are proxied through the dashboard instead of embedding raw localhost origins directly
@@ -539,3 +541,5 @@ For provider-backed runs, session polling is now used to ingest durable runtime 
 - A shared dashboard resource layer manages resource keys, caching, and invalidation, deduplicating fetches and avoiding UI flashing during background updates.
 - Heavy list views use a progressive list strategy (`useProgressiveList`) with an intersection observer to render items in batches and prevent main-thread blocking.
 - Backend read-model optimizations efficiently project data to support the resource layer while leaving API routes and backend contracts entirely unchanged.
+
+- A "Live Preview" CTA link now appears in the Live view header when the relevant sprint has an active (`running`) preview session with a resolved `hostPort`. The link securely routes directly to the iframe preview origin (`buildPreviewUrl`) at the `lastKnownPath`.
