@@ -173,6 +173,7 @@ function toMergeIndicator(value: string | null | undefined): SubtaskMergeIndicat
     case "MERGED":
     case "MERGE_BLOCKED":
     case "MERGE_CONFLICT":
+    case "PR_CREATED":
       return value;
     default:
       return undefined;

@@ -44,7 +44,7 @@ export const INVOCATION_ROUTING_IDS: InvocationRoutingId[] = [
   "merge_conflict",
 ];
 export const CLI_EXECUTION_MODES: CliExecutionMode[] = ["HOST", "DOCKER"];
-export const FEATURE_PR_AUTOMERGE_MODES: FeaturePrAutoMergeMode[] = ["OFF", "WHEN_GREEN", "ALWAYS"];
+export const FEATURE_PR_AUTOMERGE_MODES: FeaturePrAutoMergeMode[] = ["OFF", "WHEN_GREEN", "ALWAYS", "CREATE_PR"];
 export const WORKER_EXECUTION_MODES: WorkerExecutionMode[] = ["CONNECTED_MCP", "VIRTUAL"];
 export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code"];
 

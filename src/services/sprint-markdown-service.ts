@@ -191,8 +191,8 @@ function normalizeSprintStatus(value: string | undefined): SprintRecord["status"
   return undefined;
 }
 
-function toMergeIndicator(value: string | null): "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCKED" | "MERGE_CONFLICT" | undefined {
-  if (value === "CI" || value === "AUTOMERGE" || value === "MERGED" || value === "MERGE_BLOCKED" || value === "MERGE_CONFLICT") {
+function toMergeIndicator(value: string | null): "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCKED" | "MERGE_CONFLICT" | "PR_CREATED" | undefined {
+  if (value === "CI" || value === "AUTOMERGE" || value === "MERGED" || value === "MERGE_BLOCKED" || value === "MERGE_CONFLICT" || value === "PR_CREATED") {
     return value;
   }
   return undefined;

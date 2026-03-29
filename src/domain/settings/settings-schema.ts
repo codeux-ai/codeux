@@ -222,6 +222,9 @@ const validateCiIntelligence = (
   if (typeof value.featurePrAutoMergeMode !== "string" || !FEATURE_PR_AUTOMERGE_MODES.includes(value.featurePrAutoMergeMode as FeaturePrAutoMergeMode)) {
     issues.push({ path: `${path}.featurePrAutoMergeMode`, message: `Expected one of: ${FEATURE_PR_AUTOMERGE_MODES.join(", ")}` });
   }
+  if (typeof value.mainBranchAutoMergeMode !== "string" || !FEATURE_PR_AUTOMERGE_MODES.includes(value.mainBranchAutoMergeMode as FeaturePrAutoMergeMode)) {
+    issues.push({ path: `${path}.mainBranchAutoMergeMode`, message: `Expected one of: ${FEATURE_PR_AUTOMERGE_MODES.join(", ")}` });
+  }
 };
 
 const validateSprintLoopSteps = (

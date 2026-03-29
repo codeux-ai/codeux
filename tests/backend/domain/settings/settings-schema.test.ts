@@ -130,6 +130,7 @@ describe("validateSettingsPayload", () => {
         waitForJulesCiAutofix: "bad",
         julesCiAutofixMaxRetries: "bad",
         featurePrAutoMergeMode: "invalid",
+        mainBranchAutoMergeMode: "invalid",
       },
       sprintLoopSteps: {
         branchPreflight: "bad",
@@ -195,6 +196,7 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("aiProvider.providers.codex");
     expect(paths).toContain("git.githubMode");
     expect(paths).toContain("ciIntelligence.featurePrAutoMergeMode");
+    expect(paths).toContain("ciIntelligence.mainBranchAutoMergeMode");
     expect(paths).toContain("sprintLoopSteps.watchLoopOutputIntervalSeconds");
     expect(paths).toContain("cliWorkflow.executionMode");
     expect(paths).toContain("cliWorkflow.containerCacheSetupScriptImage");

@@ -17,4 +17,9 @@ describe("sanitizeCiIntelligence", () => {
     const result = sanitizeCiIntelligence(input, "REMOTE");
     expect(result.featurePrAutoMergeMode).toBe("WHEN_GREEN");
   });
+
+  it("keeps featurePrAutoMergeMode when it is CREATE_PR", () => {
+    const result = sanitizeCiIntelligence({ ciIntelligence: { featurePrAutoMergeMode: "CREATE_PR" } }, "REMOTE");
+    expect(result.featurePrAutoMergeMode).toBe("CREATE_PR");
+  });
 });
