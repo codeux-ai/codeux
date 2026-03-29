@@ -15,7 +15,7 @@ export interface LiveDurationDisplay {
 }
 
 interface DeriveLiveDurationDisplayArgs {
-  taskTiming?: Pick<LiveTaskTimingSummary, "activeStage" | "startedAt" | "totalSeconds"> | null;
+  taskTiming?: Pick<LiveTaskTimingSummary, "activeStage" | "startedAt" | "endedAt" | "totalSeconds"> | null;
   dispatchTiming?: LiveDurationDispatchTiming | null;
   now?: string | number | Date;
 }
@@ -70,6 +70,10 @@ function deriveFromTaskTiming(
   }
 
   if (taskTiming.activeStage) {
+    if (taskTiming.endedAt) {
+      const liveOffset = secondsBetween(taskTiming.endedAt, now);
+      return createDisplay("live", taskTiming.totalSeconds + liveOffset);
+    }
     return createDisplay("live", secondsBetween(taskTiming.startedAt, now));
   }
 

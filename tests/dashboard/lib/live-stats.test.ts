@@ -303,11 +303,11 @@ describe("live stats timing model", () => {
       nowIso: "2026-03-19T10:15:00.000Z",
     });
 
-    expect(summary.totalSeconds).toBe(300);
+    expect(summary.totalSeconds).toBe(720);
     expect(summary.stageTotals.coding).toBe(300);
-    expect(summary.stageTotals.ci).toBe(0);
-    expect(summary.stageTotals.autofix).toBe(0);
-    expect(summary.stageTotals.merge).toBe(0);
+    expect(summary.stageTotals.ci).toBe(180);
+    expect(summary.stageTotals.autofix).toBe(180);
+    expect(summary.stageTotals.merge).toBe(60);
     expect(summary.activeStage).toBeNull();
   });
 
@@ -389,10 +389,10 @@ describe("live stats timing model", () => {
       nowIso: "2026-03-19T10:15:00.000Z",
     });
 
-    expect(summary.totalSeconds).toBe(300);
+    expect(summary.totalSeconds).toBe(720);
     expect(summary.stageTotals.coding).toBe(300);
-    expect(summary.stageTotals.merge).toBe(0);
-    expect(summary.stageTotals.ci).toBe(0);
+    expect(summary.stageTotals.merge).toBe(360);
+    expect(summary.stageTotals.ci).toBe(60);
     expect(summary.activeStage).toBeNull();
   });
 
@@ -483,11 +483,11 @@ describe("live stats timing model", () => {
       nowIso: "2026-03-19T10:15:00.000Z",
     });
 
-    expect(summary.endedAt).toBe("2026-03-19T10:05:00.000Z");
-    expect(summary.totalSeconds).toBe(300);
+    expect(summary.endedAt).toBe("2026-03-19T10:07:00.000Z");
+    expect(summary.totalSeconds).toBe(420);
     expect(summary.stageTotals.coding).toBe(300);
-    expect(summary.stageTotals.ci).toBe(0);
-    expect(summary.stageTotals.merge).toBe(0);
+    expect(summary.stageTotals.ci).toBe(60);
+    expect(summary.stageTotals.merge).toBe(60);
     expect(summary.activeStage).toBeNull();
   });
 
