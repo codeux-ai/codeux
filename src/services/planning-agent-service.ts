@@ -23,6 +23,7 @@ import { ProviderRunner, type IProviderRunner } from "../infrastructure/provider
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
 import { classifyProviderError, ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
+import { extractJsonLikeBlock } from "./planning-json-extractor.js";
 
 interface PlanningAgentServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -73,94 +74,6 @@ interface VirtualPlanningResult {
   sessionId: string;
   workflowSettings: CliWorkflowSettings;
   providerSettings: { model: string; apiKey: string; thinkingMode?: unknown };
-}
-
-export function extractJsonLikeBlock(bodyMarkdown: string): string {
-  const trimmed = bodyMarkdown.trim();
-
-  // Strategy 1: Look for a fenced code block whose content looks like JSON.
-  // Skip fenced blocks that capture code examples inside JSON string values
-  // (e.g. ```ts ... ``` embedded in promptMarkdown fields).
-  const fenceRegex = /```[a-zA-Z0-9_-]*\s*([\s\S]*?)```/g;
-  let fencedMatch: RegExpExecArray | null;
-  while ((fencedMatch = fenceRegex.exec(trimmed)) !== null) {
-    const fencedContent = fencedMatch[1]?.trim();
-    if (fencedContent && (fencedContent.startsWith("{") || fencedContent.startsWith("["))) {
-      return fencedContent;
-    }
-  }
-
-  // Strategy 2: Find balanced brace/bracket blocks. Try each candidate starting
-  // position — if the first balanced block isn't valid JSON (e.g. a stray log
-  // object like `{ errno: -2 }`), advance to the next `{` and retry.
-  const findBalancedJson = (openChar: "{" | "[", closeChar: "}" | "]"): string | null => {
-    let searchFrom = 0;
-    while (searchFrom < trimmed.length) {
-      const start = trimmed.indexOf(openChar, searchFrom);
-      if (start < 0) return null;
-
-      let depth = 0;
-      let inString = false;
-      let escaped = false;
-      let endIndex = -1;
-      for (let index = start; index < trimmed.length; index += 1) {
-        const char = trimmed[index]!;
-        if (inString) {
-          if (escaped) { escaped = false; continue; }
-          if (char === "\\") { escaped = true; continue; }
-          if (char === "\"") { inString = false; }
-          continue;
-        }
-        if (char === "\"") { inString = true; continue; }
-        if (char === openChar) { depth += 1; continue; }
-        if (char === closeChar) {
-          depth -= 1;
-          if (depth === 0) { endIndex = index; break; }
-        }
-      }
-
-      if (endIndex < 0) return null;
-
-      const candidate = trimmed.slice(start, endIndex + 1);
-      try {
-        JSON.parse(candidate);
-        return candidate;
-      } catch {
-        // Not valid JSON — try next opening brace
-        searchFrom = start + 1;
-      }
-    }
-    return null;
-  };
-
-  const candidate = findBalancedJson("{", "}") || findBalancedJson("[", "]") || trimmed;
-
-  // Unwrap wrapper objects that contain the real payload inside a stringified
-  // "response" field (common with Gemini/virtual worker session envelopes like
-  // `{ "session_id": "...", "response": "{...actual JSON...}", "stats": {...} }`).
-  try {
-    const parsed = JSON.parse(candidate);
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      !Array.isArray(parsed) &&
-      typeof parsed.response === "string"
-    ) {
-      const inner = parsed.response.trim();
-      if (inner.startsWith("{") || inner.startsWith("[")) {
-        try {
-          JSON.parse(inner);
-          return inner;
-        } catch {
-          // inner response isn't valid JSON on its own — fall through
-        }
-      }
-    }
-  } catch {
-    // candidate isn't valid JSON — return as-is for caller to handle
-  }
-
-  return candidate;
 }
 
 export class PlanningAgentService {
