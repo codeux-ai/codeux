@@ -231,7 +231,10 @@ Legacy runtime:
   - redesigned task and sprint ledgers with search, sort-by-recency/tokens/time/input/output/name, and richer token/time breakdowns
 - The Stats page uses the same project realtime invalidation channels as the rest of the v2 dashboard, then falls back to polling so usage graphs and tables stay current during active sprint execution
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface, and task streams are filtered to the currently selected active sprint only (a frontend-only view change with no API contract change)
-- Agents page is DB-backed and manages project-scoped agents (`name`, `labels`, `instruction markdown`)
+- Agents page features an immersive, showcase-first layout that defaults to presenting the selected agent's 3D animated avatar, details, and labels, rather than a raw edit form.
+- Agents are generated with a random persisted avatar on creation and can be fully customized in the dedicated edit mode.
+- Edit mode exposes a new toggleable Memory Template Override control, allowing operators to explicitly provide custom memory injection instructions on a per-agent basis.
+- Agents page is DB-backed and manages project-scoped agents (`name`, `labels`, `instruction markdown`, `memory template markdown`)
 - Agents are auto-imported from project and home `.sprint-os/agents/*.md` when first discovered
 - Project-local markdown mirroring is enabled by default through project settings, so dashboard edits create/update `.sprint-os/agents/*.md` in the selected repo without touching shipped defaults
 - Markdown-backed agents now show sync state and support both manual single-agent re-import and bulk `Sync All`
