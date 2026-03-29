@@ -411,6 +411,8 @@ Live view behavior:
 
 The old legacy settings hook remains outside the active v2 flow; the live dashboard now uses the scoped settings API above.
 
+The Overview telemetry rail provides a compact, visually rich runtime surface that shows high-signal intervention data (titles only) and differentiated event coloring.
+
 Project management requests are centralized in:
 - `dashboard/src/v2/lib/project-api.ts`
 - `dashboard/src/v2/context/project-data.tsx`

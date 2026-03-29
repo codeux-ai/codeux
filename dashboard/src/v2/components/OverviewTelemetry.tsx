@@ -1,34 +1,12 @@
 import type { FunctionComponent } from "preact";
 import { Activity, AlertTriangle, FolderKanban, Radio } from "lucide-preact";
+import { useMemo } from "preact/hooks";
 import { SkeletonPanel } from "./ui/ListSkeletons.js";
 import { useOverviewTelemetry } from "../../hooks/use-overview-telemetry.js";
 import { formatTime } from "../../lib/time.js";
+import { buildProjectLookup, getEventStyle, getInterventionContent } from "../lib/overview-telemetry-view-models.js";
 import { useProjectData } from "../context/project-data.js";
 
-const describeEvent = (eventType: string): string => {
-  switch (eventType) {
-    case "dispatch_started":
-      return "Dispatch started";
-    case "dispatch_queued":
-      return "Dispatch queued";
-    case "cli_provider_started":
-      return "CLI provider started";
-    case "cli_provider_completed":
-      return "CLI provider completed";
-    case "ci_gate_status":
-      return "CI gate updated";
-    case "sprint_cancel_requested":
-      return "Sprint cancellation requested";
-    case "sprint_cancelled":
-      return "Sprint cancelled";
-    case "sprint_completed":
-      return "Sprint completed";
-    case "sprint_failed":
-      return "Sprint failed";
-    default:
-      return eventType.replace(/_/g, " ");
-  }
-};
 
 export const OverviewTelemetry: FunctionComponent = () => {
   const { telemetry, loading: telemetryLoading, error } = useOverviewTelemetry();
@@ -37,6 +15,8 @@ export const OverviewTelemetry: FunctionComponent = () => {
 
   const hasActiveProjects = telemetry.activeProjects.length > 0;
   const hasAttentionProjects = telemetry.attentionProjects.length > 0;
+
+  const projectLookup = useMemo(() => buildProjectLookup(telemetry), [telemetry]);
   const hasRuntimeSignal = hasActiveProjects || hasAttentionProjects;
 
   if (error) {
@@ -136,18 +116,11 @@ export const OverviewTelemetry: FunctionComponent = () => {
                           Paused
                         </div>
                       </div>
-                      <div className="mt-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                        {project.humanIntervention?.title || "Human intervention required"}
-                      </div>
-                      <p className="mt-2 text-[12px] leading-relaxed text-slate-600 dark:text-slate-300">
-                        {project.humanIntervention?.reason}
-                      </p>
-                      <div className="mt-3 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                        What to do
-                      </div>
-                      <p className="mt-1 text-[12px] leading-relaxed text-slate-500 dark:text-slate-400">
-                        {project.humanIntervention?.instructions}
-                      </p>
+                      {getInterventionContent(project) && (
+                        <div className="mt-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                          {getInterventionContent(project)!.title}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -180,22 +153,23 @@ export const OverviewTelemetry: FunctionComponent = () => {
             <div className="flex-1 min-h-0">
               <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 mb-3">Runtime Timeline</div>
               <div className="h-full overflow-y-auto dashboard-scrollbar pr-1 space-y-2">
-                {telemetry.recentEvents.map((event) => (
-                  <div key={event.id} className="rounded-2xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-status-red">{describeEvent(event.eventType)}</div>
-                      <div className="text-[10px] font-mono text-slate-400">{formatTime(event.createdAt)}</div>
+                {telemetry.recentEvents.map((event) => {
+                  const style = getEventStyle(event);
+                  return (
+                    <div key={event.id} className="rounded-2xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${style.toneClass}`}>{style.label}</div>
+                        <div className="text-[10px] font-mono text-slate-400">{formatTime(event.createdAt)}</div>
+                      </div>
+                      <div className="mt-1 text-xs font-semibold text-slate-800 dark:text-slate-200">
+                        {projectLookup.get(event.projectId) || "Project"}
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-500 font-mono">
+                        {event.sprintName}{event.sprintNumber != null ? ` · Sprint ${event.sprintNumber}` : ""}
+                      </div>
                     </div>
-                    <div className="mt-1 text-xs font-semibold text-slate-800 dark:text-slate-200">
-                      {telemetry.activeProjects.find((project) => project.projectId === event.projectId)?.projectName
-                        || telemetry.attentionProjects.find((project) => project.projectId === event.projectId)?.projectName
-                        || "Project"}
-                    </div>
-                    <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-500 font-mono">
-                      {event.sprintName}{event.sprintNumber != null ? ` · Sprint ${event.sprintNumber}` : ""}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
