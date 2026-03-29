@@ -1039,6 +1039,13 @@ describe("ExecutionRepository", () => {
       { source: "estimated", count: 1 },
     ]));
     expect(statsSnapshot.buckets).toHaveLength(24);
+    expect(statsSnapshot.chartSeries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "core_total_tokens", grouping: "totals" }),
+      expect.objectContaining({ id: "core_active_time", grouping: "totals" }),
+      expect.objectContaining({ id: "core_invocations", grouping: "totals" }),
+      expect.objectContaining({ id: "provider_codex", grouping: "providers" }),
+      expect.objectContaining({ id: "purpose_time_task_coding", grouping: "purposes_time" }),
+    ]));
   });
 
   it("supports 30d, all-time, and custom project stats windows", async () => {
