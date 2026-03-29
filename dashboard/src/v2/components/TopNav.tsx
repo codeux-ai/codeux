@@ -9,6 +9,7 @@ import { useProjectData } from "../context/project-data.js";
 import { useExecutions } from "../../hooks/useExecutions.js";
 import { useSprints } from "../../hooks/useSprints.js";
 import { DockerStatusMenu } from "./DockerStatusMenu.js";
+import { BrowserSessionsMenu } from "./browser/BrowserSessionsMenu.js";
 import { dashboardSettingsToProjectSettings } from "../lib/settings-view-models.js";
 import {
     getProjectWorkerOptions,
@@ -490,14 +491,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 {/* Docker Status */}
                 <DockerStatusMenu />
 
-                <Link
-                    to="/browser"
-                    aria-label="Sprint browser"
-                    className="hidden md:inline-flex h-11 items-center gap-2 rounded-xl border border-black/[0.06] bg-black/[0.03] px-3.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:border-sky-500/30 hover:bg-sky-500/8 hover:text-sky-600 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-sky-400/30 dark:hover:bg-sky-400/10 dark:hover:text-sky-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
-                >
-                    <Compass aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
-                    Browser
-                </Link>
+                <BrowserSessionsMenu />
 
                 {/* Notifications */}
                 <button
