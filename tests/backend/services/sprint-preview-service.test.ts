@@ -76,4 +76,55 @@ describe("SprintPreviewService workspace export", () => {
       .resolves.toBe("remote-only branch\n");
     await expect(fs.access(path.join(workspacePath, ".git"))).rejects.toThrow();
   });
+
+  it("exports the latest remote commit for a stale local branch into the preview workspace", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-preview-service-"));
+    tempDirs.push(root);
+
+    const originPath = path.join(root, "origin.git");
+    const projectPath = path.join(root, "project");
+    const publisherPath = path.join(root, "publisher");
+    const workspacePath = path.join(root, "preview-workspace");
+
+    await run("git", ["init", "--bare", originPath]);
+    await run("git", ["clone", originPath, projectPath]);
+    await configureGitIdentity(projectPath);
+
+    await run("git", ["checkout", "-b", "main"], projectPath);
+    await writeFile(path.join(projectPath, "README.md"), "base\n");
+    await run("git", ["add", "."], projectPath);
+    await run("git", ["commit", "-m", "base"], projectPath);
+    await run("git", ["push", "-u", "origin", "main"], projectPath);
+
+    // Create a local branch on the project
+    await run("git", ["checkout", "-b", "feature/sprint-52"], projectPath);
+    await writeFile(path.join(projectPath, "src", "stale.txt"), "local stale branch\n");
+    await run("git", ["add", "."], projectPath);
+    await run("git", ["commit", "-m", "local stale commit"], projectPath);
+    await run("git", ["push", "-u", "origin", "feature/sprint-52"], projectPath);
+
+    // Act as publisher making a new commit remotely
+    await run("git", ["clone", originPath, publisherPath]);
+    await configureGitIdentity(publisherPath);
+    await run("git", ["checkout", "feature/sprint-52"], publisherPath);
+    await writeFile(path.join(publisherPath, "src", "stale.txt"), "latest remote branch\n");
+    await run("git", ["add", "."], publisherPath);
+    await run("git", ["commit", "-m", "latest remote commit"], publisherPath);
+    await run("git", ["push", "origin", "feature/sprint-52"], publisherPath);
+
+    const service = new SprintPreviewService({
+      sprintPreviewRepository: {} as any,
+      projectManagementRepository: {} as any,
+      executionRepository: {} as any,
+      settingsRepository: {} as any,
+    });
+
+    // We shouldn't need to manually check out or fetch inside projectPath in tests,
+    // as materializePreviewWorkspace is expected to fetch origin if available.
+    await (service as any).materializePreviewWorkspace(projectPath, workspacePath, "feature/sprint-52", "main");
+
+    await expect(fs.readFile(path.join(workspacePath, "src", "stale.txt"), "utf8"))
+      .resolves.toBe("latest remote branch\n");
+    await expect(fs.access(path.join(workspacePath, ".git"))).rejects.toThrow();
+  });
 });
