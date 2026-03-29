@@ -14,6 +14,9 @@ const buildMainCiWaitLine = (settings: CiIntelligenceSettings): string => {
   if (!settings.enabled || !settings.waitForCiBeforeMainMerge) {
     return "";
   }
+  if (settings.mainBranchAutoMergeMode === "WHEN_GREEN" || settings.mainBranchAutoMergeMode === "ALWAYS") {
+    return "2. **Wait for CI on main**: merge will occur automatically once checks are green.\n";
+  }
   return "2. **Wait for CI on main**: merge only after required checks are green.\n";
 };
 

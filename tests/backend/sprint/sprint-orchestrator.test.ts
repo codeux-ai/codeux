@@ -154,4 +154,73 @@ describe("sprint-orchestrator", () => {
         expect(feedback.state).toBe("automerge_succeeded");
         expect(feedback.text).toContain("Main PR Created");
     });
+
+    it("creates main PR but skips auto-merge for CREATE_PR mode", async () => {
+        const ciIntelligence: CiIntelligenceSettings = {
+            ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
+            enabled: true,
+            enableLivePrMonitoring: true,
+            waitForCiBeforeMainMerge: true,
+            mainBranchAutoMergeMode: "CREATE_PR",
+        };
+        const getCiStatusForScope = vi.fn()
+            .mockResolvedValueOnce({
+                available: true,
+                openPullRequests: [],
+                mergedPullRequests: [],
+            })
+            .mockResolvedValueOnce({
+                available: true,
+                openPullRequests: [
+                    {
+                        number: 321,
+                        url: "https://github.com/example/repo/pull/321",
+                        headRefName: "feature/sprint1-implementation",
+                        baseRefName: "main",
+                        reviewDecision: "APPROVED",
+                        comments: 0,
+                        checks: [{ name: "build", status: "completed", conclusion: "success" }],
+                    },
+                ],
+                mergedPullRequests: [],
+            });
+        const resolveOrCreateMainBranchPr = vi.fn().mockResolvedValue({
+            created: true,
+            prNumber: 321,
+            prUrl: "https://github.com/example/repo/pull/321",
+        });
+        const autoMergeFeaturePr = vi.fn().mockResolvedValue({ ok: true, merged: true });
+
+        const deps = {
+            logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+            settings: { dashboardPort: 3000 },
+            completedSprints: new Set(),
+            renderInstruction: vi.fn().mockResolvedValue(""),
+            sprintExecutionStateService: {
+                resolveContext: vi.fn(),
+                hasPlannedTasks: vi.fn(),
+                loadSubtasks: vi.fn(),
+            },
+            getDashboardSettings: vi.fn().mockReturnValue(DEFAULT_DASHBOARD_SETTINGS),
+            getCiStatusForScope,
+            resolveOrCreateMainBranchPr,
+            autoMergeFeaturePr,
+        };
+        const orch = new SprintOrchestrator(deps as any);
+
+        const feedback = await (orch as any).renderMainMergeCiFeedback({
+            repoPath: "/tmp/repo",
+            featureBranch: "feature/sprint1-implementation",
+            defaultBranch: "main",
+            featureBranchPrefix: "feature/",
+            sprintNumber: 1,
+            sprintName: "Sprint 1",
+            ciIntelligence,
+            githubMode: "REMOTE",
+        });
+
+        expect(resolveOrCreateMainBranchPr).toHaveBeenCalled();
+        expect(autoMergeFeaturePr).not.toHaveBeenCalled();
+        expect(feedback.state).toBe("ready_for_merge");
+    });
 });

@@ -372,5 +372,18 @@ describe("MainMergeGateService", () => {
       expect(result.state).toBe("automerge_scheduled");
       expect(result.text).toContain("Auto-Merge Armed");
     });
+
+    it("does not attempt auto merge when CREATE_PR mode is selected", async () => {
+      const feedback = MainMergeGateService.evaluateMergeFeedback(greenPrContext);
+      const autoMergePr = vi.fn();
+      const result = await MainMergeGateService.attemptMainAutoMerge(feedback, {
+        ...greenPrContext,
+        ciIntelligence: { ...defaultCiSettings, mainBranchAutoMergeMode: "CREATE_PR" },
+        autoMergeMainBranchPr: autoMergePr,
+      });
+
+      expect(autoMergePr).not.toHaveBeenCalled();
+      expect(result.state).toBe("ready_for_merge");
+    });
   });
 });

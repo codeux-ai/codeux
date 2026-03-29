@@ -502,6 +502,19 @@ export class WatchLoopRunner {
           report += "\n⏸️ **Sprint Paused:** Main-branch merge is still blocked. Resolve the active main-merge conflict and resume the sprint.\n";
           return { status: "exit", report };
         }
+
+        const mode = ciIntelligence.mainBranchAutoMergeMode;
+        const isAutoMergeModeEnabled = mode === "WHEN_GREEN" || mode === "ALWAYS";
+        const isSettled = !isAutoMergeModeEnabled || mergeFeedback.state === "automerge_succeeded" || mergeFeedback.state === "unavailable" || mergeFeedback.state === "disabled";
+        const isAwaitingAutoMerge = isAutoMergeModeEnabled && !isSettled;
+
+        if (isAwaitingAutoMerge) {
+          report += completionGuidance;
+          report += mergeFeedback.text;
+          report += `\n⏳ **Sprint Pending:** Awaiting main-branch merge. The auto-merge mode is \`${mode}\` but the PR is currently \`${mergeFeedback.state}\`. The watch loop will monitor until it is merged.\n`;
+          return { status: "continue", report };
+        }
+
         this.deps.completedSprints.add(`${scopedExecutionContext.project.id}:${scopedExecutionContext.sprint.id}`);
         this.deps.executionRepository.updateSprintRun(sprintRunId, {
           status: "completed",
