@@ -479,7 +479,7 @@ export class SprintPreviewService {
       const completedTaskCount = this.countCompletedTasks(session.projectId, session.sprintId);
       const activeRun = this.deps.executionRepository.getProjectExecutionSnapshot(session.projectId)
         .sprintRuns
-        .some((run) => run.sprintId === session.sprintId && (run.status === "running" || run.status === "queued" || run.status === "paused"));
+        .some((run) => run.sprintId === session.sprintId && run.status === "running");
 
       if (settings.autoStartOnRunningSprint && activeRun && refreshed.status === "stopped") {
         await this.startSession(session.projectId, session.sprintId).catch((error) => {
@@ -537,7 +537,7 @@ export class SprintPreviewService {
       const execution = this.deps.executionRepository.getProjectExecutionSnapshot(project.id);
       const activeSprintRunIds = new Set(
         execution.sprintRuns
-          .filter((run) => run.status === "running" || run.status === "queued" || run.status === "paused")
+          .filter((run) => run.status === "running")
           .map((run) => run.sprintId),
       );
       for (const sprint of this.deps.projectManagementRepository.listSprints(project.id).sprints) {

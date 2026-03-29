@@ -1,0 +1,10 @@
+
+> jules-subagents@1.2.0 dev:dashboard
+> vite
+
+
+  VITE v7.3.1  ready in 593 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+7:57:27 AM [vite] (client) hmr update /src/v2/components/browser/BrowserSessionsMenu.tsx, /src/styles.css
