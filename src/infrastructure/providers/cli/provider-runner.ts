@@ -196,9 +196,11 @@ export class ProviderRunner implements IProviderRunner {
 
     if (provider === "gemini" && continueSession) {
       // `gemini --resume` restores the last session's chat history
+      // the generic builder does not handle model for gemini because gemini CLI reads it from env
+      const args = ["--resume", "--yolo", "--output-format", "json", "--p", prompt];
       return {
         command: "gemini",
-        args: ["--resume", "--yolo", "--output-format", "json", "--p", prompt],
+        args,
       };
     }
 

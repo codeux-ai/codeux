@@ -85,7 +85,7 @@ Behavior:
 3. dashboard creates an execution invocation. If using a connected worker, it also opens a background, non-chat-visible thread (`scope: "connection"`) targeted at that worker.
 4. dashboard posts a planning request message. It records the prompt, routing information, and any JSON-retry attempts as system/user/assistant messages in the invocation audit trail.
 5. the worker (or virtual provider) processes the request and generates the reply.
-6. Sprint OS captures the reply in the invocation, parses the payload, and applies the result.
+6. Sprint OS captures the reply in the invocation, parses the payload, and applies the result. During parsing, Sprint OS (`src/services/planning-agent-service.ts`) recursively searches noisy, markdown-wrapped, or nested provider responses for the canonical JSON payload (via `src/services/planning-json-extractor.ts`) instead of assuming the payload is top-level.
 
 ### Prompt Lineage
 
