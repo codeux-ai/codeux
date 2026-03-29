@@ -160,7 +160,7 @@ Legacy runtime:
 - Selecting a live worker from the top nav switches the project back to `workers.executionMode = CONNECTED_MCP` and updates the preferred live worker assignment
 - Projects page is DB-backed and can create/select/delete projects
 - Project selector and project cards now refresh over websocket when the project collection or selected project changes
-- Sprints page is project-scoped, creates sprint records in sqlite, and exposes markdown import/export controls
+- Sprints page is project-scoped, creates sprint records in sqlite, and exposes a structured Import flyout with Markdown (and soon Jira) capabilities, plus markdown export controls
 - Sprints page now also refreshes from project-structure realtime invalidation, so sprint CRUD and status-adjacent updates propagate across open dashboard tabs
 - Sprint cells and ledger rows now surface a dedicated human-intervention badge when a paused sprint needs merge work, planning, or another operator action, and the hover card explains what to do before resuming
 - Sprints page now also starts and stops sprint orchestration directly from sprint cards, with optimistic visual state updates tied to project-scoped execution data
@@ -175,7 +175,7 @@ Legacy runtime:
 - The sprint composer includes a planning-agent selector that allows operators to choose an alternate planning preset (filtered for presets with a `planning` label) for the current sprint. Leaving this on the default `Planning agent` preserves existing behavior, and any selection is honored by `Plan ahead with AI`, `Plan Only`, `Plan & Start`, and `Replan`.
 - The sprint composer now features a visible, animated planning feedback overlay that replaces the generic spinner during `Plan ahead with AI`, `Plan Only`, `Plan & Start`, and `Replan` actions.
 - Planning feedback is deterministic and staged, using an animated ship treatment (Wooden Ship for AI improvement, Container Ship for planning) that drifts across the composer based on elapsed time to make progress visible
-- The planning overlay includes a `Cancel` button that aborts the in-flight planning or improvement request via AbortController, immediately clearing the overlay and returning the composer to its editable state
+- The planning overlay includes a `Cancel` button that aborts the in-flight planning or improvement request via AbortController, safely clearing the dismissible overlay and returning the composer to its editable state without navigating away
 - Settings now expose separate CLI retry controls for quota resets and rate limits, including the rate-limit delay and a max rate-limit retry count (`5` by default).
 - Sprint data now hydrates cache-first when revisiting the page and refreshes in the background, so the showcase and ledger do not flash empty while the latest data loads. First-hydration uses skeleton placeholders while background refreshes continue, preserving existing data without reintroducing blocking loaders
 - Sprint and task list windows support selectable page size options (`10`, `20`, `50`, `100`, `All`) with a default of `20` (a frontend-only view change with no API contract change)
@@ -195,8 +195,8 @@ Legacy runtime:
 - The showcase wrappers now leave enough vertical breathing room for hover expansion, so bubble motion is no longer clipped top or bottom
 - Sprint cells now use created-date metadata on the accent rail and move the visible sprint key into the card body instead of surfacing the UUID there
 - Sprint markdown export now includes direct download actions and per-section copy-to-clipboard buttons (with brief `Copied` confirmation) in the export modal
-- The in-page sprint composer collapses into a stacked single-column layout on smaller screens, and both create and edit now use that same inline flow
-- The sprint ledger below the showcase renders contiguous striped rows (alternating light backgrounds) with a real-time search field that filters by sprint key, name, status, or goal text; a live result counter shows filtered vs total counts and a clear button resets the query
+- The in-page sprint composer collapses into a stacked single-column layout on smaller screens, and both create and edit now use that same inline flow. The Quicksprint panel and the Sprint Composer are mutually exclusive; opening one automatically dismisses the other to maintain focus.
+- The refreshed sprint ledger below the showcase renders contiguous striped rows (alternating light backgrounds) with a real-time search field that filters by sprint key, name, status, or goal text; a live result counter shows filtered vs total counts and a clear button resets the query
 - Ledger search integrates with selection: the header select-all checkbox operates on the currently filtered set only, and the selection is automatically pruned when the filter changes so stale hidden selections cannot accumulate
 - When one or more ledger rows are selected, a bulk action bar appears with `Start` and `Delete` controls that operate on all selected sprints, plus a `Clear` button to deselect
 - Sortable column headers cycle through unsorted, ascending, and descending for showcasePinned, sprintKey, name, status, tasksCount, completion, and createdAt (default: newest-first)
