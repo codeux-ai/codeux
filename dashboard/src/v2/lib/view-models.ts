@@ -26,6 +26,7 @@ export function toTaskViewModel(task: TaskRecord, sourcesById: Map<string, Sourc
     assignee: inferAssignee(task),
     time: inferTime(task),
     createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
     promptMarkdown: task.promptMarkdown,
     description: task.description,
     dependsOnTaskIds: task.dependsOnTaskIds,

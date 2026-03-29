@@ -94,6 +94,7 @@ export interface Task {
   assignee: string;
   time: string;
   createdAt: string;
+  updatedAt: string;
   promptMarkdown: string;
   description: string;
   dependsOnTaskIds: string[];

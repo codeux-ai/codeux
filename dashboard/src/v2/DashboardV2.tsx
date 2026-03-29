@@ -6,11 +6,13 @@ import { HeaderStats } from "./components/HeaderStats.js";
 import { SourcesGrid } from "./components/SourcesGrid.js";
 import { TasksList } from "./components/TasksList.js";
 import { SkeletonPanel } from "./components/ui/ListSkeletons.js";
+import { useOverviewPageData } from "./hooks/use-overview-page-data.js";
 
 const OverviewTelemetry = lazy(() => import("./components/OverviewTelemetry.js").then(m => ({ default: m.OverviewTelemetry })));
 
 export const DashboardV2: FunctionComponent = () => {
     const mainContentRef = useRef<HTMLElement>(null);
+    const pageData = useOverviewPageData();
 
     useLayoutEffect(() => {
         if (mainContentRef.current) {
@@ -46,7 +48,7 @@ export const DashboardV2: FunctionComponent = () => {
 
             {/* Metrics Section */}
             <section aria-label="Metrics" className="w-full relative z-20">
-                <HeaderStats />
+                <HeaderStats pageData={pageData} />
             </section>
 
             {/* Section Divider */}
@@ -69,7 +71,7 @@ export const DashboardV2: FunctionComponent = () => {
 
                     <section aria-label="Tasks" className="w-full relative">
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-[130%] bg-ember-500/3 dark:bg-ember-500/4 rounded-full blur-[80px] pointer-events-none -z-10" />
-                        <TasksList />
+                        <TasksList pageData={pageData} />
                     </section>
                 </div>
 

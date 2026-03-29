@@ -4,18 +4,11 @@ import gsap from "gsap";
 import { MetricCard } from "./ui/MetricCard.js";
 import { Sparkline } from "./ui/Sparkline.js";
 import { SkeletonCard } from "./ui/ListSkeletons.js";
-import { useProjectData } from "../context/project-data.js";
-import { useSprints } from "../../hooks/useSprints.js";
-import { useProjectTasks } from "../hooks/use-project-tasks.js";
 import { computeOverviewStats } from "../lib/overview-stats.js";
 
-export const HeaderStats: FunctionComponent = () => {
+export const HeaderStats: FunctionComponent<{ pageData: ReturnType<typeof import("../hooks/use-overview-page-data.js").useOverviewPageData> }> = ({ pageData }) => {
     const containerRef = useRef<HTMLDivElement>(null);
-    const { projects, selectedProject, loading: projectsLoading } = useProjectData();
-    const { data: sprints, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
-    const { tasks, loading: tasksLoading } = useProjectTasks(selectedProject?.id || null, projects, sprints);
-
-    const isLoading = projectsLoading || sprintsLoading || tasksLoading;
+    const { projects, selectedProject, sprints, tasks, stats: statsSnapshot, isLoading } = pageData;
 
     useLayoutEffect(() => {
         if (containerRef.current) {
@@ -27,7 +20,7 @@ export const HeaderStats: FunctionComponent = () => {
         }
     }, []);
 
-    const stats = useMemo(() => computeOverviewStats(projects, sprints, tasks), [projects, sprints, tasks]);
+    const stats = useMemo(() => computeOverviewStats(projects, sprints, tasks, statsSnapshot), [projects, sprints, tasks, statsSnapshot]);
 
     if (isLoading) {
         return (
@@ -45,7 +38,7 @@ export const HeaderStats: FunctionComponent = () => {
 
             {/* Card 1: Projects */}
             <MetricCard hoverTint="group-hover:bg-signal-500/[0.025]" accentHex="#00E0A0">
-                <Sparkline points={[20, 30, 25, 45, 60, 50, 80]} color="#00E0A0" />
+                <Sparkline points={stats.projectsTrend} color="#00E0A0" />
                 <div className="relative z-10 flex items-center justify-between mb-6">
                     <h3 className="text-slate-500 dark:text-slate-500 font-medium text-xs tracking-widest uppercase group-hover:text-signal-600 dark:group-hover:text-signal-400 transition-colors">Projects</h3>
                     <div className="w-2 h-2 rounded-full bg-signal-500 shadow-[0_0_10px_rgba(0,224,160,0.6)]" />
@@ -69,7 +62,7 @@ export const HeaderStats: FunctionComponent = () => {
 
             {/* Card 2: Sprints */}
             <MetricCard hoverTint="group-hover:bg-ember-500/[0.025]" accentHex="#FFB800">
-                <Sparkline points={[60, 50, 55, 45, 60, 40, 50]} color="#FFB800" />
+                <Sparkline points={stats.sprintsTrend} color="#FFB800" />
                 <div className="relative z-10 flex items-center justify-between mb-6">
                     <h3 className="text-slate-500 dark:text-slate-500 font-medium text-xs tracking-widest uppercase group-hover:text-ember-600 dark:group-hover:text-ember-400 transition-colors">Sprints</h3>
                     <div className="w-2 h-2 rounded-full bg-ember-500 shadow-[0_0_10px_rgba(255,184,0,0.6)]" />
@@ -93,7 +86,7 @@ export const HeaderStats: FunctionComponent = () => {
 
             {/* Card 3: Open Tasks */}
             <MetricCard hoverTint="group-hover:bg-status-green/[0.04]" accentHex="#00AB84">
-                <Sparkline points={[60, 75, 80, 85, 95, 90, 110]} color="#00AB84" />
+                <Sparkline points={stats.openTasksTrend} color="#00AB84" />
                 <div className="relative z-10 flex items-center justify-between mb-6">
                     <h3 className="text-slate-500 dark:text-slate-500 font-medium text-xs tracking-widest uppercase group-hover:text-status-green transition-colors">Open Tasks</h3>
                     <div className="w-2 h-2 rounded-full bg-status-green shadow-[0_0_10px_rgba(0,171,132,0.7)] animate-pulse" />
@@ -118,7 +111,7 @@ export const HeaderStats: FunctionComponent = () => {
 
             {/* Card 4: Completed Tasks */}
             <MetricCard hoverTint="group-hover:bg-status-red/[0.03]" accentHex="#E3000F">
-                <Sparkline points={[5, 2, 8, 4, 12, 10, 15]} color="#E3000F" />
+                <Sparkline points={stats.completedTasksTrend} color="#E3000F" />
                 <div className="relative z-10 flex items-center justify-between mb-6">
                     <h3 className="text-slate-500 dark:text-slate-500 font-medium text-xs tracking-widest uppercase group-hover:text-status-red transition-colors">Completed Tasks</h3>
                     <div className="relative w-2 h-2">
