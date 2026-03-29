@@ -179,7 +179,7 @@ export class MainMergeGateService {
     context: MergeFeedbackContext,
   ): Promise<MergeFeedbackResult> {
     const mode: FeaturePrAutoMergeMode = context.ciIntelligence.mainBranchAutoMergeMode;
-    if (mode === "OFF" || !feedback.prNumber || !context.autoMergeMainBranchPr) {
+    if (mode === "OFF" || mode === "CREATE_PR" || !feedback.prNumber || !context.autoMergeMainBranchPr) {
       return feedback;
     }
 
