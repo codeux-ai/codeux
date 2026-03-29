@@ -121,6 +121,7 @@ The dashboard now has a dedicated `/stats` page.
 It focuses on:
 
 - total tokens
+- The Overview page now reuses project stats telemetry to display a 7-day Total Tokens card for the selected project, maintaining consistency with the Stats page without introducing a separate query path.
 - active AI time
 - wall runtime
 - telemetry confidence
