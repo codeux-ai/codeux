@@ -923,6 +923,7 @@ export class SprintPreviewService {
     featureBranch: string,
     defaultBranch: string,
   ): Promise<void> {
+    await this.fetchOriginIfAvailable(repoPath);
     await this.ensurePreviewBranchExists(repoPath, featureBranch, defaultBranch);
     const exportRef = await this.resolvePreviewExportRef(repoPath, featureBranch);
     const archivePath = `${workspacePath}.tar`;
@@ -940,8 +941,6 @@ export class SprintPreviewService {
   }
 
   private async ensurePreviewBranchExists(repoPath: string, featureBranch: string, defaultBranch: string): Promise<void> {
-    await this.fetchOriginIfAvailable(repoPath);
-
     if (await this.localBranchExists(repoPath, featureBranch)) {
       return;
     }
@@ -960,11 +959,11 @@ export class SprintPreviewService {
   }
 
   private async resolvePreviewExportRef(repoPath: string, branch: string): Promise<string> {
-    if (await this.localBranchExists(repoPath, branch)) {
-      return branch;
-    }
     if (await this.remoteTrackingRefExists(repoPath, branch)) {
       return `origin/${branch}`;
+    }
+    if (await this.localBranchExists(repoPath, branch)) {
+      return branch;
     }
     throw new Error(`Cannot export sprint preview workspace: branch ${branch} does not exist locally or on origin.`);
   }
