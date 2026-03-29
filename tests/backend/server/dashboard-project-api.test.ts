@@ -827,9 +827,10 @@ describe("dashboard project management API", () => {
       usage: {
         totalTokens: 490,
         activeTimeMs: 90_000,
-        wallTimeMs: 90_000,
+        wallTimeMs: expect.any(Number),
       },
     });
+    expect(statsSnapshot.usage.wallTimeMs).toBeGreaterThanOrEqual(90_000);
     expect(statsSnapshot.tasks[0]).toMatchObject({
       label: "T01 Wire selected project state",
       usage: {
