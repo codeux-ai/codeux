@@ -192,6 +192,7 @@ Dashboard behavior:
   - `cleanupWorktreeOnFailure`
   - `retryOnReadFileNotFound`
   - `resumeFailedTaskInSameWorkspace`
+  - `maxPlanningJsonRetries` (default `3`): Maximum number of retry attempts inside a same-session virtual worker planning loop if the provider output cannot be parsed as valid JSON.
 - Runtime mode:
   - `executionMode` (`HOST|DOCKER`)
 - Docker runtime config:

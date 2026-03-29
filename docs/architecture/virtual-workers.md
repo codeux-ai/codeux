@@ -89,11 +89,14 @@ Today virtual workers handle:
 - queued `mcp_worker` task dispatches
 - worker-owned `merge_conflict` attention
 
-For planning flows, Sprint OS:
+For planning flows, Sprint OS (`src/services/planning-agent-service.ts`):
 
 - runs the Planning agent prompt through the configured virtual worker CLI
 - honors per-request planning overrides for virtual provider selection, so choosing `codex` in the sprint composer actually launches the Codex CLI and credentials even if the project default is `gemini`
 - creates the same planning thread record in the dashboard, but stores the request/response as system messages instead of waiting on an MCP reply
+- executes a retry loop up to `cliWorkflow.maxPlanningJsonRetries` (default 3) times if the initial response cannot be parsed as valid JSON
+- maintains same-session continuation semantics during retries (`src/infrastructure/providers/cli/provider-runner.ts`); subsequent JSON retry requests continue the same underlying provider session using `continueSessionId` (falling back from `nativeSessionId` to the logical `sessionId`)
+- records execution and provider invocation trails during retries, so operators will see an initial system message indicating the retry followed by a new provider invocation recording the follow-up prompt and reply
 - allows sprint compose, improve, and `Plan & Start` to work even when no live MCP listener is attached
 
 For merge conflicts, Sprint OS:
