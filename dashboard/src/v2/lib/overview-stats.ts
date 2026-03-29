@@ -9,7 +9,8 @@ export interface OverviewStats {
   completedTasks: number;
   runningTasks: number;
   criticalTasks: number;
-  projectsTrend: number[];
+  totalTokens: number;
+  tokensTrend: number[];
   sprintsTrend: number[];
   openTasksTrend: number[];
   completedTasksTrend: number[];
@@ -88,7 +89,7 @@ export function buildDailyActivityTrend(dateStrings: string[], days: number = 7)
   return trend;
 }
 
-export function extractProjectsTrend(buckets: ExecutionUsageBucketSummary[] | undefined, days: number = 7): number[] {
+export function extractTokensTrend(buckets: ExecutionUsageBucketSummary[] | undefined, days: number = 7): number[] {
   const trend = buildEmptyTrend(days);
   if (!buckets || buckets.length === 0) return trend;
 
@@ -123,13 +124,14 @@ export function computeOverviewStats(
   const openTasksList = tasks.filter((task) => task.status !== "completed");
   const completedTasksList = tasks.filter((task) => task.status === "completed");
 
-  const projectsTrend = extractProjectsTrend(statsSnapshot?.buckets);
+  const tokensTrend = extractTokensTrend(statsSnapshot?.buckets);
   const sprintsTrend = extractSprintsTrend(sprints);
   const openTasksTrend = extractOpenTasksTrend(tasks);
   const completedTasksTrend = extractCompletedTasksTrend(tasks);
 
   return {
     totalProjects: projects.length,
+    totalTokens: statsSnapshot?.usage?.totalTokens ?? 0,
     runningProjects: projects.filter((project) => project.isRunning).length,
     totalSprints: sprints.length,
     activeSprints: sprints.filter((sprint) => sprint.status === "running").length,
@@ -137,7 +139,7 @@ export function computeOverviewStats(
     completedTasks: completedTasksList.length,
     runningTasks: tasks.filter((task) => task.status === "in_progress").length,
     criticalTasks: tasks.filter((task) => task.priority === "critical").length,
-    projectsTrend,
+    tokensTrend,
     sprintsTrend,
     openTasksTrend,
     completedTasksTrend,

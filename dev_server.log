@@ -1,0 +1,11 @@
+
+> jules-subagents@1.2.0 dev:dashboard
+> vite
+
+
+  VITE v7.3.1  ready in 553 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+3:38:22 PM [vite] (client) hmr update /src/v2/components/HeaderStats.tsx, /src/styles.css
+3:38:29 PM [vite] (client) hmr update /src/v2/components/HeaderStats.tsx, /src/styles.css

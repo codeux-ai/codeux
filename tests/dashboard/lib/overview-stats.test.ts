@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { computeOverviewStats, buildEmptyTrend, extractProjectsTrend, extractSprintsTrend, extractOpenTasksTrend, extractCompletedTasksTrend } from "../../../dashboard/src/v2/lib/overview-stats.js";
+import { computeOverviewStats, buildEmptyTrend, extractTokensTrend, extractSprintsTrend, extractOpenTasksTrend, extractCompletedTasksTrend } from "../../../dashboard/src/v2/lib/overview-stats.js";
 
 describe("overview-stats", () => {
   const fakeNow = new Date("2024-03-10T12:00:00Z");
@@ -39,7 +39,7 @@ describe("overview-stats", () => {
     expect(stats.runningTasks).toBe(1);
     expect(stats.criticalTasks).toBe(1);
 
-    expect(stats.projectsTrend).toEqual([0, 0, 0, 0, 0, 0, 0]);
+    expect(stats.tokensTrend).toEqual([0, 0, 0, 0, 0, 0, 0]);
     // Mar 4(idx0), Mar 5(idx1), Mar 6(idx2), Mar 7(idx3), Mar 8(idx4), Mar 9(idx5), Mar 10(idx6)
     // s1=Mar 8(idx4), s2=Mar 9(idx5)
     expect(stats.sprintsTrend).toEqual([0, 0, 0, 0, 1, 2, 2]);
@@ -52,7 +52,7 @@ describe("overview-stats", () => {
   describe("empty-state handling", () => {
     it("returns empty 7-day arrays when no data provided", () => {
       const stats = computeOverviewStats([], [], []);
-      expect(stats.projectsTrend).toEqual([0, 0, 0, 0, 0, 0, 0]);
+      expect(stats.tokensTrend).toEqual([0, 0, 0, 0, 0, 0, 0]);
       expect(stats.sprintsTrend).toEqual([0, 0, 0, 0, 0, 0, 0]);
       expect(stats.openTasksTrend).toEqual([0, 0, 0, 0, 0, 0, 0]);
       expect(stats.completedTasksTrend).toEqual([0, 0, 0, 0, 0, 0, 0]);
@@ -63,19 +63,19 @@ describe("overview-stats", () => {
     });
   });
 
-  describe("extractProjectsTrend (token series extraction)", () => {
+  describe("extractTokensTrend (token series extraction)", () => {
     it("extracts total tokens from usage buckets", () => {
       const buckets = [
         { usage: { totalTokens: 100 } },
         { usage: { totalTokens: 200 } },
         { usage: { totalTokens: 300 } },
       ] as any;
-      expect(extractProjectsTrend(buckets, 7)).toEqual([0, 0, 0, 0, 100, 200, 300]);
+      expect(extractTokensTrend(buckets, 7)).toEqual([0, 0, 0, 0, 100, 200, 300]);
     });
 
     it("handles more than 7 buckets by taking the last 7", () => {
       const buckets = Array.from({ length: 10 }).map((_, i) => ({ usage: { totalTokens: i * 10 } })) as any;
-      expect(extractProjectsTrend(buckets, 7)).toEqual([30, 40, 50, 60, 70, 80, 90]);
+      expect(extractTokensTrend(buckets, 7)).toEqual([30, 40, 50, 60, 70, 80, 90]);
     });
   });
 
