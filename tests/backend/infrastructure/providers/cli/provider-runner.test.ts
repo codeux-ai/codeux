@@ -373,4 +373,117 @@ describe("ProviderRunner", () => {
     expect(env.GH_TOKEN).toBe("gh-token-123");
     expect(env.GITHUB_TOKEN).toBe("gh-token-123");
   });
+
+  it("should forward continueSessionId to CLI args correctly in HOST mode", async () => {
+    const onActivity = vi.fn();
+    const sessionId = "session-1";
+    const continueSessionId = "native-123";
+
+    await runner.runProvider({
+      provider: "gemini",
+      prompt: "gemini follow up",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "gemini-key",
+      sessionId,
+      workflowSettings: defaultWorkflowSettings,
+      repoPath: "/repo",
+      continueSessionId,
+      onActivity,
+    });
+
+    await runner.runProviderForText({
+      provider: "codex",
+      prompt: "codex follow up",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "codex-key",
+      sessionId,
+      workflowSettings: defaultWorkflowSettings,
+      repoPath: "/repo",
+      continueSessionId,
+      onActivity,
+    });
+
+    await runner.runProvider({
+      provider: "claude-code",
+      prompt: "claude follow up",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "claude-key",
+      sessionId,
+      workflowSettings: defaultWorkflowSettings,
+      repoPath: "/repo",
+      continueSessionId,
+      onActivity,
+    });
+
+    expect(runStreamingCommand).toHaveBeenCalledTimes(3);
+
+    const geminiArgs = vi.mocked(runStreamingCommand).mock.calls[0]?.[1] ?? [];
+    expect(geminiArgs).toEqual(["--resume", "--yolo", "--output-format", "json", "--p", "gemini follow up"]);
+
+    const codexArgs = vi.mocked(runStreamingCommand).mock.calls[1]?.[1] ?? [];
+    expect(codexArgs).toEqual(["exec", "resume", "--last", "--yolo", "--json", "--output-last-message", expect.any(String), "codex follow up"]);
+
+    const claudeArgs = vi.mocked(runStreamingCommand).mock.calls[2]?.[1] ?? [];
+    expect(claudeArgs).toEqual(["--dangerously-skip-permissions", "--session-id", continueSessionId, "-p", "claude follow up"]);
+  });
+
+  it("should forward continueSessionId to Docker CLI correctly in DOCKER mode", async () => {
+    const onActivity = vi.fn();
+    defaultWorkflowSettings.executionMode = "DOCKER";
+    const sessionId = "session-1";
+    const continueSessionId = "native-123";
+
+    await runner.runProvider({
+      provider: "gemini",
+      prompt: "gemini follow up",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "gemini-key",
+      sessionId,
+      workflowSettings: defaultWorkflowSettings,
+      repoPath: "/repo",
+      continueSessionId,
+      onActivity,
+    });
+
+    await runner.runProviderForText({
+      provider: "codex",
+      prompt: "codex follow up",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "codex-key",
+      sessionId,
+      workflowSettings: defaultWorkflowSettings,
+      repoPath: "/repo",
+      continueSessionId,
+      onActivity,
+    });
+
+    await runner.runProvider({
+      provider: "claude-code",
+      prompt: "claude follow up",
+      cwd: "/repo",
+      model: "default",
+      apiKey: "claude-key",
+      sessionId,
+      workflowSettings: defaultWorkflowSettings,
+      repoPath: "/repo",
+      continueSessionId,
+      onActivity,
+    });
+
+    expect(mockDockerRunner.runProviderInDocker).toHaveBeenCalledTimes(3);
+
+    const geminiArgs = vi.mocked(mockDockerRunner.runProviderInDocker).mock.calls[0]?.[0]?.args ?? [];
+    expect(geminiArgs).toEqual(["--resume", "--yolo", "--output-format", "json", "--p", "gemini follow up"]);
+
+    const codexArgs = vi.mocked(mockDockerRunner.runProviderInDocker).mock.calls[1]?.[0]?.args ?? [];
+    expect(codexArgs).toEqual(["exec", "resume", "--last", "--yolo", "--json", "--output-last-message", expect.any(String), "codex follow up"]);
+
+    const claudeArgs = vi.mocked(mockDockerRunner.runProviderInDocker).mock.calls[2]?.[0]?.args ?? [];
+    expect(claudeArgs).toEqual(["--dangerously-skip-permissions", "--session-id", continueSessionId, "-p", "claude follow up"]);
+  });
 });

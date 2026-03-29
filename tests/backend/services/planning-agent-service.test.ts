@@ -943,4 +943,168 @@ describe("PlanningAgentService", () => {
 
     await expect(improvePromise).rejects.toThrow();
   });
+
+  it("retries virtual planning requests on invalid JSON and recovers on success", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-retry-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      "Turn sprint goals into concrete executable tasks.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const connectionRepository = new ConnectionChatRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          stdout: "",
+          stderr: "",
+          code: 0,
+          signal: null,
+          text: "I cannot give you JSON, but here are my thoughts. We need two tasks.",
+          usageTelemetry: { inputTokens: 10, cachedInputTokens: 0, outputTokens: 20, reasoningOutputTokens: 0, totalTokens: 30, usageSource: "reported", rawUsageJson: {}, transcriptText: "", nativeSessionId: "native-123" },
+          nativeSessionId: "native-123",
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          stdout: "",
+          stderr: "",
+          code: 0,
+          signal: null,
+          text: JSON.stringify({
+            goal: "Goal",
+            tasks: [{ key: "T01", title: "Task 1", description: "D", promptMarkdown: "P", priority: "high", executorType: "auto", dependsOn: [] }],
+          }),
+          usageTelemetry: { inputTokens: 50, cachedInputTokens: 0, outputTokens: 40, reasoningOutputTokens: 0, totalTokens: 90, usageSource: "reported", rawUsageJson: {}, transcriptText: "", nativeSessionId: "native-123" },
+          nativeSessionId: "native-123",
+        }),
+    };
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+      providerRunner,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Retry Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Retry Sprint",
+      goal: "Goal",
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
+      cliWorkflow: { maxPlanningJsonRetries: 3 },
+    });
+
+    await service.planSprint(project.id, sprint.id, { autoStart: false });
+
+    const calls = vi.mocked(providerRunner.runProviderForText).mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[1]?.[0]?.continueSessionId).toBe("native-123");
+    expect(calls[1]?.[0]?.prompt).toContain("Your previous output could not be parsed as valid JSON");
+
+    const tasks = projectRepository.listTasks(project.id, sprint.id);
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]?.title).toBe("Task 1");
+  });
+
+  it("exhausts virtual planning retry budget and throws", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-exhaust-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".sprint-os", "agents", "planning_agent.md"),
+      "Turn sprint goals into concrete executable tasks.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const connectionRepository = new ConnectionChatRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const providerRunner: IProviderRunner = {
+      runProvider: vi.fn(),
+      runProviderForText: vi.fn().mockResolvedValue({
+        ok: true,
+        stdout: "",
+        stderr: "",
+        code: 0,
+        signal: null,
+        text: "Still not JSON.",
+        usageTelemetry: { inputTokens: 10, cachedInputTokens: 0, outputTokens: 10, reasoningOutputTokens: 0, totalTokens: 20, usageSource: "reported", rawUsageJson: {}, transcriptText: "", nativeSessionId: "native-123" },
+        nativeSessionId: "native-123",
+      }),
+    };
+
+    const service = new PlanningAgentService({
+      projectManagementRepository: projectRepository,
+      connectionChatRepository: connectionRepository,
+      executionRepository,
+      settingsRepository,
+      agentPresetSyncService: syncService,
+      executionControlService: { orchestrateSprint: vi.fn() } as any,
+      providerRunner,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Exhaust Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Exhaust Sprint",
+      goal: "Goal",
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      workers: { executionMode: "VIRTUAL", virtualWorkerProvider: "claude-code" },
+      cliWorkflow: { maxPlanningJsonRetries: 2 },
+    });
+
+    await expect(service.planSprint(project.id, sprint.id, { autoStart: false }))
+      .rejects.toThrow("Planning agent reply was not valid JSON.");
+
+    const calls = vi.mocked(providerRunner.runProviderForText).mock.calls;
+    // 1 initial attempt + 2 retries = 3 calls
+    expect(calls).toHaveLength(3);
+    expect(calls[1]?.[0]?.continueSessionId).toBe("native-123");
+    expect(calls[2]?.[0]?.continueSessionId).toBe("native-123");
+  });
 });

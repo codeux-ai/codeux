@@ -645,7 +645,7 @@ export class PlanningAgentService {
       repoPath: args.repoPath,
       githubToken: args.settings.git.githubToken,
       signal: args.signal,
-      continueSessionId: previousResult.nativeSessionId || sessionId,
+      continueSessionId: previousResult.nativeSessionId || previousResult.sessionId,
       onActivity: (description, originator) => {
         this.deps.logger?.debug("Virtual planning JSON retry activity", {
           projectId: args.projectId,
