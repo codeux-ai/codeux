@@ -327,7 +327,7 @@ export const SprintStatsDeck: FunctionComponent<{
 }> = ({ hasSprintContext, stats, tasks, sprintTiming }) => {
   const totalTrackedStageSeconds = LIVE_TASK_STAGE_ORDER.reduce((sum, stage) => sum + sprintTiming.stageTotals[stage], 0);
   const completionRate = tasks.length > 0 ? (stats.completed / tasks.length) * 100 : 0;
-  const mergePressure = stats.ci + stats.automerge + stats.mergeBlocked + stats.mergeConflicts;
+  const mergePressure = stats.ci + stats.mergeBlocked + stats.mergeConflicts;
 
   if (!hasSprintContext) {
     return (
@@ -455,7 +455,7 @@ export const SprintStatsDeck: FunctionComponent<{
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <CounterTile label="CI Lane" value={stats.ci} icon={GitPullRequest} accent="text-ember-500" />
-                  <CounterTile label="Automerge" value={stats.automerge} icon={Sparkles} accent="text-ember-500" />
+                  <CounterTile label="Automerge" value={stats.automerge} icon={Sparkles} accent="text-status-green" />
                   <CounterTile label="Merged" value={stats.merged} icon={CheckCircle2} accent="text-status-green" />
                   <CounterTile label="Blocked" value={stats.mergeBlocked + stats.mergeConflicts} icon={WandSparkles} accent="text-status-amber" />
                 </div>
