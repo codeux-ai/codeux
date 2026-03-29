@@ -1474,15 +1474,22 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   app.use((req, res, next) => {
     const isGet = req.method === "GET";
     const isApi = req.path.startsWith("/api/") || req.path.startsWith("/health") || req.path.startsWith("/ready");
-    const isExtensionless = !req.path.split("/").pop()?.includes(".");
+    const isExtensionless = path.extname(req.path) === "";
     const isPreviewHost = parsePreviewSessionIdFromHost(req.headers.host) !== null;
 
     if (isGet && !isApi && isExtensionless && !isPreviewHost) {
-      const indexPath = path.join(staticDir, "index.html");
-      if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-        return;
-      }
+      const indexPath = path.join(path.resolve(staticDir), "index.html");
+      res.sendFile(indexPath, (err: any) => {
+        if (err) {
+          // If the file is simply not found, pass to the next middleware (usually resulting in a 404).
+          if ((err as any).code === "ENOENT" || (err as any).status === 404) {
+            next();
+          } else {
+            next(err);
+          }
+        }
+      });
+      return;
     }
     next();
   });

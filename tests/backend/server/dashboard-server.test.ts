@@ -194,6 +194,80 @@ async function waitForRealtimeMessage(
 }
 
 describe("setupDashboardServer", () => {
+  it("serves the SPA fallback index.html for extensionless routes but passes through assets and API", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-dashboard-spa-"));
+    tempDirs.push(dir);
+    const indexPath = path.join(dir, "index.html");
+    await fs.writeFile(indexPath, "<!doctype html><html><head><title>Dashboard</title></head><body>App</body></html>");
+
+    // Create an asset to verify it is NOT swallowed by the SPA fallback
+    const assetsDir = path.join(dir, "assets");
+    await fs.mkdir(assetsDir);
+    const assetPath = path.join(assetsDir, "app.css");
+    await fs.writeFile(assetPath, "body { color: red; }");
+
+    const app = express();
+    const handle = await setupDashboardServer({
+      app,
+      dashboardDir: dir,
+      port: await getAvailablePort(),
+      liveActivityCacheMs: 1000,
+      getStatus: () => ({ ok: true }),
+      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getProjectStatsSnapshot: () => ({
+        projectId: "project-test",
+        projectName: "Project Test",
+        window: "7d",
+        generatedAt: new Date().toISOString(),
+        usage: { invocationCount: 0, activeTimeMs: 0, wallTimeMs: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, reportedInvocationCount: 0, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 },
+        activeSprint: null,
+        buckets: [],
+        sprints: [],
+        tasks: [],
+        providers: [],
+        purposes: [],
+        tokenSources: [],
+      }),
+      getLiveActivities: async () => ({}),
+      getGitStatus: async () => ({ mode: "LOCAL", available: true, repositoryRoot: null, branch: null, hasRemote: false, dirty: false, openPullRequests: [], ciRuns: [], mergedPullRequests: [], tracking: { scope: "REPOSITORY", label: "Repository", branch: null }, warnings: [], lastUpdated: new Date().toISOString() }),
+      getExternalSettingsHints: () => ({ env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" }, settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" }, resolved: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" } }),
+      ...buildSettingsServerOptions(),
+      listAgentPresets: () => [],
+      createAgentPreset: () => ({ id: "agent-1" } as any),
+      updateAgentPreset: () => ({ id: "agent-1" } as any),
+      deleteAgentPreset: () => {},
+      rerunTask: async () => ({ ok: true }),
+      orchestrateSprint: async () => ({ ok: true }),
+      pauseSprintRun: async () => ({ ok: true }),
+      cancelSprintRun: async () => ({ ok: true }),
+      cancelTaskDispatch: async () => ({ ok: true }),
+      retryTaskDispatch: async () => ({ ok: true }),
+    });
+    serversToClose.push(handle.server);
+
+    // 1. Direct subpage route without extension
+    const pageResponse = await fetch(`http://127.0.0.1:${handle.port}/sprints`);
+    expect(pageResponse.status).toBe(200);
+    expect(await pageResponse.text()).toContain("<title>Dashboard</title>");
+
+    // 2. Existing valid asset request
+    const assetResponse = await fetch(`http://127.0.0.1:${handle.port}/assets/app.css`);
+    expect(assetResponse.status).toBe(200);
+    expect(await assetResponse.text()).toContain("color: red");
+
+    // 3. Missing asset request (should 404, not fallback to SPA)
+    const missingAssetResponse = await fetch(`http://127.0.0.1:${handle.port}/assets/missing.js`);
+    expect(missingAssetResponse.status).toBe(404);
+
+    // 4. API request
+    const apiResponse = await fetch(`http://127.0.0.1:${handle.port}/api/status`);
+    expect(apiResponse.status).toBe(200);
+    const apiBody = await apiResponse.json() as { ok: boolean };
+    expect(apiBody.ok).toBe(true);
+  });
+
   it("tries next port when requested port is in use", async () => {
     const blocker = await new Promise<Server>((resolve) => {
       const server = express().listen(0, "127.0.0.1", () => resolve(server));
