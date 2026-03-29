@@ -509,14 +509,14 @@ export class SprintOsWorker {
   }
 
   private resolveTerminalTaskState(session: JulesSession): "COMPLETED" | "FAILED" | "BLOCKED" | null {
+    if (session.state && FAILED_STATES.has(session.state)) {
+      return "FAILED";
+    }
     if (this.extractPullRequest(session) || session.state === "COMPLETED") {
       return "COMPLETED";
     }
     if (session.state && ACTION_REQUIRED_STATES.has(session.state)) {
       return "BLOCKED";
-    }
-    if (session.state && FAILED_STATES.has(session.state)) {
-      return "FAILED";
     }
     return null;
   }

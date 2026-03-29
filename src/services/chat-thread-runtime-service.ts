@@ -186,7 +186,7 @@ export class ChatThreadRuntimeService {
       return await this.runConnectedWorkerCompaction(project.id, project.baseDir, project.name, thread, messages, route.connectionId);
     }
 
-    if (route.mode !== "VIRTUAL" || !route.providerId || !route.model || !route.apiKey) {
+    if (route.mode !== "VIRTUAL" || !route.providerId || !route.model || typeof route.apiKey !== "string") {
       throw new Error("Failed to resolve a chat worker for thread compaction.");
     }
 
