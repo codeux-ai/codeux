@@ -820,6 +820,7 @@ describe("dashboard project management API", () => {
         usage: { totalTokens: number; activeTimeMs: number; wallTimeMs: number };
         tasks: Array<{ label: string; usage: { totalTokens: number } }>;
         providers: Array<{ id: string; usage: { totalTokens: number } }>;
+        chartSeries: Array<{ id: string; grouping: string }>;
       };
     expect(statsSnapshot).toMatchObject({
       projectId: project.id,

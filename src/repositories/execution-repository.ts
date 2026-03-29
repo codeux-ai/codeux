@@ -35,6 +35,7 @@ import type {
   ExecutionHumanInterventionSummary,
   ExecutionUsageBucketSummary,
   ExecutionUsageTotals,
+  ProjectExecutionStatsChartSeries,
   OverviewTelemetryProjectSummary,
   OverviewTelemetrySnapshot,
   ProjectExecutionStatsSnapshot,
@@ -1485,6 +1486,46 @@ export class ExecutionRepository {
       LIMIT 1
     `).get(projectId) as { sprint_id: string; sprint_name: string; sprint_number: number | string | null } | undefined;
 
+    const chartSeries: ProjectExecutionStatsChartSeries[] = [
+      { id: "core_total_tokens", label: "Total Tokens", grouping: "totals", defaultEnabled: true, data: buckets.map((b) => b.usage.totalTokens) },
+      { id: "core_active_time", label: "Active Time (ms)", grouping: "totals", defaultEnabled: false, data: buckets.map((b) => b.usage.activeTimeMs) },
+      { id: "core_invocations", label: "Invocations", grouping: "totals", defaultEnabled: false, data: buckets.map((b) => b.usage.invocationCount) },
+      { id: "core_input_tokens", label: "Input Tokens", grouping: "details", defaultEnabled: false, data: buckets.map((b) => b.usage.inputTokens) },
+      { id: "core_cached_tokens", label: "Cached Tokens", grouping: "details", defaultEnabled: false, data: buckets.map((b) => b.usage.cachedInputTokens) },
+      { id: "core_output_tokens", label: "Output Tokens", grouping: "details", defaultEnabled: false, data: buckets.map((b) => b.usage.outputTokens) },
+      { id: "core_reasoning_tokens", label: "Reasoning Tokens", grouping: "details", defaultEnabled: false, data: buckets.map((b) => b.usage.reasoningOutputTokens) },
+      { id: "reliability_reported", label: "Reported Usage", grouping: "reliability", defaultEnabled: false, data: buckets.map((b) => b.usage.reportedInvocationCount) },
+      { id: "reliability_estimated", label: "Estimated Usage", grouping: "reliability", defaultEnabled: false, data: buckets.map((b) => b.usage.estimatedInvocationCount) },
+      { id: "reliability_unsupported", label: "Unsupported Usage", grouping: "reliability", defaultEnabled: false, data: buckets.map((b) => b.usage.unsupportedInvocationCount) },
+      { id: "reliability_unavailable", label: "Unavailable Usage", grouping: "reliability", defaultEnabled: false, data: buckets.map((b) => b.usage.unavailableInvocationCount) },
+      ...Array.from(providerUsage.keys()).map((providerId) => ({
+        id: `provider_${providerId}`, label: `${providerId} Tokens`, grouping: "providers", defaultEnabled: false, data: buckets.map(() => 0)
+      })),
+      ...Array.from(purposeUsage.keys()).map((purposeId) => ({
+        id: `purpose_time_${purposeId}`, label: `${purposeId.replace(/_/g, " ")} Time`, grouping: "purposes_time", defaultEnabled: false, data: buckets.map(() => 0)
+      })),
+      ...Array.from(purposeUsage.keys()).map((purposeId) => ({
+        id: `purpose_invocations_${purposeId}`, label: `${purposeId.replace(/_/g, " ")} Invocations`, grouping: "purposes_invocations", defaultEnabled: false, data: buckets.map(() => 0)
+      }))
+    ];
+
+    const firstBucketStartMs = buckets.length > 0 ? new Date(buckets[0].bucketStart).getTime() : 0;
+    if (buckets.length > 0) {
+      for (const invocation of mappedInvocations) {
+        const bucketIndex = Math.floor((new Date(invocation.startedAt).getTime() - firstBucketStartMs) / normalized.bucketSizeMs);
+        if (bucketIndex >= 0 && bucketIndex < buckets.length) {
+            const providerSeries = chartSeries.find(s => s.id === `provider_${invocation.provider}`);
+            if (providerSeries) providerSeries.data[bucketIndex] += invocation.totalTokens;
+
+            const purposeTimeSeries = chartSeries.find(s => s.id === `purpose_time_${invocation.purpose}`);
+            if (purposeTimeSeries) purposeTimeSeries.data[bucketIndex] += invocation.durationMs || 0;
+
+            const purposeInvocationsSeries = chartSeries.find(s => s.id === `purpose_invocations_${invocation.purpose}`);
+            if (purposeInvocationsSeries) purposeInvocationsSeries.data[bucketIndex] += 1;
+        }
+      }
+    }
+
     return {
       projectId,
       projectName: projectRow?.name || "Unknown Project",
@@ -1527,6 +1568,7 @@ export class ExecutionRepository {
       tokenSources: Array.from(tokenSourceCounts.entries())
         .map(([source, count]) => ({ source: source as ProjectExecutionStatsSnapshot["tokenSources"][number]["source"], count }))
         .sort((left, right) => right.count - left.count),
+      chartSeries,
     };
   }
 
