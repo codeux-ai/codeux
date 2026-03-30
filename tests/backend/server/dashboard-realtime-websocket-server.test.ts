@@ -240,3 +240,61 @@ describe("DashboardRealtimeWebSocketServer", () => {
     });
   });
 });
+
+describe("DashboardRealtimeWebSocketServer observability", () => {
+  it("emits repeated_unhealthy_recovery_patterns when clients constantly require snapshots due to invalid messages", () => {
+    const serverMock = new EventEmitter();
+    const loggerMock = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() };
+    const realtimeServiceMock = {
+      subscribe: vi.fn().mockReturnValue(() => {}),
+      getLatestSequenceForScopes: vi.fn(),
+      getLatestSequence: vi.fn(),
+    };
+
+    bootDashboardRealtimeWebSocketServer({
+      server: serverMock as any,
+      pathName: "/ws",
+      realtimeService: realtimeServiceMock as any,
+      logger: loggerMock as any,
+    });
+
+    const socketMock = new EventEmitter();
+    (socketMock as any).write = vi.fn();
+    (socketMock as any).remoteAddress = "127.0.0.1";
+    (socketMock as any).destroy = vi.fn();
+
+    const reqMock = {
+      url: "/ws",
+      headers: {
+        upgrade: "websocket",
+        connection: "upgrade",
+        "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+      },
+    };
+
+    serverMock.emit("upgrade", reqMock, socketMock);
+
+    // Simulate invalid frames which force snapshot_required and count as recovery attempts
+    for (let i = 0; i < 4; i++) {
+      const invalidPayload = Buffer.from("invalid-json");
+      const length = invalidPayload.length;
+      const header = Buffer.alloc(6);
+      header[0] = 0x81;
+      header[1] = length | 0x80;
+      header[2] = 0;
+      header[3] = 0;
+      header[4] = 0;
+      header[5] = 0;
+      const combined = Buffer.concat([header, invalidPayload]);
+      socketMock.emit("data", combined);
+    }
+
+    expect(loggerMock.warn).toHaveBeenCalledWith(
+      "repeated_unhealthy_recovery_patterns",
+      expect.objectContaining({
+        clientId: "127.0.0.1",
+        count: 4,
+      })
+    );
+  });
+});

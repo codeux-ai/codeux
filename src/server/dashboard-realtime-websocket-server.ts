@@ -14,6 +14,7 @@ interface RealtimeClientState {
   socket: Socket;
   subscriptions: Set<string>;
   lastPushedSequence: number | null;
+  recoveryAttempts: number[];
 }
 
 const WS_MAGIC = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
@@ -196,6 +197,7 @@ export function bootDashboardRealtimeWebSocketServer(args: {
       socket,
       subscriptions: new Set<string>(),
       lastPushedSequence: null,
+      recoveryAttempts: [],
     };
     clients.set(socket, client);
     sendJson(socket, { type: "ready" });
@@ -236,9 +238,27 @@ export function bootDashboardRealtimeWebSocketServer(args: {
               const replayLastSequence = replayEvents[replayEvents.length - 1]?.sequence ?? afterSequence;
 
               if (missedNonReplayableSnapshot || (latestSequence !== null && replayLastSequence < latestSequence)) {
+                const reason = missedNonReplayableSnapshot ? "non_replayable_event_missed" : "replay_window_exceeded";
+                args.logger.warn("websocket_recovery_snapshot_required", {
+                  reason,
+                  afterSequence,
+                  latestSequence
+                });
+
+                const now = Date.now();
+                client.recoveryAttempts.push(now);
+                client.recoveryAttempts = client.recoveryAttempts.filter(t => now - t <= 60000);
+                if (client.recoveryAttempts.length > 3) {
+                  args.logger.warn("repeated_unhealthy_recovery_patterns", {
+                    clientId: socket.remoteAddress || "unknown",
+                    count: client.recoveryAttempts.length
+                  });
+                  client.recoveryAttempts = [];
+                }
+
                 sendJson(socket, {
                   type: "snapshot_required",
-                  reason: missedNonReplayableSnapshot ? "non_replayable_event_missed" : "replay_window_exceeded",
+                  reason,
                 });
               } else {
                 for (const replayEvent of replayEvents) {
@@ -258,9 +278,23 @@ export function bootDashboardRealtimeWebSocketServer(args: {
           });
         } catch (error) {
           args.logger.warn("Invalid dashboard realtime websocket message", { error });
+          const reason = "invalid_client_message";
+          args.logger.warn("websocket_recovery_snapshot_required", { reason });
+
+          const now = Date.now();
+          client.recoveryAttempts.push(now);
+          client.recoveryAttempts = client.recoveryAttempts.filter(t => now - t <= 60000);
+          if (client.recoveryAttempts.length > 3) {
+            args.logger.warn("repeated_unhealthy_recovery_patterns", {
+              clientId: socket.remoteAddress || "unknown",
+              count: client.recoveryAttempts.length
+            });
+            client.recoveryAttempts = [];
+          }
+
           sendJson(socket, {
             type: "snapshot_required",
-            reason: "invalid_client_message",
+            reason,
           });
         }
       }

@@ -371,7 +371,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
       projectManagementRepository: deps.projectManagementRepository,
       projectRuntimeRepository: deps.projectRuntimeRepository,
       getProjectExecutionSnapshot,
-      getGitStatus: deps.getGitStatus
+      getGitStatus: deps.getGitStatus,
+      logger: deps.logger.child({ component: "project-live-snapshot" })
     }, projectIdHint),
     getOverviewTelemetrySnapshot,
   });
@@ -400,7 +401,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
       projectManagementRepository: deps.projectManagementRepository,
       projectRuntimeRepository: deps.projectRuntimeRepository,
       getProjectExecutionSnapshot,
-      getGitStatus: deps.getGitStatus
+      getGitStatus: deps.getGitStatus,
+      logger: deps.logger.child({ component: "project-live-snapshot" })
     }, projectIdHint),
     getExecutionSnapshot: () => {
       const projectId = deps.projectManagementRepository.getSelectedProjectId();
