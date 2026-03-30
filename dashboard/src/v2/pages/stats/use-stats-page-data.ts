@@ -19,6 +19,8 @@ export function useStatsPageData(projectId: string | null) {
   
   const { stats, loading, error } = useProjectStats(projectId, activeQuery);
 
+
+
   const usage = stats?.usage || EMPTY_USAGE;
   const tokenSeries = useMemo(() => createSeries(stats?.buckets || [], (bucket) => bucket.usage.totalTokens), [stats?.buckets]);
   const activeTimeSeries = useMemo(() => createSeries(stats?.buckets || [], (bucket) => bucket.usage.activeTimeMs / 1000), [stats?.buckets]);

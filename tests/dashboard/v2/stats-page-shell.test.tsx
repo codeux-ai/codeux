@@ -17,7 +17,15 @@ vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
 const baseStats = {
   generatedAt: "2023-01-01T00:00:00Z",
   activeSprint: { sprintNumber: 5, sprintId: "s1", sprintName: "S1" },
-  range: { resolutionLabel: "7 days", label: "7 days", periodStart: "2023", periodEnd: "2023", from: "2023", to: "2023", bucketCount: 1, isCustom: false, window: "7d", resolution: "day" },
+  range: {
+        from: "2023-01-01T00:00:00Z",
+        to: "2023-01-07T23:59:59Z",
+        resolution: "day",
+        label: "Last 7 Days",
+        bucketCount: 7,
+        resolutionLabel: "daily",
+      },
+      chartSeries: [{ id: "tokens", label: "Tokens", grouping: "Usage", defaultEnabled: true, data: [10] }],
   buckets: [{ bucketStart: "2023-01-01", bucketEnd: "2023-01-01", label: "B1", usage: { invocationCount: 1, activeTimeMs: 1, reportedInvocationCount: 1, totalTokens: 1, inputTokens: 1, outputTokens: 1, cachedInputTokens: 1, reasoningOutputTokens: 1, wallTimeMs: 1, unparseableInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0, executionCount: 1, successCount: 1, failureCount: 1 } }],
   sources: [],
   purposes: [],
