@@ -1,10 +1,14 @@
 import type { DashboardRealtimeEvent, DashboardRealtimeServerMessage } from "../../types.js";
 
+export type TransportState = "connecting" | "connected" | "reconnecting" | "disconnected";
+
 type RealtimeListener = (message: DashboardRealtimeServerMessage) => void;
+type TransportStateListener = (state: TransportState) => void;
 
 interface RealtimeSubscription {
   scopes: string[];
   listener: RealtimeListener;
+  transportListener?: TransportStateListener;
 }
 
 function buildRealtimeUrl(): string {
@@ -21,13 +25,18 @@ class DashboardRealtimeClient {
   private nextSubscriptionId = 1;
   private snapshotRequiredLastDispatchedAt: number = 0;
   private readonly SNAPSHOT_REQUIRED_COOLDOWN_MS = 3000;
+  private transportState: TransportState = "disconnected";
 
-  subscribe(scopes: string[], listener: RealtimeListener): () => void {
+  subscribe(scopes: string[], listener: RealtimeListener, transportListener?: TransportStateListener): () => void {
     const subscriptionId = this.nextSubscriptionId++;
     this.subscriptions.set(subscriptionId, {
       scopes: [...new Set(scopes.map((scope) => String(scope || "").trim()).filter(Boolean))],
       listener,
+      transportListener,
     });
+    if (transportListener) {
+      transportListener(this.transportState);
+    }
     this.ensureConnected();
     this.syncSubscriptions();
 
@@ -46,11 +55,13 @@ class DashboardRealtimeClient {
     }
 
     this.clearReconnectTimer();
+    this.setTransportState(this.reconnectAttempt > 0 ? "reconnecting" : "connecting");
     const socket = new WebSocket(buildRealtimeUrl());
     this.socket = socket;
 
     socket.addEventListener("open", () => {
       this.reconnectAttempt = 0;
+      this.setTransportState("connected");
       this.syncSubscriptions();
     });
 
@@ -71,6 +82,9 @@ class DashboardRealtimeClient {
     socket.addEventListener("close", () => {
       if (this.socket === socket) {
         this.socket = null;
+        if (this.subscriptions.size === 0) {
+          this.setTransportState("disconnected");
+        }
       }
       if (this.subscriptions.size > 0) {
         this.scheduleReconnect();
@@ -123,6 +137,7 @@ class DashboardRealtimeClient {
 
   private scheduleReconnect(): void {
     this.clearReconnectTimer();
+    this.setTransportState("reconnecting");
     const delayMs = Math.min(5000, 250 * (2 ** this.reconnectAttempt));
     this.reconnectAttempt += 1;
     this.reconnectTimer = window.setTimeout(() => {
@@ -147,6 +162,18 @@ class DashboardRealtimeClient {
       this.reconnectTimer = null;
     }
   }
+
+  private setTransportState(state: TransportState): void {
+    if (this.transportState === state) {
+      return;
+    }
+    this.transportState = state;
+    for (const subscription of this.subscriptions.values()) {
+      if (subscription.transportListener) {
+        subscription.transportListener(state);
+      }
+    }
+  }
 }
 
 let sharedClient: DashboardRealtimeClient | null = null;
@@ -158,6 +185,6 @@ function getClient(): DashboardRealtimeClient {
   return sharedClient;
 }
 
-export function subscribeToDashboardRealtime(scopes: string[], listener: RealtimeListener): () => void {
-  return getClient().subscribe(scopes, listener);
+export function subscribeToDashboardRealtime(scopes: string[], listener: RealtimeListener, transportListener?: TransportStateListener): () => void {
+  return getClient().subscribe(scopes, listener, transportListener);
 }
