@@ -53,6 +53,7 @@ export interface CiGateResult {
 export class FeaturePrGateService {
   async evaluateCiGate(subtasks: Subtask[], context: CiGateContext): Promise<CiGateResult> {
     const updatedSubtasks = [...subtasks];
+    const tasksToPersist: Subtask[] = [];
     for (const task of updatedSubtasks) {
       const previousStatus = task.status;
       const previousMergeIndicator = task.merge_indicator;
@@ -74,8 +75,18 @@ export class FeaturePrGateService {
         task.intervention_hint = undefined;
       }
       if (task.record_id && (task.status !== previousStatus || task.merge_indicator !== previousMergeIndicator)) {
-        await context.persistMergedTask(task);
+        tasksToPersist.push(task);
       }
+    }
+
+    if (tasksToPersist.length > 0) {
+      await Promise.all(
+        tasksToPersist.map((task) =>
+          context.persistMergedTask(task).catch(() => {
+            // Preserve in-memory merged state even if persistence fails.
+          })
+        )
+      );
     }
 
     if (
@@ -95,34 +106,73 @@ export class FeaturePrGateService {
       return { subtasks: updatedSubtasks, reportText: "" };
     }
 
+    const processResults = await Promise.all(
+      completedAwaitingMerge.map((task) =>
+        this.processTask(task, context).catch((err) => {
+          console.error(`Error processing task ${task.id}:`, err);
+          return { reportText: "", events: [], attentionItem: undefined };
+        })
+      )
+    );
+
     let reportText = "";
-    for (const task of completedAwaitingMerge) {
+    for (let i = 0; i < completedAwaitingMerge.length; i++) {
+      const task = completedAwaitingMerge[i];
+      const result = processResults[i];
+      if (result) {
+        reportText += result.reportText;
+        for (const event of result.events) {
+          this.appendCiGateEvent(task, context, event.state, event.payload);
+        }
+        if (result.attentionItem && context.openCiFixAttention) {
+          context.openCiFixAttention(task, result.attentionItem);
+        }
+      }
+    }
+
+    return { subtasks: updatedSubtasks, reportText };
+  }
+
+
+  private async processTask(
+    task: Subtask,
+    context: CiGateContext
+  ): Promise<{
+    reportText: string;
+    events: Array<{ state: string; payload: Record<string, unknown> }>;
+    attentionItem?: WorkerCiFixPayload
+  }> {
+    let reportText = "";
+    const events: Array<{ state: string; payload: Record<string, unknown> }> = [];
+    let attentionItem: WorkerCiFixPayload | undefined = undefined;
+
       const workerBranch = typeof task.worker_branch === "string" ? task.worker_branch : null;
-      const pr = matchPrForTask(task, context.gitStatus);
-      const mergedPr = matchMergedPrForTask(task, context.gitStatus);
+      // At this point, gitStatus is known to be available and non-null because of the check before the loop.
+      const pr = matchPrForTask(task, context.gitStatus as GitTrackingStatus);
+      const mergedPr = matchMergedPrForTask(task, context.gitStatus as GitTrackingStatus);
 
       if (mergedPr) {
         task.status = "COMPLETED";
         task.is_merged = true;
         task.merge_indicator = task.merge_indicator === "AUTOMERGE" ? "AUTOMERGE" : "MERGED";
         await this.persistMergedTask(task, context);
-        this.appendCiGateEvent(task, context, "merge_confirmed", {
+        events.push({ state: "merge_confirmed", payload: {
           prNumber: mergedPr.number,
           prUrl: mergedPr.url,
           mergedAt: mergedPr.mergedAt,
-        });
+        } });
         reportText += buildMergeConfirmedText(task.id, mergedPr.number, context.featureBranch);
-        continue;
+        return { reportText, events, attentionItem };
       }
 
       if (!pr) {
         task.status = "RUNNING";
         task.merge_indicator = "CI";
-        this.appendCiGateEvent(task, context, "waiting_for_pr", {
+        events.push({ state: "waiting_for_pr", payload: {
           featureBranch: context.featureBranch,
-        });
+        } });
         reportText += buildNoPrFoundText(task.id, context.featureBranch);
-        continue;
+        return { reportText, events, attentionItem };
       }
 
       const checks = Array.isArray(pr.checks) ? pr.checks : [];
@@ -135,14 +185,14 @@ export class FeaturePrGateService {
         task.merge_indicator = "MERGE_CONFLICT";
         await this.persistMergedTask(task, context);
         reportText += buildMergeConflictText(task.id, pr.number, pr.url, sourceBranch, context.featureBranch);
-        this.appendCiGateEvent(task, context, "merge_conflict", {
+        events.push({ state: "merge_conflict", payload: {
           prNumber: pr.number,
           prUrl: pr.url,
           mergeStateStatus: pr.mergeStateStatus,
           sourceBranch,
           targetBranch: context.featureBranch,
-        });
-        continue;
+        } });
+        return { reportText, events, attentionItem };
       }
 
       const ciSupport = waitForFeatureCi && checks.length === 0
@@ -163,12 +213,12 @@ export class FeaturePrGateService {
       if (autoMergeMode === "CREATE_PR" && isTaskCodeComplete(task)) {
         task.status = "COMPLETED";
         task.merge_indicator = "PR_ONLY";
-        this.appendCiGateEvent(task, context, "pr_created_no_merge", {
+        events.push({ state: "pr_created_no_merge", payload: {
           prNumber: pr.number,
           prUrl: pr.url,
-        });
+        } });
         reportText += `- ✅ **PR Created (no merge):** Task \`${task.id}\` — PR #${pr.number} created. Task marked complete without automerge.\n`;
-        continue;
+        return { reportText, events, attentionItem };
       }
 
       const shouldAutoMergeAlways = autoMergeMode === "ALWAYS" && !waitForFeatureCi;
@@ -184,18 +234,18 @@ export class FeaturePrGateService {
           persistMergedTask: context.persistMergedTask,
         });
         reportText += mergeAttempt.reportText;
-        this.appendCiGateEvent(task, context, mergeAttempt.state === "merged"
+        events.push({ state: mergeAttempt.state === "merged"
           ? "automerge_succeeded"
           : mergeAttempt.state === "scheduled"
             ? "automerge_scheduled"
             : mergeAttempt.state === "conflict"
               ? "automerge_conflict"
-            : "automerge_failed", {
+            : "automerge_failed", payload: {
           prNumber: pr.number,
           prUrl: pr.url,
           mode: "always",
-        });
-        if (task.is_merged) continue;
+        }});
+        if (task.is_merged) return { reportText, events, attentionItem };
       }
 
       if (isMergeReady) {
@@ -212,18 +262,18 @@ export class FeaturePrGateService {
             persistMergedTask: context.persistMergedTask,
           });
           reportText += mergeAttempt.reportText;
-          this.appendCiGateEvent(task, context, mergeAttempt.state === "merged"
+          events.push({ state: mergeAttempt.state === "merged"
             ? "automerge_succeeded"
             : mergeAttempt.state === "scheduled"
               ? "automerge_scheduled"
               : mergeAttempt.state === "conflict"
                 ? "automerge_conflict"
-              : "automerge_failed", {
+              : "automerge_failed", payload: {
             prNumber: pr.number,
             prUrl: pr.url,
             mode: "when_green",
-          });
-          continue;
+          }});
+          return { reportText, events, attentionItem };
         }
 
         task.merge_indicator = task.is_merged
@@ -231,11 +281,11 @@ export class FeaturePrGateService {
           : task.merge_indicator === "MERGE_CONFLICT"
             ? "MERGE_CONFLICT"
             : undefined;
-        this.appendCiGateEvent(task, context, "ready_for_merge", {
+        events.push({ state: "ready_for_merge", payload: {
           prNumber: pr.number,
           prUrl: pr.url,
           ciWaitSkipped: skipCiWait,
-        });
+        } });
         reportText += buildMergeReadyText(task.id, pr.number, context.featureBranch);
         if (skipCiWait) {
           reportText += buildCiWaitSkippedText(
@@ -243,7 +293,7 @@ export class FeaturePrGateService {
             describeCiSupportSkipReason(ciSupport.reason),
           );
         }
-        continue;
+        return { reportText, events, attentionItem };
       }
 
       const inProgressResult = await evaluateInProgressState({
@@ -255,7 +305,7 @@ export class FeaturePrGateService {
         hasReviewBlockers,
         workerBranch,
         featureBranch: context.featureBranch,
-        gitStatus: context.gitStatus,
+        gitStatus: context.gitStatus as GitTrackingStatus,
         ciIntelligence: context.ciIntelligence,
         automationLevel: context.automationLevel,
         ciAutofixRetryCounts: context.ciAutofixRetryCounts,
@@ -274,10 +324,10 @@ export class FeaturePrGateService {
       }
 
       if (inProgressResult.workerCiFixRequired && inProgressResult.workerCiFixPayload && context.openCiFixAttention) {
-        context.openCiFixAttention(task, inProgressResult.workerCiFixPayload);
+        attentionItem = inProgressResult.workerCiFixPayload;
       }
 
-      this.appendCiGateEvent(task, context, task.status === "BLOCKED" ? "blocked" : "waiting_checks", {
+      events.push({ state: task.status === "BLOCKED" ? "blocked" : "waiting_checks", payload: {
         prNumber: pr.number,
         prUrl: pr.url,
         hasFailedChecks,
@@ -285,11 +335,9 @@ export class FeaturePrGateService {
         hasReviewBlockers,
         mergeIndicator: task.merge_indicator || null,
         interventionOwner: task.intervention_owner || null,
-      });
-      if ((task.status as string) === "BLOCKED") continue;
-    }
+      } });
 
-    return { subtasks: updatedSubtasks, reportText };
+    return { reportText, events, attentionItem };
   }
 
   private appendCiGateEvent(
