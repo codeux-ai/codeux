@@ -14,6 +14,7 @@ import type { MergeFeedbackResult } from "../ci/main-merge-gate.js";
 import type { ProjectAttentionItemRecord } from "../../../contracts/project-attention-types.js";
 import { isCompletedTaskSettled } from "../task-merge-state.js";
 import { transitionSprintRun } from "./sprint-run-transitions.js";
+import { buildTaskAttentionPayload } from "./attention-payload-builder.js";
 
 export interface WatchLoopRunnerArgs {
   args: SprintAgentArgs;
@@ -444,7 +445,7 @@ export class WatchLoopRunner {
           && mergeFeedback.hasMergeConflict
           && activeMainMergeAttentionItems.length === 0
         ) {
-          this.deps.projectAttentionService.openItem({
+          this.deps.projectAttentionService.openItem(buildTaskAttentionPayload({
             projectId: scopedExecutionContext.project.id,
             sprintId: scopedExecutionContext.sprint.id,
             sprintRunId,
@@ -477,7 +478,7 @@ export class WatchLoopRunner {
               sprintName: scopedExecutionContext.sprint.name,
               featureBranchTaskContexts: selectMergedTaskContexts(subtasks),
             },
-          });
+          }));
         } else if (ciIntelligence.resolveMainMergeConflicts && !mergeFeedback.hasMergeConflict) {
           resolveMainMergeConflictAttentionItems(
             this.deps.projectAttentionService,
@@ -570,7 +571,7 @@ export class WatchLoopRunner {
           { reason: "manual_attention" },
           `sprint-paused:${sprintRunId}:manual-attention`
         );
-        this.deps.projectAttentionService.openItem({
+        this.deps.projectAttentionService.openItem(buildTaskAttentionPayload({
           projectId: scopedExecutionContext.project.id,
           sprintId: scopedExecutionContext.sprint.id,
           sprintRunId,
@@ -588,7 +589,7 @@ export class WatchLoopRunner {
             readyTaskIds: (tasksByStatus.get("PENDING") || []).map((task) => task.record_id || task.id),
             blockedTaskIds: (tasksByStatus.get("BLOCKED") || []).map((task) => task.record_id || task.id),
           },
-        });
+        }));
       }
     }
 
