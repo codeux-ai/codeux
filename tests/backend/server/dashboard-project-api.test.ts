@@ -623,6 +623,8 @@ describe("dashboard project management API", () => {
         name: "Project Manager",
         instructionMarkdown: "Coordinate the sprint and answer dashboard chat.",
         labels: ["planning", "communication"],
+        avatarConfig: { body: "bot", hair: "wires" },
+        memoryTemplateOverrideEnabled: true,
       }),
     });
     expect(agentPresetCreateResponse.status).toBe(201);
@@ -631,10 +633,14 @@ describe("dashboard project management API", () => {
       name: string;
       sourceScope: string | null;
       sourcePath: string | null;
+      avatarConfig?: any;
+      memoryTemplateOverrideEnabled?: boolean;
     };
     expect(agentPreset.name).toBe("Project Manager");
     expect(agentPreset.sourceScope).toBe("project");
     expect(agentPreset.sourcePath).toBe(path.join(project.baseDir, ".sprint-os", "agents", "project_manager.md"));
+    expect(agentPreset.avatarConfig).toEqual({ body: "bot", hair: "wires" });
+    expect(agentPreset.memoryTemplateOverrideEnabled).toBe(true);
     expect(await fs.readFile(agentPreset.sourcePath!, "utf8")).toContain("Coordinate the sprint");
 
     const agentPresetUpdateResponse = await fetch(`${baseUrl}/api/agent-presets/${agentPreset.id}`, {
@@ -644,6 +650,8 @@ describe("dashboard project management API", () => {
         name: "Worker",
         instructionMarkdown: "Updated worker markdown from the dashboard.",
         labels: ["execution"],
+        avatarConfig: { body: "human" },
+        memoryTemplateOverrideEnabled: false,
       }),
     });
     expect(agentPresetUpdateResponse.status).toBe(200);
@@ -827,9 +835,10 @@ describe("dashboard project management API", () => {
       usage: {
         totalTokens: 490,
         activeTimeMs: 90_000,
-        wallTimeMs: 90_000,
+        wallTimeMs: expect.any(Number),
       },
     });
+    expect(statsSnapshot.usage.wallTimeMs).toBeGreaterThanOrEqual(90_000);
     expect(statsSnapshot.tasks[0]).toMatchObject({
       label: "T01 Wire selected project state",
       usage: {

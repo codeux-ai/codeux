@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { AlertTriangle, Bot, Brain, FileUp, Plus, RefreshCw, Save, Sparkles, Tags, Trash2 } from "lucide-preact";
+import { Bot, Plus, Brain, AlertTriangle, RefreshCw, FileUp, Trash2, Tags, Save } from "lucide-preact";
 import type { AgentPreset } from "./types.js";
 import { useProjectData } from "./context/project-data.js";
 import {
@@ -13,8 +13,13 @@ import {
   updateAgentPreset,
 } from "./lib/agent-preset-api.js";
 import { fetchProjectEffectiveSettings } from "./lib/settings-api.js";
+import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
+import { AgentsHero } from "./components/agents/AgentsHero.js";
+import { AgentPresetShowcaseCard } from "./components/agents/AgentPresetShowcaseCard.js";
+import { AgentPresetDetailPanel } from "./components/agents/AgentPresetDetailPanel.js";
+import { AgentPresetEditorPanel } from "./components/agents/AgentPresetEditorPanel.js";
 
 const EmptyState: FunctionComponent<{ hasProject: boolean; onCreate?: () => void }> = ({ hasProject, onCreate }) => (
   <div className="relative overflow-hidden rounded-[2rem] border border-dashed border-signal-500/25 bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:bg-void-800/60 dark:border-signal-500/20 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
@@ -233,6 +238,8 @@ export const AgentsPage: FunctionComponent = () => {
   const [importingId, setImportingId] = useState<string | null>(null);
   const [syncingAll, setSyncingAll] = useState(false);
   const [projectFileSavingEnabled, setProjectFileSavingEnabled] = useState(true);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
 
   const refreshPresets = async (): Promise<void> => {
     if (!selectedProject) {
@@ -249,6 +256,14 @@ export const AgentsPage: FunctionComponent = () => {
       ]);
       setPresets(nextPresets);
       setProjectFileSavingEnabled(effectiveSettings.settings.agents.saveToProjectDirectory);
+
+      if (!selectedPresetId && nextPresets.length > 0) {
+        setSelectedPresetId(nextPresets[0].id);
+      } else if (selectedPresetId && !nextPresets.find((p) => p.id === selectedPresetId)) {
+        setSelectedPresetId(nextPresets.length > 0 ? nextPresets[0].id : null);
+        setIsEditing(false);
+      }
+
       setError(null);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
@@ -287,8 +302,11 @@ export const AgentsPage: FunctionComponent = () => {
         name: `Agent ${presets.length + 1}`,
         instructionMarkdown: "",
         labels: [],
+        avatarConfig: generateRandomAgentAvatar(Date.now().toString()),
       });
       setPresets((current) => [created, ...current]);
+      setSelectedPresetId(created.id);
+      setIsEditing(true);
       setError(null);
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : String(createError));
@@ -326,12 +344,13 @@ export const AgentsPage: FunctionComponent = () => {
 
   const handleSave = async (
     presetId: string,
-    next: { name: string; labels: string[]; instructionMarkdown: string },
+    next: Parameters<typeof updateAgentPreset>[1],
   ): Promise<void> => {
     setSavingId(presetId);
     try {
       const updated = await updateAgentPreset(presetId, next);
       setPresets((current) => current.map((preset) => preset.id === updated.id ? updated : preset));
+      setIsEditing(false);
       setError(null);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : String(updateError));
@@ -344,7 +363,14 @@ export const AgentsPage: FunctionComponent = () => {
     setDeletingId(presetId);
     try {
       await deleteAgentPreset(presetId);
-      setPresets((current) => current.filter((preset) => preset.id !== presetId));
+      setPresets((current) => {
+        const next = current.filter((p) => p.id !== presetId);
+        if (selectedPresetId === presetId) {
+          setSelectedPresetId(next.length > 0 ? next[0].id : null);
+          setIsEditing(false);
+        }
+        return next;
+      });
       setError(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : String(deleteError));
@@ -353,73 +379,19 @@ export const AgentsPage: FunctionComponent = () => {
     }
   };
 
+  const selectedPreset = presets.find((p) => p.id === selectedPresetId);
+
   return (
     <div className="relative z-10 mx-auto flex max-w-[1880px] flex-col gap-12 px-8 py-20 md:px-20">
-      <div ref={headerRef} className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
-        <div className="space-y-5">
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
-            <Sparkles className="h-3.5 w-3.5" strokeWidth={2.3} />
-            Agents
-          </div>
-          <div className="relative overflow-hidden">
-            <div className="pointer-events-none absolute -left-2 -top-8 font-display text-[6rem] font-black leading-none tracking-tighter text-black/[0.04] dark:text-white/[0.03]">
-              ROLE
-            </div>
-            <h1 className="relative z-10 font-display text-5xl font-black tracking-tighter text-slate-900 dark:text-white md:text-7xl">
-              Project <span className="text-signal-500">Agents.</span>
-            </h1>
-          </div>
-          <p className="max-w-2xl text-lg leading-relaxed text-slate-500 dark:text-slate-400">
-            {selectedProject
-              ? `Database-backed agents for ${selectedProject.name}. Markdown agents from home or project \`.sprint-os/agents\` are imported automatically, and dashboard edits ${projectFileSavingEnabled ? "mirror back into the project directory" : "stay database-only for this project"}.`
-              : "Select a project to create reusable agents with instructions and labels."}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {[
-            { label: "Agents", value: stats.total, icon: Brain },
-            { label: "Tagged", value: stats.withLabels, icon: Tags },
-            { label: "Ready", value: stats.withInstructions, icon: Bot },
-            { label: "Drift", value: stats.outOfSync, icon: AlertTriangle },
-          ].map(({ label, value, icon: Icon }) => (
-            <div
-              key={label}
-              className="inline-flex items-center gap-3 rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300"
-            >
-              <Icon className="h-3.5 w-3.5 text-signal-500" strokeWidth={2} />
-              {label} <span className="font-mono text-slate-700 dark:text-white">{value}</span>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={() => void refreshPresets()}
-            disabled={loading || projectLoading}
-            className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} strokeWidth={2.2} />
-            Refresh
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleSyncAll()}
-            disabled={!selectedProject || syncingAll || presets.every((preset) => preset.syncStatus !== "out_of_sync")}
-            className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${syncingAll ? "animate-spin" : ""}`} strokeWidth={2.2} />
-            Sync All
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleCreate()}
-            disabled={!selectedProject}
-            className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-void-900 transition-colors hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
-            New Agent
-          </button>
-        </div>
-      </div>
+      <AgentsHero
+        selectedProject={selectedProject}
+        projectLoading={projectLoading}
+        loading={loading}
+        syncingAll={syncingAll}
+        presets={presets}
+        onSyncAll={() => void handleSyncAll()}
+        onCreate={() => void handleCreate()}
+      />
 
       {error && (
         <div className="rounded-[1.5rem] border border-status-red/20 bg-status-red/10 px-5 py-4 text-sm text-status-red">
@@ -439,22 +411,45 @@ export const AgentsPage: FunctionComponent = () => {
         <EmptyState hasProject={false} />
       ) : presets.length === 0 && !loading ? (
         <EmptyState hasProject onCreate={() => void handleCreate()} />
-      ) : (
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-          {presets.map((preset) => (
-            <AgentPresetCard
-              key={preset.id}
-              preset={preset}
-              saving={savingId === preset.id}
-              deleting={deletingId === preset.id}
-              importing={importingId === preset.id}
-              onSave={handleSave}
-              onDelete={handleDelete}
-              onImport={handleImport}
-            />
-          ))}
+      ) : presets.length > 0 ? (
+        <div className="flex flex-col gap-8 xl:flex-row xl:items-start">
+          <div className="flex w-full flex-col gap-4 xl:w-1/3 xl:shrink-0">
+            {presets.map((preset) => (
+              <AgentPresetShowcaseCard
+                key={preset.id}
+                preset={preset}
+                isSelected={selectedPresetId === preset.id}
+                onClick={() => {
+                  setSelectedPresetId(preset.id);
+                  setIsEditing(false);
+                }}
+              />
+            ))}
+          </div>
+
+          <div className="w-full flex-1">
+            {selectedPreset && (
+              isEditing ? (
+                <AgentPresetEditorPanel
+                  preset={selectedPreset}
+                  saving={savingId === selectedPreset.id}
+                  onSave={handleSave}
+                  onCancel={() => setIsEditing(false)}
+                />
+              ) : (
+                <AgentPresetDetailPanel
+                  preset={selectedPreset}
+                  onEdit={() => setIsEditing(true)}
+                  onDelete={handleDelete}
+                  onImport={handleImport}
+                  deleting={deletingId === selectedPreset.id}
+                  importing={importingId === selectedPreset.id}
+                />
+              )
+            )}
+          </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 };

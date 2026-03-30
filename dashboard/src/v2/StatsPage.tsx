@@ -654,10 +654,10 @@ const InteractiveUsageChart: FunctionComponent<{
     : stats.range.label;
   const axisLabelStep = getAxisLabelStep(stats.range);
 
-  const peakTokens = Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.totalTokens));
-  const peakTime = Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.activeTimeMs));
-  const peakInvocations = Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.invocationCount));
-  const averageTokens = visibleBuckets.length > 0 ? Math.round(sumUsage(visibleBuckets.map((bucket) => ({
+  const peakTokens = useMemo(() => Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.totalTokens)), [visibleBuckets]);
+  const peakTime = useMemo(() => Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.activeTimeMs)), [visibleBuckets]);
+  const peakInvocations = useMemo(() => Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.invocationCount)), [visibleBuckets]);
+  const averageTokens = useMemo(() => visibleBuckets.length > 0 ? Math.round(sumUsage(visibleBuckets.map((bucket) => ({
     id: bucket.bucketStart,
     label: bucket.label,
     secondaryLabel: null,
@@ -666,7 +666,7 @@ const InteractiveUsageChart: FunctionComponent<{
     provider: null,
     usage: bucket.usage,
     lastActivityAt: bucket.bucketEnd,
-  }))).totalTokens / visibleBuckets.length) : 0;
+  }))).totalTokens / visibleBuckets.length) : 0, [visibleBuckets]);
 
   useEffect(() => {
     const handleMouseUp = () => {

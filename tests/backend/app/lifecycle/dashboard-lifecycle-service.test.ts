@@ -117,6 +117,8 @@ describe("dashboard-lifecycle-service", () => {
       } as any,
       projectRuntimeRepository: {
         getSelectedProjectStatus: vi.fn().mockReturnValue("runtime-status"),
+        getSelectedProjectLiveStatus: vi.fn().mockReturnValue("runtime-live-status"),
+        getProjectLiveStatus: vi.fn().mockReturnValue("project-live-status"),
       } as any,
       connectionChatRepository: {
         listConnections: vi.fn().mockReturnValue([]),
@@ -166,6 +168,7 @@ describe("dashboard-lifecycle-service", () => {
         retryTaskDispatch: vi.fn().mockResolvedValue({ id: "task-1" }),
       } as any,
       dashboardRealtimeService: {
+        scheduleProjectLiveRefresh: vi.fn(),
         setSnapshotLoaders: vi.fn(),
       } as any,
       logger: {
@@ -327,7 +330,7 @@ describe("dashboard-lifecycle-service", () => {
       const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
 
       setupArgs.getStatus();
-      expect(mockDeps.projectRuntimeRepository.getSelectedProjectStatus).toHaveBeenCalled();
+      expect(mockDeps.projectRuntimeRepository.getSelectedProjectLiveStatus).toHaveBeenCalled();
       expect(setupArgs.getExecutionSnapshot()).toMatchObject({ projectId: "project-1" });
       expect(mockDeps.executionRepository.getProjectExecutionSnapshot).toHaveBeenCalledWith("project-1");
       expect(setupArgs.getExecutionSnapshot().connections[0]).toMatchObject({

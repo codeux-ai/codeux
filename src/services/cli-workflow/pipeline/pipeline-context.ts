@@ -42,6 +42,8 @@ export interface PipelineContext {
   workflowSucceeded: boolean;
   /** Worker agent preset ID for per-agent memory tagging. */
   agentPresetId?: string;
+  memoryTemplateOverrideEnabled?: boolean;
+  memoryTemplateMarkdown?: string;
 
   workspaceManager: IWorkspaceManager;
   prService: IPrService;

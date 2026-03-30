@@ -1,4 +1,5 @@
 import type {
+  AgentAvatarConfig,
   AgentPresetRecord,
   CreateAgentPresetInput,
   UpdateAgentPresetInput,
@@ -94,6 +95,7 @@ export interface Task {
   assignee: string;
   time: string;
   createdAt: string;
+  updatedAt: string;
   promptMarkdown: string;
   description: string;
   dependsOnTaskIds: string[];
@@ -105,6 +107,7 @@ export interface Task {
 export type {
   ExecutionInvocationRecord,
   ExecutionInvocationMessageRecord,
+  AgentAvatarConfig,
   AgentPresetRecord,
   CreateProjectInput,
   CreateAgentPresetInput,

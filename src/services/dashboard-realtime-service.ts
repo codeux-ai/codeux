@@ -12,15 +12,19 @@ import {
   type AppendDashboardRealtimeEventInput,
 } from "../repositories/dashboard-realtime-event-repository.js";
 
+type MaybePromise<T> = T | Promise<T>;
+
 export interface DashboardRealtimeSnapshotLoaders {
-  getProjectsSnapshot: () => ProjectCollectionResponse;
-  getProjectExecutionSnapshot: (projectId: string) => ExecutionDashboardSnapshot;
-  getProjectStatusSnapshot: (projectId: string) => DashboardStatus;
-  getOverviewTelemetrySnapshot: () => OverviewTelemetrySnapshot;
+  getProjectsSnapshot: () => MaybePromise<ProjectCollectionResponse>;
+  getProjectExecutionSnapshot: (projectId: string) => MaybePromise<ExecutionDashboardSnapshot>;
+  getProjectStatusSnapshot: (projectId: string) => MaybePromise<DashboardStatus>;
+  getProjectLiveSnapshot?: (projectId: string) => MaybePromise<import("../contracts/app-types.js").ProjectLiveDashboardSnapshot>;
+  getOverviewTelemetrySnapshot: () => MaybePromise<OverviewTelemetrySnapshot>;
 }
 
 export interface DashboardRealtimeMutationNotifier {
   scheduleProjectsRefresh: () => void;
+  scheduleProjectLiveRefresh: (projectId: string) => void;
   scheduleProjectExecutionRefresh: (projectId: string, options?: { includeOverview?: boolean; includeProjects?: boolean }) => void;
   scheduleProjectRuntimeStatusRefresh: (projectId: string) => void;
   scheduleProjectStructureRefresh: (projectId: string, options?: { includeProjects?: boolean }) => void;
@@ -29,6 +33,7 @@ export interface DashboardRealtimeMutationNotifier {
 type DashboardRealtimeListener = (event: DashboardRealtimeEvent) => void;
 
 const DEFAULT_FLUSH_DELAY_MS = 75;
+const PROJECT_LIVE_MIN_INTERVAL_MS = 100;
 const PROJECT_EXECUTION_MIN_INTERVAL_MS = 300;
 const PROJECT_RUNTIME_STATUS_MIN_INTERVAL_MS = 250;
 const PROJECT_STRUCTURE_MIN_INTERVAL_MS = 250;
@@ -37,9 +42,11 @@ const OVERVIEW_MIN_INTERVAL_MS = 1_000;
 
 export class DashboardRealtimeService implements DashboardRealtimeMutationNotifier {
   private readonly listeners = new Set<DashboardRealtimeListener>();
+  private readonly pendingProjectLiveIds = new Set<string>();
   private readonly pendingProjectIds = new Set<string>();
   private readonly pendingProjectStatusIds = new Set<string>();
   private readonly pendingProjectStructureIds = new Set<string>();
+  private readonly projectLivePublishedAt = new Map<string, number>();
   private readonly projectExecutionPublishedAt = new Map<string, number>();
   private readonly projectRuntimeStatusPublishedAt = new Map<string, number>();
   private readonly projectStructurePublishedAt = new Map<string, number>();
@@ -95,6 +102,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
       return;
     }
 
+    this.pendingProjectLiveIds.add(normalizedProjectId);
     this.pendingProjectIds.add(normalizedProjectId);
     if (options?.includeProjects === true) {
       this.pendingProjects = true;
@@ -111,6 +119,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
       return;
     }
 
+    this.pendingProjectLiveIds.add(normalizedProjectId);
     this.pendingProjectStatusIds.add(normalizedProjectId);
     this.scheduleFlush();
   }
@@ -121,10 +130,21 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
       return;
     }
 
+    this.pendingProjectLiveIds.add(normalizedProjectId);
     this.pendingProjectStructureIds.add(normalizedProjectId);
     if (options?.includeProjects !== false) {
       this.pendingProjects = true;
     }
+    this.scheduleFlush();
+  }
+
+  scheduleProjectLiveRefresh(projectId: string): void {
+    const normalizedProjectId = String(projectId || "").trim();
+    if (!normalizedProjectId) {
+      return;
+    }
+
+    this.pendingProjectLiveIds.add(normalizedProjectId);
     this.scheduleFlush();
   }
 
@@ -159,13 +179,14 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
     this.flushTimer = setTimeout(() => {
       this.flushTimer = null;
       this.flushDueAt = null;
-      this.flushScheduledSnapshots();
+      void this.flushScheduledSnapshots();
     }, Math.max(0, dueAt - Date.now()));
   }
 
-  private flushScheduledSnapshots(): void {
+  private async flushScheduledSnapshots(): Promise<void> {
     const loaders = this.snapshotLoaders;
     if (!loaders) {
+      this.pendingProjectLiveIds.clear();
       this.pendingProjectIds.clear();
       this.pendingProjectStatusIds.clear();
       this.pendingProjectStructureIds.clear();
@@ -176,11 +197,13 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
 
     const now = Date.now();
     let nextDelayMs: number | null = null;
+    const projectLiveIds = [...this.pendingProjectLiveIds];
     const projectIds = [...this.pendingProjectIds];
     const projectStatusIds = [...this.pendingProjectStatusIds];
     const projectStructureIds = [...this.pendingProjectStructureIds];
     const shouldPublishProjects = this.pendingProjects;
     const shouldPublishOverview = this.pendingOverview;
+    this.pendingProjectLiveIds.clear();
     this.pendingProjectIds.clear();
     this.pendingProjectStatusIds.clear();
     this.pendingProjectStructureIds.clear();
@@ -194,7 +217,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
       } else {
         try {
-          const projects = loaders.getProjectsSnapshot();
+          const projects = await Promise.resolve(loaders.getProjectsSnapshot());
           this.publishRawEvent({
             scopeType: "projects",
             scopeId: "projects",
@@ -213,6 +236,41 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
       }
     }
 
+    for (const projectId of projectLiveIds) {
+      if (!loaders.getProjectLiveSnapshot) {
+        continue;
+      }
+
+      const lastPublishedAt = this.projectLivePublishedAt.get(projectId) ?? 0;
+      const waitMs = this.getThrottleDelay(lastPublishedAt, PROJECT_LIVE_MIN_INTERVAL_MS, now);
+      if (waitMs > 0) {
+        this.pendingProjectLiveIds.add(projectId);
+        nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
+        continue;
+      }
+
+      try {
+        const snapshot = await Promise.resolve(loaders.getProjectLiveSnapshot(projectId));
+        this.publishRawEvent({
+          scopeType: "project",
+          scopeId: projectId,
+          eventType: "project.live.updated",
+          entityType: "project_live",
+          entityId: projectId,
+          projectId,
+          sprintId: snapshot.selectedSprintId,
+          payload: snapshot,
+          replayable: false,
+        });
+        this.projectLivePublishedAt.set(projectId, now);
+      } catch (error) {
+        this.logger.error("Failed to publish project live realtime snapshot", {
+          projectId,
+          error,
+        });
+      }
+    }
+
     for (const projectId of projectIds) {
       const lastPublishedAt = this.projectExecutionPublishedAt.get(projectId) ?? 0;
       const waitMs = this.getThrottleDelay(lastPublishedAt, PROJECT_EXECUTION_MIN_INTERVAL_MS, now);
@@ -223,7 +281,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
       }
 
       try {
-        const snapshot = loaders.getProjectExecutionSnapshot(projectId);
+        const snapshot = await Promise.resolve(loaders.getProjectExecutionSnapshot(projectId));
         this.publishRawEvent({
           scopeType: "project",
           scopeId: projectId,
@@ -253,7 +311,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
       }
 
       try {
-        const snapshot = loaders.getProjectStatusSnapshot(projectId);
+        const snapshot = await Promise.resolve(loaders.getProjectStatusSnapshot(projectId));
         this.publishRawEvent({
           scopeType: "project",
           scopeId: projectId,
@@ -312,7 +370,7 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
       } else {
         try {
-          const telemetry = loaders.getOverviewTelemetrySnapshot();
+          const telemetry = await Promise.resolve(loaders.getOverviewTelemetrySnapshot());
           this.publishRawEvent({
             scopeType: "overview",
             scopeId: "overview",

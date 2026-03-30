@@ -325,6 +325,9 @@ export class AppDbStorage {
         source_scope TEXT,
         source_updated_at TEXT,
         source_imported_at TEXT,
+        avatar_config_json TEXT,
+        memory_template_override_enabled INTEGER NOT NULL DEFAULT 0,
+        memory_template_markdown TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -526,6 +529,9 @@ export class AppDbStorage {
     this.ensureColumn("agent_presets", "source_scope", "TEXT");
     this.ensureColumn("agent_presets", "source_updated_at", "TEXT");
     this.ensureColumn("agent_presets", "source_imported_at", "TEXT");
+    this.ensureColumn("agent_presets", "avatar_config_json", "TEXT");
+    this.ensureColumn("agent_presets", "memory_template_override_enabled", "INTEGER NOT NULL DEFAULT 0");
+    this.ensureColumn("agent_presets", "memory_template_markdown", "TEXT");
     this.ensureColumn("connection_project_bindings", "last_attention_cursor", "TEXT");
     this.ensureColumn("connection_project_bindings", "last_assignment_cursor", "TEXT");
     this.ensureColumn("dashboard_realtime_events", "is_replayable", "INTEGER NOT NULL DEFAULT 1");

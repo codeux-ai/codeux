@@ -127,10 +127,12 @@ export interface LiveTaskCardProps {
     events?: ExecutionRuntimeEventSummary[];
     onRerun: (id: string, options?: RerunOptions) => void;
     isRerunning: boolean;
-    dispatchError?: string | null;
-    dispatchStartedAt?: string | null;
-    dispatchFinishedAt?: string | null;
-    dispatchStatus?: string | null;
+    dispatchInfo?: {
+        errorMessage: string | null;
+        startedAt: string | null;
+        finishedAt: string | null;
+        status: string | null;
+    } | null;
 }
 
 const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
@@ -139,10 +141,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     events,
     onRerun,
     isRerunning,
-    dispatchError,
-    dispatchStartedAt,
-    dispatchFinishedAt,
-    dispatchStatus,
+    dispatchInfo,
 }) => {
     const [expanded, setExpanded] = useState(false);
     const [showFeed, setShowFeed] = useState(false);
@@ -169,10 +168,10 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
 
     const renderedPrompt = useMemo(() => renderMarkdown(task.prompt), [task.prompt]);
     const dispatchTiming = useMemo(() => ({
-        startedAt: dispatchStartedAt ?? null,
-        finishedAt: dispatchFinishedAt ?? null,
-        status: dispatchStatus ?? taskPhase,
-    }), [dispatchStartedAt, dispatchFinishedAt, dispatchStatus, taskPhase]);
+        startedAt: dispatchInfo?.startedAt ?? null,
+        finishedAt: dispatchInfo?.finishedAt ?? null,
+        status: dispatchInfo?.status ?? taskPhase,
+    }), [dispatchInfo?.startedAt, dispatchInfo?.finishedAt, dispatchInfo?.status, taskPhase]);
 
     const handleExpandCollapsed = useCallback(() => setExpanded(true), []);
 
@@ -313,9 +312,9 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                 )}
 
                 {/* Dispatch error / quota countdown */}
-                {dispatchError && (
+                {dispatchInfo?.errorMessage && (
                     <div className="mb-4 rounded-xl border border-status-amber/15 bg-status-amber/[0.04] px-4 py-2.5">
-                        <QuotaCountdown errorMessage={dispatchError} />
+                        <QuotaCountdown errorMessage={dispatchInfo.errorMessage} />
                     </div>
                 )}
 

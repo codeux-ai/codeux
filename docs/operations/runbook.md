@@ -138,8 +138,8 @@ Symptoms:
 Checks:
 - Restart MCP once to trigger startup recovery.
 - Verify startup logs for a recovery line:
-  - `[Recovery] Marked <N> interrupted CLI session(s) as FAILED ...`
-- Restart the sprint from the dashboard so failed tasks are retried on a fresh orchestration attempt.
+  - `Recovered runtime state on startup`
+- Verify the affected sprint run returns to active monitoring without creating a brand-new sprint run record.
 
 ## Recovery Techniques
 
@@ -148,6 +148,8 @@ Checks:
 - Use activities APIs to inspect detailed session trace.
 - Re-enable steps after diagnosis to restore normal operation.
 - On startup, interrupted local CLI sessions (`cli-*` with `RUNNING`) are auto-recovered to `FAILED` so orchestration can safely retry them.
+- On startup, active `queued` and `running` sprint runs are resumed automatically in place; Sprint OS now restores the watch loop instead of requiring a manual sprint restart.
+- Local `docker_cli` task dispatches are rewritten to retryable failed state during that recovery, while durable Jules sessions and connected-worker dispatches remain attached to the resumed sprint run.
 - Failed CLI sessions can preserve their worktree for manual follow-up or assisted retry, based on CLI Workflow settings.
 
 ## Useful Commands

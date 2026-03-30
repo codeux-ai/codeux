@@ -55,7 +55,7 @@ export function createDashboardDependencies(
 
   const activityCacheService = new ActivityCacheService(
     {
-      getSubtasks: () => projectRuntimeRepository.getSelectedProjectStatus().subtasks,
+      getSubtasks: () => projectRuntimeRepository.getSelectedProjectLiveStatus().subtasks,
       resolveSessionNameFromTask: (task) => context.resolveSessionNameFromTask(task),
       fetchRecentActivities: (sessionName, pageSize) => context.fetchRecentActivities(sessionName, pageSize),
       resolveGitStatusRepoPath: () => context.resolveGitStatusRepoPath(),

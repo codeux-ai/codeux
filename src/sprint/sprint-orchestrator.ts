@@ -316,6 +316,104 @@ export class SprintOrchestrator {
     });
   }
 
+  async recoverSprintRun(sprintRunId: string): Promise<any> {
+    const existingRun = this.deps.executionRepository.getSprintRun(sprintRunId);
+    if (!existingRun) {
+      throw new Error(`Sprint run not found: ${sprintRunId}`);
+    }
+    if (existingRun.status !== "queued" && existingRun.status !== "running") {
+      return null;
+    }
+
+    const args: SprintAgentArgs = {
+      action: "orchestrate",
+      project_id: existingRun.projectId,
+      sprint_id: existingRun.sprintId,
+      wait: true,
+    };
+    const fallbackDashboardSettings = this.deps.getDashboardSettings();
+    const initialExecutionContext = this.deps.sprintExecutionStateService.resolveContext(args, fallbackDashboardSettings);
+    const dashboardSettings = this.deps.getDashboardSettings({
+      projectId: initialExecutionContext.project.id,
+      sprintId: initialExecutionContext.sprint.id,
+    });
+    const executionContext = this.deps.sprintExecutionStateService.resolveContext(args, dashboardSettings);
+    const repoPath = executionContext.repoPath;
+    const defaultFeatureBranch = executionContext.featureBranch;
+    const defaultBranch = executionContext.defaultBranch;
+    const githubMode = this.deps.settings.githubMode === "LOCAL" ? "LOCAL" : "REMOTE";
+    const retryFailed = true;
+    const loopSteps = this.getLoopStepSettings(dashboardSettings);
+    const ciIntelligence = this.getCiIntelligenceSettings(dashboardSettings);
+    const automationLevel = dashboardSettings.automationLevel;
+    const automationInterventions = this.getAutomationInterventionsSettings(dashboardSettings);
+    const featureBranchPrefix = dashboardSettings.git.featureBranchPrefix;
+    const dashboardPort = this.getDashboardPort();
+    const leaseToken = randomUUID();
+    const now = new Date().toISOString();
+
+    this.deps.executionRepository.acquireLease({
+      scopeType: "sprint",
+      scopeId: executionContext.sprint.id,
+      ownerKey: SPRINT_ORCHESTRATOR_OWNER_KEY,
+      leaseToken,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    this.deps.executionRepository.updateSprintRun(existingRun.id, {
+      status: "running",
+      startedAt: existingRun.startedAt || now,
+      finishedAt: null,
+      lastHeartbeatAt: now,
+    });
+    this.deps.executionRepository.appendSprintRunEvent(existingRun.id, "sprint_recovery_started", "system", {
+      previousStatus: existingRun.status,
+      recoveredAt: now,
+    }, {
+      sourceEventKey: `startup-recovery:sprint-run:${existingRun.id}`,
+    });
+
+    try {
+      const planningAgentPresetId = await this.deps.resolvePlanningAgentPresetId?.(executionContext.project.id);
+      return await this.actionRunner.runOrchestrate({
+        args,
+        executionContext,
+        repoPath,
+        defaultFeatureBranch,
+        defaultBranch,
+        featureBranchPrefix,
+        githubMode,
+        retryFailed,
+        loopSteps,
+        ciIntelligence,
+        automationLevel,
+        automationInterventions,
+        dashboardPort,
+        shouldWait: true,
+        watchLoopEnabled: true,
+        sprintRunId: existingRun.id,
+        leaseToken,
+        planningAgentPresetId,
+      });
+    } catch (error) {
+      const failedAt = new Date().toISOString();
+      const message = error instanceof Error ? error.message : String(error);
+      this.deps.executionRepository.updateSprintRun(existingRun.id, {
+        status: "failed",
+        finishedAt: failedAt,
+        lastHeartbeatAt: failedAt,
+      });
+      this.deps.executionRepository.appendSprintRunEvent(existingRun.id, "sprint_failed", "system", {
+        reason: "orchestrator_recovery_exception",
+        errorMessage: message,
+      }, {
+        sourceEventKey: `orchestrator-recovery-error:${existingRun.id}:${message}`,
+      });
+      throw error;
+    } finally {
+      this.deps.executionRepository.releaseLease("sprint", executionContext.sprint.id, leaseToken);
+    }
+  }
+
   async execute(args: SprintAgentArgs): Promise<any> {
     const fallbackDashboardSettings = this.deps.getDashboardSettings();
     const initialExecutionContext = this.deps.sprintExecutionStateService.resolveContext(args, fallbackDashboardSettings);

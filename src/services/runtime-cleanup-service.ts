@@ -192,33 +192,32 @@ export class RuntimeCleanupService {
   private reconcileTerminalDispatches(now: Date): string[] {
     const reconciledDispatchIds: string[] = [];
 
-    for (const project of this.projectManagementRepository.listProjects().projects) {
-      for (const dispatch of this.executionRepository.listTaskDispatches({ projectId: project.id })) {
-        if (!["queued", "claimed", "running", "cancel_requested"].includes(dispatch.status)) {
-          continue;
-        }
-
-        const taskRun = this.executionRepository.getTaskRunByDispatchId(dispatch.id);
-        if (!taskRun || !isTerminalTaskRunState(taskRun.state)) {
-          continue;
-        }
-
-        const terminalAt = taskRun.finishedAt || now.toISOString();
-        this.executionRepository.updateTaskDispatch(dispatch.id, {
-          status: this.mapTaskRunStateToDispatchStatus(taskRun.state),
-          finishedAt: terminalAt,
-          lastHeartbeatAt: terminalAt,
-          errorMessage: taskRun.state === "FAILED"
-            ? dispatch.errorMessage || "Provider session failed before dispatch reconciliation."
-            : taskRun.state === "BLOCKED"
-              ? dispatch.errorMessage || "Provider session requires attention before dispatch reconciliation."
-              : null,
-        });
-        if (dispatch.sprintRunId) {
-          this.executionRepository.finalizeSprintRunCancellationIfIdle(dispatch.sprintRunId);
-        }
-        reconciledDispatchIds.push(dispatch.id);
+    for (const dispatch of this.executionRepository.listTaskDispatchesByStatus([
+      "queued",
+      "claimed",
+      "running",
+      "cancel_requested",
+    ])) {
+      const taskRun = this.executionRepository.getTaskRunByDispatchId(dispatch.id);
+      if (!taskRun || !isTerminalTaskRunState(taskRun.state)) {
+        continue;
       }
+
+      const terminalAt = taskRun.finishedAt || now.toISOString();
+      this.executionRepository.updateTaskDispatch(dispatch.id, {
+        status: this.mapTaskRunStateToDispatchStatus(taskRun.state),
+        finishedAt: terminalAt,
+        lastHeartbeatAt: terminalAt,
+        errorMessage: taskRun.state === "FAILED"
+          ? dispatch.errorMessage || "Provider session failed before dispatch reconciliation."
+          : taskRun.state === "BLOCKED"
+            ? dispatch.errorMessage || "Provider session requires attention before dispatch reconciliation."
+            : null,
+      });
+      if (dispatch.sprintRunId) {
+        this.executionRepository.finalizeSprintRunCancellationIfIdle(dispatch.sprintRunId);
+      }
+      reconciledDispatchIds.push(dispatch.id);
     }
 
     return reconciledDispatchIds;
@@ -229,41 +228,36 @@ export class RuntimeCleanupService {
     const staleCutoffMs = now.getTime() - STALE_SPRINT_RUN_MS;
     const nowIso = now.toISOString();
 
-    for (const project of this.projectManagementRepository.listProjects().projects) {
-      for (const sprintRun of this.executionRepository.listSprintRuns(project.id)) {
-        if (sprintRun.status !== "running") {
-          continue;
-        }
-        const sprintLease = this.executionRepository.getLease("sprint", sprintRun.sprintId);
-        if (sprintLease && sprintLease.expiresAt > nowIso) {
-          continue;
-        }
-        if (this.executionRepository.hasActiveTaskDispatches(sprintRun.id)) {
-          continue;
-        }
-
-        const lastHeartbeatAt = sprintRun.lastHeartbeatAt || sprintRun.updatedAt || sprintRun.startedAt || sprintRun.createdAt;
-        if (!lastHeartbeatAt || new Date(lastHeartbeatAt).getTime() > staleCutoffMs) {
-          continue;
-        }
-
-        if (sprintLease) {
-          this.executionRepository.releaseLease("sprint", sprintRun.sprintId, sprintLease.leaseToken);
-        }
-        this.executionRepository.updateSprintRun(sprintRun.id, {
-          status: "failed",
-          finishedAt: nowIso,
-          lastHeartbeatAt: nowIso,
-        });
-        this.executionRepository.appendSprintRunEvent(sprintRun.id, "sprint_failed", "system", {
-          reason: "orchestration_heartbeat_stalled",
-          previousLastHeartbeatAt: sprintRun.lastHeartbeatAt,
-          failedAt: nowIso,
-        }, {
-          sourceEventKey: `cleanup:stale-sprint-run:${sprintRun.id}:${lastHeartbeatAt}`,
-        });
-        failedSprintRunIds.push(sprintRun.id);
+    for (const sprintRun of this.executionRepository.listSprintRunsByStatus(["running"])) {
+      const sprintLease = this.executionRepository.getLease("sprint", sprintRun.sprintId);
+      if (sprintLease && sprintLease.expiresAt > nowIso) {
+        continue;
       }
+      if (this.executionRepository.hasActiveTaskDispatches(sprintRun.id)) {
+        continue;
+      }
+
+      const lastHeartbeatAt = sprintRun.lastHeartbeatAt || sprintRun.updatedAt || sprintRun.startedAt || sprintRun.createdAt;
+      if (!lastHeartbeatAt || new Date(lastHeartbeatAt).getTime() > staleCutoffMs) {
+        continue;
+      }
+
+      if (sprintLease) {
+        this.executionRepository.releaseLease("sprint", sprintRun.sprintId, sprintLease.leaseToken);
+      }
+      this.executionRepository.updateSprintRun(sprintRun.id, {
+        status: "failed",
+        finishedAt: nowIso,
+        lastHeartbeatAt: nowIso,
+      });
+      this.executionRepository.appendSprintRunEvent(sprintRun.id, "sprint_failed", "system", {
+        reason: "orchestration_heartbeat_stalled",
+        previousLastHeartbeatAt: sprintRun.lastHeartbeatAt,
+        failedAt: nowIso,
+      }, {
+        sourceEventKey: `cleanup:stale-sprint-run:${sprintRun.id}:${lastHeartbeatAt}`,
+      });
+      failedSprintRunIds.push(sprintRun.id);
     }
 
     return failedSprintRunIds;

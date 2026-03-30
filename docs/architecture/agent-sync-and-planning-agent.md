@@ -55,6 +55,25 @@ That means:
 - `source_scope`
 - `source_updated_at`
 - `source_imported_at`
+- `avatar_config_json` (used for dashboard UI avatars: body, hair, face, shirt, bottom)
+- `memory_template_override_enabled`
+- `memory_template_markdown`
+
+These metadata fields are synced bidirectionally with project markdown files using a `---json` frontmatter codec:
+
+```markdown
+---json
+{
+  "avatarConfig": {
+    "body": "human",
+    "hair": "short"
+  },
+  "memoryTemplateOverrideEnabled": true,
+  "memoryTemplateMarkdown": "Format memory here."
+}
+---
+Agent instructions go here.
+```
 
 The API record also exposes derived sync state:
 

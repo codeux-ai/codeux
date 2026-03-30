@@ -24,9 +24,14 @@ export function useProjectStats(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const refreshInternal = useCallback(async (options?: { silent?: boolean }): Promise<void> => {
     if (!projectId) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
       setStats(null);
       setError(null);
       setLoading(false);
@@ -35,17 +40,31 @@ export function useProjectStats(
     }
 
     const isForeground = !options?.silent && !hasLoadedRef.current;
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     if (isForeground) {
       setLoading(true);
     }
     try {
-      setStats(await fetchProjectStats(projectId, statsQuery));
-      hasLoadedRef.current = true;
-      setError(null);
+      setStats(await fetchProjectStats(projectId, statsQuery, abortController.signal));
+      if (abortControllerRef.current === abortController) {
+        hasLoadedRef.current = true;
+        setError(null);
+      }
     } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
+      if (fetchError instanceof Error && fetchError.name === "AbortError") {
+        return;
+      }
+      if (abortControllerRef.current === abortController) {
+        setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
+      }
     } finally {
-      if (isForeground) {
+      if (isForeground && abortControllerRef.current === abortController) {
         setLoading(false);
       }
     }
@@ -56,24 +75,43 @@ export function useProjectStats(
     void refreshInternal();
   }, [refreshInternal]);
 
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (!projectId) {
       return;
     }
 
-    return subscribeToDashboardRealtime([`project:${projectId}`], (message: DashboardRealtimeServerMessage) => {
+    const unsubsribe = subscribeToDashboardRealtime([`project:${projectId}`], (message: DashboardRealtimeServerMessage) => {
       if (message.type === "event" && (
         message.event.eventType === "project.execution.updated"
         || message.event.eventType === "project.structure.updated"
       )) {
-        void refreshInternal({ silent: true });
+        if (debounceRef.current) {
+          clearTimeout(debounceRef.current);
+        }
+        debounceRef.current = setTimeout(() => {
+          void refreshInternal({ silent: true });
+        }, 500);
         return;
       }
 
       if (message.type === "snapshot_required") {
-        void refreshInternal({ silent: true });
+        if (debounceRef.current) {
+          clearTimeout(debounceRef.current);
+        }
+        debounceRef.current = setTimeout(() => {
+          void refreshInternal({ silent: true });
+        }, 500);
       }
     });
+
+    return () => {
+      unsubsribe();
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
   }, [projectId, refreshInternal]);
 
   useEffect(() => {

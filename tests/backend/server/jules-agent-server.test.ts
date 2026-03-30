@@ -151,7 +151,7 @@ describe("JulesAgentServer", () => {
         ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence, enabled: true, waitForCiBeforeFeatureMerge: true }
       };
       vi.spyOn((server as any).projectManagementRepository, "getSelectedProjectId").mockReturnValue(null);
-      vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectStatus").mockReturnValue({
+      vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectLiveStatus").mockReturnValue({
         subtasks: [{ id: "T1", status: "RUNNING" } as any],
         feature_branch: "feat/test",
         timestamp: "2026-03-09T00:00:00.000Z",
@@ -179,7 +179,7 @@ describe("JulesAgentServer", () => {
         },
         sources: {},
       });
-      vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectStatus").mockReturnValue({
+      vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectLiveStatus").mockReturnValue({
         subtasks: [{ id: "T1", status: "RUNNING" } as any],
         feature_branch: "feat/test",
         timestamp: "2026-03-09T00:00:00.000Z",
@@ -193,7 +193,7 @@ describe("JulesAgentServer", () => {
 
     it("should return MAIN_BRANCH_CI otherwise", () => {
       vi.spyOn((server as any).projectManagementRepository, "getSelectedProjectId").mockReturnValue(null);
-      vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectStatus").mockReturnValue({
+      vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectLiveStatus").mockReturnValue({
         subtasks: [],
         feature_branch: undefined,
         timestamp: null,
@@ -738,8 +738,13 @@ describe("JulesAgentServer", () => {
       const { bootDashboard } = await import("../../../src/app/lifecycle/dashboard-lifecycle-service.js");
       const { bootMcpTransport, bootMcpHttpTransport } = await import("../../../src/app/lifecycle/mcp-lifecycle-service.js");
 
-      (server as any).sessionTracking = {
-        recoverInterruptedCliSessions: vi.fn().mockReturnValue({ recoveredCount: 6, sessionIds: ["1", "2", "3", "4", "5", "6"] })
+      (server as any).runtimeStartupRecoveryService = {
+        recover: vi.fn().mockResolvedValue({
+          recoveredCliSessionIds: ["1", "2", "3", "4", "5", "6"],
+          reconciledLocalDispatchIds: [],
+          resumedSprintRunIds: [],
+          supersededSprintRunIds: [],
+        }),
       };
 
       const refreshJulesApiKeySpy = vi.spyOn(server as any, "refreshJulesApiKey").mockImplementation(() => {});
@@ -751,7 +756,7 @@ describe("JulesAgentServer", () => {
       expect(bootMcpTransport).toHaveBeenCalled();
       expect(bootMcpHttpTransport).toHaveBeenCalled();
       expect(refreshJulesApiKeySpy).toHaveBeenCalled();
-      expect((server as any).sessionTracking.recoverInterruptedCliSessions).toHaveBeenCalled();
+      expect((server as any).runtimeStartupRecoveryService.recover).toHaveBeenCalled();
 
       refreshJulesApiKeySpy.mockRestore();
     });
@@ -761,8 +766,13 @@ describe("JulesAgentServer", () => {
       const { bootDashboard } = await import("../../../src/app/lifecycle/dashboard-lifecycle-service.js");
       const { bootMcpTransport, bootMcpHttpTransport } = await import("../../../src/app/lifecycle/mcp-lifecycle-service.js");
 
-      (server as any).sessionTracking = {
-        recoverInterruptedCliSessions: vi.fn().mockReturnValue({ recoveredCount: 0, sessionIds: [] })
+      (server as any).runtimeStartupRecoveryService = {
+        recover: vi.fn().mockResolvedValue({
+          recoveredCliSessionIds: [],
+          reconciledLocalDispatchIds: [],
+          resumedSprintRunIds: [],
+          supersededSprintRunIds: [],
+        }),
       };
 
       const refreshJulesApiKeySpy = vi.spyOn(server as any, "refreshJulesApiKey").mockImplementation(() => {});
@@ -774,7 +784,7 @@ describe("JulesAgentServer", () => {
       expect(bootMcpTransport).toHaveBeenCalled();
       expect(bootMcpHttpTransport).toHaveBeenCalled();
       expect(refreshJulesApiKeySpy).toHaveBeenCalled();
-      expect((server as any).sessionTracking.recoverInterruptedCliSessions).toHaveBeenCalled();
+      expect((server as any).runtimeStartupRecoveryService.recover).toHaveBeenCalled();
 
       refreshJulesApiKeySpy.mockRestore();
     });
@@ -791,8 +801,13 @@ describe("JulesAgentServer", () => {
       const { bootDashboard } = await import("../../../src/app/lifecycle/dashboard-lifecycle-service.js");
       const { bootMcpTransport, bootMcpHttpTransport } = await import("../../../src/app/lifecycle/mcp-lifecycle-service.js");
 
-      (server as any).sessionTracking = {
-        recoverInterruptedCliSessions: vi.fn().mockReturnValue({ recoveredCount: 0, sessionIds: [] })
+      (server as any).runtimeStartupRecoveryService = {
+        recover: vi.fn().mockResolvedValue({
+          recoveredCliSessionIds: [],
+          reconciledLocalDispatchIds: [],
+          resumedSprintRunIds: [],
+          supersededSprintRunIds: [],
+        }),
       };
 
       (server as any).activityCacheService = {

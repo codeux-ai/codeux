@@ -335,7 +335,7 @@ function deriveTaskEndAt(args: {
   }
 
   if (args.phase === "FAILED" || args.phase === "BLOCKED" || args.phase === "QUOTA") {
-    return runtimeTerminalAt ?? latestEventAt;
+    return maxIso(runtimeTerminalAt, latestEventAt);
   }
 
   if (args.phase === "PENDING") {
@@ -358,6 +358,11 @@ function deriveTaskEndAt(args: {
   }
 
   if (args.phase === "COMPLETED" && hasMergeEvidence) {
+    if (latestPostCodingStageSignal) {
+      return latestPostCodingStageSignal.signal.terminal
+        ? maxIso(codingCompletedAt, runtimeTerminalAt, latestPostCodingStageSignal.at)
+        : args.nowIso;
+    }
     return codingCompletedAt ?? runtimeTerminalAt ?? latestEventAt;
   }
 
@@ -471,6 +476,18 @@ export function buildLiveTaskTimingSummary(args: {
     stageTotals[segment.stage] += segment.durationSeconds;
   }
 
+  const wallTimeMs = dispatch?.usage?.wallTimeMs;
+  if (typeof wallTimeMs === "number" && wallTimeMs > 0) {
+    const wallTimeSeconds = Math.floor(wallTimeMs / 1000);
+    if (hasLiveWindow && segments[segments.length - 1]?.stage === "coding") {
+      stageTotals["coding"] = Math.max(stageTotals["coding"], wallTimeSeconds);
+    } else {
+      stageTotals["coding"] = wallTimeSeconds;
+    }
+  }
+
+  const recalculatedTotalSeconds = LIVE_TASK_STAGE_ORDER.reduce((acc, stage) => acc + stageTotals[stage], 0);
+
   return {
     taskId: args.task.record_id || args.task.id,
     taskKey: args.task.id,
@@ -478,7 +495,7 @@ export function buildLiveTaskTimingSummary(args: {
     phase,
     startedAt,
     endedAt,
-    totalSeconds: secondsBetween(startedAt, endedAt),
+    totalSeconds: recalculatedTotalSeconds,
     activeStage: hasLiveWindow
       ? segments[segments.length - 1]?.stage ?? null
       : null,

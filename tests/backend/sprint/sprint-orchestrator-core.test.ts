@@ -265,4 +265,46 @@ describe("SprintOrchestrator core execution", () => {
       expect.any(Object),
     );
   });
+
+  it("recovers an existing sprint run without creating a new run", async () => {
+    const { deps } = buildDeps();
+    deps.getDashboardSettings = () => ({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      sprintLoopSteps: {
+        ...DEFAULT_DASHBOARD_SETTINGS.sprintLoopSteps,
+        branchPreflight: false,
+        planningPreflight: false,
+      },
+    });
+    deps.executionRepository.getSprintRun = vi.fn().mockReturnValue({
+      id: "run-existing",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      status: "running",
+      startedAt: "2026-03-29T10:00:00.000Z",
+    });
+    const orchestrator = new SprintOrchestrator(deps as any);
+    const runOrchestrateSpy = vi.spyOn((orchestrator as any).actionRunner as SprintActionRunner, "runOrchestrate")
+      .mockResolvedValue({ content: [] });
+
+    await orchestrator.recoverSprintRun("run-existing");
+
+    expect(deps.executionRepository.createSprintRun).not.toHaveBeenCalled();
+    expect(deps.executionRepository.appendSprintRunEvent).toHaveBeenCalledWith(
+      "run-existing",
+      "sprint_recovery_started",
+      "system",
+      expect.objectContaining({
+        previousStatus: "running",
+      }),
+      expect.objectContaining({
+        sourceEventKey: "startup-recovery:sprint-run:run-existing",
+      }),
+    );
+    expect(runOrchestrateSpy).toHaveBeenCalledWith(expect.objectContaining({
+      sprintRunId: "run-existing",
+      shouldWait: true,
+      watchLoopEnabled: true,
+    }));
+  });
 });

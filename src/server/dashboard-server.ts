@@ -7,21 +7,23 @@ import type { IncomingMessage } from "http";
 import net from "net";
 import type { Duplex } from "stream";
 import type {
+  DashboardStatus,
   ExecutionAttentionItemSummary,
   ExecutionAssignedWorkerSummary,
   DockerContainer,
   ExecutionDashboardSnapshot,
   ExternalSettingsHints,
-    GitTrackingStatus,
-    JulesActivity,
-    OverviewTelemetrySnapshot,
-    ProjectExecutionStatsSnapshot,
-    ProjectStatsQuery,
-    ProjectStatsWindow,
-    ReadinessProbeStatus,
-    SprintPreviewScript,
-    SprintPreviewSession,
-  } from "../contracts/app-types.js";
+  GitTrackingStatus,
+  JulesActivity,
+  OverviewTelemetrySnapshot,
+  ProjectExecutionStatsSnapshot,
+  ProjectLiveDashboardSnapshot,
+  ProjectStatsQuery,
+  ProjectStatsWindow,
+  ReadinessProbeStatus,
+  SprintPreviewScript,
+  SprintPreviewSession,
+} from "../contracts/app-types.js";
 import type {
   EffectiveSettingsResponse,
   ProjectSettings,
@@ -84,6 +86,7 @@ export interface DashboardServerOptions {
   port: number;
   liveActivityCacheMs: number;
   getStatus: () => unknown;
+  getLiveSnapshot?: (projectId?: string | null) => Promise<ProjectLiveDashboardSnapshot> | ProjectLiveDashboardSnapshot;
   getExecutionSnapshot: () => ExecutionDashboardSnapshot;
   getProjectExecutionSnapshot: (projectId: string) => ExecutionDashboardSnapshot;
   getProjectStatsSnapshot: (projectId: string, query?: ProjectStatsQuery) => ProjectExecutionStatsSnapshot;
@@ -699,16 +702,33 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   });
 
   // Combined endpoint — single HTTP call for live page initial load
-  app.get("/api/live", (req, res) => {
-    const status = getStatus() as { project_id?: string | null };
-    const projectId = typeof status?.project_id === "string" && status.project_id.trim().length > 0
-      ? status.project_id.trim()
-      : null;
+  app.get("/api/live", async (req, res) => {
+    try {
+      const requestedProjectId = String(req.query.projectId || "").trim();
+      const projectId = requestedProjectId.length > 0 ? requestedProjectId : null;
+      if (options.getLiveSnapshot) {
+        res.json(await options.getLiveSnapshot(projectId));
+        return;
+      }
 
-    res.json({
-      status,
-      execution: projectId ? options.getProjectExecutionSnapshot(projectId) : options.getExecutionSnapshot(),
-    });
+      const status = getStatus() as DashboardStatus;
+      const resolvedProjectId = projectId
+        || (typeof status?.project_id === "string" && status.project_id.trim().length > 0
+          ? status.project_id.trim()
+          : null);
+
+      res.json({
+        projectId: resolvedProjectId,
+        selectedSprintId: status?.sprint_id ?? null,
+        status,
+        execution: resolvedProjectId ? options.getProjectExecutionSnapshot(resolvedProjectId) : options.getExecutionSnapshot(),
+        gitStatus: null,
+        gitStatusError: null,
+        updatedAt: new Date().toISOString(),
+      } satisfies ProjectLiveDashboardSnapshot);
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to load live snapshot") });
+    }
   });
 
   app.get("/api/telemetry/overview", (req, res) => {
@@ -1474,15 +1494,22 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   app.use((req, res, next) => {
     const isGet = req.method === "GET";
     const isApi = req.path.startsWith("/api/") || req.path.startsWith("/health") || req.path.startsWith("/ready");
-    const isExtensionless = !req.path.split("/").pop()?.includes(".");
+    const isExtensionless = path.extname(req.path) === "";
     const isPreviewHost = parsePreviewSessionIdFromHost(req.headers.host) !== null;
 
     if (isGet && !isApi && isExtensionless && !isPreviewHost) {
-      const indexPath = path.join(staticDir, "index.html");
-      if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-        return;
-      }
+      const indexPath = path.join(path.resolve(staticDir), "index.html");
+      res.sendFile(indexPath, (err: any) => {
+        if (err) {
+          // If the file is simply not found, pass to the next middleware (usually resulting in a 404).
+          if ((err as any).code === "ENOENT" || (err as any).status === 404) {
+            next();
+          } else {
+            next(err);
+          }
+        }
+      });
+      return;
     }
     next();
   });

@@ -5,6 +5,7 @@ import { CoreDependencies } from "../../../../src/app/dependency-factory/core-fa
 import { SprintDependencies } from "../../../../src/app/dependency-factory/sprint-factory.js";
 import { ActivityCacheService } from "../../../../src/server/activity-cache-service.js";
 import { TaskRerunService } from "../../../../src/services/task-rerun-service.js";
+import { WorkspaceManager } from "../../../../src/infrastructure/providers/cli/workspace-manager.js";
 
 vi.mock("../../../../src/server/activity-cache-service.js", () => {
   const ActivityCacheService = vi.fn();
@@ -15,6 +16,16 @@ vi.mock("../../../../src/server/activity-cache-service.js", () => {
 vi.mock("../../../../src/services/task-rerun-service.js", () => {
   const TaskRerunService = vi.fn();
   return { TaskRerunService };
+});
+
+vi.mock("../../../../src/infrastructure/providers/cli/workspace-manager.js", () => {
+  const WorkspaceManager = vi.fn().mockImplementation(function WorkspaceManagerMock() {
+    return {
+    buildWorktreePath: vi.fn().mockReturnValue("/repo/.worktrees/session-1"),
+    removeWorktree: vi.fn().mockResolvedValue(undefined),
+    };
+  });
+  return { WorkspaceManager };
 });
 
 describe("Dashboard Factory", () => {
@@ -44,6 +55,7 @@ describe("Dashboard Factory", () => {
       },
       projectRuntimeRepository: {
         getSelectedProjectStatus: vi.fn().mockReturnValue({ project_id: "project-1", sprint_id: "sprint-1", sprint_number: 3, feature_branch: "feature/sprint3", repo_path: "/repo", subtasks: ["mock-subtask"] }),
+        getSelectedProjectLiveStatus: vi.fn().mockReturnValue({ project_id: "project-1", sprint_id: "sprint-1", sprint_number: 3, feature_branch: "feature/sprint3", repo_path: "/repo", subtasks: ["mock-subtask"] }),
         getProjectStatus: vi.fn().mockReturnValue({ project_id: "project-1", sprint_id: "sprint-1", sprint_number: 3, source_id: "source-1", feature_branch: "feature/sprint3", repo_path: "/repo", subtasks: [{ record_id: "task1", id: "T1", title: "Task", prompt: "Do it", depends_on: [], is_independent: true }] }),
         syncDashboardStatus: vi.fn(),
       },
@@ -59,10 +71,23 @@ describe("Dashboard Factory", () => {
         updateSprintRun: vi.fn(),
       },
       settingsRepository: {
+        getDefaultDashboardSettings: vi.fn().mockReturnValue({}),
         resolveProjectDashboardSettings: vi.fn(),
       },
       projectAttentionService: {
         resolveItemsForDispatch: vi.fn(),
+      },
+      connectionChatRepository: {},
+      projectWorkerAssignmentRepository: {},
+      agentPresetSyncService: {},
+      activeDispatchRegistry: {
+        requestStop: vi.fn().mockResolvedValue(undefined),
+      },
+      providerRunner: {},
+      julesApi: {},
+      memoryService: {},
+      agentPresetRepository: {
+        getAgentPreset: vi.fn(),
       },
     };
 
@@ -70,6 +95,8 @@ describe("Dashboard Factory", () => {
       sprintTaskDispatchService: {
         startTask: vi.fn(),
       },
+      sprintOrchestrator: {},
+      taskService: {},
     };
   });
 
@@ -164,7 +191,7 @@ describe("Dashboard Factory", () => {
   });
 
   it("getSubtasks handles missing lastStatus", () => {
-    mockCoreDeps.projectRuntimeRepository.getSelectedProjectStatus.mockReturnValue({ subtasks: [] });
+    mockCoreDeps.projectRuntimeRepository.getSelectedProjectLiveStatus.mockReturnValue({ subtasks: [] });
     createDashboardDependencies(
       mockContext as unknown as ServerContext,
       mockCoreDeps as unknown as CoreDependencies,
@@ -206,5 +233,143 @@ describe("Dashboard Factory", () => {
 
     const taskRerunArgs = vi.mocked(TaskRerunService).mock.calls[0][0];
     expect(taskRerunArgs.resolveTaskContext("task1")).toBeNull();
+  });
+
+  it("resolveTaskContext returns null when the task, sprint, or project cannot be resolved", () => {
+    createDashboardDependencies(
+      mockContext as unknown as ServerContext,
+      mockCoreDeps as unknown as CoreDependencies,
+      mockSprintDeps as unknown as SprintDependencies
+    );
+
+    const taskRerunArgs = vi.mocked(TaskRerunService).mock.calls[0][0];
+
+    mockCoreDeps.projectManagementRepository.getTask.mockReturnValueOnce(null);
+    expect(taskRerunArgs.resolveTaskContext("missing-task")).toBeNull();
+
+    mockCoreDeps.projectManagementRepository.getTask.mockReturnValue({ id: "task1", taskKey: "T1", projectId: "project-1", sprintId: "sprint-1" });
+    mockCoreDeps.projectManagementRepository.getSprint.mockReturnValueOnce(null);
+    expect(taskRerunArgs.resolveTaskContext("task1")).toBeNull();
+
+    mockCoreDeps.projectManagementRepository.getSprint.mockReturnValue({ id: "sprint-1", projectId: "project-1", number: 3, featureBranch: "feature/sprint3" });
+    mockCoreDeps.projectManagementRepository.getProject.mockReturnValueOnce(null);
+    expect(taskRerunArgs.resolveTaskContext("task1")).toBeNull();
+  });
+
+  it("resolveSprintRunId creates and timestamps a sprint run when none is active", async () => {
+    mockCoreDeps.executionRepository.findActiveSprintRun.mockReturnValue(null);
+    mockCoreDeps.executionRepository.createSprintRun.mockReturnValue({ id: "run-created" });
+
+    createDashboardDependencies(
+      mockContext as unknown as ServerContext,
+      mockCoreDeps as unknown as CoreDependencies,
+      mockSprintDeps as unknown as SprintDependencies
+    );
+
+    const taskRerunArgs = vi.mocked(TaskRerunService).mock.calls[0][0];
+    const sprintRunId = await taskRerunArgs.resolveSprintRunId({ projectId: "project-1", sprintId: "sprint-1" });
+
+    expect(sprintRunId).toBe("run-created");
+    expect(mockCoreDeps.executionRepository.createSprintRun).toHaveBeenCalledWith({
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      triggerType: "dashboard",
+      triggeredBy: "task_rerun",
+      executorMode: "mixed",
+      status: "running",
+    });
+    expect(mockCoreDeps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
+      "run-created",
+      expect.objectContaining({
+        status: "running",
+        startedAt: expect.any(String),
+        lastHeartbeatAt: expect.any(String),
+      }),
+    );
+  });
+
+  it("clearTaskWorktree removes the session worktree when a latest task run exists", async () => {
+    mockCoreDeps.executionRepository.getLatestTaskRun = vi.fn().mockReturnValue({ sessionId: "session-1" });
+
+    createDashboardDependencies(
+      mockContext as unknown as ServerContext,
+      mockCoreDeps as unknown as CoreDependencies,
+      mockSprintDeps as unknown as SprintDependencies
+    );
+
+    const taskRerunArgs = vi.mocked(TaskRerunService).mock.calls[0][0];
+    await taskRerunArgs.clearTaskWorktree({ taskId: "task1", repoPath: "/repo" });
+
+    expect(mockCoreDeps.executionRepository.getLatestTaskRun).toHaveBeenCalledWith("task1");
+    expect(WorkspaceManager).toHaveBeenCalledTimes(1);
+    const workspaceManagerInstance = vi.mocked(WorkspaceManager).mock.results[0]?.value;
+    expect(workspaceManagerInstance.buildWorktreePath).toHaveBeenCalledWith("/repo", "session-1", "HOST");
+    expect(workspaceManagerInstance.removeWorktree).toHaveBeenCalledWith("/repo", "/repo/.worktrees/session-1");
+  });
+
+  it("clearTaskWorktree exits early when there is no latest session", async () => {
+    mockCoreDeps.executionRepository.getLatestTaskRun = vi.fn().mockReturnValue(null);
+
+    createDashboardDependencies(
+      mockContext as unknown as ServerContext,
+      mockCoreDeps as unknown as CoreDependencies,
+      mockSprintDeps as unknown as SprintDependencies
+    );
+
+    const taskRerunArgs = vi.mocked(TaskRerunService).mock.calls[0][0];
+    await taskRerunArgs.clearTaskWorktree({ taskId: "task1", repoPath: "/repo" });
+
+    expect(mockCoreDeps.executionRepository.getLatestTaskRun).toHaveBeenCalledWith("task1");
+    expect(WorkspaceManager).not.toHaveBeenCalled();
+  });
+
+  it("updates executor overrides and cancels active dispatches correctly", async () => {
+    mockCoreDeps.executionRepository.listTaskDispatches = vi.fn().mockReturnValue([
+      { id: "queued-1", status: "queued" },
+      { id: "running-1", status: "running" },
+      { id: "cancel-1", status: "cancel_requested" },
+      { id: "completed-1", status: "completed" },
+    ]);
+    mockCoreDeps.executionRepository.updateTaskDispatch = vi.fn();
+
+    createDashboardDependencies(
+      mockContext as unknown as ServerContext,
+      mockCoreDeps as unknown as CoreDependencies,
+      mockSprintDeps as unknown as SprintDependencies
+    );
+
+    const taskRerunArgs = vi.mocked(TaskRerunService).mock.calls[0][0];
+
+    taskRerunArgs.updateTaskExecutorOverride("task1", "jules");
+    taskRerunArgs.updateTaskExecutorOverride("task1", "codex");
+    expect(mockCoreDeps.projectManagementRepository.updateTask).toHaveBeenCalledWith("task1", { executorType: "jules" });
+    expect(mockCoreDeps.projectManagementRepository.updateTask).toHaveBeenCalledWith("task1", { executorType: "docker_cli" });
+
+    await taskRerunArgs.cancelActiveDispatch("task1", "project-1");
+
+    expect(mockCoreDeps.executionRepository.listTaskDispatches).toHaveBeenCalledWith({ projectId: "project-1", taskId: "task1" });
+    expect(mockCoreDeps.activeDispatchRegistry.requestStop).toHaveBeenCalledWith("running-1", "Task rerun requested from dashboard.");
+    expect(mockCoreDeps.executionRepository.updateTaskDispatch).toHaveBeenCalledTimes(3);
+    expect(mockCoreDeps.executionRepository.updateTaskDispatch).toHaveBeenCalledWith(
+      "queued-1",
+      expect.objectContaining({
+        status: "cancelled",
+        errorMessage: "Cancelled: task rerun requested.",
+      }),
+    );
+    expect(mockCoreDeps.executionRepository.updateTaskDispatch).toHaveBeenCalledWith(
+      "running-1",
+      expect.objectContaining({
+        status: "cancelled",
+        errorMessage: "Cancelled: task rerun requested.",
+      }),
+    );
+    expect(mockCoreDeps.executionRepository.updateTaskDispatch).toHaveBeenCalledWith(
+      "cancel-1",
+      expect.objectContaining({
+        status: "cancelled",
+        errorMessage: "Cancelled: task rerun requested.",
+      }),
+    );
   });
 });

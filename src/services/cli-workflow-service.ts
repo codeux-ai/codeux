@@ -173,6 +173,8 @@ export class CliWorkflowService {
       initialHead: "",
       workflowSucceeded: false,
       agentPresetId: workerAgent?.id,
+      memoryTemplateOverrideEnabled: workerAgent?.memoryTemplateOverrideEnabled,
+      memoryTemplateMarkdown: workerAgent?.memoryTemplateMarkdown,
       workspaceManager: this.workspaceManager,
       prService: this.prService,
       providerRunner: this.providerRunner,
