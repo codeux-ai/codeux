@@ -157,6 +157,7 @@ export class CoreToolHandler {
           threadId: immediateInboxMessage.threadId,
           projectId: immediateInboxMessage.projectId,
           bodyMarkdown: immediateInboxMessage.bodyMarkdown,
+          metadata: immediateInboxMessage.metadata,
         },
         continuation: {
           nextTool: "listen",
@@ -181,6 +182,7 @@ export class CoreToolHandler {
             threadId: message.threadId,
             projectId: message.projectId,
             bodyMarkdown: message.bodyMarkdown,
+            metadata: message.metadata,
           },
           continuation: {
             nextTool: "listen",
@@ -254,6 +256,7 @@ export class CoreToolHandler {
       threadId: args.thread_id,
       bodyMarkdown: args.body_markdown,
       replyToMessageId: args.reply_to_message_id,
+      metadata: args.metadata,
     });
 
     return {

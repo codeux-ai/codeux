@@ -1,6 +1,7 @@
 import type { PipelineContext } from "./pipeline-context.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "../../cli-workflow-text-utils.js";
 import { classifyProviderError, ProviderQuotaError } from "../../../shared/providers/provider-error-classifier.js";
+import { resolveProviderRetryDecision, sleepWithSignal } from "../../../shared/providers/provider-retry-policy.js";
 import { resolveProviderForInvocation } from "../../provider-routing.js";
 
 export async function executeProviderStage(ctx: PipelineContext, providerPrompt: string): Promise<void> {
@@ -13,13 +14,13 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     ? ctx.deps.executionRepository.getTaskRun(ctx.taskRunId)
     : null;
 
-  let execInvocation: { id: string } | undefined = undefined;
+  let execInvocationId: string | null = null;
 
-  const runProvider = async (p: string, retrySystemMessage?: string) => {
+  const runProvider = async (p: string, retrySystemMessage?: string, continueSessionId?: string | null) => {
     const startedAt = new Date().toISOString();
 
-    if (!execInvocation) {
-      execInvocation = ctx.deps.executionRepository?.createExecutionInvocation({
+    if (!execInvocationId) {
+      execInvocationId = ctx.deps.executionRepository?.createExecutionInvocation({
         projectId: taskRun?.projectId || "",
         sprintId: taskRun?.sprintId,
         taskId: taskRun?.taskId,
@@ -30,18 +31,18 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
         provider: ctx.provider,
         model,
         startedAt,
-      });
+      })?.id || null;
     }
 
-    if (execInvocation && retrySystemMessage) {
-      ctx.deps.executionRepository?.appendExecutionInvocationMessage(execInvocation.id, {
+    if (execInvocationId && retrySystemMessage) {
+      ctx.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
         role: "system",
         contentMarkdown: retrySystemMessage,
       });
     }
 
-    if (execInvocation) {
-      ctx.deps.executionRepository?.appendExecutionInvocationMessage(execInvocation.id, {
+    if (execInvocationId) {
+      ctx.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
         role: "user",
         contentMarkdown: p,
       });
@@ -64,8 +65,8 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
       })
       : null;
 
-    if (invocation && execInvocation) {
-      ctx.deps.executionRepository?.updateExecutionInvocation(execInvocation.id, {
+    if (invocation && execInvocationId) {
+      ctx.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
         providerInvocationId: invocation.id,
       });
     }
@@ -82,6 +83,7 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
       repoPath: ctx.repoPath,
       githubToken: ctx.deps.getGithubToken(),
       signal: ctx.abortSignal,
+      continueSessionId,
       onActivity: (desc, originator) =>
         ctx.deps.sessionTracking.appendActivity(ctx.sessionId, {
           description: desc,
@@ -121,18 +123,20 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
       });
     }
 
-    if (execInvocation) {
-      ctx.deps.executionRepository?.updateExecutionInvocation(execInvocation.id, {
+    if (execInvocationId) {
+      ctx.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
         status: result.ok ? "completed" : "failed",
+        provider: ctx.provider,
+        model,
         finishedAt: new Date().toISOString(),
       });
       if (!result.ok) {
-        ctx.deps.executionRepository?.appendExecutionInvocationMessage(execInvocation.id, {
+        ctx.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
           role: "tool",
           contentMarkdown: result.stderr || result.stdout || "Provider failed without output.",
         });
       } else {
-        ctx.deps.executionRepository?.appendExecutionInvocationMessage(execInvocation.id, {
+        ctx.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
           role: "assistant",
           contentMarkdown: result.usageTelemetry.transcriptText,
         });
@@ -142,18 +146,85 @@ export async function executeProviderStage(ctx: PipelineContext, providerPrompt:
     return result;
   };
 
-  let providerResult = await runProvider(providerPrompt);
+  let currentPrompt = providerPrompt;
+  let providerResult: Awaited<ReturnType<typeof runProvider>>;
+  let usedReadFileRetry = false;
+  let continueSessionId: string | null = null;
+  let rateLimitRetryCount = 0;
 
-  if (!providerResult.ok && ctx.workflowSettings.retryOnReadFileNotFound && isReadFileNotFoundToolError(providerResult)) {
-    ctx.deps.sessionTracking.appendActivity(ctx.sessionId, {
-      originator: "system",
-      description: "Retrying with file-discovery guidance.",
-    });
-    providerResult = await runProvider(buildReadFileRetryPrompt(providerPrompt), "Retrying with file-discovery guidance.");
-  }
+  while (true) {
+    providerResult = await runProvider(
+      currentPrompt,
+      usedReadFileRetry ? "Retrying with file-discovery guidance." : undefined,
+      continueSessionId,
+    );
 
-  if (!providerResult.ok) {
+    if (!providerResult.ok && ctx.workflowSettings.retryOnReadFileNotFound && !usedReadFileRetry && isReadFileNotFoundToolError(providerResult)) {
+      ctx.deps.sessionTracking.appendActivity(ctx.sessionId, {
+        originator: "system",
+        description: "Retrying with file-discovery guidance.",
+      });
+      currentPrompt = buildReadFileRetryPrompt(providerPrompt);
+      usedReadFileRetry = true;
+      continue;
+    }
+
+    if (providerResult.ok) {
+      return;
+    }
+
     const classification = classifyProviderError(ctx.provider, providerResult);
+    if (execInvocationId) {
+      ctx.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
+        lastErrorCategory: classification.category,
+        lastErrorMessage: classification.userMessage,
+        lastRetryAfterIso: classification.resetAtIso,
+      });
+      ctx.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
+        role: "system",
+        contentMarkdown: `Provider error (${classification.category}): ${classification.userMessage}`,
+        metadata: {
+          provider: ctx.provider,
+          model,
+          errorCategory: classification.category,
+          retryAfterIso: classification.resetAtIso,
+        },
+      });
+    }
+
+    const retryDecision = resolveProviderRetryDecision(classification, ctx.workflowSettings);
+    if (retryDecision) {
+      if (retryDecision.kind === "rate_limit" && rateLimitRetryCount >= ctx.workflowSettings.maxRateLimitRetries) {
+        // fall through to terminal classified error handling below
+      } else {
+        if (retryDecision.kind === "rate_limit") {
+          rateLimitRetryCount += 1;
+        }
+        const retryMessage = retryDecision.kind === "quota_reset"
+          ? `Waiting for provider quota reset. Retrying at ${retryDecision.retryAtIso}.`
+          : `Provider rate-limited. Retrying at ${retryDecision.retryAtIso}.`;
+        ctx.deps.sessionTracking.appendActivity(ctx.sessionId, {
+          originator: "system",
+          description: retryMessage,
+        });
+        if (execInvocationId) {
+          ctx.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
+            role: "system",
+            contentMarkdown: retryMessage,
+            metadata: {
+              provider: ctx.provider,
+              model,
+              errorCategory: classification.category,
+              retryAfterIso: retryDecision.retryAtIso,
+            },
+          });
+        }
+        continueSessionId = providerResult.nativeSessionId || (ctx.provider === "claude-code" ? null : ctx.sessionId);
+        await sleepWithSignal(retryDecision.delayMs, ctx.abortSignal);
+        continue;
+      }
+    }
+
     if (classification.category !== "UNKNOWN") {
       throw new ProviderQuotaError(classification);
     }

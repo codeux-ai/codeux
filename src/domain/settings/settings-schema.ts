@@ -259,6 +259,10 @@ const validateCliWorkflow = (
   if (typeof value.cleanupWorktreeOnSuccess !== "boolean") issues.push({ path: `${path}.cleanupWorktreeOnSuccess`, message: "Expected a boolean" });
   if (typeof value.cleanupWorktreeOnFailure !== "boolean") issues.push({ path: `${path}.cleanupWorktreeOnFailure`, message: "Expected a boolean" });
   if (typeof value.retryOnReadFileNotFound !== "boolean") issues.push({ path: `${path}.retryOnReadFileNotFound`, message: "Expected a boolean" });
+  if (typeof value.retryOnQuotaReset !== "boolean") issues.push({ path: `${path}.retryOnQuotaReset`, message: "Expected a boolean" });
+  if (typeof value.retryOnRateLimit !== "boolean") issues.push({ path: `${path}.retryOnRateLimit`, message: "Expected a boolean" });
+  if (typeof value.rateLimitRetryDelaySeconds !== "number" || !Number.isFinite(value.rateLimitRetryDelaySeconds) || value.rateLimitRetryDelaySeconds < 1) issues.push({ path: `${path}.rateLimitRetryDelaySeconds`, message: "Expected a positive integer" });
+  if (typeof value.maxRateLimitRetries !== "number" || !Number.isFinite(value.maxRateLimitRetries) || value.maxRateLimitRetries < 1) issues.push({ path: `${path}.maxRateLimitRetries`, message: "Expected a positive integer" });
   if (typeof value.maxPlanningJsonRetries !== "number" || !Number.isFinite(value.maxPlanningJsonRetries) || value.maxPlanningJsonRetries < 0) issues.push({ path: `${path}.maxPlanningJsonRetries`, message: "Expected a non-negative integer" });
   if (typeof value.maxQuotaRetriesWithoutTimer !== "number" || !Number.isFinite(value.maxQuotaRetriesWithoutTimer) || value.maxQuotaRetriesWithoutTimer < 1) issues.push({ path: `${path}.maxQuotaRetriesWithoutTimer`, message: "Expected a positive integer" });
   if (typeof value.resumeFailedTaskInSameWorkspace !== "boolean") issues.push({ path: `${path}.resumeFailedTaskInSameWorkspace`, message: "Expected a boolean" });
@@ -277,6 +281,25 @@ const validateCliWorkflow = (
   if (typeof value.containerGeminiAuthPath !== "string") issues.push({ path: `${path}.containerGeminiAuthPath`, message: "Expected a string" });
   if (typeof value.containerCodexAuthPath !== "string") issues.push({ path: `${path}.containerCodexAuthPath`, message: "Expected a string" });
   if (typeof value.containerClaudeCodeAuthPath !== "string") issues.push({ path: `${path}.containerClaudeCodeAuthPath`, message: "Expected a string" });
+};
+
+const validateSprintPreview = (
+  value: unknown,
+  path: string,
+  issues: ValidationIssue[],
+) => {
+  if (!isRecord(value)) {
+    issues.push({ path, message: "Expected an object" });
+    return;
+  }
+  if (typeof value.autoStartOnRunningSprint !== "boolean") issues.push({ path: `${path}.autoStartOnRunningSprint`, message: "Expected a boolean" });
+  if (typeof value.rebuildOnTaskCompletion !== "boolean") issues.push({ path: `${path}.rebuildOnTaskCompletion`, message: "Expected a boolean" });
+  if (typeof value.rebuildOnSprintCompletion !== "boolean") issues.push({ path: `${path}.rebuildOnSprintCompletion`, message: "Expected a boolean" });
+  if (typeof value.autoStopOnTerminalSprint !== "boolean") issues.push({ path: `${path}.autoStopOnTerminalSprint`, message: "Expected a boolean" });
+  if (typeof value.hostPortRangeStart !== "number") issues.push({ path: `${path}.hostPortRangeStart`, message: "Expected a number" });
+  if (typeof value.hostPortRangeEnd !== "number") issues.push({ path: `${path}.hostPortRangeEnd`, message: "Expected a number" });
+  if (typeof value.containerAppPort !== "number") issues.push({ path: `${path}.containerAppPort`, message: "Expected a number" });
+  if (typeof value.startupScriptPath !== "string") issues.push({ path: `${path}.startupScriptPath`, message: "Expected a string" });
 };
 
 const validateWorkers = (
@@ -436,6 +459,7 @@ export const validateSettingsPayload = (payload: unknown): ValidationResult<Dash
   validateCiIntelligence(payload.ciIntelligence, "ciIntelligence", issues);
   validateSprintLoopSteps(payload.sprintLoopSteps, "sprintLoopSteps", issues);
   validateCliWorkflow(payload.cliWorkflow, "cliWorkflow", issues);
+  validateSprintPreview(payload.sprintPreview, "sprintPreview", issues);
   validateWorkers(payload.workers, "workers", issues);
   validateAgents(payload.agents, "agents", issues);
   validateSkills(payload.skills, "skills", issues);

@@ -2,20 +2,28 @@ import express, { type Express } from "express";
 import * as fs from "fs";
 import * as path from "path";
 import type { Server } from "http";
-import { createServer } from "http";
+import { createServer, request as httpRequest } from "http";
+import type { IncomingMessage } from "http";
+import net from "net";
+import type { Duplex } from "stream";
 import type {
+  DashboardStatus,
   ExecutionAttentionItemSummary,
   ExecutionAssignedWorkerSummary,
+  DockerContainer,
   ExecutionDashboardSnapshot,
   ExternalSettingsHints,
-    GitTrackingStatus,
-    JulesActivity,
-    OverviewTelemetrySnapshot,
-    ProjectExecutionStatsSnapshot,
-    ProjectStatsQuery,
-    ProjectStatsWindow,
-    ReadinessProbeStatus,
-  } from "../contracts/app-types.js";
+  GitTrackingStatus,
+  JulesActivity,
+  OverviewTelemetrySnapshot,
+  ProjectExecutionStatsSnapshot,
+  ProjectLiveDashboardSnapshot,
+  ProjectStatsQuery,
+  ProjectStatsWindow,
+  ReadinessProbeStatus,
+  SprintPreviewScript,
+  SprintPreviewSession,
+} from "../contracts/app-types.js";
 import type {
   EffectiveSettingsResponse,
   ProjectSettings,
@@ -47,6 +55,7 @@ import type {
   CreateDashboardConversationMessageInput,
   McpConnectionRecord,
   UpdateConversationThreadInput,
+  UpdateConversationThreadRouteInput,
   UpdateMcpConnectionInput,
 } from "../contracts/connection-chat-types.js";
 import type {
@@ -77,6 +86,7 @@ export interface DashboardServerOptions {
   port: number;
   liveActivityCacheMs: number;
   getStatus: () => unknown;
+  getLiveSnapshot?: (projectId?: string | null) => Promise<ProjectLiveDashboardSnapshot> | ProjectLiveDashboardSnapshot;
   getExecutionSnapshot: () => ExecutionDashboardSnapshot;
   getProjectExecutionSnapshot: (projectId: string) => ExecutionDashboardSnapshot;
   getProjectStatsSnapshot: (projectId: string, query?: ProjectStatsQuery) => ProjectExecutionStatsSnapshot;
@@ -144,9 +154,11 @@ export interface DashboardServerOptions {
   listConversationThreads: (projectId: string) => ConversationThreadRecord[];
   createConversationThread: (projectId: string, input: CreateConversationThreadInput) => ConversationThreadRecord;
   updateConversationThread: (threadId: string, input: UpdateConversationThreadInput) => ConversationThreadRecord;
+  updateThreadRoute: (threadId: string, input: UpdateConversationThreadRouteInput) => ConversationThreadRecord;
+  compactThreadSession: (threadId: string) => Promise<ConversationThreadRecord> | ConversationThreadRecord;
   deleteConversationThread: (threadId: string) => void;
   listConversationMessages: (threadId: string) => ConversationMessageRecord[];
-  postConversationMessage: (projectId: string, input: CreateDashboardConversationMessageInput) => ConversationMessageRecord;
+  postConversationMessage: (projectId: string, input: CreateDashboardConversationMessageInput) => Promise<ConversationMessageRecord> | ConversationMessageRecord;
 
   listProjectInvocations: (projectId: string) => ExecutionInvocationRecord[];
   listInvocationMessages: (invocationId: string) => ExecutionInvocationMessageRecord[];
@@ -168,6 +180,22 @@ export interface DashboardServerOptions {
   logger?: Logger;
   isReady?: () => ReadinessProbeStatus;
   isHealthy?: () => ReadinessProbeStatus;
+  listDockerContainers: () => Promise<DockerContainer[]>;
+  listSprintPreviewSessions?: (projectId: string) => Promise<SprintPreviewSession[]> | SprintPreviewSession[];
+  getSprintPreviewSession?: (sessionId: string) => Promise<SprintPreviewSession | null> | SprintPreviewSession | null;
+  startSprintPreviewSession?: (projectId: string, sprintId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
+  rebuildSprintPreviewSession?: (sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
+  stopSprintPreviewSession?: (sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
+  getSprintPreviewScript?: (projectId: string, sprintId: string) => Promise<SprintPreviewScript> | SprintPreviewScript;
+  saveSprintPreviewScript?: (projectId: string, sprintId: string, content: string) => Promise<SprintPreviewScript> | SprintPreviewScript;
+  getSprintPreviewLogs?: (sessionId: string, tail?: number) => Promise<{ logs: string }> | { logs: string };
+  proxySprintPreviewRequest?: (args: {
+    sessionId: string;
+    method: string;
+    path: string;
+    headers?: Record<string, string | undefined>;
+    body?: Buffer;
+  }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
 }
 
 export interface DashboardServerHandle {
@@ -175,18 +203,179 @@ export interface DashboardServerHandle {
   server: Server;
 }
 
+const PREVIEW_BRIDGE_PATH = "/_sprint_os/preview-bridge.js";
+const PREVIEW_HOST_PREFIX = "preview-";
+
+function parsePreviewSessionIdFromHost(hostHeader: string | undefined): string | null {
+  const rawHost = String(hostHeader || "").trim().toLowerCase();
+  if (!rawHost) {
+    return null;
+  }
+  const hostWithoutPort = rawHost.split(":")[0] || "";
+  if (!hostWithoutPort.startsWith(PREVIEW_HOST_PREFIX)) {
+    return null;
+  }
+  const firstDotIndex = hostWithoutPort.indexOf(".");
+  if (firstDotIndex === -1) {
+    return null; // Must have a domain suffix
+  }
+  const firstSegment = hostWithoutPort.slice(0, firstDotIndex);
+  if (firstSegment === PREVIEW_HOST_PREFIX) {
+    return null;
+  }
+  const sessionId = firstSegment.slice(PREVIEW_HOST_PREFIX.length).trim();
+  return sessionId || null;
+}
+
+function buildDashboardOriginForPreviewHost(req: express.Request): string {
+  const protocol = req.protocol || "http";
+  const rawHost = String(req.headers.host || "").trim();
+  const hostWithoutPort = rawHost.split(":")[0] || "localhost";
+  const port = rawHost.includes(":") ? rawHost.slice(rawHost.lastIndexOf(":")) : "";
+
+  if (hostWithoutPort.startsWith(PREVIEW_HOST_PREFIX)) {
+    const firstDotIndex = hostWithoutPort.indexOf(".");
+    if (firstDotIndex !== -1) {
+      const dashboardHostWithoutPort = hostWithoutPort.slice(firstDotIndex + 1);
+      const finalHost = dashboardHostWithoutPort === "localhost" ? `localhost${port}` : `${dashboardHostWithoutPort}${port}`;
+      return `${protocol}://${finalHost}`;
+    }
+  }
+
+  return `${protocol}://${rawHost}`;
+}
+
+function buildPreviewBridgeScript(): string {
+  return [
+    "(() => {",
+    "  const sendState = () => {",
+    "    try {",
+    "      window.parent?.postMessage({",
+    "        type: 'sprint-preview:state',",
+    "        href: window.location.href,",
+    "        path: `${window.location.pathname}${window.location.search}${window.location.hash}`,",
+    "        title: document.title || ''",
+    "      }, '*');",
+    "    } catch {}",
+    "  };",
+    "  const wrapHistory = (methodName) => {",
+    "    const original = history[methodName];",
+    "    if (typeof original !== 'function') return;",
+    "    history[methodName] = function (...args) {",
+    "      const result = original.apply(this, args);",
+    "      queueMicrotask(sendState);",
+    "      return result;",
+    "    };",
+    "  };",
+    "  wrapHistory('pushState');",
+    "  wrapHistory('replaceState');",
+    "  window.addEventListener('popstate', sendState);",
+    "  window.addEventListener('hashchange', sendState);",
+    "  window.addEventListener('load', sendState);",
+    "  document.addEventListener('DOMContentLoaded', sendState);",
+    "  window.addEventListener('message', (event) => {",
+    "    const message = event.data || {};",
+    "    if (message.type !== 'sprint-preview:navigate') return;",
+    "    const action = String(message.action || '');",
+    "    if (action === 'back') { history.back(); return; }",
+    "    if (action === 'forward') { history.forward(); return; }",
+    "    if (action === 'reload') { window.location.reload(); return; }",
+    "    if (action === 'push' || action === 'replace') {",
+    "      const target = typeof message.path === 'string' && message.path.trim() ? message.path.trim() : '/';",
+    "      if (action === 'replace') window.location.replace(target);",
+    "      else window.location.assign(target);",
+    "    }",
+    "  });",
+    "})();",
+  ].join("\n");
+}
+
+function injectPreviewBridgeIntoHtml(html: string): string {
+  const tag = `<script src="${PREVIEW_BRIDGE_PATH}"></script>`;
+  if (html.includes(PREVIEW_BRIDGE_PATH)) {
+    return html;
+  }
+  if (html.includes("</head>")) {
+    return html.replace("</head>", `  ${tag}\n</head>`);
+  }
+  if (html.includes("</body>")) {
+    return html.replace("</body>", `  ${tag}\n</body>`);
+  }
+  return `${html}\n${tag}\n`;
+}
+
+function rewritePreviewLocationHeader(location: string, req: express.Request, upstreamPort: number): string {
+  if (!location) {
+    return location;
+  }
+  const previewOrigin = `${req.protocol || "http"}://${String(req.headers.host || "").trim()}`;
+  const upstreamOrigins = new Set([
+    `http://127.0.0.1:${upstreamPort}`,
+    `http://localhost:${upstreamPort}`,
+  ]);
+  for (const upstreamOrigin of upstreamOrigins) {
+    if (location.startsWith(upstreamOrigin)) {
+      return `${previewOrigin}${location.slice(upstreamOrigin.length)}`;
+    }
+  }
+  return location;
+}
+
+async function pipePreviewUpgradeRequest(args: {
+  req: IncomingMessage;
+  socket: Duplex;
+  head: Buffer;
+  upstreamPort: number;
+}): Promise<void> {
+  const upstreamSocket = net.connect(args.upstreamPort, "127.0.0.1");
+  const requestLines = [`${args.req.method || "GET"} ${args.req.url || "/"} HTTP/${args.req.httpVersion}`];
+  for (const [key, value] of Object.entries(args.req.headers)) {
+    if (value === undefined) {
+      continue;
+    }
+    const headerValue = key.toLowerCase() === "host" ? `127.0.0.1:${args.upstreamPort}` : value;
+    if (Array.isArray(headerValue)) {
+      for (const item of headerValue) {
+        requestLines.push(`${key}: ${item}`);
+      }
+      continue;
+    }
+    requestLines.push(`${key}: ${headerValue}`);
+  }
+  requestLines.push("", "");
+  const requestBuffer = Buffer.from(requestLines.join("\r\n"), "utf8");
+
+  const destroyBoth = () => {
+    args.socket.destroy();
+    upstreamSocket.destroy();
+  };
+
+  upstreamSocket.on("connect", () => {
+    upstreamSocket.write(requestBuffer);
+    if (args.head.length > 0) {
+      upstreamSocket.write(args.head);
+    }
+    args.socket.pipe(upstreamSocket);
+    upstreamSocket.pipe(args.socket);
+  });
+  upstreamSocket.on("error", destroyBoth);
+  args.socket.on("error", destroyBoth);
+  args.socket.on("close", () => upstreamSocket.destroy());
+}
+
 const bindDashboardServer = async (
   app: Express,
   startPort: number,
   logger: Logger
 ): Promise<DashboardServerHandle> => {
+  const host = (process.env.DASHBOARD_HOST || "127.0.0.1").trim() || "127.0.0.1";
   let port = Math.max(1, Math.min(65535, Math.round(startPort)));
 
   while (port <= 65535) {
     try {
       const server = await new Promise<Server>((resolve, reject) => {
         const listeningServer = createServer(app);
-        listeningServer.listen(port, "127.0.0.1", () => resolve(listeningServer));
+        listeningServer.listen(port, host, () => resolve(listeningServer));
         listeningServer.on("error", reject);
       });
       return { port, server };
@@ -239,6 +428,16 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     retryTaskDispatch,
     logger,
     isReady,
+    listDockerContainers,
+    listSprintPreviewSessions,
+    getSprintPreviewSession,
+    startSprintPreviewSession,
+    rebuildSprintPreviewSession,
+    stopSprintPreviewSession,
+    getSprintPreviewScript,
+    saveSprintPreviewScript,
+    getSprintPreviewLogs,
+    proxySprintPreviewRequest,
   } = options;
 
   const dashboardLogger = logger ?? createLogger({ bindings: { component: "dashboard-server" } });
@@ -255,6 +454,92 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       });
     });
     next();
+  });
+
+  app.use(async (req, res, next) => {
+    const sessionId = parsePreviewSessionIdFromHost(req.headers.host);
+    if (!sessionId) {
+      next();
+      return;
+    }
+    if (req.path === PREVIEW_BRIDGE_PATH) {
+      res.type("application/javascript").send(buildPreviewBridgeScript());
+      return;
+    }
+    if (!getSprintPreviewSession) {
+      res.status(503).send("Sprint preview runtime is unavailable.");
+      return;
+    }
+
+    let session: SprintPreviewSession | null = null;
+    try {
+      session = await getSprintPreviewSession(sessionId);
+    } catch (error) {
+      res.status(502).send(toErrorMessage(error, "Failed to resolve sprint preview session"));
+      return;
+    }
+    if (!session?.hostPort) {
+      res.status(404).send("Sprint preview session is unavailable.");
+      return;
+    }
+
+    const headers = { ...req.headers } as Record<string, string | string[] | undefined>;
+    delete headers["accept-encoding"];
+    headers["x-forwarded-host"] = String(req.headers.host || "");
+    headers.host = `127.0.0.1:${session.hostPort}`;
+    headers["x-forwarded-proto"] = req.protocol || "http";
+    if (req.socket.localPort) {
+      headers["x-forwarded-port"] = String(req.socket.localPort);
+    }
+
+    const proxyRequest = httpRequest({
+      protocol: "http:",
+      hostname: "127.0.0.1",
+      port: session.hostPort,
+      method: req.method,
+      path: req.originalUrl || req.url,
+      headers,
+    }, (proxyResponse) => {
+      const contentType = String(proxyResponse.headers["content-type"] || "");
+      const isHtml = contentType.toLowerCase().includes("text/html");
+      if (!isHtml) {
+        const responseHeaders = { ...proxyResponse.headers };
+        if (typeof responseHeaders.location === "string") {
+          responseHeaders.location = rewritePreviewLocationHeader(responseHeaders.location, req, session.hostPort!);
+        }
+        res.writeHead(proxyResponse.statusCode || 502, responseHeaders);
+        proxyResponse.pipe(res);
+        return;
+      }
+
+      const chunks: Buffer[] = [];
+      proxyResponse.on("data", (chunk) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      });
+      proxyResponse.on("end", () => {
+        const body = Buffer.concat(chunks).toString("utf8");
+        const injected = injectPreviewBridgeIntoHtml(body);
+        const responseHeaders = { ...proxyResponse.headers };
+        delete responseHeaders["content-length"];
+        delete responseHeaders["content-security-policy"];
+        delete responseHeaders["content-security-policy-report-only"];
+        if (typeof responseHeaders.location === "string") {
+          responseHeaders.location = rewritePreviewLocationHeader(responseHeaders.location, req, session.hostPort!);
+        }
+        res.writeHead(proxyResponse.statusCode || 502, responseHeaders);
+        res.end(injected);
+      });
+    });
+
+    proxyRequest.on("error", (error) => {
+      if (!res.headersSent) {
+        res.status(502).send(toErrorMessage(error, "Failed to proxy sprint preview host request"));
+      } else {
+        res.end();
+      }
+    });
+
+    req.pipe(proxyRequest);
   });
 
   app.use(express.json({ limit: "1mb" }));
@@ -285,12 +570,165 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     res.json(options.getExecutionSnapshot());
   });
 
+  app.get("/api/docker/containers", async (req, res) => {
+    try {
+      const containers = await listDockerContainers();
+      res.json(containers);
+    } catch (error) {
+      res.json([]);
+    }
+  });
+
+  app.get("/api/projects/:projectId/preview/sessions", async (req, res) => {
+    try {
+      if (!listSprintPreviewSessions) {
+        res.json([]);
+        return;
+      }
+      res.json(await listSprintPreviewSessions(String(req.params.projectId || "").trim()));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to list sprint preview sessions") });
+    }
+  });
+
+  app.post("/api/projects/:projectId/sprints/:sprintId/preview/start", async (req, res) => {
+    try {
+      if (!startSprintPreviewSession) {
+        throw new Error("Sprint preview runtime is unavailable.");
+      }
+      res.json(await startSprintPreviewSession(
+        String(req.params.projectId || "").trim(),
+        String(req.params.sprintId || "").trim(),
+      ));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to start sprint preview session") });
+    }
+  });
+
+  app.post("/api/browser/sessions/:sessionId/rebuild", async (req, res) => {
+    try {
+      if (!rebuildSprintPreviewSession) {
+        throw new Error("Sprint preview runtime is unavailable.");
+      }
+      res.json(await rebuildSprintPreviewSession(String(req.params.sessionId || "").trim()));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to rebuild sprint preview session") });
+    }
+  });
+
+  app.post("/api/browser/sessions/:sessionId/stop", async (req, res) => {
+    try {
+      if (!stopSprintPreviewSession) {
+        throw new Error("Sprint preview runtime is unavailable.");
+      }
+      res.json(await stopSprintPreviewSession(String(req.params.sessionId || "").trim()));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to stop sprint preview session") });
+    }
+  });
+
+  app.get("/api/projects/:projectId/sprints/:sprintId/preview/script", async (req, res) => {
+    try {
+      if (!getSprintPreviewScript) {
+        throw new Error("Sprint preview runtime is unavailable.");
+      }
+      res.json(await getSprintPreviewScript(
+        String(req.params.projectId || "").trim(),
+        String(req.params.sprintId || "").trim(),
+      ));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to load sprint preview script") });
+    }
+  });
+
+  app.put("/api/projects/:projectId/sprints/:sprintId/preview/script", async (req, res) => {
+    try {
+      if (!saveSprintPreviewScript) {
+        throw new Error("Sprint preview runtime is unavailable.");
+      }
+      res.json(await saveSprintPreviewScript(
+        String(req.params.projectId || "").trim(),
+        String(req.params.sprintId || "").trim(),
+        typeof req.body?.content === "string" ? req.body.content : "",
+      ));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to save sprint preview script") });
+    }
+  });
+
+  app.get("/api/browser/sessions/:sessionId/logs", async (req, res) => {
+    try {
+      if (!getSprintPreviewLogs) {
+        throw new Error("Sprint preview runtime is unavailable.");
+      }
+      const tail = typeof req.query.tail === "string" ? Number(req.query.tail) : undefined;
+      res.json(await getSprintPreviewLogs(String(req.params.sessionId || "").trim(), tail));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to load sprint preview logs") });
+    }
+  });
+
+  app.all("/api/browser/sessions/:sessionId/proxy{*rest}", async (req, res) => {
+    try {
+      if (!proxySprintPreviewRequest) {
+        throw new Error("Sprint preview runtime is unavailable.");
+      }
+      const sessionId = String(req.params.sessionId || "").trim();
+      const prefix = `/api/browser/sessions/${sessionId}/proxy`;
+      const pathWithQuery = req.originalUrl.startsWith(prefix)
+        ? req.originalUrl.slice(prefix.length) || "/"
+        : "/";
+      const body = req.body
+        ? Buffer.isBuffer(req.body)
+          ? req.body
+          : Buffer.from(JSON.stringify(req.body))
+        : undefined;
+      const proxied = await proxySprintPreviewRequest({
+        sessionId,
+        method: req.method,
+        path: pathWithQuery,
+        headers: Object.fromEntries(
+          Object.entries(req.headers).map(([key, value]) => [key, Array.isArray(value) ? value.join(", ") : value]),
+        ),
+        body,
+      });
+      for (const [key, value] of Object.entries(proxied.headers)) {
+        res.setHeader(key, value);
+      }
+      res.status(proxied.status).send(proxied.body);
+    } catch (error) {
+      res.status(502).json({ error: toErrorMessage(error, "Failed to proxy sprint preview request") });
+    }
+  });
+
   // Combined endpoint — single HTTP call for live page initial load
-  app.get("/api/live", (req, res) => {
-    res.json({
-      status: getStatus(),
-      execution: options.getExecutionSnapshot(),
-    });
+  app.get("/api/live", async (req, res) => {
+    try {
+      const requestedProjectId = String(req.query.projectId || "").trim();
+      const projectId = requestedProjectId.length > 0 ? requestedProjectId : null;
+      if (options.getLiveSnapshot) {
+        res.json(await options.getLiveSnapshot(projectId));
+        return;
+      }
+
+      const status = getStatus() as DashboardStatus;
+      const resolvedProjectId = projectId
+        || (typeof status?.project_id === "string" && status.project_id.trim().length > 0
+          ? status.project_id.trim()
+          : null);
+
+      res.json({
+        projectId: resolvedProjectId,
+        selectedSprintId: status?.sprint_id ?? null,
+        status,
+        execution: resolvedProjectId ? options.getProjectExecutionSnapshot(resolvedProjectId) : options.getExecutionSnapshot(),
+        gitStatus: null,
+        gitStatusError: null,
+        updatedAt: new Date().toISOString(),
+      } satisfies ProjectLiveDashboardSnapshot);
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to load live snapshot") });
+    }
   });
 
   app.get("/api/telemetry/overview", (req, res) => {
@@ -754,6 +1192,39 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     }
   });
 
+  app.put("/api/conversations/threads/:threadId/route", (req, res) => {
+    if (!options.updateThreadRoute) {
+      res.status(404).json({ error: "Thread routing is not enabled." });
+      return;
+    }
+    try {
+      const input = {
+        routeKind: req.body?.routeKind as "worker" | "virtual",
+        virtualProvider: typeof req.body?.virtualProvider === "string" ? req.body.virtualProvider.trim() : undefined,
+        virtualModel: typeof req.body?.virtualModel === "string" ? req.body.virtualModel.trim() : undefined,
+        workerEndpointId: typeof req.body?.workerEndpointId === "string" ? req.body.workerEndpointId.trim() : undefined,
+      };
+      if (input.routeKind !== "worker" && input.routeKind !== "virtual") {
+        throw new Error("Invalid routeKind. Must be 'worker' or 'virtual'.");
+      }
+      res.json(options.updateThreadRoute(String(req.params.threadId || "").trim(), input));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to update thread route") });
+    }
+  });
+
+  app.post("/api/conversations/threads/:threadId/compact", async (req, res) => {
+    if (!options.compactThreadSession) {
+      res.status(404).json({ error: "Thread compaction is not enabled." });
+      return;
+    }
+    try {
+      res.json(await options.compactThreadSession(String(req.params.threadId || "").trim()));
+    } catch (error) {
+      res.status(400).json({ error: toErrorMessage(error, "Failed to compact thread session") });
+    }
+  });
+
   app.delete("/api/conversations/threads/:threadId", (req, res) => {
     try {
       options.deleteConversationThread(String(req.params.threadId || "").trim());
@@ -1021,17 +1492,53 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   // 2. SPA Fallback: For any GET request that isn't for an API and doesn't have an extension,
   // serve the index.html to allow client-side routing (TanStack Router) to take over.
   app.use((req, res, next) => {
-    if (req.method === "GET" && !req.path.startsWith("/api/") && !req.path.startsWith("/health") && !req.path.startsWith("/ready")) {
-      const indexPath = path.join(staticDir, "index.html");
-      if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-        return;
-      }
+    const isGet = req.method === "GET";
+    const isApi = req.path.startsWith("/api/") || req.path.startsWith("/health") || req.path.startsWith("/ready");
+    const isExtensionless = path.extname(req.path) === "";
+    const isPreviewHost = parsePreviewSessionIdFromHost(req.headers.host) !== null;
+
+    if (isGet && !isApi && isExtensionless && !isPreviewHost) {
+      const indexPath = path.join(path.resolve(staticDir), "index.html");
+      res.sendFile(indexPath, (err: any) => {
+        if (err) {
+          // If the file is simply not found, pass to the next middleware (usually resulting in a 404).
+          if ((err as any).code === "ENOENT" || (err as any).status === 404) {
+            next();
+          } else {
+            next(err);
+          }
+        }
+      });
+      return;
     }
     next();
   });
 
   const handle = await bindDashboardServer(app, port, dashboardLogger);
+
+  handle.server.on("upgrade", (req, socket, head) => {
+    const sessionId = parsePreviewSessionIdFromHost(req.headers.host);
+    if (!sessionId || !getSprintPreviewSession) {
+      return;
+    }
+    void (async () => {
+      try {
+        const session = await getSprintPreviewSession(sessionId);
+        if (!session?.hostPort) {
+          socket.destroy();
+          return;
+        }
+        await pipePreviewUpgradeRequest({
+          req,
+          socket,
+          head,
+          upstreamPort: session.hostPort,
+        });
+      } catch {
+        socket.destroy();
+      }
+    })();
+  });
 
   if (options.realtimeService) {
     bootDashboardRealtimeWebSocketServer({
@@ -1039,6 +1546,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       pathName: "/api/realtime",
       realtimeService: options.realtimeService,
       logger: dashboardLogger.child({ component: "dashboard-realtime-websocket" }),
+      shouldHandleRequest: (req) => parsePreviewSessionIdFromHost(req.headers.host) === null,
     });
   }
 

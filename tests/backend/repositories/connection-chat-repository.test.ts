@@ -30,7 +30,7 @@ async function createRepositories(): Promise<{
 afterEach(async () => {
   vi.useRealTimers();
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
-});
+  });
 
 async function createRepositoriesWithRealtime(): Promise<{
   storage: AppDbStorage;
@@ -172,6 +172,124 @@ describe("ConnectionChatRepository", () => {
     expect(connectionRepository.listThreads(project.id)[0]).toMatchObject({
       connectionId: listen.connection.id,
       pendingMessageCount: 0,
+    });
+  });
+
+  it("marks delivered dashboard messages processed for virtual replies", async () => {
+    const { projectRepository, connectionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Virtual Reply Project",
+      sourceType: "local",
+      sourceRef: "/workspace/virtual-reply-project",
+    });
+
+    connectionRepository.startListen({
+      connectionKey: "virtual-status-listener",
+      displayName: "Virtual Status Listener",
+      role: "listener",
+      projectId: project.id,
+    });
+
+    const message = connectionRepository.postDashboardMessage(project.id, {
+      title: "Status test",
+      bodyMarkdown: "Please reply from a virtual worker.",
+    });
+    const thread = connectionRepository.listThreads(project.id)[0];
+
+    connectionRepository.pullInbox({
+      connectionKey: "virtual-status-listener",
+      projectId: project.id,
+    });
+
+    const processed = connectionRepository.markDashboardMessagesProcessed(thread.id, {
+      upToMessageId: message.id,
+    });
+
+    expect(processed.pendingMessageCount).toBe(0);
+    expect(connectionRepository.listMessages(thread.id)[0]).toMatchObject({
+      id: message.id,
+      deliveryStatus: "processed",
+    });
+  });
+
+  it("keeps hidden control messages out of visible chat counts while still delivering them to workers", async () => {
+    const { projectRepository, connectionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Hidden Control Message Project",
+      sourceType: "local",
+      sourceRef: "/workspace/hidden-control-message-project",
+    });
+
+    const listen = connectionRepository.startListen({
+      connectionKey: "worker-hidden-control",
+      displayName: "Worker Hidden Control",
+      role: "worker",
+      projectId: project.id,
+    });
+
+    const thread = connectionRepository.createThread(project.id, {
+      title: "Compaction Thread",
+      connectionId: listen.connection.id,
+    });
+
+    const request = connectionRepository.postDashboardMessage(project.id, {
+      threadId: thread.id,
+      connectionId: listen.connection.id,
+      bodyMarkdown: "Hidden compaction request",
+      metadata: {
+        internalVisibility: "hidden",
+        internalOperation: "thread_compaction_request",
+        requestId: "req-1",
+      },
+    });
+
+    expect(connectionRepository.listMessages(thread.id)).toEqual([]);
+    expect(connectionRepository.listMessages(thread.id, { includeHidden: true })).toHaveLength(1);
+    expect(connectionRepository.listThreads(project.id)[0]).toMatchObject({
+      messageCount: 0,
+      pendingMessageCount: 0,
+      lastMessageAt: null,
+      lastMessagePreview: null,
+    });
+
+    const inbox = connectionRepository.pullInbox({
+      connectionKey: "worker-hidden-control",
+      projectId: project.id,
+    });
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0]).toMatchObject({
+      id: request.id,
+      threadId: thread.id,
+      metadata: {
+        internalVisibility: "hidden",
+        internalOperation: "thread_compaction_request",
+        requestId: "req-1",
+      },
+    });
+
+    connectionRepository.postListenReply({
+      connectionKey: "worker-hidden-control",
+      threadId: thread.id,
+      bodyMarkdown: "Compacted summary",
+      replyToMessageId: request.id,
+      metadata: {
+        internalVisibility: "hidden",
+        internalOperation: "thread_compaction_result",
+        requestId: "req-1",
+      },
+    });
+
+    expect(connectionRepository.listMessages(thread.id)).toEqual([]);
+    expect(connectionRepository.listMessages(thread.id, { includeHidden: true })).toHaveLength(2);
+    expect(connectionRepository.listThreads(project.id)[0]).toMatchObject({
+      messageCount: 0,
+      pendingMessageCount: 0,
+      lastMessageAt: null,
+      lastMessagePreview: null,
+    });
+    expect(connectionRepository.listConnections(project.id)[0]).toMatchObject({
+      pendingInboxCount: 0,
+      messageCount: 0,
     });
   });
 
@@ -546,4 +664,53 @@ describe("ConnectionChatRepository", () => {
       event.eventType === "conversation.thread.deleted" && event.entityId === thread.id
     ))).toBe(true);
   });
-});
+  });
+
+  describe("ConversationRuntimeState and Metadata", () => {
+    it("creates, retrieves, and updates thread with runtimeState and persists message metadata", async () => {
+      const { projectRepository, connectionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Test Project",
+        sourceType: "local",
+        sourceRef: "/tmp/test",
+      });
+
+      const runtimeState = {
+        replayRequired: true,
+        routeKind: "worker",
+        virtualProvider: "openai",
+        compactionSummary: { tokenCount: 100 },
+      };
+
+      const thread = connectionRepository.createThread(project.id, {
+        title: "Test Thread",
+        runtimeState,
+      });
+
+      expect(thread.runtimeState).toEqual(runtimeState);
+
+      const threads = connectionRepository.listThreads(project.id);
+      expect(threads[0].runtimeState).toEqual(runtimeState);
+
+      const updatedState = { ...runtimeState, replayRequired: false };
+      const updatedThread = connectionRepository.updateThread(thread.id, {
+        runtimeState: updatedState,
+      });
+
+      expect(updatedThread.runtimeState).toEqual(updatedState);
+      const rehydratedThreads = connectionRepository.listThreads(project.id);
+      expect(rehydratedThreads[0].runtimeState).toEqual(updatedState);
+
+      const messageMetadata = { testKey: "testValue", numericKey: 123 };
+      const message = connectionRepository.postDashboardMessage(project.id, {
+        threadId: thread.id,
+        bodyMarkdown: "Hello",
+        metadata: messageMetadata,
+      });
+
+      expect(message.metadata).toEqual(messageMetadata);
+
+      const messages = connectionRepository.listMessages(thread.id);
+      expect(messages[0].metadata).toEqual(messageMetadata);
+    });
+  });

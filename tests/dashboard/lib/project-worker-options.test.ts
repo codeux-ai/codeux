@@ -71,9 +71,11 @@ describe("project-worker-options", () => {
   it("derives options correctly when primary is in connections", () => {
     const result = getProjectWorkerOptions(mockSnapshot, connectedRouting);
     expect(result.options).toHaveLength(4);
-    expect(result.options[0].id).toBe("conn-1");
+    expect(result.options[0].id).toBe("we-1");
     expect(result.options[0].isPrimary).toBe(true);
-    expect(result.selectedOption?.id).toBe("conn-1");
+    expect(result.options[0].workerEndpointId).toBe("we-1");
+    expect(result.options[0].connectionId).toBe("conn-1");
+    expect(result.selectedOption?.id).toBe("we-1");
     expect(result.hasConnections).toBe(true);
   });
 

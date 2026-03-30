@@ -15,7 +15,7 @@ const areDependenciesMet = (subtasks: Subtask[], task: Subtask): boolean => {
 
 export const runStatusDerivationStep = (subtasks: Subtask[], options: DeriveStatusOptions): Subtask[] => {
   for (const task of subtasks) {
-    if (task.session_state === "QUOTA" || task.status === "QUOTA") {
+    if (task.session_state === "QUOTA" || task.session_state === "RATE_LIMITED" || task.status === "QUOTA") {
       task.status = "QUOTA";
       continue;
     }

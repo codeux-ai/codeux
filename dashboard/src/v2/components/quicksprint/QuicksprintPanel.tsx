@@ -17,7 +17,7 @@ import type { PlanningRouteOption } from "../../lib/sprint-composer-state.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { getProviderModelOptions } from "../../lib/settings-view-models.js";
 import { getPlanningFeedback } from "../../lib/sprint-planning-feedback.js";
-import { ContainerShip } from "../ui/PlanningShip.js";
+import { PlanningProgressOverlay } from "../ui/PlanningProgressOverlay.js";
 
 /* ─── Icon Map ──────────────────────────────────────────────────────── */
 const IconMap: Record<string, FunctionComponent<any>> = {
@@ -148,6 +148,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   /* ── Execution state ────────────────────────────────────────────── */
   const [executingMode, setExecutingMode] = useState<"plan_only" | "plan_and_start" | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
   const isBusy = executingMode !== null;
 
   const selectedTemplate = useMemo(
@@ -207,6 +208,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   /* ── Planning feedback / timer ──────────────────────────────────── */
   useEffect(() => {
     if (!isBusy) { setElapsedMs(0); return; }
+    setIsOverlayDismissed(false);
     const t0 = Date.now();
     const id = setInterval(() => setElapsedMs(Date.now() - t0), 100);
     return () => clearInterval(id);
@@ -322,52 +324,16 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.07),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,224,160,0.06),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.09),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,224,160,0.07),transparent_34%)]" />
 
       {/* ═══ Planning Overlay ═══ */}
-      {isBusy && feedback && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 p-8 backdrop-blur-xl dark:bg-void-900/80">
-          <div className="relative mb-12 flex h-32 w-full max-w-md items-center justify-center overflow-hidden">
-            <div className="absolute inset-x-0 bottom-8 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent dark:via-white/10" />
-            <div
-              className="absolute transition-[left] duration-200 ease-linear"
-              style={{ left: `${feedback.shipProgress * 100}%`, transform: "translateX(-50%)" }}
-            >
-              <svg width="120" height="60" viewBox="-60 -30 120 60">
-                <ContainerShip accentColor="#FF6B00" isMoving={true} isDark={isDark} />
-              </svg>
-            </div>
-          </div>
-
-          <div className="space-y-4 text-center">
-            <div className="inline-flex items-center gap-3 rounded-full border border-ember-500/20 bg-ember-500/[0.08] px-5 py-2 text-xs font-bold uppercase tracking-[0.2em] text-ember-600 dark:text-ember-400">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ember-400 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-ember-500" />
-              </span>
-              Quicksprint in motion
-            </div>
-            <div className="flex items-center justify-center gap-6">
-              <div className="flex flex-col items-center">
-                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">ETA</div>
-                <div className="font-mono text-xl font-medium tracking-tight text-slate-900 dark:text-white">
-                  {Math.floor(Math.max(0, planningEta - elapsedMs) / 60000)}:{String(Math.floor((Math.max(0, planningEta - elapsedMs) % 60000) / 1000)).padStart(2, "0")}
-                </div>
-              </div>
-              <div className="h-8 w-px bg-black/[0.08] dark:bg-white/[0.08]" />
-              <div className="flex flex-col items-center">
-                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Elapsed</div>
-                <div className="font-mono text-xl font-medium tracking-tight text-slate-500">
-                  {Math.floor(elapsedMs / 60000)}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")}
-                </div>
-              </div>
-            </div>
-            <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-              {feedback.text}
-            </h3>
-            <p className="mx-auto max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-              The Planning agent is researching the codebase to decompose your quicksprint into grounded, atomic subtasks.
-            </p>
-          </div>
-        </div>
-      )}
+      <PlanningProgressOverlay
+        isBusy={isBusy && !isOverlayDismissed}
+        feedback={feedback}
+        planningEta={planningEta}
+        elapsedMs={elapsedMs}
+        isDark={isDark}
+        actionType="quicksprint"
+        themeAccent="ember"
+        onDismiss={() => setIsOverlayDismissed(true)}
+      />
 
       {/* ═══ Content ═══ */}
       <div ref={fieldsRef} className="relative z-10">

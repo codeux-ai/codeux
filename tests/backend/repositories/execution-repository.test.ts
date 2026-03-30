@@ -29,7 +29,7 @@ async function createRepositories(): Promise<{
 
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
-});
+  });
 
 describe("ExecutionRepository", () => {
 
@@ -740,6 +740,111 @@ describe("ExecutionRepository", () => {
     ))).toBe(true);
   });
 
+  it("keeps full dispatch and event history for every active sprint run when sprints run in parallel", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Parallel Active History Project",
+      sourceType: "local",
+      sourceRef: "/workspace/parallel-active-history-project",
+    });
+    const olderSprint = projectRepository.createSprint(project.id, {
+      name: "Older Active Sprint",
+      number: 26,
+    });
+    const newerSprint = projectRepository.createSprint(project.id, {
+      name: "Newer Active Sprint",
+      number: 64,
+    });
+    const olderRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: olderSprint.id,
+      status: "running",
+    });
+    executionRepository.updateSprintRun(olderRun.id, {
+      status: "running",
+      startedAt: "2026-03-19T09:00:00.000Z",
+      lastHeartbeatAt: "2026-03-19T09:15:00.000Z",
+    });
+    const newerRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: newerSprint.id,
+      status: "running",
+    });
+    executionRepository.updateSprintRun(newerRun.id, {
+      status: "running",
+      startedAt: "2026-03-19T10:00:00.000Z",
+      lastHeartbeatAt: "2026-03-19T11:59:00.000Z",
+    });
+
+    const olderTask = projectRepository.createTask(project.id, {
+      sprintId: olderSprint.id,
+      title: "Keep older active sprint visible",
+    });
+    const olderDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: olderSprint.id,
+      taskId: olderTask.id,
+      sprintRunId: olderRun.id,
+      executorType: "docker_cli",
+      status: "running",
+    });
+    const olderTaskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: olderSprint.id,
+      taskId: olderTask.id,
+      sprintRunId: olderRun.id,
+      dispatchId: olderDispatch.id,
+      provider: "codex",
+      state: "RUNNING",
+      startedAt: "2026-03-19T09:00:00.000Z",
+    });
+    executionRepository.appendTaskRunEvent(olderTaskRun.id, "cli_git_no_changes", "system", null, {
+      createdAt: "2026-03-19T09:01:00.000Z",
+      sourceEventKey: "older-active-event",
+    });
+
+    for (let index = 0; index < 25; index += 1) {
+      const task = projectRepository.createTask(project.id, {
+        sprintId: newerSprint.id,
+        title: `Newer active task ${index}`,
+      });
+      const dispatch = executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: newerSprint.id,
+        taskId: task.id,
+        sprintRunId: newerRun.id,
+        executorType: "docker_cli",
+        status: "running",
+      });
+      const run = executionRepository.createTaskRun({
+        projectId: project.id,
+        sprintId: newerSprint.id,
+        taskId: task.id,
+        sprintRunId: newerRun.id,
+        dispatchId: dispatch.id,
+        provider: "codex",
+        state: "RUNNING",
+        startedAt: `2026-03-19T10:${String(index).padStart(2, "0")}:00.000Z`,
+      });
+      for (let eventIndex = 0; eventIndex < 10; eventIndex += 1) {
+        executionRepository.appendTaskRunEvent(run.id, "provider_activity", "agent", {
+          preview: `Newer active event ${index}-${eventIndex}`,
+        }, {
+          createdAt: `2026-03-19T11:${String(index).padStart(2, "0")}:${String(eventIndex).padStart(2, "0")}.000Z`,
+          sourceEventKey: `newer-active-${index}-${eventIndex}`,
+        });
+      }
+    }
+
+    const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
+
+    expect(snapshot.sprintRuns.filter((run) => run.status === "running")).toHaveLength(2);
+    expect(snapshot.taskDispatches.some((dispatch) => dispatch.id === olderDispatch.id)).toBe(true);
+    expect(snapshot.recentEvents.some((event) => (
+      event.taskId === olderTask.id && event.eventType === "cli_git_no_changes"
+    ))).toBe(true);
+  });
+
   it("projects human intervention summaries for paused sprint runs", async () => {
     const { projectRepository, executionRepository, projectAttentionRepository } = await createRepositories();
     const project = projectRepository.createProject({
@@ -1257,4 +1362,33 @@ describe("ExecutionRepository", () => {
       expect(td.provider).toBe("target-provider");
     }
   });
-});
+  });
+
+  describe("ExecutionInvocationMessageRecord Metadata", () => {
+    it("persists and retrieves metadata for execution messages", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Test Project Execution",
+        sourceType: "local",
+        sourceRef: "/tmp/exec",
+      });
+
+      const invocation = executionRepository.createExecutionInvocation({
+        projectId: project.id,
+        type: "test_invocation",
+      });
+
+      const messageMetadata = { invocationSpecific: true, tokens: 42 };
+
+      const message = executionRepository.appendExecutionInvocationMessage(invocation.id, {
+        role: "user",
+        contentMarkdown: "Test prompt",
+        metadata: messageMetadata,
+      });
+
+      expect(message.metadata).toEqual(messageMetadata);
+
+      const messages = executionRepository.listExecutionInvocationMessages(invocation.id);
+      expect(messages[0].metadata).toEqual(messageMetadata);
+    });
+  });

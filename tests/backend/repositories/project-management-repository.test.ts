@@ -302,6 +302,7 @@ describe("ProjectManagementRepository", () => {
     const storage = new AppDbStorage(path.join(dir, "app.db"));
     const notifier = {
       scheduleProjectsRefresh: vi.fn(),
+      scheduleProjectLiveRefresh: vi.fn(),
       scheduleProjectExecutionRefresh: vi.fn(),
       scheduleProjectStructureRefresh: vi.fn(),
     };

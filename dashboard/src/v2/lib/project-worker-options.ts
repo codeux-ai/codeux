@@ -61,39 +61,44 @@ export function getProjectWorkerOptions(
 ): ProjectWorkerOptionsResult {
   const connections = (execution?.connections || []).filter((connection) => connection.role === "worker");
   const primaryAssignedWorker = execution?.primaryAssignedWorker || null;
+  const overflowAssignedWorkers = execution?.overflowAssignedWorkers || [];
   const options: WorkerOption[] = [];
   const isVirtualMode = routing?.executionMode === "VIRTUAL";
   const selectedVirtualProvider = isVirtualMode ? routing?.virtualWorkerProvider : null;
+  const assignedWorkers = [primaryAssignedWorker, ...overflowAssignedWorkers].filter(Boolean) as ExecutionAssignedWorkerSummary[];
+  const representedConnectionIds = new Set<string>();
+
+  for (const assignedWorker of assignedWorkers) {
+    if (assignedWorker.connectionId) {
+      representedConnectionIds.add(assignedWorker.connectionId);
+    }
+    options.push({
+      id: assignedWorker.workerEndpointId || assignedWorker.connectionId || assignedWorker.assignmentId,
+      label: assignedWorker.workerDisplayName,
+      subLabel: assignedWorker.assignmentRole === "primary" ? "Assigned Worker" : "Overflow Worker",
+      status: assignedWorker.workerStatus || assignedWorker.status,
+      isPrimary: !isVirtualMode && assignedWorker.assignmentRole === "primary",
+      type: "endpoint",
+      isSelectable: isSelectableAssignedWorker(assignedWorker),
+      connectionId: assignedWorker.connectionId,
+      workerEndpointId: assignedWorker.workerEndpointId,
+      workerEndpointKey: assignedWorker.workerEndpointKey,
+    });
+  }
 
   for (const conn of connections) {
-    const isPrimary = !isVirtualMode && primaryAssignedWorker?.connectionId === conn.id;
+    if (representedConnectionIds.has(conn.id)) {
+      continue;
+    }
     options.push({
       id: conn.id,
       label: conn.displayName,
       subLabel: conn.model || conn.role,
       status: conn.status,
-      isPrimary,
-      type: 'connection',
+      isPrimary: false,
+      type: "connection",
       isSelectable: LIVE_WORKER_STATUSES.has(conn.status),
       connectionId: conn.id,
-    });
-  }
-
-  if (
-    primaryAssignedWorker
-    && !isVirtualMode
-    && !options.find((option) => option.connectionId === primaryAssignedWorker.connectionId)
-  ) {
-    options.unshift({
-      id: primaryAssignedWorker.workerEndpointId || primaryAssignedWorker.assignmentId,
-      label: primaryAssignedWorker.workerDisplayName,
-      subLabel: 'Assigned (Offline)',
-      status: primaryAssignedWorker.workerStatus || 'offline',
-      isPrimary: true,
-      type: 'endpoint',
-      isSelectable: isSelectableAssignedWorker(primaryAssignedWorker),
-      workerEndpointId: primaryAssignedWorker.workerEndpointId,
-      workerEndpointKey: primaryAssignedWorker.workerEndpointKey,
     });
   }
 

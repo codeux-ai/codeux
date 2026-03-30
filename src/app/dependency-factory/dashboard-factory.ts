@@ -8,7 +8,10 @@ import { PlanningAgentService } from "../../services/planning-agent-service.js";
 import { QuicksprintService } from "../../services/quicksprint-service.js";
 import { WorkspaceManager } from "../../infrastructure/providers/cli/workspace-manager.js";
 
+import { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
+
 export interface DashboardDependencies {
+  chatThreadRuntimeService: ChatThreadRuntimeService;
   activityCacheService: ActivityCacheService;
   taskRerunService: TaskRerunService;
   executionControlService: ExecutionControlService;
@@ -26,18 +29,33 @@ export function createDashboardDependencies(
     projectRuntimeRepository,
     projectManagementRepository,
     connectionChatRepository,
+    projectWorkerAssignmentRepository,
     projectAttentionService,
     agentPresetSyncService,
     executionRepository,
     settingsRepository,
     julesApi,
     activeDispatchRegistry,
+    providerRunner,
   } = coreDeps;
-  const { sprintTaskDispatchService, sprintOrchestrator } = sprintDeps;
+  const { sprintTaskDispatchService, sprintOrchestrator, taskService } = sprintDeps;
+
+    const chatThreadRuntimeService = new ChatThreadRuntimeService({
+    connectionChatRepository,
+    projectWorkerAssignmentRepository,
+    executionRepository,
+    taskService,
+    getDashboardSettings: () => settingsRepository.getDefaultDashboardSettings(),
+    getGithubToken: () => context.getEffectiveGithubToken(),
+    agentPresetSyncService,
+    projectManagementRepository,
+    providerRunner,
+    logger: logger.child({ component: "chat-thread-runtime-service" }),
+  });
 
   const activityCacheService = new ActivityCacheService(
     {
-      getSubtasks: () => projectRuntimeRepository.getSelectedProjectStatus().subtasks,
+      getSubtasks: () => projectRuntimeRepository.getSelectedProjectLiveStatus().subtasks,
       resolveSessionNameFromTask: (task) => context.resolveSessionNameFromTask(task),
       fetchRecentActivities: (sessionName, pageSize) => context.fetchRecentActivities(sessionName, pageSize),
       resolveGitStatusRepoPath: () => context.resolveGitStatusRepoPath(),
@@ -208,6 +226,7 @@ export function createDashboardDependencies(
   );
 
   return {
+    chatThreadRuntimeService,
     activityCacheService,
     taskRerunService,
     executionControlService,

@@ -111,6 +111,7 @@ export const fetchProjectExecution = async (projectId: string, signal?: AbortSig
 export const fetchProjectStats = async (
   projectId: string,
   statsQuery: ProjectStatsQuery | ProjectStatsWindow = "7d",
+  signal?: AbortSignal,
 ): Promise<ProjectExecutionStatsSnapshot> => {
   const query = typeof statsQuery === "string"
     ? { window: statsQuery }
@@ -123,7 +124,7 @@ export const fetchProjectStats = async (
   if (query.to) {
     url.searchParams.set("to", query.to);
   }
-  return fetchJson<ProjectExecutionStatsSnapshot>(`${url.pathname}${url.search}`);
+  return fetchJson<ProjectExecutionStatsSnapshot>(`${url.pathname}${url.search}`, { signal });
 };
 
 export const createSprint = async (projectId: string, input: CreateSprintInput): Promise<SprintRecord> => {

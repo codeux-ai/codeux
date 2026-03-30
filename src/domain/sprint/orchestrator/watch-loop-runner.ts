@@ -36,7 +36,18 @@ export class WatchLoopRunner {
   constructor(
     private readonly deps: SprintOrchestratorDependencies,
     private readonly cycleRunner: CycleRunner,
-    private readonly renderMainMergeCiFeedback: (args: any) => Promise<MergeFeedbackResult>
+    private readonly renderMainMergeCiFeedback: (args: {
+      repoPath: string;
+      featureBranch: string;
+      defaultBranch: string;
+      featureBranchPrefix: string;
+      sprintNumber?: number;
+      sprintName?: string;
+      sprintDescription?: string;
+      ciIntelligence: CiIntelligenceSettings;
+      githubMode: "REMOTE" | "LOCAL";
+      subtasks?: Subtask[];
+    }) => Promise<MergeFeedbackResult>
   ) {}
 
   async run(params: WatchLoopRunnerArgs): Promise<string> {
@@ -410,6 +421,7 @@ export class WatchLoopRunner {
           sprintDescription: scopedExecutionContext.sprint.goal,
           ciIntelligence,
           githubMode,
+          subtasks,
         });
         if (mergeFeedback.text) {
           this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "main_merge_gate_status", "system", {

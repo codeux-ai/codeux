@@ -35,7 +35,7 @@ This creates sequence-backed replay for reconnecting browser clients.
 
 Production refinement shipped on March 15, 2026:
 
-- large snapshot events such as `project.execution.updated`, `project.runtime_status.updated`, `projects.updated`, `project.structure.updated`, and `overview.telemetry.updated` now persist as lightweight sequence markers with `is_replayable = 0`
+- large snapshot events such as `project.live.updated`, `project.execution.updated`, `project.runtime_status.updated`, `projects.updated`, `project.structure.updated`, and `overview.telemetry.updated` now persist as lightweight sequence markers with `is_replayable = 0`
 - reconnecting websocket clients still get correct gap detection, but missed heavy snapshots now trigger `snapshot_required` instead of replaying bulky payloads from sqlite
 - replay decisions are now scope-aware instead of comparing against the global event sequence, which avoids false snapshot reloads when unrelated projects are active
 
@@ -45,6 +45,7 @@ Sprint OS now coalesces runtime writes before broadcasting them.
 
 The current publisher schedules:
 
+- `project.live.updated`
 - `projects.updated`
 - `project.structure.updated`
 - `project.execution.updated`
@@ -86,7 +87,7 @@ Reconnect behavior:
 
 ### Websocket-first dashboard consumers
 
-The first dashboard consumers now use websocket-first updates with polling fallback:
+The first dashboard consumers now use websocket-first updates:
 
 - `dashboard/src/hooks/use-dashboard-runtime-data.ts`
 - `dashboard/src/hooks/use-overview-telemetry.ts`
@@ -97,13 +98,16 @@ The first dashboard consumers now use websocket-first updates with polling fallb
 Behavior:
 
 - initial snapshot still comes from REST
+- the v2 Live page now hydrates from one combined `/api/live` snapshot
+- after hydration, the v2 Live page treats `project.live.updated` as the only authoritative websocket payload for selected-project runtime state
 - websocket updates replace stale wait time for execution and overview telemetry
 - project collection and selected-project context now refresh over websocket too
 - sprint and task pages now react to project-structure invalidation events
 - sprint and task hooks now treat realtime invalidation as silent background refresh, which avoids foreground loading flicker while the browser is already showing current data
 - execution snapshot consumers now diff snapshots semantically instead of treating every fetch-time `updatedAt` stamp as a meaningful change
-- the v2 Live page now derives DAG/task structure from the project task resource layer and overlays runtime state from `/api/status`, so transient runtime snapshot gaps do not collapse the live task graph or remount the page shell
-- polling remains as recovery fallback, now on a slower `30s` default cadence for websocket-backed dashboard surfaces
+- git status is now folded into that same `/api/live` contract and refreshed server-side so the browser no longer polls git independently on the Live page
+- reconnect recovery for the Live page now means re-fetching `/api/live` on `snapshot_required`, not running parallel status/execution repair logic in the browser
+- polling remains a recovery tool for other websocket-backed dashboard surfaces, but the Live page no longer keeps its own steady-state poll loop
 
 ## Current Backend Integration Points
 
@@ -122,6 +126,11 @@ Additional March 15, 2026 tuning:
 - noisy task-run updates and task-run event appends no longer force overview telemetry refresh on every mutation
 - lease updates still refresh the project execution surface, but they no longer churn overview telemetry
 - attention queue open/claim/resolve mutations now notify the live execution snapshot directly instead of waiting for a nearby side-effect refresh
+
+Production refinement shipped on March 30, 2026:
+
+- project execution, runtime-status, and structure refresh scheduling now also fan into `project.live.updated`, so the Live page always receives a fresh combined snapshot after any committed runtime mutation
+- the server now performs a periodic background live-snapshot refresh for the selected project so git status and other slower-changing runtime metadata continue to stream even when no new task event is being written
 
 ## What This Improves
 
@@ -146,7 +155,7 @@ This is the first slice, not the final transport rollout.
 Still pending:
 
 - degraded-mode dashboard banners and richer reconnect diagnostics
-- broader polling reduction once websocket behavior has been hardened longer
+- broader polling reduction for non-Live dashboard surfaces once websocket behavior has been hardened longer
 
 ## Relationship To MCP Listen
 

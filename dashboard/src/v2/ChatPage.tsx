@@ -3,11 +3,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import gsap from "gsap";
 import {
   ArrowUp,
-  MessageCircle,
-  Plus,
   RefreshCw,
   Sparkles,
-  Trash2,
   UserCircle2,
 } from "lucide-preact";
 import type {
@@ -31,6 +28,8 @@ import {
   fetchProjectConnections,
   postConversationMessage,
   updateConversationThread,
+  updateThreadRoute,
+  compactThreadSession,
 } from "./lib/connection-api.js";
 import {
   isDetailLoading,
@@ -41,24 +40,36 @@ import { upsertChatThread } from "./lib/chat-thread-utils.js";
 import { fetchInvocationMessages, fetchProjectInvocations } from "./lib/invocation-api.js";
 import { renderMarkdown } from "../lib/markdown.js";
 import { subscribeToDashboardRealtime } from "../lib/realtime/dashboard-realtime-client.js";
+import { ChatThreadHeader } from "./components/chat/ChatThreadHeader.js";
+import { useExecutions } from "../hooks/useExecutions.js";
+import { getProjectWorkerOptions, type WorkerRoutingPreference } from "./lib/project-worker-options.js";
+import { fetchProjectEffectiveSettings } from "./lib/settings-api.js";
+import { toChatTimestampMs } from "./lib/chat-time.js";
+import { ChatPageShell } from "./components/chat/ChatPageShell.js";
+import { ChatRail } from "./components/chat/ChatRail.js";
+import { ThreadListCard } from "./components/chat/ThreadListCard.js";
+import { InvocationListCard } from "./components/chat/InvocationListCard.js";
+import { EmptyChat, LoadingChat } from "./components/chat/ChatEmptyState.js";
+import { ChatMessageBubble } from "./components/chat/ChatMessageBubble.js";
+import { InvocationMessageBubble } from "./components/chat/InvocationMessageBubble.js";
+import { WorkingBubble } from "./components/chat/WorkingBubble.js";
 
-const formatTime = (iso: string): string => (
-  new Date(iso).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
-);
-
-const relativeTime = (iso: string | null): string => {
-  if (!iso) return "No messages";
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const mins = Math.max(0, Math.floor(diffMs / 60000));
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+const formatInvocationErrorCategory = (value: ExecutionInvocationRecord["lastErrorCategory"]): string | null => {
+  switch (value) {
+    case "RATE_LIMITED":
+      return "Rate limit";
+    case "QUOTA_EXHAUSTED":
+      return "Quota reset";
+    case "AUTH_FAILURE":
+      return "Auth failure";
+    case "PROVIDER_NOT_FOUND":
+      return "Provider missing";
+    case "UNKNOWN":
+      return "Error";
+    default:
+      return null;
+  }
 };
-
-const statusTone = (pendingCount: number): string => (
-  pendingCount > 0 ? "text-status-amber" : "text-slate-400 dark:text-slate-500"
-);
 
 const isWorkingMessage = (
   message: ChatMessageRecord,
@@ -71,7 +82,7 @@ const isWorkingMessage = (
   return !allMessages.some((candidate) => (
     candidate.threadId === message.threadId
     && candidate.direction === "connection_to_dashboard"
-    && new Date(candidate.createdAt).getTime() >= new Date(message.createdAt).getTime()
+    && toChatTimestampMs(candidate.createdAt) >= toChatTimestampMs(message.createdAt)
   ));
 };
 
@@ -81,7 +92,7 @@ const upsertMessage = (messages: ChatMessageRecord[], nextMessage: ChatMessageRe
   }
 
   return [...messages, nextMessage].sort((left, right) => {
-    const byCreatedAt = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+    const byCreatedAt = toChatTimestampMs(left.createdAt) - toChatTimestampMs(right.createdAt);
     if (byCreatedAt !== 0) {
       return byCreatedAt;
     }
@@ -163,233 +174,7 @@ const toAgentConnection = (connection: ExecutionConnectionSummary): AgentConnect
   activeDispatchCount: connection.activeDispatchCount,
 });
 
-const EmptyChat: FunctionComponent<{ message: string }> = ({ message }) => (
-  <div className="flex h-full min-h-[360px] items-center justify-center rounded-[1.9rem] border border-dashed border-signal-500/20 bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-signal-500/20 dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-    <div className="space-y-3">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-[1.2rem] bg-signal-500/10 text-signal-500">
-        <MessageCircle className="h-6 w-6" strokeWidth={1.6} />
-      </div>
-      <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">No Chat Thread Yet</h3>
-      <p className="max-w-md text-sm leading-relaxed text-slate-500 dark:text-slate-400">{message}</p>
-    </div>
-  </div>
-);
-
-const LoadingChat: FunctionComponent<{ label: string }> = ({ label }) => (
-  <div className="flex h-full min-h-[360px] items-center justify-center rounded-[1.9rem] border border-dashed border-black/[0.06] bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-    <div className="space-y-4">
-      <div className="mx-auto flex items-center justify-center gap-1.5">
-        <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-signal-500" />
-        <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-signal-500 [animation-delay:140ms]" />
-        <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-signal-500 [animation-delay:280ms]" />
-      </div>
-      <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-signal-500">{label}</div>
-      <p className="max-w-md text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-        Sprint OS is loading the latest stored conversation state.
-      </p>
-    </div>
-  </div>
-);
-
-const ThreadList: FunctionComponent<{
-  threads: ChatThread[];
-  selectedThreadId: string | null;
-  onSelect: (threadId: string) => void;
-  onDelete: (threadId: string) => void;
-  deletingThreadId: string | null;
-}> = ({ threads, selectedThreadId, onSelect, onDelete, deletingThreadId }) => (
-  <div className="space-y-3">
-    {threads.map((thread) => (
-      <div key={thread.id} className="group relative overflow-hidden rounded-[1.25rem]">
-        <button
-          type="button"
-          onClick={() => onSelect(thread.id)}
-          className={`w-full rounded-[1.25rem] border px-4 py-3 pr-16 text-left transition-colors duration-150 ${
-            selectedThreadId === thread.id
-              ? "border-signal-500/30 bg-signal-500/10"
-              : "border-black/[0.05] bg-black/[0.03] hover:border-slate-300 hover:bg-black/[0.05] dark:border-white/[0.05] dark:bg-white/[0.03] dark:hover:border-white/[0.12] dark:hover:bg-white/[0.05]"
-          }`}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="truncate font-display text-lg font-black tracking-tight text-slate-900 dark:text-white">{thread.title}</div>
-              <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                {thread.lastMessagePreview || "No messages yet."}
-              </div>
-            </div>
-            <div className="shrink-0 text-right">
-              <div className={`text-[10px] font-bold uppercase tracking-[0.12em] ${statusTone(thread.pendingMessageCount)}`}>
-                {thread.pendingMessageCount > 0 ? `${thread.pendingMessageCount} pending` : "synced"}
-              </div>
-              <div className="mt-1 text-[10px] font-mono text-slate-400">{relativeTime(thread.lastMessageAt)}</div>
-            </div>
-          </div>
-        </button>
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onDelete(thread.id);
-          }}
-          disabled={deletingThreadId === thread.id}
-          aria-label={`Delete ${thread.title}`}
-          className="absolute inset-y-0 right-0 flex w-12 translate-x-full items-center justify-center border-l border-status-red/15 bg-status-red/10 text-status-red opacity-0 transition-all duration-150 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100 disabled:translate-x-0 disabled:opacity-100"
-        >
-          {deletingThreadId === thread.id ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.1} /> : <Trash2 className="h-4 w-4" strokeWidth={2.1} />}
-        </button>
-      </div>
-    ))}
-  </div>
-);
-
-const InvocationList: FunctionComponent<{
-  invocations: ExecutionInvocationRecord[];
-  selectedInvocationId: string | null;
-  onSelect: (invocationId: string) => void;
-}> = ({ invocations, selectedInvocationId, onSelect }) => (
-  <div className="space-y-3">
-    {invocations.map((invocation) => (
-      <div key={invocation.id} className="relative overflow-hidden rounded-[1.25rem]">
-        <button
-          type="button"
-          onClick={() => onSelect(invocation.id)}
-          className={`w-full rounded-[1.25rem] border px-4 py-3 text-left transition-colors duration-150 ${
-            selectedInvocationId === invocation.id
-              ? "border-signal-500/30 bg-signal-500/10"
-              : "border-black/[0.05] bg-black/[0.03] hover:border-slate-300 hover:bg-black/[0.05] dark:border-white/[0.05] dark:bg-white/[0.03] dark:hover:border-white/[0.12] dark:hover:bg-white/[0.05]"
-          }`}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <div className="truncate font-display text-lg font-black tracking-tight text-slate-900 dark:text-white capitalize">{invocation.type}</div>
-                {(invocation.sprintId || invocation.taskId) && (
-                  <div className="rounded border border-black/[0.06] bg-black/[0.03] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
-                    {invocation.taskId ? "Task" : "Sprint"}
-                  </div>
-                )}
-              </div>
-              <div className="mt-1 line-clamp-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400 capitalize">
-                {invocation.provider} {invocation.model && `· ${invocation.model}`}
-              </div>
-            </div>
-            <div className="shrink-0 text-right">
-              <div className={`text-[10px] font-bold uppercase tracking-[0.12em] ${invocation.status === "failed" ? "text-status-red" : invocation.status === "completed" ? "text-signal-500" : "text-slate-500"}`}>
-                {invocation.status}
-              </div>
-              <div className="mt-1 text-[10px] font-mono text-slate-400">{relativeTime(invocation.lastMessageAt || invocation.createdAt)}</div>
-            </div>
-          </div>
-        </button>
-      </div>
-    ))}
-  </div>
-);
-
-const InvocationMessageBubble: FunctionComponent<{ message: ExecutionInvocationMessageRecord }> = ({ message }) => {
-  const fromSystem = message.role === "system";
-  const fromUser = message.role === "user";
-  const fromTool = message.role === "tool";
-  const fromAssistant = message.role === "assistant";
-
-  return (
-    <div className={`flex ${fromUser || fromTool ? "justify-end" : "justify-start"}`}>
-      <div className={`flex max-w-[760px] items-start gap-3 ${fromUser || fromTool ? "flex-row-reverse" : "flex-row"}`}>
-        <div className={`mt-1 flex h-9 w-9 items-center justify-center rounded-[0.9rem] ${
-          fromUser || fromTool
-            ? "border border-black/[0.06] bg-white text-slate-500 dark:border-white/[0.06] dark:bg-void-700 dark:text-slate-300"
-            : "border border-signal-500/20 bg-signal-500/10 text-signal-500"
-        }`}>
-          {fromUser || fromTool ? <UserCircle2 className="h-4 w-4" strokeWidth={1.6} /> : <Sparkles className="h-4 w-4" strokeWidth={1.6} />}
-        </div>
-        <div className="space-y-2">
-          <div className={`rounded-[1.5rem] px-5 py-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${
-            fromUser || fromTool
-              ? "rounded-tr-sm border border-signal-500/20 bg-signal-500/10 text-slate-900 dark:text-white"
-              : "rounded-tl-sm border border-black/[0.06] bg-white/75 text-slate-700 dark:border-white/[0.06] dark:bg-void-800/70 dark:text-slate-200"
-          }`}>
-            <div
-              className="prose prose-sm max-w-none text-[14px] leading-7 text-inherit prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit"
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(message.contentMarkdown || "*(No message content)*") }}
-            />
-            {message.toolCallsJson && (
-              <div className="mt-4 rounded border border-black/[0.06] bg-black/[0.03] p-3 text-xs dark:border-white/[0.06] dark:bg-white/[0.03]">
-                <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-slate-600 dark:text-slate-400">
-                  {JSON.stringify(message.toolCallsJson, null, 2)}
-                </pre>
-              </div>
-            )}
-          </div>
-          <div className={`px-1 text-[10px] font-mono text-slate-400 flex items-center gap-2 ${fromUser || fromTool ? "justify-end" : "justify-start"}`}>
-            <span>{formatTime(message.createdAt)}</span>
-            <span className="capitalize">{message.role}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const MessageBubble: FunctionComponent<{ message: ChatMessageRecord }> = ({ message }) => {
-  const fromDashboard = message.direction === "dashboard_to_connection";
-  return (
-    <div className={`flex ${fromDashboard ? "justify-end" : "justify-start"}`}>
-      <div className={`flex max-w-[760px] items-start gap-3 ${fromDashboard ? "flex-row-reverse" : "flex-row"}`}>
-        <div className={`mt-1 flex h-9 w-9 items-center justify-center rounded-[0.9rem] ${
-          fromDashboard
-            ? "border border-black/[0.06] bg-white text-slate-500 dark:border-white/[0.06] dark:bg-void-700 dark:text-slate-300"
-            : "border border-signal-500/20 bg-signal-500/10 text-signal-500"
-        }`}>
-          {fromDashboard ? <UserCircle2 className="h-4 w-4" strokeWidth={1.6} /> : <Sparkles className="h-4 w-4" strokeWidth={1.6} />}
-        </div>
-        <div className="space-y-2">
-          <div className={`rounded-[1.5rem] px-5 py-4 shadow-[0_2px_16px_rgba(0,0,0,0.04)] ${
-            fromDashboard
-              ? "rounded-tr-sm border border-signal-500/20 bg-signal-500/10 text-slate-900 dark:text-white"
-              : "rounded-tl-sm border border-black/[0.06] bg-white/75 text-slate-700 dark:border-white/[0.06] dark:bg-void-800/70 dark:text-slate-200"
-          }`}>
-            <div
-              className="prose prose-sm max-w-none text-[14px] leading-7 text-inherit prose-headings:text-inherit prose-p:text-inherit prose-strong:text-inherit prose-code:text-inherit"
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(message.bodyMarkdown) }}
-            />
-          </div>
-          <div className="flex items-center gap-3 px-1 text-[10px] font-mono text-slate-400">
-            <span>{formatTime(message.createdAt)}</span>
-            <span>{message.deliveryStatus}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const WorkingBubble: FunctionComponent<{ displayName: string | null }> = ({ displayName }) => (
-  <div className="flex justify-start">
-    <div className="flex max-w-[760px] items-start gap-3">
-      <div className="mt-1 flex h-9 w-9 items-center justify-center rounded-[0.9rem] border border-signal-500/20 bg-signal-500/10 text-signal-500">
-        <Sparkles className="h-4 w-4" strokeWidth={1.6} />
-      </div>
-      <div className="space-y-2">
-        <div className="rounded-[1.5rem] rounded-tl-sm border border-black/[0.06] bg-white/75 px-5 py-4 text-slate-700 shadow-[0_2px_16px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/70 dark:text-slate-200">
-          <div className="flex items-center gap-2">
-            <span className="text-[13px] font-medium text-slate-500 dark:text-slate-400">
-              {displayName || "Listener"} is preparing a reply
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-signal-500" />
-              <span className="h-2 w-2 animate-pulse rounded-full bg-signal-500 [animation-delay:120ms]" />
-              <span className="h-2 w-2 animate-pulse rounded-full bg-signal-500 [animation-delay:240ms]" />
-            </span>
-          </div>
-        </div>
-        <div className="px-1 text-[10px] font-mono text-slate-400">Working</div>
-      </div>
-    </div>
-  </div>
-);
-
 export const ChatPage: FunctionComponent = () => {
-  const headerRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const selectedThreadIdRef = useRef<string | null>(null);
@@ -405,6 +190,31 @@ export const ChatPage: FunctionComponent = () => {
   const activationTokenRef = useRef(0);
   const { selectedProject } = useProjectData();
 
+  const { data: execution, loading: executionLoading } = useExecutions(selectedProject?.id || null);
+  const [workerRouting, setWorkerRouting] = useState<WorkerRoutingPreference | null>(null);
+
+  useEffect(() => {
+    if (!selectedProject) {
+      setWorkerRouting(null);
+      return;
+    }
+    let isMounted = true;
+    fetchProjectEffectiveSettings(selectedProject.id)
+      .then((response) => {
+        if (!isMounted) return;
+        setWorkerRouting({
+          executionMode: response.settings.workers.executionMode,
+          virtualWorkerProvider: response.settings.workers.virtualWorkerProvider,
+        });
+      })
+      .catch((err) => {
+        console.error("Failed to fetch effective settings", err);
+      });
+    return () => { isMounted = false; };
+  }, [selectedProject]);
+
+  const { options: workerOptions } = getProjectWorkerOptions(execution, workerRouting, executionLoading);
+
   const [chatMode, setChatMode] = useState<"threads" | "invocations">("threads");
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [invocations, setInvocations] = useState<ExecutionInvocationRecord[]>([]);
@@ -419,6 +229,8 @@ export const ChatPage: FunctionComponent = () => {
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [assigningRoute, setAssigningRoute] = useState(false);
+  const [compacting, setCompacting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedThread = useMemo(
@@ -872,6 +684,9 @@ export const ChatPage: FunctionComponent = () => {
         const nextThreads = upsertChatThread(currentThreads, thread);
         threadCacheRef.current.set(selectedProject.id, nextThreads);
         setThreadsSnapshot(nextThreads);
+        if (thread.id === selectedThreadIdRef.current) {
+          void refreshMessages(thread.id, { force: true });
+        }
         if (!selectedThreadIdRef.current) {
           void activateThread(thread.id, { preferredThread: thread });
         }
@@ -914,15 +729,6 @@ export const ChatPage: FunctionComponent = () => {
     messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
   }, [messages]);
 
-  useLayoutEffect(() => {
-    if (!headerRef.current) return;
-    gsap.fromTo(
-      Array.from(headerRef.current.children),
-      { opacity: 0, y: 28 },
-      { opacity: 1, y: 0, duration: 0.8, stagger: 0.08, ease: "power4.out" }
-    );
-  }, []);
-
   const activeConnection = useMemo(() => {
     if (!selectedThread?.connectionId) {
       return null;
@@ -945,15 +751,27 @@ export const ChatPage: FunctionComponent = () => {
     return thread;
   }, [activateThread, selectedProject, setThreadsSnapshot]);
 
-  const handleAssignThread = useCallback(async (connectionId: string): Promise<void> => {
+  const handleAssignRoute = useCallback(async (option: { id: string, label: string, status: string, isPrimary: boolean, type: string, isSelectable: boolean, connectionId?: string | null, workerEndpointId?: string | null, providerId?: string }): Promise<void> => {
     if (!selectedThread) {
       return;
     }
 
+    setAssigningRoute(true);
     try {
-      const updated = await updateConversationThread(selectedThread.id, {
-        connectionId: connectionId || null,
-      });
+      let updated: ChatThread;
+      if (!option.id) {
+         updated = await updateConversationThread(selectedThread.id, {
+           connectionId: null,
+         });
+      } else {
+        const routeKind = option.type === "virtual" ? "virtual" : "worker";
+        updated = await updateThreadRoute(selectedThread.id, {
+          routeKind,
+          virtualProvider: routeKind === "virtual" ? option.providerId : undefined,
+          workerEndpointId: routeKind === "worker" ? (option.workerEndpointId || option.connectionId || undefined) : undefined,
+        });
+      }
+
       const nextThreads = (threadCacheRef.current.get(selectedProject?.id || "") || threadsRef.current).map((thread) => (
         thread.id === updated.id ? updated : thread
       ));
@@ -965,8 +783,34 @@ export const ChatPage: FunctionComponent = () => {
       setError(null);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : String(updateError));
+    } finally {
+      setAssigningRoute(false);
     }
   }, [refreshMessages, selectedProject, selectedThread, setThreadsSnapshot]);
+
+  const handleCompactThread = useCallback(async (): Promise<void> => {
+    if (!selectedThread) {
+      return;
+    }
+
+    setCompacting(true);
+    try {
+      const updated = await compactThreadSession(selectedThread.id);
+      const nextThreads = (threadCacheRef.current.get(selectedProject?.id || "") || threadsRef.current).map((thread) => (
+        thread.id === updated.id ? updated : thread
+      ));
+      if (selectedProject) {
+        threadCacheRef.current.set(selectedProject.id, nextThreads);
+      }
+      setThreadsSnapshot(nextThreads);
+      await refreshMessages(updated.id);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCompacting(false);
+    }
+  }, [selectedThread, selectedProject, setThreadsSnapshot, refreshMessages]);
 
   const handleSend = useCallback(async (): Promise<void> => {
     const bodyMarkdown = input.trim();
@@ -976,7 +820,26 @@ export const ChatPage: FunctionComponent = () => {
 
     setSending(true);
     try {
-      const thread = selectedThread || await createThreadForCompose();
+      let thread = selectedThread || await createThreadForCompose();
+
+      if (thread.messageCount === 0 && !thread.connectionId && !thread.runtimeState?.virtualProvider && !thread.runtimeState?.workerEndpointId) {
+        const { options: defaultOptions, selectedOption } = getProjectWorkerOptions(execution, workerRouting, false);
+        const hasActiveRoute = selectedOption !== null;
+
+        if (hasActiveRoute && selectedOption) {
+          try {
+            const routeKind = selectedOption.type === "virtual" ? "virtual" : "worker";
+            thread = await updateThreadRoute(thread.id, {
+              routeKind,
+              virtualProvider: routeKind === "virtual" ? selectedOption.providerId : undefined,
+              workerEndpointId: routeKind === "worker" ? (selectedOption.workerEndpointId || selectedOption.connectionId || undefined) : undefined,
+            });
+          } catch (err) {
+            console.warn("Failed to set default route for thread before sending", err);
+          }
+        }
+      }
+
       const created = await postConversationMessage(selectedProject.id, {
         threadId: thread.id,
         bodyMarkdown,
@@ -1044,297 +907,243 @@ export const ChatPage: FunctionComponent = () => {
     }
   }, [activateThread, refreshThreads, selectedProject, selectedThreadId, setThreadsSnapshot]);
 
-  return (
-    <div className="relative z-10 mx-auto flex min-h-[calc(100vh-70px)] max-w-[1900px] flex-col gap-10 px-8 py-16 md:px-20">
-      <div ref={headerRef} className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
-        <div className="space-y-4">
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
-            <MessageCircle className="h-3.5 w-3.5" strokeWidth={2.2} />
-            Dashboard Chat
+  const renderRail = () => {
+    if (chatMode === "threads") {
+      return (
+        <ChatRail
+          title="Threads"
+          count={threads.filter((t) => t.scope === "project").length}
+          secondaryTitle="Listeners"
+          secondaryCount={connections.length}
+        >
+          {threadsLoading ? (
+            <LoadingChat label="Loading threads" />
+          ) : threads.filter((t) => t.scope === "project").length === 0 ? (
+            <EmptyChat message="Create the first project thread or post a message to queue work for an incoming listener." />
+          ) : (
+            <ThreadListCard
+              threads={threads.filter((t) => t.scope === "project")}
+              selectedThreadId={selectedThreadId}
+              onSelect={(threadId) => {
+                const preferredThread = threads.find((thread) => thread.id === threadId) || null;
+                void activateThread(threadId, { preferredThread });
+              }}
+              onDelete={(threadId) => void handleDeleteThread(threadId)}
+              deletingThreadId={deletingThreadId}
+            />
+          )}
+        </ChatRail>
+      );
+    }
+
+    return (
+      <ChatRail
+        title="Invocations"
+        count={invocations.length}
+      >
+        {invocationsLoading ? (
+          <LoadingChat label="Loading invocations" />
+        ) : invocations.length === 0 ? (
+          <EmptyChat message="No execution invocations found for this project." />
+        ) : (
+          <InvocationListCard
+            invocations={invocations}
+            selectedInvocationId={selectedInvocationId}
+            onSelect={(invocationId) => {
+              const preferredInvocation = invocations.find((inv) => inv.id === invocationId) || null;
+              void activateInvocation(invocationId, { preferredInvocation });
+            }}
+          />
+        )}
+      </ChatRail>
+    );
+  };
+
+  const renderDetail = () => {
+    if (chatMode === "threads") {
+      return (
+        <>
+          <ChatThreadHeader
+            thread={selectedThread}
+            workerOptions={workerOptions}
+            isAssigning={assigningRoute}
+            onAssignRoute={(option) => void handleAssignRoute(option)}
+            onCompact={() => void handleCompactThread()}
+            isCompacting={compacting}
+          />
+
+          <div ref={messagesRef} className="flex-1 min-h-0 space-y-6 overflow-y-auto px-6 py-6">
+            {threadsLoading ? (
+              <LoadingChat label="Loading conversation" />
+            ) : !selectedThread ? (
+              <EmptyChat message="Select an existing thread or create a new one to start routing dashboard chat through the selected project." />
+            ) : threadMessagesLoading ? (
+              <LoadingChat label="Loading conversation" />
+            ) : messages.length === 0 ? (
+              <EmptyChat message="This thread is ready. The next dashboard message will be stored in Sprint OS and queued for a listening MCP connection." />
+            ) : (
+              <>
+                {messages.map((message) => <ChatMessageBubble key={message.id} message={message} />)}
+                {hasWorkingReply ? <WorkingBubble displayName={activeConnection?.displayName || null} runtimeState={selectedThread?.runtimeState} /> : null}
+              </>
+            )}
           </div>
-          <div className="relative overflow-hidden">
-            <div className="pointer-events-none absolute -left-2 -top-8 font-display text-[6rem] font-black leading-none tracking-tighter text-black/[0.04] dark:text-white/[0.03]">
-              CHAT
+
+          <div className="shrink-0 border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
+            <div className="rounded-[1.5rem] border border-black/[0.06] bg-black/[0.03] p-3 focus-within:border-signal-500/30 dark:border-white/[0.06] dark:bg-white/[0.03]">
+              <textarea
+                ref={composerRef}
+                value={input}
+                rows={1}
+                placeholder={activeConnection ? "Send a dashboard message to the active listener…" : "Write a project note or queue a message for a future listener…"}
+                className="max-h-[180px] min-h-[38px] w-full resize-none bg-transparent px-2 py-2 text-[15px] leading-relaxed text-slate-900 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-600"
+                onInput={(event) => {
+                  const element = event.currentTarget;
+                  element.style.height = "auto";
+                  element.style.height = `${element.scrollHeight}px`;
+                  setInput(element.value);
+                }}
+                onKeyDown={(event) => {
+                  if (event.isComposing) {
+                    return;
+                  }
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void handleSend();
+                  }
+                }}
+              />
+              <div className="mt-3 flex items-center justify-between">
+                <div className="text-[10px] font-mono text-slate-400">
+                  {activeConnection
+                    ? `${activeConnection.displayName} · ${activeConnection.status} · Enter sends`
+                    : "Messages will stay queued until a listener claims or is assigned to this thread · Enter sends · Shift+Enter newline"}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleSend()}
+                  disabled={!selectedProject || !input.trim() || sending}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-[1rem] bg-signal-500 text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-black/[0.06] disabled:text-slate-400 disabled:shadow-none dark:disabled:bg-white/[0.06]"
+                >
+                  {sending ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.2} /> : <ArrowUp className="h-4 w-4" strokeWidth={2.5} />}
+                </button>
+              </div>
             </div>
-            <h1 className="relative z-10 font-display text-5xl font-black tracking-tighter text-slate-900 dark:text-white md:text-7xl">
-              Project <span className="text-signal-500">Conversations.</span>
-            </h1>
           </div>
-          <p className="max-w-2xl text-lg leading-relaxed text-slate-500 dark:text-slate-400">
-            {selectedProject
-              ? `Messages sent here are stored in Sprint OS and routed toward listening MCP connections for ${selectedProject.name}.`
-              : "Select a project to inspect its conversation threads and route dashboard messages to connected listeners."}
-          </p>
+        </>
+      );
+    }
+
+    return (
+      <>
+        <div className="shrink-0 border-b border-black/[0.05] px-6 py-5 dark:border-white/[0.05]">
+          <div className="flex items-start justify-between gap-6">
+            <div>
+              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">
+                <span>Active Invocation</span>
+                {formatInvocationErrorCategory(selectedInvocation?.lastErrorCategory || null) && (
+                  <span className="rounded border border-status-amber/30 bg-status-amber/10 px-1.5 py-0.5 text-[9px] tracking-[0.14em] text-status-amber">
+                    {formatInvocationErrorCategory(selectedInvocation?.lastErrorCategory || null)}
+                  </span>
+                )}
+              </div>
+              <h2 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white capitalize">
+                {selectedInvocation?.type || "No Invocation Selected"}
+              </h2>
+              {selectedInvocation && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                  {selectedInvocation.provider && (
+                    <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-1 font-mono dark:border-white/[0.06] dark:bg-white/[0.03]">
+                      {selectedInvocation.provider}
+                    </span>
+                  )}
+                  {selectedInvocation.model && (
+                    <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-1 font-mono dark:border-white/[0.06] dark:bg-white/[0.03]">
+                      {selectedInvocation.model}
+                    </span>
+                  )}
+                  <span className={`rounded-full border px-2 py-1 font-mono ${
+                    selectedInvocation.status === "failed"
+                      ? "border-status-red/30 bg-status-red/10 text-status-red"
+                      : selectedInvocation.status === "completed"
+                        ? "border-signal-500/20 bg-signal-500/10 text-signal-500"
+                        : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"
+                  }`}>
+                    {selectedInvocation.status}
+                  </span>
+                </div>
+              )}
+              {selectedInvocation?.lastErrorMessage && (
+                <div className="mt-3 max-w-2xl text-sm leading-relaxed text-status-amber">
+                  {selectedInvocation.lastErrorMessage}
+                  {selectedInvocation.lastRetryAfterIso && ` Retry at ${selectedInvocation.lastRetryAfterIso}.`}
+                </div>
+              )}
+            </div>
+            <div className="text-right text-[10px] font-mono text-slate-400">
+              <div className="mb-2">{selectedInvocation ? `${selectedInvocation.messageCount} messages` : "0 messages"}</div>
+            </div>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center rounded-full border border-black/[0.06] bg-white/70 p-1 dark:border-white/[0.06] dark:bg-white/[0.03]">
-            <button
-              type="button"
-              onClick={() => setChatMode("threads")}
-              className={`rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${
-                chatMode === "threads"
-                  ? "bg-slate-900 text-white dark:bg-white dark:text-void-900"
-                  : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-              }`}
-            >
-              Threads
-            </button>
-            <button
-              type="button"
-              onClick={() => setChatMode("invocations")}
-              className={`rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${
-                chatMode === "invocations"
-                  ? "bg-slate-900 text-white dark:bg-white dark:text-void-900"
-                  : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
-              }`}
-            >
-              Invocations
-            </button>
-          </div>
-          {chatMode === "threads" && (
+        <div ref={messagesRef} className="flex-1 min-h-0 space-y-6 overflow-y-auto px-6 py-6">
+          {invocationsLoading ? (
+            <LoadingChat label="Loading invocations" />
+          ) : !selectedInvocation ? (
+            <EmptyChat message="Select an existing execution invocation to view its logs and messages." />
+          ) : invocationMessagesLoading ? (
+            <LoadingChat label="Loading messages" />
+          ) : invocationMessages.length === 0 ? (
+            <EmptyChat message="No messages found for this invocation." />
+          ) : (
             <>
-              <span className="rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
-                {activeConnection ? `${activeConnection.displayName} · ${activeConnection.status}` : "Unassigned"}
-              </span>
-              <span className={`rounded-full border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] ${
-                pendingDashboardMessages > 0
-                  ? "border-status-amber/30 bg-status-amber/10 text-status-amber"
-                  : "border-signal-500/20 bg-signal-500/10 text-signal-500"
-              }`}>
-                {pendingDashboardMessages > 0 ? `${pendingDashboardMessages} pending` : "Inbox clear"}
-              </span>
+              {invocationMessages.map((message) => <InvocationMessageBubble key={message.id} message={message} />)}
             </>
           )}
-          <button
-            type="button"
-            onClick={() => void refreshThreads({ manual: true })}
-            disabled={manualRefreshing}
-            className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${manualRefreshing ? "animate-spin" : ""}`} strokeWidth={2.1} />
-            Refresh
-          </button>
-          {chatMode === "threads" && (
-            <button
-              type="button"
-              onClick={() => void createThreadForCompose()}
-              disabled={!selectedProject}
-              className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-void-900 transition-colors hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
-              New Thread
-            </button>
-          )}
         </div>
-      </div>
 
-      {error && (
-        <div className="rounded-[1.4rem] border border-status-red/20 bg-status-red/10 px-5 py-4 text-sm text-status-red">
-          {error}
+        <div className="shrink-0 border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
+          <div className="rounded-[1.5rem] border border-black/[0.06] bg-black/[0.03] p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+            <div className="min-h-[38px] w-full px-2 py-2 text-[15px] leading-relaxed text-slate-400 dark:text-slate-600">
+              Invocation execution logs are read-only. Switch to Threads to communicate.
+            </div>
+          </div>
         </div>
-      )}
+      </>
+    );
+  };
 
-      {!selectedProject ? (
-        <EmptyChat message="Choose a project from the top navigation to load its stored chat threads and messages." />
-      ) : (
-        <div className="grid min-h-[720px] grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <aside className="rounded-[1.9rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-            {chatMode === "threads" ? (
-              <>
-                <div className="mb-5 flex items-center justify-between">
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Threads</div>
-                    <div className="mt-1 font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                      {threads.filter((t) => t.scope === "project").length}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Listeners</div>
-                    <div className="mt-1 font-mono text-sm text-slate-600 dark:text-slate-300">{connections.length}</div>
-                  </div>
-                </div>
+  if (!selectedProject) {
+    return (
+      <ChatPageShell
+        selectedProject={null}
+        chatMode={chatMode}
+        onSetChatMode={setChatMode}
+        onRefresh={() => void refreshThreads({ manual: true })}
+        manualRefreshing={manualRefreshing}
+        onCreateThread={() => void createThreadForCompose()}
+        pendingDashboardMessages={pendingDashboardMessages}
+        activeConnectionLabel={activeConnection ? `${activeConnection.displayName} · ${activeConnection.status}` : undefined}
+        error={error}
+        railSlot={<div />}
+        detailSlot={<EmptyChat message="Choose a project from the top navigation to load its stored chat threads and messages." />}
+      />
+    );
+  }
 
-                {threadsLoading ? (
-                  <LoadingChat label="Loading threads" />
-                ) : threads.filter((t) => t.scope === "project").length === 0 ? (
-                  <EmptyChat message="Create the first project thread or post a message to queue work for an incoming listener." />
-                ) : (
-                  <ThreadList
-                    threads={threads.filter((t) => t.scope === "project")}
-                    selectedThreadId={selectedThreadId}
-                    onSelect={(threadId) => {
-                      const preferredThread = threads.find((thread) => thread.id === threadId) || null;
-                      void activateThread(threadId, { preferredThread });
-                    }}
-                    onDelete={(threadId) => void handleDeleteThread(threadId)}
-                    deletingThreadId={deletingThreadId}
-                  />
-                )}
-              </>
-            ) : (
-              <>
-                <div className="mb-5 flex items-center justify-between">
-                  <div>
-                    <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Invocations</div>
-                    <div className="mt-1 font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{invocations.length}</div>
-                  </div>
-                </div>
-
-                {invocationsLoading ? (
-                  <LoadingChat label="Loading invocations" />
-                ) : invocations.length === 0 ? (
-                  <EmptyChat message="No execution invocations found for this project." />
-                ) : (
-                  <InvocationList
-                    invocations={invocations}
-                    selectedInvocationId={selectedInvocationId}
-                    onSelect={(invocationId) => {
-                      const preferredInvocation = invocations.find((inv) => inv.id === invocationId) || null;
-                      void activateInvocation(invocationId, { preferredInvocation });
-                    }}
-                  />
-                )}
-              </>
-            )}
-          </aside>
-
-          <section className="flex min-h-[720px] flex-col rounded-[1.9rem] border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-            {chatMode === "threads" ? (
-              <>
-                <div className="border-b border-black/[0.05] px-6 py-5 dark:border-white/[0.05]">
-                  <div className="flex items-start justify-between gap-6">
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">Active Thread</div>
-                      <h2 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-                        {selectedThread?.title || "No Thread Selected"}
-                      </h2>
-                    </div>
-                    <div className="text-right text-[10px] font-mono text-slate-400">
-                      <div className="mb-2">{selectedThread ? `${selectedThread.messageCount} messages` : "0 messages"}</div>
-                      <label className="inline-flex items-center gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Worker:</span>
-                        <select
-                          value={selectedThread?.connectionId || ""}
-                          onChange={(event) => void handleAssignThread(event.currentTarget.value)}
-                          disabled={!selectedThread}
-                          className="rounded-full border border-black/[0.08] bg-white/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300"
-                        >
-                          <option value="">Unassigned</option>
-                          {connections.map((connection) => (
-                            <option key={connection.id} value={connection.id}>
-                              {connection.displayName} · {connection.status}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                <div ref={messagesRef} className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
-                  {threadsLoading ? (
-                    <LoadingChat label="Loading conversation" />
-                  ) : !selectedThread ? (
-                    <EmptyChat message="Select an existing thread or create a new one to start routing dashboard chat through the selected project." />
-                  ) : threadMessagesLoading ? (
-                    <LoadingChat label="Loading conversation" />
-                  ) : messages.length === 0 ? (
-                    <EmptyChat message="This thread is ready. The next dashboard message will be stored in Sprint OS and queued for a listening MCP connection." />
-                  ) : (
-                    <>
-                      {messages.map((message) => <MessageBubble key={message.id} message={message} />)}
-                      {hasWorkingReply ? <WorkingBubble displayName={activeConnection?.displayName || null} /> : null}
-                    </>
-                  )}
-                </div>
-
-                <div className="border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
-                  <div className="rounded-[1.5rem] border border-black/[0.06] bg-black/[0.03] p-3 focus-within:border-signal-500/30 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                    <textarea
-                      ref={composerRef}
-                      value={input}
-                      rows={1}
-                      placeholder={activeConnection ? "Send a dashboard message to the active listener…" : "Write a project note or queue a message for a future listener…"}
-                      className="max-h-[180px] min-h-[38px] w-full resize-none bg-transparent px-2 py-2 text-[15px] leading-relaxed text-slate-900 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-600"
-                      onInput={(event) => {
-                        const element = event.currentTarget;
-                        element.style.height = "auto";
-                        element.style.height = `${element.scrollHeight}px`;
-                        setInput(element.value);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.isComposing) {
-                          return;
-                        }
-                        if (event.key === "Enter" && !event.shiftKey) {
-                          event.preventDefault();
-                          void handleSend();
-                        }
-                      }}
-                    />
-                    <div className="mt-3 flex items-center justify-between">
-                      <div className="text-[10px] font-mono text-slate-400">
-                        {activeConnection
-                          ? `${activeConnection.displayName} · ${activeConnection.status} · Enter sends`
-                          : "Messages will stay queued until a listener claims or is assigned to this thread · Enter sends · Shift+Enter newline"}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => void handleSend()}
-                        disabled={!selectedProject || !input.trim() || sending}
-                        className="inline-flex h-11 w-11 items-center justify-center rounded-[1rem] bg-signal-500 text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-black/[0.06] disabled:text-slate-400 disabled:shadow-none dark:disabled:bg-white/[0.06]"
-                      >
-                        {sending ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.2} /> : <ArrowUp className="h-4 w-4" strokeWidth={2.5} />}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="border-b border-black/[0.05] px-6 py-5 dark:border-white/[0.05]">
-                  <div className="flex items-start justify-between gap-6">
-                    <div>
-                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">Active Invocation</div>
-                      <h2 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white capitalize">
-                        {selectedInvocation?.type || "No Invocation Selected"}
-                      </h2>
-                    </div>
-                    <div className="text-right text-[10px] font-mono text-slate-400">
-                      <div className="mb-2">{selectedInvocation ? `${selectedInvocation.messageCount} messages` : "0 messages"}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div ref={messagesRef} className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
-                  {invocationsLoading ? (
-                    <LoadingChat label="Loading invocations" />
-                  ) : !selectedInvocation ? (
-                    <EmptyChat message="Select an existing execution invocation to view its logs and messages." />
-                  ) : invocationMessagesLoading ? (
-                    <LoadingChat label="Loading messages" />
-                  ) : invocationMessages.length === 0 ? (
-                    <EmptyChat message="No messages found for this invocation." />
-                  ) : (
-                    <>
-                      {invocationMessages.map((message) => <InvocationMessageBubble key={message.id} message={message} />)}
-                    </>
-                  )}
-                </div>
-
-                <div className="border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
-                  <div className="rounded-[1.5rem] border border-black/[0.06] bg-black/[0.03] p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                    <div className="min-h-[38px] w-full px-2 py-2 text-[15px] leading-relaxed text-slate-400 dark:text-slate-600">
-                      Invocation execution logs are read-only. Switch to Threads to communicate.
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </section>
-        </div>
-      )}
-    </div>
+  return (
+    <ChatPageShell
+      selectedProject={selectedProject}
+      chatMode={chatMode}
+      onSetChatMode={setChatMode}
+      onRefresh={() => void refreshThreads({ manual: true })}
+      manualRefreshing={manualRefreshing}
+      onCreateThread={() => void createThreadForCompose()}
+      pendingDashboardMessages={pendingDashboardMessages}
+      activeConnectionLabel={activeConnection ? `${activeConnection.displayName} · ${activeConnection.status}` : undefined}
+      error={error}
+      railSlot={renderRail()}
+      detailSlot={renderDetail()}
+    />
   );
 };

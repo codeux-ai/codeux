@@ -22,7 +22,7 @@ describe("AgentPresetSyncService", () => {
     const repoPath = path.join(dir, "repo");
     await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
     const agentPath = path.join(repoPath, ".sprint-os", "agents", "planning_agent.md");
-    await fs.writeFile(agentPath, "Initial planning instructions.\n", "utf8");
+    await fs.writeFile(agentPath, "---json\n{\"avatarConfig\":{\"body\":\"alien\"},\"memoryTemplateOverrideEnabled\":true}\n---\nInitial planning instructions.\n", "utf8");
 
     const storage = new AppDbStorage(path.join(dir, "app.db"));
     const projectRepository = new ProjectManagementRepository(storage);
@@ -48,6 +48,8 @@ describe("AgentPresetSyncService", () => {
       sourceScope: "project",
       syncStatus: "synced",
       sourceExists: true,
+      avatarConfig: { body: "alien" },
+      memoryTemplateOverrideEnabled: true,
     });
 
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -56,6 +58,48 @@ describe("AgentPresetSyncService", () => {
     const drifted = await syncService.listAgentPresets(project.id);
     expect(drifted[0]?.syncStatus).toBe("synced");
     expect(drifted[0]?.instructionMarkdown).toContain("Updated planning instructions");
+    expect(drifted[0]?.avatarConfig).toBeUndefined();
+    expect(drifted[0]?.memoryTemplateOverrideEnabled).toBe(false);
+  });
+
+  it("normalizes project_manager sources and resolves the Project manager agent", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-project-manager-agent-"));
+    tempDirs.push(dir);
+
+    const repoPath = path.join(dir, "repo");
+    await fs.mkdir(path.join(repoPath, ".sprint-os", "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(repoPath, ".sprint-os", "agents", "project_manager.md"),
+      "Answer Jules clarification requests.\n",
+      "utf8",
+    );
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+    const settingsRepository = new SettingsRepository(path.join(dir, "settings.db"));
+    const syncService = new AgentPresetSyncService({
+      projectManagementRepository: projectRepository,
+      agentPresetRepository,
+      settingsRepository,
+      projectRoot: dir,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Project Manager Project",
+      sourceType: "local",
+      sourceRef: repoPath,
+    });
+
+    const presets = await syncService.listAgentPresets(project.id);
+    expect(presets.find((preset) => preset.name === "Project manager")).toMatchObject({
+      sourceScope: "project",
+      syncStatus: "synced",
+    });
+
+    const resolved = await syncService.getProjectManagerAgent(project.id);
+    expect(resolved.name).toBe("Project manager");
+    expect(resolved.instructionMarkdown).toContain("Answer Jules clarification requests.");
   });
 
   it("repairs stale DB content when source metadata already matches", async () => {
@@ -149,7 +193,7 @@ describe("AgentPresetSyncService", () => {
       sourceScope: "project",
       syncStatus: "synced",
     });
-    expect(await fs.readFile(createdPath, "utf8")).toBe("Handle execution work.");
+    expect(await fs.readFile(createdPath, "utf8")).toContain("Handle execution work.");
 
     const importedDefaults = await syncService.listAgentPresets(project.id);
     const planningAgent = importedDefaults.find((preset) => preset.name === "Planning agent");
@@ -162,7 +206,7 @@ describe("AgentPresetSyncService", () => {
 
     expect(updated.sourceScope).toBe("project");
     expect(updated.syncStatus).toBe("synced");
-    expect(await fs.readFile(projectPlanningPath, "utf8")).toBe("Project-specific planning instructions.");
+    expect(await fs.readFile(projectPlanningPath, "utf8")).toContain("Project-specific planning instructions.");
     expect(await fs.readFile(defaultPlanningPath, "utf8")).toBe("Default planning instructions.\n");
   });
 

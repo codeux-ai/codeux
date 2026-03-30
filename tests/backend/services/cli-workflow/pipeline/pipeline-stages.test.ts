@@ -1,10 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PipelineContext } from "../../../../../src/services/cli-workflow/pipeline/pipeline-context.js";
 import { executeProviderStage } from "../../../../../src/services/cli-workflow/pipeline/execute-provider-stage.js";
 import { executeGitFinalizeStage } from "../../../../../src/services/cli-workflow/pipeline/git-finalize-stage.js";
 import { executePrepareStage } from "../../../../../src/services/cli-workflow/pipeline/prepare-stage.js";
 import { executePrFinalizeStage } from "../../../../../src/services/cli-workflow/pipeline/pr-finalize-stage.js";
 import { executeCleanupStage } from "../../../../../src/services/cli-workflow/pipeline/cleanup-stage.js";
+import * as providerRetryPolicy from "../../../../../src/shared/providers/provider-retry-policy.js";
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const createMockContext = (): PipelineContext => {
   return {
@@ -17,12 +22,29 @@ const createMockContext = (): PipelineContext => {
     repoPath: "/repo",
     worktreePath: "/repo/worktree",
     workflowSettings: {
-      executionMode: "LOCAL",
+      executionMode: "HOST",
       resumeFailedTaskInSameWorkspace: false,
       retryOnReadFileNotFound: true,
+      retryOnQuotaReset: true,
+      retryOnRateLimit: true,
+      rateLimitRetryDelaySeconds: 10,
+      maxRateLimitRetries: 5,
       cleanupWorktreeOnSuccess: true,
       cleanupWorktreeOnFailure: false,
       containerImage: "node:18",
+      containerSetupScriptPath: "",
+      containerCacheSetupScriptImage: false,
+      containerMountGitConfig: false,
+      containerMountGithubAuth: false,
+      containerMountGeminiAuth: false,
+      containerMountCodexAuth: false,
+      containerMountClaudeCodeAuth: false,
+      containerGithubAuthPath: "",
+      containerGeminiAuthPath: "",
+      containerCodexAuthPath: "",
+      containerClaudeCodeAuthPath: "",
+      maxPlanningJsonRetries: 3,
+      maxQuotaRetriesWithoutTimer: 5,
     },
     settings: {
       aiProvider: {
@@ -47,8 +69,12 @@ const createMockContext = (): PipelineContext => {
         cleanupWorktreeOnSuccess: true,
         cleanupWorktreeOnFailure: false,
         retryOnReadFileNotFound: true,
+        retryOnQuotaReset: true,
+        retryOnRateLimit: true,
+        rateLimitRetryDelaySeconds: 10,
+        maxRateLimitRetries: 5,
         resumeFailedTaskInSameWorkspace: false,
-        executionMode: "LOCAL",
+        executionMode: "HOST",
         containerImage: "node:18",
         containerSetupScriptPath: "",
         containerCacheSetupScriptImage: false,
@@ -61,9 +87,11 @@ const createMockContext = (): PipelineContext => {
         containerGeminiAuthPath: "",
         containerCodexAuthPath: "",
         containerClaudeCodeAuthPath: "",
+        maxPlanningJsonRetries: 3,
+        maxQuotaRetriesWithoutTimer: 5,
       },
       workers: {
-        executionMode: "LOCAL",
+        executionMode: "CONNECTED_MCP",
         virtualWorkerProvider: "gemini",
         model: "default",
         maxConcurrency: 1,
@@ -170,6 +198,74 @@ describe("executePrepareStage", () => {
     expect(ctx.workspaceManager.prepareWorktree).toHaveBeenCalledWith("/repo", "/repo/worktree", "worker-branch", "feature-branch", undefined);
   });
 
+  it("includes default memory learnings instruction when memory capture is enabled without override", async () => {
+    const ctx = createMockContext();
+    ctx.settings.memory = {
+      enabled: true,
+      autoCaptureSprint: true,
+      workerLearningsInstruction: "Default Settings Instruction",
+      maxLongTermPerProject: 50,
+      minLongTermRelevance: 0.7,
+      shortTermRetentionSprints: 3,
+    };
+    vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
+    vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
+    vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
+    vi.mocked(ctx.deps.getWorkerInstruction).mockResolvedValue("");
+
+    const result = await executePrepareStage(ctx);
+
+    expect(result.providerPrompt).toContain("## LEARNINGS CAPTURE (Required)");
+    expect(result.providerPrompt).toContain("Default Settings Instruction");
+  });
+
+  it("uses preset override memory learnings instruction when override is enabled and non-empty", async () => {
+    const ctx = createMockContext();
+    ctx.settings.memory = {
+      enabled: true,
+      autoCaptureSprint: true,
+      workerLearningsInstruction: "Default Settings Instruction",
+      maxLongTermPerProject: 50,
+      minLongTermRelevance: 0.7,
+      shortTermRetentionSprints: 3,
+    };
+    ctx.memoryTemplateOverrideEnabled = true;
+    ctx.memoryTemplateMarkdown = "Preset Override Instruction";
+    vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
+    vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
+    vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
+    vi.mocked(ctx.deps.getWorkerInstruction).mockResolvedValue("");
+
+    const result = await executePrepareStage(ctx);
+
+    expect(result.providerPrompt).toContain("## LEARNINGS CAPTURE (Required)");
+    expect(result.providerPrompt).toContain("Preset Override Instruction");
+    expect(result.providerPrompt).not.toContain("Default Settings Instruction");
+  });
+
+  it("falls back to default memory learnings instruction when override is enabled but template is empty", async () => {
+    const ctx = createMockContext();
+    ctx.settings.memory = {
+      enabled: true,
+      autoCaptureSprint: true,
+      workerLearningsInstruction: "Default Settings Instruction",
+      maxLongTermPerProject: 50,
+      minLongTermRelevance: 0.7,
+      shortTermRetentionSprints: 3,
+    };
+    ctx.memoryTemplateOverrideEnabled = true;
+    ctx.memoryTemplateMarkdown = "   \n"; // empty string behavior
+    vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: false });
+    vi.mocked(ctx.workspaceManager.buildWorkspaceGuidance).mockResolvedValue("guidance");
+    vi.mocked(ctx.runCommand).mockResolvedValue({ ok: true, stdout: "head-sha\n", stderr: "" });
+    vi.mocked(ctx.deps.getWorkerInstruction).mockResolvedValue("");
+
+    const result = await executePrepareStage(ctx);
+
+    expect(result.providerPrompt).toContain("## LEARNINGS CAPTURE (Required)");
+    expect(result.providerPrompt).toContain("Default Settings Instruction");
+  });
+
   it("handles FF-merge during resume properly", async () => {
     const ctx = createMockContext();
     vi.mocked(ctx.workspaceManager.prepareWorktree).mockResolvedValue({ worktreePath: "/repo/worktree", resumed: true });
@@ -229,6 +325,62 @@ describe("executeProviderStage", () => {
       role: "system",
       contentMarkdown: "Retrying with file-discovery guidance.",
     }));
+  });
+
+  it("continues the native provider session when retrying after a rate limit", async () => {
+    const ctx = createMockContext();
+    vi.spyOn(providerRetryPolicy, "sleepWithSignal").mockResolvedValue();
+    vi.mocked(ctx.providerRunner.runProvider)
+      .mockResolvedValueOnce({
+        ok: false,
+        code: 1,
+        stdout: "",
+        stderr: "code: 429, message: 'No capacity available for model gemini-3.1-pro-preview on the server'",
+        nativeSessionId: "native-rate-limit",
+        usageTelemetry: { transcriptText: "" } as any,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        code: 0,
+        stdout: "success",
+        stderr: "",
+        nativeSessionId: "native-rate-limit",
+        usageTelemetry: { transcriptText: "success transcript" } as any,
+      });
+
+    await executeProviderStage(ctx, "prompt");
+
+    expect(ctx.providerRunner.runProvider).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(ctx.providerRunner.runProvider).mock.calls[1]?.[0]?.continueSessionId).toBe("native-rate-limit");
+  });
+
+  it("stops retrying rate-limited provider runs after the configured max", async () => {
+    const ctx = createMockContext();
+    ctx.workflowSettings.maxRateLimitRetries = 1;
+    vi.spyOn(providerRetryPolicy, "sleepWithSignal").mockResolvedValue();
+    vi.mocked(ctx.providerRunner.runProvider)
+      .mockResolvedValueOnce({
+        ok: false,
+        code: 1,
+        stdout: "",
+        stderr: "code: 429, message: 'No capacity available for model gemini-3.1-pro-preview on the server'",
+        nativeSessionId: "native-rate-limit",
+        usageTelemetry: { transcriptText: "" } as any,
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        code: 1,
+        stdout: "",
+        stderr: "code: 429, message: 'No capacity available for model gemini-3.1-pro-preview on the server'",
+        nativeSessionId: "native-rate-limit",
+        usageTelemetry: { transcriptText: "" } as any,
+      });
+
+    await expect(executeProviderStage(ctx, "prompt")).rejects.toThrow("rate-limited");
+
+    expect(ctx.providerRunner.runProvider).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(ctx.providerRunner.runProvider).mock.calls[1]?.[0]?.continueSessionId).toBe("native-rate-limit");
+    expect(providerRetryPolicy.sleepWithSignal).toHaveBeenCalledTimes(1);
   });
 });
 

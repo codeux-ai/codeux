@@ -3,6 +3,7 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
+import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { ProjectRuntimeRepository } from "../../../src/repositories/project-runtime-repository.js";
 
@@ -10,9 +11,11 @@ const tempDirs: string[] = [];
 
 async function createRepositories(): Promise<{
   storage: AppDbStorage;
+  executionRepository: ExecutionRepository;
   projectRepository: ProjectManagementRepository;
   runtimeRepository: ProjectRuntimeRepository;
   realtimeNotifier: {
+    scheduleProjectLiveRefresh: ReturnType<typeof vi.fn>;
     scheduleProjectRuntimeStatusRefresh: ReturnType<typeof vi.fn>;
   };
 }> {
@@ -20,10 +23,12 @@ async function createRepositories(): Promise<{
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const realtimeNotifier = {
+    scheduleProjectLiveRefresh: vi.fn(),
     scheduleProjectRuntimeStatusRefresh: vi.fn(),
   };
   return {
     storage,
+    executionRepository: new ExecutionRepository(storage),
     projectRepository: new ProjectManagementRepository(storage),
     runtimeRepository: new ProjectRuntimeRepository(storage, realtimeNotifier as any),
     realtimeNotifier,
@@ -278,5 +283,182 @@ describe("ProjectRuntimeRepository", () => {
     expect(status2.subtasks).toHaveLength(1);
     expect(status2.subtasks[0].id).toBe("S2T1");
     expect(status2.subtasks[0].status).toBe("PENDING");
+  });
+
+  it("resolves live project status from the most recent active sprint instead of a stale selected sprint", async () => {
+    const { executionRepository, projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Parallel Live Project",
+      sourceType: "local",
+      sourceRef: "/workspace/parallel-live",
+    });
+
+    const olderSprint = projectRepository.createSprint(project.id, { name: "Older Sprint", number: 26 });
+    const currentSprint = projectRepository.createSprint(project.id, { name: "Current Sprint", number: 64 });
+    const olderTask = projectRepository.createTask(project.id, {
+      sprintId: olderSprint.id,
+      taskKey: "OLD",
+      title: "Older live task",
+      status: "in_progress",
+    });
+    const currentTask = projectRepository.createTask(project.id, {
+      sprintId: currentSprint.id,
+      taskKey: "CUR",
+      title: "Current live task",
+      status: "in_progress",
+    });
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: olderSprint.id,
+      sprint_number: 26,
+      feature_branch: "feature/sprint-26",
+      subtasks: [
+        { id: "OLD", title: "Older live task", status: "RUNNING", record_id: olderTask.id, depends_on: [] },
+      ],
+      reportText: "Older sprint still active",
+      timestamp: "2026-03-30T05:40:00.000Z",
+    });
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: currentSprint.id,
+      sprint_number: 64,
+      feature_branch: "feature/sprint-64",
+      subtasks: [
+        { id: "CUR", title: "Current live task", status: "RUNNING", record_id: currentTask.id, depends_on: [] },
+      ],
+      reportText: "Current sprint should drive live status",
+      timestamp: "2026-03-30T05:56:00.000Z",
+    });
+
+    const olderRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: olderSprint.id,
+      status: "running",
+    });
+    executionRepository.updateSprintRun(olderRun.id, {
+      status: "running",
+      startedAt: "2026-03-30T05:40:00.000Z",
+      lastHeartbeatAt: "2026-03-30T05:48:00.000Z",
+    });
+    const currentRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: currentSprint.id,
+      status: "running",
+    });
+    executionRepository.updateSprintRun(currentRun.id, {
+      status: "running",
+      startedAt: "2026-03-30T05:50:00.000Z",
+      lastHeartbeatAt: "2026-03-30T05:56:00.000Z",
+    });
+
+    projectRepository.setSelectedProjectId(project.id);
+    projectRepository.setSelectedSprintId(project.id, olderSprint.id);
+
+    const selectedStatus = runtimeRepository.getSelectedProjectStatus();
+    expect(selectedStatus.sprint_id).toBe(olderSprint.id);
+    expect(selectedStatus.reportText).toBe("Older sprint still active");
+
+    const liveStatus = runtimeRepository.getSelectedProjectLiveStatus();
+    expect(liveStatus.sprint_id).toBe(currentSprint.id);
+    expect(liveStatus.sprint_number).toBe(64);
+    expect(liveStatus.feature_branch).toBe("feature/sprint-64");
+    expect(liveStatus.reportText).toBe("Current sprint should drive live status");
+    expect(liveStatus.subtasks).toHaveLength(1);
+    expect(liveStatus.subtasks[0].id).toBe("CUR");
+  });
+
+  it("projects recent provider activity into task activities without a secondary fetch path", async () => {
+    const { executionRepository, projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Activity Projection",
+      sourceType: "local",
+      sourceRef: "/workspace/activity-projection",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 9",
+      number: 9,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "A01",
+      title: "Hydrate runtime feed",
+      promptMarkdown: "Show the latest provider messages.",
+      status: "in_progress",
+    });
+
+    projectRepository.setSelectedProjectId(project.id);
+
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "running",
+    });
+    const run = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "jules",
+      sessionId: "session-activity-1",
+      sessionName: "sessions/session-activity-1",
+      state: "RUNNING",
+      startedAt: "2026-03-27T10:00:00.000Z",
+    });
+
+    executionRepository.appendTaskRunEvent(run.id, "provider_activity", "agent", {
+      activityId: "activity-1",
+      activityName: "sessions/session-activity-1/activities/activity-1",
+      preview: "Need the repo root clarified.",
+      description: "Need the repo root clarified.",
+      agentMessaged: {
+        agentMessage: "Need the repo root clarified.",
+      },
+    }, {
+      createdAt: "2026-03-27T10:05:00.000Z",
+      sourceEventKey: "activity:activity-1",
+    });
+    executionRepository.appendTaskRunEvent(run.id, "provider_activity", "user", {
+      activityId: "activity-2",
+      activityName: "sessions/session-activity-1/activities/activity-2",
+      preview: "Repo root is /workspace/activity-projection.",
+      userMessaged: {
+        userMessage: "Repo root is /workspace/activity-projection.",
+      },
+    }, {
+      createdAt: "2026-03-27T10:06:00.000Z",
+      sourceEventKey: "activity:activity-2",
+    });
+
+    const status = runtimeRepository.getSelectedProjectStatus();
+
+    expect(status.subtasks).toHaveLength(1);
+    expect(status.subtasks[0]?.activities).toEqual([
+      expect.objectContaining({
+        id: "activity-1",
+        originator: "agent",
+        agentMessaged: {
+          agentMessage: "Need the repo root clarified.",
+        },
+      }),
+      expect.objectContaining({
+        id: "activity-2",
+        originator: "user",
+        userMessaged: {
+          userMessage: "Repo root is /workspace/activity-projection.",
+        },
+      }),
+    ]);
   });
 });

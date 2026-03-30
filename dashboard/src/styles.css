@@ -171,6 +171,10 @@
     75%      { transform: translateY(2px) rotate(-0.5deg); }
   }
 
+  .ship-bob {
+    animation: ship-bob 4s ease-in-out infinite;
+  }
+
   /* Wake trail pulse */
   @keyframes wake-pulse {
     0%, 100% { opacity: 0.15; }
@@ -322,5 +326,76 @@
 
   .dag-running-ring {
     animation: dag-running-ring 2.4s ease-in-out infinite;
+  }
+
+  /* Text overflow breaking utilities */
+  .break-words {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* Accessible touch target helpers */
+  .touch-target {
+    position: relative;
+  }
+  .touch-target::after {
+    content: '';
+    position: absolute;
+    inset: -8px; /* Expand hit area by 8px on all sides */
+    min-width: 44px;
+    min-height: 44px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  /* ── Chat Avatar & Widget Animations ───────────────────────────────────────────── */
+
+  /* Jules animated J */
+  @keyframes jules-j-draw {
+    0%   { stroke-dasharray: 0 100; stroke-dashoffset: 0; opacity: 0; }
+    50%  { stroke-dasharray: 100 0; stroke-dashoffset: 0; opacity: 1; }
+    100% { stroke-dasharray: 100 0; stroke-dashoffset: 100; opacity: 0; }
+  }
+
+  @keyframes jules-j-glow {
+    0%, 100% { filter: drop-shadow(0 0 2px rgba(0, 224, 160, 0.4)); }
+    50%      { filter: drop-shadow(0 0 6px rgba(0, 224, 160, 0.8)); }
+  }
+
+  .jules-j-glow {
+    animation: jules-j-glow 3s ease-in-out infinite;
+  }
+
+  /* Widget runtime pulsing */
+  @keyframes widget-running-border {
+    0%, 100% { box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.1); }
+    50%      { box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.3); }
+  }
+
+  .widget-running {
+    animation: widget-running-border 2.5s ease-in-out infinite;
+  }
+
+  @keyframes widget-queued-border {
+    0%, 100% { box-shadow: inset 0 0 0 1px rgba(100, 116, 139, 0.1); }
+    50%      { box-shadow: inset 0 0 0 1px rgba(100, 116, 139, 0.3); }
+  }
+
+  .widget-queued {
+    animation: widget-queued-border 2.5s ease-in-out infinite;
+  }
+
+  /* Reduced motion fallback */
+  @media (prefers-reduced-motion: reduce) {
+    .widget-running,
+    .widget-queued,
+    .ocean-wave,
+    .ship-bob,
+    .jules-j-glow,
+    .jules-j-draw {
+      animation: none !important;
+      transition: none !important;
+    }
   }
 }

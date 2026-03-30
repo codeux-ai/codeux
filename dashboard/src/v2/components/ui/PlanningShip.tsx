@@ -6,7 +6,7 @@ interface ShipProps {
   isDark: boolean;
 }
 
-export const ContainerShip: FunctionComponent<ShipProps> = ({ accentColor, isMoving, isDark }) => {
+export const ContainerShipDef: FunctionComponent<ShipProps> = ({ accentColor, isMoving, isDark }) => {
   const hullFill = isDark ? "#0f1d33" : "#c8d6e5";
   const hullStroke = isDark ? "#1a3050" : "#8395a7";
   const deckFill = isDark ? "#162840" : "#a4b0be";
@@ -17,7 +17,7 @@ export const ContainerShip: FunctionComponent<ShipProps> = ({ accentColor, isMov
   const smokeFill = isDark ? "#b8c8d8" : "#636e72";
 
   return (
-    <g transform="scale(0.8)">
+    <g>
       <ellipse cx={0} cy={24} rx={46} ry={8} fill={accentColor} opacity={0.08}>
         {isMoving && <animate attributeName="ry" values="8;10;8" dur="2.5s" repeatCount="indefinite" />}
       </ellipse>
@@ -42,7 +42,15 @@ export const ContainerShip: FunctionComponent<ShipProps> = ({ accentColor, isMov
   );
 };
 
-export const WoodenShip: FunctionComponent<ShipProps> = ({ accentColor, isMoving, isDark }) => {
+export const ContainerShip: FunctionComponent<ShipProps> = (props) => {
+  return (
+    <g transform="scale(0.8)">
+      <ContainerShipDef {...props} />
+    </g>
+  );
+};
+
+export const WoodenShipDef: FunctionComponent<ShipProps> = ({ accentColor, isMoving, isDark }) => {
   const hullFill = isDark ? "#5C3D0E" : "#8B6914";
   const hullStroke = isDark ? "#7A5518" : "#A67B20";
   const deckFill = isDark ? "#7A5518" : "#A67B20";
@@ -51,7 +59,7 @@ export const WoodenShip: FunctionComponent<ShipProps> = ({ accentColor, isMoving
   const sailStroke = isDark ? "#C9BFA8" : "#B8A888";
 
   return (
-    <g transform="scale(0.8)">
+    <g>
       <ellipse cx={0} cy={24} rx={38} ry={7} fill={accentColor} opacity={0.06}>
         {isMoving && <animate attributeName="ry" values="7;9;7" dur="2.8s" repeatCount="indefinite" />}
       </ellipse>
@@ -70,6 +78,14 @@ export const WoodenShip: FunctionComponent<ShipProps> = ({ accentColor, isMoving
           ))}
         </g>
       )}
+    </g>
+  );
+};
+
+export const WoodenShip: FunctionComponent<ShipProps> = (props) => {
+  return (
+    <g transform="scale(0.8)">
+      <WoodenShipDef {...props} />
     </g>
   );
 };

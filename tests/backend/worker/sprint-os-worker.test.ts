@@ -149,9 +149,50 @@ describe("SprintOsWorker", () => {
       claim_reason: "worker_listen_claimed",
     });
   });
-});
 
-describe("More worker padding", () => {
-    it("should test pad1", () => expect(1).toBe(1));
-    it("should test pad2", () => expect(2).toBe(2));
+  it("resolves terminal task state properly respecting failure precedence", () => {
+    const worker = new SprintOsWorker(baseConfig);
+
+    // Simulate FAILED state but with a PR URL present.
+    const failedSession = {
+      id: "session-1",
+      name: "Session 1",
+      state: "FAILED",
+      provider: "jules" as const,
+      prompt: "prompt",
+      outputs: [{ pullRequest: { url: "http://github.com/pr/1" } }],
+    };
+
+    expect((worker as any).resolveTerminalTaskState(failedSession)).toBe("FAILED");
+  });
+
+  it("resolves terminal task state as COMPLETED when no failure state is present but a PR exists", () => {
+    const worker = new SprintOsWorker(baseConfig);
+
+    // Simulate PR URL present with no failure state.
+    const completedSession = {
+      id: "session-1",
+      name: "Session 1",
+      state: "IDLE", // not a failed state
+      provider: "jules" as const,
+      prompt: "prompt",
+      outputs: [{ pullRequest: { url: "http://github.com/pr/1" } }],
+    };
+
+    expect((worker as any).resolveTerminalTaskState(completedSession)).toBe("COMPLETED");
+  });
+
+  it("resolves terminal task state as BLOCKED when state is action required", () => {
+    const worker = new SprintOsWorker(baseConfig);
+
+    const blockedSession = {
+      id: "session-1",
+      name: "Session 1",
+      state: "AWAITING_USER_FEEDBACK",
+      provider: "jules" as const,
+      prompt: "prompt",
+    };
+
+    expect((worker as any).resolveTerminalTaskState(blockedSession)).toBe("BLOCKED");
+  });
 });

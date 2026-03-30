@@ -55,6 +55,25 @@ That means:
 - `source_scope`
 - `source_updated_at`
 - `source_imported_at`
+- `avatar_config_json` (used for dashboard UI avatars: body, hair, face, shirt, bottom)
+- `memory_template_override_enabled`
+- `memory_template_markdown`
+
+These metadata fields are synced bidirectionally with project markdown files using a `---json` frontmatter codec:
+
+```markdown
+---json
+{
+  "avatarConfig": {
+    "body": "human",
+    "hair": "short"
+  },
+  "memoryTemplateOverrideEnabled": true,
+  "memoryTemplateMarkdown": "Format memory here."
+}
+---
+Agent instructions go here.
+```
 
 The API record also exposes derived sync state:
 
@@ -85,7 +104,7 @@ Behavior:
 3. dashboard creates an execution invocation. If using a connected worker, it also opens a background, non-chat-visible thread (`scope: "connection"`) targeted at that worker.
 4. dashboard posts a planning request message. It records the prompt, routing information, and any JSON-retry attempts as system/user/assistant messages in the invocation audit trail.
 5. the worker (or virtual provider) processes the request and generates the reply.
-6. Sprint OS captures the reply in the invocation, parses the payload, and applies the result.
+6. Sprint OS captures the reply in the invocation, parses the payload, and applies the result. During parsing, Sprint OS (`src/services/planning-agent-service.ts`) recursively searches noisy, markdown-wrapped, or nested provider responses for the canonical JSON payload (via `src/services/planning-json-extractor.ts`) instead of assuming the payload is top-level.
 
 ### Prompt Lineage
 
@@ -139,6 +158,26 @@ The planning contract is now intentionally strict so the planner emits database-
 - the default built-in Planning agent instructions now include canonical multi-task JSON examples so virtual and connected planning workers follow the same output shape more reliably
 
 This keeps planning quality deterministic across providers and reduces executor ambiguity when Sprint OS converts the plan into DB task records.
+
+### Provider Throttling And Quota Recovery
+
+Virtual planning now classifies retryable provider failures before deciding whether to fail the invocation:
+
+- `QUOTA_EXHAUSTED` means the provider reported a real quota window, optionally with a reset time.
+- `RATE_LIMITED` means the provider rejected the request transiently, including Gemini `429` no-capacity responses.
+
+Planning follows the shared CLI workflow retry controls:
+
+- `cliWorkflow.retryOnQuotaReset` (default `true`)
+- `cliWorkflow.retryOnRateLimit` (default `true`)
+- `cliWorkflow.rateLimitRetryDelaySeconds` (default `10`)
+- `cliWorkflow.maxRateLimitRetries` (default `5`)
+
+When a retryable provider error occurs, Sprint OS appends an explicit system event to the execution invocation, records the classified error on the invocation row, waits for the configured backoff/reset, and retries. Rate-limit retries stop after the configured max retry count, while quota-reset retries still wait for the provider's reset window. For providers that support native session continuation, each retry now resumes the prior provider session instead of starting a brand-new conversation. That makes the dashboard invocation rail and message history show:
+
+- which error type occurred
+- whether Sprint OS is waiting on quota reset or rate-limit backoff
+- which virtual model the planning agent actually used
 
 If `autoStart` is enabled, Sprint OS starts orchestration after the tasks are created.
 

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { classifyProviderError, type ProviderErrorClassification } from "../../../src/shared/providers/provider-error-classifier.js";
+import {
+  classifyProviderError,
+  extractProviderErrorCategory,
+  extractRetryAfterIso,
+  type ProviderErrorClassification,
+} from "../../../src/shared/providers/provider-error-classifier.js";
 import type { CommandResult } from "../../../src/shared/subprocess/command-runner.js";
 
 const makeResult = (stdout: string, stderr: string): CommandResult => ({
@@ -54,6 +59,12 @@ describe("classifyProviderError", () => {
 
     it("detects rate limiting via 429", () => {
       const result = makeResult("", "code: 429, message: 'too many requests'");
+      const classification = classifyProviderError("gemini", result);
+      expect(classification.category).toBe("RATE_LIMITED");
+    });
+
+    it("detects no-capacity Gemini 429s as rate limits", () => {
+      const result = makeResult("", "code: 429, message: 'No capacity available for model gemini-3.1-pro-preview on the server'");
       const classification = classifyProviderError("gemini", result);
       expect(classification.category).toBe("RATE_LIMITED");
     });
@@ -125,6 +136,14 @@ describe("classifyProviderError", () => {
       const diffMinutes = (resetAt.getTime() - now.getTime()) / 60000;
       expect(diffMinutes).toBeGreaterThan(55);
       expect(diffMinutes).toBeLessThan(65);
+    });
+
+    it("embeds retry/category tags into classified errors", () => {
+      const result = makeResult("", "quota will reset after 1h0m0s");
+      const classification = classifyProviderError("gemini", result);
+      const message = new Error(`${classification.userMessage} [ERROR_CATEGORY:${classification.category}] [RETRY_AFTER:${classification.resetAtIso}]`).message;
+      expect(extractProviderErrorCategory(message)).toBe("QUOTA_EXHAUSTED");
+      expect(extractRetryAfterIso(message)).toBe(classification.resetAtIso);
     });
   });
 });

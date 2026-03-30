@@ -7,13 +7,17 @@ import type { Logger } from "../../shared/logging/logger.js";
 import type { RuntimeContext } from "../runtime-context.js";
 import type {
   ExecutionAttentionItemSummary,
+  DockerContainer,
   ExecutionConnectionSummary,
   ExecutionAssignedWorkerSummary,
   ExternalSettingsHints,
   GitTrackingStatus,
   JulesActivity,
+  ProjectLiveDashboardSnapshot,
   ProjectStatsQuery,
-  ReadinessProbeStatus
+  ReadinessProbeStatus,
+  SprintPreviewScript,
+  SprintPreviewSession,
 } from "../../contracts/app-types.js";
 import type { McpConnectionRecord } from "../../contracts/connection-chat-types.js";
 import type { AppDbStorage } from "../../repositories/app-db-storage.js";
@@ -33,6 +37,7 @@ import type { TaskRerunService } from "../../services/task-rerun-service.js";
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
 import type { DashboardRealtimeService } from "../../services/dashboard-realtime-service.js";
 import type { PlanningAgentService } from "../../services/planning-agent-service.js";
+import type { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
 import type { QuicksprintService } from "../../services/quicksprint-service.js";
 import type { MemoryService } from "../../services/memory-service.js";
 import type { MemoryPromotionService } from "../../services/memory-promotion-service.js";
@@ -64,12 +69,29 @@ export interface BootDashboardDeps {
   executionControlService: ExecutionControlService;
   planningAgentService: PlanningAgentService;
   quicksprintService: QuicksprintService;
+  chatThreadRuntimeService: ChatThreadRuntimeService;
   dashboardRealtimeService: DashboardRealtimeService;
   logger: Logger;
   getLiveActivitiesForActiveTasks: () => Promise<Record<string, JulesActivity[]>>;
   getGitStatus: () => Promise<GitTrackingStatus>;
   isReady: () => ReadinessProbeStatus;
   isHealthy: () => ReadinessProbeStatus;
+  listDockerContainers: () => Promise<DockerContainer[]>;
+  listSprintPreviewSessions: (projectId: string) => Promise<SprintPreviewSession[]>;
+  getSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession | null>;
+  startSprintPreviewSession: (projectId: string, sprintId: string) => Promise<SprintPreviewSession>;
+  rebuildSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession>;
+  stopSprintPreviewSession: (sessionId: string) => Promise<SprintPreviewSession>;
+  getSprintPreviewScript: (projectId: string, sprintId: string) => Promise<SprintPreviewScript>;
+  saveSprintPreviewScript: (projectId: string, sprintId: string, content: string) => Promise<SprintPreviewScript>;
+  getSprintPreviewLogs: (sessionId: string, tail?: number) => Promise<{ logs: string }>;
+  proxySprintPreviewRequest: (args: {
+    sessionId: string;
+    method: string;
+    path: string;
+    headers?: Record<string, string | undefined>;
+    body?: Buffer;
+  }) => Promise<{ status: number; headers: Record<string, string>; body: Buffer }>;
   syncGitSettingsFromDashboard: () => void;
   refreshJulesApiKey: () => void;
   setLogger: (logger: Logger) => void;
@@ -339,10 +361,64 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     return snapshot;
   };
 
+  const getProjectLiveSnapshot = async (projectIdHint?: string | null): Promise<ProjectLiveDashboardSnapshot> => {
+    const projectId = typeof projectIdHint === "string" && projectIdHint.trim().length > 0
+      ? projectIdHint.trim()
+      : deps.projectManagementRepository.getSelectedProjectId();
+
+    if (!projectId) {
+      return {
+        projectId: null,
+        selectedSprintId: null,
+        status: { subtasks: [], timestamp: null },
+        execution: {
+          projectId: null,
+          projectName: null,
+          sprintRuns: [],
+          taskDispatches: [],
+          connections: [],
+          primaryAssignedWorker: null,
+          overflowAssignedWorkers: [],
+          attentionItems: [],
+          recentEvents: [],
+          updatedAt: null,
+        },
+        gitStatus: null,
+        gitStatusError: null,
+        updatedAt: null,
+      };
+    }
+
+    const selectedSprintId = deps.projectManagementRepository.listSprints(projectId).selectedSprintId ?? null;
+    const status = deps.projectRuntimeRepository.getProjectStatus(projectId, selectedSprintId);
+    const execution = getProjectExecutionSnapshot(projectId);
+
+    let gitStatus: GitTrackingStatus | null = null;
+    let gitStatusError: string | null = null;
+    try {
+      gitStatus = await deps.getGitStatus();
+    } catch (error) {
+      gitStatusError = error instanceof Error
+        ? error.message
+        : "Unable to load git/ci/pr tracking.";
+    }
+
+    return {
+      projectId,
+      selectedSprintId,
+      status,
+      execution,
+      gitStatus,
+      gitStatusError,
+      updatedAt: new Date().toISOString(),
+    };
+  };
+
   deps.dashboardRealtimeService.setSnapshotLoaders({
     getProjectsSnapshot,
     getProjectExecutionSnapshot,
-    getProjectStatusSnapshot: (projectId) => deps.projectRuntimeRepository.getProjectStatus(projectId),
+    getProjectStatusSnapshot: (projectId) => deps.projectRuntimeRepository.getProjectLiveStatus(projectId),
+    getProjectLiveSnapshot,
     getOverviewTelemetrySnapshot,
   });
 
@@ -365,7 +441,8 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     dashboardDir,
     port,
     liveActivityCacheMs: deps.LIVE_ACTIVITY_CACHE_MS,
-    getStatus: () => deps.projectRuntimeRepository.getSelectedProjectStatus(),
+    getStatus: () => deps.projectRuntimeRepository.getSelectedProjectLiveStatus(),
+    getLiveSnapshot: getProjectLiveSnapshot,
     getExecutionSnapshot: () => {
       const projectId = deps.projectManagementRepository.getSelectedProjectId();
       return projectId
@@ -535,9 +612,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     listConversationThreads: (projectId) => deps.connectionChatRepository.listThreads(projectId),
     createConversationThread: (projectId, input) => deps.connectionChatRepository.createThread(projectId, input),
     updateConversationThread: (threadId, input) => deps.connectionChatRepository.updateThread(threadId, input),
+    updateThreadRoute: (threadId, input) => deps.chatThreadRuntimeService.updateThreadRoute(threadId, input),
+    compactThreadSession: (threadId) => deps.chatThreadRuntimeService.compactThreadSession(threadId),
     deleteConversationThread: (threadId) => deps.connectionChatRepository.deleteThread(threadId),
     listConversationMessages: (threadId) => deps.connectionChatRepository.listMessages(threadId),
-    postConversationMessage: (projectId, input) => deps.connectionChatRepository.postDashboardMessage(projectId, input),
+    postConversationMessage: (projectId, input) => deps.chatThreadRuntimeService.postMessage(projectId, input),
 
     listProjectInvocations: (projectId) => deps.executionRepository.listExecutionInvocations({ projectId }),
     listInvocationMessages: (invocationId) => deps.executionRepository.listExecutionInvocationMessages(invocationId),
@@ -578,6 +657,16 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     logger: deps.logger.child({ component: "dashboard-server" }),
     isReady: deps.isReady,
     isHealthy: deps.isHealthy,
+    listDockerContainers: deps.listDockerContainers,
+    listSprintPreviewSessions: deps.listSprintPreviewSessions,
+    getSprintPreviewSession: deps.getSprintPreviewSession,
+    startSprintPreviewSession: deps.startSprintPreviewSession,
+    rebuildSprintPreviewSession: deps.rebuildSprintPreviewSession,
+    stopSprintPreviewSession: deps.stopSprintPreviewSession,
+    getSprintPreviewScript: deps.getSprintPreviewScript,
+    saveSprintPreviewScript: deps.saveSprintPreviewScript,
+    getSprintPreviewLogs: deps.getSprintPreviewLogs,
+    proxySprintPreviewRequest: deps.proxySprintPreviewRequest,
   });
 
   deps.runtimeContext.dashboardRuntimePort = handle.port;

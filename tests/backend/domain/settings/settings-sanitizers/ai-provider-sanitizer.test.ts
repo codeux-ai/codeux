@@ -59,4 +59,41 @@ describe("sanitizeAiProvider", () => {
     expect(result.invocationRouting.clarification_reply.providers.gemini?.model).toBe("gemini-2.5-flash");
     expect(result.invocationRouting.planning.profile).toBeDefined();
   });
+
+  it("migrates untouched legacy dashboard reply routes to worker profile defaults", () => {
+    const result = sanitizeAiProvider({
+      aiProvider: {
+        invocationRouting: {
+          dashboard_reply: {
+            profile: "GLOBAL",
+            strategy: "MANUAL",
+            provider: null,
+            allowedProviders: [],
+            providers: {},
+          },
+        },
+      },
+    } as any);
+
+    expect(result.invocationRouting.dashboard_reply.profile).toBe("WORKER");
+  });
+
+  it("preserves intentionally customized dashboard reply routes", () => {
+    const result = sanitizeAiProvider({
+      aiProvider: {
+        invocationRouting: {
+          dashboard_reply: {
+            profile: "GLOBAL",
+            strategy: "MANUAL",
+            provider: "codex",
+            allowedProviders: [],
+            providers: {},
+          },
+        },
+      },
+    } as any);
+
+    expect(result.invocationRouting.dashboard_reply.profile).toBe("GLOBAL");
+    expect(result.invocationRouting.dashboard_reply.provider).toBe("codex");
+  });
 });

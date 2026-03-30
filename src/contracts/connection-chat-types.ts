@@ -42,6 +42,29 @@ export interface McpConnectionRecord {
   activeDispatchCount: number;
 }
 
+
+export interface ConversationRuntimeState {
+  routeKind?: string;
+  workerEndpointId?: string;
+  connectionId?: string;
+  virtualProvider?: string;
+  providerLabel?: string;
+  modelLabel?: string;
+  sessionIds?: string[];
+  continuationStatus?: string;
+  replayRequired?: boolean;
+  compactionSummary?: ConversationCompactionSummary | null;
+}
+
+export interface ConversationCompactionSummary {
+  markdown: string;
+  generatedAt: string;
+  provider: string;
+  model: string;
+  sourceMessageId: string | null;
+  sourceMessageCount: number;
+}
+
 export interface ConversationThreadRecord {
   id: string;
   projectId: string;
@@ -55,6 +78,7 @@ export interface ConversationThreadRecord {
   pendingMessageCount: number;
   lastMessageAt: string | null;
   lastMessagePreview: string | null;
+  runtimeState?: ConversationRuntimeState | null;
 }
 
 export interface ConversationMessageRecord {
@@ -65,6 +89,7 @@ export interface ConversationMessageRecord {
   authorConnectionId: string | null;
   bodyMarkdown: string;
   deliveryStatus: ConversationDeliveryStatus;
+  metadata?: Record<string, unknown> | null;
   createdAt: string;
 }
 
@@ -74,6 +99,7 @@ export interface ConnectionInboxMessage {
   threadTitle: string;
   projectId: string;
   bodyMarkdown: string;
+  metadata?: Record<string, unknown> | null;
   createdAt: string;
   deliveryStatus: ConversationDeliveryStatus;
 }
@@ -101,6 +127,7 @@ export interface PostListenReplyInput {
   threadId: string;
   bodyMarkdown: string;
   replyToMessageId?: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface UpsertMcpConnectionInput {
@@ -126,6 +153,7 @@ export interface CreateConversationThreadInput {
   title: string;
   connectionId?: string | null;
   scope?: ConversationThreadScope;
+  runtimeState?: ConversationRuntimeState | null;
 }
 
 export interface CreateDashboardConversationMessageInput {
@@ -133,10 +161,19 @@ export interface CreateDashboardConversationMessageInput {
   title?: string;
   connectionId?: string | null;
   bodyMarkdown: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface UpdateConversationThreadInput {
   connectionId?: string | null;
+  runtimeState?: ConversationRuntimeState | null;
+}
+
+export interface UpdateConversationThreadRouteInput {
+  routeKind: "worker" | "virtual";
+  virtualProvider?: string;
+  virtualModel?: string;
+  workerEndpointId?: string;
 }
 
 export interface StartListenResponse {
@@ -169,6 +206,7 @@ export interface ListenDashboardMessagePayload {
   threadId: string;
   projectId: string;
   bodyMarkdown: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface ListenProjectPayload {

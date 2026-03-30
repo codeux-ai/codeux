@@ -77,7 +77,7 @@ Unknown tool names raise MCP `MethodNotFound`.
 - `listen` registers or refreshes the connection, then blocks until one actionable event is available or timeout expires.
 - `listen` returns exactly one event at a time: a dashboard message, a worker dispatch, or a timeout result with explicit "call listen again" continuation guidance.
 - `listen` now returns compact event payloads instead of full connection/message records:
-  - dashboard messages: `id`, `threadId`, `projectId`, `bodyMarkdown`
+  - dashboard messages: `id`, `threadId`, `projectId`, `bodyMarkdown`, optional `metadata`
   - task dispatches: full dispatch claim payload
   - timeout: continuation only
 - The default `listen` timeout is derived from dashboard settings `sprintLoopSteps.watchLoopOutputIntervalSeconds` and currently defaults to `300`.
@@ -98,6 +98,8 @@ Unknown tool names raise MCP `MethodNotFound`.
 - Claiming a dispatch acquires a DB-backed lease on that dispatch and returns the full task payload plus project/sprint branch context.
 - `execute_worker_dispatch` starts the claimed dispatch on a headless worker-host Sprint OS server using the existing provider execution path.
 - `generate_dashboard_reply` generates a reply-only markdown response for a dashboard inbox message using the editable `Worker` agent plus the project repo context.
+- `generate_dashboard_reply` also accepts `mode = compact_thread`, which treats the supplied markdown as a prepared compaction prompt and records the run as a `chat_compaction` invocation.
+- `post_listen_reply` accepts optional `metadata`, which Sprint OS uses for hidden control-plane replies such as connected-worker thread compaction.
 - `update_task_dispatch` is used for heartbeats and terminal worker outcomes (`RUNNING`, `COMPLETED`, `FAILED`, `BLOCKED`).
 - `update_task_dispatch` now returns both the persisted dispatch state and an optional `controlAction`.
 - When the dashboard cancels a running worker dispatch, the next worker heartbeat receives `controlAction = "cancel"` while the dispatch remains `cancel_requested`.

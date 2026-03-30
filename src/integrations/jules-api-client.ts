@@ -256,15 +256,56 @@ export class JulesApiClient {
 
   async fetchRecentActivities(sessionName: string, pageSize: number): Promise<JulesActivity[]> {
     this.ensureApiKey();
+    if (pageSize <= 0) {
+      return [];
+    }
     const normalizedSessionName = this.toSessionName(sessionName);
-    const response = await this.axiosInstance.get<JulesListActivitiesResponse>(`/${normalizedSessionName}/activities`, {
-      params: { pageSize },
-    });
-    const activities = response.data.activities || [];
-    return activities.slice().sort((a, b) => {
+    let pageToken: string | undefined = undefined;
+    let recentActivities: JulesActivity[] = [];
+
+    do {
+      const response: { data: JulesListActivitiesResponse } = await this.axiosInstance.get<JulesListActivitiesResponse>(`/${normalizedSessionName}/activities`, {
+        params: { pageSize, pageToken },
+      });
+      const activities = response.data.activities || [];
+      if (activities.length > 0) {
+        recentActivities = recentActivities.concat(activities).slice(-pageSize);
+      }
+      pageToken = response.data.nextPageToken;
+    } while (pageToken);
+
+    const hydratedActivities = await Promise.all(
+      recentActivities.map(async (activity) => {
+        const activityId = this.extractActivityId(activity);
+        if (!activityId) {
+          return activity;
+        }
+        try {
+          return await this.getActivity(normalizedSessionName, activityId);
+        } catch {
+          return activity;
+        }
+      })
+    );
+
+    return hydratedActivities.slice().sort((a, b) => {
       const left = new Date(a.createTime || 0).getTime();
       const right = new Date(b.createTime || 0).getTime();
       return left - right;
     });
+  }
+
+  private extractActivityId(activity: Pick<JulesActivity, "id" | "name">): string | null {
+    const rawId = typeof activity.id === "string" && activity.id.trim().length > 0
+      ? activity.id.trim()
+      : typeof activity.name === "string" && activity.name.trim().length > 0
+        ? activity.name.trim().split("/").pop() || ""
+        : "";
+
+    if (!rawId) {
+      return null;
+    }
+
+    return rawId.split("/").pop() || null;
   }
 }

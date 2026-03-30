@@ -80,6 +80,9 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
   cliWorkflow: {
     ...settings.cliWorkflow,
   },
+  sprintPreview: {
+    ...settings.sprintPreview,
+  },
   workers: {
     ...settings.workers,
   },
@@ -118,6 +121,9 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
   },
   cliWorkflow: {
     ...settings.cliWorkflow,
+  },
+  sprintPreview: {
+    ...settings.sprintPreview,
   },
   workers: {
     ...settings.workers,

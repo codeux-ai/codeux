@@ -159,7 +159,20 @@ Current realtime event used for execution consumers:
 
 - `project.execution.updated`
 
-The browser still loads its initial execution snapshot through REST, then applies websocket updates on top with polling fallback for recovery.
+The browser still loads its initial execution snapshot through REST for execution-focused consumers such as the execution panel and project execution hooks.
+
+For the v2 Live page specifically, execution is no longer applied as an independent visual source of truth. The page now hydrates from `/api/live` and then consumes:
+
+- `project.live.updated`
+
+That combined event folds together:
+
+- selected-sprint `/api/status` data
+- project execution snapshot data
+- git status
+- selected sprint identity from the header-scoped project selection
+
+This keeps the execution read model authoritative for dispatches, runs, connections, and runtime events, while preventing the browser from trying to reconcile separate status and execution payloads into one visual state.
 
 Related realtime scopes now also exist for the surrounding v2 project-management surfaces:
 

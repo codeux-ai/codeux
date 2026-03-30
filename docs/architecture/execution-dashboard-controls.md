@@ -85,6 +85,22 @@ The runtime cleanup sweep now reconciles stale execution records before they blo
 
 This prevents dead background orchestration attempts from leaving the dashboard permanently stuck in a fake active state.
 
+## Startup Recovery
+
+Sprint OS now performs a dedicated execution recovery pass during server startup before the normal cleanup loop begins.
+
+That startup pass is intentionally different from stale-runtime cleanup:
+
+- `queued` and `running` sprint runs are resumed in place, keeping the original `sprint_run` id instead of creating a fresh restart run
+- Sprint OS releases the orphaned in-process sprint lease from the old server process before reacquiring a fresh lease for the resumed watch loop
+- if corrupted state left more than one active `queued` or `running` run for the same sprint, Sprint OS resumes only the newest run and fails older duplicates as superseded
+- interrupted local CLI task dispatches (`docker_cli`) are not treated as still running after process restart; they are rewritten to failed/retryable state so the resumed sprint loop can launch them again safely
+- remote/durable executor paths remain attached to the original run:
+  - Jules sessions continue through session-sync against the remote provider state
+  - connected MCP worker dispatches keep their durable dispatch row and can continue once the worker reconnects with the same connection key
+
+This means a normal app restart no longer requires operators to manually restart an otherwise healthy sprint just to restore the watch loop.
+
 ## Dispatch Controls
 
 ### Cancel Dispatch

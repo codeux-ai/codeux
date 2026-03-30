@@ -52,9 +52,15 @@ export async function executePrepareStage(
     } catch { /* memory injection is best-effort */ }
   }
 
-  const learningsInstruction = ctx.settings.memory?.enabled
-    && ctx.settings.memory.autoCaptureSprint
-    && ctx.settings.memory.workerLearningsInstruction?.trim();
+  let learningsInstruction = "";
+  if (ctx.settings.memory?.enabled && ctx.settings.memory.autoCaptureSprint) {
+    if (ctx.memoryTemplateOverrideEnabled && ctx.memoryTemplateMarkdown?.trim()) {
+      learningsInstruction = ctx.memoryTemplateMarkdown.trim();
+    } else if (ctx.settings.memory.workerLearningsInstruction?.trim()) {
+      learningsInstruction = ctx.settings.memory.workerLearningsInstruction.trim();
+    }
+  }
+
   if (learningsInstruction) {
     promptBody += `\n\n## LEARNINGS CAPTURE (Required)\n\n${learningsInstruction}`;
   }

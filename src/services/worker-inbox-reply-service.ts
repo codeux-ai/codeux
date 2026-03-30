@@ -2,10 +2,17 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { randomUUID } from "crypto";
 import type { DashboardSettings, ProviderId, Subtask } from "../contracts/app-types.js";
+import type {
+  ConversationCompactionSummary,
+  ConversationMessageRecord,
+  ConversationRuntimeState,
+  ConversationThreadRecord,
+} from "../contracts/connection-chat-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
+import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
-import { providerSpecs } from "../infrastructure/providers/cli/provider-runner.js";
-import { runCommandStrict } from "./cli-process-runner.js";
+import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
+
 import { getRepoSprintOsPath } from "../shared/config/sprint-os-paths.js";
 import type { TaskService } from "./task-service.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
@@ -17,6 +24,7 @@ export interface GenerateDashboardReplyInput {
   threadId: string;
   threadTitle?: string;
   bodyMarkdown: string;
+  mode?: "reply" | "compact_thread";
 }
 
 export interface GenerateDashboardReplyResult {
@@ -27,11 +35,13 @@ export interface GenerateDashboardReplyResult {
 
 interface WorkerInboxReplyServiceDependencies {
   projectManagementRepository: ProjectManagementRepository;
+  connectionChatRepository: ConnectionChatRepository;
   taskService: TaskService;
   agentPresetSyncService: AgentPresetSyncService;
   executionRepository: ExecutionRepository;
   getDashboardSettings: () => DashboardSettings;
   getGithubToken: () => string | undefined;
+  providerRunner: IProviderRunner;
   logger?: Logger;
 }
 
@@ -45,19 +55,24 @@ export class WorkerInboxReplyService {
     }
 
     const route = this.resolveProviderRoute("dashboard_reply", input.bodyMarkdown);
-    const rawPrompt = await this.buildPrompt({
-      projectId: input.projectId,
-      repoPath: project.baseDir,
-      projectName: project.name,
-      threadId: input.threadId,
-      threadTitle: input.threadTitle,
-      bodyMarkdown: input.bodyMarkdown,
-    });
+    const thread = this.deps.connectionChatRepository.getThread(input.threadId);
+    const messages = this.deps.connectionChatRepository.listMessages(input.threadId);
+    const rawPrompt = input.mode === "compact_thread"
+      ? input.bodyMarkdown.trim()
+      : await this.buildPrompt({
+        projectId: input.projectId,
+        repoPath: project.baseDir,
+        projectName: project.name,
+        thread,
+        threadTitle: input.threadTitle || thread.title,
+        messages,
+        bodyMarkdown: input.bodyMarkdown,
+      });
     const prompt = buildProviderPrompt(rawPrompt, route.providers[route.provider].thinkingMode);
 
     const execInvocation = this.deps.executionRepository.createExecutionInvocation({
       projectId: input.projectId,
-      type: "worker_reply",
+      type: input.mode === "compact_thread" ? "chat_compaction" : "worker_reply",
       provider: route.provider,
       model: route.providers[route.provider].model,
       startedAt: new Date().toISOString(),
@@ -105,7 +120,11 @@ export class WorkerInboxReplyService {
     });
 
     if (!bodyMarkdown) {
-      throw new Error(`Provider ${route.provider} returned an empty dashboard reply.`);
+      throw new Error(
+        input.mode === "compact_thread"
+          ? `Provider ${route.provider} returned an empty thread compaction summary.`
+          : `Provider ${route.provider} returned an empty dashboard reply.`
+      );
     }
 
     this.deps.logger?.info("Generated dashboard reply for worker connection", {
@@ -137,18 +156,16 @@ export class WorkerInboxReplyService {
       ? args.task.record_id.trim()
       : null;
 
-    const workerInstructions = (await this.deps.agentPresetSyncService.getWorkerAgent(args.projectId))
+    const projectManagerInstructions = (await this.deps.agentPresetSyncService.getProjectManagerAgent(args.projectId))
       .instructionMarkdown
       .trim();
 
-    const latestAgentPrompt = this.getLatestAgentPrompt(args.task);
+    const clarificationRequest = this.getLatestClarificationRequest(args.task);
 
     const fullContextPrompt = [
-      workerInstructions ? `## WORKER INSTRUCTIONS\n\n${workerInstructions}` : "",
-      "## ROLE",
-      "You are a Sprint OS automated assistant answering a clarification request from an implementation agent.",
-      "Your goal is to provide a helpful, technically accurate answer based on the full sprint context.",
-      "Reply in concise markdown.",
+      projectManagerInstructions ? `## PROJECT MANAGER INSTRUCTIONS\n\n${projectManagerInstructions}` : "",
+      "## CLARIFICATION TASK",
+      "Answer Jules' clarification request for the current task using the sprint context below.",
       "",
       "## SPRINT CONTEXT",
       `Project: ${project.name}`,
@@ -161,7 +178,9 @@ export class WorkerInboxReplyService {
       `Task ID: ${args.task.id}`,
       `Title: ${args.task.title}`,
       `Original Prompt: ${args.task.prompt}`,
-      latestAgentPrompt ? `\n## LATEST CLARIFICATION REQUEST FROM AGENT\n${latestAgentPrompt}` : "",
+      "",
+      "## JULES CLARIFICATION REQUEST",
+      clarificationRequest,
       "",
       "## REQUIRED OUTPUT",
       "Return only the answer body in markdown. No JSON. No code fences unless the reply truly needs them.",
@@ -226,7 +245,7 @@ export class WorkerInboxReplyService {
     return reply;
   }
 
-  private getLatestAgentPrompt(task: Subtask): string {
+  private getLatestClarificationRequest(task: Subtask): string {
     const activities = Array.isArray(task.activities) ? task.activities : [];
     for (let index = activities.length - 1; index >= 0; index -= 1) {
       const entry = activities[index] as Record<string, unknown>;
@@ -237,10 +256,10 @@ export class WorkerInboxReplyService {
       }
       const description = typeof entry.description === "string" ? entry.description.trim() : "";
       if (description.length > 0) {
-        return description;
+        return `No explicit Jules clarification message was captured. Latest related activity summary: ${description}`;
       }
     }
-    return "";
+    return "No explicit Jules clarification message was captured in recent session activities.";
   }
 
   private resolveProviderRoute(
@@ -272,13 +291,18 @@ export class WorkerInboxReplyService {
     projectId: string;
     repoPath: string;
     projectName: string;
-    threadId: string;
+    thread: ConversationThreadRecord;
     threadTitle?: string;
+    messages: ConversationMessageRecord[];
     bodyMarkdown: string;
   }): Promise<string> {
     const workerInstructions = (await this.deps.agentPresetSyncService.getWorkerAgent(args.projectId))
       .instructionMarkdown
       .trim();
+    const compactionSummary = this.getCompactionSummary(args.thread.runtimeState);
+    const replayMessages = args.messages.length > 0
+      ? (compactionSummary ? this.getMessagesAfterCompaction(args.messages, compactionSummary) : args.messages)
+      : [{ authorType: "dashboard_user", bodyMarkdown: args.bodyMarkdown } as ConversationMessageRecord];
 
     const instructions = [
       "You are a Sprint OS connected worker replying to a dashboard chat message.",
@@ -296,11 +320,21 @@ export class WorkerInboxReplyService {
       "## CONTEXT",
       `Project: ${args.projectName}`,
       `Repo Path: ${args.repoPath}`,
-      `Thread ID: ${args.threadId}`,
+      `Thread ID: ${args.thread.id}`,
       args.threadTitle ? `Thread Title: ${args.threadTitle}` : "",
       "",
-      "## DASHBOARD MESSAGE",
-      args.bodyMarkdown.trim(),
+      ...(compactionSummary ? [
+        "## COMPACTED HISTORY",
+        compactionSummary.markdown,
+        "",
+        "## MESSAGES SINCE COMPACTION",
+      ] : [
+        "## CONVERSATION HISTORY",
+      ]),
+      replayMessages.map((message) => {
+        const role = message.authorType === "dashboard_user" ? "User" : "Worker";
+        return `### ${role}\n${message.bodyMarkdown.trim()}`;
+      }).join("\n\n") || args.bodyMarkdown.trim(),
       "",
       "## REQUIRED OUTPUT",
       "Return only the reply body in markdown. No JSON. No code fences unless the reply truly needs them.",
@@ -315,14 +349,21 @@ export class WorkerInboxReplyService {
     apiKey: string;
     githubToken?: string;
   }): Promise<string> {
-    const env = this.withProviderEnv(input.provider, input.model, input.apiKey, input.githubToken);
-    if (input.provider === "codex") {
-      return await this.runCodexReply(input.repoPath, input.model, input.prompt, env);
-    }
+    const workflowSettings = this.deps.getDashboardSettings().cliWorkflow;
 
-    const spec = providerSpecs[input.provider](input.model, input.prompt);
-    const result = await runCommandStrict(spec.command, spec.args, input.repoPath, env);
-    return result.stdout || result.stderr;
+    const result = await this.deps.providerRunner.runProviderForText({
+      provider: input.provider,
+      prompt: input.prompt,
+      cwd: input.repoPath,
+      model: input.model,
+      apiKey: input.apiKey,
+      sessionId: "worker-reply-" + randomUUID(),
+      workflowSettings,
+      repoPath: input.repoPath,
+      githubToken: input.githubToken,
+      onActivity: () => {},
+    });
+    return result.text;
   }
 
   private normalizeProviderReply(output: string): string {
@@ -343,63 +384,26 @@ export class WorkerInboxReplyService {
     return trimmed;
   }
 
-  private async runCodexReply(
-    repoPath: string,
-    model: string,
-    prompt: string,
-    env: NodeJS.ProcessEnv,
-  ): Promise<string> {
-    const outputDir = getRepoSprintOsPath(repoPath, "tmp");
-    await fs.mkdir(outputDir, { recursive: true });
-    const outputPath = path.join(outputDir, `worker-reply-${randomUUID()}.txt`);
-
-    const args = ["exec", "--yolo", "--output-last-message", outputPath];
-    if (model && model !== "default") {
-      args.push("--model", model);
+  private getCompactionSummary(runtimeState: ConversationRuntimeState | null | undefined): ConversationCompactionSummary | null {
+    const summary = runtimeState?.compactionSummary;
+    if (!summary || typeof summary.markdown !== "string" || !summary.markdown.trim()) {
+      return null;
     }
-    args.push(prompt);
-
-    try {
-      const result = await runCommandStrict("codex", args, repoPath, env);
-      const fileOutput = await fs.readFile(outputPath, "utf8").catch(() => "");
-      return fileOutput.trim() || result.stdout || result.stderr;
-    } finally {
-      await fs.rm(outputPath, { force: true }).catch(() => undefined);
-    }
+    return summary;
   }
 
-  private withProviderEnv(
-    provider: ProviderId,
-    model: string,
-    apiKey: string,
-    githubToken?: string,
-  ): NodeJS.ProcessEnv {
-    const env: NodeJS.ProcessEnv = { ...process.env };
-    if (githubToken) {
-      env.GH_TOKEN = githubToken;
-      env.GITHUB_TOKEN = githubToken;
+  private getMessagesAfterCompaction(
+    messages: ConversationMessageRecord[],
+    summary: ConversationCompactionSummary,
+  ): ConversationMessageRecord[] {
+    if (!summary.sourceMessageId) {
+      return messages;
     }
-
-    if (provider === "gemini") {
-      if (model && model !== "default") {
-        env.GEMINI_MODEL = model;
-      }
-      if (apiKey) {
-        env.GEMINI_API_KEY = apiKey;
-      }
-    } else if (provider === "claude-code") {
-      if (apiKey) {
-        env.ANTHROPIC_API_KEY = apiKey;
-      }
-    } else if (provider === "codex") {
-      if (model && model !== "default") {
-        env.CODEX_MODEL = model;
-      }
-      if (apiKey) {
-        env.OPENAI_API_KEY = apiKey;
-      }
+    const index = messages.findIndex((message) => message.id === summary.sourceMessageId);
+    if (index === -1) {
+      return messages;
     }
-
-    return env;
+    return messages.slice(index + 1);
   }
-}
+
+  }

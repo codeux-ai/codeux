@@ -5,22 +5,14 @@ import { TaskRow } from "./ui/TaskRow.js";
 import { FilterStrip } from "./ui/FilterStrip.js";
 import { SkeletonRow } from "./ui/ListSkeletons.js";
 import { deriveActiveSprintIds, filterTasksToActiveSprints } from "../lib/overview-streams.js";
-import { useProjectData } from "../context/project-data.js";
-import { useSprints } from "../../hooks/useSprints.js";
-import { useProjectTasks } from "../hooks/use-project-tasks.js";
-
 type TaskFilter = "All Tasks" | "Running" | "Queued" | "Completed";
 
 const FILTER_OPTIONS = ["All Tasks", "Running", "Queued", "Completed"] as const;
 
-export const TasksList: FunctionComponent = () => {
+export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("../hooks/use-overview-page-data.js").useOverviewPageData> }> = ({ pageData }) => {
     const listRef = useRef<HTMLDivElement>(null);
     const [activeFilter, setActiveFilter] = useState<TaskFilter>("All Tasks");
-    const { projects, selectedProject, loading: projectsLoading } = useProjectData();
-    const { data: sprints, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
-    const { tasks, loading: tasksLoading } = useProjectTasks(selectedProject?.id || null, projects, sprints);
-
-    const isLoading = projectsLoading || sprintsLoading || tasksLoading;
+    const { sprints, tasks, isLoading } = pageData;
 
     useLayoutEffect(() => {
         if (listRef.current) {

@@ -1,4 +1,5 @@
 import type {
+  AgentAvatarConfig,
   AgentPresetRecord,
   CreateAgentPresetInput,
   UpdateAgentPresetInput,
@@ -11,6 +12,7 @@ import type {
   ConnectionInboxMessage,
   ConversationMessageRecord,
   ConversationThreadRecord,
+  ConversationRuntimeState,
   CreateConversationThreadInput,
   CreateDashboardConversationMessageInput,
   McpConnectionCapabilities,
@@ -22,6 +24,7 @@ import type {
   StartListenInput,
   StartListenResponse,
   UpdateConversationThreadInput,
+  UpdateConversationThreadRouteInput,
   UpdateMcpConnectionInput,
 } from "../../../src/contracts/connection-chat-types.js";
 import type {
@@ -92,6 +95,7 @@ export interface Task {
   assignee: string;
   time: string;
   createdAt: string;
+  updatedAt: string;
   promptMarkdown: string;
   description: string;
   dependsOnTaskIds: string[];
@@ -103,6 +107,7 @@ export interface Task {
 export type {
   ExecutionInvocationRecord,
   ExecutionInvocationMessageRecord,
+  AgentAvatarConfig,
   AgentPresetRecord,
   CreateProjectInput,
   CreateAgentPresetInput,
@@ -116,6 +121,7 @@ export type {
   ConnectionInboxMessage,
   ConversationMessageRecord,
   ConversationThreadRecord,
+  ConversationRuntimeState,
   McpConnectionCapabilities,
   McpConnectionRecord,
   McpConnectionRole,
@@ -142,6 +148,7 @@ export type {
   ProjectStatsQuery,
   ProjectStatsWindow,
   UpdateConversationThreadInput,
+  UpdateConversationThreadRouteInput,
   TaskExecutorType,
   TaskPriority,
   TaskRecord,

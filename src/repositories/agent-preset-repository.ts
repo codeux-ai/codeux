@@ -19,6 +19,9 @@ interface AgentPresetRow {
   source_scope: string | null;
   source_updated_at: string | null;
   source_imported_at: string | null;
+  avatar_config_json: string | null;
+  memory_template_override_enabled: number;
+  memory_template_markdown: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -46,6 +49,21 @@ function parseLabels(value: string | null): string[] {
   } catch {
     return [];
   }
+}
+
+function parseAvatarConfig(value: string | null): AgentPresetRecord["avatarConfig"] {
+  if (!value) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (parsed && typeof parsed === "object") {
+      return parsed as AgentPresetRecord["avatarConfig"];
+    }
+  } catch {
+    // Ignore invalid JSON
+  }
+  return undefined;
 }
 
 export class AgentPresetRepository {
@@ -92,9 +110,12 @@ export class AgentPresetRepository {
         source_scope,
         source_updated_at,
         source_imported_at,
+        avatar_config_json,
+        memory_template_override_enabled,
+        memory_template_markdown,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
@@ -105,6 +126,9 @@ export class AgentPresetRepository {
       null,
       null,
       null,
+      input.avatarConfig ? JSON.stringify(input.avatarConfig) : null,
+      input.memoryTemplateOverrideEnabled ? 1 : 0,
+      input.memoryTemplateMarkdown || null,
       now,
       now,
     );
@@ -129,9 +153,12 @@ export class AgentPresetRepository {
         source_scope,
         source_updated_at,
         source_imported_at,
+        avatar_config_json,
+        memory_template_override_enabled,
+        memory_template_markdown,
         created_at,
         updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       projectId,
@@ -142,6 +169,9 @@ export class AgentPresetRepository {
       input.sourceScope,
       input.sourceUpdatedAt,
       importedAt,
+      input.avatarConfig ? JSON.stringify(input.avatarConfig) : null,
+      input.memoryTemplateOverrideEnabled ? 1 : 0,
+      input.memoryTemplateMarkdown || null,
       now,
       now,
     );
@@ -154,12 +184,17 @@ export class AgentPresetRepository {
     const now = new Date().toISOString();
     this.db.prepare(`
       UPDATE agent_presets
-      SET name = ?, instruction_markdown = ?, labels_json = ?, updated_at = ?
+      SET name = ?, instruction_markdown = ?, labels_json = ?, avatar_config_json = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.name?.trim() || current.name,
       input.instructionMarkdown === undefined ? current.instructionMarkdown : input.instructionMarkdown.trim(),
       JSON.stringify(input.labels === undefined ? current.labels : this.normalizeLabels(input.labels)),
+      input.avatarConfig === undefined
+        ? (current.avatarConfig ? JSON.stringify(current.avatarConfig) : null)
+        : (input.avatarConfig ? JSON.stringify(input.avatarConfig) : null),
+      input.memoryTemplateOverrideEnabled === undefined ? (current.memoryTemplateOverrideEnabled ? 1 : 0) : (input.memoryTemplateOverrideEnabled ? 1 : 0),
+      input.memoryTemplateMarkdown === undefined ? (current.memoryTemplateMarkdown || null) : (input.memoryTemplateMarkdown || null),
       now,
       agentPresetId,
     );
@@ -195,6 +230,9 @@ export class AgentPresetRepository {
     name: string;
     instructionMarkdown: string;
     sourceUpdatedAt: string;
+    avatarConfig?: AgentPresetRecord["avatarConfig"];
+    memoryTemplateOverrideEnabled?: boolean;
+    memoryTemplateMarkdown?: string;
   }): AgentPresetRecord {
     const current = requireRecord(this.getAgentPreset(agentPresetId), "Agent preset", agentPresetId);
     if (!current.sourcePath || !current.sourceScope) {
@@ -204,13 +242,16 @@ export class AgentPresetRepository {
 
     this.db.prepare(`
       UPDATE agent_presets
-      SET name = ?, instruction_markdown = ?, source_updated_at = ?, source_imported_at = ?, updated_at = ?
+      SET name = ?, instruction_markdown = ?, source_updated_at = ?, source_imported_at = ?, avatar_config_json = ?, memory_template_override_enabled = ?, memory_template_markdown = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.name.trim(),
       input.instructionMarkdown.trim(),
       input.sourceUpdatedAt,
       input.sourceUpdatedAt,
+      input.avatarConfig ? JSON.stringify(input.avatarConfig) : null,
+      input.memoryTemplateOverrideEnabled ? 1 : 0,
+      input.memoryTemplateMarkdown || null,
       now,
       agentPresetId,
     );
@@ -253,6 +294,9 @@ export class AgentPresetRepository {
       sourceImportedAt: row.source_imported_at,
       sourceExists: Boolean(row.source_path),
       syncStatus: row.source_path ? "synced" : "manual",
+      avatarConfig: parseAvatarConfig(row.avatar_config_json),
+      memoryTemplateOverrideEnabled: Boolean(row.memory_template_override_enabled),
+      memoryTemplateMarkdown: row.memory_template_markdown || undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

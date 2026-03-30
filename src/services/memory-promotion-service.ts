@@ -155,6 +155,11 @@ export class MemoryPromotionService {
       );
       promoted.push(record);
       this.logger.info(`Promoted memory ${memoryId} → ${record.id}`);
+
+      // Automatically trigger embedding generation for the newly promoted long-term memory
+      this.memoryService.triggerEmbedding(record).catch((error: Error) => {
+        this.logger.warn(`Failed to embed promoted memory ${record.id}: ${error.message}`);
+      });
     }
 
     return promoted;

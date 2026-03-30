@@ -392,6 +392,13 @@ export const TasksPage: FunctionComponent = () => {
     const params = new URLSearchParams(locationSearch);
     return params.get("sprint");
   }, [locationSearch]);
+  const routeSprintId = useMemo(() => {
+    if (!initialSprint) {
+      return null;
+    }
+    return sprints.some((sprint: Sprint) => sprint.id === initialSprint) ? initialSprint : null;
+  }, [initialSprint, sprints]);
+  const taskScopeSprintId = routeSprintId ?? selectedSprintId;
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
   const [listWindow, setListWindow] = useState<ListWindowOption>(DEFAULT_LIST_WINDOW);
@@ -403,7 +410,7 @@ export const TasksPage: FunctionComponent = () => {
     selectedProject?.id || null,
     projects,
     sprints,
-    selectedSprintId
+    taskScopeSprintId
   );
 
   useLayoutEffect(() => {
@@ -424,25 +431,7 @@ export const TasksPage: FunctionComponent = () => {
         delay: 0.2,
       });
     }
-  }, [selectedProject?.id, selectedSprintId, statusFilter, priorityFilter]);
-
-  useEffect(() => {
-    if (!selectedProject || sprintsLoading) {
-      return;
-    }
-
-    if (initialSprint) {
-      if (sprints.some((sprint: Sprint) => sprint.id === initialSprint)) {
-        if (initialSprint !== selectedSprintId) {
-          void selectSprint(initialSprint);
-        }
-      } else {
-        if (selectedSprintId !== null) {
-          void selectSprint(null);
-        }
-      }
-    }
-  }, [initialSprint, selectedProject, sprints, sprintsLoading, selectedSprintId, selectSprint]);
+  }, [selectedProject?.id, statusFilter, priorityFilter, taskScopeSprintId]);
 
   const dependenciesMap = useMemo(() => buildDependentTasksMap(tasks), [tasks]);
 
@@ -450,7 +439,22 @@ export const TasksPage: FunctionComponent = () => {
     return deriveTaskBoardState(tasks, statusFilter, priorityFilter, listWindow);
   }, [tasks, statusFilter, priorityFilter, listWindow]);
 
-  const selectedSprintModel = selectedSprintId ? sprints.find((sprint: Sprint) => sprint.id === selectedSprintId) || null : null;
+  const selectedSprintModel = taskScopeSprintId ? sprints.find((sprint: Sprint) => sprint.id === taskScopeSprintId) || null : null;
+
+  const handleSprintScopeSelect = useCallback((sprintId: string | null) => {
+    const params = new URLSearchParams(locationSearch);
+    if (params.has("sprint")) {
+      if (sprintId) {
+        params.set("sprint", sprintId);
+      } else {
+        params.delete("sprint");
+      }
+      const nextSearch = params.toString();
+      const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
+      window.history.replaceState(window.history.state, "", nextUrl);
+    }
+    void selectSprint(sprintId);
+  }, [locationSearch, selectSprint]);
 
   const handleTaskSubmit = useCallback(async (draft: {
     sprintId: string;
@@ -484,7 +488,7 @@ export const TasksPage: FunctionComponent = () => {
   const handleEditClick = useCallback((nextTask: Task) => {
     setEditingTask(nextTask);
     setShowComposer(true);
-    setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50);
+    setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   }, []);
 
   return (
@@ -542,7 +546,7 @@ export const TasksPage: FunctionComponent = () => {
                 setEditingTask(null);
               } else {
                 setShowComposer(true);
-                setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 50);
+                setTimeout(() => composerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
               }
             }}
             disabled={!selectedProject || sprints.length === 0}
@@ -555,7 +559,7 @@ export const TasksPage: FunctionComponent = () => {
       </div>
 
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 -mt-4">
-        <SprintSelector sprints={sprints} selectedId={selectedSprintId} onSelect={selectSprint} />
+        <SprintSelector sprints={sprints} selectedId={taskScopeSprintId} onSelect={handleSprintScopeSelect} />
 
         <div className="flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl">
           {[

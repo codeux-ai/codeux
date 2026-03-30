@@ -22,7 +22,9 @@ import { buildReadFileRetryPrompt, isReadFileNotFoundToolError } from "./cli-wor
 import { ProviderRunner, type IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
 import { classifyProviderError, ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
+import { resolveProviderRetryDecision, sleepWithSignal } from "../shared/providers/provider-retry-policy.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
+import { extractJsonLikeBlock } from "./planning-json-extractor.js";
 
 interface PlanningAgentServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -73,94 +75,6 @@ interface VirtualPlanningResult {
   sessionId: string;
   workflowSettings: CliWorkflowSettings;
   providerSettings: { model: string; apiKey: string; thinkingMode?: unknown };
-}
-
-export function extractJsonLikeBlock(bodyMarkdown: string): string {
-  const trimmed = bodyMarkdown.trim();
-
-  // Strategy 1: Look for a fenced code block whose content looks like JSON.
-  // Skip fenced blocks that capture code examples inside JSON string values
-  // (e.g. ```ts ... ``` embedded in promptMarkdown fields).
-  const fenceRegex = /```[a-zA-Z0-9_-]*\s*([\s\S]*?)```/g;
-  let fencedMatch: RegExpExecArray | null;
-  while ((fencedMatch = fenceRegex.exec(trimmed)) !== null) {
-    const fencedContent = fencedMatch[1]?.trim();
-    if (fencedContent && (fencedContent.startsWith("{") || fencedContent.startsWith("["))) {
-      return fencedContent;
-    }
-  }
-
-  // Strategy 2: Find balanced brace/bracket blocks. Try each candidate starting
-  // position — if the first balanced block isn't valid JSON (e.g. a stray log
-  // object like `{ errno: -2 }`), advance to the next `{` and retry.
-  const findBalancedJson = (openChar: "{" | "[", closeChar: "}" | "]"): string | null => {
-    let searchFrom = 0;
-    while (searchFrom < trimmed.length) {
-      const start = trimmed.indexOf(openChar, searchFrom);
-      if (start < 0) return null;
-
-      let depth = 0;
-      let inString = false;
-      let escaped = false;
-      let endIndex = -1;
-      for (let index = start; index < trimmed.length; index += 1) {
-        const char = trimmed[index]!;
-        if (inString) {
-          if (escaped) { escaped = false; continue; }
-          if (char === "\\") { escaped = true; continue; }
-          if (char === "\"") { inString = false; }
-          continue;
-        }
-        if (char === "\"") { inString = true; continue; }
-        if (char === openChar) { depth += 1; continue; }
-        if (char === closeChar) {
-          depth -= 1;
-          if (depth === 0) { endIndex = index; break; }
-        }
-      }
-
-      if (endIndex < 0) return null;
-
-      const candidate = trimmed.slice(start, endIndex + 1);
-      try {
-        JSON.parse(candidate);
-        return candidate;
-      } catch {
-        // Not valid JSON — try next opening brace
-        searchFrom = start + 1;
-      }
-    }
-    return null;
-  };
-
-  const candidate = findBalancedJson("{", "}") || findBalancedJson("[", "]") || trimmed;
-
-  // Unwrap wrapper objects that contain the real payload inside a stringified
-  // "response" field (common with Gemini/virtual worker session envelopes like
-  // `{ "session_id": "...", "response": "{...actual JSON...}", "stats": {...} }`).
-  try {
-    const parsed = JSON.parse(candidate);
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      !Array.isArray(parsed) &&
-      typeof parsed.response === "string"
-    ) {
-      const inner = parsed.response.trim();
-      if (inner.startsWith("{") || inner.startsWith("[")) {
-        try {
-          JSON.parse(inner);
-          return inner;
-        } catch {
-          // inner response isn't valid JSON on its own — fall through
-        }
-      }
-    }
-  } catch {
-    // candidate isn't valid JSON — return as-is for caller to handle
-  }
-
-  return candidate;
 }
 
 export class PlanningAgentService {
@@ -567,13 +481,27 @@ export class PlanningAgentService {
     const providerPrompt = buildProviderPrompt(args.rawPrompt, providerSettings.thinkingMode);
 
     if (args.invocationId) {
+      this.deps.executionRepository?.updateExecutionInvocation(args.invocationId, {
+        provider,
+        model: providerSettings.model,
+      });
       this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
         role: "system",
         contentMarkdown: `Planning request routed through virtual ${this.getProviderLabel(provider)} worker (model: ${providerSettings.model}).`,
+        metadata: {
+          provider,
+          model: providerSettings.model,
+          routeKind: "virtual",
+        },
       });
     }
 
-    const runProvider = async (prompt: string, currentSessionId: string, retry: boolean) => {
+    const runProvider = async (
+      prompt: string,
+      currentSessionId: string,
+      retry: boolean,
+      continueNativeSessionId?: string | null,
+    ) => {
       args.signal?.throwIfAborted();
       const startedAt = new Date().toISOString();
       const invocation = this.deps.executionRepository?.createProviderInvocationUsage({
@@ -598,6 +526,7 @@ export class PlanningAgentService {
         repoPath: args.repoPath,
         githubToken: args.settings.git.githubToken,
         signal: args.signal,
+        continueSessionId: continueNativeSessionId,
         onActivity: (description, originator) => {
           this.deps.logger?.debug(retry ? "Virtual planning worker retry activity" : "Virtual planning worker activity", {
             projectId: args.projectId,
@@ -630,19 +559,29 @@ export class PlanningAgentService {
       return result;
     };
 
-    let result = await runProvider(providerPrompt, sessionId, false);
+    let currentPrompt = providerPrompt;
+    let result: Awaited<ReturnType<typeof runProvider>>;
+    let usedReadFileRetry = false;
+    let continueSessionId: string | null = null;
+    let rateLimitRetryCount = 0;
+    while (true) {
+      result = await runProvider(currentPrompt, sessionId, usedReadFileRetry, continueSessionId);
 
-    if (!result.ok && workflowSettings.retryOnReadFileNotFound && isReadFileNotFoundToolError(result)) {
-      this.deps.logger?.info("Retrying virtual planning request with file-discovery guidance", {
-        projectId: args.projectId,
-        invocationId: args.invocationId,
-        provider,
-      });
-      result = await runProvider(buildReadFileRetryPrompt(providerPrompt), `${sessionId}-retry`, true);
-    }
+      if (!result.ok && workflowSettings.retryOnReadFileNotFound && !usedReadFileRetry && isReadFileNotFoundToolError(result)) {
+        this.deps.logger?.info("Retrying virtual planning request with file-discovery guidance", {
+          projectId: args.projectId,
+          invocationId: args.invocationId,
+          provider,
+        });
+        currentPrompt = buildReadFileRetryPrompt(providerPrompt);
+        usedReadFileRetry = true;
+        continue;
+      }
 
-    const bodyMarkdown = result.text.trim();
-    if (!result.ok) {
+      if (result.ok) {
+        break;
+      }
+
       const classification = classifyProviderError(provider, result);
       this.deps.logger?.error("Virtual planning provider failed", {
         projectId: args.projectId,
@@ -653,11 +592,77 @@ export class PlanningAgentService {
         stderr: result.stderr?.slice(0, 500),
         stdout: result.stdout?.slice(0, 500),
       });
+
+      if (args.invocationId) {
+        this.deps.executionRepository?.updateExecutionInvocation(args.invocationId, {
+          lastErrorCategory: classification.category,
+          lastErrorMessage: classification.userMessage,
+          lastRetryAfterIso: classification.resetAtIso,
+        });
+        this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
+          role: "system",
+          contentMarkdown: `Provider error (${classification.category}): ${classification.userMessage}`,
+          metadata: {
+            provider,
+            model: providerSettings.model,
+            errorCategory: classification.category,
+            retryAfterIso: classification.resetAtIso,
+            routeKind: "virtual",
+          },
+        });
+      }
+
+      const retryDecision = resolveProviderRetryDecision(classification, workflowSettings);
+      if (retryDecision) {
+        if (retryDecision.kind === "rate_limit" && rateLimitRetryCount >= workflowSettings.maxRateLimitRetries) {
+          this.deps.logger?.warn("Stopping virtual planning retries after hitting max rate-limit retries", {
+            projectId: args.projectId,
+            invocationId: args.invocationId,
+            provider,
+            model: providerSettings.model,
+            maxRateLimitRetries: workflowSettings.maxRateLimitRetries,
+          });
+        } else {
+          if (retryDecision.kind === "rate_limit") {
+            rateLimitRetryCount += 1;
+          }
+          this.deps.logger?.warn("Retrying virtual planning request after classified provider error", {
+            projectId: args.projectId,
+            invocationId: args.invocationId,
+            provider,
+            model: providerSettings.model,
+            errorCategory: classification.category,
+            retryAtIso: retryDecision.retryAtIso,
+            delayMs: retryDecision.delayMs,
+          });
+          if (args.invocationId) {
+            this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
+              role: "system",
+              contentMarkdown: retryDecision.kind === "quota_reset"
+                ? `Waiting for provider quota reset. Retrying at ${retryDecision.retryAtIso}.`
+                : `Provider rate-limited. Retrying at ${retryDecision.retryAtIso}.`,
+              metadata: {
+                provider,
+                model: providerSettings.model,
+                errorCategory: classification.category,
+                retryAfterIso: retryDecision.retryAtIso,
+                routeKind: "virtual",
+              },
+            });
+          }
+          continueSessionId = result.nativeSessionId || (provider === "claude-code" ? null : sessionId);
+          await sleepWithSignal(retryDecision.delayMs, args.signal);
+          continue;
+        }
+      }
+
       if (classification.category !== "UNKNOWN") {
         throw new ProviderQuotaError(classification);
       }
       throw new Error(classification.userMessage);
     }
+
+    const bodyMarkdown = result.text.trim();
     if (!bodyMarkdown) {
       throw new Error(`Virtual ${this.getProviderLabel(provider)} worker returned an empty Planning agent reply.`);
     }
@@ -666,6 +671,11 @@ export class PlanningAgentService {
       this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
         role: "assistant",
         contentMarkdown: bodyMarkdown,
+        metadata: {
+          provider,
+          model: providerSettings.model,
+          routeKind: "virtual",
+        },
       });
     }
 
@@ -700,10 +710,20 @@ export class PlanningAgentService {
       this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
         role: "system",
         contentMarkdown: `Retrying JSON parse in same ${this.getProviderLabel(provider)} session (session: ${sessionId}).`,
+        metadata: {
+          provider,
+          model: providerSettings.model,
+          routeKind: "virtual",
+        },
       });
       this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
         role: "user",
         contentMarkdown: args.followUpPrompt,
+        metadata: {
+          provider,
+          model: providerSettings.model,
+          routeKind: "virtual",
+        },
       });
     }
 
@@ -732,7 +752,7 @@ export class PlanningAgentService {
       repoPath: args.repoPath,
       githubToken: args.settings.git.githubToken,
       signal: args.signal,
-      continueSessionId: previousResult.nativeSessionId || sessionId,
+      continueSessionId: previousResult.nativeSessionId || previousResult.sessionId,
       onActivity: (description, originator) => {
         this.deps.logger?.debug("Virtual planning JSON retry activity", {
           projectId: args.projectId,
@@ -771,6 +791,11 @@ export class PlanningAgentService {
       this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
         role: "assistant",
         contentMarkdown: bodyMarkdown,
+        metadata: {
+          provider,
+          model: providerSettings.model,
+          routeKind: "virtual",
+        },
       });
     }
 

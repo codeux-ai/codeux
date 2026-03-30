@@ -66,6 +66,7 @@ This foundation gave Sprint OS a clean product base for:
 
 - reusable planning roles
 - reusable worker role definitions later
+- reusable project-manager clarification guidance
 - future task-to-agent assignment
 
 ## What This Fixes
@@ -94,6 +95,16 @@ Not implemented yet:
 - preset inheritance or global templates
 - preset versioning
 - preset execution analytics
+
+## Current Built-In Conventions
+
+Sprint OS currently recognizes these markdown-backed preset conventions under `.sprint-os/agents`:
+
+- `planning_agent.md` -> `Planning agent`
+- `worker.md` -> `Worker`
+- `project_manager.md` -> `Project manager`
+
+`Project manager` is now used by worker-routed clarification auto-answer. That prompt injects the preset's markdown, includes sprint context, and passes through the latest explicit Jules clarification message when recent session activities contain one.
 
 ## Why This Matters
 

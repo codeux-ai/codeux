@@ -116,6 +116,14 @@ export class CycleRunner {
             projectId: args.executionContext.project.id,
             sprintId: args.executionContext.sprint.id,
           }).cliWorkflow.maxQuotaRetriesWithoutTimer,
+          maxRateLimitRetries: this.deps.getDashboardSettings({
+            projectId: args.executionContext.project.id,
+            sprintId: args.executionContext.sprint.id,
+          }).cliWorkflow.maxRateLimitRetries,
+          retryOnRateLimit: this.deps.getDashboardSettings({
+            projectId: args.executionContext.project.id,
+            sprintId: args.executionContext.sprint.id,
+          }).cliWorkflow.retryOnRateLimit,
         },
       );
       subtasks = syncResult.subtasks;
@@ -404,7 +412,7 @@ export class CycleRunner {
         agentPresetId: args.planningAgentPresetId ?? null,
         content,
         category: "error",
-        strength: 0.8,
+        strength: 0.7,
         source: {
           type: "auto_capture",
           originType: "ci_failure",

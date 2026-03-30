@@ -173,6 +173,8 @@ export class CliWorkflowService {
       initialHead: "",
       workflowSucceeded: false,
       agentPresetId: workerAgent?.id,
+      memoryTemplateOverrideEnabled: workerAgent?.memoryTemplateOverrideEnabled,
+      memoryTemplateMarkdown: workerAgent?.memoryTemplateMarkdown,
       workspaceManager: this.workspaceManager,
       prService: this.prService,
       providerRunner: this.providerRunner,
@@ -307,6 +309,31 @@ export class CliWorkflowService {
           provider: args.provider,
           reason: abortController.signal.reason || "dashboard_cancel",
         }, `cli:cancelled:${args.sessionId}`);
+      } else if (error instanceof ProviderQuotaError && error.category === "RATE_LIMITED") {
+        this.deps.sessionTracking.updateSession(args.sessionId, { state: "RATE_LIMITED" });
+        this.deps.sessionTracking.appendActivity(args.sessionId, {
+          originator: "system",
+          description: `Provider rate limit: ${message}`,
+        });
+        this.updateExecutionState(args, {
+          state: workflowSettings.retryOnRateLimit ? "QUOTA" : "FAILED",
+          finishedAt,
+          dispatchStatus: workflowSettings.retryOnRateLimit ? "quota" : "failed",
+          errorMessage: message,
+        });
+        this.appendExecutionEvent(args, "cli_workflow_rate_limited", {
+          provider: args.provider,
+          errorMessage: message,
+          category: error.category,
+          retryAfterIso: error.retryAfterIso,
+        });
+        this.deps.logger?.warn("CLI workflow hit provider rate limit", {
+          sessionId: args.sessionId,
+          provider: args.provider,
+          category: error.category,
+          retryAfterIso: error.retryAfterIso,
+          message,
+        });
       } else if (error instanceof ProviderQuotaError && error.category !== "UNKNOWN") {
         this.deps.sessionTracking.updateSession(args.sessionId, { state: "QUOTA" });
         this.deps.sessionTracking.appendActivity(args.sessionId, {

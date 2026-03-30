@@ -5,6 +5,7 @@ import type {
   CreateConversationThreadInput,
   CreateDashboardConversationMessageInput,
   UpdateConversationThreadInput,
+  UpdateConversationThreadRouteInput,
   UpdateMcpConnectionInput,
 } from "../types.js";
 
@@ -60,6 +61,24 @@ export const updateConversationThread = async (
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
+  });
+};
+
+export const updateThreadRoute = async (
+  threadId: string,
+  input: UpdateConversationThreadRouteInput
+): Promise<ChatThread> => {
+  return fetchJson<ChatThread>(`/api/conversations/threads/${encodeURIComponent(threadId)}/route`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+};
+
+export const compactThreadSession = async (threadId: string): Promise<ChatThread> => {
+  return fetchJson<ChatThread>(`/api/conversations/threads/${encodeURIComponent(threadId)}/compact`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
   });
 };
 

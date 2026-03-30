@@ -2,7 +2,11 @@ import type { JulesActivity, JulesSession, Subtask } from "../../contracts/app-t
 import type { TaskRunRecord, TaskDispatchStatus, TaskRunState } from "../../contracts/execution-types.js";
 import type { SessionSyncDependencies } from "../sprint-types.js";
 import { buildTaskRunKey, extractTaskRunKeyFromTitle } from "../../services/task-run-key.js";
-import { isQuotaCooldownActive } from "../../shared/providers/provider-error-classifier.js";
+import {
+  extractProviderErrorCategory,
+  isQuotaCooldownActive,
+  isRetryAfterActive,
+} from "../../shared/providers/provider-error-classifier.js";
 
 const mapSessionStateToTaskRunState = (
   sessionState: string | undefined,
@@ -15,6 +19,9 @@ const mapSessionStateToTaskRunState = (
     return "FAILED";
   }
   if (sessionState === "QUOTA") {
+    return "QUOTA";
+  }
+  if (sessionState === "RATE_LIMITED") {
     return "QUOTA";
   }
   if (isActionRequiredState(sessionState)) {
@@ -93,6 +100,29 @@ const getActivityKind = (activity: JulesActivity): string => {
   if (activity.userMessaged) return "user_message";
   return "activity";
 };
+
+const buildProviderActivityEventPayload = (
+  activity: JulesActivity,
+  sessionId: string | null,
+  sessionName: string | null,
+  provider: string | null,
+): Record<string, unknown> => ({
+  activityId: activity.id,
+  activityName: activity.name,
+  sessionId,
+  sessionName,
+  provider,
+  kind: getActivityKind(activity),
+  preview: getActivityPreview(activity),
+  description: typeof activity.description === "string" ? activity.description : null,
+  agentMessaged: activity.agentMessaged || null,
+  userMessaged: activity.userMessaged || null,
+  progressUpdated: activity.progressUpdated || null,
+  planGenerated: activity.planGenerated || null,
+  planApproved: activity.planApproved || null,
+  sessionFailed: activity.sessionFailed || null,
+  sessionCompleted: activity.sessionCompleted ?? null,
+});
 
 const resolveWorkerBranch = (session: JulesSession): string | null => {
   const output = Array.isArray(session.outputs)
@@ -214,13 +244,7 @@ const syncExecutionRunState = (
     }
 
     deps.executionRepository.appendTaskRunEvent(taskRun.id, "provider_activity", activity.originator || "provider", {
-      activityId: activity.id,
-      sessionId,
-      sessionName,
-      provider,
-      kind: getActivityKind(activity),
-      preview: getActivityPreview(activity),
-      description: typeof activity.description === "string" ? activity.description : null,
+      ...buildProviderActivityEventPayload(activity, sessionId, sessionName, provider),
     }, {
       createdAt: typeof activity.createTime === "string" && activity.createTime.trim().length > 0 ? activity.createTime : undefined,
       sourceEventKey: `activity:${activity.id}`,
@@ -232,7 +256,13 @@ export const runSessionSyncStep = async (
   subtasks: Subtask[],
   deps: SessionSyncDependencies,
   retryFailed: boolean,
-  context: { repoPath: string; sprintNumber: number; maxQuotaRetriesWithoutTimer?: number },
+  context: {
+    repoPath: string;
+    sprintNumber: number;
+    maxQuotaRetriesWithoutTimer?: number;
+    retryOnRateLimit?: boolean;
+    maxRateLimitRetries?: number;
+  },
 ): Promise<{ subtasks: Subtask[]; sessions: JulesSession[] }> => {
   const sessionsResponse = await deps.listSessions();
   const sessions = sessionsResponse.sessions || [];
@@ -338,6 +368,45 @@ export const runSessionSyncStep = async (
       continue;
     }
 
+    if (match.state === "RATE_LIMITED") {
+      let retryDelayActive = true;
+      let rateLimitRetriesWithoutDelay = 0;
+      if (task.record_id && task.project_id && deps.executionRepository) {
+        const dispatches = deps.executionRepository.listTaskDispatches({
+          projectId: task.project_id,
+          taskId: task.record_id,
+        });
+        const withError = dispatches.filter((d) => d.errorMessage);
+        const latestError = withError.length > 0 ? withError[withError.length - 1].errorMessage : null;
+        retryDelayActive = isRetryAfterActive(latestError);
+
+        if (!retryDelayActive) {
+          for (let i = withError.length - 1; i >= 0; i--) {
+            const err = withError[i].errorMessage;
+            if (!err || extractProviderErrorCategory(err) !== "RATE_LIMITED") {
+              break;
+            }
+            if (isRetryAfterActive(err)) {
+              break;
+            }
+            rateLimitRetriesWithoutDelay++;
+          }
+        }
+      }
+
+      const maxRetries = context.maxRateLimitRetries ?? 5;
+      if (!context.retryOnRateLimit) {
+        task.status = "FAILED";
+      } else if (retryDelayActive) {
+        task.status = "QUOTA";
+      } else if (retryFailed && rateLimitRetriesWithoutDelay <= maxRetries) {
+        task.status = "PENDING";
+      } else {
+        task.status = "FAILED";
+      }
+      continue;
+    }
+
     if (match.state === "QUOTA") {
       // Check if the quota cooldown has expired by looking at the latest dispatch error
       let cooldownActive = true;
@@ -352,10 +421,11 @@ export const runSessionSyncStep = async (
         cooldownActive = isQuotaCooldownActive(latestError);
 
         // Count consecutive quota dispatches without a reset timer
-        if (!cooldownActive && latestError) {
+        if (!cooldownActive && latestError && extractProviderErrorCategory(latestError) !== "RATE_LIMITED") {
           for (let i = withError.length - 1; i >= 0; i--) {
             const err = withError[i].errorMessage;
             if (!err || !err.toLowerCase().includes("quota")) break;
+            if (extractProviderErrorCategory(err) === "RATE_LIMITED") break;
             if (isQuotaCooldownActive(err)) break;
             quotaRetriesWithoutTimer++;
           }

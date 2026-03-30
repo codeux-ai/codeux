@@ -32,10 +32,10 @@ export default {
         },
         // Semantic status colors
         status: {
-          green: "#00AB84",  // Running
-          red: "#E3000F",    // Failed
-          amber: "#F59E0B",  // Intervention
-          violet: "#A300D6", // Legacy
+          green: "#008667",  // Running (Darkened to pass WCAG 4.5:1 on white)
+          red: "#D9000E",    // Failed (Darkened slightly)
+          amber: "#A66200",  // Intervention (Darkened to pass 4.5:1 on white)
+          violet: "#8A00B5", // Legacy
         },
         // Backwards compat alias for any remaining obsidian refs
         obsidian: {

@@ -84,7 +84,7 @@ export const Sidebar: FunctionComponent = () => {
             </a>
 
             {/* Navigation */}
-            <nav ref={navRef} aria-label="Main Navigation" className="flex-1 px-4 flex flex-col relative z-10">
+            <nav ref={navRef} aria-label="Sidebar navigation" className="flex-1 px-4 flex flex-col relative z-10">
                 <div className="px-4 text-[9px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.2em] mb-3">Workspace</div>
                 {navItems.map((item, idx) => {
                     const isActive = activeIndex === idx;

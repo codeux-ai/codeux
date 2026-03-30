@@ -202,7 +202,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
               onPrimaryAction?.();
             }}
             disabled={!onPrimaryAction || primaryBusy}
-            className={`flex h-9 w-9 items-center justify-center rounded-full text-slate-800 transition-all duration-300 dark:text-white ${
+            className={`touch-target flex h-9 w-9 items-center justify-center rounded-full text-slate-800 transition-all duration-300 dark:text-white ${
               isRunning
                 ? "bg-status-red/[0.12] shadow-[0_0_18px_rgba(227,0,15,0.16)] hover:bg-status-red/[0.18]"
                 : "bg-signal-500/[0.12] shadow-[0_0_18px_rgba(0,224,160,0.16)] hover:bg-signal-500/[0.18]"
@@ -216,7 +216,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
           <a
             href={`/tasks?sprint=${encodeURIComponent(sprint.id)}`}
             onClick={(event: MouseEvent) => event.stopPropagation()}
-            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-slate-900 px-5 text-[10px] font-bold uppercase tracking-[0.1em] text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] transition-all hover:opacity-85 dark:bg-white dark:text-void-900"
+            className="touch-target inline-flex h-9 items-center gap-1.5 rounded-full bg-slate-900 px-5 text-[10px] font-bold uppercase tracking-[0.1em] text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] transition-all hover:opacity-85 dark:bg-white dark:text-void-900"
           >
             View Tasks
             <Maximize2 className="h-2.5 w-2.5" />
@@ -227,7 +227,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
               event.stopPropagation();
               setMenuOpen((current) => !current);
             }}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-black/[0.06] text-slate-800 transition-colors hover:bg-black/10 dark:bg-white/[0.07] dark:text-white dark:hover:bg-white/10"
+            className="touch-target flex h-9 w-9 items-center justify-center rounded-full bg-black/[0.06] text-slate-800 transition-colors hover:bg-black/10 dark:bg-white/[0.07] dark:text-white dark:hover:bg-white/10"
             title="Settings"
           >
             <MoreVertical className="h-3.5 w-3.5" />

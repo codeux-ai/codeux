@@ -46,6 +46,7 @@ Storage:
 - provider session DB at `~/.sprint-os/session-tracking.db`
 - Sprint OS app DB at `~/.sprint-os/app.db`
   - includes project planning tables (sprints with `original_prompt` and `goal`) plus selected-project runtime projection in `app_settings`, `task_runs`, and `task_run_events`
+  - also stores sprint preview runtime state in `sprint_preview_sessions`
 
 Runtime resolution:
 - effective runtime settings always resolve as `system -> project -> sprint`
@@ -86,6 +87,7 @@ Runtime resolution:
   - `ciIntelligence`
   - `sprintLoopSteps`
   - `cliWorkflow`
+  - `sprintPreview`
   - `agents`
   - `skills`
 
@@ -116,6 +118,16 @@ Effective settings APIs:
 - `PUT /api/sprints/:sprintId/settings`
 - `DELETE /api/sprints/:sprintId/settings`
 - `GET /api/projects/:projectId/sprints/:sprintId/settings/effective`
+
+Preview APIs:
+- `GET /api/projects/:projectId/preview/sessions`
+- `POST /api/projects/:projectId/sprints/:sprintId/preview/start`
+- `POST /api/browser/sessions/:sessionId/rebuild`
+- `POST /api/browser/sessions/:sessionId/stop`
+- `GET /api/projects/:projectId/sprints/:sprintId/preview/script`
+- `PUT /api/projects/:projectId/sprints/:sprintId/preview/script`
+- `GET /api/browser/sessions/:sessionId/logs`
+- `ALL /api/browser/sessions/:sessionId/proxy/*`
 
 The effective endpoints return:
 - resolved `DashboardSettings`
@@ -159,11 +171,11 @@ Dashboard behavior:
   - default profiles:
     - `task_coding`: `GLOBAL`
     - `planning`: `WORKER`
-    - `dashboard_reply`: `GLOBAL`
+    - `dashboard_reply`: `WORKER`
     - `clarification_reply`: `WORKER`
     - `ci_fix`: `WORKER`
     - `merge_conflict`: `WORKER`
-  - clarification auto-answer in `WORKER` mode now follows the preferred worker CLI provider/model by default instead of accidentally inheriting whichever global CLI provider happened to match.
+  - dashboard replies and clarification auto-answer in `WORKER` mode now follow the preferred worker CLI provider/model by default instead of accidentally inheriting whichever global provider happened to match.
 
 `automationInterventions` contains:
 - `autoApprovePlan` (default `true`): auto-approve `AWAITING_PLAN_APPROVAL` sessions in `SEMI_AUTO`
@@ -171,6 +183,8 @@ Dashboard behavior:
 - `autoResumePaused` (default `false`): auto-send resume nudge for `PAUSED` sessions in `SEMI_AUTO`
 - `clarificationAnswerTemplate`: default response body used for clarification auto-replies
 - `clarificationCooldownSeconds` (default `300`): wait time after an auto-reply/resume before Sprint OS sends another clarification nudge; during this cooldown the task stays in automated recovery and does not open a fresh `action_required` human-escalation path
+- when `autoAnswerClarificationMode = WORKER`, Sprint OS now composes the clarification-answer prompt from the editable `Project manager` agent preset instead of prepending worker instructions
+- worker-routed clarification prompts now include a dedicated Jules clarification section so the latest explicit `agentMessaged.agentMessage` is passed through when available instead of only broad sprint context
 
 `cliWorkflow` contains:
 - Retry/cleanup toggles:
@@ -178,6 +192,7 @@ Dashboard behavior:
   - `cleanupWorktreeOnFailure`
   - `retryOnReadFileNotFound`
   - `resumeFailedTaskInSameWorkspace`
+  - `maxPlanningJsonRetries` (default `3`): Maximum number of retry attempts inside a same-session virtual worker planning loop if the provider output cannot be parsed as valid JSON.
 - Runtime mode:
   - `executionMode` (`HOST|DOCKER`)
 - Docker runtime config:
@@ -190,10 +205,27 @@ Dashboard behavior:
   - `containerMountGitConfig`
   - `containerMountGithubAuth`
 
+`sprintPreview` contains:
+- `autoStartOnRunningSprint`
+- `rebuildOnTaskCompletion`
+- `rebuildOnSprintCompletion`
+- `autoStopOnTerminalSprint`
+- `hostPortRangeStart`
+- `hostPortRangeEnd`
+- `containerAppPort`
+- `startupScriptPath`
+
+Preview runtime notes:
+- preview settings participate in the same `system -> project -> sprint` resolution model as other project-scoped defaults
+- preview session runtime state is stored in the app DB table `sprint_preview_sessions`, not the settings DB
+- `startupScriptPath` points to the editable preview startup script and is separate from `cliWorkflow.containerSetupScriptPath`
+- preview host ports are allocated from the configured range and bound to `127.0.0.1`
+
 `agents` contains:
 - `saveToProjectDirectory` (default `true`)
   - when enabled, dashboard agent create/update writes project-local markdown companions under `.sprint-os/agents`
   - mirrored filenames use lowercase underscore-safe slugs such as `planning_agent.md`
+  - clarification auto-answer can read project-local `project_manager.md` as the editable instruction source for worker-routed Jules clarification replies
   - default/home markdown sources are never modified by dashboard edits; Sprint OS creates a project-level override file instead
   - `containerMountGeminiAuth`
   - `containerMountCodexAuth`

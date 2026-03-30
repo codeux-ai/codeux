@@ -95,6 +95,25 @@ const normalizeInvocationRouting = (
 ): Record<InvocationRoutingId, InvocationRoutingSettings> => {
   const result = {} as Record<InvocationRoutingId, InvocationRoutingSettings>;
 
+  const isLegacyDashboardReplyDefault = (source: Partial<InvocationRoutingSettings> | undefined): boolean => {
+    if (!source || typeof source !== "object") {
+      return false;
+    }
+
+    const hasProviderOverrides = !!(
+      source.providers
+      && typeof source.providers === "object"
+      && !Array.isArray(source.providers)
+      && Object.keys(source.providers).length > 0
+    );
+
+    return source.profile === "GLOBAL"
+      && (source.strategy === undefined || source.strategy === "MANUAL")
+      && (source.provider === undefined || source.provider === null)
+      && (!Array.isArray(source.allowedProviders) || source.allowedProviders.length === 0)
+      && !hasProviderOverrides;
+  };
+
   for (const routeId of INVOCATION_ROUTING_IDS) {
     const source = input?.[routeId];
     const defaults = DEFAULT_INVOCATION_ROUTING[routeId];
@@ -114,10 +133,14 @@ const normalizeInvocationRouting = (
       ? source.allowedProviders.filter((value): value is ProviderId => PROVIDER_IDS.includes(value as ProviderId))
       : defaults.allowedProviders;
 
-    result[routeId] = {
-      profile: INVOCATION_ROUTING_PROFILES.includes(source?.profile as InvocationRoutingProfile)
+    const normalizedProfile = routeId === "dashboard_reply" && isLegacyDashboardReplyDefault(source)
+      ? defaults.profile
+      : INVOCATION_ROUTING_PROFILES.includes(source?.profile as InvocationRoutingProfile)
         ? source?.profile as InvocationRoutingProfile
-        : defaults.profile,
+        : defaults.profile;
+
+    result[routeId] = {
+      profile: normalizedProfile,
       strategy: PROVIDER_STRATEGIES.includes(source?.strategy as ProviderStrategy)
         ? source?.strategy as ProviderStrategy
         : defaults.strategy,

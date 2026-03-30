@@ -293,6 +293,7 @@ export class AppDbStorage {
         connection_id TEXT,
         scope TEXT NOT NULL,
         title TEXT NOT NULL,
+        runtime_state_json TEXT,
         status TEXT NOT NULL DEFAULT 'open',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
@@ -308,6 +309,7 @@ export class AppDbStorage {
         author_connection_id TEXT,
         body_markdown TEXT NOT NULL,
         delivery_status TEXT NOT NULL DEFAULT 'pending',
+        metadata_json TEXT,
         created_at TEXT NOT NULL,
         FOREIGN KEY (thread_id) REFERENCES conversation_threads(id) ON DELETE CASCADE,
         FOREIGN KEY (author_connection_id) REFERENCES mcp_connections(id) ON DELETE SET NULL
@@ -323,6 +325,9 @@ export class AppDbStorage {
         source_scope TEXT,
         source_updated_at TEXT,
         source_imported_at TEXT,
+        avatar_config_json TEXT,
+        memory_template_override_enabled INTEGER NOT NULL DEFAULT 0,
+        memory_template_markdown TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
@@ -433,6 +438,9 @@ export class AppDbStorage {
         started_at TEXT NOT NULL,
         finished_at TEXT,
         error_message TEXT,
+        last_error_category TEXT,
+        last_error_message TEXT,
+        last_retry_after_iso TEXT,
         message_count INTEGER NOT NULL DEFAULT 0,
         last_message_at TEXT,
         created_at TEXT NOT NULL,
@@ -453,6 +461,7 @@ export class AppDbStorage {
         role TEXT NOT NULL,
         content_markdown TEXT NOT NULL,
         tool_calls_json TEXT,
+        metadata_json TEXT,
         created_at TEXT NOT NULL,
         FOREIGN KEY (invocation_id) REFERENCES execution_invocations(id) ON DELETE CASCADE
       );
@@ -477,6 +486,37 @@ export class AppDbStorage {
         payload_json TEXT,
         created_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS sprint_preview_sessions (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        host_port INTEGER,
+        container_app_port INTEGER NOT NULL,
+        container_id TEXT,
+        container_name TEXT,
+        worktree_path TEXT,
+        feature_branch TEXT,
+        startup_script_path TEXT NOT NULL,
+        startup_mode TEXT NOT NULL,
+        install_command TEXT,
+        build_command TEXT,
+        run_command TEXT,
+        last_completed_task_count INTEGER NOT NULL DEFAULT 0,
+        last_seen_sprint_status TEXT,
+        last_known_path TEXT,
+        health_status TEXT NOT NULL DEFAULT 'unknown',
+        last_error TEXT,
+        last_build_at TEXT,
+        last_started_at TEXT,
+        last_stopped_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+        UNIQUE (project_id, sprint_id)
+      );
     `);
 
     this.ensureColumn("task_runs", "sprint_run_id", "TEXT");
@@ -489,9 +529,18 @@ export class AppDbStorage {
     this.ensureColumn("agent_presets", "source_scope", "TEXT");
     this.ensureColumn("agent_presets", "source_updated_at", "TEXT");
     this.ensureColumn("agent_presets", "source_imported_at", "TEXT");
+    this.ensureColumn("agent_presets", "avatar_config_json", "TEXT");
+    this.ensureColumn("agent_presets", "memory_template_override_enabled", "INTEGER NOT NULL DEFAULT 0");
+    this.ensureColumn("agent_presets", "memory_template_markdown", "TEXT");
     this.ensureColumn("connection_project_bindings", "last_attention_cursor", "TEXT");
     this.ensureColumn("connection_project_bindings", "last_assignment_cursor", "TEXT");
     this.ensureColumn("dashboard_realtime_events", "is_replayable", "INTEGER NOT NULL DEFAULT 1");
+    this.ensureColumn("conversation_threads", "runtime_state_json", "TEXT");
+    this.ensureColumn("conversation_messages", "metadata_json", "TEXT");
+    this.ensureColumn("execution_invocation_messages", "metadata_json", "TEXT");
+    this.ensureColumn("execution_invocations", "last_error_category", "TEXT");
+    this.ensureColumn("execution_invocations", "last_error_message", "TEXT");
+    this.ensureColumn("execution_invocations", "last_retry_after_iso", "TEXT");
     this.ensureUniqueIndex("idx_tasks_sprint_key", "tasks", "sprint_id, task_key");
     this.ensureIndex("idx_sprint_runs_project_sprint", "sprint_runs", "project_id, sprint_id, created_at DESC");
     this.ensureIndex("idx_tasks_project_sprint_sort", "tasks", "project_id, sprint_id, sort_order ASC, created_at ASC, task_key ASC");
@@ -538,6 +587,8 @@ export class AppDbStorage {
     this.ensureIndex("idx_project_attention_items_project_status", "project_attention_items", "project_id, status, opened_at DESC");
     this.ensureIndex("idx_project_attention_items_sprint_run_status", "project_attention_items", "sprint_run_id, status, opened_at DESC");
     this.ensureIndex("idx_project_attention_items_dispatch_status", "project_attention_items", "dispatch_id, status, opened_at DESC");
+    this.ensureIndex("idx_sprint_preview_sessions_project_updated", "sprint_preview_sessions", "project_id, updated_at DESC");
+    this.ensureIndex("idx_sprint_preview_sessions_sprint", "sprint_preview_sessions", "sprint_id, updated_at DESC");
   }
 
   getPath(): string {

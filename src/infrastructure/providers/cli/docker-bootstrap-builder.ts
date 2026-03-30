@@ -59,7 +59,9 @@ export class DockerBootstrapBuilder {
       `export NPM_CONFIG_PREFIX="${runtimeNpmPrefix}"`,
       `export NPM_CONFIG_CACHE="${runtimeNpmCache}"`,
       "export npm_config_cache=\"$NPM_CONFIG_CACHE\"",
-      "mkdir -p \"$NPM_CONFIG_PREFIX\" \"$NPM_CONFIG_CACHE\"",
+      "export PNPM_STORE_DIR=\"$NPM_CONFIG_CACHE/pnpm-store\"",
+      "export pnpm_config_store_dir=\"$PNPM_STORE_DIR\"",
+      "mkdir -p \"$NPM_CONFIG_PREFIX\" \"$NPM_CONFIG_CACHE\" \"$PNPM_STORE_DIR\"",
       "export PATH=\"$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH\"",
     ].join("\n");
   }

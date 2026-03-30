@@ -34,7 +34,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 function isTerminalSessionState(state: string | undefined): boolean {
-  return state === "COMPLETED" || state === "FAILED" || state === "CANCELLED" || state === "QUOTA";
+  return state === "COMPLETED" || state === "FAILED" || state === "CANCELLED" || state === "QUOTA" || state === "RATE_LIMITED";
 }
 
 function extractPullRequest(session: JulesSession): { url?: string; workerBranch?: string } | null {
@@ -49,6 +49,9 @@ function resolveTerminalDispatchState(session: JulesSession): "COMPLETED" | "FAI
     return "COMPLETED";
   }
   if (session.state === "QUOTA") {
+    return "QUOTA";
+  }
+  if (session.state === "RATE_LIMITED") {
     return "QUOTA";
   }
   if (session.state === "FAILED" || session.state === "CANCELLED") {

@@ -241,15 +241,93 @@ describe("live session runtime state", () => {
   it("falls back to runtime status sprint_id when selectedSprintId is not loaded yet", () => {
     expect(resolveLiveSessionSprintScopeId(
       createStatus({ sprint_id: "sprint-42" }),
+      createExecution(),
       null,
     )).toBe("sprint-42");
   });
 
-  it("prefers selectedSprintId over runtime status sprint_id", () => {
+  it("prefers selectedSprintId when it still matches active sprint activity", () => {
     expect(resolveLiveSessionSprintScopeId(
       createStatus({ sprint_id: "sprint-42" }),
+      createExecution({
+        sprintRuns: [{
+          id: "run-99",
+          projectId: "project-1",
+          sprintId: "sprint-99",
+          sprintName: "Sprint 99",
+          sprintNumber: 99,
+          status: "running",
+          triggerType: "manual",
+          triggeredBy: null,
+          executorMode: "mixed",
+          startedAt: "2026-03-15T10:05:00.000Z",
+          finishedAt: null,
+          lastHeartbeatAt: null,
+          createdAt: "2026-03-15T10:05:00.000Z",
+          activeLeaseOwnerKey: null,
+          activeLeaseExpiresAt: null,
+          humanIntervention: null,
+        }],
+      }),
       "sprint-99",
     )).toBe("sprint-99");
+  });
+
+  it("uses selectedSprintId even when another sprint is actively running", () => {
+    expect(resolveLiveSessionSprintScopeId(
+      createStatus({ sprint_id: "sprint-42" }),
+      createExecution({
+        sprintRuns: [{
+          id: "run-42",
+          projectId: "project-1",
+          sprintId: "sprint-42",
+          sprintName: "Sprint 42",
+          sprintNumber: 42,
+          status: "running",
+          triggerType: "manual",
+          triggeredBy: null,
+          executorMode: "mixed",
+          startedAt: "2026-03-15T10:10:00.000Z",
+          finishedAt: null,
+          lastHeartbeatAt: null,
+          createdAt: "2026-03-15T10:10:00.000Z",
+          activeLeaseOwnerKey: null,
+          activeLeaseExpiresAt: null,
+          humanIntervention: null,
+        }],
+      }),
+      "sprint-99",
+    )).toBe("sprint-99");
+  });
+
+  it("does not report sprint context for an explicitly selected sprint with no scoped data", () => {
+    const state = deriveLiveSessionRuntimeState(
+      createStatus({ sprint_id: "sprint-42", timestamp: "2026-03-15T10:10:00.000Z", subtasks: [] }),
+      createExecution({
+        sprintRuns: [{
+          id: "run-42",
+          projectId: "project-1",
+          sprintId: "sprint-42",
+          sprintName: "Sprint 42",
+          sprintNumber: 42,
+          status: "running",
+          triggerType: "manual",
+          triggeredBy: null,
+          executorMode: "mixed",
+          startedAt: "2026-03-15T10:10:00.000Z",
+          finishedAt: null,
+          lastHeartbeatAt: null,
+          createdAt: "2026-03-15T10:10:00.000Z",
+          activeLeaseOwnerKey: null,
+          activeLeaseExpiresAt: null,
+          humanIntervention: null,
+        }],
+      }),
+      "sprint-99",
+    );
+
+    expect(state.hasActiveSprint).toBe(false);
+    expect(state.hasSprintContext).toBe(false);
   });
 });
 

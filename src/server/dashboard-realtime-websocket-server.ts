@@ -149,6 +149,7 @@ export function bootDashboardRealtimeWebSocketServer(args: {
   pathName: string;
   realtimeService: DashboardRealtimeService;
   logger: Logger;
+  shouldHandleRequest?: (req: IncomingMessage) => boolean;
 }): void {
   const clients = new Map<Socket, RealtimeClientState>();
 
@@ -166,6 +167,9 @@ export function bootDashboardRealtimeWebSocketServer(args: {
   });
 
   const upgradeHandler = (req: IncomingMessage, socket: Socket): void => {
+    if (args.shouldHandleRequest && !args.shouldHandleRequest(req)) {
+      return;
+    }
     if (!isRealtimeUpgradeRequest(req, args.pathName)) {
       socket.destroy();
       return;

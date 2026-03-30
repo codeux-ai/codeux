@@ -211,7 +211,8 @@ export class SprintOrchestrator {
     sprintDescription?: string;
     ciIntelligence: CiIntelligenceSettings;
     githubMode: "REMOTE" | "LOCAL";
-  }): Promise<MergeFeedbackResult> {
+    subtasks?: Subtask[];
+}): Promise<MergeFeedbackResult> {
     if (!this.deps.getCiStatusForScope) {
       return {
         text: "",
@@ -254,7 +255,7 @@ export class SprintOrchestrator {
         featureBranch: args.featureBranch,
         defaultBranch: args.defaultBranch,
         title: resolveMainBranchPrTitle(args),
-        body: resolveMainBranchPrBody(args),
+        body: resolveMainBranchPrBody({ ...args, subtasks: args.subtasks }),
       });
       if (pr?.prUrl || pr?.prNumber) {
         createdPrNote = `\n🤖 **Main PR ${pr.created ? "Created" : "Resolved"}:** ${formatMainPrReference(pr, args.featureBranch, args.defaultBranch)}\n`;
@@ -313,6 +314,104 @@ export class SprintOrchestrator {
     this.deps.executionRepository.appendSprintRunEvent(sprintRun.id, args.eventType, "system", args.payload, {
       sourceEventKey: `${args.eventType}:${args.sprintId}:${JSON.stringify(args.payload)}`,
     });
+  }
+
+  async recoverSprintRun(sprintRunId: string): Promise<any> {
+    const existingRun = this.deps.executionRepository.getSprintRun(sprintRunId);
+    if (!existingRun) {
+      throw new Error(`Sprint run not found: ${sprintRunId}`);
+    }
+    if (existingRun.status !== "queued" && existingRun.status !== "running") {
+      return null;
+    }
+
+    const args: SprintAgentArgs = {
+      action: "orchestrate",
+      project_id: existingRun.projectId,
+      sprint_id: existingRun.sprintId,
+      wait: true,
+    };
+    const fallbackDashboardSettings = this.deps.getDashboardSettings();
+    const initialExecutionContext = this.deps.sprintExecutionStateService.resolveContext(args, fallbackDashboardSettings);
+    const dashboardSettings = this.deps.getDashboardSettings({
+      projectId: initialExecutionContext.project.id,
+      sprintId: initialExecutionContext.sprint.id,
+    });
+    const executionContext = this.deps.sprintExecutionStateService.resolveContext(args, dashboardSettings);
+    const repoPath = executionContext.repoPath;
+    const defaultFeatureBranch = executionContext.featureBranch;
+    const defaultBranch = executionContext.defaultBranch;
+    const githubMode = this.deps.settings.githubMode === "LOCAL" ? "LOCAL" : "REMOTE";
+    const retryFailed = true;
+    const loopSteps = this.getLoopStepSettings(dashboardSettings);
+    const ciIntelligence = this.getCiIntelligenceSettings(dashboardSettings);
+    const automationLevel = dashboardSettings.automationLevel;
+    const automationInterventions = this.getAutomationInterventionsSettings(dashboardSettings);
+    const featureBranchPrefix = dashboardSettings.git.featureBranchPrefix;
+    const dashboardPort = this.getDashboardPort();
+    const leaseToken = randomUUID();
+    const now = new Date().toISOString();
+
+    this.deps.executionRepository.acquireLease({
+      scopeType: "sprint",
+      scopeId: executionContext.sprint.id,
+      ownerKey: SPRINT_ORCHESTRATOR_OWNER_KEY,
+      leaseToken,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+    });
+    this.deps.executionRepository.updateSprintRun(existingRun.id, {
+      status: "running",
+      startedAt: existingRun.startedAt || now,
+      finishedAt: null,
+      lastHeartbeatAt: now,
+    });
+    this.deps.executionRepository.appendSprintRunEvent(existingRun.id, "sprint_recovery_started", "system", {
+      previousStatus: existingRun.status,
+      recoveredAt: now,
+    }, {
+      sourceEventKey: `startup-recovery:sprint-run:${existingRun.id}`,
+    });
+
+    try {
+      const planningAgentPresetId = await this.deps.resolvePlanningAgentPresetId?.(executionContext.project.id);
+      return await this.actionRunner.runOrchestrate({
+        args,
+        executionContext,
+        repoPath,
+        defaultFeatureBranch,
+        defaultBranch,
+        featureBranchPrefix,
+        githubMode,
+        retryFailed,
+        loopSteps,
+        ciIntelligence,
+        automationLevel,
+        automationInterventions,
+        dashboardPort,
+        shouldWait: true,
+        watchLoopEnabled: true,
+        sprintRunId: existingRun.id,
+        leaseToken,
+        planningAgentPresetId,
+      });
+    } catch (error) {
+      const failedAt = new Date().toISOString();
+      const message = error instanceof Error ? error.message : String(error);
+      this.deps.executionRepository.updateSprintRun(existingRun.id, {
+        status: "failed",
+        finishedAt: failedAt,
+        lastHeartbeatAt: failedAt,
+      });
+      this.deps.executionRepository.appendSprintRunEvent(existingRun.id, "sprint_failed", "system", {
+        reason: "orchestrator_recovery_exception",
+        errorMessage: message,
+      }, {
+        sourceEventKey: `orchestrator-recovery-error:${existingRun.id}:${message}`,
+      });
+      throw error;
+    } finally {
+      this.deps.executionRepository.releaseLease("sprint", executionContext.sprint.id, leaseToken);
+    }
   }
 
   async execute(args: SprintAgentArgs): Promise<any> {
@@ -573,12 +672,13 @@ function resolveMainBranchPrTitle(args: {
   return `Merge ${args.featureBranch} into ${args.defaultBranch}`;
 }
 
-function resolveMainBranchPrBody(args: {
+export function resolveMainBranchPrBody(args: {
   featureBranch: string;
   defaultBranch: string;
   sprintNumber?: number;
   sprintName?: string;
   sprintDescription?: string;
+  subtasks?: Subtask[];
 }): string {
   const scopeLine = typeof args.sprintNumber === "number" && Number.isFinite(args.sprintNumber)
     ? `Sprint: ${args.sprintNumber}`
@@ -590,15 +690,64 @@ function resolveMainBranchPrBody(args: {
     ? `**Sprint Context:**\n${args.sprintDescription.trim()}`
     : `**Sprint Context:**\nNo sprint description provided.`;
 
+  if (!args.subtasks || args.subtasks.length === 0) {
+    return [
+      "Automated sprint completion PR opened by Sprint OS.",
+      "",
+      scopeLine,
+      "",
+      descriptionSection,
+      "",
+      `Base: \`${args.defaultBranch}\``,
+      `Head: \`${args.featureBranch}\``,
+    ].join("\n");
+  }
+
+  const completedTasks = args.subtasks.filter(task => {
+    return task.status === 'COMPLETED' || (task.status === 'CODING_COMPLETED' && (task.is_merged || task.merge_indicator === 'MERGED' || task.merge_indicator === 'AUTOMERGE'));
+  });
+
+  const providerCounts = new Map<string, number>();
+  for (const task of completedTasks) {
+    if (task.provider) {
+      providerCounts.set(task.provider, (providerCounts.get(task.provider) || 0) + 1);
+    }
+  }
+
+  const providerStats = Array.from(providerCounts.entries())
+    .map(([provider, count]) => `${count} by ${provider}`)
+    .join(" · ");
+
+  const summaryStats = `**${completedTasks.length}/${args.subtasks.length} tasks completed**` + (providerStats ? ` · ${providerStats}` : '');
+
+  const taskChecklist = args.subtasks.map(task => {
+    const isCompleted = task.status === 'COMPLETED' || (task.status === 'CODING_COMPLETED' && (task.is_merged || task.merge_indicator === 'MERGED' || task.merge_indicator === 'AUTOMERGE'));
+    const checkbox = isCompleted ? '[x]' : '[ ]';
+    const providerStr = task.provider ? ` — \`${task.provider}\`` : '';
+    const prStr = task.pr_url ? ` ([PR](${task.pr_url}))` : '';
+    return `- ${checkbox} **${task.id}**: ${task.title}${providerStr}${prStr}`;
+  }).join("\n");
+
   return [
+    "## 🚀 Sprint Completion",
     "Automated sprint completion PR opened by Sprint OS.",
     "",
-    scopeLine,
+    "> " + scopeLine,
+    "> " + descriptionSection.split('\n').join('\n> '),
     "",
-    descriptionSection,
+    summaryStats,
+    "",
+    taskChecklist,
+    "",
+    "<details>",
+    "<summary>Branch Info</summary>",
     "",
     `Base: \`${args.defaultBranch}\``,
     `Head: \`${args.featureBranch}\``,
+    "</details>",
+    "",
+    "---",
+    "*Generated by [Sprint OS](https://github.com/numnx/jules-agent-mcp)*"
   ].join("\n");
 }
 

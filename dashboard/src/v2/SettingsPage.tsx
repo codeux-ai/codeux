@@ -70,7 +70,7 @@ const CATEGORIES: Category[] = [
 const CATEGORY_SEARCH_HINTS: Record<CategoryId, string[]> = {
   general: ["automation", "scope", "runtime", "dashboard", "clarification", "pause", "resume"],
   models: ["provider", "routing", "model", "thinking", "worker", "codex", "gemini", "claude", "jules"],
-  sprint: ["ci", "merge", "watch", "loop", "docker", "execution", "cleanup", "branch", "autofix"],
+  sprint: ["ci", "merge", "watch", "loop", "docker", "execution", "cleanup", "branch", "autofix", "browser", "preview", "container", "port"],
   agents: ["agent", "prompt", "template", "markdown", "instruction"],
   memory: ["memory", "embedding", "capture", "promotion", "learning"],
   integrations: ["github", "token", "api key", "auth", "credential", "integration"],
@@ -2062,6 +2062,52 @@ export const SettingsPage: FunctionComponent = () => {
               },
             }))} />
           </Row>
+          <Row label="Retry after quota reset" description="When a provider reports a concrete quota reset time, wait for that reset and retry automatically." badge={getFieldBadge("cliWorkflow.retryOnQuotaReset")}>
+            <Toggle value={editableSettings.cliWorkflow.retryOnQuotaReset} onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              cliWorkflow: {
+                ...current.cliWorkflow,
+                retryOnQuotaReset: !current.cliWorkflow.retryOnQuotaReset,
+              },
+            }))} />
+          </Row>
+          <Row label="Retry on rate limit" description="Retry transient rate-limit failures after a fixed delay until the configured max retry count is reached." badge={getFieldBadge("cliWorkflow.retryOnRateLimit")}>
+            <Toggle value={editableSettings.cliWorkflow.retryOnRateLimit} onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              cliWorkflow: {
+                ...current.cliWorkflow,
+                retryOnRateLimit: !current.cliWorkflow.retryOnRateLimit,
+              },
+            }))} />
+          </Row>
+          <Row label="Rate limit retry delay" description="Seconds to wait before retrying a rate-limited provider call." badge={getFieldBadge("cliWorkflow.rateLimitRetryDelaySeconds")}>
+            <NumberInput
+              value={editableSettings.cliWorkflow.rateLimitRetryDelaySeconds}
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                cliWorkflow: {
+                  ...current.cliWorkflow,
+                  rateLimitRetryDelaySeconds: value,
+                },
+              }))}
+              min={1}
+              max={3600}
+            />
+          </Row>
+          <Row label="Max rate limit retries" description="Maximum retry attempts for rate-limited provider calls before Sprint OS fails the invocation." badge={getFieldBadge("cliWorkflow.maxRateLimitRetries")}>
+            <NumberInput
+              value={editableSettings.cliWorkflow.maxRateLimitRetries}
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                cliWorkflow: {
+                  ...current.cliWorkflow,
+                  maxRateLimitRetries: value,
+                },
+              }))}
+              min={1}
+              max={100}
+            />
+          </Row>
           <Row label="Resume failed task in same workspace" description="Reuse the same workspace for a retry instead of provisioning a fresh one." badge={getFieldBadge("cliWorkflow.resumeFailedTaskInSameWorkspace")}>
             <Toggle value={editableSettings.cliWorkflow.resumeFailedTaskInSameWorkspace} onChange={() => updateEditableSettings((current) => ({
               ...current,
@@ -2147,6 +2193,100 @@ export const SettingsPage: FunctionComponent = () => {
                 containerMountGitConfig: !current.cliWorkflow.containerMountGitConfig,
               },
             }))} />
+          </Row>
+        </SectionCard>
+
+        <SectionCard title="Sprint Browser" watermark="WEB" badge={getBadge("sprintPreview")}>
+          <Row label="Auto-start running sprint previews" description="Launch the preview container automatically when a sprint enters the running state." badge={getFieldBadge("sprintPreview.autoStartOnRunningSprint")}>
+            <Toggle value={editableSettings.sprintPreview.autoStartOnRunningSprint} onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              sprintPreview: {
+                ...current.sprintPreview,
+                autoStartOnRunningSprint: !current.sprintPreview.autoStartOnRunningSprint,
+              },
+            }))} />
+          </Row>
+          <Row label="Rebuild after task completion" description="Rebuild the active sprint preview whenever the completed task count increases." badge={getFieldBadge("sprintPreview.rebuildOnTaskCompletion")}>
+            <Toggle value={editableSettings.sprintPreview.rebuildOnTaskCompletion} onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              sprintPreview: {
+                ...current.sprintPreview,
+                rebuildOnTaskCompletion: !current.sprintPreview.rebuildOnTaskCompletion,
+              },
+            }))} />
+          </Row>
+          <Row label="Rebuild after sprint completion" description="Run one last preview rebuild when the sprint reaches a terminal completed state." badge={getFieldBadge("sprintPreview.rebuildOnSprintCompletion")}>
+            <Toggle value={editableSettings.sprintPreview.rebuildOnSprintCompletion} onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              sprintPreview: {
+                ...current.sprintPreview,
+                rebuildOnSprintCompletion: !current.sprintPreview.rebuildOnSprintCompletion,
+              },
+            }))} />
+          </Row>
+          <Row label="Auto-stop on terminal sprint" description="Stop preview containers automatically when their sprint finishes or is otherwise terminal." badge={getFieldBadge("sprintPreview.autoStopOnTerminalSprint")}>
+            <Toggle value={editableSettings.sprintPreview.autoStopOnTerminalSprint} onChange={() => updateEditableSettings((current) => ({
+              ...current,
+              sprintPreview: {
+                ...current.sprintPreview,
+                autoStopOnTerminalSprint: !current.sprintPreview.autoStopOnTerminalSprint,
+              },
+            }))} />
+          </Row>
+          <Row label="Host port range start" description="Lower bound for the preview port allocator. Preview ports bind to localhost only." badge={getFieldBadge("sprintPreview.hostPortRangeStart")}>
+            <NumberInput
+              value={editableSettings.sprintPreview.hostPortRangeStart}
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                sprintPreview: {
+                  ...current.sprintPreview,
+                  hostPortRangeStart: value,
+                },
+              }))}
+              min={1}
+              max={65535}
+            />
+          </Row>
+          <Row label="Host port range end" description="Upper bound for the preview port allocator. Keep the range large enough for concurrent sprint previews." badge={getFieldBadge("sprintPreview.hostPortRangeEnd")}>
+            <NumberInput
+              value={editableSettings.sprintPreview.hostPortRangeEnd}
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                sprintPreview: {
+                  ...current.sprintPreview,
+                  hostPortRangeEnd: value,
+                },
+              }))}
+              min={1}
+              max={65535}
+            />
+          </Row>
+          <Row label="Container app port" description="Internal port the preview process listens on inside the container before it is mapped to a random host port." badge={getFieldBadge("sprintPreview.containerAppPort")}>
+            <NumberInput
+              value={editableSettings.sprintPreview.containerAppPort}
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                sprintPreview: {
+                  ...current.sprintPreview,
+                  containerAppPort: value,
+                },
+              }))}
+              min={1}
+              max={65535}
+            />
+          </Row>
+          <Row label="Startup script path" description="Project-relative path used for the editable sprint preview startup script override." badge={getFieldBadge("sprintPreview.startupScriptPath")} last>
+            <TextInput
+              value={editableSettings.sprintPreview.startupScriptPath}
+              onChange={(value) => updateEditableSettings((current) => ({
+                ...current,
+                sprintPreview: {
+                  ...current.sprintPreview,
+                  startupScriptPath: value,
+                },
+              }))}
+              mono
+            />
           </Row>
         </SectionCard>
       </div>

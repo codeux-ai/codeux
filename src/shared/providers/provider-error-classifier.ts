@@ -6,26 +6,49 @@ export class ProviderQuotaError extends Error {
   readonly retryAfterIso: string | null;
 
   constructor(classification: ProviderErrorClassification) {
+    const categoryTag = classification.category !== "UNKNOWN"
+      ? ` [ERROR_CATEGORY:${classification.category}]`
+      : "";
     const retryTag = classification.resetAtIso ? ` [RETRY_AFTER:${classification.resetAtIso}]` : "";
-    super(`${classification.userMessage}${retryTag}`);
+    super(`${classification.userMessage}${categoryTag}${retryTag}`);
     this.name = "ProviderQuotaError";
     this.category = classification.category;
     this.retryAfterIso = classification.resetAtIso;
   }
 }
 
+const ERROR_CATEGORY_PATTERN = /\[ERROR_CATEGORY:([A-Z_]+)\]/;
 const RETRY_AFTER_PATTERN = /\[RETRY_AFTER:(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\]/;
+
+export function extractProviderErrorCategory(errorMessage: string): ProviderErrorCategory | null {
+  const match = errorMessage.match(ERROR_CATEGORY_PATTERN);
+  const category = match?.[1] ?? null;
+  switch (category) {
+    case "QUOTA_EXHAUSTED":
+    case "AUTH_FAILURE":
+    case "RATE_LIMITED":
+    case "PROVIDER_NOT_FOUND":
+    case "UNKNOWN":
+      return category;
+    default:
+      return null;
+  }
+}
 
 export function extractRetryAfterIso(errorMessage: string): string | null {
   const match = errorMessage.match(RETRY_AFTER_PATTERN);
   return match?.[1] ?? null;
 }
 
-export function isQuotaCooldownActive(errorMessage: string | null | undefined): boolean {
+export function isRetryAfterActive(errorMessage: string | null | undefined): boolean {
   if (!errorMessage) return false;
   const iso = extractRetryAfterIso(errorMessage);
   if (!iso) return false;
   return new Date(iso).getTime() > Date.now();
+}
+
+export function isQuotaCooldownActive(errorMessage: string | null | undefined): boolean {
+  return isRetryAfterActive(errorMessage);
 }
 
 export type ProviderErrorCategory =
@@ -80,6 +103,7 @@ const GEMINI_PATTERNS: ErrorPattern[] = [
     patterns: [
       /rate.?limit/i,
       /too many requests/i,
+      /no capacity available for model/i,
       /code:\s*429\b/,
     ],
     resetTimeExtractor: (text: string): string | null => {

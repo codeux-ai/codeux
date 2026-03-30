@@ -11,6 +11,7 @@ import type {
   ProviderStrategy,
   McpToolToggle,
   ProviderId,
+  SprintPreviewSettings,
   SkillToggle,
   ThinkingMode,
   WorkerSettings,
@@ -58,6 +59,7 @@ export interface ProjectSettings {
   ciIntelligence: CiIntelligenceSettings;
   sprintLoopSteps: DashboardSettings["sprintLoopSteps"];
   cliWorkflow: CliWorkflowSettings;
+  sprintPreview: SprintPreviewSettings;
   workers: WorkerSettings;
   agents: AgentSettings;
   skills: SkillToggle[];

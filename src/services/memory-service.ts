@@ -89,11 +89,9 @@ export class MemoryService {
 
     // Async: compute embedding if model is loaded
     if (this.embeddingService.isLoaded()) {
-      try {
-        await this.embedMemory(record);
-      } catch (error) {
+      this.triggerEmbedding(record).catch(error => {
         this.logger.warn(`Failed to embed memory ${record.id}: ${error}`);
-      }
+      });
     }
 
     return this.memoryRepository.getMemory(record.id) ?? record;
@@ -104,7 +102,16 @@ export class MemoryService {
   }
 
   updateMemory(memoryId: string, input: UpdateMemoryInput): MemoryRecord {
-    return this.memoryRepository.updateMemory(memoryId, input);
+    const record = this.memoryRepository.updateMemory(memoryId, input);
+
+    // Automatically trigger embedding generation whenever a long-term memory is updated
+    if (record.scope === "project" && this.embeddingService.isLoaded()) {
+      this.triggerEmbedding(record).catch(error => {
+        this.logger.warn(`Failed to embed updated memory ${record.id}: ${error}`);
+      });
+    }
+
+    return record;
   }
 
   deleteMemory(memoryId: string): void {
@@ -198,7 +205,7 @@ export class MemoryService {
 
     for (const memory of memories) {
       try {
-        await this.embedMemory(memory);
+        await this.triggerEmbedding(memory);
         completed++;
         onProgress?.(completed, memories.length);
       } catch (error) {
@@ -225,7 +232,7 @@ export class MemoryService {
       for (const memory of memories) {
         if (!this.reembedProgress?.active) break;
         try {
-          await this.embedMemory(memory);
+          await this.triggerEmbedding(memory);
           completed++;
         } catch (error) {
           this.logger.warn(`Failed to re-embed memory ${memory.id}: ${error}`);
@@ -441,7 +448,7 @@ export class MemoryService {
     return pc;
   }
 
-  private async embedMemory(record: MemoryRecord): Promise<void> {
+  public async triggerEmbedding(record: MemoryRecord): Promise<void> {
     const modelId = this.embeddingService.getLoadedModelId();
     const dimension = this.embeddingService.getDimension();
     if (!modelId || !dimension) return;

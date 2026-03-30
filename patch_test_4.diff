@@ -1,0 +1,29 @@
+--- tests/dashboard/v2/sprints-page.test.tsx
++++ tests/dashboard/v2/sprints-page.test.tsx
+@@ -31,6 +31,8 @@
+       activeRunsBySprintId: new Map(),
+       interventionBySprintId: new Map(),
+       nextId: "spr-123",
++      virtualProviders: [],
++      pendingActionIds: new Set(),
+       showImportModal: false,
+       setShowImportModal: vi.fn(),
+     } as any);
+@@ -59,6 +61,8 @@
+       activeRunsBySprintId: new Map(),
+       interventionBySprintId: new Map(),
+       nextId: "spr-123",
++      virtualProviders: [],
++      pendingActionIds: new Set(),
+       showImportModal: true,
+       setShowImportModal: vi.fn(),
+     } as any);
+@@ -77,6 +81,8 @@
+       activeRunsBySprintId: new Map(),
+       interventionBySprintId: new Map(),
+       nextId: "spr-123",
++      virtualProviders: [],
++      pendingActionIds: new Set(),
+       showImportModal: false,
+       setShowImportModal: vi.fn(),
+     } as any);

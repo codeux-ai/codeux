@@ -24,12 +24,14 @@ export class AgentToolHandler {
     thread_id: string;
     thread_title?: string;
     body_markdown: string;
+    mode?: "reply" | "compact_thread";
   }) {
     const result = await this.deps.workerInboxReplyService.generateReply({
       projectId: args.project_id,
       threadId: args.thread_id,
       threadTitle: args.thread_title,
       bodyMarkdown: args.body_markdown,
+      mode: args.mode,
     });
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   }
