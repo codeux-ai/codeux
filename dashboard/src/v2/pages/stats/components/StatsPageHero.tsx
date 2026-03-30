@@ -16,17 +16,17 @@ import {
   TimerReset,
   Workflow,
 } from "lucide-preact";
-import { MetricCard } from "../../components/ui/MetricCard.js";
-import { Sparkline } from "../../components/ui/Sparkline.js";
-import { useProjectData } from "../../context/project-data.js";
-import { useProgressiveList } from "../../../hooks/use-progressive-list.js";
+import { MetricCard } from "../../../components/ui/MetricCard.js";
+import { Sparkline } from "../../../components/ui/Sparkline.js";
+import { useProjectData } from "../../../context/project-data.js";
+import { useProgressiveList } from "../../../../hooks/use-progressive-list.js";
 import type {
   ExecutionStatsEntitySummary,
   ExecutionUsageBucketSummary,
   ProjectExecutionStatsSnapshot,
   ProjectStatsWindow,
   SegmentDefinition,
-} from "../../types.js";
+} from "../../../types.js";
 import {
   formatTokens,
   formatDuration,
@@ -34,12 +34,8 @@ import {
   formatDateTime,
   sumUsage,
   createSeries,
-} from "./stats-utils.js";
-import { useStatsPageData } from "./use-stats-page-data.js";
-import { StatsPageHero } from "./components/StatsPageHero.js";
-import { AnalysisStudioSection } from "./components/AnalysisStudioSection.js";
-import { TelemetrySectionsSection } from "./components/TelemetrySectionsSection.js";
-
+} from "../stats-utils.js";
+import { useStatsPageData } from "../use-stats-page-data.js";
 
 type StatsVisualMode = "trend" | "composition" | "reliability";
 type ChartSeriesId = "tokens" | "active" | "invocations";
@@ -1110,8 +1106,8 @@ const TrendStudio: FunctionComponent<{
           <div className="mt-5 grid grid-cols-2 gap-4">
             <div className={SUBPANEL_CLASS}>
               <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Planning</div>
-              <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{planningUsage ? formatTokens((planningUsage?.usage?.totalTokens || 0)) : "0"}</div>
-              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{planningUsage ? formatDuration((planningUsage?.usage?.activeTimeMs || 0)) : "No planning data yet"}</div>
+              <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{planningUsage ? formatTokens(planningUsage.usage.totalTokens) : "0"}</div>
+              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{planningUsage ? formatDuration(planningUsage.usage.activeTimeMs) : "No planning data yet"}</div>
             </div>
             <div className={SUBPANEL_CLASS}>
               <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Providers</div>
@@ -1535,137 +1531,51 @@ const TelemetryLedger: FunctionComponent<{
   );
 };
 
-export const StatsPage: FunctionComponent = () => {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const { selectedProject } = useProjectData();
-  const {
-    stats,
-    loading,
-    error,
-    usage,
-    tokenSeries,
-    activeTimeSeries,
-    wallTimeSeries,
-    planningUsage,
-    activeQuery,
-    customFrom,
-    setCustomFrom,
-    customTo,
-    setCustomTo,
-    visualMode,
-    setVisualMode,
-    providerSegments,
-    sourceSegments,
-    tokenSegments,
-    applyPresetWindow,
-    applyCustomRange,
-    completionConfidence,
-  } = useStatsPageData(selectedProject?.id || null);
-
-  useLayoutEffect(() => {
-    if (!rootRef.current) {
-      return;
-    }
-    gsap.fromTo(
-      rootRef.current.children,
-      { opacity: 0, y: 28 },
-      { opacity: 1, y: 0, duration: 0.8, stagger: 0.08, ease: "power4.out" },
-    );
-  }, []);
-
+export const StatsPageHero: FunctionComponent<any> = ({ selectedProject, stats, activeQuery, customFrom, customTo, applyPresetWindow, setCustomFrom, setCustomTo, applyCustomRange }) => {
   return (
-    <div ref={rootRef} className="mx-auto flex max-w-[2400px] flex-col gap-16 px-8 py-20 md:px-20">
-      <StatsPageHero
-        selectedProject={selectedProject}
-        stats={stats}
-        activeQuery={activeQuery}
-        customFrom={customFrom}
-        customTo={customTo}
-        applyPresetWindow={applyPresetWindow}
-        setCustomFrom={setCustomFrom}
-        setCustomTo={setCustomTo}
-        applyCustomRange={applyCustomRange}
-      />
-
-      {!selectedProject ? (
-        <div className="rounded-[2rem] border border-dashed border-black/[0.08] bg-white/68 px-8 py-16 text-center text-base text-slate-400 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/55 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-          Select a project to load telemetry.
+    <section className={`${PANEL_CLASS} rounded-[2.5rem] p-8 md:p-10`}>
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.14]" />
+      <div className="relative flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
+        <div className="max-w-4xl">
+          <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.24em] text-signal-600 dark:text-signal-400">
+            <BarChart3 className="h-3.5 w-3.5" strokeWidth={2.2} />
+            Telemetry Atlas
+          </div>
+          <h1 className="mt-6 text-5xl font-black tracking-[-0.06em] text-slate-900 dark:text-white md:text-7xl">
+            Statistics.
+          </h1>
+          <p className="mt-5 max-w-3xl text-lg leading-relaxed text-slate-500 dark:text-slate-400">
+            A high-signal telemetry workspace for planning, coding, CI recovery, and merge automation with deeper analysis, stronger interaction, and better operational usability.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+              {selectedProject?.name || "No project selected"}
+            </div>
+            <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+              {stats?.activeSprint ? `Live sprint ${stats.activeSprint.sprintNumber ?? "?"}` : "Historical lens"}
+            </div>
+            <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+              Generated {stats ? formatDateTime(stats.generatedAt) : "--"}
+            </div>
+            {stats ? (
+              <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+                {stats.range.resolutionLabel}
+              </div>
+            ) : null}
+          </div>
         </div>
-      ) : loading && !stats ? (
-        <div className="rounded-[2rem] border border-black/[0.05] bg-white/68 px-8 py-16 text-center text-base text-slate-500 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.05] dark:bg-void-800/55 dark:text-slate-400 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-          Loading the telemetry field for {selectedProject.name}.
-        </div>
-      ) : error ? (
-        <div className="rounded-[2rem] border border-red-500/20 bg-red-500/10 px-8 py-12 text-base text-red-600 dark:text-red-300">
-          {error}
-        </div>
-      ) : stats ? (
-        <>
-          <section className="grid grid-cols-1 gap-5 lg:grid-cols-2 2xl:grid-cols-5">
-            <SignalMetricCard
-              label="Total Tokens"
-              value={formatTokens(usage.totalTokens)}
-              detail={`${usage.reportedInvocationCount} reported · ${usage.estimatedInvocationCount} estimated provider calls`}
-              accentHex="#00E0A0"
-              hoverTint="group-hover:bg-signal-500/[0.025]"
-              sparkline={tokenSeries}
-              signalLabel="Throughput"
-            />
-            <SignalMetricCard
-              label="Active AI Time"
-              value={formatDuration(usage.activeTimeMs)}
-              detail={`${usage.invocationCount} tracked CLI invocations across the selected window`}
-              accentHex="#FFB800"
-              hoverTint="group-hover:bg-amber-500/[0.03]"
-              sparkline={activeTimeSeries}
-              signalLabel="Latency"
-            />
-            <SignalMetricCard
-              label="Wall Runtime"
-              value={formatDuration(usage.wallTimeMs)}
-              detail="Task-run wall time in the same window, including completed sprint work."
-              accentHex="#0EA5E9"
-              hoverTint="group-hover:bg-cyan-500/[0.03]"
-              sparkline={wallTimeSeries}
-              signalLabel="Task Scope"
-            />
-            <SignalMetricCard
-              label="Planning Usage"
-              value={formatTokens((planningUsage?.usage?.totalTokens || 0))}
-              detail={
-                (planningUsage?.usage?.totalTokens || 0) > 0
-                  ? `${formatDuration((planningUsage?.usage?.activeTimeMs || 0))} spent in sprint planning`
-                  : "Planning usage will land here once virtual planning runs execute."
-              }
-              accentHex="#F43F5E"
-              hoverTint="group-hover:bg-rose-500/[0.03]"
-              sparkline={createSeries(stats.buckets, (bucket) => bucket.usage.invocationCount)}
-              signalLabel="Planning"
-            />
-            <SignalMetricCard
-              label="Telemetry Confidence"
-              value={completionConfidence}
-              detail={`${usage.unavailableInvocationCount + usage.unsupportedInvocationCount} invocations could not expose authoritative counts`}
-              accentHex="#10B981"
-              hoverTint="group-hover:bg-emerald-500/[0.03]"
-              sparkline={createSeries(stats.buckets, (bucket) => bucket.usage.reportedInvocationCount)}
-              signalLabel="Audit"
-            />
-          </section>
-
-          <AnalysisStudioSection
-            stats={stats}
-            planningUsage={planningUsage}
-            providerSegments={providerSegments}
-            tokenSegments={tokenSegments}
-            sourceSegments={sourceSegments}
-            visualMode={visualMode}
-            setVisualMode={setVisualMode}
+        <div className="flex flex-col items-start gap-4 xl:items-end">
+          <RangeToggle
+            activeWindow={activeQuery.window}
+            customFrom={customFrom}
+            customTo={customTo}
+            onSelectPreset={applyPresetWindow}
+            onCustomFromChange={setCustomFrom}
+            onCustomToChange={setCustomTo}
+            onApplyCustom={applyCustomRange}
           />
-
-          <TelemetrySectionsSection stats={stats} />
-        </>
-      ) : null}
-    </div>
+        </div>
+      </div>
+    </section>
   );
 };
