@@ -190,7 +190,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             <input
               value={addressValue}
               onInput={(event) => onAddressChange((event.currentTarget as HTMLInputElement).value)}
-              className="h-10 w-full rounded-2xl border border-black/[0.08] bg-white/80 px-4 font-mono text-sm text-slate-800  transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100"
+              className="h-10 w-full rounded-2xl border border-black/[0.08] bg-white/80 px-4 font-mono text-sm text-slate-800 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100"
             />
           </form>
         </div>

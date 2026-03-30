@@ -271,7 +271,7 @@ const DagNode = memo(({ node, dispatch, tone }: { node: SprintDagNodeModel & { x
         <div className="mt-3 grid grid-cols-[1fr_auto] items-end gap-2">
           <div className="min-w-0 text-[10px] font-mono leading-tight text-slate-400">
             <div>{node.incoming.length} deps in</div>
-            <div>{node.outgoing.length} deps </div>
+            <div>{node.outgoing.length} deps out</div>
           </div>
           <div className="flex flex-col items-end text-[10px] font-mono text-slate-400">
             {executorLabel && <span>{executorLabel}</span>}

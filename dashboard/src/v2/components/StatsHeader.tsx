@@ -70,7 +70,7 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
             gsap.fromTo(
                 Array.from(headerRef.current.children),
                 { opacity: 0, y: 40 },
-                { opacity: 1, y: 0, stagger: 0.1, duration: 0.9, ease: "power4.", delay: 0.05 },
+                { opacity: 1, y: 0, stagger: 0.1, duration: 0.9, ease: "power4.out", delay: 0.05 },
             );
         }
     }, []);

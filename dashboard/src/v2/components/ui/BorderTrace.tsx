@@ -16,14 +16,14 @@ export const BorderTrace: FunctionComponent<{ accentHex: string }> = ({ accentHe
         {/* Left — grows upward from corner, 200ms delay */}
         <div className="absolute left-0 top-0 bottom-0 w-[1px] overflow-hidden">
             <div
-                className="w-full h-full origin-bottom scale-y-0 group-hover:scale-y-[0.7] transition-transform duration-500 ease- delay-200"
+                className="w-full h-full origin-bottom scale-y-0 group-hover:scale-y-[0.7] transition-transform duration-500 ease-out delay-200"
                 style={{ background: `linear-gradient(0deg, ${accentHex}70, transparent)` }}
             />
         </div>
         {/* Right — grows upward from corner, 200ms delay */}
         <div className="absolute right-0 top-0 bottom-0 w-[1px] overflow-hidden">
             <div
-                className="w-full h-full origin-bottom scale-y-0 group-hover:scale-y-[0.7] transition-transform duration-500 ease- delay-200"
+                className="w-full h-full origin-bottom scale-y-0 group-hover:scale-y-[0.7] transition-transform duration-500 ease-out delay-200"
                 style={{ background: `linear-gradient(0deg, ${accentHex}70, transparent)` }}
             />
         </div>

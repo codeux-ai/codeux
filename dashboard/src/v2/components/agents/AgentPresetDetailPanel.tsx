@@ -39,7 +39,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
         <button
           type="button"
           onClick={onEdit}
-          className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/20 transition-all hover:scale-105 hover:bg-signal-400  focus:ring-4 focus:ring-signal-500/30"
+          className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/20 transition-all hover:scale-105 hover:bg-signal-400 focus:outline-none focus:ring-4 focus:ring-signal-500/30"
         >
           <Edit2 className="h-4 w-4" strokeWidth={2.5} />
           Edit Agent

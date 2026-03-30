@@ -197,7 +197,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
               value={searchQuery}
               onInput={(e) => setSearchQuery((e.target as HTMLInputElement).value)}
               placeholder="Search sprints…"
-              className="h-9 w-56 rounded-full border border-black/[0.08] bg-white/80 pl-9 pr-8 text-xs text-slate-700 placeholder:text-slate-400 focus:border-signal-500/40  focus:ring-2 focus:ring-signal-500/10 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder:text-slate-500"
+              className="h-9 w-56 rounded-full border border-black/[0.08] bg-white/80 pl-9 pr-8 text-xs text-slate-700 placeholder:text-slate-400 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/10 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder:text-slate-500"
             />
             {searchQuery && (
               <button

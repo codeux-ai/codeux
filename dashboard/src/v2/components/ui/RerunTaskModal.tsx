@@ -28,16 +28,15 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
 }) => {
     const backdropRef = useRef<HTMLDivElement>(null);
     const cardRef = useRef<HTMLDivElement>(null);
-    const triggerRef = useRef<HTMLElement | null>(null);
 
     const [provider, setProvider] = useState("");
     const [clearWorktree, setClearWorktree] = useState(false);
 
     useLayoutEffect(() => {
-        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2." });
+        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
         gsap.fromTo(cardRef.current,
             { y: 36, opacity: 0, scale: 0.96 },
-            { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.", delay: 0.04 },
+            { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out", delay: 0.04 },
         );
     }, []);
 
@@ -47,54 +46,12 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     };
 
     useEffect(() => {
-        triggerRef.current = document.activeElement as HTMLElement | null;
-
-        const getFocusableElements = () => {
-            if (!cardRef.current) return [];
-            return Array.from(cardRef.current.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')) as HTMLElement[];
-        };
-
-        if (cardRef.current) {
-            const focusableElements = getFocusableElements();
-            if (focusableElements.length > 0) {
-                focusableElements[0].focus();
-            }
-        }
-
         const handler = (e: KeyboardEvent) => {
-            if (e.key === "Escape") {
-                handleClose();
-            } else if (e.key === "Tab") {
-                if (!cardRef.current) return;
-                const focusableElements = getFocusableElements();
-                if (focusableElements.length === 0) return;
-
-                const first = focusableElements[0];
-                const last = focusableElements[focusableElements.length - 1];
-
-                if (!cardRef.current.contains(document.activeElement)) {
-                    e.preventDefault();
-                    first.focus();
-                    return;
-                }
-
-                if (e.shiftKey && document.activeElement === first) {
-                    e.preventDefault();
-                    last.focus();
-                } else if (!e.shiftKey && document.activeElement === last) {
-                    e.preventDefault();
-                    first.focus();
-                }
-            }
+            if (e.key === "Escape") handleClose();
         };
         document.addEventListener("keydown", handler);
-        return () => {
-            document.removeEventListener("keydown", handler);
-            if (triggerRef.current) {
-                triggerRef.current.focus();
-            }
-        };
-    }, [handleClose]);
+        return () => document.removeEventListener("keydown", handler);
+    }, []);
 
     const handleSubmit = () => {
         onConfirm({
@@ -133,8 +90,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                     <button
                         type="button"
                         onClick={handleClose}
-                        aria-label="Close"
-                        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/[0.04] text-slate-400 hover:text-slate-700 dark:bg-white/[0.04] dark:text-slate-500 dark:hover:text-white transition-colors"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/[0.04] text-slate-400 hover:text-slate-700 dark:bg-white/[0.04] dark:text-slate-500 dark:hover:text-white transition-colors"
                     >
                         <X className="w-3.5 h-3.5" strokeWidth={2} />
                     </button>
@@ -155,7 +111,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                             id="rerun-provider"
                             value={provider}
                             onChange={(e) => setProvider((e.target as HTMLSelectElement).value)}
-                            className="w-full rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.03] px-4 py-2.5 text-[13px] font-medium text-slate-700 dark:text-slate-200  focus:ring-2 focus:ring-signal-500 focus:border-transparent transition-shadow"
+                            className="w-full rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.03] px-4 py-2.5 text-[13px] font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-signal-500 focus:border-transparent transition-shadow"
                         >
                             {PROVIDER_OPTIONS.map(opt => (
                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -195,14 +151,14 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                     <button
                         type="button"
                         onClick={handleClose}
-                        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 px-4 py-2 rounded-xl text-[12px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+                        className="px-4 py-2 rounded-xl text-[12px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
                     >
                         Cancel
                     </button>
                     <button
                         type="button"
                         onClick={handleSubmit}
-                        className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-bold bg-status-amber text-white shadow-[0_4px_16px_rgba(245,158,11,0.25)] hover:shadow-[0_6px_24px_rgba(245,158,11,0.35)] hover:-translate-y-px transition-all duration-200"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-bold bg-status-amber text-white shadow-[0_4px_16px_rgba(245,158,11,0.25)] hover:shadow-[0_6px_24px_rgba(245,158,11,0.35)] hover:-translate-y-px transition-all duration-200"
                     >
                         <RotateCcw className="w-3.5 h-3.5" strokeWidth={2} />
                         Rerun Task

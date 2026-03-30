@@ -54,7 +54,7 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string }> =
             if (!pathRef.current || !svgRef.current) return;
             applyDrawState(false);
             const len = pathRef.current.getTotalLength();
-            gsap.fromTo(pathRef.current, { strokeDashoffset: len }, { strokeDashoffset: 0, duration: 0.85, ease: "power2." });
+            gsap.fromTo(pathRef.current, { strokeDashoffset: len }, { strokeDashoffset: 0, duration: 0.85, ease: "power2.out" });
             gsap.to(svgRef.current, {
                 filter: `drop-shadow(0 0 5px ${color})`,
                 opacity: 0.55,

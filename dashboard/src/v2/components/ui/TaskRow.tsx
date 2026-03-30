@@ -5,7 +5,7 @@ import type { Task } from "../../types.js";
 
 export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
     <div
-        className="group relative flex items-center justify-between py-5 cursor-pointer border-b border-black/[0.05] dark:border-white/[0.04] last:border-0  focus-visible:ring-2 focus-visible:ring-slate-500 dark:focus-visible:ring-slate-400 focus-visible:z-10 focus-visible:rounded-xl"
+        className="group relative flex items-center justify-between py-5 cursor-pointer border-b border-black/[0.05] dark:border-white/[0.04] last:border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 dark:focus-visible:ring-slate-400 focus-visible:z-10 focus-visible:rounded-xl"
         tabIndex={0}
         role="button"
         onKeyDown={(e) => {
@@ -26,7 +26,7 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
 
             {/* Title */}
             <div className="col-span-5 flex items-center min-w-0">
-                <span className={`text-lg font-bold tracking-tight text-slate-900 dark:text-white truncate group-hover:translate-x-1.5 transition-transform duration-300 ease- ${task.status === 'completed' ? 'opacity-50' : task.status === 'coding_completed' ? 'opacity-80' : ''}`}>
+                <span className={`text-lg font-bold tracking-tight text-slate-900 dark:text-white truncate group-hover:translate-x-1.5 transition-transform duration-300 ease-out ${task.status === 'completed' ? 'opacity-50' : task.status === 'coding_completed' ? 'opacity-80' : ''}`}>
                     {task.title}
                 </span>
             </div>

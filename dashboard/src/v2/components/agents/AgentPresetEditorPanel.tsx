@@ -60,7 +60,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
           <button
             type="submit"
             disabled={saving || !name.trim()}
-            className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/20 transition-all hover:scale-105 hover:bg-signal-400  focus:ring-4 focus:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+            className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/20 transition-all hover:scale-105 hover:bg-signal-400 focus:outline-none focus:ring-4 focus:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
           >
             {saving ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.5} /> : <Save className="h-4 w-4" strokeWidth={2.5} />}
             Save Agent
@@ -79,7 +79,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               value={name}
               onInput={(e) => setName(e.currentTarget.value)}
               placeholder="e.g. Planning Agent"
-              className="rounded-xl border border-black/10 bg-slate-50 px-4 py-3 text-base font-medium text-slate-900 focus:border-signal-500  focus:ring-4 focus:ring-signal-500/20 dark:border-white/10 dark:bg-void-800 dark:text-white"
+              className="rounded-xl border border-black/10 bg-slate-50 px-4 py-3 text-base font-medium text-slate-900 focus:border-signal-500 focus:outline-none focus:ring-4 focus:ring-signal-500/20 dark:border-white/10 dark:bg-void-800 dark:text-white"
               required
             />
           </div>
@@ -93,7 +93,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               value={labels}
               onInput={(e) => setLabels(e.currentTarget.value)}
               placeholder="e.g. planning, core"
-              className="rounded-xl border border-black/10 bg-slate-50 px-4 py-3 text-base font-medium text-slate-900 focus:border-signal-500  focus:ring-4 focus:ring-signal-500/20 dark:border-white/10 dark:bg-void-800 dark:text-white"
+              className="rounded-xl border border-black/10 bg-slate-50 px-4 py-3 text-base font-medium text-slate-900 focus:border-signal-500 focus:outline-none focus:ring-4 focus:ring-signal-500/20 dark:border-white/10 dark:bg-void-800 dark:text-white"
             />
           </div>
 
@@ -106,7 +106,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
               onInput={(e) => setInstructionMarkdown(e.currentTarget.value)}
               placeholder="Markdown instructions for this agent's behavior..."
               rows={8}
-              className="rounded-xl border border-black/10 bg-slate-50 px-4 py-3 text-base font-medium text-slate-900 focus:border-signal-500  focus:ring-4 focus:ring-signal-500/20 dark:border-white/10 dark:bg-void-800 dark:text-white"
+              className="rounded-xl border border-black/10 bg-slate-50 px-4 py-3 text-base font-medium text-slate-900 focus:border-signal-500 focus:outline-none focus:ring-4 focus:ring-signal-500/20 dark:border-white/10 dark:bg-void-800 dark:text-white"
             />
           </div>
 
@@ -132,7 +132,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
                   onInput={(e) => setMemoryMarkdown(e.currentTarget.value)}
                   placeholder="Override the default memory prompt template for this agent."
                   rows={5}
-                  className="rounded-xl border border-black/10 bg-white px-4 py-3 text-base font-medium text-slate-900 focus:border-signal-500  focus:ring-4 focus:ring-signal-500/20 dark:border-white/10 dark:bg-void-900 dark:text-white"
+                  className="rounded-xl border border-black/10 bg-white px-4 py-3 text-base font-medium text-slate-900 focus:border-signal-500 focus:outline-none focus:ring-4 focus:ring-signal-500/20 dark:border-white/10 dark:bg-void-900 dark:text-white"
                 />
               </div>
             )}

@@ -22,64 +22,23 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
 }) => {
   const backdropRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLElement | null>(null);
   const [sprintText, setSprintText] = useState(sprintMarkdown);
   const [tasksText, setTasksText] = useState(tasksMarkdown);
   const [copiedField, setCopiedField] = useState<"sprint" | "tasks" | null>(null);
 
   useLayoutEffect(() => {
-    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2." });
-    gsap.fromTo(cardRef.current, { y: 42, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4." });
+    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
+    gsap.fromTo(cardRef.current, { y: 42, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" });
   }, []);
 
   useEffect(() => {
-    triggerRef.current = document.activeElement as HTMLElement | null;
-
-    const getFocusableElements = () => {
-        if (!cardRef.current) return [];
-        return Array.from(cardRef.current.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')) as HTMLElement[];
-    };
-
-    if (cardRef.current) {
-        const focusableElements = getFocusableElements();
-        if (focusableElements.length > 0) {
-            focusableElements[0].focus();
-        }
-    }
-
     const handler = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
-      } else if (event.key === "Tab") {
-        if (!cardRef.current) return;
-        const focusableElements = getFocusableElements();
-        if (focusableElements.length === 0) return;
-
-        const first = focusableElements[0];
-        const last = focusableElements[focusableElements.length - 1];
-
-        if (!cardRef.current.contains(document.activeElement)) {
-            event.preventDefault();
-            first.focus();
-            return;
-        }
-
-        if (event.shiftKey && document.activeElement === first) {
-            event.preventDefault();
-            last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-            event.preventDefault();
-            first.focus();
-        }
       }
     };
     document.addEventListener("keydown", handler);
-    return () => {
-        document.removeEventListener("keydown", handler);
-        if (triggerRef.current) {
-            triggerRef.current.focus();
-        }
-    };
+    return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
   const handleBackdropClick = (event: MouseEvent) => {
@@ -162,8 +121,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
             </div>
             <button
               onClick={onClose}
-              aria-label="Close"
-              className="touch-target focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
@@ -199,7 +157,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                   value={sprintText}
                   onInput={(event) => setSprintText((event.target as HTMLTextAreaElement).value)}
                   readOnly={mode === "export"}
-                  className="w-full min-h-[180px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300  focus:border-signal-500 resize-none font-mono"
+                  className="w-full min-h-[180px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none font-mono"
                   placeholder="name: Sprint Name&#10;number: 1&#10;status: running&#10;goal:&#10;Describe the sprint scope."
                 />
               </div>
@@ -232,7 +190,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                   value={tasksText}
                   onInput={(event) => setTasksText((event.target as HTMLTextAreaElement).value)}
                   readOnly={mode === "export"}
-                  className="w-full min-h-[240px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300  focus:border-signal-500 resize-none font-mono"
+                  className="w-full min-h-[240px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none font-mono"
                   placeholder={'--- FILE: T01.md ---\ntitle: Task Title\ndepends_on: []\nis_independent: true\nmerged: false\nprompt:\nDetailed instructions'}
                 />
               </div>

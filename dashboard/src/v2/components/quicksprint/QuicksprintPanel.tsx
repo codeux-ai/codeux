@@ -222,7 +222,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   useEffect(() => {
     if (!cardRef.current) return;
     gsap.fromTo(cardRef.current, { y: 28, opacity: 0, scale: 0.985 }, {
-      y: 0, opacity: 1, scale: 1, duration: 0.72, ease: "power4.",
+      y: 0, opacity: 1, scale: 1, duration: 0.72, ease: "power4.out",
     });
   }, []);
 
@@ -231,7 +231,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     const items = fieldsRef.current.querySelectorAll("[data-qs-stagger]");
     if (!items.length) return;
     gsap.fromTo(items, { y: 18, opacity: 0 }, {
-      y: 0, opacity: 1, stagger: 0.055, duration: 0.5, ease: "power3.",
+      y: 0, opacity: 1, stagger: 0.055, duration: 0.5, ease: "power3.out",
     });
   }, [phase]);
 
@@ -530,7 +530,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                   onInput={(e) => setAdditionalPrompt((e.target as HTMLTextAreaElement).value)}
                   placeholder="Add extra context or requirements for this specific run — e.g. 'Focus only on the auth module' or 'Include migration scripts'..."
                   rows={4}
-                  className="w-full rounded-[1.7rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm leading-relaxed text-slate-700  transition-all placeholder:text-slate-300 focus:border-ember-500/40 focus:shadow-[0_0_0_1px_rgba(255,107,0,0.16),0_0_30px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
+                  className="w-full rounded-[1.7rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-ember-500/40 focus:shadow-[0_0_0_1px_rgba(255,107,0,0.16),0_0_30px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
                 />
               </div>
 
@@ -616,7 +616,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                 value={edName}
                 onInput={(e) => setEdName((e.target as HTMLInputElement).value)}
                 placeholder="API Integration Tests"
-                className="w-full border-0 border-b-2 border-black/[0.08] bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900  transition-colors placeholder:text-slate-200 focus:border-ember-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
+                className="w-full border-0 border-b-2 border-black/[0.08] bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-ember-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
                 autoFocus
               />
             </label>
@@ -629,7 +629,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                 value={edDescription}
                 onInput={(e) => setEdDescription((e.target as HTMLInputElement).value)}
                 placeholder="What this template does in one line"
-                className="w-full border-0 border-b-2 border-black/[0.06] bg-transparent pb-2 text-sm leading-relaxed text-slate-700  transition-colors placeholder:text-slate-300 focus:border-ember-500/60 dark:border-white/[0.06] dark:text-slate-300 dark:placeholder:text-slate-600"
+                className="w-full border-0 border-b-2 border-black/[0.06] bg-transparent pb-2 text-sm leading-relaxed text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:border-ember-500/60 dark:border-white/[0.06] dark:text-slate-300 dark:placeholder:text-slate-600"
               />
             </label>
 
@@ -679,7 +679,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                     value={edCategory}
                     onInput={(e) => setEdCategory((e.target as HTMLInputElement).value)}
                     placeholder="e.g. engineering..."
-                    className="flex-1 min-w-0 border-0 border-b-2 border-black/[0.06] bg-transparent pb-1 text-sm text-slate-700  transition-colors placeholder:text-slate-300 focus:border-ember-500/60 dark:border-white/[0.06] dark:text-slate-300 dark:placeholder:text-slate-600"
+                    className="flex-1 min-w-0 border-0 border-b-2 border-black/[0.06] bg-transparent pb-1 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:border-ember-500/60 dark:border-white/[0.06] dark:text-slate-300 dark:placeholder:text-slate-600"
                   />
                 </div>
 
@@ -802,7 +802,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                 onInput={(e) => setEdInstruction((e.target as HTMLTextAreaElement).value)}
                 placeholder="Write detailed instructions for the planning agent. Leave empty to use only the agent preset's instructions..."
                 rows={10}
-                className="w-full rounded-[1.7rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm font-mono leading-relaxed text-slate-700  transition-all placeholder:text-slate-300 focus:border-ember-500/40 focus:shadow-[0_0_0_1px_rgba(255,107,0,0.16),0_0_30px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
+                className="w-full rounded-[1.7rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm font-mono leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-ember-500/40 focus:shadow-[0_0_0_1px_rgba(255,107,0,0.16),0_0_30px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
               />
             </div>
 

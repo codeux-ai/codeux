@@ -74,7 +74,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
                 aria-label="Docker Status"
                 aria-haspopup="dialog"
                 aria-expanded={isHovered}
-                className={`w-11 h-11 flex items-center justify-center rounded-xl transition-colors  focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
+                className={`w-11 h-11 flex items-center justify-center rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
                     isHovered
                         ? "bg-black/[0.05] dark:bg-white/[0.05]"
                         : "hover:bg-black/[0.05] dark:hover:bg-white/[0.05]"

@@ -73,7 +73,7 @@ const TextField: FunctionComponent<{ value: string; onChange: (value: string) =>
     type="text"
     value={value}
     onInput={(event) => onChange((event.currentTarget as HTMLInputElement).value)}
-    className={`h-11 rounded-xl border border-black/[0.08] bg-white px-3 text-sm text-slate-700  transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-void-900 dark:text-slate-200 ${mono ? "font-mono" : ""}`}
+    className={`h-11 rounded-xl border border-black/[0.08] bg-white px-3 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-void-900 dark:text-slate-200 ${mono ? "font-mono" : ""}`}
   />
 );
 
@@ -81,7 +81,7 @@ const TextAreaField: FunctionComponent<{ value: string; onChange: (value: string
   <textarea
     value={value}
     onInput={(event) => onChange((event.currentTarget as HTMLTextAreaElement).value)}
-    className="min-h-[112px] w-full rounded-2xl border border-black/[0.08] bg-white px-3 py-3 text-sm text-slate-700  transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-void-900 dark:text-slate-200"
+    className="min-h-[112px] w-full rounded-2xl border border-black/[0.08] bg-white px-3 py-3 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-void-900 dark:text-slate-200"
   />
 );
 
@@ -97,7 +97,7 @@ const NumberField: FunctionComponent<{ value: number; onChange: (value: number) 
     min={min}
     max={max}
     onInput={(event) => onChange(Number((event.currentTarget as HTMLInputElement).value))}
-    className="h-11 w-28 rounded-xl border border-black/[0.08] bg-white px-3 font-mono text-sm text-slate-700  transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-void-900 dark:text-slate-200"
+    className="h-11 w-28 rounded-xl border border-black/[0.08] bg-white px-3 font-mono text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-void-900 dark:text-slate-200"
   />
 );
 
@@ -359,7 +359,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
             />
           </Row>
-          <Row label="Dispatch timeout" description="Seconds to wait for a worker to finish a single task dispatch before timing ." badge={getBadge("workers.timeoutSeconds")}>
+          <Row label="Dispatch timeout" description="Seconds to wait for a worker to finish a single task dispatch before timing out." badge={getBadge("workers.timeoutSeconds")}>
             <NumberField
               value={settings.workers.timeoutSeconds}
               min={60}

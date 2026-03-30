@@ -19,7 +19,7 @@ export const Sidebar: FunctionComponent = () => {
 
     useEffect(() => {
         if (sidebarRef.current) {
-            gsap.fromTo(sidebarRef.current, { x: -50, opacity: 0 }, { x: 0, opacity: 1, duration: 1.2, ease: "power4." });
+            gsap.fromTo(sidebarRef.current, { x: -50, opacity: 0 }, { x: 0, opacity: 1, duration: 1.2, ease: "power4.out" });
         }
     }, []);
 
@@ -32,7 +32,7 @@ export const Sidebar: FunctionComponent = () => {
                 gsap.to(lineRef.current, {
                     attr: { d: path },
                     duration: 0.6,
-                    ease: "power2."
+                    ease: "power2.out"
                 });
             }
         }
@@ -75,7 +75,7 @@ export const Sidebar: FunctionComponent = () => {
                 <div aria-hidden="true" className="w-9 h-9 rounded-2xl bg-void-900 dark:bg-[#F9F8F4] p-[1px] shadow-[0_0_16px_rgba(0,224,160,0.2)] group-hover:shadow-[0_0_24px_rgba(0,224,160,0.35)] transition-shadow duration-500">
                     <div className="w-full h-full bg-[#F9F8F4] dark:bg-void-900 rounded-[14px] flex items-center justify-center">
                         <div className="w-4 h-4 rounded-full bg-void-900 dark:bg-[#F9F8F4] relative">
-                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-signal-500 group-hover:scale-[2] transition-transform duration-500 ease- shadow-[0_0_6px_rgba(0,224,160,0.8)]" />
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-signal-500 group-hover:scale-[2] transition-transform duration-500 ease-out shadow-[0_0_6px_rgba(0,224,160,0.8)]" />
                         </div>
                     </div>
                 </div>
@@ -113,7 +113,7 @@ export const Sidebar: FunctionComponent = () => {
             <div className="px-4 relative z-10">
                 <button aria-label="Settings" className="relative w-full flex items-center gap-3.5 px-5 py-3 rounded-2xl transition-colors duration-200 text-left group overflow-hidden focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10">
                     <div className="absolute inset-0 rounded-2xl bg-transparent group-hover:bg-black/[0.03] dark:group-hover:bg-white/[0.03] transition-opacity duration-300 pointer-events-none opacity-0 group-hover:opacity-100" />
-                    <Settings aria-hidden="true" className="relative z-10 w-4 h-4 text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 group-hover:rotate-90 transition-all duration-700 ease-in-" strokeWidth={1.5} />
+                    <Settings aria-hidden="true" className="relative z-10 w-4 h-4 text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 group-hover:rotate-90 transition-all duration-700 ease-in-out" strokeWidth={1.5} />
                     <span className="relative z-10 font-medium text-sm tracking-wide text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-300">Settings</span>
                 </button>
             </div>

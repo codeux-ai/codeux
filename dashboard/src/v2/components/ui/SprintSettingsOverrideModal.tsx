@@ -31,7 +31,6 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
 }) => {
   const backdropRef = useRef<HTMLDivElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLElement | null>(null);
 
   const [settings, setSettings] = useState<ProjectSettings | null>(null);
   const [savedSettings, setSavedSettings] = useState<ProjectSettings | null>(null);
@@ -59,8 +58,8 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
   };
 
   useLayoutEffect(() => {
-    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2." });
-    gsap.fromTo(cardRef.current, { y: 42, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4." });
+    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
+    gsap.fromTo(cardRef.current, { y: 42, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" });
   }, []);
 
   useEffect(() => {
@@ -68,53 +67,13 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
   }, [projectId, sprint.id]);
 
   useEffect(() => {
-    triggerRef.current = document.activeElement as HTMLElement | null;
-
-    const getFocusableElements = () => {
-        if (!cardRef.current) return [];
-        return Array.from(cardRef.current.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')) as HTMLElement[];
-    };
-
-    if (cardRef.current) {
-        const focusableElements = getFocusableElements();
-        if (focusableElements.length > 0) {
-            focusableElements[0].focus();
-        }
-    }
-
     const handler = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
-      } else if (event.key === "Tab") {
-        if (!cardRef.current) return;
-        const focusableElements = getFocusableElements();
-        if (focusableElements.length === 0) return;
-
-        const first = focusableElements[0];
-        const last = focusableElements[focusableElements.length - 1];
-
-        if (!cardRef.current.contains(document.activeElement)) {
-            event.preventDefault();
-            first.focus();
-            return;
-        }
-
-        if (event.shiftKey && document.activeElement === first) {
-            event.preventDefault();
-            last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-            event.preventDefault();
-            first.focus();
-        }
       }
     };
     document.addEventListener("keydown", handler);
-    return () => {
-        document.removeEventListener("keydown", handler);
-        if (triggerRef.current) {
-            triggerRef.current.focus();
-        }
-    };
+    return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
   useEffect(() => {
@@ -224,8 +183,7 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
               <button
                 type="button"
                 onClick={onClose}
-                aria-label="Close"
-                className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/[0.05] text-slate-500 transition-colors hover:text-slate-900 dark:bg-white/[0.05] dark:text-slate-400 dark:hover:text-white"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/[0.05] text-slate-500 transition-colors hover:text-slate-900 dark:bg-white/[0.05] dark:text-slate-400 dark:hover:text-white"
               >
                 <X className="h-4 w-4" strokeWidth={2.1} />
               </button>

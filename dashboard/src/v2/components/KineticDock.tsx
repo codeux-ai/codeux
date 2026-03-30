@@ -37,7 +37,7 @@ export const KineticDock: FunctionComponent = () => {
         if (dockRef.current) {
             gsap.fromTo(dockRef.current,
                 { y: 100, opacity: 0, scale: 0.8 },
-                { y: 0, opacity: 1, scale: 1, duration: 1.4, ease: "elastic.(1, 0.7)", delay: 0.2 },
+                { y: 0, opacity: 1, scale: 1, duration: 1.4, ease: "elastic.out(1, 0.7)", delay: 0.2 },
             );
         }
     }, []);
@@ -71,11 +71,11 @@ export const KineticDock: FunctionComponent = () => {
                     scale: 1 + 0.45 * ratio,
                     y: -18 * ratio,
                     duration: 0.35,
-                    ease: "power2.",
+                    ease: "power2.out",
                     overwrite: "auto",
                 });
             } else {
-                gsap.to(item, { scale: 1, y: 0, duration: 0.35, ease: "power2.", overwrite: "auto" });
+                gsap.to(item, { scale: 1, y: 0, duration: 0.35, ease: "power2.out", overwrite: "auto" });
             }
         });
     };
@@ -83,7 +83,7 @@ export const KineticDock: FunctionComponent = () => {
     const handleMouseLeave = () => {
         itemRefs.current.forEach(item => {
             if (!item) return;
-            gsap.to(item, { scale: 1, y: 0, duration: 0.55, ease: "elastic.(1, 0.5)", overwrite: "auto" });
+            gsap.to(item, { scale: 1, y: 0, duration: 0.55, ease: "elastic.out(1, 0.5)", overwrite: "auto" });
         });
     };
 
@@ -116,7 +116,7 @@ export const KineticDock: FunctionComponent = () => {
                                  group-hover:opacity-100 group-hover:scale-100
                                  -translate-y-1 group-hover:-translate-y-0
                                  pointer-events-none
-                                 transition-all duration-200 ease-
+                                 transition-all duration-200 ease-out
                                  shadow-xl backdrop-blur-md whitespace-nowrap">
                     {item.label}
                 </span>

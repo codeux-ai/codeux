@@ -32,7 +32,7 @@ export const ChatAvatar: FunctionComponent<ChatAvatarProps> = ({ role, provider,
               strokeLinecap="round"
               strokeLinejoin="round"
               class="jules-j-draw"
-              style={{ animation: "jules-j-draw 3s ease-in- infinite", animationFillMode: "both" }}
+              style={{ animation: "jules-j-draw 3s ease-in-out infinite", animationFillMode: "both" }}
             />
           </svg>
         );

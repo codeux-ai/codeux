@@ -30,7 +30,7 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
             scale: 1.08,
             rotation: (Math.random() - 0.5) * 8,
             duration: 0.6,
-            ease: "back.(2)",
+            ease: "back.out(2)",
             overwrite: true,
         });
     }, []);
@@ -41,7 +41,7 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
             scale: 1,
             rotation: 0,
             duration: 0.8,
-            ease: "elastic.(1, 0.5)",
+            ease: "elastic.out(1, 0.5)",
             overwrite: true,
         });
     }, []);
@@ -55,7 +55,7 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
             onBlur={handleHoverLeave}
             role="group"
             tabIndex={0}
-            className="relative group cursor-pointer w-56 h-56 flex items-center justify-center shrink-0 perspective-1000 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-[2rem] "
+            className="relative group cursor-pointer w-56 h-56 flex items-center justify-center shrink-0 perspective-1000 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-[2rem] focus:outline-none"
             style={{ animationDelay: `${animDelay}s` }}
         >
             {/* Shadow underlay */}
@@ -76,7 +76,7 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
             </div>
 
             {/* Content */}
-            <div className="relative z-20 flex flex-col items-center justify-center text-center p-5 w-full h-full transform-gpu group-hover:translate-z-12 transition-transform duration-500 ease-">
+            <div className="relative z-20 flex flex-col items-center justify-center text-center p-5 w-full h-full transform-gpu group-hover:translate-z-12 transition-transform duration-500 ease-out">
                 {/* Status label on hover */}
                 <div className={`absolute top-5 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${state.text}`}>
                     <StatusIcon className={`w-3.5 h-3.5 ${source.status === 'running' ? 'animate-pulse' : ''}`} strokeWidth={2.5} />
@@ -84,7 +84,7 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
                 </div>
 
                 {/* Main icon */}
-                <div className="touch-target w-10 h-10 rounded-full flex items-center justify-center text-slate-600 dark:text-slate-400 group-hover:opacity-0 transition-opacity duration-300 mb-2">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center text-slate-600 dark:text-slate-400 group-hover:opacity-0 transition-opacity duration-300 mb-2">
                     <FolderGit2 className="w-7 h-7" strokeWidth={1} />
                 </div>
 

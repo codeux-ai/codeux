@@ -94,7 +94,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
       scale: 1.05,
       rotation: (Math.random() - 0.5) * 4,
       duration: 0.8,
-      ease: "elastic.(1, 0.5)",
+      ease: "elastic.out(1, 0.5)",
       overwrite: "auto",
     });
   };
@@ -107,7 +107,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
       scale: 1,
       rotation: 0,
       duration: 0.95,
-      ease: "elastic.(1, 0.5)",
+      ease: "elastic.out(1, 0.5)",
       overwrite: "auto",
     });
   };
@@ -263,7 +263,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
                 onToggleShowcase?.();
               }}
               disabled={showcaseBusy}
-              className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+              className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
             >
               <Heart className="h-3.5 w-3.5" fill={sprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
               {sprint.showcasePinned ? "Remove" : "Add"}

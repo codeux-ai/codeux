@@ -19,7 +19,7 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
             gsap.fromTo(
                 listRef.current.children,
                 { y: 30, opacity: 0, scale: 0.99 },
-                { y: 0, opacity: 1, scale: 1, duration: 0.7, stagger: 0.04, ease: "power3.", delay: 0.1 }
+                { y: 0, opacity: 1, scale: 1, duration: 0.7, stagger: 0.04, ease: "power3.out", delay: 0.1 }
             );
         }
     }, [activeFilter]);

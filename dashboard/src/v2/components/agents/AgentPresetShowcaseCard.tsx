@@ -11,7 +11,7 @@ export const AgentPresetShowcaseCard: FunctionComponent<{
   <button
     type="button"
     onClick={onClick}
-    className={`group relative flex w-full flex-col overflow-hidden rounded-[1.5rem] border p-6 text-left transition-all hover:shadow-xl  focus:ring-4 ${
+    className={`group relative flex w-full flex-col overflow-hidden rounded-[1.5rem] border p-6 text-left transition-all hover:shadow-xl focus:outline-none focus:ring-4 ${
       isSelected
         ? "border-signal-500 bg-white shadow-[0_8px_30px_rgba(0,224,160,0.15)] ring-signal-500/20 dark:border-signal-500 dark:bg-void-900"
         : "border-black/[0.08] bg-white/60 hover:border-signal-500/50 hover:bg-white dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:border-signal-500/50 dark:hover:bg-void-800"

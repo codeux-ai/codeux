@@ -22,7 +22,7 @@ export const SourcesGrid: FunctionComponent = () => {
                     scale: 1,
                     duration: 1.1,
                     stagger: { amount: 0.7, from: "center" },
-                    ease: "elastic.(1, 0.7)",
+                    ease: "elastic.out(1, 0.7)",
                     delay: 0.1
                 }
             );
