@@ -550,5 +550,6 @@ For provider-backed runs, session polling is now used to ingest durable runtime 
 - A shared dashboard resource layer manages resource keys, caching, and invalidation, deduplicating fetches and avoiding UI flashing during background updates.
 - Heavy list views use a progressive list strategy (`useProgressiveList`) with an intersection observer to render items in batches and prevent main-thread blocking.
 - Backend read-model optimizations efficiently project data to support the resource layer while leaving API routes and backend contracts entirely unchanged.
+- Extensionless dashboard routes like `/sprints` are served by the SPA app shell on direct load or refresh. This routing behavior remains consistent even when Sprint OS itself is running inside a preview container.
 
 - A "Live Preview" CTA link now appears in the Live view header when the relevant sprint has an active (`running`) preview session with a resolved `hostPort`. The link securely routes directly to the iframe preview origin (`buildPreviewUrl`) at the `lastKnownPath`.

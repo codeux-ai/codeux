@@ -1122,23 +1122,23 @@ describe("SprintPreviewService unit tests", () => {
       expect(exists).toBe(false);
     });
 
-    it("resolvePreviewExportRef prefers local branch", async () => {
+    it("resolvePreviewExportRef prefers origin ref when both exist", async () => {
       vi.mocked(runCommandStrict).mockResolvedValue({ exitCode: 0, stdout: "", stderr: "", durationMs: 1 });
       const service = new SprintPreviewService(deps as any);
       const ref = await (service as any).resolvePreviewExportRef("/repo", "feature");
-      expect(ref).toBe("feature");
+      expect(ref).toBe("origin/feature");
     });
 
-    it("resolvePreviewExportRef falls back to origin ref", async () => {
+    it("resolvePreviewExportRef falls back to local ref when no origin", async () => {
       let callCount = 0;
       vi.mocked(runCommandStrict).mockImplementation(async () => {
         callCount++;
-        if (callCount === 1) throw new Error("not local"); // localBranchExists
-        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 }; // remoteTrackingRefExists
+        if (callCount === 1) throw new Error("not remote"); // remoteTrackingRefExists
+        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 }; // localBranchExists
       });
       const service = new SprintPreviewService(deps as any);
       const ref = await (service as any).resolvePreviewExportRef("/repo", "feature");
-      expect(ref).toBe("origin/feature");
+      expect(ref).toBe("feature");
     });
 
     it("resolvePreviewExportRef throws when branch not found anywhere", async () => {

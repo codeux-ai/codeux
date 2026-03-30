@@ -111,6 +111,9 @@ It supports:
 - rebuild when a sprint transitions into a completed terminal state
 - auto-stop when a sprint becomes terminal
 
+Rebuild behaviors:
+- A rebuild (whether triggered automatically or manually via `POST /api/browser/sessions/:sessionId/rebuild`) now synchronizes the sprint feature branch with `origin` before exporting the workspace. This ensures remote changes (such as those pushed by remote Jules workers) are reflected in rebuilt containers.
+
 These behaviors are controlled through scoped settings under `sprintPreview`.
 
 Startup hygiene:
