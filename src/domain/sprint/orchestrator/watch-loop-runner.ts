@@ -503,17 +503,16 @@ export class WatchLoopRunner {
           return { status: "exit", report };
         }
         this.deps.completedSprints.add(`${scopedExecutionContext.project.id}:${scopedExecutionContext.sprint.id}`);
-        this.deps.executionRepository.updateSprintRun(sprintRunId, {
-          status: "completed",
-          finishedAt: new Date().toISOString(),
-          lastHeartbeatAt: new Date().toISOString(),
-        });
-        this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_completed", "system", {
-          sprintNumber: scopedExecutionContext.sprintNumber,
-          taskCount: subtasks.length,
-        }, {
-          sourceEventKey: `sprint-completed:${sprintRunId}`,
-        });
+        this.transitionSprintRun(
+          sprintRunId,
+          "completed",
+          "sprint_completed",
+          {
+            sprintNumber: scopedExecutionContext.sprintNumber,
+            taskCount: subtasks.length,
+          },
+          `sprint-completed:${sprintRunId}`
+        );
         this.triggerAutoPromote(scopedExecutionContext.project.id, scopedExecutionContext.sprint.id);
         report += await this.deps.renderInstruction("cleanupAllMerged", { planning_target: scopedExecutionContext.sprint.name }, repoPath);
         report += completionGuidance;
@@ -528,51 +527,43 @@ export class WatchLoopRunner {
       const { tasksByStatus, statusCounts } = partitionSubtasksByStatus(subtasks);
       const failedTaskCount = statusCounts["FAILED"] || 0;
       if (failedTaskCount > 0) {
-        this.deps.executionRepository.updateSprintRun(sprintRunId, {
-          status: "failed",
-          finishedAt: new Date().toISOString(),
-          lastHeartbeatAt: new Date().toISOString(),
-        });
-        this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_failed", "system", {
-          failedTaskCount,
-        }, {
-          sourceEventKey: `sprint-failed:${sprintRunId}`,
-        });
+        this.transitionSprintRun(
+          sprintRunId,
+          "failed",
+          "sprint_failed",
+          { failedTaskCount },
+          `sprint-failed:${sprintRunId}`
+        );
         report += await this.deps.renderInstruction("cleanupFailed", { planning_target: scopedExecutionContext.sprint.name }, repoPath);
       } else if (manualMergeTasks.length > 0) {
-        this.deps.executionRepository.updateSprintRun(sprintRunId, {
-          status: "paused",
-          lastHeartbeatAt: new Date().toISOString(),
-        });
-        this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_paused", "system", {
-          reason: "awaiting_merge",
-          awaitingMergeCount: manualMergeTasks.length,
-        }, {
-          sourceEventKey: `sprint-paused:${sprintRunId}:awaiting-merge`,
-        });
+        this.transitionSprintRun(
+          sprintRunId,
+          "paused",
+          "sprint_paused",
+          {
+            reason: "awaiting_merge",
+            awaitingMergeCount: manualMergeTasks.length,
+          },
+          `sprint-paused:${sprintRunId}:awaiting-merge`
+        );
         report += await this.deps.renderInstruction("cleanupDeferred", {}, repoPath);
       } else if (subtasks.length === 0) {
-        this.deps.executionRepository.updateSprintRun(sprintRunId, {
-          status: "cancelled",
-          finishedAt: new Date().toISOString(),
-          lastHeartbeatAt: new Date().toISOString(),
-        });
-        this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_cancelled", "system", {
-          reason: "empty",
-        }, {
-          sourceEventKey: `sprint-cancelled:${sprintRunId}:empty`,
-        });
+        this.transitionSprintRun(
+          sprintRunId,
+          "cancelled",
+          "sprint_cancelled",
+          { reason: "empty" },
+          `sprint-cancelled:${sprintRunId}:empty`
+        );
         report += await this.renderInstruction("cleanupEmpty", {}, repoPath);
       } else {
-        this.deps.executionRepository.updateSprintRun(sprintRunId, {
-          status: "paused",
-          lastHeartbeatAt: new Date().toISOString(),
-        });
-        this.deps.executionRepository.appendSprintRunEvent(sprintRunId, "sprint_paused", "system", {
-          reason: "manual_attention",
-        }, {
-          sourceEventKey: `sprint-paused:${sprintRunId}:manual-attention`,
-        });
+        this.transitionSprintRun(
+          sprintRunId,
+          "paused",
+          "sprint_paused",
+          { reason: "manual_attention" },
+          `sprint-paused:${sprintRunId}:manual-attention`
+        );
         this.deps.projectAttentionService.openItem({
           projectId: scopedExecutionContext.project.id,
           sprintId: scopedExecutionContext.sprint.id,
@@ -596,6 +587,34 @@ export class WatchLoopRunner {
     }
 
     return { status: "continue", report };
+  }
+
+  private transitionSprintRun(
+    sprintRunId: string,
+    status: string,
+    eventType: string,
+    eventPayload: Record<string, unknown>,
+    sourceEventKeySuffix: string
+  ): void {
+    const now = new Date().toISOString();
+    const isTerminal = status === "completed" || status === "failed" || status === "cancelled";
+
+    const updatePayload: Record<string, unknown> = {
+      status,
+      lastHeartbeatAt: now,
+    };
+    if (isTerminal) {
+      updatePayload.finishedAt = now;
+    }
+
+    this.deps.executionRepository.updateSprintRun(sprintRunId, updatePayload as any);
+    this.deps.executionRepository.appendSprintRunEvent(
+      sprintRunId,
+      eventType,
+      "system",
+      eventPayload,
+      { sourceEventKey: sourceEventKeySuffix }
+    );
   }
 }
 function resolveMainMergeConflictAttentionItems(
