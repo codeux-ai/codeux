@@ -224,11 +224,11 @@ Legacy runtime:
 - Stats page now matches the high-interaction v2 dashboard card language more closely:
   - animated metric cards
   - a unified glass-panel system that mirrors the premium live card surfaces instead of using a separate visual treatment
-  - a full-width analysis studio that switches completely between `Trend`, `Composition`, and `Reliability` modes
-  - an interactive trend graph with hover bucket inspection, a toggleable legend for tokens/active time/invocation volume, smooth staged line-draw animation that matches the metric-card sparkline language, and drag-to-zoom timeframe selection
+  - a relocated analysis-mode control that focuses the workspace on trend, composition, or reliability
+  - a full-width interactive trend graph with hover bucket inspection, a clickable detailed-series sidebar for configuring the chart, smooth staged line-draw animation that matches the metric-card sparkline language, and drag-to-zoom timeframe selection
   - hourly views keep one-hour hover targets while reducing visible axis labels to a three-hour rhythm for readability
   - donut-style composition charts for providers, token anatomy, and telemetry-source mix now animate as interactive slices with hover emphasis and center-detail readouts
-  - redesigned task and sprint ledgers with search, sort-by-recency/tokens/time/input/output/name, and richer token/time breakdowns
+  - tabbed task and sprint telemetry sections replacing the always-visible ledger layout, complete with search, sort-by-recency/tokens/time/input/output/name, and richer token/time breakdowns
 - The Stats page uses the same project realtime invalidation channels as the rest of the v2 dashboard, then falls back to polling so usage graphs and tables stay current during active sprint execution
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface, and task streams are filtered to the currently selected active sprint only (a frontend-only view change with no API contract change)
 - Agents page is DB-backed and manages project-scoped agents (`name`, `labels`, `instruction markdown`)
