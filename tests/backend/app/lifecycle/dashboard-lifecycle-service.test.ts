@@ -168,6 +168,7 @@ describe("dashboard-lifecycle-service", () => {
         retryTaskDispatch: vi.fn().mockResolvedValue({ id: "task-1" }),
       } as any,
       dashboardRealtimeService: {
+        scheduleProjectLiveRefresh: vi.fn(),
         setSnapshotLoaders: vi.fn(),
       } as any,
       logger: {

@@ -101,6 +101,16 @@ export interface DashboardStatus {
   timestamp: string | null;
 }
 
+export interface ProjectLiveDashboardSnapshot {
+  projectId: string | null;
+  selectedSprintId: string | null;
+  status: DashboardStatus;
+  execution: ExecutionDashboardSnapshot;
+  gitStatus: GitTrackingStatus | null;
+  gitStatusError: string | null;
+  updatedAt: string | null;
+}
+
 export interface LiveActivitiesResponse {
   activitiesBySession: Record<string, JulesActivity[]>;
   polledAt: string;

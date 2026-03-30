@@ -13,16 +13,13 @@ import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { HumanInterventionBadge } from "./components/ui/HumanInterventionBadge.js";
 import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
-import { useSprints } from "../hooks/useSprints.js";
 import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
-import { LivePreviewLink } from "./components/ui/LivePreviewLink.js";
 import { useLiveSessionActions } from "./hooks/use-live-session-actions.js";
 import { formatTime } from "../lib/time.js";
 import { renderMarkdown } from "../lib/markdown.js";
-import type { Subtask, ExecutionDashboardSnapshot, ExecutionRuntimeEventSummary } from "../types.js";
-import { deriveLiveSessionRuntimeState, resolveLiveSessionSprintScopeId } from "./lib/live-session-runtime.js";
+import type { Subtask, ExecutionRuntimeEventSummary } from "../types.js";
+import { deriveLiveSessionRuntimeState } from "./lib/live-session-runtime.js";
 import { getTaskProgressPhase } from "../lib/task-progress.js";
-import { computeStats } from "../lib/status.js";
 
 import { IntelPanel } from "./components/ui/IntelPanel.js";
 import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
@@ -41,8 +38,6 @@ import { RuntimeEventFeed } from "./components/RuntimeEventFeed.js";
 import { GitCIStatusPanel } from "./components/GitCIStatusPanel.js";
 import { deriveLiveDurationDisplay } from "./lib/live-duration-display.js";
 import { useProjectData } from "./context/project-data.js";
-import { useProjectTasks } from "./hooks/use-project-tasks.js";
-import { buildLiveSessionTasks } from "./lib/live-session-task-structure.js";
 
 
 
@@ -96,31 +91,26 @@ const EMPTY_LIVE_SESSION_RUNTIME_STATE = {
 export const LiveSessionPage: FunctionComponent = () => {
 
     const contentRef = useRef<HTMLDivElement>(null);
-    const { projects, selectedProjectId } = useProjectData();
-    const { error, execution, gitStatus, gitStatusError, initialLoadComplete: legacyInitialLoadComplete, refreshRuntimeStatus, refreshGitStatus, status, tasksWithLiveActivities } = useDashboardRuntimeData(selectedProjectId);
+    const { selectedProjectId } = useProjectData();
+    const {
+        error,
+        execution,
+        gitStatus,
+        gitStatusError,
+        initialLoadComplete,
+        refreshRuntimeStatus,
+        refreshGitStatus,
+        selectedSprintId,
+        status,
+        tasksWithLiveActivities,
+    } = useDashboardRuntimeData(selectedProjectId);
     const realtimeProjectId = selectedProjectId || execution.projectId || status.project_id || null;
-    const { data: sprints, selectedSprintId, loading: sprintsLoading } = useSprints(realtimeProjectId);
-    const sprintScopeId = useMemo(
-        () => resolveLiveSessionSprintScopeId(status, execution, selectedSprintId),
-        [execution, selectedSprintId, status],
-    );
+    const sprintScopeId = selectedSprintId || status.sprint_id || null;
     const { selectedSession } = usePreviewSessions({
         projectId: realtimeProjectId,
         selectedSprintId: sprintScopeId
     });
-    const sprintScopeReady = Boolean(
-        selectedSprintId
-        || sprintScopeId
-        || (legacyInitialLoadComplete && !sprintsLoading)
-    );
-    const { tasks: projectTasks } = useProjectTasks(
-        realtimeProjectId,
-        projects,
-        sprints,
-        sprintScopeReady ? sprintScopeId : undefined,
-        { enabled: sprintScopeReady },
-    );
-    const initialLoadComplete = legacyInitialLoadComplete && !sprintsLoading;
+    const sprintScopeReady = Boolean(selectedSprintId || sprintScopeId || initialLoadComplete);
 
     const {
         rerunningIds,
@@ -192,16 +182,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             : execution.sprintRuns;
     }, [execution.sprintRuns, sprintScopeId, sprintScopeReady]);
 
-    const visibleTasksWithLiveActivities = useMemo(
-        () => buildLiveSessionTasks(
-            projectTasks,
-            tasksWithLiveActivities,
-            realtimeProjectId,
-            sprintDispatches,
-            sprintEvents,
-        ),
-        [projectTasks, realtimeProjectId, sprintDispatches, sprintEvents, tasksWithLiveActivities],
-    );
+    const visibleTasksWithLiveActivities = tasksWithLiveActivities;
 
     const hasSprintContext = rawHasSprintContext || visibleTasksWithLiveActivities.length > 0;
 
@@ -209,7 +190,18 @@ export const LiveSessionPage: FunctionComponent = () => {
 
     const visibleStats = useMemo(() => {
         if (!hasSprintContext) return EMPTY_RUNTIME_STATS;
-        return computeStats(visibleTasksWithLiveActivities);
+        return {
+            total: visibleTasksWithLiveActivities.length,
+            running: visibleTasksWithLiveActivities.filter((task) => task.status === "RUNNING").length,
+            codingCompleted: visibleTasksWithLiveActivities.filter((task) => task.status === "CODING_COMPLETED").length,
+            completed: visibleTasksWithLiveActivities.filter((task) => task.status === "COMPLETED").length,
+            failed: visibleTasksWithLiveActivities.filter((task) => task.status === "FAILED").length,
+            ci: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "CI").length,
+            automerge: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "AUTOMERGE").length,
+            merged: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "MERGED" || task.is_merged).length,
+            mergeBlocked: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "MERGE_BLOCKED").length,
+            mergeConflicts: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "MERGE_CONFLICT").length,
+        };
     }, [hasSprintContext, visibleTasksWithLiveActivities]);
 
     const { sprintTiming, taskTimings, taskTimingMap } = useLiveTaskTimingSummaries({
@@ -377,6 +369,15 @@ export const LiveSessionPage: FunctionComponent = () => {
                 setHeaderView={setHeaderView}
                 visibleStats={visibleStats}
                 hasSprintContext={hasSprintContext}
+                hasLiveSprint={hasLiveSprint}
+                initialLoadComplete={initialLoadComplete}
+                liveSprintRun={liveSprintRun}
+                pausedInterventionRun={pausedInterventionRun}
+                scopedFeatureBranch={status.sprint_id && sprintScopeId && status.sprint_id === sprintScopeId
+                    ? status.feature_branch ?? null
+                    : null}
+                selectedSession={selectedSession}
+                statusTimestamp={status.timestamp}
             />
 
             {pausedIntervention && !hasLiveSprint && (
@@ -545,7 +546,10 @@ export const LiveSessionPage: FunctionComponent = () => {
                     </ExecutionTimelineProvider>
 
                     {/* 4. Protocol — collapsible */}
-                    <SprintProtocol />
+                    <SprintProtocol
+                        hasSprintContext={hasSprintContext}
+                        instructions={status.instructions}
+                    />
                 </div>
             </div>
         </div>

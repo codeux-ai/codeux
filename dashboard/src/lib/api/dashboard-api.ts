@@ -6,6 +6,7 @@ import type {
   ExternalSettingsHints,
   GitTrackingStatus,
   OverviewTelemetrySnapshot,
+  ProjectLiveDashboardSnapshot,
 } from "../../types.js";
 
 const fetchJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
@@ -18,10 +19,7 @@ const fetchJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
   return (await response.json()) as T;
 };
 
-export interface RuntimeDashboardPayload {
-  status: DashboardStatus;
-  execution: ExecutionDashboardSnapshot;
-}
+export type RuntimeDashboardPayload = ProjectLiveDashboardSnapshot;
 
 export const fetchRuntimeStatus = async (): Promise<DashboardStatus> => {
   return fetchJson<DashboardStatus>("/api/status");
@@ -31,21 +29,33 @@ export const fetchExecutionSnapshot = async (): Promise<ExecutionDashboardSnapsh
   return fetchJson<ExecutionDashboardSnapshot>("/api/execution");
 };
 
-export const fetchRuntimeDashboardPayload = async (): Promise<RuntimeDashboardPayload> => {
+export const fetchRuntimeDashboardPayload = async (projectId?: string | null): Promise<RuntimeDashboardPayload> => {
+  if (projectId) {
+    return fetchLivePayload(projectId);
+  }
+
   const [status, execution] = await Promise.all([
     fetchRuntimeStatus(),
     fetchExecutionSnapshot(),
   ]);
 
   return {
+    projectId: execution.projectId,
+    selectedSprintId: status.sprint_id ?? null,
     status,
     execution,
+    gitStatus: null,
+    gitStatusError: null,
+    updatedAt: execution.updatedAt,
   };
 };
 
 /** Single HTTP call returning both status + execution — used for fast initial load. */
-export const fetchLivePayload = async (): Promise<RuntimeDashboardPayload> => {
-  return fetchJson<RuntimeDashboardPayload>("/api/live");
+export const fetchLivePayload = async (projectId?: string | null): Promise<RuntimeDashboardPayload> => {
+  const query = typeof projectId === "string" && projectId.trim().length > 0
+    ? `?projectId=${encodeURIComponent(projectId.trim())}`
+    : "";
+  return fetchJson<RuntimeDashboardPayload>(`/api/live${query}`);
 };
 
 export const fetchLiveActivities = async (): Promise<import("../../types.js").LiveActivitiesResponse> => {

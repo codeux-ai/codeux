@@ -101,6 +101,7 @@ export class JulesAgentServer {
   private static readonly LIVE_ACTIVITY_CACHE_MS = 10_000;
   private static readonly GIT_STATUS_CACHE_MS = 10_000;
   private static readonly RUNTIME_CLEANUP_INTERVAL_MS = 15_000;
+  private static readonly LIVE_SNAPSHOT_REFRESH_INTERVAL_MS = 30_000;
   private readonly projectRoot: string;
   private readonly appConfig: AppConfig;
   private server: Server;
@@ -151,6 +152,7 @@ export class JulesAgentServer {
   private memoryRepository: import("../repositories/memory-repository.js").MemoryRepository;
   private runtimeCleanupInterval: ReturnType<typeof setInterval> | null = null;
   private sprintPreviewInterval: ReturnType<typeof setInterval> | null = null;
+  private liveSnapshotInterval: ReturnType<typeof setInterval> | null = null;
   private mcpHttpHandle: McpHttpTransportHandle | null = null;
   private mcpServiceBound = false;
 
@@ -226,6 +228,10 @@ export class JulesAgentServer {
       if (this.sprintPreviewInterval) {
         clearInterval(this.sprintPreviewInterval);
         this.sprintPreviewInterval = null;
+      }
+      if (this.liveSnapshotInterval) {
+        clearInterval(this.liveSnapshotInterval);
+        this.liveSnapshotInterval = null;
       }
       if (this.mcpHttpHandle) {
         await this.mcpHttpHandle.close().catch(() => undefined);
@@ -306,6 +312,26 @@ export class JulesAgentServer {
     initialTimer.unref?.();
     this.sprintPreviewInterval = setInterval(reconcile, JulesAgentServer.RUNTIME_CLEANUP_INTERVAL_MS);
     this.sprintPreviewInterval.unref?.();
+  }
+
+  private startLiveSnapshotLoop(): void {
+    if (this.appConfig.runtimeRole !== "project_manager" || this.liveSnapshotInterval) {
+      return;
+    }
+
+    const refreshLiveSnapshot = (): void => {
+      const projectId = this.projectManagementRepository.getSelectedProjectId();
+      if (!projectId) {
+        return;
+      }
+
+      this.dashboardRealtimeService.scheduleProjectLiveRefresh(projectId);
+    };
+
+    const initialTimer = setTimeout(refreshLiveSnapshot, 0);
+    initialTimer.unref?.();
+    this.liveSnapshotInterval = setInterval(refreshLiveSnapshot, JulesAgentServer.LIVE_SNAPSHOT_REFRESH_INTERVAL_MS);
+    this.liveSnapshotInterval.unref?.();
   }
 
   private createContext(): ServerContext {
@@ -896,6 +922,7 @@ export class JulesAgentServer {
     this.mcpServiceBound = true;
     this.startRuntimeCleanupLoop();
     this.startSprintPreviewLoop();
+    this.startLiveSnapshotLoop();
     this.virtualWorkerService.start();
   }
 }

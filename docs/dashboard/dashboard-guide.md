@@ -283,24 +283,24 @@ Legacy runtime:
 - The Live page now keeps the Git/CI/PR card in a dedicated `GitCIStatusPanel` component so the page shell stays focused on wiring runtime state, controls, and layout
 - Live task stats, filter counts, the active filtered task list, and per-card runtime payloads are memoized from the selected project's runtime snapshot so high-frequency realtime updates do not repeatedly recompute unchanged projections
 - Live task cards, the DAG, and timing summaries now render from the same projected task model:
-  - stable task ordering and dependencies still come from the project task store
-  - `/api/status` continues to provide task-level runtime state and live activities
-  - execution dispatches and runtime events now fill session/provider/branch/PR metadata gaps and can promote visible task phase to `BLOCKED`, `FAILED`, `QUOTA`, or terminal completion before the legacy status snapshot catches up
-- Background `/api/status` refreshes now keep the last known session/provider/branch/PR metadata for active tasks when a transient poll returns the same task without those runtime fields, preventing cards from briefly dropping CLI/session context
+  - the task list now comes from the selected sprint inside the unified `/api/live` snapshot instead of being reconstructed from separate task, status, and activity endpoints in the browser
+  - task ordering, dependency edges, visible phase, and task activities all come from that same selected-sprint snapshot
+  - execution dispatches and runtime events still enrich cards with session, provider, branch, PR, attention, and timing metadata without becoming a second visual source of truth for task identity
 - Live Session now shows a clear paused-for-human-intervention banner, repeats the reason/instructions in the hero state, and surfaces the same guidance inside paused sprint run cards
 - worker-owned merge conflicts are now excluded from that human-intervention projection; they remain visible in the attention queue and realtime runtime feed, but they no longer tell the operator to merge or resume while the worker is handling them
 - Worker mode is now explicit in settings:
   - `Connected MCP` keeps worker dispatches and worker-owned attention on live MCP listeners
   - `Virtual on-demand` hands that same work to short-lived internal CLI workers that do not create MCP connection rows
-- The Live view no longer blocks task stats and task cards on the execution snapshot finishing first:
-  - `/api/live` now restores the selected-project runtime in one roundtrip instead of stitching `/api/status`, `/api/execution`, and `/api/live-activities` in the browser
-  - task stats, DAG state, and the race view now derive from the same projected task list, so the hero visualizations stay in sync during refresh and websocket recovery
-  - the page only shows the full `Waiting for Sprint Start` empty state when neither runtime status nor execution state has sprint context
+- The Live view now uses one authoritative runtime contract:
+  - one initial `GET /api/live?projectId=<selectedProjectId>` fetch hydrates the page
+  - after hydration, `project.live.updated` is the only websocket event the Live page applies for selected-project runtime state
+  - task stats, DAG state, race positions, protocol text, git status, and the visible task list all derive from the same payload, so the hero visualizations stay in sync during normal updates and websocket recovery
+  - the page only shows the full `Waiting for Sprint Start` empty state when the selected-sprint live snapshot has no sprint context
 - The Live view now keeps its mounted shell stable during background refresh:
-  - fetch-only execution `updatedAt` changes no longer trigger full runtime rerenders by themselves
-  - the selected project scope is anchored from dashboard project selection instead of transient runtime snapshot identity
-  - sprint structure now comes from the stable project task store, while `/api/status` only overlays live execution state and activity onto those tasks
-  - transient runtime snapshot gaps therefore no longer drop the DAG or task pipeline back to `Awaiting sprint decomposition...` when the sprint tasks themselves still exist
+  - the selected project scope is anchored from dashboard project selection
+  - the selected sprint scope is anchored from the persisted header selection inside the unified live snapshot
+  - websocket reconnect gaps now trigger a full `/api/live` reload instead of incremental client-side repair across multiple endpoints
+  - transient execution-only refreshes therefore no longer drop the DAG, race, or task pipeline back to a mismatched or partially stale state
 - The Live view hero now has three interchangeable visualizations:
   - `Stats` for a compact asymmetric telemetry deck with one dominant sprint-time panel, a slimmer runtime intelligence rail, live flow-state deltas, merge pressure, and accumulated stage timing
   - `Race` for stage-based progress across the execution course
@@ -376,9 +376,10 @@ Runtime scoping:
 ## Polling Behavior
 
 From `dashboard/src/hooks/use-dashboard-runtime-data.ts`:
-- Status and execution snapshot now use websocket-first updates with a `5s` fallback poll for degraded transport cases.
-- Runtime fallback refresh now applies status and execution results independently instead of waiting for both responses before updating the page, which avoids slow `/api/execution` responses blanking the whole live view.
-- Git status keeps a `30s` fallback poll and also refreshes opportunistically from project realtime events with internal rate limiting, so the live view no longer waits for the next full poll cycle after sprint activity.
+- Live view now does one initial `/api/live` fetch, then subscribes only to `project.live.updated` for selected-project runtime state.
+- There is no steady-state client poll for status, execution, or git on the Live page anymore.
+- When the websocket reports `snapshot_required`, the browser re-fetches `/api/live` and replaces the whole live snapshot atomically.
+- Git status is refreshed server-side and folded into that same live snapshot stream, including a periodic background refresh owned by the server.
 - The sprint boat-race animation now resets cached vessel positions whenever the live sprint goes idle, and it keys each vessel by persisted task identity instead of raw task key so a new sprint starts from harbour rather than drifting backward from the previous finish line.
 - The boat race no longer caps the visible fleet at ten vessels, and the race canvas now renders at a fixed `800px` height instead of scaling per-boat.
 
@@ -409,11 +410,11 @@ Chat-specific behavior:
 
 Live view behavior:
 
-- `project.execution.updated` replaces the execution snapshot immediately
-- `project.runtime_status.updated` replaces the runtime task state immediately
-- `project.structure.updated` triggers a silent background reload for structural changes that are not already embedded in the execution payload
-- attention queue changes now flow through the same realtime execution snapshot path, so merge-conflict escalation, worker claims, and resolution actions appear without waiting for a poll tick
-- provider-backed runtime feeds now render the persisted agent/user message text from `provider_activity` events, so clarification requests and other Jules messages show up directly instead of collapsing to a generic provider label
+- `project.live.updated` replaces the entire selected-project live snapshot immediately
+- `project.execution.updated`, `project.runtime_status.updated`, and `project.structure.updated` still exist for other dashboard surfaces and also fan into a follow-up `project.live.updated` publish for Live-page consumers
+- attention queue changes now flow into the same live snapshot path, so merge-conflict escalation, worker claims, and resolution actions appear without waiting for a poll tick
+- git status changes also arrive through that same live snapshot path instead of a separate client poll
+- provider-backed runtime feeds still render the persisted agent/user message text from `provider_activity` events, but the Live page no longer tries to reconcile those events against independently fetched task structure
 
 The old legacy settings hook remains outside the active v2 flow; the live dashboard now uses the scoped settings API above.
 

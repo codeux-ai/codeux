@@ -15,6 +15,7 @@ async function createRepositories(): Promise<{
   projectRepository: ProjectManagementRepository;
   runtimeRepository: ProjectRuntimeRepository;
   realtimeNotifier: {
+    scheduleProjectLiveRefresh: ReturnType<typeof vi.fn>;
     scheduleProjectRuntimeStatusRefresh: ReturnType<typeof vi.fn>;
   };
 }> {
@@ -22,6 +23,7 @@ async function createRepositories(): Promise<{
   tempDirs.push(dir);
   const storage = new AppDbStorage(path.join(dir, "app.db"));
   const realtimeNotifier = {
+    scheduleProjectLiveRefresh: vi.fn(),
     scheduleProjectRuntimeStatusRefresh: vi.fn(),
   };
   return {

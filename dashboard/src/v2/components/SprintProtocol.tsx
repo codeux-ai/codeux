@@ -4,22 +4,20 @@ import { useMemo } from "preact/hooks";
 import { AlertTriangle } from "lucide-preact";
 import { CollapsiblePanel } from "./ui/CollapsiblePanel.js";
 import { renderMarkdown } from "../../lib/markdown.js";
-import type { DashboardStatus } from "../../types.js";
+export interface SprintProtocolProps {
+    hasSprintContext: boolean;
+    instructions?: string;
+}
 
-import { useProjectData } from "../context/project-data.js";
-import { useDashboardRuntimeData } from "../../hooks/use-dashboard-runtime-data.js";
-
-export const SprintProtocol: FunctionComponent = memo(() => {
-    const { selectedProjectId } = useProjectData();
-    const { status, initialLoadComplete, execution } = useDashboardRuntimeData(selectedProjectId);
-
-    // Simplistic hasSprintContext derived state matching what was passed
-    const hasSprintContext = Boolean(status.sprint_id || execution.sprintRuns.length > 0 || execution.taskDispatches.length > 0);
+export const SprintProtocol: FunctionComponent<SprintProtocolProps> = memo(({
+    hasSprintContext,
+    instructions,
+}) => {
 
     const protocolMarkup = useMemo(() => (
-        renderMarkdown(hasSprintContext ? status.instructions : undefined)
+        renderMarkdown(hasSprintContext ? instructions : undefined)
         || '<p class="text-slate-400 dark:text-slate-600 italic">No active sprint protocol.</p>'
-    ), [hasSprintContext, status.instructions]);
+    ), [hasSprintContext, instructions]);
 
     return (
         <CollapsiblePanel

@@ -3,16 +3,15 @@ import { memo } from "preact/compat";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { Radio, BarChart3, Ship, Workflow, AlertTriangle } from "lucide-preact";
-import type { DashboardStatus, DashboardStats, ExecutionSprintRunSummary } from "../../types.js";
+import type {
+  DashboardStats,
+  ExecutionSprintRunSummary,
+  SprintPreviewSession,
+} from "../../types.js";
 
 import { formatTime } from "../../lib/time.js";
 import { LivePreviewLink } from "./ui/LivePreviewLink.js";
 import { HumanInterventionBadge } from "./ui/HumanInterventionBadge.js";
-import { useProjectData } from "../context/project-data.js";
-import { useDashboardRuntimeData } from "../../hooks/use-dashboard-runtime-data.js";
-import { useSprints } from "../../hooks/useSprints.js";
-import { usePreviewSessions } from "../hooks/use-preview-sessions.js";
-import { deriveLiveSessionRuntimeState, resolveLiveSessionSprintScopeId } from "../lib/live-session-runtime.js";
 
 type HeaderView = "stats" | "race" | "dag";
 
@@ -21,52 +20,30 @@ export interface StatsHeaderProps {
     setHeaderView: (view: HeaderView) => void;
     visibleStats: DashboardStats;
     hasSprintContext: boolean;
+    hasLiveSprint: boolean;
+    initialLoadComplete: boolean;
+    liveSprintRun: ExecutionSprintRunSummary | null;
+    pausedInterventionRun: ExecutionSprintRunSummary | null;
+    scopedFeatureBranch: string | null;
+    selectedSession: SprintPreviewSession | null;
+    statusTimestamp: string | null;
 }
-
-const EMPTY_LIVE_SESSION_RUNTIME_STATE = {
-    liveSprintRun: null,
-    pausedInterventionRun: null,
-    hasActiveSprint: false,
-    hasSprintContext: false,
-} as const;
 
 export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
     headerView,
     setHeaderView,
     visibleStats,
     hasSprintContext,
+    hasLiveSprint,
+    initialLoadComplete,
+    liveSprintRun,
+    pausedInterventionRun,
+    scopedFeatureBranch,
+    selectedSession,
+    statusTimestamp,
 }) => {
     const headerRef = useRef<HTMLDivElement>(null);
-    const { selectedProjectId } = useProjectData();
-    const { execution, initialLoadComplete: legacyInitialLoadComplete, status } = useDashboardRuntimeData(selectedProjectId);
-    const realtimeProjectId = selectedProjectId || execution.projectId || status.project_id || null;
-    const { selectedSprintId, loading: sprintsLoading } = useSprints(realtimeProjectId);
-
-    const sprintScopeId = resolveLiveSessionSprintScopeId(status, execution, selectedSprintId);
-    const scopedFeatureBranch = status.sprint_id && sprintScopeId && status.sprint_id === sprintScopeId
-        ? status.feature_branch
-        : null;
-
-    const { selectedSession } = usePreviewSessions({
-        projectId: realtimeProjectId,
-        selectedSprintId: sprintScopeId
-    });
-
-    const sprintScopeReady = Boolean(
-        selectedSprintId
-        || sprintScopeId
-        || (legacyInitialLoadComplete && !sprintsLoading)
-    );
-    const initialLoadComplete = legacyInitialLoadComplete && !sprintsLoading;
-
-    const runtimeState = sprintScopeReady
-            ? deriveLiveSessionRuntimeState(status, execution, sprintScopeId)
-            : EMPTY_LIVE_SESSION_RUNTIME_STATE;
-
-    const liveSprintRun = runtimeState.liveSprintRun;
-    const pausedInterventionRun = runtimeState.pausedInterventionRun;
     const pausedIntervention = pausedInterventionRun?.humanIntervention || null;
-    const hasLiveSprint = runtimeState.hasActiveSprint;
 
     useLayoutEffect(() => {
         if (headerRef.current) {
@@ -172,9 +149,9 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
                             </div>
                         )}
                     </div>
-                    {status.timestamp && hasSprintContext && (
+                    {statusTimestamp && hasSprintContext && (
                         <span className="text-[10px] font-mono text-slate-400">
-                            Updated {formatTime(status.timestamp)}
+                            Updated {formatTime(statusTimestamp)}
                         </span>
                     )}
                 </div>
