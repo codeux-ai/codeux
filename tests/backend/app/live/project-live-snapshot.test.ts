@@ -9,13 +9,14 @@ describe("getProjectLiveSnapshot", () => {
     deps = {
       projectManagementRepository: {
         getSelectedProjectId: vi.fn().mockReturnValue("proj-1"),
-        listSprints: vi.fn().mockReturnValue({ selectedSprintId: "sprint-1" }),
+        listSprints: vi.fn().mockReturnValue({ selectedSprintId: "sprint-1", sprints: [{ id: "sprint-1" }] }),
       } as any,
       projectRuntimeRepository: {
         getProjectStatus: vi.fn().mockReturnValue({ subtasks: [], timestamp: "2024-01-01T00:00:00.000Z" }),
       } as any,
       getProjectExecutionSnapshot: vi.fn().mockReturnValue({ sprintRuns: [] }),
       getGitStatus: vi.fn().mockResolvedValue({ status: "clean" } as unknown as GitTrackingStatus),
+      logger: { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() } as any,
     };
   });
 
