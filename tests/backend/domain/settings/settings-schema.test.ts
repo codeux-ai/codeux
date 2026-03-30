@@ -35,6 +35,23 @@ describe("validateSettingsPayload", () => {
     expect(result.data).toEqual(payload);
   });
 
+  it("accepts CREATE_PR for featurePrAutoMergeMode", () => {
+    const payload = cloneDefaults({
+      env: {},
+      settingsJson: {},
+      resolved: {},
+    });
+
+    // Default clone includes `ciIntelligence` initialized by cloneDefaults, modify it
+    payload.ciIntelligence.featurePrAutoMergeMode = "CREATE_PR";
+
+    const result = validateSettingsPayload(payload);
+
+    expect(result.success).toBe(true);
+    expect(result.issues).toEqual([]);
+    expect(result.data.ciIntelligence.featurePrAutoMergeMode).toBe("CREATE_PR");
+  });
+
   it("rejects non-object payloads early", () => {
     const result = validateSettingsPayload("invalid");
 
