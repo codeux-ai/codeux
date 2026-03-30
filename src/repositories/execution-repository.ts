@@ -1602,16 +1602,19 @@ export class ExecutionRepository {
 
     const firstBucketStartMs = buckets.length > 0 ? new Date(buckets[0].bucketStart).getTime() : 0;
     if (buckets.length > 0) {
+      const chartSeriesMap = new Map<string, ProjectExecutionStatsChartSeries>(
+        chartSeries.map(s => [s.id, s])
+      );
       for (const invocation of mappedInvocations) {
         const bucketIndex = Math.floor((new Date(invocation.startedAt).getTime() - firstBucketStartMs) / normalized.bucketSizeMs);
         if (bucketIndex >= 0 && bucketIndex < buckets.length) {
-            const providerSeries = chartSeries.find(s => s.id === `provider_${invocation.provider}`);
+            const providerSeries = chartSeriesMap.get(`provider_${invocation.provider}`);
             if (providerSeries) providerSeries.data[bucketIndex] += invocation.totalTokens;
 
-            const purposeTimeSeries = chartSeries.find(s => s.id === `purpose_time_${invocation.purpose}`);
+            const purposeTimeSeries = chartSeriesMap.get(`purpose_time_${invocation.purpose}`);
             if (purposeTimeSeries) purposeTimeSeries.data[bucketIndex] += invocation.durationMs || 0;
 
-            const purposeInvocationsSeries = chartSeries.find(s => s.id === `purpose_invocations_${invocation.purpose}`);
+            const purposeInvocationsSeries = chartSeriesMap.get(`purpose_invocations_${invocation.purpose}`);
             if (purposeInvocationsSeries) purposeInvocationsSeries.data[bucketIndex] += 1;
         }
       }

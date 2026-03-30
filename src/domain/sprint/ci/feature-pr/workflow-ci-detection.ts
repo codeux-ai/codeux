@@ -65,16 +65,17 @@ export async function detectPullRequestCiSupport(
   let sawPrTrigger = false;
   let sawUnknown = false;
 
-  for (const workflowFile of workflowFiles) {
-    let content: string;
-    try {
-      content = await readFile(workflowFile, "utf8");
-    } catch {
+  const fileContents = await Promise.allSettled(
+    workflowFiles.map((file) => readFile(file, "utf8")),
+  );
+
+  for (const result of fileContents) {
+    if (result.status === "rejected") {
       sawUnknown = true;
       continue;
     }
 
-    const evaluation = evaluateWorkflowFileForPullRequest(content, baseBranch);
+    const evaluation = evaluateWorkflowFileForPullRequest(result.value, baseBranch);
     if (evaluation === "applicable") {
       return { status: "applicable", reason: "matching_pr_workflow_found" };
     }
