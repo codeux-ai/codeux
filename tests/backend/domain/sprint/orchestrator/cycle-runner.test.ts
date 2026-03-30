@@ -795,7 +795,7 @@ describe("CycleRunner attention sync", () => {
     });
 
     // Directly call the private method using any cast
-    (runner as any).captureCiFailureMemories(
+    await (runner as any).captureCiFailureMemories(
       [
         {
           id: "T1",
@@ -826,7 +826,6 @@ describe("CycleRunner attention sync", () => {
     );
 
     // Give the unawaited promise returned by createMemory inside catch block a chance to resolve.
-    await new Promise((r) => setTimeout(r, 0));
 
     expect(mockMemoryService.createMemory).toHaveBeenCalledWith("project-1", expect.objectContaining({
       category: "error",
@@ -857,7 +856,7 @@ describe("CycleRunner attention sync", () => {
       }
     });
 
-    (runner as any).captureCiFailureMemories(
+    await (runner as any).captureCiFailureMemories(
       [
         {
           id: "T1",
@@ -886,8 +885,6 @@ describe("CycleRunner attention sync", () => {
         loopSteps: {},
       } as any
     );
-
-    await new Promise((r) => setTimeout(r, 0));
 
     expect(mockMemoryService.createMemory).not.toHaveBeenCalled();
   });
@@ -914,7 +911,7 @@ describe("CycleRunner attention sync", () => {
     const states = new Map();
     states.set("T1", "RUNNING");
 
-    (runner as any).captureTaskCompletionMemories(
+    await (runner as any).captureTaskCompletionMemories(
       [
         {
           id: "T1",
@@ -944,8 +941,6 @@ describe("CycleRunner attention sync", () => {
       } as any
     );
 
-    await new Promise((r) => setTimeout(r, 0));
-
     expect(mockMemoryService.createMemory).not.toHaveBeenCalled();
   });
 
@@ -970,7 +965,7 @@ describe("CycleRunner attention sync", () => {
       }
     });
 
-    (runner as any).captureCiFailureMemories(
+    await (runner as any).captureCiFailureMemories(
       [
         {
           id: "T1",
@@ -1000,8 +995,6 @@ describe("CycleRunner attention sync", () => {
       } as any
     );
 
-    await new Promise((r) => setTimeout(r, 0));
-
     expect(mockMemoryService.createMemory).not.toHaveBeenCalled();
   });
 
@@ -1027,7 +1020,7 @@ describe("CycleRunner attention sync", () => {
     const states = new Map();
     states.set("T1", "RUNNING");
 
-    (runner as any).captureTaskCompletionMemories(
+    await (runner as any).captureTaskCompletionMemories(
       [
         {
           id: "T1",
@@ -1057,8 +1050,6 @@ describe("CycleRunner attention sync", () => {
       } as any
     );
 
-    await new Promise((r) => setTimeout(r, 0));
-
     expect(mockMemoryService.createMemory).not.toHaveBeenCalled();
   });
 
@@ -1084,7 +1075,7 @@ describe("CycleRunner attention sync", () => {
     const states = new Map();
     states.set("T1", "RUNNING");
 
-    (runner as any).captureTaskCompletionMemories(
+    await (runner as any).captureTaskCompletionMemories(
       [
         {
           id: "T1",
@@ -1114,8 +1105,6 @@ describe("CycleRunner attention sync", () => {
       } as any
     );
 
-    await new Promise((r) => setTimeout(r, 0));
-
     expect(mockMemoryService.createMemory).not.toHaveBeenCalled();
   });
 
@@ -1141,7 +1130,7 @@ describe("CycleRunner attention sync", () => {
     const states = new Map();
     states.set("T1", "RUNNING");
 
-    (runner as any).captureTaskCompletionMemories(
+    await (runner as any).captureTaskCompletionMemories(
       [
         {
           id: "T1",
@@ -1170,8 +1159,6 @@ describe("CycleRunner attention sync", () => {
         loopSteps: {},
       } as any
     );
-
-    await new Promise((r) => setTimeout(r, 0));
 
     expect(mockMemoryService.createMemory).toHaveBeenCalledWith("project-1", expect.objectContaining({
       category: "error",
