@@ -355,4 +355,59 @@ describe("SettingsRepository", () => {
     expect(repo.getDefaultDashboardSettings().git.githubToken).toBe("legacy-gh");
     expect(db.prepare("SELECT payload FROM app_settings WHERE id = 1").get()).toBeUndefined();
   });
+
+  it("resolves effective settings through a scoped resolver, caching lookups", async () => {
+    const { repo } = await createRepo();
+
+    repo.saveSystemSettings({
+      ...repo.getSystemSettings(),
+      defaults: {
+        ...repo.getSystemSettings().defaults,
+        automationLevel: "FULL",
+      },
+    });
+
+    repo.saveProjectSettings("project-1", {
+      git: {
+        defaultBranch: "develop",
+      },
+    });
+    repo.saveProjectSettings("project-2", {
+      git: {
+        defaultBranch: "test-branch",
+      },
+    });
+
+    const baseProject1Settings = repo.getProjectResolvedSettings("project-1");
+    repo.saveSprintSettings("sprint-1", baseProject1Settings, {
+      sprintLoopSteps: {
+        watchLoop: false,
+      },
+    });
+
+    const resolver = repo.createScopedResolver();
+
+    // First resolution
+    const p1 = resolver.resolveProjectDashboardSettings("project-1");
+    expect(p1.settings.automationLevel).toBe("FULL");
+    expect(p1.settings.git.defaultBranch).toBe("develop");
+
+    const p1s1 = resolver.resolveSprintDashboardSettings("project-1", "sprint-1");
+    expect(p1s1.settings.automationLevel).toBe("FULL");
+    expect(p1s1.settings.git.defaultBranch).toBe("develop");
+    expect(p1s1.settings.sprintLoopSteps.watchLoop).toBe(false);
+
+    // Second resolution should return strictly identical objects via cache
+    const p1Cached = resolver.resolveProjectDashboardSettings("project-1");
+    const p1s1Cached = resolver.resolveSprintDashboardSettings("project-1", "sprint-1");
+
+    expect(p1Cached).toBe(p1);
+    expect(p1s1Cached).toBe(p1s1);
+
+    // Different project resolution
+    const p2 = resolver.resolveProjectDashboardSettings("project-2");
+    expect(p2.settings.git.defaultBranch).toBe("test-branch");
+    const p2Cached = resolver.resolveProjectDashboardSettings("project-2");
+    expect(p2Cached).toBe(p2);
+  });
 });
