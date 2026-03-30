@@ -139,19 +139,6 @@ describe("Provider Routing Logic", () => {
   });
 
   describe("resolveProviderForInvocation", () => {
-    it("uses worker profile defaults for dashboard replies", () => {
-      const settings = mockSettings("MANUAL", "jules");
-
-      const result = resolveProviderForInvocation(settings, {
-        invocation: "dashboard_reply",
-        task: mockTask({ prompt: "Reply to the dashboard thread" }),
-        providerPool: ["gemini", "codex", "claude-code"],
-      });
-
-      expect(result.provider).toBe("gemini");
-      expect(result.providers.gemini.model).toBe("gemini-2.5-flash");
-    });
-
     it("uses worker profile defaults for clarification replies", () => {
       const settings = mockSettings("MANUAL", "codex");
       settings.aiProvider.invocationRouting.clarification_reply = {

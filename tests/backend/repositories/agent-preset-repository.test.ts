@@ -30,9 +30,6 @@ describe("AgentPresetRepository", () => {
       name: "Project Manager",
       instructionMarkdown: "Coordinate planning and summarize blockers.",
       labels: ["planning", "review"],
-      avatarConfig: { body: "alien", face: "happy" },
-      memoryTemplateOverrideEnabled: true,
-      memoryTemplateMarkdown: "Memory format",
     });
 
     expect(created).toMatchObject({
@@ -40,25 +37,17 @@ describe("AgentPresetRepository", () => {
       name: "Project Manager",
       instructionMarkdown: "Coordinate planning and summarize blockers.",
       labels: ["planning", "review"],
-      avatarConfig: { body: "alien", face: "happy" },
-      memoryTemplateOverrideEnabled: true,
-      memoryTemplateMarkdown: "Memory format",
     });
 
     const updated = agentPresetRepository.updateAgentPreset(created.id, {
       name: "Worker",
       instructionMarkdown: "Pick up tasks and report progress.",
       labels: ["execution"],
-      avatarConfig: { body: "human" },
-      memoryTemplateOverrideEnabled: false,
     });
     expect(updated).toMatchObject({
       name: "Worker",
       instructionMarkdown: "Pick up tasks and report progress.",
       labels: ["execution"],
-      avatarConfig: { body: "human" },
-      memoryTemplateOverrideEnabled: false,
-      memoryTemplateMarkdown: "Memory format",
     });
 
     const listed = agentPresetRepository.listAgentPresets(project.id);

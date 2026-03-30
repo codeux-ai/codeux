@@ -23,7 +23,7 @@ export const HumanInterventionBadge: FunctionComponent<HumanInterventionBadgePro
       : "left-1/2 -translate-x-1/2";
 
   return (
-    <div className="group/intervention relative inline-flex" title={formatHumanInterventionTooltip(summary)}>
+    <div className="group/intervention relative inline-flex" role="status" aria-label={`Action Required: ${summary.title}`} title={formatHumanInterventionTooltip(summary)}>
       <div
         className={`inline-flex items-center gap-1.5 rounded-full border border-status-amber/25 bg-status-amber/12 text-status-amber shadow-[0_10px_24px_rgba(245,158,11,0.12)] ${
           compact ? "px-2.5 py-1 text-[10px]" : "px-3 py-1.5 text-[10px]"

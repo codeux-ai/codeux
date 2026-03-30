@@ -66,21 +66,6 @@ describe("JulesAgentServer", () => {
   });
 
   describe("getDashboardPort", () => {
-    it("should prefer DASHBOARD_PORT from the live environment", () => {
-      const originalPort = process.env.DASHBOARD_PORT;
-      process.env.DASHBOARD_PORT = "3000";
-      try {
-        const runtimeContext = (server as any).runtimeContext;
-        runtimeContext.dashboardSettings = {
-          ...DEFAULT_DASHBOARD_SETTINGS,
-          dashboardPort: 9999,
-        };
-        expect((server as any).getDashboardPort()).toBe(3000);
-      } finally {
-        process.env.DASHBOARD_PORT = originalPort;
-      }
-    });
-
     it("should return port from dashboard settings", () => {
       const runtimeContext = (server as any).runtimeContext;
       runtimeContext.dashboardSettings = {

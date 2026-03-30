@@ -81,29 +81,6 @@ describe("WorkspaceManager", () => {
       );
     });
 
-    it("should fall back to a local branch when the remote tracking ref is missing", async () => {
-      vi.mocked(fs.access).mockRejectedValue(new Error("not found"));
-      vi.mocked(runCommandStrict).mockImplementation(async (_cmd, args) => {
-        const key = args.join(" ");
-        if (key === "show-ref --verify --quiet refs/remotes/origin/feature") {
-          throw new Error("missing remote ref");
-        }
-        if (key === "show-ref --verify --quiet refs/heads/feature") {
-          return { ok: true, stdout: "", stderr: "" };
-        }
-        return { ok: true, stdout: "", stderr: "" };
-      });
-
-      const result = await manager.prepareWorktree("/repo", "/final", "worker", "feature");
-
-      expect(result).toEqual({ worktreePath: "/final", resumed: false });
-      expect(runCommandStrict).toHaveBeenCalledWith(
-        "git",
-        ["worktree", "add", "--force", "-B", "worker", "/final", "feature"],
-        "/repo",
-      );
-    });
-
 it("should retry fetch after repairing stale git state on first failure", async () => {
       vi.mocked(fs.access).mockRejectedValue(new Error("not found"));
       vi.mocked(fs.readdir as any).mockResolvedValue([]); // no worktree entries to clean

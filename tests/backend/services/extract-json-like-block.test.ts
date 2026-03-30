@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractJsonLikeBlock } from "../../../src/services/planning-json-extractor.js";
+import { extractJsonLikeBlock } from "../../../src/services/planning-agent-service.js";
 
 describe("extractJsonLikeBlock", () => {
   it("extracts plain JSON object", () => {

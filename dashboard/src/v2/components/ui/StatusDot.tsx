@@ -13,6 +13,17 @@ interface StatusDotProps {
     className?: string;
 }
 
+const statusLabels: Record<SourceStatus, string> = {
+    running: "Active",
+    failed: "Error",
+    intervention: "Action Required",
+    idle: "Offline",
+};
+
 export const StatusDot: FunctionComponent<StatusDotProps> = ({ status, className = "w-1.5 h-1.5" }) => (
-    <span className={`rounded-full shrink-0 ${className} ${dotClasses[status] ?? dotClasses.idle}`} />
+    <span
+        role="status"
+        aria-label={statusLabels[status] ?? statusLabels.idle}
+        className={`rounded-full shrink-0 ${className} ${dotClasses[status] ?? dotClasses.idle}`}
+    />
 );

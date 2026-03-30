@@ -11,9 +11,7 @@ if [ -d "/opt/credentials/gh" ]; then sync_dir_contents "/opt/credentials/gh" "$
 export NPM_CONFIG_PREFIX="/runtime/npm-global"
 export NPM_CONFIG_CACHE="/runtime/npm-cache"
 export npm_config_cache="$NPM_CONFIG_CACHE"
-export PNPM_STORE_DIR="$NPM_CONFIG_CACHE/pnpm-store"
-export pnpm_config_store_dir="$PNPM_STORE_DIR"
-mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_STORE_DIR"
+mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 if [ -f "/opt/jules/setup.sh" ]; then bash "/opt/jules/setup.sh" || echo "provider-runner: setup script failed" >&2; fi
 if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;;     codex) npm install -g @openai/codex ;;     claude) if command -v curl >/dev/null 2>&1; then curl -fsSL https://claude.ai/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl not found; cannot install claude" >&2; fi ;; esac; fi
@@ -43,9 +41,7 @@ if [ -d "/opt/credentials/gh" ]; then sync_dir_contents "/opt/credentials/gh" "$
 export NPM_CONFIG_PREFIX="/runtime/npm-global"
 export NPM_CONFIG_CACHE="/runtime/npm-cache"
 export npm_config_cache="$NPM_CONFIG_CACHE"
-export PNPM_STORE_DIR="$NPM_CONFIG_CACHE/pnpm-store"
-export pnpm_config_store_dir="$PNPM_STORE_DIR"
-mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_STORE_DIR"
+mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 if [ -f "/opt/jules/setup.sh" ]; then bash "/opt/jules/setup.sh" || echo "provider-runner: setup script failed" >&2; fi
 if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;;     codex) npm install -g @openai/codex ;;     claude) if command -v curl >/dev/null 2>&1; then curl -fsSL https://claude.ai/install.sh | bash && export PATH="$HOME/.local/bin:$PATH"; else echo "provider-runner: curl not found; cannot install claude" >&2; fi ;; esac; fi
@@ -75,9 +71,7 @@ if [ -d "/opt/credentials/gh" ]; then sync_dir_contents "/opt/credentials/gh" "$
 export NPM_CONFIG_PREFIX="/runtime/npm-global"
 export NPM_CONFIG_CACHE="/runtime/npm-cache"
 export npm_config_cache="$NPM_CONFIG_CACHE"
-export PNPM_STORE_DIR="$NPM_CONFIG_CACHE/pnpm-store"
-export pnpm_config_store_dir="$PNPM_STORE_DIR"
-mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_STORE_DIR"
+mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 if [ -f "/opt/jules/setup.sh" ]; then bash "/opt/jules/setup.sh" || echo "provider-runner: setup script failed" >&2; fi
 if ! command -v "$1" >/dev/null 2>&1; then case "$1" in     gemini) npm install -g @google/gemini-cli ;; esac; fi
@@ -107,9 +101,7 @@ if [ -d "/opt/credentials/gh" ]; then sync_dir_contents "/opt/credentials/gh" "$
 export NPM_CONFIG_PREFIX="/runtime/npm-global"
 export NPM_CONFIG_CACHE="/runtime/npm-cache"
 export npm_config_cache="$NPM_CONFIG_CACHE"
-export PNPM_STORE_DIR="$NPM_CONFIG_CACHE/pnpm-store"
-export pnpm_config_store_dir="$PNPM_STORE_DIR"
-mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE" "$PNPM_STORE_DIR"
+mkdir -p "$NPM_CONFIG_PREFIX" "$NPM_CONFIG_CACHE"
 export PATH="$HOME/.local/bin:$NPM_CONFIG_PREFIX/bin:$PATH"
 if [ -f "/opt/jules/setup.sh" ]; then bash "/opt/jules/setup.sh" || echo "provider-runner: setup script failed" >&2; fi
 if [ "$1" = "gemini" ]; then

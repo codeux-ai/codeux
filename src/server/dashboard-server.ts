@@ -203,7 +203,7 @@ export interface DashboardServerHandle {
 const PREVIEW_BRIDGE_PATH = "/_sprint_os/preview-bridge.js";
 const PREVIEW_HOST_PREFIX = "preview-";
 
-function parsePreviewSessionIdFromHost(hostHeader: string | undefined): string | null {
+export function parsePreviewSessionIdFromHost(hostHeader: string | undefined): string | null {
   const rawHost = String(hostHeader || "").trim().toLowerCase();
   if (!rawHost) {
     return null;
@@ -1544,7 +1544,7 @@ function toErrorMessage(error: unknown, prefix: string): string {
   return `${prefix}: ${message}`;
 }
 
-function parseProjectStatsQuery(query: Record<string, unknown>): ProjectStatsQuery {
+export function parseProjectStatsQuery(query: Record<string, unknown>): ProjectStatsQuery {
   const requestedWindow = typeof query.window === "string" ? query.window.trim() : "";
   const window: ProjectStatsWindow = (
     requestedWindow === "24h"
@@ -1570,7 +1570,7 @@ function parseProjectStatsQuery(query: Record<string, unknown>): ProjectStatsQue
   };
 }
 
-function parseNullableTrimmedString(value: unknown): string | null | undefined {
+export function parseNullableTrimmedString(value: unknown): string | null | undefined {
   if (value === null) {
     return null;
   }

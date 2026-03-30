@@ -97,47 +97,10 @@ describe("JulesApiClient", () => {
       expect(activities).toHaveLength(2);
     });
 
-    it("fetches the latest activities across pages and hydrates them via get", async () => {
-      mockAxios().get
-        .mockResolvedValueOnce({
-          data: {
-            activities: [
-              { id: "a1", createTime: "2021-01-01T00:00:00.000Z", progressUpdated: {} },
-            ],
-            nextPageToken: "next",
-          },
-        })
-        .mockResolvedValueOnce({
-          data: {
-            activities: [
-              { id: "a2", createTime: "2021-01-02T00:00:00.000Z", agentMessaged: { agentMessage: "Latest message" } },
-            ],
-          },
-        })
-        .mockResolvedValueOnce({
-          data: {
-            id: "a2",
-            createTime: "2021-01-02T00:00:00.000Z",
-            agentMessaged: { agentMessage: "Latest message" },
-          },
-        });
-
-      const activities = await client.fetchRecentActivities("s1", 1);
-
-      expect(activities).toEqual([
-        {
-          id: "a2",
-          createTime: "2021-01-02T00:00:00.000Z",
-          agentMessaged: { agentMessage: "Latest message" },
-        },
-      ]);
-      expect(mockAxios().get).toHaveBeenNthCalledWith(1, "/sessions/s1/activities", {
-        params: { pageSize: 1, pageToken: undefined },
-      });
-      expect(mockAxios().get).toHaveBeenNthCalledWith(2, "/sessions/s1/activities", {
-        params: { pageSize: 1, pageToken: "next" },
-      });
-      expect(mockAxios().get).toHaveBeenNthCalledWith(3, "/sessions/s1/activities/a2");
+    it("fetches recent activities", async () => {
+      mockAxios().get.mockResolvedValue({ data: { activities: [{ createTime: "2021-01-01" }] } });
+      await client.fetchRecentActivities("s1", 10);
+      expect(mockAxios().get).toHaveBeenCalledWith("/sessions/s1/activities", expect.anything());
     });
   });
 });

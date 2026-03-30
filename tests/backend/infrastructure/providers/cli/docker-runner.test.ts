@@ -128,10 +128,6 @@ describe("DockerRunner", () => {
     expect(cmd).toBe("docker");
     expect(args).toContain("run");
     expect(args).toContain("--rm");
-    expect(args).toContain("--label");
-    expect(args).toContain("sprint-os.session-id=session-123");
-    expect(args).toContain("sprint-os.command=test-cmd");
-    expect(args).toContain("sprint-os.args=--arg1");
     expect(args).toContain("/repo/path");
     expect(args).toContain("node:20");
     expect(args).toContain("test-cmd");

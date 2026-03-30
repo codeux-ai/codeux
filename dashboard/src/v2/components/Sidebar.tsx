@@ -41,6 +41,7 @@ export const Sidebar: FunctionComponent = () => {
     return (
         <aside
             ref={sidebarRef}
+            aria-label="Workspace sidebar"
             className="w-[260px] h-screen shrink-0 border-r border-black/[0.05] dark:border-white/[0.04] bg-[#F5F3EF]/60 dark:bg-void-900 flex flex-col justify-between py-8 relative z-40"
         >
             {/* Animated SVG Spline — signal jade to warm ember */}
@@ -109,13 +110,13 @@ export const Sidebar: FunctionComponent = () => {
             </nav>
 
             {/* Settings */}
-            <div className="px-4 relative z-10">
+            <nav aria-label="Settings navigation" className="px-4 relative z-10">
                 <button aria-label="Settings" className="relative w-full flex items-center gap-3.5 px-5 py-3 rounded-2xl transition-colors duration-200 text-left group overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10">
                     <div className="absolute inset-0 rounded-2xl bg-transparent group-hover:bg-black/[0.03] dark:group-hover:bg-white/[0.03] transition-opacity duration-300 pointer-events-none opacity-0 group-hover:opacity-100" />
                     <Settings aria-hidden="true" className="relative z-10 w-4 h-4 text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 group-hover:rotate-90 transition-all duration-700 ease-in-out" strokeWidth={1.5} />
                     <span className="relative z-10 font-medium text-sm tracking-wide text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-300">Settings</span>
                 </button>
-            </div>
+            </nav>
 
             <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#F5F3EF] dark:from-void-900 to-transparent pointer-events-none z-0" />
         </aside>

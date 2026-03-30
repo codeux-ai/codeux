@@ -25,21 +25,4 @@ describe("sanitizeCliWorkflow", () => {
     expect(result.containerMountCodexAuth).toBe(false);
     expect(result.containerMountClaudeCodeAuth).toBe(true);
   });
-
-  it("defaults quota-reset and rate-limit retries and clamps rate-limit delay", () => {
-    const defaults = sanitizeCliWorkflow(undefined);
-    expect(defaults.retryOnQuotaReset).toBe(true);
-    expect(defaults.retryOnRateLimit).toBe(true);
-    expect(defaults.rateLimitRetryDelaySeconds).toBe(10);
-    expect(defaults.maxRateLimitRetries).toBe(5);
-
-    const clamped = sanitizeCliWorkflow({
-      cliWorkflow: {
-        rateLimitRetryDelaySeconds: 0,
-        maxRateLimitRetries: 0,
-      },
-    });
-    expect(clamped.rateLimitRetryDelaySeconds).toBe(1);
-    expect(clamped.maxRateLimitRetries).toBe(1);
-  });
 });

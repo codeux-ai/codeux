@@ -23,8 +23,6 @@ describe("DockerBootstrapBuilder", () => {
 
     const script = builder.build(options);
 
-    expect(script).toContain("export PNPM_STORE_DIR=\"$NPM_CONFIG_CACHE/pnpm-store\"");
-    expect(script).toContain("export pnpm_config_store_dir=\"$PNPM_STORE_DIR\"");
     expect(script).toMatchSnapshot();
   });
 

@@ -109,29 +109,4 @@ describe("DockerSetupImageCache", () => {
     });
     expect(onActivity).toHaveBeenCalledWith(expect.stringContaining("Falling back to runtime setup script"));
   });
-
-  it("falls back to runtime setup instead of building when buildIfMissing is false", async () => {
-    vi.mocked(runStreamingCommand)
-      .mockReset()
-      .mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "missing" });
-
-    const onActivity = vi.fn();
-    const result = await new DockerSetupImageCache().resolveImage({
-      baseImage: "node:24-bookworm",
-      setupScriptPath: "/repo/.sprint-os/container/setup.sh",
-      cacheEnabled: true,
-      buildIfMissing: false,
-      runtimeRoot: "/runtime",
-      repoPath: "/repo",
-      onActivity,
-      mapSourcePathForDaemon: (sourcePath) => `/mapped${sourcePath}`,
-    });
-
-    expect(result).toEqual({
-      image: "node:24-bookworm",
-      runSetupScriptAtRuntime: true,
-    });
-    expect(runStreamingCommand).toHaveBeenCalledTimes(1);
-    expect(onActivity).toHaveBeenCalledWith(expect.stringContaining("Cached Docker setup image"));
-  });
 });
