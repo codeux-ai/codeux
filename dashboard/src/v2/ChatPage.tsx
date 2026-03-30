@@ -47,6 +47,8 @@ import { getProjectWorkerOptions, type WorkerRoutingPreference } from "./lib/pro
 import { fetchProjectEffectiveSettings } from "./lib/settings-api.js";
 import { toChatTimestampMs } from "./lib/chat-time.js";
 import { ChatPageShell } from "./components/chat/ChatPageShell.js";
+import { buildThreadIndex, buildInvocationIndex, buildConnectionIndex } from "./lib/chat-entity-index.js";
+import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { ChatRail } from "./components/chat/ChatRail.js";
 import { ThreadListCard } from "./components/chat/ThreadListCard.js";
 import { InvocationListCard } from "./components/chat/InvocationListCard.js";
@@ -188,27 +190,12 @@ export const ChatPage: FunctionComponent = () => {
   const { selectedProject } = useProjectData();
 
   const { data: execution, loading: executionLoading } = useExecutions(selectedProject?.id || null);
-  const [workerRouting, setWorkerRouting] = useState<WorkerRoutingPreference | null>(null);
+  const { data: effectiveSettings, loading: effectiveSettingsLoading } = useProjectEffectiveSettings(selectedProject?.id || null);
 
-  useEffect(() => {
-    if (!selectedProject) {
-      setWorkerRouting(null);
-      return;
-    }
-    let isMounted = true;
-    fetchProjectEffectiveSettings(selectedProject.id)
-      .then((response) => {
-        if (!isMounted) return;
-        setWorkerRouting({
-          executionMode: response.settings.workers.executionMode,
-          virtualWorkerProvider: response.settings.workers.virtualWorkerProvider,
-        });
-      })
-      .catch((err) => {
-        console.error("Failed to fetch effective settings", err);
-      });
-    return () => { isMounted = false; };
-  }, [selectedProject]);
+  const workerRouting: WorkerRoutingPreference | null = effectiveSettings ? {
+    executionMode: effectiveSettings.settings.workers.executionMode,
+    virtualWorkerProvider: effectiveSettings.settings.workers.virtualWorkerProvider,
+  } : null;
 
   const { options: workerOptions } = getProjectWorkerOptions(execution, workerRouting, executionLoading);
 
@@ -230,14 +217,18 @@ export const ChatPage: FunctionComponent = () => {
   const [compacting, setCompacting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const threadIndex = useMemo(() => buildThreadIndex(threads), [threads]);
+  const invocationIndex = useMemo(() => buildInvocationIndex(invocations), [invocations]);
+  const connectionIndex = useMemo(() => buildConnectionIndex(connections), [connections]);
+
   const selectedThread = useMemo(
-    () => threads.find((thread) => thread.id === selectedThreadId) || null,
-    [threads, selectedThreadId]
+    () => (selectedThreadId ? threadIndex.get(selectedThreadId) || null : null),
+    [threadIndex, selectedThreadId]
   );
 
   const selectedInvocation = useMemo(
-    () => invocations.find((inv) => inv.id === selectedInvocationId) || null,
-    [invocations, selectedInvocationId]
+    () => (selectedInvocationId ? invocationIndex.get(selectedInvocationId) || null : null),
+    [invocationIndex, selectedInvocationId]
   );
 
   useEffect(() => {
@@ -730,8 +721,8 @@ export const ChatPage: FunctionComponent = () => {
     if (!selectedThread?.connectionId) {
       return null;
     }
-    return connections.find((connection) => connection.id === selectedThread.connectionId) || null;
-  }, [connections, selectedThread]);
+    return connectionIndex.get(selectedThread.connectionId) || null;
+  }, [connectionIndex, selectedThread]);
 
   const createThreadForCompose = useCallback(async (): Promise<ChatThread> => {
     if (!selectedProject) {
@@ -922,7 +913,7 @@ export const ChatPage: FunctionComponent = () => {
               threads={threads.filter((t) => t.scope === "project")}
               selectedThreadId={selectedThreadId}
               onSelect={(threadId) => {
-                const preferredThread = threads.find((thread) => thread.id === threadId) || null;
+                const preferredThread = threadIndex.get(threadId) || null;
                 void activateThread(threadId, { preferredThread });
               }}
               onDelete={(threadId) => void handleDeleteThread(threadId)}
@@ -947,7 +938,7 @@ export const ChatPage: FunctionComponent = () => {
             invocations={invocations}
             selectedInvocationId={selectedInvocationId}
             onSelect={(invocationId) => {
-              const preferredInvocation = invocations.find((inv) => inv.id === invocationId) || null;
+              const preferredInvocation = invocationIndex.get(invocationId) || null;
               void activateInvocation(invocationId, { preferredInvocation });
             }}
           />
