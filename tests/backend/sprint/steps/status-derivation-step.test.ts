@@ -14,6 +14,15 @@ describe("runStatusDerivationStep", () => {
     expect(result[1].status).toBe("PENDING");
   });
 
+  it("unblocks dependent tasks when dependencies are completed and PR_CREATED", () => {
+    const subtasks: Subtask[] = [
+      { id: "task-1", title: "Task 1", prompt: "", depends_on: [], is_independent: true, is_merged: false, merge_indicator: "PR_CREATED", status: "COMPLETED" },
+      { id: "task-2", title: "Task 2", prompt: "", depends_on: ["task-1"], is_independent: false, is_merged: false, status: "BLOCKED" },
+    ];
+    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState });
+    expect(result[1].status).toBe("PENDING");
+  });
+
   it("retries failed tasks if retryFailed is true and deps met", () => {
     const subtasks: Subtask[] = [
       { id: "task-1", title: "Task 1", prompt: "", depends_on: [], is_independent: true, is_merged: false, status: "FAILED", session_state: "FAILED" },

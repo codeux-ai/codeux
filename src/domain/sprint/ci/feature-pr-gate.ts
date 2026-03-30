@@ -9,6 +9,7 @@ import {
   buildMergeConfirmedText,
   buildMergeReadyText,
   buildNoPrFoundText,
+  buildPrCreatedText,
 } from "./feature-pr/ci-notification-builder.js";
 import {
   detectPullRequestCiSupport,
@@ -122,6 +123,19 @@ export class FeaturePrGateService {
           featureBranch: context.featureBranch,
         });
         reportText += buildNoPrFoundText(task.id, context.featureBranch);
+        continue;
+      }
+
+      if (context.ciIntelligence.featurePrAutoMergeMode === "CREATE_PR") {
+        task.status = "COMPLETED";
+        task.is_merged = false;
+        task.merge_indicator = "PR_CREATED";
+        await this.persistMergedTask(task, context);
+        this.appendCiGateEvent(task, context, "pr_created", {
+          prNumber: pr.number,
+          prUrl: pr.url,
+        });
+        reportText += buildPrCreatedText(task.id, pr.number, pr.url);
         continue;
       }
 

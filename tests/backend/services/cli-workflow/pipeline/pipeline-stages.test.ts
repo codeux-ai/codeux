@@ -285,6 +285,29 @@ describe("executePrFinalizeStage", () => {
     expect(ctx.prService.resolveOrCreateFeaturePr).not.toHaveBeenCalled();
     expect(ctx.deps.sessionTracking.updateSession).toHaveBeenCalledWith(ctx.sessionId, { state: "COMPLETED", prUrl: undefined });
   });
+
+  it("creates PR if autoCreatePr is false but featurePrAutoMergeMode is CREATE_PR", async () => {
+    const ctx = createMockContext();
+    ctx.settings.git.autoCreatePr = false;
+    ctx.settings.ciIntelligence.featurePrAutoMergeMode = "CREATE_PR";
+    vi.mocked(ctx.prService.resolveOrCreateFeaturePr).mockResolvedValue("https://github.com/pr/1");
+
+    await executePrFinalizeStage(ctx);
+
+    expect(ctx.workflowSucceeded).toBe(true);
+    expect(ctx.prService.resolveOrCreateFeaturePr).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskDescription: "test prompt",
+        sprintDescription: "Mock Sprint Goal",
+      }),
+      ctx.worktreePath,
+      undefined
+    );
+    expect(ctx.deps.sessionTracking.updateSession).toHaveBeenCalledWith(ctx.sessionId, { state: "COMPLETED", prUrl: "https://github.com/pr/1" });
+    expect(ctx.deps.sessionTracking.appendActivity).toHaveBeenCalledWith(ctx.sessionId, expect.objectContaining({
+      description: "Workflow completed. PR: https://github.com/pr/1"
+    }));
+  });
 });
 
 describe("executeCleanupStage", () => {

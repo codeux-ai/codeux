@@ -34,6 +34,12 @@ export function buildMergeReadyText(taskId: string, prNumber: number, featureBra
   return `✅ **Feature PR Ready:** Task \`${taskId}\` can be approved for merge into \`${featureBranch}\` (PR #${prNumber}).\n`;
 }
 
+export function buildPrCreatedText(taskId: string, prNumber: number, prUrl: string): string {
+  let text = `✅ **PR Created:** Task \`${taskId}\` has created a PR (#${prNumber}) and the merge mode is \`CREATE_PR\`.\n`;
+  text += `   - PR: ${prUrl}\n`;
+  return text;
+}
+
 export function buildMergeConflictText(
   taskId: string,
   prNumber: number,

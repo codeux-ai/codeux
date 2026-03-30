@@ -94,6 +94,31 @@ describe("protocol-step", () => {
         expect(res.instructions).toContain('"feature_comments_line":""');
     });
 
+    it("does not require a merge protocol for completed tasks with PR_CREATED merge indicator", async () => {
+        const subtasks: Subtask[] = [
+            { id: "1", title: "t", prompt: "p", depends_on: [], is_independent: false, status: "COMPLETED", is_merged: false, merge_indicator: "PR_CREATED" },
+        ];
+
+        const renderInstruction = vi.fn(async (t, v) => `${t}:${JSON.stringify(v)}`);
+        const onTaskEvent = vi.fn();
+
+        const res = await runProtocolStep(subtasks, {
+            featureBranch: "fb",
+            githubMode: "REMOTE",
+            ciIntelligence,
+            enableMergeProtocol: true,
+            enableActionRequiredProtocol: true,
+            isActionRequiredState: () => false,
+            renderInstruction,
+            onTaskEvent,
+        });
+
+        expect(res.awaitingMerge).toEqual([]);
+        expect(res.manualMergeTasks).toEqual([]);
+        expect(res.instructions).toBe("");
+        expect(onTaskEvent).not.toHaveBeenCalled();
+    });
+
     it("does not require a merge protocol for completed tasks with no branch or PR output", async () => {
         const subtasks: Subtask[] = [
             { id: "1", title: "t", prompt: "p", depends_on: [], is_independent: false, status: "COMPLETED", is_merged: false },

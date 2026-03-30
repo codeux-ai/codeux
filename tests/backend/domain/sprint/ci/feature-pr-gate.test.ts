@@ -376,6 +376,25 @@ jobs:
     expect(context.sendSessionMessage).toHaveBeenCalled();
   });
 
+  it("completes task with PR_CREATED when featurePrAutoMergeMode is CREATE_PR and PR exists", async () => {
+    context.ciIntelligence.featurePrAutoMergeMode = "CREATE_PR";
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].merge_indicator).toBe("PR_CREATED");
+    expect(context.persistMergedTask).toHaveBeenCalledWith(expect.objectContaining({ id: "T1", is_merged: false, merge_indicator: "PR_CREATED" }));
+    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({ state: "pr_created", prNumber: 101 }),
+      expect.any(Object),
+    );
+    expect(result.reportText).toContain("PR Created");
+    expect(result.reportText).toContain("CREATE_PR");
+  });
+
   it("confirms the task as merged when the PR has already landed", async () => {
     context.gitStatus.openPullRequests = [];
     context.gitStatus.mergedPullRequests = [
