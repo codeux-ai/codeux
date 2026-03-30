@@ -7,6 +7,7 @@ import type {
   SystemSettings,
 } from "../contracts/settings-scope-types.js";
 import { SettingsDbStorage } from "./settings-db-storage.js";
+import { executeChunkedInQuery } from "./repository-utils.js";
 import {
   buildDefaultProjectSettings,
   buildDefaultSystemSettings,
@@ -66,19 +67,23 @@ export class SettingsRepository {
     this.migrateLegacySettingsIfNeeded();
     const result = new Map<string, ProjectSettingsOverride>();
 
-    // Use an executeChunkedInQuery wrapper if we want, but SettingsDbStorage does it raw currently.
-    // For large projectIds, chunking may be needed. Given project size it's likely okay,
-    // but we can chunk the request.
-    const chunkSize = 100;
-    for (let i = 0; i < projectIds.length; i += chunkSize) {
-      const chunk = projectIds.slice(i, i + chunkSize);
-      const rows = this.storage.readProjectPayloads(chunk);
-      for (const row of rows) {
-        try {
-          result.set(row.project_id, JSON.parse(row.payload) as ProjectSettingsOverride);
-        } catch {
-          // Ignore
-        }
+    const rows = executeChunkedInQuery<{ project_id: string; payload: string }>(
+      (sql) => this.storage.getCachedStatement(sql),
+      {
+        sqlPrefix: `
+          SELECT project_id, payload
+          FROM project_settings
+          WHERE project_id
+        `,
+        items: projectIds,
+      }
+    );
+
+    for (const row of rows) {
+      try {
+        result.set(row.project_id, JSON.parse(row.payload) as ProjectSettingsOverride);
+      } catch {
+        // Ignore
       }
     }
 
