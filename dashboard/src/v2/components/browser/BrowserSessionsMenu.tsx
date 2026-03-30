@@ -61,7 +61,7 @@ export const BrowserSessionsMenu: FunctionComponent = () => {
         if (e.key === "Escape") {
             setIsOpen(false);
             if (triggerRef.current) {
-                triggerRef.current.focus();
+                if (typeof triggerRef.current.focus === "function") triggerRef.current.focus();
             }
             return;
         }
