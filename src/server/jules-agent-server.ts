@@ -428,7 +428,7 @@ export class JulesAgentServer {
   private resolveGitTrackingRequest(): GitTrackingRequest {
     const settings = this.getSelectedProjectDashboardSettings();
     const ci = settings.ciIntelligence;
-    const runtimeStatus = this.projectRuntimeRepository.getSelectedProjectStatus();
+    const runtimeStatus = this.projectRuntimeRepository.getSelectedProjectLiveStatus();
     const subtasks: Subtask[] = Array.isArray(runtimeStatus.subtasks) ? runtimeStatus.subtasks : [];
     const featureBranch = typeof runtimeStatus.feature_branch === "string" && runtimeStatus.feature_branch.trim().length > 0
       ? runtimeStatus.feature_branch.trim()
@@ -476,7 +476,7 @@ export class JulesAgentServer {
     const dashboardBindUp = !this.isDashboardEnabled() || this.runtimeContext.dashboardRuntimePort !== null;
     const mcpServiceUp = this.mcpServiceBound;
 
-    const isReady = settingsDbUp && dashboardBindUp && mcpServiceUp && !!this.projectRuntimeRepository.getSelectedProjectStatus().timestamp;
+    const isReady = settingsDbUp && dashboardBindUp && mcpServiceUp && !!this.projectRuntimeRepository.getSelectedProjectLiveStatus().timestamp;
 
     return {
       status: isReady ? "READY" : "NOT_READY",

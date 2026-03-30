@@ -283,6 +283,90 @@ describe("ProjectRuntimeRepository", () => {
     expect(status2.subtasks[0].status).toBe("PENDING");
   });
 
+  it("resolves live project status from the most recent active sprint instead of a stale selected sprint", async () => {
+    const { executionRepository, projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Parallel Live Project",
+      sourceType: "local",
+      sourceRef: "/workspace/parallel-live",
+    });
+
+    const olderSprint = projectRepository.createSprint(project.id, { name: "Older Sprint", number: 26 });
+    const currentSprint = projectRepository.createSprint(project.id, { name: "Current Sprint", number: 64 });
+    const olderTask = projectRepository.createTask(project.id, {
+      sprintId: olderSprint.id,
+      taskKey: "OLD",
+      title: "Older live task",
+      status: "in_progress",
+    });
+    const currentTask = projectRepository.createTask(project.id, {
+      sprintId: currentSprint.id,
+      taskKey: "CUR",
+      title: "Current live task",
+      status: "in_progress",
+    });
+
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: olderSprint.id,
+      sprint_number: 26,
+      feature_branch: "feature/sprint-26",
+      subtasks: [
+        { id: "OLD", title: "Older live task", status: "RUNNING", record_id: olderTask.id, depends_on: [] },
+      ],
+      reportText: "Older sprint still active",
+      timestamp: "2026-03-30T05:40:00.000Z",
+    });
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: currentSprint.id,
+      sprint_number: 64,
+      feature_branch: "feature/sprint-64",
+      subtasks: [
+        { id: "CUR", title: "Current live task", status: "RUNNING", record_id: currentTask.id, depends_on: [] },
+      ],
+      reportText: "Current sprint should drive live status",
+      timestamp: "2026-03-30T05:56:00.000Z",
+    });
+
+    const olderRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: olderSprint.id,
+      status: "running",
+    });
+    executionRepository.updateSprintRun(olderRun.id, {
+      status: "running",
+      startedAt: "2026-03-30T05:40:00.000Z",
+      lastHeartbeatAt: "2026-03-30T05:48:00.000Z",
+    });
+    const currentRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: currentSprint.id,
+      status: "running",
+    });
+    executionRepository.updateSprintRun(currentRun.id, {
+      status: "running",
+      startedAt: "2026-03-30T05:50:00.000Z",
+      lastHeartbeatAt: "2026-03-30T05:56:00.000Z",
+    });
+
+    projectRepository.setSelectedProjectId(project.id);
+    projectRepository.setSelectedSprintId(project.id, olderSprint.id);
+
+    const selectedStatus = runtimeRepository.getSelectedProjectStatus();
+    expect(selectedStatus.sprint_id).toBe(olderSprint.id);
+    expect(selectedStatus.reportText).toBe("Older sprint still active");
+
+    const liveStatus = runtimeRepository.getSelectedProjectLiveStatus();
+    expect(liveStatus.sprint_id).toBe(currentSprint.id);
+    expect(liveStatus.sprint_number).toBe(64);
+    expect(liveStatus.feature_branch).toBe("feature/sprint-64");
+    expect(liveStatus.reportText).toBe("Current sprint should drive live status");
+    expect(liveStatus.subtasks).toHaveLength(1);
+    expect(liveStatus.subtasks[0].id).toBe("CUR");
+  });
+
   it("projects recent provider activity into task activities without a secondary fetch path", async () => {
     const { executionRepository, projectRepository, runtimeRepository } = await createRepositories();
 

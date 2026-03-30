@@ -44,6 +44,7 @@ describe("Dashboard Factory", () => {
       },
       projectRuntimeRepository: {
         getSelectedProjectStatus: vi.fn().mockReturnValue({ project_id: "project-1", sprint_id: "sprint-1", sprint_number: 3, feature_branch: "feature/sprint3", repo_path: "/repo", subtasks: ["mock-subtask"] }),
+        getSelectedProjectLiveStatus: vi.fn().mockReturnValue({ project_id: "project-1", sprint_id: "sprint-1", sprint_number: 3, feature_branch: "feature/sprint3", repo_path: "/repo", subtasks: ["mock-subtask"] }),
         getProjectStatus: vi.fn().mockReturnValue({ project_id: "project-1", sprint_id: "sprint-1", sprint_number: 3, source_id: "source-1", feature_branch: "feature/sprint3", repo_path: "/repo", subtasks: [{ record_id: "task1", id: "T1", title: "Task", prompt: "Do it", depends_on: [], is_independent: true }] }),
         syncDashboardStatus: vi.fn(),
       },
@@ -164,7 +165,7 @@ describe("Dashboard Factory", () => {
   });
 
   it("getSubtasks handles missing lastStatus", () => {
-    mockCoreDeps.projectRuntimeRepository.getSelectedProjectStatus.mockReturnValue({ subtasks: [] });
+    mockCoreDeps.projectRuntimeRepository.getSelectedProjectLiveStatus.mockReturnValue({ subtasks: [] });
     createDashboardDependencies(
       mockContext as unknown as ServerContext,
       mockCoreDeps as unknown as CoreDependencies,

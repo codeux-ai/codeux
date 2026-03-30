@@ -319,6 +319,19 @@ export class ProjectRuntimeRepository {
     return this.getProjectStatus(projectId, sprintId);
   }
 
+  getProjectLiveStatus(projectId: string, preferredSprintId?: string | null): DashboardStatus {
+    const sprintId = this.resolveLiveSprintId(projectId, preferredSprintId);
+    return this.getProjectStatus(projectId, sprintId);
+  }
+
+  getSelectedProjectLiveStatus(): DashboardStatus {
+    const projectId = this.getSelectedProjectId();
+    if (!projectId) {
+      return { subtasks: [], timestamp: null };
+    }
+    return this.getProjectLiveStatus(projectId);
+  }
+
   getProjectStatus(projectId: string, explicitSprintId?: string | null): DashboardStatus {
     const context = this.getRuntimeContext(projectId, explicitSprintId);
     const sprintIdToLoad = explicitSprintId ?? context?.sprintId ?? null;
@@ -370,7 +383,7 @@ export class ProjectRuntimeRepository {
   }
 
   getSelectedProjectRepoPath(fallbackPath: string): string {
-    const status = this.getSelectedProjectStatus();
+    const status = this.getSelectedProjectLiveStatus();
     const repoPath = typeof status.repo_path === "string" ? status.repo_path.trim() : "";
     return repoPath.length > 0 ? repoPath : fallbackPath;
   }
@@ -500,6 +513,46 @@ export class ProjectRuntimeRepository {
         FROM sprints
         WHERE id = ?
       `).get(existing.sprintId) as SprintRow | undefined || null;
+    }
+
+    return null;
+  }
+
+  private resolveLiveSprintId(projectId: string, preferredSprintId?: string | null): string | null {
+    if (preferredSprintId) {
+      const preferredActiveRow = this.db.prepare(`
+        SELECT sr.sprint_id
+        FROM sprint_runs sr
+        WHERE sr.project_id = ?
+          AND sr.sprint_id = ?
+          AND sr.status IN ('queued', 'running', 'paused', 'cancel_requested')
+        ORDER BY COALESCE(sr.last_heartbeat_at, sr.updated_at, sr.created_at) DESC, sr.rowid DESC
+        LIMIT 1
+      `).get(projectId, preferredSprintId) as { sprint_id: string } | undefined;
+      if (preferredActiveRow) {
+        return preferredActiveRow.sprint_id;
+      }
+    }
+
+    const activeRow = this.db.prepare(`
+      SELECT sr.sprint_id
+      FROM sprint_runs sr
+      WHERE sr.project_id = ?
+        AND sr.status IN ('queued', 'running', 'paused', 'cancel_requested')
+      ORDER BY COALESCE(sr.last_heartbeat_at, sr.updated_at, sr.created_at) DESC, sr.rowid DESC
+      LIMIT 1
+    `).get(projectId) as { sprint_id: string } | undefined;
+    if (activeRow) {
+      return activeRow.sprint_id;
+    }
+
+    if (preferredSprintId) {
+      return preferredSprintId;
+    }
+
+    const selectedSprintId = this.getSelectedSprintId(projectId);
+    if (selectedSprintId) {
+      return selectedSprintId;
     }
 
     return null;

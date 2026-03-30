@@ -101,8 +101,8 @@ export const LiveSessionPage: FunctionComponent = () => {
     const realtimeProjectId = selectedProjectId || execution.projectId || status.project_id || null;
     const { data: sprints, selectedSprintId, loading: sprintsLoading } = useSprints(realtimeProjectId);
     const sprintScopeId = useMemo(
-        () => resolveLiveSessionSprintScopeId(status, selectedSprintId),
-        [selectedSprintId, status],
+        () => resolveLiveSessionSprintScopeId(status, execution, selectedSprintId),
+        [execution, selectedSprintId, status],
     );
     const { selectedSession } = usePreviewSessions({
         projectId: realtimeProjectId,

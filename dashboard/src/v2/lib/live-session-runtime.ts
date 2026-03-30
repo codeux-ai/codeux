@@ -18,15 +18,34 @@ export interface LiveSessionRuntimeState {
 
 export function resolveLiveSessionSprintScopeId(
   status: DashboardStatus,
+  execution: ExecutionDashboardSnapshot,
   selectedSprintId?: string | null,
 ): string | null {
   if (selectedSprintId) {
-    return selectedSprintId;
+    const hasSelectedSprintActivity = execution.sprintRuns.some((run) =>
+      run.sprintId === selectedSprintId
+      && ["running", "queued", "paused", "cancel_requested"].includes(run.status)
+    );
+    const hasSelectedSprintStatus = status.sprint_id === selectedSprintId
+      && (Boolean(status.timestamp) || (status.subtasks?.length || 0) > 0);
+
+    if (hasSelectedSprintActivity || hasSelectedSprintStatus || execution.sprintRuns.length === 0) {
+      return selectedSprintId;
+    }
   }
 
-  return typeof status.sprint_id === "string" && status.sprint_id.trim().length > 0
-    ? status.sprint_id
-    : null;
+  if (typeof status.sprint_id === "string" && status.sprint_id.trim().length > 0) {
+    return status.sprint_id;
+  }
+
+  const activeRun = execution.sprintRuns.find((run) => ["running", "queued", "paused", "cancel_requested"].includes(run.status))
+    || execution.sprintRuns[0]
+    || null;
+  if (activeRun?.sprintId) {
+    return activeRun.sprintId;
+  }
+
+  return selectedSprintId ?? null;
 }
 
 export function deriveLiveSessionRuntimeState(

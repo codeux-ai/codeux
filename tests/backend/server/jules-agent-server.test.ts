@@ -151,7 +151,7 @@ describe("JulesAgentServer", () => {
         ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence, enabled: true, waitForCiBeforeFeatureMerge: true }
       };
       vi.spyOn((server as any).projectManagementRepository, "getSelectedProjectId").mockReturnValue(null);
-      vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectStatus").mockReturnValue({
+      vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectLiveStatus").mockReturnValue({
         subtasks: [{ id: "T1", status: "RUNNING" } as any],
         feature_branch: "feat/test",
         timestamp: "2026-03-09T00:00:00.000Z",
@@ -179,7 +179,7 @@ describe("JulesAgentServer", () => {
         },
         sources: {},
       });
-      vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectStatus").mockReturnValue({
+      vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectLiveStatus").mockReturnValue({
         subtasks: [{ id: "T1", status: "RUNNING" } as any],
         feature_branch: "feat/test",
         timestamp: "2026-03-09T00:00:00.000Z",
@@ -193,7 +193,7 @@ describe("JulesAgentServer", () => {
 
     it("should return MAIN_BRANCH_CI otherwise", () => {
       vi.spyOn((server as any).projectManagementRepository, "getSelectedProjectId").mockReturnValue(null);
-      vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectStatus").mockReturnValue({
+      vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectLiveStatus").mockReturnValue({
         subtasks: [],
         feature_branch: undefined,
         timestamp: null,

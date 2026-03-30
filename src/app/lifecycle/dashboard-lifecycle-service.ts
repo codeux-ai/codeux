@@ -363,7 +363,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
   deps.dashboardRealtimeService.setSnapshotLoaders({
     getProjectsSnapshot,
     getProjectExecutionSnapshot,
-    getProjectStatusSnapshot: (projectId) => deps.projectRuntimeRepository.getProjectStatus(projectId),
+    getProjectStatusSnapshot: (projectId) => deps.projectRuntimeRepository.getProjectLiveStatus(projectId),
     getOverviewTelemetrySnapshot,
   });
 
@@ -386,7 +386,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     dashboardDir,
     port,
     liveActivityCacheMs: deps.LIVE_ACTIVITY_CACHE_MS,
-    getStatus: () => deps.projectRuntimeRepository.getSelectedProjectStatus(),
+    getStatus: () => deps.projectRuntimeRepository.getSelectedProjectLiveStatus(),
     getExecutionSnapshot: () => {
       const projectId = deps.projectManagementRepository.getSelectedProjectId();
       return projectId

@@ -42,7 +42,7 @@ export const StatsHeader: FunctionComponent<StatsHeaderProps> = memo(({
     const realtimeProjectId = selectedProjectId || execution.projectId || status.project_id || null;
     const { selectedSprintId, loading: sprintsLoading } = useSprints(realtimeProjectId);
 
-    const sprintScopeId = resolveLiveSessionSprintScopeId(status, selectedSprintId);
+    const sprintScopeId = resolveLiveSessionSprintScopeId(status, execution, selectedSprintId);
 
     const { selectedSession } = usePreviewSessions({
         projectId: realtimeProjectId,

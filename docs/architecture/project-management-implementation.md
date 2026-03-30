@@ -108,12 +108,14 @@ The v2 dashboard now uses the selected project as the scope driver.
 
 Current behavior:
 - Top navigation project selector reads/writes the selected project in sqlite
+- Top navigation sprint selection remains a persisted management/view preference, but live runtime status now resolves from active sprint runs so stale selections do not hijack parallel sprint execution
 - Projects page creates, lists, selects, and deletes projects
 - Sprints page creates and lists sprints for the selected project
 - Sprint list/status views derive their effective sprint state from the latest `sprint_run`, so paused or cancelled runs do not continue to render as running
 - Sprints page run controls now operate on project-scoped execution data and update sprint cards optimistically while the execution snapshot refreshes
 - Sprints page can import markdown bundles and export DB-backed sprint/task markdown bundles
 - Tasks page creates, edits, deletes, filters, and groups tasks for the selected project
+- Tasks page sprint deep links now apply a local page filter instead of silently overwriting the persisted selected sprint for the whole project
 - Task dependencies are edited in the task modal and stored in `task_dependencies`
 - Dashboard overview project/task widgets and header stats read from the same DB-backed state
 - Agents page manages project-scoped agent presets rather than live MCP connections
