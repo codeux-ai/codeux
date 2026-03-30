@@ -280,7 +280,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             <button
               type="button"
               onClick={handleCancel}
-              className="mt-2 inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/66 px-4 py-2 text-xs font-semibold text-slate-500 transition-colors hover:border-status-red/30 hover:text-status-red dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:border-status-red/30 dark:hover:text-status-red"
+              className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 mt-2 inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/66 px-4 py-2 text-xs font-semibold text-slate-500 transition-colors hover:border-status-red/30 hover:text-status-red dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:border-status-red/30 dark:hover:text-status-red"
             >
               <X className="h-3.5 w-3.5" />
               Cancel
@@ -316,7 +316,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/78 text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-white"
+              className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/78 text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-white"
               aria-label="Close sprint composer"
             >
               <X className="h-4 w-4" />

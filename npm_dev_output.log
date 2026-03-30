@@ -1,0 +1,25 @@
+
+> jules-subagents@1.2.0 dev:dashboard
+> vite
+
+
+  VITE v7.3.1  ready in 578 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+10:05:21 AM [vite] (client) hmr update /src/styles.css, /src/v2/components/ui/CollapsiblePanel.tsx
+10:07:19 AM [vite] (client) hmr update /src/v2/components/ui/AddProjectModal.tsx, /src/styles.css
+10:08:56 AM [vite] (client) hmr update /src/styles.css, /src/v2/components/ui/RerunTaskModal.tsx
+10:19:27 AM [vite] (client) hmr update /src/styles.css, /src/v2/components/ui/RerunTaskModal.tsx
+10:20:14 AM [vite] (client) hmr update /src/v2/components/ui/AddProjectModal.tsx, /src/styles.css
+10:20:14 AM [vite] (client) hmr update /src/v2/components/ui/AddProjectModal.tsx, /src/styles.css
+10:21:19 AM [vite] (client) hmr update /src/styles.css, /src/v2/components/ui/CollapsiblePanel.tsx
+10:21:19 AM [vite] (client) hmr update /src/v2/components/ui/AddProjectModal.tsx, /src/styles.css
+10:21:19 AM [vite] (client) hmr update /src/styles.css, /src/v2/components/ui/RerunTaskModal.tsx
+10:23:46 AM [vite] (client) hmr update /src/v2/components/ui/AddProjectModal.tsx, /src/styles.css
+10:25:03 AM [vite] (client) hmr update /src/styles.css, /src/v2/components/ui/RerunTaskModal.tsx
+10:26:59 AM [vite] (client) hmr update /src/v2/components/ui/AddProjectModal.tsx, /src/styles.css
+10:28:08 AM [vite] (client) hmr update /src/styles.css, /src/v2/components/ui/RerunTaskModal.tsx
+10:40:09 AM [vite] (client) hmr update /src/styles.css, /src/v2/components/ui/CollapsiblePanel.tsx
+10:41:44 AM [vite] (client) hmr update /src/styles.css, /src/v2/components/ui/RerunTaskModal.tsx
+10:43:02 AM [vite] (client) hmr update /src/v2/components/ui/AddProjectModal.tsx, /src/styles.css

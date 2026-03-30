@@ -14,6 +14,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const backdropRef = useRef<HTMLDivElement>(null);
     const cardRef     = useRef<HTMLDivElement>(null);
     const fieldsRef   = useRef<HTMLDivElement>(null);
+    const triggerRef  = useRef<HTMLElement | null>(null);
 
     const [name, setName]           = useState('');
     const [sourceType, setSourceType] = useState<SourceType>('local');
@@ -41,10 +42,54 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     };
 
     useEffect(() => {
-        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose(); };
+        triggerRef.current = document.activeElement as HTMLElement | null;
+
+        const getFocusableElements = () => {
+            if (!cardRef.current) return [];
+            return Array.from(cardRef.current.querySelectorAll('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')) as HTMLElement[];
+        };
+
+        if (cardRef.current) {
+            const focusableElements = getFocusableElements();
+            if (focusableElements.length > 0) {
+                focusableElements[0].focus();
+            }
+        }
+
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                handleClose();
+            } else if (e.key === 'Tab') {
+                if (!cardRef.current) return;
+                const focusableElements = getFocusableElements();
+                if (focusableElements.length === 0) return;
+
+                const first = focusableElements[0];
+                const last = focusableElements[focusableElements.length - 1];
+
+                if (!cardRef.current.contains(document.activeElement)) {
+                    e.preventDefault();
+                    first.focus();
+                    return;
+                }
+
+                if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            }
+        };
         document.addEventListener('keydown', handler);
-        return () => document.removeEventListener('keydown', handler);
-    }, []);
+        return () => {
+            document.removeEventListener('keydown', handler);
+            if (triggerRef.current) {
+                triggerRef.current.focus();
+            }
+        };
+    }, [handleClose]);
 
     const handleBackdropClick = (e: MouseEvent) => {
         if (e.target === backdropRef.current) handleClose();
@@ -127,7 +172,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         <button
                             onClick={handleClose}
                             aria-label="Close"
-                            className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
+                            className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
                         >
                             <X className="w-4 h-4" />
                         </button>
@@ -234,13 +279,13 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 <button
                                     type="button"
                                     onClick={handleClose}
-                                    className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 rounded-sm text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
-                                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] hover:-translate-y-px"
+                                    className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] hover:-translate-y-px"
                                 >
                                     <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                                     Add Project
