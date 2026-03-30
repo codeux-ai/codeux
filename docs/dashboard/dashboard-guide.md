@@ -379,7 +379,7 @@ Runtime scoping:
 ## Polling Behavior
 
 From `dashboard/src/hooks/use-dashboard-runtime-data.ts`:
-- Live view now does one initial `/api/live` fetch, then subscribes only to `project.live.updated` for selected-project runtime state.
+- Live view now does one initial `/api/live` fetch, then subscribes only to `project.live.updated` for selected-project runtime state. The UI explicitly reflects websocket degradation states (`connecting`, `reconnecting`, etc.) without altering the stable Live snapshot payload.
 - There is no steady-state client poll for status, execution, or git on the Live page anymore.
 - When the websocket reports `snapshot_required`, the browser re-fetches `/api/live` and replaces the whole live snapshot atomically.
 - Git status is refreshed server-side and folded into that same live snapshot stream, including a periodic background refresh owned by the server.

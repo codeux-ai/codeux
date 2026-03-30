@@ -30,6 +30,7 @@
 - [Agent Preset Foundation](./architecture/agent-preset-foundation.md)
 - [Agent Sync And Planning Agent](./architecture/agent-sync-and-planning-agent.md)
 - [Live Connections Runtime Surface](./architecture/live-connections-runtime-surface.md)
+- [Postgres Migration Plan](./architecture/postgres-migration-plan.md)
 - [Connection And Listener Foundation Reset](./architecture/connection-and-listener-foundation-reset.md)
 - [Streamable HTTP Worker Gateway](./architecture/streamable-http-worker-gateway.md)
 - [MCP Connections And Listen Mode](./architecture/mcp-connections-and-listen-mode.md)
