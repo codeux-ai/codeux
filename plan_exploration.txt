@@ -1,6 +1,0 @@
-1. The goal is to clean up the lower half of the Stats page by giving task and sprint telemetry their own focused tabs and removing the "token-share" and "active-time-share" progress bars.
-2. The `TelemetryLedger` component is currently in `dashboard/src/v2/pages/stats/components/StatsShared.tsx`. It will be moved to its own file `dashboard/src/v2/pages/stats/components/TelemetryLedger.tsx`.
-3. The `TelemetryLedgerTabs` component will be created in `dashboard/src/v2/pages/stats/components/TelemetryLedgerTabs.tsx` to handle the tab functionality.
-4. The `TelemetrySectionsSection` component will be updated to use `TelemetryLedgerTabs`.
-5. I need to remove `tokenShare` and `timeShare` progress bars from `TelemetryLedger`.
-6. Need to test with `tests/dashboard/v2/stats-telemetry-tabs.test.tsx`.
