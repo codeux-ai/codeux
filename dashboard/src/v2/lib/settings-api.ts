@@ -32,8 +32,11 @@ export const resetSystemDatabase = async (): Promise<void> => {
   });
 };
 
-export const fetchProjectEffectiveSettings = async (projectId: string): Promise<EffectiveSettingsResponse> => {
-  return fetchJson<EffectiveSettingsResponse>(`/api/projects/${encodeURIComponent(projectId)}/settings/effective`);
+export const fetchProjectEffectiveSettings = async (
+  projectId: string,
+  init?: RequestInit
+): Promise<EffectiveSettingsResponse> => {
+  return fetchJson<EffectiveSettingsResponse>(`/api/projects/${encodeURIComponent(projectId)}/settings/effective`, init);
 };
 
 export const saveProjectSettings = async (projectId: string, settings: ProjectSettings): Promise<void> => {
