@@ -6,6 +6,27 @@ import { FeaturePrGateService, CiGateContext } from "../../../../../src/domain/s
 import type { Subtask, GitTrackingStatus } from "../../../../../src/contracts/app-types.js";
 
 describe("FeaturePrGateService", () => {
+
+  it("completes task with PR_CREATED when in CREATE_PR mode and PR is open", async () => {
+    context.ciIntelligence.featurePrAutoMergeMode = "CREATE_PR";
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].merge_indicator).toBe("PR_CREATED");
+    expect(context.persistMergedTask).toHaveBeenCalled();
+  });
+
+  it("leaves task incomplete when in CREATE_PR mode and no PR is matched", async () => {
+    context.gitStatus.openPullRequests = [];
+    context.ciIntelligence.featurePrAutoMergeMode = "CREATE_PR";
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("RUNNING");
+    expect(result.subtasks[0].merge_indicator).toBe("CI");
+  });
+
   let service: FeaturePrGateService;
   let context: CiGateContext;
   let subtasks: Subtask[];

@@ -47,12 +47,12 @@ export interface JulesActivity {
 }
 
 export type SubtaskStatus = "PENDING" | "RUNNING" | "CODING_COMPLETED" | "COMPLETED" | "FAILED" | "BLOCKED" | "QUOTA";
-export type SubtaskMergeIndicator = "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCKED" | "MERGE_CONFLICT";
+export type SubtaskMergeIndicator = "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCKED" | "MERGE_CONFLICT" | "PR_CREATED";
 export type ProviderId = "jules" | "gemini" | "codex" | "claude-code";
 export type ProviderStrategy = "MANUAL" | "WEIGHTED" | "ORCHESTRATOR";
 export type ThinkingMode = "SMALL" | "MEDIUM" | "HIGH";
 export type CliExecutionMode = "HOST" | "DOCKER";
-export type FeaturePrAutoMergeMode = "OFF" | "WHEN_GREEN" | "ALWAYS";
+export type FeaturePrAutoMergeMode = "OFF" | "WHEN_GREEN" | "ALWAYS" | "CREATE_PR";
 export type WorkerExecutionMode = "CONNECTED_MCP" | "VIRTUAL";
 export type VirtualWorkerProvider = Exclude<ProviderId, "jules">;
 

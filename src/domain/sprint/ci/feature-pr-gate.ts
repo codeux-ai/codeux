@@ -57,7 +57,7 @@ export class FeaturePrGateService {
       const previousStatus = task.status;
       const previousMergeIndicator = task.merge_indicator;
       task.merge_indicator = task.is_merged
-        ? (task.merge_indicator === "AUTOMERGE" ? "AUTOMERGE" : "MERGED")
+        ? (task.merge_indicator === "AUTOMERGE" ? "AUTOMERGE" : task.merge_indicator === "PR_CREATED" ? "PR_CREATED" : "MERGED")
         : task.merge_indicator === "MERGE_CONFLICT"
           ? "MERGE_CONFLICT"
           : taskHasMergeEvidence(task)
@@ -104,7 +104,7 @@ export class FeaturePrGateService {
       if (mergedPr) {
         task.status = "COMPLETED";
         task.is_merged = true;
-        task.merge_indicator = task.merge_indicator === "AUTOMERGE" ? "AUTOMERGE" : "MERGED";
+        task.merge_indicator = task.merge_indicator === "AUTOMERGE" ? "AUTOMERGE" : task.merge_indicator === "PR_CREATED" ? "PR_CREATED" : "MERGED";
         await this.persistMergedTask(task, context);
         this.appendCiGateEvent(task, context, "merge_confirmed", {
           prNumber: mergedPr.number,
@@ -122,6 +122,19 @@ export class FeaturePrGateService {
           featureBranch: context.featureBranch,
         });
         reportText += buildNoPrFoundText(task.id, context.featureBranch);
+        continue;
+      }
+
+      if (context.ciIntelligence.featurePrAutoMergeMode === "CREATE_PR") {
+        task.status = "COMPLETED";
+        task.merge_indicator = "PR_CREATED";
+        await this.persistMergedTask(task, context);
+        this.appendCiGateEvent(task, context, "pr_created", {
+          prNumber: pr.number,
+          prUrl: pr.url,
+        });
+        reportText += `Pull Request #${pr.number} created and matched. Task completed.
+`;
         continue;
       }
 

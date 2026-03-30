@@ -285,6 +285,18 @@ describe("executePrFinalizeStage", () => {
     expect(ctx.prService.resolveOrCreateFeaturePr).not.toHaveBeenCalled();
     expect(ctx.deps.sessionTracking.updateSession).toHaveBeenCalledWith(ctx.sessionId, { state: "COMPLETED", prUrl: undefined });
   });
+
+  it("creates PR if featurePrAutoMergeMode is CREATE_PR even when autoCreatePr is false", async () => {
+    const ctx = createMockContext();
+    ctx.settings.git.autoCreatePr = false;
+    ctx.settings.ciIntelligence.featurePrAutoMergeMode = "CREATE_PR";
+    vi.mocked(ctx.prService.resolveOrCreateFeaturePr).mockResolvedValue("https://github.com/pr/create-pr-mode");
+
+    await executePrFinalizeStage(ctx);
+
+    expect(ctx.prService.resolveOrCreateFeaturePr).toHaveBeenCalled();
+    expect(ctx.deps.sessionTracking.updateSession).toHaveBeenCalledWith(ctx.sessionId, { state: "COMPLETED", prUrl: "https://github.com/pr/create-pr-mode" });
+  });
 });
 
 describe("executeCleanupStage", () => {

@@ -3,6 +3,40 @@ import { runProtocolStep } from "../../../../src/sprint/steps/protocol-step.js";
 import { Subtask, CiIntelligenceSettings } from "../../../../src/contracts/app-types.js";
 
 describe("protocol-step", () => {
+    it("does not emit manual merge protocol text when a task is PR_CREATED", async () => {
+        const subtasks: Subtask[] = [
+            { id: "1", title: "t", prompt: "p", depends_on: [], is_independent: false, status: "COMPLETED", is_merged: false, merge_indicator: "PR_CREATED", worker_branch: "worker/1", pr_url: "https://example.com/pr/1" },
+        ];
+
+        const renderInstruction = vi.fn(async (t, v) => `[${t}]`);
+
+        const res = await runProtocolStep(subtasks, {
+            featureBranch: "fb",
+            githubMode: "REMOTE",
+            ciIntelligence: {
+                enabled: true,
+                enableLivePrMonitoring: false,
+                waitForCiBeforeMainMerge: false,
+                resolveAllCommentsBeforeMainMerge: false,
+                resolveMainMergeConflicts: false,
+                waitForCiBeforeFeatureMerge: false,
+                resolveAllCommentsBeforeFeatureMerge: false,
+                resolveMergeConflicts: false,
+                waitForJulesCiAutofix: false,
+                julesCiAutofixMaxRetries: 0,
+                featurePrAutoMergeMode: "OFF",
+                mainBranchAutoMergeMode: "OFF",
+            },
+            enableMergeProtocol: true,
+            enableActionRequiredProtocol: true,
+            isActionRequiredState: () => false,
+            renderInstruction,
+        });
+
+        expect(res.manualMergeTasks).toEqual([]);
+        expect(res.instructions).not.toContain("mergeTask");
+    });
+
     const ciIntelligence: CiIntelligenceSettings = {
         enabled: true,
         enableLivePrMonitoring: false,
