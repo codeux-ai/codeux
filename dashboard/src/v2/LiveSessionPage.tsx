@@ -34,6 +34,7 @@ import {
     EMPTY_RUNTIME_STATS,
 } from "./lib/live-session-config.js";
 import { LiveTaskCard, TaskDuration, QuotaCountdown } from "./components/LiveTaskCard.js";
+import { LiveTransportBanner } from "./components/live-session/LiveTransportBanner.js";
 import { RuntimeEventFeed } from "./components/RuntimeEventFeed.js";
 import { GitCIStatusPanel } from "./components/GitCIStatusPanel.js";
 import { deriveLiveDurationDisplay } from "./lib/live-duration-display.js";
@@ -98,6 +99,9 @@ export const LiveSessionPage: FunctionComponent = () => {
         gitStatus,
         gitStatusError,
         initialLoadComplete,
+        transportState,
+        isRecovering,
+        snapshotUpdatedAt,
         refreshRuntimeStatus,
         refreshGitStatus,
         selectedSprintId,
@@ -333,36 +337,14 @@ export const LiveSessionPage: FunctionComponent = () => {
 
 
 
-    /* Connection error — only show full-page error if we have NO prior data.
-       If we already loaded sprint data, keep showing it with an inline warning
-       so the view doesn't flicker away on transient network blips. */
-    if (error && !hasSprintContext && !initialLoadComplete) {
-        return (
-            <div className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex items-center justify-center min-h-[60vh]">
-                <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-status-red/20 rounded-[1.75rem] p-12 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] text-center max-w-lg">
-                    <WaveFluid accentHex="#E3000F" />
-                    <div className="relative z-10">
-                        <div className="w-16 h-16 rounded-[1.25rem] bg-status-red/10 flex items-center justify-center mx-auto mb-5">
-                            <Zap className="w-8 h-8 text-status-red" strokeWidth={1} />
-                        </div>
-                        <h2 className="text-2xl font-black tracking-tighter font-display text-slate-900 dark:text-white mb-3">Connection Lost</h2>
-                        <p className="text-sm text-slate-500 max-w-xs mx-auto">{error}</p>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-16 relative z-10">
-
-            {/* Inline connection warning — shown when we have prior data but lost connection */}
-            {error && (hasSprintContext || initialLoadComplete) && (
-                <div className="flex items-center gap-3 px-5 py-3 rounded-2xl border border-status-red/15 bg-status-red/5 text-sm text-status-red font-medium backdrop-blur-md">
-                    <Zap className="w-4 h-4 shrink-0" strokeWidth={2} />
-                    <span>{error} — showing last known state, reconnecting...</span>
-                </div>
-            )}
+            <LiveTransportBanner
+                transportState={transportState}
+                isRecovering={isRecovering}
+                snapshotUpdatedAt={snapshotUpdatedAt}
+                error={error}
+            />
 
             <StatsHeader
                 headerView={headerView}

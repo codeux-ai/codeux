@@ -30,24 +30,7 @@ export const fetchExecutionSnapshot = async (): Promise<ExecutionDashboardSnapsh
 };
 
 export const fetchRuntimeDashboardPayload = async (projectId?: string | null): Promise<RuntimeDashboardPayload> => {
-  if (projectId) {
-    return fetchLivePayload(projectId);
-  }
-
-  const [status, execution] = await Promise.all([
-    fetchRuntimeStatus(),
-    fetchExecutionSnapshot(),
-  ]);
-
-  return {
-    projectId: execution.projectId,
-    selectedSprintId: status.sprint_id ?? null,
-    status,
-    execution,
-    gitStatus: null,
-    gitStatusError: null,
-    updatedAt: execution.updatedAt,
-  };
+  return fetchLivePayload(projectId);
 };
 
 /** Single HTTP call returning both status + execution — used for fast initial load. */

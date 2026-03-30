@@ -81,12 +81,16 @@ describe("dashboard-realtime-client", () => {
 
   it("reuses the server sequence watermark across reconnects", async () => {
     const { subscribeToDashboardRealtime } = await import("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
-    const unsubscribe = subscribeToDashboardRealtime(["overview"], () => {});
+    const transportSpy = vi.fn();
+    const unsubscribe = subscribeToDashboardRealtime(["overview"], () => {}, transportSpy);
+
+    expect(transportSpy).toHaveBeenCalledWith("disconnected"); // initial
 
     const firstSocket = MockWebSocket.instances[0];
     expect(firstSocket?.url).toBe("ws://localhost:4444/api/realtime");
 
     firstSocket.emit("open");
+    expect(transportSpy).toHaveBeenCalledWith("connected");
     expect(JSON.parse(firstSocket.sentMessages[0] || "{}")).toMatchObject({
       type: "set_subscriptions",
       scopes: ["overview"],
@@ -100,6 +104,7 @@ describe("dashboard-realtime-client", () => {
     });
 
     firstSocket.emit("close");
+    expect(transportSpy).toHaveBeenCalledWith("reconnecting");
     vi.advanceTimersByTime(250);
 
     const secondSocket = MockWebSocket.instances[1];
