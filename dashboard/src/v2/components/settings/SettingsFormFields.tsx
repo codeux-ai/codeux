@@ -5,13 +5,13 @@ import type { ProjectSettings } from "../../../types.js";
 
 export const Toggle: FunctionComponent<{
   value: boolean;
-  onChange: () => void;
+  onChange: (value: boolean) => void;
   danger?: boolean;
   disabled?: boolean;
 }> = ({ value, onChange, danger, disabled }) => (
   <button
     type="button"
-    onClick={onChange}
+    onClick={() => onChange(!value)}
     disabled={disabled}
     className={`group relative h-7 w-12 shrink-0 overflow-hidden rounded-full border transition-[background-color,box-shadow,border-color] duration-300 focus:outline-none focus:ring-2 focus:ring-signal-500/20 disabled:cursor-not-allowed disabled:opacity-60 ${
       value
@@ -174,7 +174,7 @@ export const Row: FunctionComponent<{
   description?: string;
   children: ComponentChildren;
   last?: boolean;
-  badge?: string;
+  badge?: ComponentChildren;
 }> = ({ label, description, children, last, badge }) => (
   <div
     className={`flex flex-col gap-4 rounded-[1.35rem] border border-black/[0.05] bg-black/[0.02] px-4 py-4 md:flex-row md:items-start md:justify-between ${!last ? "" : ""} dark:border-white/[0.05] dark:bg-white/[0.02]`}
@@ -182,14 +182,14 @@ export const Row: FunctionComponent<{
     <div className="min-w-0 flex-1">
       <div className="flex flex-wrap items-center gap-2">
         <div className="text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">{label}</div>
-        {badge ? (
+        {badge && typeof badge === "string" ? (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
             <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black leading-none text-white dark:bg-amber-300 dark:text-void-900">
               !
             </span>
             {badge}
           </span>
-        ) : null}
+        ) : badge}
       </div>
       {description ? (
         <div className="mt-0.5 text-xs font-medium leading-relaxed text-slate-400">{description}</div>
@@ -199,4 +199,26 @@ export const Row: FunctionComponent<{
       {children}
     </div>
   </div>
+);
+
+export const Card: FunctionComponent<{ title: string; description: string; badge?: string; children: ComponentChildren }> = ({
+  title,
+  description,
+  badge,
+  children,
+}) => (
+  <section className="rounded-[2rem] border border-black/[0.06] bg-white/72 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_12px_36px_rgba(0,0,0,0.22)]">
+    <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
+      <div>
+        <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</h3>
+        <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">{description}</p>
+      </div>
+      {badge ? (
+        <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-300">
+          {badge}
+        </span>
+      ) : null}
+    </div>
+    <div className="space-y-4">{children}</div>
+  </section>
 );
