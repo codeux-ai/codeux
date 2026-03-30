@@ -58,10 +58,10 @@ export const usePreviewSessions = ({
 
   const selectedSession = useMemo(() => {
     if (activeSessionId) {
-      return sessions.find((session) => session.id === activeSessionId) || null;
+      return (sessions ?? []).find((session) => session.id === activeSessionId) || null;
     }
     if (selectedSprintId) {
-      return sessions.find((session) => session.sprintId === selectedSprintId) || null;
+      return (sessions ?? []).find((session) => session.sprintId === selectedSprintId) || null;
     }
     return sessions[0] || null;
   }, [activeSessionId, selectedSprintId, sessions]);
