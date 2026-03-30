@@ -3,8 +3,8 @@ import { Layers3 } from "lucide-preact";
 import {
   PANEL_CLASS,
   StudioHeader,
-  TelemetryLedger,
 } from "./StatsShared.js";
+import { TelemetryLedgerTabs } from "./TelemetryLedgerTabs.js";
 
 export const TelemetrySectionsSection: FunctionComponent<any> = ({ stats }) => {
   return (
@@ -17,22 +17,7 @@ export const TelemetrySectionsSection: FunctionComponent<any> = ({ stats }) => {
           description="Deep operational ledgers for execution scopes, redesigned around search, recency, sort controls, and richer usage breakdowns."
         />
       </div>
-      <div className="grid grid-cols-1 gap-6 2xl:grid-cols-2">
-        <TelemetryLedger
-          title="Task Telemetry"
-          eyebrow="Task Ledger"
-          items={stats.tasks}
-          kindLabel="tasks"
-          emptyLabel="No task telemetry landed in this window yet."
-        />
-        <TelemetryLedger
-          title="Sprint Telemetry"
-          eyebrow="Sprint Ledger"
-          items={stats.sprints}
-          kindLabel="sprints"
-          emptyLabel="No sprint telemetry active in this window."
-        />
-      </div>
+      <TelemetryLedgerTabs stats={stats} />
     </section>
   );
 };

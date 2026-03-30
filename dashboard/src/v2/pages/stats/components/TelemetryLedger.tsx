@@ -1,0 +1,190 @@
+import type { FunctionComponent } from "preact";
+import { useMemo, useState } from "preact/hooks";
+import { ArrowDownRight, ArrowUpRight, Brain, Database } from "lucide-preact";
+import { useProgressiveList } from "../../../../hooks/use-progressive-list.js";
+import type { ExecutionStatsEntitySummary } from "../../../types.js";
+import { formatTokens, formatDuration, formatDateTime } from "../stats-utils.js";
+import {
+  CHIP_CLASS,
+  INPUT_CLASS,
+  LEDGER_ROW_CLASS,
+  PANEL_CLASS,
+  SUBPANEL_CLASS,
+  SortButton,
+  TokenChip,
+  getLedgerSortValue,
+  type LedgerSortKey
+} from "./StatsShared.js";
+
+export const TelemetryLedger: FunctionComponent<{
+  title: string;
+  eyebrow: string;
+  items: ExecutionStatsEntitySummary[];
+  kindLabel: string;
+  emptyLabel: string;
+  defaultSortKey?: LedgerSortKey;
+}> = ({
+  title,
+  eyebrow,
+  items,
+  kindLabel,
+  emptyLabel,
+  defaultSortKey = "tokens",
+}) => {
+  const [query, setQuery] = useState("");
+  const [sortKey, setSortKey] = useState<LedgerSortKey>(defaultSortKey);
+
+  const filteredItems = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const base = normalizedQuery.length === 0
+      ? items
+      : items.filter((item) => {
+        const haystack = [
+          item.label,
+          item.secondaryLabel || "",
+          item.status || "",
+          item.provider || "",
+          item.purpose || "",
+        ].join(" ").toLowerCase();
+        return haystack.includes(normalizedQuery);
+      });
+
+    return [...base].sort((left, right) => {
+      const leftValue = getLedgerSortValue(left, sortKey);
+      const rightValue = getLedgerSortValue(right, sortKey);
+
+      if (typeof leftValue === "string" && typeof rightValue === "string") {
+        return leftValue.localeCompare(rightValue);
+      }
+
+      return Number(rightValue) - Number(leftValue);
+    });
+  }, [items, query, sortKey]);
+
+  const {
+    visibleItems,
+    sentinelRef,
+    scrollContainerRef,
+  } = useProgressiveList(filteredItems, { initialCount: 12, stepCount: 8 });
+
+
+
+  return (
+    <div className={`${PANEL_CLASS} p-6`}>
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">{eyebrow}</div>
+            <div className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</div>
+            <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+              Search, sort, and compare {kindLabel} by recency, tokens, active time, and directional token flow.
+            </div>
+          </div>
+          <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+            {filteredItems.length} {kindLabel}
+          </div>
+        </div>
+
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+          <input
+            type="text"
+            value={query}
+            onInput={(event) => setQuery((event.currentTarget as HTMLInputElement).value)}
+            placeholder={`Search ${kindLabel}`}
+            className={INPUT_CLASS}
+          />
+          <div className="flex flex-wrap gap-2">
+            {([
+              ["last", "Latest"],
+              ["tokens", "Tokens"],
+              ["active", "Active"],
+              ["input", "Input"],
+              ["output", "Output"],
+              ["name", "Name"],
+            ] as const).map(([value, label]) => (
+              <SortButton
+                key={value}
+                label={label}
+                active={sortKey === value}
+                onClick={() => setSortKey(value)}
+              />
+            ))}
+          </div>
+        </div>
+
+        {filteredItems.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
+            {emptyLabel}
+          </div>
+        ) : (
+          <div ref={scrollContainerRef} className="max-h-[42rem] overflow-y-auto pr-2 dashboard-scrollbar">
+            <div className="space-y-3">
+              {visibleItems.map((item, index) => {
+
+                return (
+                  <div key={item.id} className={LEDGER_ROW_CLASS}>
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-black/[0.06] bg-white/75 text-sm font-black text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.07)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:text-white dark:shadow-[0_12px_28px_rgba(0,0,0,0.22)]">
+                        {index + 1}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                          <div className="min-w-0">
+                            <div className="truncate text-base font-black tracking-tight text-slate-900 dark:text-white">{item.label}</div>
+                            <div className="mt-1 flex flex-wrap gap-2">
+                              {item.secondaryLabel ? (
+                                <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+                                  {item.secondaryLabel}
+                                </span>
+                              ) : null}
+                              {item.status ? (
+                                <span className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+                                  {item.status}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="text-left xl:text-right">
+                            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Last activity</div>
+                            <div className="mt-1 text-sm font-black text-slate-900 dark:text-white">{formatDateTime(item.lastActivityAt)}</div>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-3">
+                            <div className={`${SUBPANEL_CLASS} flex-1 min-w-[120px]`}>
+                              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Total</div>
+                              <div className="mt-2 text-sm font-black text-slate-900 dark:text-white">{formatTokens(item.usage.totalTokens)}</div>
+                            </div>
+                            <div className={`${SUBPANEL_CLASS} flex-1 min-w-[120px]`}>
+                              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Active</div>
+                              <div className="mt-2 text-sm font-black text-slate-900 dark:text-white">{formatDuration(item.usage.activeTimeMs)}</div>
+                            </div>
+                            <div className={`${SUBPANEL_CLASS} flex-1 min-w-[120px]`}>
+                              <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Calls</div>
+                              <div className="mt-2 text-sm font-black text-slate-900 dark:text-white">{item.usage.invocationCount.toLocaleString()}</div>
+                            </div>
+                          </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <TokenChip icon={ArrowDownRight} label="In" value={item.usage.inputTokens} tone="border-signal-500/16 bg-signal-500/8 text-signal-600 dark:text-signal-400" />
+                          <TokenChip icon={Database} label="Cached" value={item.usage.cachedInputTokens} tone="border-cyan-500/16 bg-cyan-500/8 text-cyan-600 dark:text-cyan-400" />
+                          <TokenChip icon={ArrowUpRight} label="Out" value={item.usage.outputTokens} tone="border-amber-500/16 bg-amber-500/8 text-amber-600 dark:text-amber-400" />
+                          <TokenChip icon={Brain} label="Reason" value={item.usage.reasoningOutputTokens} tone="border-rose-500/16 bg-rose-500/8 text-rose-600 dark:text-rose-400" />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {visibleItems.length < filteredItems.length ? (
+                <div ref={sentinelRef} className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-4 text-center text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:border-white/[0.08]">
+                  Loading more telemetry lanes...
+                </div>
+              ) : null}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};

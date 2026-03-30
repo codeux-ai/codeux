@@ -96,8 +96,8 @@ describe("StatsPage Shell", () => {
 
   it("renders telemetry ledgers", () => {
     render(<StatsPage />);
-    expect(screen.getByText("Task Telemetry")).toBeInTheDocument();
-    expect(screen.getByText("Sprint Telemetry")).toBeInTheDocument();
+    expect(screen.getAllByText("Task Telemetry")[0]).toBeInTheDocument();
+    expect(screen.getAllByText("Sprint Telemetry")[0]).toBeInTheDocument();
   });
 
   it("renders composition mode when active", () => {
