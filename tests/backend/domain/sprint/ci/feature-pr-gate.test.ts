@@ -298,6 +298,24 @@ jobs:
     );
   });
 
+  it("marks the task as PR_CREATED when featurePrAutoMergeMode is CREATE_PR and PR exists", async () => {
+    context.ciIntelligence.featurePrAutoMergeMode = "CREATE_PR";
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].merge_indicator).toBe("PR_CREATED");
+    expect(context.persistMergedTask).toHaveBeenCalledWith(expect.objectContaining({ id: "T1", merge_indicator: "PR_CREATED" }));
+    expect(result.reportText).toContain("PR created for task T1 (#101)");
+    expect(context.executionRepository?.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "ci_gate_status",
+      "system",
+      expect.objectContaining({ state: "pr_created_confirmed", prNumber: 101 }),
+      expect.any(Object)
+    );
+  });
+
   it("keeps completed no-output tasks completed when there is no PR evidence to merge", async () => {
     subtasks[0].worker_branch = undefined;
     subtasks[0].pr_url = undefined;

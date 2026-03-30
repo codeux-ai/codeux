@@ -51,6 +51,27 @@ describe("protocol-step", () => {
         }));
     });
 
+    it("excludes PR_CREATED tasks from manual merge protocol", async () => {
+        const subtasks: Subtask[] = [
+            { id: "1", title: "t", prompt: "p", depends_on: [], is_independent: false, status: "COMPLETED", is_merged: false, merge_indicator: "PR_CREATED", pr_url: "url" },
+        ];
+
+        const renderInstruction = vi.fn(async (t, v) => `${t}:${JSON.stringify(v)}`);
+
+        const res = await runProtocolStep(subtasks, {
+            featureBranch: "fb",
+            githubMode: "REMOTE",
+            ciIntelligence,
+            enableMergeProtocol: true,
+            enableActionRequiredProtocol: true,
+            isActionRequiredState: () => false,
+            renderInstruction,
+        });
+
+        expect(res.instructions).not.toContain("mergeHeader");
+        expect(res.manualMergeTasks).toHaveLength(0);
+    });
+
     it("suppresses manual merge instructions for worker-escalated merge conflicts", async () => {
         const subtasks: Subtask[] = [
             { id: "1", title: "t", prompt: "p", depends_on: [], is_independent: false, status: "COMPLETED", is_merged: false, worker_branch: "worker/1" },

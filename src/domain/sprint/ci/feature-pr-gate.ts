@@ -60,9 +60,11 @@ export class FeaturePrGateService {
         ? (task.merge_indicator === "AUTOMERGE" ? "AUTOMERGE" : "MERGED")
         : task.merge_indicator === "MERGE_CONFLICT"
           ? "MERGE_CONFLICT"
-          : taskHasMergeEvidence(task)
-            ? task.merge_indicator
-            : undefined;
+          : task.merge_indicator === "PR_CREATED"
+            ? "PR_CREATED"
+            : taskHasMergeEvidence(task)
+              ? task.merge_indicator
+              : undefined;
       if (task.status === "COMPLETED" && taskHasMergeEvidence(task) && !task.is_merged) {
         task.status = "CODING_COMPLETED";
       }
@@ -125,6 +127,20 @@ export class FeaturePrGateService {
         continue;
       }
 
+      const autoMergeMode = context.ciIntelligence.featurePrAutoMergeMode;
+
+      if (autoMergeMode === "CREATE_PR") {
+        task.status = "COMPLETED";
+        task.merge_indicator = "PR_CREATED";
+        await this.persistMergedTask(task, context);
+        this.appendCiGateEvent(task, context, "pr_created_confirmed", {
+          prNumber: pr.number,
+          prUrl: pr.url,
+        });
+        reportText += `- PR created for task ${task.id} (#${pr.number}).\n`;
+        continue;
+      }
+
       const checks = Array.isArray(pr.checks) ? pr.checks : [];
       const waitForFeatureCi = context.ciIntelligence.waitForCiBeforeFeatureMerge;
       const resolveAllCommentsBeforeFeatureMerge = context.ciIntelligence.resolveAllCommentsBeforeFeatureMerge;
@@ -158,7 +174,6 @@ export class FeaturePrGateService {
         pr.comments
       );
 
-      const autoMergeMode = context.ciIntelligence.featurePrAutoMergeMode;
       const shouldAutoMergeAlways = autoMergeMode === "ALWAYS" && !waitForFeatureCi;
       const shouldAutoMergeWhenGreen = autoMergeMode === "WHEN_GREEN" || (autoMergeMode === "ALWAYS" && waitForFeatureCi);
 

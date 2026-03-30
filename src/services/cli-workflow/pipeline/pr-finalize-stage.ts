@@ -3,7 +3,7 @@ import type { PipelineContext } from "./pipeline-context.js";
 export async function executePrFinalizeStage(ctx: PipelineContext): Promise<{ prUrl?: string }> {
   let prUrl: string | undefined;
 
-  if (ctx.settings.git.autoCreatePr) {
+  if (ctx.settings.git.autoCreatePr || ctx.settings.ciIntelligence.featurePrAutoMergeMode === "CREATE_PR") {
     const sprint = ctx.task.sprint_id ? ctx.deps.projectManagementRepository?.getSprint(ctx.task.sprint_id) : null;
     prUrl = await ctx.prService.resolveOrCreateFeaturePr(
       {
