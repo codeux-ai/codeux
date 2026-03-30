@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -169,5 +169,75 @@ describe("DashboardRealtimeService", () => {
 
     expect(eventTypes).toContain("project.execution.updated");
     expect(eventTypes).toContain("project.live.updated");
+  });
+});
+
+describe("DashboardRealtimeService observability", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("emits size and frequency info when publishing project live snapshot", async () => {
+    const loggerMock = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() };
+    const eventRepoMock = {
+      getLatestSequence: () => 1,
+      appendEvent: vi.fn().mockReturnValue({ sequence: 2 }),
+    };
+
+    const service = new DashboardRealtimeService(eventRepoMock as any, loggerMock as any);
+    service.setSnapshotLoaders({
+      getProjectLiveSnapshot: () => ({ selectedSprintId: "sprint-1", foo: "bar" } as any),
+      getProjectsSnapshot: () => ({} as any),
+      getProjectExecutionSnapshot: () => ({} as any),
+      getProjectStatusSnapshot: () => ({} as any),
+      getOverviewTelemetrySnapshot: () => ({} as any),
+    });
+
+    service.scheduleProjectLiveRefresh("proj-1");
+    vi.advanceTimersByTime(100);
+    // wait for flush
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(loggerMock.info).toHaveBeenCalledWith(
+      "realtime_snapshot_published",
+      expect.objectContaining({
+        type: "project.live.updated",
+        projectId: "proj-1",
+        sizeBytes: expect.any(Number),
+        publishFrequencyMs: 0,
+      })
+    );
+  });
+
+  it("emits background refresh info when publishing projects overview", async () => {
+    const loggerMock = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() };
+    const eventRepoMock = {
+      getLatestSequence: () => 1,
+      appendEvent: vi.fn().mockReturnValue({ sequence: 2 }),
+    };
+
+    const service = new DashboardRealtimeService(eventRepoMock as any, loggerMock as any);
+    service.setSnapshotLoaders({
+      getProjectLiveSnapshot: () => ({} as any),
+      getProjectsSnapshot: () => ({} as any),
+      getProjectExecutionSnapshot: () => ({} as any),
+      getProjectStatusSnapshot: () => ({} as any),
+      getOverviewTelemetrySnapshot: () => ({} as any),
+    });
+
+    service.scheduleProjectsRefresh();
+    vi.advanceTimersByTime(100);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(loggerMock.info).toHaveBeenCalledWith(
+      "realtime_background_refresh",
+      expect.objectContaining({ type: "projects" })
+    );
   });
 });

@@ -1,38 +1,18 @@
-import type {
-  ProjectLiveDashboardSnapshot,
-  DashboardStatus,
-  ExecutionDashboardSnapshot,
-  GitTrackingStatus,
-} from "../../contracts/app-types.js";
-import type { ProjectManagementRepository } from "../../repositories/project-management-repository.js";
-import type { ProjectRuntimeRepository } from "../../repositories/project-runtime-repository.js";
-import type { Logger } from "../../shared/logging/logger.js";
+const fs = require('fs');
+const file = 'src/app/live/project-live-snapshot.ts';
+let code = fs.readFileSync(file, 'utf8');
 
-export interface ProjectLiveSnapshotDeps {
-  projectManagementRepository: ProjectManagementRepository;
-  projectRuntimeRepository: ProjectRuntimeRepository;
-  getProjectExecutionSnapshot: (projectId: string) => ExecutionDashboardSnapshot;
-  getGitStatus: () => Promise<GitTrackingStatus>;
-  logger: Logger;
-}
+code = code.replace(
+  'import type { ProjectRuntimeRepository } from "../../repositories/project-runtime-repository.js";',
+  'import type { ProjectRuntimeRepository } from "../../repositories/project-runtime-repository.js";\nimport type { Logger } from "../../shared/logging/logger.js";'
+);
 
-/**
- * The unified assembly path for the Live snapshot.
- *
- * Boundary Contract:
- * - SQLite is the absolute source of truth.
- * - The server assembles the snapshot (this module).
- * - Websockets transport committed snapshot changes.
- * - The browser renders the snapshot without reconciling competing sources.
- *
- * Field Ownership & Mutation Triggers:
- * - `projectId`: Owned by `ProjectManagementRepository`. Mutated when a project is selected or created.
- * - `selectedSprintId`: Owned by `ProjectManagementRepository`. Mutated when a sprint is selected or changed.
- * - `status`: Owned by `ProjectRuntimeRepository`. Mutated when task states change, a sprint is run, or orchestration loop updates progress.
- * - `execution`: Owned by `ExecutionRepository` (via `getProjectExecutionSnapshot`). Mutated when sprint runs are dispatched, worker states change, or attention items are created/claimed.
- * - `gitStatus` / `gitStatusError`: Owned by the external git system. Mutated when local branches or upstream changes are detected.
- * - `updatedAt`: Owned by this assembly module. Mutated upon every assembly call to track the snapshot timestamp.
- */
+code = code.replace(
+  '  getGitStatus: () => Promise<GitTrackingStatus>;\n}',
+  '  getGitStatus: () => Promise<GitTrackingStatus>;\n  logger: Logger;\n}'
+);
+
+const newLogic = `
 export async function getProjectLiveSnapshot(
   deps: ProjectLiveSnapshotDeps,
   projectIdHint?: string | null,
@@ -123,3 +103,9 @@ export async function getProjectLiveSnapshot(
 
   return snapshot;
 }
+`;
+
+code = code.replace(/export async function getProjectLiveSnapshot\([\s\S]*?^}/m, newLogic.trim());
+
+fs.writeFileSync(file, code);
+console.log('patched');
