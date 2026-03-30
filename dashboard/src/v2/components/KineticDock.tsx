@@ -94,7 +94,7 @@ export const KineticDock: FunctionComponent = () => {
                 key={item.label}
                 to={item.path}
                 ref={(el: HTMLAnchorElement | null) => { itemRefs.current[globalIndex] = el; }}
-                className="relative group flex flex-col items-center justify-center w-[52px] h-[52px] rounded-[1.4rem] transition-colors duration-300 decoration-none"
+                className="relative group flex flex-col items-center justify-center w-[52px] h-[52px] rounded-[1.4rem] transition-colors duration-300 decoration-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
             >
                 <div className="absolute inset-0 bg-transparent group-hover:bg-black/[0.04] dark:group-hover:bg-white/[0.05] rounded-[1.4rem] pointer-events-none transition-colors duration-300" />
 

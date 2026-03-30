@@ -127,7 +127,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         <button
                             onClick={handleClose}
                             aria-label="Close"
-                            className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
+                            className="w-9 h-9 flex items-center justify-center rounded-full focus-visible:ring-2 focus-visible:ring-ember-500/50 bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
                         >
                             <X className="w-4 h-4" />
                         </button>
@@ -147,7 +147,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     value={name}
                                     onInput={(e) => setName((e.target as HTMLInputElement).value)}
                                     placeholder="My Awesome Project"
-                                    className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-[1.6rem] font-black text-slate-900 dark:text-white placeholder-slate-200 dark:placeholder-slate-700 focus:outline-none transition-colors font-display tracking-tight leading-none"
+                                    className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus-visible:border-ember-500 focus-visible:ring-2 focus-visible:ring-ember-500/50 dark:focus-visible:border-ember-500 focus-visible:ring-2 focus-visible:ring-ember-500/50 pb-2.5 text-[1.6rem] font-black text-slate-900 dark:text-white placeholder-slate-200 dark:placeholder-slate-700 transition-colors font-display tracking-tight leading-none"
                                     required
                                     autoFocus
                                 />
@@ -164,7 +164,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             key={type}
                                             type="button"
                                             onClick={() => handleSourceTypeChange(type)}
-                                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-[0.12em] transition-all duration-250 ${
+                                            className={`flex items-center gap-2 px-4 py-2 rounded-xl focus-visible:ring-2 focus-visible:ring-ember-500/50 text-xs font-bold uppercase tracking-[0.12em] transition-all duration-250 ${
                                                 sourceType === type
                                                     ? 'bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]'
                                                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
@@ -191,7 +191,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         value={localPath}
                                         onInput={(e) => setLocalPath((e.target as HTMLInputElement).value)}
                                         placeholder="/home/user/projects/my-project"
-                                        className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none transition-colors"
+                                        className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus-visible:border-ember-500 focus-visible:ring-2 focus-visible:ring-ember-500/50 dark:focus-visible:border-ember-500 focus-visible:ring-2 focus-visible:ring-ember-500/50 pb-2.5 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 transition-colors"
                                         required
                                     />
                                 </div>
@@ -206,7 +206,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             value={gitUrl}
                                             onInput={(e) => setGitUrl((e.target as HTMLInputElement).value)}
                                             placeholder="https://github.com/user/repo.git"
-                                            className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none transition-colors"
+                                            className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus-visible:border-ember-500 focus-visible:ring-2 focus-visible:ring-ember-500/50 dark:focus-visible:border-ember-500 focus-visible:ring-2 focus-visible:ring-ember-500/50 pb-2.5 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 transition-colors"
                                             required
                                         />
                                     </div>
@@ -220,7 +220,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             value={cloneDir}
                                             onInput={(e) => setCloneDir((e.target as HTMLInputElement).value)}
                                             placeholder="/home/user/projects"
-                                            className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none transition-colors"
+                                            className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus-visible:border-ember-500 focus-visible:ring-2 focus-visible:ring-ember-500/50 dark:focus-visible:border-ember-500 focus-visible:ring-2 focus-visible:ring-ember-500/50 pb-2.5 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 transition-colors"
                                         />
                                     </div>
                                 </>

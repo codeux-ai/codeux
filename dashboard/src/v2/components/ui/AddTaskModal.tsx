@@ -198,7 +198,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             <button
               onClick={onClose}
               aria-label="Close"
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
+              className="w-9 h-9 flex items-center justify-center rounded-full focus-visible:ring-2 focus-visible:ring-signal-500/50 bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
             >
               <X className="w-4 h-4" />
             </button>
@@ -211,7 +211,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                 <select
                   value={sprintId}
                   onInput={(event) => setSprintId((event.target as HTMLSelectElement).value)}
-                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500"
+                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus-visible:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500/50"
                   required
                 >
                   <option value="" disabled>Select sprint</option>
@@ -227,7 +227,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                   type="text"
                   value={title}
                   onInput={(event) => setTitle((event.target as HTMLInputElement).value)}
-                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500"
+                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus-visible:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500/50"
                   placeholder="Define the task scope"
                   required
                 />
@@ -305,7 +305,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               <textarea
                 value={description}
                 onInput={(event) => setDescription((event.target as HTMLTextAreaElement).value)}
-                className="mt-2.5 w-full min-h-[110px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none"
+                className="mt-2.5 w-full min-h-[110px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus-visible:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500/50 resize-none"
                 placeholder="Summarize the intent and outcome."
               />
             </div>
@@ -315,7 +315,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               <textarea
                 value={promptMarkdown}
                 onInput={(event) => setPromptMarkdown((event.target as HTMLTextAreaElement).value)}
-                className="mt-2.5 w-full min-h-[150px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none font-mono"
+                className="mt-2.5 w-full min-h-[150px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus-visible:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500/50 resize-none font-mono"
                 placeholder="Detailed markdown instructions for the agent."
               />
             </div>
