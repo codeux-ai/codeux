@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -12,6 +12,8 @@ import { ProjectWorkerAssignmentService } from "../../../src/domain/workers/proj
 import { ProjectAttentionRepository } from "../../../src/repositories/project-attention-repository.js";
 import { ProjectAttentionService } from "../../../src/domain/workers/project-attention-service.js";
 import { RuntimeCleanupService } from "../../../src/services/runtime-cleanup-service.js";
+import type { DockerRuntimePruneService } from "../../../src/services/docker-runtime-prune-service.js";
+import type { Logger } from "../../../src/shared/logging/logger.js";
 
 const tempDirs: string[] = [];
 
@@ -41,6 +43,42 @@ async function createRepositories(): Promise<{
     executionRepository,
     projectRepository,
     projectAttentionService,
+  );
+
+  return {
+    storage,
+    projectRepository,
+    connectionRepository,
+    executionRepository,
+    projectAttentionRepository,
+    cleanupService,
+  };
+}
+
+async function createCleanupFixture(options?: {
+  dockerRuntimePruneService?: Pick<DockerRuntimePruneService, "cleanup">;
+  logger?: Pick<Logger, "info" | "error">;
+}) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-runtime-cleanup-"));
+  tempDirs.push(dir);
+  const storage = new AppDbStorage(path.join(dir, "app.db"));
+  const projectRepository = new ProjectManagementRepository(storage);
+  const workerEndpointRepository = new WorkerEndpointRepository(storage);
+  const projectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(storage);
+  const projectAttentionRepository = new ProjectAttentionRepository(storage);
+  const connectionRepository = new ConnectionChatRepository(storage, undefined, workerEndpointRepository);
+  const executionRepository = new ExecutionRepository(storage);
+  const projectAttentionService = new ProjectAttentionService(
+    projectAttentionRepository,
+    projectWorkerAssignmentRepository,
+  );
+  const cleanupService = new RuntimeCleanupService(
+    connectionRepository,
+    executionRepository,
+    projectRepository,
+    projectAttentionService,
+    options?.dockerRuntimePruneService as DockerRuntimePruneService | undefined,
+    options?.logger as Logger | undefined,
   );
 
   return {
@@ -286,6 +324,245 @@ describe("RuntimeCleanupService", () => {
       id: taskRun.id,
       state: "COMPLETED",
       finishedAt: "2026-03-13T04:37:54.622Z",
+    });
+  });
+
+  it("force-cancels stale cancel-requested dispatches, opens attention items, and reports cleanup activity", async () => {
+    const logger = {
+      info: vi.fn(),
+      error: vi.fn(),
+    };
+    const dockerRuntimePruneService = {
+      cleanup: vi.fn().mockReturnValue({ prunedPaths: ["/tmp/runtime-a"] }),
+    };
+    const {
+      projectRepository,
+      executionRepository,
+      projectAttentionRepository,
+      cleanupService,
+    } = await createCleanupFixture({
+      dockerRuntimePruneService,
+      logger,
+    });
+
+    const project = projectRepository.createProject({
+      name: "Stale Cancel Project",
+      sourceType: "local",
+      sourceRef: "/workspace/stale-cancel-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Stale Cancel Sprint",
+      number: 28,
+      status: "running",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Cancel requested dispatch",
+      status: "in_progress",
+      executorType: "mcp_worker",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "cancel_requested",
+      executorMode: "mcp_worker",
+      triggerType: "dashboard",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "mcp_worker",
+      status: "cancel_requested",
+    });
+    executionRepository.updateTaskDispatch(dispatch.id, {
+      status: "cancel_requested",
+      lastHeartbeatAt: "2026-03-13T04:00:00.000Z",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "codex",
+      mode: "mcp_worker",
+      state: "RUNNING",
+      startedAt: "2026-03-13T03:30:00.000Z",
+    });
+    const result = cleanupService.cleanup(new Date("2026-03-13T04:40:00.000Z"));
+
+    expect(result.forceCancelledDispatchIds).toEqual([dispatch.id]);
+    expect(result.prunedDockerRuntimePaths).toEqual(["/tmp/runtime-a"]);
+    expect(executionRepository.getTaskDispatch(dispatch.id)).toMatchObject({
+      id: dispatch.id,
+      status: "cancelled",
+      connectionId: null,
+    });
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      id: taskRun.id,
+      state: "BLOCKED",
+      connectionId: null,
+      finishedAt: "2026-03-13T04:40:00.000Z",
+    });
+    expect(executionRepository.listTaskRunEvents(taskRun.id)[0]).toMatchObject({
+      eventType: "dispatch_cancelled",
+      payload: expect.objectContaining({
+        force: true,
+      }),
+    });
+    expect(projectRepository.getTask(task.id)?.status).toBe("pending");
+    expect(projectAttentionRepository.listProjectAttentionItems(project.id, {
+      statuses: ["open"],
+    })[0]).toMatchObject({
+      dispatchId: dispatch.id,
+      attentionType: "dispatch_cancel_stalled",
+      severity: "medium",
+    });
+    expect(executionRepository.getLease("task_dispatch", dispatch.id)).toBeNull();
+    expect(executionRepository.getSprintRun(sprintRun.id)).toMatchObject({
+      id: sprintRun.id,
+      status: "cancelled",
+    });
+    expect(logger.info).toHaveBeenCalledWith("Runtime cleanup sweep completed", {
+      staleConnections: 0,
+      offlineConnections: 0,
+      prunedConnections: 0,
+      prunedDockerRuntimePaths: 1,
+      blockedDispatches: 0,
+      forceCancelledDispatches: 1,
+      reconciledDispatches: 0,
+      failedSprintRuns: 0,
+    });
+  });
+
+  it("reconciles failed and blocked task runs and ignores fresh or still-active sprint runs", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      cleanupService,
+    } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Reconcile Runtime States Project",
+      sourceType: "local",
+      sourceRef: "/workspace/reconcile-runtime-states-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Reconcile Runtime States Sprint",
+      number: 31,
+      status: "running",
+    });
+    const failedTask = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Failed dispatch",
+      status: "in_progress",
+      executorType: "jules",
+    });
+    const blockedTask = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Blocked dispatch",
+      status: "in_progress",
+      executorType: "jules",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "mixed",
+      triggerType: "dashboard",
+    });
+    const failedDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: failedTask.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "running",
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: failedTask.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: failedDispatch.id,
+      provider: "jules",
+      mode: "jules",
+      state: "FAILED",
+      finishedAt: "2026-03-13T05:10:00.000Z",
+    });
+    const blockedDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: blockedTask.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "running",
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: blockedTask.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: blockedDispatch.id,
+      provider: "jules",
+      mode: "jules",
+      state: "BLOCKED",
+      finishedAt: "2026-03-13T05:11:00.000Z",
+    });
+
+    const freshSprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "mixed",
+      triggerType: "dashboard",
+    });
+    executionRepository.updateSprintRun(freshSprintRun.id, {
+      status: "running",
+      lastHeartbeatAt: "2026-03-13T05:39:30.000Z",
+    });
+    const leasedSprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "mixed",
+      triggerType: "dashboard",
+    });
+    executionRepository.updateSprintRun(leasedSprintRun.id, {
+      status: "running",
+      lastHeartbeatAt: "2026-03-13T05:00:00.000Z",
+    });
+    executionRepository.acquireLease({
+      scopeType: "sprint",
+      scopeId: sprint.id,
+      ownerKey: "sprint_orchestrator",
+      leaseToken: "live-sprint-lease",
+      expiresAt: "2026-03-13T05:50:00.000Z",
+    });
+
+    const result = cleanupService.cleanup(new Date("2026-03-13T05:40:00.000Z"));
+
+    expect(result.reconciledDispatchIds).toEqual([failedDispatch.id, blockedDispatch.id]);
+    expect(executionRepository.getTaskDispatch(failedDispatch.id)).toMatchObject({
+      id: failedDispatch.id,
+      status: "failed",
+      errorMessage: "Provider session failed before dispatch reconciliation.",
+    });
+    expect(executionRepository.getTaskDispatch(blockedDispatch.id)).toMatchObject({
+      id: blockedDispatch.id,
+      status: "blocked",
+      errorMessage: "Provider session requires attention before dispatch reconciliation.",
+    });
+    expect(result.failedSprintRunIds).toEqual([]);
+    expect(executionRepository.getSprintRun(freshSprintRun.id)).toMatchObject({
+      id: freshSprintRun.id,
+      status: "running",
+    });
+    expect(executionRepository.getSprintRun(leasedSprintRun.id)).toMatchObject({
+      id: leasedSprintRun.id,
+      status: "running",
     });
   });
 });
