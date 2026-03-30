@@ -1,0 +1,20 @@
+--- tests/dashboard/v2/sprints-page.test.tsx
++++ tests/dashboard/v2/sprints-page.test.tsx
+@@ -46,7 +46,7 @@
+     const { rerender } = render(<SprintsPage />);
+
+     // Verify the Import trigger is visible
+-    const importTrigger = screen.getAllByRole("button", { name: /import/i })[0];
++    const importTrigger = screen.getAllByRole("button", { name: /import/i }).find((btn) => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown")) || screen.getByRole("button", { name: /import/i });
+     expect(importTrigger).toBeInTheDocument();
+
+     // Open the menu
+@@ -101,7 +101,7 @@
+     render(<SprintsPage />);
+
+     // Open the menu
+-    const importTrigger = screen.getAllByRole("button", { name: /import/i })[0];
++    const importTrigger = screen.getAllByRole("button", { name: /import/i }).find((btn) => btn.textContent?.includes("Import") && !btn.textContent?.includes("Markdown")) || screen.getByRole("button", { name: /import/i });
+     fireEvent.click(importTrigger);
+
+     // Ensure Jira item exists

@@ -1,0 +1,25 @@
+--- tests/dashboard/v2/sprints-page.test.tsx
++++ tests/dashboard/v2/sprints-page.test.tsx
+@@ -46,12 +46,12 @@
+     const { rerender } = render(<SprintsPage />);
+
+     // Verify the Import trigger is visible
+-    const importTrigger = screen.getByRole("button", { name: /import/i });
++    const importTrigger = screen.getAllByRole("button", { name: /import/i })[0];
+     expect(importTrigger).toBeInTheDocument();
+
+     // Open the menu
+     fireEvent.click(importTrigger);
+
+     // Click the Markdown option
+     const markdownOption = screen.getByRole("button", { name: /markdown/i });
+     fireEvent.click(markdownOption);
+@@ -101,7 +101,7 @@
+     render(<SprintsPage />);
+
+     // Open the menu
+-    const importTrigger = screen.getByRole("button", { name: /import/i });
++    const importTrigger = screen.getAllByRole("button", { name: /import/i })[0];
+     fireEvent.click(importTrigger);
+
+     // Ensure Jira item exists

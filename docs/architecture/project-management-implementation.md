@@ -12,7 +12,7 @@ It includes:
 - selected-project persistence in sqlite
 - project-scoped dashboard HTTP endpoints
 - v2 dashboard wiring for Projects, Sprints, Tasks, top-nav selection, and overview widgets
-- markdown import/export for sprints and tasks
+- a structured import flyout supporting markdown import (and placeholders for future providers like Jira), plus export for sprints and tasks
 - selected-project runtime projection for live dashboard status
 - DB-backed project-scoped Agents and Chat pages
 - first listen-loop MCP connection and conversation contracts
@@ -122,6 +122,9 @@ Current behavior:
 - Agents page manages project-scoped agent presets rather than live MCP connections
 - Chat page lists sqlite-backed conversation threads/messages for the selected project
 - Dashboard messages are queued for listeners through the same sqlite model
+- planning flows include interactive, background-safe, and dismissible planning overlays with cancellation support
+- quicksprint execution flows are now mutually exclusive with composer create/edit states to maintain focus
+- the sprint ledger uses a refreshed visual treatment with alternating striped rows and real-time client-side search/filtering
 - internal sprint orchestration resolves project/sprint scope from sqlite instead of markdown task directories
 - orchestrate executions now create `sprint_runs`, `task_dispatches`, and `task_runs`
 - orchestrate executions now hold a sprint-scoped execution lease while the loop is active

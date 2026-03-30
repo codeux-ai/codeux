@@ -1,4 +1,6 @@
-import { defineConfig } from "vitest/config";
+const fs = require('fs');
+
+const content = `import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
@@ -36,4 +38,5 @@ export default defineConfig({
       "react/jsx-runtime": "preact/jsx-runtime",
     }
   },
-});
+});`;
+fs.writeFileSync('vitest.config.ts', content);

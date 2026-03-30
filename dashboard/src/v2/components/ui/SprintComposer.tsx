@@ -22,7 +22,7 @@ import {
 } from "../../lib/sprint-composer-state.js";
 import { getProviderModelOptions } from "../../lib/settings-view-models.js";
 import { getPlanningFeedback, type PlanningActionType } from "../../lib/sprint-planning-feedback.js";
-import { ContainerShip, WoodenShip } from "./PlanningShip.js";
+import { PlanningProgressOverlay } from "./PlanningProgressOverlay.js";
 import type { ImprovePromptInput, VirtualWorkerProvider } from "../../types.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 
@@ -65,6 +65,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
+  const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
 
   const state = useSprintComposerState(initialSprint);
 
@@ -93,6 +94,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       setElapsedMs(0);
       return;
     }
+    setIsOverlayDismissed(false);
     const start = Date.now();
     const interval = setInterval(() => {
       setElapsedMs(Date.now() - start);
@@ -228,66 +230,17 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(0,224,160,0.08),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(255,184,0,0.08),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(0,224,160,0.1),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(255,184,0,0.09),transparent_34%)]" />
 
-      {isBusy && feedback && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 p-8 backdrop-blur-xl dark:bg-void-900/80">
-          <div className="relative mb-12 flex h-32 w-full max-w-md items-center justify-center overflow-hidden">
-            <div className="absolute inset-x-0 bottom-8 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent dark:via-white/10" />
-            <div
-              className="absolute transition-[left] duration-200 ease-linear"
-              style={{ left: `${feedback.shipProgress * 100}%`, transform: 'translateX(-50%)' }}
-            >
-              <svg width="120" height="60" viewBox="-60 -30 120 60">
-                {feedback.shipType === "container"
-                  ? <ContainerShip accentColor="#00E0A0" isMoving={true} isDark={isDark} />
-                  : <WoodenShip accentColor="#FFB800" isMoving={true} isDark={isDark} />
-                }
-              </svg>
-            </div>
-          </div>
-
-          <div className="space-y-4 text-center">
-            <div className="inline-flex items-center gap-3 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-5 py-2 text-xs font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-300">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-signal-400 opacity-75"></span>
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-signal-500"></span>
-              </span>
-              Planning in motion
-            </div>
-            <div className="flex items-center justify-center gap-6">
-              <div className="flex flex-col items-center">
-                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">ETA</div>
-                <div className="font-mono text-xl font-medium tracking-tight text-slate-900 dark:text-white">
-                  {Math.floor(Math.max(0, planningEta - elapsedMs) / 60000)}:{String(Math.floor((Math.max(0, planningEta - elapsedMs) % 60000) / 1000)).padStart(2, '0')}
-                </div>
-              </div>
-              <div className="h-8 w-px bg-black/[0.08] dark:bg-white/[0.08]" />
-              <div className="flex flex-col items-center">
-                <div className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Elapsed</div>
-                <div className="font-mono text-xl font-medium tracking-tight text-slate-500">
-                  {Math.floor(elapsedMs / 60000)}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, '0')}
-                </div>
-              </div>
-            </div>
-            <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-              {feedback.text}
-            </h3>
-            <p className="mx-auto max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-              {busyAction === "improve"
-                ? "The Planning agent is researching your codebase to produce a more precise technical definition."
-                : "The Planning agent is researching the codebase to decompose your sprint into grounded, atomic subtasks."
-              }
-            </p>
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="mt-2 inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/66 px-4 py-2 text-xs font-semibold text-slate-500 transition-colors hover:border-status-red/30 hover:text-status-red dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:border-status-red/30 dark:hover:text-status-red"
-            >
-              <X className="h-3.5 w-3.5" />
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+      <PlanningProgressOverlay
+        isBusy={isBusy && !isOverlayDismissed}
+        feedback={feedback}
+        planningEta={planningEta}
+        elapsedMs={elapsedMs}
+        isDark={isDark}
+        actionType={busyAction || "plan_and_start"}
+        themeAccent="signal"
+        onCancel={handleCancel}
+        onDismiss={() => setIsOverlayDismissed(true)}
+      />
 
       <form
         ref={fieldsRef}

@@ -1,4 +1,6 @@
-import { defineConfig } from "vitest/config";
+const fs = require('fs');
+
+const content = `import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
@@ -10,12 +12,10 @@ export default defineConfig({
         provider: "v8",
         reporter: ["text", "json", "html"],
         thresholds: {
-            // Lower slightly to account for the injection of the SprintImportMenu into SprintsPage
-            // without requiring a full rewrite of SprintsPage test suite just for one line
-            lines: 74.95,
+            lines: 75.05,
             functions: 69,
             branches: 64,
-            statements: 74.65,
+            statements: 74.75,
             // Specifically enforce 80% on activity-cache-service.ts as per task requirement
             "src/server/activity-cache-service.ts": {
                 lines: 80,
@@ -36,4 +36,5 @@ export default defineConfig({
       "react/jsx-runtime": "preact/jsx-runtime",
     }
   },
-});
+});`;
+fs.writeFileSync('vitest.config.ts', content);

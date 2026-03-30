@@ -1,4 +1,3 @@
-/* istanbul ignore file */
 import type { FunctionComponent } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
@@ -23,7 +22,6 @@ import { AddTaskModal } from "../../components/ui/AddTaskModal.js";
 import { SprintComposer } from "../../components/ui/SprintComposer.js";
 import { SprintMarkdownModal } from "../../components/ui/SprintMarkdownModal.js";
 import { SprintSettingsOverrideModal } from "../../components/ui/SprintSettingsOverrideModal.js";
-import { SprintImportMenu } from "../../components/sprints/SprintImportMenu.js";
 import { useSprintsPageData } from "./use-sprints-page-data.js";
 import { useProgressiveList } from "../../hooks/use-progressive-list.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "../../lib/list-window.js";
@@ -228,10 +226,15 @@ export const SprintsPage: FunctionComponent = () => {
                 {label} <span className="font-mono text-slate-700 dark:text-white">{value}</span>
               </div>
             ))}
-            <SprintImportMenu
+            <button
+              type="button"
+              onClick={() => setShowImportModal(true)}
               disabled={!selectedProject}
-              onImportMarkdown={() => setShowImportModal(true)}
-            />
+              className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
+            >
+              <Download className="h-3.5 w-3.5" strokeWidth={2.2} />
+              Import Markdown
+            </button>
             <button
               type="button"
               onClick={() => {

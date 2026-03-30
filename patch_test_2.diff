@@ -1,0 +1,29 @@
+--- tests/dashboard/v2/sprints-page.test.tsx
++++ tests/dashboard/v2/sprints-page.test.tsx
+@@ -27,6 +27,8 @@
+       selectedProject: { id: "proj-1" },
+       planningRoute: { available: true },
+       sortedSprints: [],
++      showcaseSprints: [],
++      activeRunsBySprintId: new Map(),
+       showImportModal: false,
+       setShowImportModal: vi.fn(),
+     } as any);
+@@ -51,6 +53,8 @@
+       selectedProject: { id: "proj-1" },
+       planningRoute: { available: true },
+       sortedSprints: [],
++      showcaseSprints: [],
++      activeRunsBySprintId: new Map(),
+       showImportModal: true,
+       setShowImportModal: vi.fn(),
+     } as any);
+@@ -65,6 +69,8 @@
+       selectedProject: { id: "proj-1" },
+       planningRoute: { available: true },
+       sortedSprints: [],
++      showcaseSprints: [],
++      activeRunsBySprintId: new Map(),
+       showImportModal: false,
+       setShowImportModal: vi.fn(),
+     } as any);
