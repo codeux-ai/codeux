@@ -70,7 +70,7 @@ export const Sidebar: FunctionComponent = () => {
             </svg>
 
             {/* Logo */}
-            <a href="/" className="px-7 mb-10 flex items-center gap-3 group cursor-pointer relative z-10 w-fit">
+            <a href="/" className="px-7 mb-10 flex items-center gap-3 group cursor-pointer relative z-10 w-fit focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl">
                 <div aria-hidden="true" className="w-9 h-9 rounded-2xl bg-void-900 dark:bg-[#F9F8F4] p-[1px] shadow-[0_0_16px_rgba(0,224,160,0.2)] group-hover:shadow-[0_0_24px_rgba(0,224,160,0.35)] transition-shadow duration-500">
                     <div className="w-full h-full bg-[#F9F8F4] dark:bg-void-900 rounded-[14px] flex items-center justify-center">
                         <div className="w-4 h-4 rounded-full bg-void-900 dark:bg-[#F9F8F4] relative">

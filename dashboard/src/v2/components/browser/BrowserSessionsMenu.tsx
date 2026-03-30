@@ -13,7 +13,9 @@ export const BrowserSessionsMenu: FunctionComponent = () => {
     const [loading, setLoading] = useState(false);
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
+    const dialogRef = useRef<HTMLDivElement>(null);
     const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const triggerRef = useRef<HTMLAnchorElement>(null);
 
     const loadSessions = useCallback(async () => {
         if (!selectedProject?.id) {
@@ -49,13 +51,36 @@ export const BrowserSessionsMenu: FunctionComponent = () => {
         }, 150);
     };
 
-    const handleFocus = () => {
-        setIsOpen(true);
-    };
-
     const handleBlur = (e: FocusEvent) => {
         if (!containerRef.current?.contains(e.relatedTarget as Node)) {
             setIsOpen(false);
+        }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+            setIsOpen(false);
+            if (triggerRef.current) {
+                if (typeof triggerRef.current.focus === "function") triggerRef.current.focus();
+            }
+            return;
+        }
+
+        if (!isOpen || !dialogRef.current) return;
+
+        const focusableElements = Array.from(dialogRef.current.querySelectorAll('[role="menuitem"]')) as HTMLElement[];
+        if (focusableElements.length === 0) return;
+
+        const currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement);
+
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            const nextIndex = currentIndex < focusableElements.length - 1 ? currentIndex + 1 : 0;
+            focusableElements[nextIndex]?.focus();
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            const prevIndex = currentIndex > 0 ? currentIndex - 1 : focusableElements.length - 1;
+            focusableElements[prevIndex]?.focus();
         }
     };
 
@@ -79,12 +104,14 @@ export const BrowserSessionsMenu: FunctionComponent = () => {
             ref={containerRef}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
-            onFocus={handleFocus}
             onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
         >
             <Link
+                ref={triggerRef}
                 to="/browser"
                 aria-label="Sprint browser"
+                onClick={() => setIsOpen(!isOpen)}
                 className="inline-flex h-11 items-center gap-2 rounded-xl border border-black/[0.06] bg-black/[0.03] px-3.5 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:border-sky-500/30 hover:bg-sky-500/8 hover:text-sky-600 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:border-sky-400/30 dark:hover:bg-sky-400/10 dark:hover:text-sky-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
             >
                 <Compass aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2} />
@@ -93,6 +120,7 @@ export const BrowserSessionsMenu: FunctionComponent = () => {
 
             {isOpen && (
                 <div
+                    ref={dialogRef}
                     role="menu"
                     aria-label="Active Browser Sessions"
                     className="absolute right-0 top-full mt-2 w-72 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50"

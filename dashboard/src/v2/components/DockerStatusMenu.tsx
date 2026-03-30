@@ -17,7 +17,9 @@ export const DockerStatusMenu: FunctionComponent = () => {
     const [loading, setLoading] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
+    const dialogRef = useRef<HTMLDivElement>(null);
     const timeoutRef = useRef<number | null>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
 
     const fetchContainers = async () => {
         try {
@@ -63,17 +65,65 @@ export const DockerStatusMenu: FunctionComponent = () => {
 
     const activeContainers = containers.filter(c => c.state === "running");
 
+    const handleBlur = (e: FocusEvent) => {
+        if (!menuRef.current?.contains(e.relatedTarget as Node)) {
+            setIsHovered(false);
+        }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape") {
+            setIsHovered(false);
+            if (triggerRef.current) {
+                triggerRef.current.focus();
+            }
+            return;
+        }
+
+        // Open on Enter/Space if not open
+        if (!isHovered && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault();
+            setIsHovered(true);
+            void fetchContainers();
+            return;
+        }
+
+        if (!isHovered || !dialogRef.current) return;
+
+        const focusableElements = Array.from(dialogRef.current.querySelectorAll('[tabindex="0"]')) as HTMLElement[];
+        if (focusableElements.length === 0) return;
+
+        const currentIndex = focusableElements.indexOf(document.activeElement as HTMLElement);
+
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            const nextIndex = currentIndex < focusableElements.length - 1 ? currentIndex + 1 : 0;
+            focusableElements[nextIndex]?.focus();
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            const prevIndex = currentIndex > 0 ? currentIndex - 1 : focusableElements.length - 1;
+            focusableElements[prevIndex]?.focus();
+        }
+    };
+
     return (
         <div
             className="relative"
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
+            onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
             ref={menuRef}
         >
             <button
+                ref={triggerRef}
                 aria-label="Docker Status"
                 aria-haspopup="dialog"
                 aria-expanded={isHovered}
+                onClick={() => {
+                    setIsHovered(!isHovered);
+                    if (!isHovered) void fetchContainers();
+                }}
                 className={`w-11 h-11 flex items-center justify-center rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
                     isHovered
                         ? "bg-black/[0.05] dark:bg-white/[0.05]"
@@ -94,6 +144,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
 
             {isHovered && (
                 <div
+                    ref={dialogRef}
                     role="dialog"
                     aria-label="Active Docker Containers"
                     className="absolute right-0 top-full mt-2 w-80 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50 flex flex-col"
@@ -129,7 +180,8 @@ export const DockerStatusMenu: FunctionComponent = () => {
                                     return (
                                         <div
                                             key={container.id}
-                                            className="group flex flex-col p-3 rounded-xl hover:bg-black/[0.02] dark:hover:bg-white/[0.02] border border-transparent hover:border-black/[0.04] dark:hover:border-white/[0.04] transition-all"
+                                            tabIndex={0}
+                                            className="group flex flex-col p-3 rounded-xl hover:bg-black/[0.02] dark:hover:bg-white/[0.02] border border-transparent hover:border-black/[0.04] dark:hover:border-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:bg-black/[0.02] dark:focus-visible:bg-white/[0.02] transition-all"
                                         >
                                             <div className="flex items-start justify-between mb-1.5">
                                                 <div className="flex items-center gap-2 min-w-0">

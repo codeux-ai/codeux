@@ -1,11 +1,18 @@
 import { useEffect, useRef } from "preact/hooks";
+import type { RefObject } from "preact";
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function useFocusTrap(active: boolean, onClose?: () => void) {
-  const containerRef = useRef<HTMLDivElement>(null);
+export function useFocusTrap(active: boolean, onClose?: () => void, providedRef?: RefObject<HTMLElement | HTMLDivElement>) {
+  const defaultRef = useRef<HTMLDivElement>(null);
+  const containerRef = providedRef || defaultRef;
   const triggerRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!active) return;
@@ -26,7 +33,7 @@ export function useFocusTrap(active: boolean, onClose?: () => void) {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        if (onClose) onClose();
+        if (onCloseRef.current) onCloseRef.current();
         return;
       }
 
@@ -67,7 +74,7 @@ export function useFocusTrap(active: boolean, onClose?: () => void) {
         triggerRef.current.focus();
       }
     };
-  }, [active, onClose]);
+  }, [active, containerRef]);
 
   return containerRef;
 }

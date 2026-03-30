@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { X, Download, Upload, Copy, Check } from "lucide-preact";
 
 interface SprintMarkdownModalProps {
@@ -26,20 +27,12 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
   const [tasksText, setTasksText] = useState(tasksMarkdown);
   const [copiedField, setCopiedField] = useState<"sprint" | "tasks" | null>(null);
 
+  useFocusTrap(true, onClose, cardRef);
+
   useLayoutEffect(() => {
     gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
     gsap.fromTo(cardRef.current, { y: 42, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" });
   }, []);
-
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
 
   const handleBackdropClick = (event: MouseEvent) => {
     if (event.target === backdropRef.current) {

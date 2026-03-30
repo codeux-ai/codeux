@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { X, ListChecks, Target, Bot, Plus } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
 
@@ -56,62 +57,12 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   const [executorType, setExecutorType] = useState<TaskExecutorType>(initialTask?.executorType || "auto");
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(initialTask?.dependsOnTaskIds || []);
 
+  useFocusTrap(true, onClose, cardRef);
+
   useLayoutEffect(() => {
     gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
     gsap.fromTo(cardRef.current, { y: 40, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" });
   }, []);
-
-  const triggerRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    triggerRef.current = document.activeElement as HTMLElement | null;
-
-    // Initial focus setup
-    if (cardRef.current) {
-      const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
-      if (focusableElements.length > 0) {
-        focusableElements[0].focus();
-      }
-    }
-
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      } else if (event.key === "Tab") {
-        if (!cardRef.current) return;
-
-        const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
-
-        if (focusableElements.length === 0) return;
-
-        const first = focusableElements[0];
-        const last = focusableElements[focusableElements.length - 1];
-
-        // If focus has escaped the modal (e.g. user clicked background), force it back in
-        if (!cardRef.current.contains(document.activeElement)) {
-          event.preventDefault();
-          first.focus();
-          return;
-        }
-
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        }
-      }
-    };
-
-    document.addEventListener("keydown", handler);
-    return () => {
-      document.removeEventListener("keydown", handler);
-      if (triggerRef.current) {
-        triggerRef.current.focus();
-      }
-    };
-  }, [onClose]);
 
   const dependencyOptions = useMemo(() => {
     return availableTasks.filter((task) => task.sprintId === sprintId && task.recordId !== initialTask?.recordId);
