@@ -34,7 +34,6 @@ describe("DashboardRealtimeService", () => {
 
     service.setSnapshotLoaders({
       getProjectsSnapshot: () => ({ projects: [], selectedProjectId: "project-1" }),
-      getProjectLiveSnapshot: () => ({ projectId: "project-1", selectedSprintId: null, status: { project_id: "project-1", timestamp: null, subtasks: [] }, execution: { projectId: "project-1", projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null } as any),
       getProjectExecutionSnapshot: () => ({
         projectId: "project-1",
         projectName: "Project 1",
@@ -108,7 +107,6 @@ describe("DashboardRealtimeService", () => {
 
     service.setSnapshotLoaders({
       getProjectsSnapshot: () => ({ projects: [], selectedProjectId: "project-1" }),
-      getProjectLiveSnapshot: () => ({ projectId: "project-1", selectedSprintId: null, status: { project_id: "project-1", timestamp: null, subtasks: [] }, execution: { projectId: "project-1", projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null } as any),
       getProjectExecutionSnapshot: () => ({
         projectId: "project-1",
         projectName: "Project 1",

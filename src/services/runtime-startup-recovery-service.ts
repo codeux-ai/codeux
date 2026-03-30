@@ -117,6 +117,7 @@ export class RuntimeStartupRecoveryService {
     const resumedSprintRunIds: string[] = [];
     const supersededSprintRunIds: string[] = [];
     const activeRuns = this.deps.executionRepository.listSprintRunsByStatus([...ACTIVE_SPRINT_RUN_STATUSES]);
+    activeRuns.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     const recoveredSprintIds = new Set<string>();
     const recoveredAt = new Date().toISOString();
 
@@ -135,6 +136,12 @@ export class RuntimeStartupRecoveryService {
         supersededSprintRunIds.push(sprintRun.id);
         continue;
       }
+
+      // Gate the recovery loop against the active in-memory orchestrator registry
+      if (this.deps.sprintOrchestrator.isOrchestratingSprint && this.deps.sprintOrchestrator.isOrchestratingSprint(sprintRun.projectId, sprintRun.sprintId)) {
+        continue;
+      }
+
 
       recoveredSprintIds.add(sprintRun.sprintId);
       this.deps.executionRepository.releaseLease("sprint", sprintRun.sprintId);

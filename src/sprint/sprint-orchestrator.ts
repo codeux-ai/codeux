@@ -102,6 +102,7 @@ export class SprintOrchestrator {
   private readonly cycleRunner: CycleRunner;
   private readonly watchLoopRunner: WatchLoopRunner;
   private readonly actionRunner: SprintActionRunner;
+  private readonly activeOrchestrations = new Set<string>();
 
   constructor(private readonly deps: SprintOrchestratorDependencies) {
     this.cycleRunner = new CycleRunner(deps);
@@ -316,6 +317,10 @@ export class SprintOrchestrator {
     });
   }
 
+  isOrchestratingSprint(projectId: string, sprintId: string): boolean {
+    return this.activeOrchestrations.has(`${projectId}:${sprintId}`);
+  }
+
   async recoverSprintRun(sprintRunId: string): Promise<any> {
     const existingRun = this.deps.executionRepository.getSprintRun(sprintRunId);
     if (!existingRun) {
@@ -372,6 +377,9 @@ export class SprintOrchestrator {
       sourceEventKey: `startup-recovery:sprint-run:${existingRun.id}`,
     });
 
+    const orchestrationKey = `${executionContext.project.id}:${executionContext.sprint.id}`;
+    this.activeOrchestrations.add(orchestrationKey);
+
     try {
       const planningAgentPresetId = await this.deps.resolvePlanningAgentPresetId?.(executionContext.project.id);
       return await this.actionRunner.runOrchestrate({
@@ -388,8 +396,8 @@ export class SprintOrchestrator {
         automationLevel,
         automationInterventions,
         dashboardPort,
-        shouldWait: true,
-        watchLoopEnabled: true,
+        shouldWait: loopSteps.watchLoop,
+        watchLoopEnabled: loopSteps.watchLoop,
         sprintRunId: existingRun.id,
         leaseToken,
         planningAgentPresetId,
@@ -410,6 +418,7 @@ export class SprintOrchestrator {
       });
       throw error;
     } finally {
+      this.activeOrchestrations.delete(orchestrationKey);
       this.deps.executionRepository.releaseLease("sprint", executionContext.sprint.id, leaseToken);
     }
   }
@@ -611,6 +620,9 @@ export class SprintOrchestrator {
           lastHeartbeatAt: new Date().toISOString(),
         });
 
+        const orchestrationKey = `${executionContext.project.id}:${executionContext.sprint.id}`;
+        this.activeOrchestrations.add(orchestrationKey);
+
         try {
           try {
             return await this.actionRunner.runOrchestrate({
@@ -650,6 +662,7 @@ export class SprintOrchestrator {
             throw error;
           }
         } finally {
+          this.activeOrchestrations.delete(orchestrationKey);
           this.deps.executionRepository.releaseLease("sprint", executionContext.sprint.id, leaseToken);
         }
       }

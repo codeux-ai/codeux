@@ -1,8 +1,9 @@
 /**
  * @vitest-environment jsdom
  * @jsx h
+ * @jsxFrag Fragment
  */
-import { h } from "preact";
+import { h, Fragment } from "preact";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/preact";
 import { usePreviewSessions } from "../../../dashboard/src/v2/hooks/use-preview-sessions.js";

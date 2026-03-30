@@ -363,11 +363,13 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
       viewport.scrollHeight - viewport.clientHeight,
     ));
 
-    viewport.scrollTo({
-      left: nextLeft,
-      top: nextTop,
-      behavior: "smooth",
-    });
+    if (typeof viewport.scrollTo === 'function') {
+      viewport.scrollTo({
+        left: nextLeft,
+        top: nextTop,
+        behavior: "smooth",
+      });
+    }
   }, [focusNodeIds, hasSprintContext, positionedNodeById, positionedNodes]);
 
   if (!hasSprintContext || tasks.length === 0) {
