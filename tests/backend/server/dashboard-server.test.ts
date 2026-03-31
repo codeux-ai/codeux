@@ -215,8 +215,40 @@ describe("setupDashboardServer", () => {
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
 
-    getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
-    }));
+      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getLiveSnapshot: () => ({ projectId: "project-1", selectedSprintId: null, status: { project_id: "project-1", timestamp: null, subtasks: [] }, execution: { projectId: "project-1", projectName: "Project 1", sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null, startup: { status: "completed", jobs: [] } }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+      getProjectLiveSnapshot: (projectId: string) => ({ projectId, selectedSprintId: null, status: { project_id: projectId, timestamp: null, subtasks: [] }, execution: { projectId, projectName: "Project 1", sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null, startup: { status: "completed", jobs: [] } } as any),
+      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getProjectStatsSnapshot: () => ({
+        projectId: "project-test",
+        projectName: "Project Test",
+        window: "7d",
+        generatedAt: new Date().toISOString(),
+        usage: { invocationCount: 0, activeTimeMs: 0, wallTimeMs: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, reportedInvocationCount: 0, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 },
+        activeSprint: null,
+        buckets: [],
+        sprints: [],
+        tasks: [],
+        providers: [],
+        purposes: [],
+        tokenSources: [],
+      }),
+      getLiveActivities: async () => ({}),
+      getGitStatus: async () => ({ mode: "LOCAL", available: true, repositoryRoot: null, branch: null, hasRemote: false, dirty: false, openPullRequests: [], ciRuns: [], mergedPullRequests: [], tracking: { scope: "REPOSITORY", label: "Repository", branch: null }, warnings: [], lastUpdated: new Date().toISOString() }),
+      getExternalSettingsHints: () => ({ env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" }, settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" }, resolved: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" } }),
+      ...buildSettingsServerOptions(),
+      listAgentPresets: () => [],
+      createAgentPreset: () => ({ id: "agent-1" } as any),
+      updateAgentPreset: () => ({ id: "agent-1" } as any),
+      deleteAgentPreset: () => {},
+      rerunTask: async () => ({ ok: true }),
+      orchestrateSprint: async () => ({ ok: true }),
+      pauseSprintRun: async () => ({ ok: true }),
+      cancelSprintRun: async () => ({ ok: true }),
+      cancelTaskDispatch: async () => ({ ok: true }),
+      retryTaskDispatch: async () => ({ ok: true }),
+    });
     serversToClose.push(handle.server);
 
     // 1. Direct subpage route without extension
@@ -590,7 +622,9 @@ describe("setupDashboardServer", () => {
         purposes: [],
         tokenSources: [],
       }),
-      getLiveSnapshot: () => ({ projectId: "project-1", selectedSprintId: null, status: { project_id: "project-1", timestamp: null, subtasks: [] }, execution: { projectId: "project-1", projectName: "Project 1", sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null } as any),
+      getLiveSnapshot: () => ({ projectId: "project-1", selectedSprintId: null, status: { project_id: "project-1", timestamp: null, subtasks: [] }, execution: { projectId: "project-1", projectName: "Project 1", sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null, startup: { status: "completed", jobs: [] } } as any),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+      getLiveActivities: async () => ({}),
       getGitStatus: async () => ({} as any),
       getExternalSettingsHints: () => ({} as any),
     }));

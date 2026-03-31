@@ -34,12 +34,15 @@ export const KineticDock: FunctionComponent = () => {
 
     /* Entrance */
     useEffect(() => {
-        if (dockRef.current) {
-            gsap.fromTo(dockRef.current,
-                { y: 100, opacity: 0, scale: 0.8 },
-                { y: 0, opacity: 1, scale: 1, duration: 1.4, ease: "elastic.out(1, 0.7)", delay: 0.2 },
-            );
-        }
+        const timer = setTimeout(() => {
+            if (dockRef.current) {
+                gsap.fromTo(dockRef.current,
+                    { y: 100, opacity: 0, scale: 0.8 },
+                    { y: 0, opacity: 1, scale: 1, duration: 1.4, ease: "elastic.out(1, 0.7)", delay: 0.2 },
+                );
+            }
+        }, 0);
+        return () => clearTimeout(timer);
     }, []);
 
     /* Active indicator — DOM-based so the divider doesn't break the math */

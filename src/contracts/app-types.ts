@@ -125,6 +125,8 @@ export interface ProjectLiveDashboardSnapshot {
   gitStatusError: string | null;
   /** Owned by the server assembly module. Mutated upon every assembly call to track the snapshot timestamp. */
   updatedAt: string | null;
+  /** Represents background startup tasks that block or warn in the dashboard UI. */
+  startup: RuntimeStartupStateSnapshot;
 }
 
 export interface LiveActivitiesResponse {
@@ -846,4 +848,21 @@ export interface SprintPreviewScript {
   detectedInstallCommand: string | null;
   detectedBuildCommand: string | null;
   detectedRunCommand: string | null;
+}
+
+export type StartupJobStatus = "pending" | "running" | "completed" | "failed";
+
+export interface StartupJobState {
+  name: string;
+  status: StartupJobStatus;
+  error: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export type StartupAggregateStatus = "pending" | "running" | "completed" | "failed";
+
+export interface RuntimeStartupStateSnapshot {
+  status: StartupAggregateStatus;
+  jobs: StartupJobState[];
 }

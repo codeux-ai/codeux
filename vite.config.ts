@@ -20,7 +20,6 @@ export default defineConfig({
       output: {
         manualChunks: {
           vendor: ["preact", "react", "react-dom"],
-          three: ["three"],
         },
       },
     },

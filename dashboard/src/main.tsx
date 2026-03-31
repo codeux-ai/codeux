@@ -14,10 +14,10 @@ import { ProjectDataProvider } from "./v2/context/project-data.js";
 import { SkeletonPanel } from "./v2/components/ui/ListSkeletons.js";
 import { DashboardV2 } from "./v2/DashboardV2.js";
 import { LiveSessionPage } from "./v2/LiveSessionPage.js";
-import { DeepOceanBackground } from "./v2/components/chat/DeepOceanBackground.js";
 import "./styles.css";
 
 // Route components — each dynamic import becomes its own chunk in the build
+const DeepOceanBackground = lazy(() => import("./v2/components/chat/DeepOceanBackground.js").then(m => ({ default: m.DeepOceanBackground })));
 const SprintsPage   = lazy(() => import("./v2/pages/sprints/SprintsPage.js").then(m => ({ default: m.SprintsPage })));
 const ProjectsPage  = lazy(() => import("./v2/ProjectsPage.js").then(m => ({ default: m.ProjectsPage })));
 const ChatPage      = lazy(() => import("./v2/ChatPage.js").then(m => ({ default: m.ChatPage })));
@@ -29,6 +29,34 @@ const MemoryPage    = lazy(() => import("./v2/MemoryPage.js").then(m => ({ defau
 const BrowserPage   = lazy(() => import("./v2/BrowserPage.js").then(m => ({ default: m.BrowserPage })));
 
 // 1. Root layout route
+const IdleDeepOceanBackground = () => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    let handle: any;
+    if ("requestIdleCallback" in window) {
+      handle = (window as any).requestIdleCallback(() => setMounted(true), { timeout: 2000 });
+    } else {
+      handle = setTimeout(() => setMounted(true), 500) as any;
+    }
+    return () => {
+      if ("requestIdleCallback" in window) {
+        (window as any).cancelIdleCallback(handle);
+      } else {
+        clearTimeout(handle);
+      }
+    };
+  }, []);
+
+  if (!mounted) return null;
+
+  return (
+    <Suspense fallback={null}>
+      <DeepOceanBackground />
+    </Suspense>
+  );
+};
+
 const rootRoute = createRootRoute({
   component: () => {
     const [isDark, setIsDark] = useState(true);
@@ -50,7 +78,7 @@ const rootRoute = createRootRoute({
           <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:px-4 focus:py-2 focus:bg-white focus:text-slate-900 focus:font-bold focus:rounded-br-lg ">
             Skip to main content
           </a>
-          <DeepOceanBackground />
+          <IdleDeepOceanBackground />
 
           <div className="flex-1 flex flex-col h-full relative z-10 overflow-hidden">
             <TopNav isDark={isDark} toggleTheme={toggleTheme} />

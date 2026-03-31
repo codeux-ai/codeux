@@ -40,11 +40,11 @@ interface ConnectionRow {
   last_heartbeat_at: string | null;
   created_at: string;
   updated_at: string;
-  tasks_run_count: number | string | null;
-  thread_count: number | string | null;
-  message_count: number | string | null;
-  pending_inbox_count: number | string | null;
-  active_dispatch_count: number | string | null;
+  tasks_run_count?: number | string | null;
+  thread_count?: number | string | null;
+  message_count?: number | string | null;
+  pending_inbox_count?: number | string | null;
+  active_dispatch_count?: number | string | null;
 }
 
 interface BindingRow {
@@ -158,35 +158,7 @@ export class ConnectionChatRepository {
   listConnections(projectId: string): McpConnectionRecord[] {
     requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const rows = this.db.prepare(`
-      SELECT
-        c.*,
-        (SELECT COUNT(*) FROM task_runs tr WHERE tr.connection_id = c.id AND tr.project_id = ?) AS tasks_run_count,
-        (SELECT COUNT(*) FROM conversation_threads ct WHERE ct.project_id = ? AND ct.connection_id = c.id) AS thread_count,
-        (
-          SELECT COUNT(*)
-          FROM conversation_messages cm
-          INNER JOIN conversation_threads ct ON ct.id = cm.thread_id
-          WHERE ct.project_id = ?
-            AND ct.connection_id = c.id
-            AND ${visibleConversationMessageFilter("cm")}
-        ) AS message_count,
-        (
-          SELECT COUNT(*)
-          FROM conversation_messages cm
-          INNER JOIN conversation_threads ct ON ct.id = cm.thread_id
-          WHERE ct.project_id = ?
-            AND (ct.connection_id = c.id OR ct.connection_id IS NULL)
-            AND cm.direction = 'dashboard_to_connection'
-            AND cm.delivery_status = 'pending'
-            AND ${visibleConversationMessageFilter("cm")}
-        ) AS pending_inbox_count
-        ,
-        (
-          SELECT COUNT(*)
-          FROM task_dispatches td
-          WHERE td.connection_id = c.id
-            AND td.status IN ('claimed', 'running', 'cancel_requested')
-        ) AS active_dispatch_count
+      SELECT c.*
       FROM mcp_connections c
       WHERE EXISTS (
         SELECT 1
@@ -195,25 +167,14 @@ export class ConnectionChatRepository {
           AND b.project_id = ?
       )
       ORDER BY COALESCE(c.last_heartbeat_at, c.updated_at) DESC, c.display_name ASC
-    `).all(projectId, projectId, projectId, projectId, projectId) as unknown as ConnectionRow[];
+    `).all(projectId) as unknown as ConnectionRow[];
 
-    return this.sortConnections(this.inflateConnections(rows));
+    return this.sortConnections(this.inflateConnections(rows, projectId));
   }
 
   getConnection(connectionId: string): McpConnectionRecord | null {
     const row = this.db.prepare(`
-      SELECT
-        c.*,
-        0 AS tasks_run_count,
-        0 AS thread_count,
-        0 AS message_count,
-        0 AS pending_inbox_count,
-        (
-          SELECT COUNT(*)
-          FROM task_dispatches td
-          WHERE td.connection_id = c.id
-            AND td.status IN ('claimed', 'running', 'cancel_requested')
-        ) AS active_dispatch_count
+      SELECT c.*
       FROM mcp_connections c
       WHERE c.id = ?
     `).get(connectionId) as ConnectionRow | undefined;
@@ -227,18 +188,7 @@ export class ConnectionChatRepository {
 
   getConnectionByKey(connectionKey: string): McpConnectionRecord | null {
     const row = this.db.prepare(`
-      SELECT
-        c.*,
-        0 AS tasks_run_count,
-        0 AS thread_count,
-        0 AS message_count,
-        0 AS pending_inbox_count,
-        (
-          SELECT COUNT(*)
-          FROM task_dispatches td
-          WHERE td.connection_id = c.id
-            AND td.status IN ('claimed', 'running', 'cancel_requested')
-        ) AS active_dispatch_count
+      SELECT c.*
       FROM mcp_connections c
       WHERE c.connection_key = ?
     `).get(connectionKey.trim()) as ConnectionRow | undefined;
@@ -1047,16 +997,19 @@ export class ConnectionChatRepository {
     );
   }
 
-  private inflateConnections(rows: ConnectionRow[]): McpConnectionRecord[] {
+  private inflateConnections(rows: ConnectionRow[], projectId?: string): McpConnectionRecord[] {
     if (rows.length === 0) {
       return [];
     }
 
+    const connectionIds = rows.map((row) => row.id);
+    const placeholders = connectionIds.map(() => "?").join(", ");
+
     const bindings = this.db.prepare(`
       SELECT connection_id, project_id, is_active
       FROM connection_project_bindings
-      WHERE connection_id IN (${rows.map(() => "?").join(", ")})
-    `).all(...rows.map((row) => row.id)) as unknown as BindingRow[];
+      WHERE connection_id IN (${placeholders})
+    `).all(...connectionIds) as unknown as BindingRow[];
 
     const projectIdsByConnection = new Map<string, string[]>();
     const activeProjectIdsByConnection = new Map<string, string[]>();
@@ -1072,29 +1025,115 @@ export class ConnectionChatRepository {
       }
     }
 
-    return rows.map((row) => ({
-      id: row.id,
-      connectionKey: row.connection_key,
-      displayName: row.display_name,
-      role: row.role as McpConnectionRecord["role"],
-      transport: row.transport,
-      status: this.deriveConnectionStatus(
-        row.status as McpConnectionRecord["status"],
-        row.last_heartbeat_at,
-        toNumber(row.active_dispatch_count),
-      ),
-      capabilities: parseCapabilities(row.capabilities_json),
-      lastHeartbeatAt: row.last_heartbeat_at,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      projectIds: projectIdsByConnection.get(row.id) || [],
-      activeProjectIds: activeProjectIdsByConnection.get(row.id) || [],
-      tasksRunCount: toNumber(row.tasks_run_count),
-      threadCount: toNumber(row.thread_count),
-      messageCount: toNumber(row.message_count),
-      pendingInboxCount: toNumber(row.pending_inbox_count),
-      activeDispatchCount: toNumber(row.active_dispatch_count),
-    }));
+    const activeDispatchCounts = new Map<string, number>();
+    const dispatchRows = this.db.prepare(`
+      SELECT connection_id, COUNT(*) as count
+      FROM task_dispatches
+      WHERE connection_id IN (${placeholders})
+        AND status IN ('claimed', 'running', 'cancel_requested')
+      GROUP BY connection_id
+    `).all(...connectionIds) as Array<{ connection_id: string; count: number | string }>;
+
+    for (const row of dispatchRows) {
+      activeDispatchCounts.set(row.connection_id, toNumber(row.count));
+    }
+
+    const tasksRunCounts = new Map<string, number>();
+    const threadCounts = new Map<string, number>();
+    const messageCounts = new Map<string, number>();
+    const pendingInboxCounts = new Map<string, number>();
+    let unassignedPendingInboxCount = 0;
+
+    if (projectId) {
+      const taskRunRows = this.db.prepare(`
+        SELECT connection_id, COUNT(*) as count
+        FROM task_runs
+        WHERE connection_id IN (${placeholders})
+          AND project_id = ?
+        GROUP BY connection_id
+      `).all(...connectionIds, projectId) as Array<{ connection_id: string; count: number | string }>;
+      for (const row of taskRunRows) {
+        tasksRunCounts.set(row.connection_id, toNumber(row.count));
+      }
+
+      const threadRows = this.db.prepare(`
+        SELECT connection_id, COUNT(*) as count
+        FROM conversation_threads
+        WHERE connection_id IN (${placeholders})
+          AND project_id = ?
+        GROUP BY connection_id
+      `).all(...connectionIds, projectId) as Array<{ connection_id: string; count: number | string }>;
+      for (const row of threadRows) {
+        threadCounts.set(row.connection_id, toNumber(row.count));
+      }
+
+      const messageRows = this.db.prepare(`
+        SELECT ct.connection_id, COUNT(*) as count
+        FROM conversation_messages cm
+        INNER JOIN conversation_threads ct ON ct.id = cm.thread_id
+        WHERE ct.connection_id IN (${placeholders})
+          AND ct.project_id = ?
+          AND ${visibleConversationMessageFilter("cm")}
+        GROUP BY ct.connection_id
+      `).all(...connectionIds, projectId) as Array<{ connection_id: string; count: number | string }>;
+      for (const row of messageRows) {
+        messageCounts.set(row.connection_id, toNumber(row.count));
+      }
+
+      const unassignedInboxRow = this.db.prepare(`
+        SELECT COUNT(*) as count
+        FROM conversation_messages cm
+        INNER JOIN conversation_threads ct ON ct.id = cm.thread_id
+        WHERE ct.connection_id IS NULL
+          AND ct.project_id = ?
+          AND cm.direction = 'dashboard_to_connection'
+          AND cm.delivery_status = 'pending'
+          AND ${visibleConversationMessageFilter("cm")}
+      `).get(projectId) as { count: number | string } | undefined;
+      unassignedPendingInboxCount = unassignedInboxRow ? toNumber(unassignedInboxRow.count) : 0;
+
+      const assignedInboxRows = this.db.prepare(`
+        SELECT ct.connection_id, COUNT(*) as count
+        FROM conversation_messages cm
+        INNER JOIN conversation_threads ct ON ct.id = cm.thread_id
+        WHERE ct.connection_id IN (${placeholders})
+          AND ct.project_id = ?
+          AND cm.direction = 'dashboard_to_connection'
+          AND cm.delivery_status = 'pending'
+          AND ${visibleConversationMessageFilter("cm")}
+        GROUP BY ct.connection_id
+      `).all(...connectionIds, projectId) as Array<{ connection_id: string; count: number | string }>;
+      for (const row of assignedInboxRows) {
+        pendingInboxCounts.set(row.connection_id, toNumber(row.count));
+      }
+    }
+
+    return rows.map((row) => {
+      const activeDispatchCount = activeDispatchCounts.get(row.id) || 0;
+      return {
+        id: row.id,
+        connectionKey: row.connection_key,
+        displayName: row.display_name,
+        role: row.role as McpConnectionRecord["role"],
+        transport: row.transport,
+        status: this.deriveConnectionStatus(
+          row.status as McpConnectionRecord["status"],
+          row.last_heartbeat_at,
+          activeDispatchCount,
+        ),
+        capabilities: parseCapabilities(row.capabilities_json),
+        lastHeartbeatAt: row.last_heartbeat_at,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        projectIds: projectIdsByConnection.get(row.id) || [],
+        activeProjectIds: activeProjectIdsByConnection.get(row.id) || [],
+        tasksRunCount: tasksRunCounts.get(row.id) || 0,
+        threadCount: threadCounts.get(row.id) || 0,
+        messageCount: messageCounts.get(row.id) || 0,
+        pendingInboxCount: (pendingInboxCounts.get(row.id) || 0) + unassignedPendingInboxCount,
+        activeDispatchCount,
+      };
+    });
   }
 
   private deriveConnectionStatus(

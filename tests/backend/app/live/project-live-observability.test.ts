@@ -31,6 +31,7 @@ describe("getProjectLiveSnapshot observability", () => {
         recentEvents: [],
         updatedAt: null,
       }),
+      getStartupState: () => ({ status: "completed", jobs: [] } as any),
       getGitStatus: async () => ({
         branch: "main",
         status: "clean",
@@ -62,6 +63,7 @@ describe("getProjectLiveSnapshot observability", () => {
       projectRuntimeRepository: {} as any,
       getProjectExecutionSnapshot: () => ({} as any),
       getGitStatus: async () => ({} as any),
+      getStartupState: () => ({ status: "completed", jobs: [] } as any),
       logger: loggerMock as any,
     };
 
@@ -82,6 +84,7 @@ describe("getProjectLiveSnapshot observability", () => {
         sprintRuns: [{ status: "running" }],
       } as any),
       getGitStatus: async () => ({} as any),
+      getStartupState: () => ({ status: "completed", jobs: [] } as any),
       logger: loggerMock as any,
     };
 
@@ -102,6 +105,7 @@ describe("getProjectLiveSnapshot observability", () => {
         sprintRuns: [],
       } as any),
       getGitStatus: async () => ({} as any),
+      getStartupState: () => ({ status: "completed", jobs: [] } as any),
       logger: loggerMock as any,
     };
 
@@ -122,6 +126,7 @@ describe("getProjectLiveSnapshot observability", () => {
         sprintRuns: [],
       } as any),
       getGitStatus: async () => ({} as any),
+      getStartupState: () => ({ status: "completed", jobs: [] } as any),
       logger: loggerMock as any,
     };
 
