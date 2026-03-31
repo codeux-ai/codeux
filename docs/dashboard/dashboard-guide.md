@@ -16,7 +16,7 @@ Configured by:
 If the requested port is busy, startup automatically retries the next port (`+1`) until it finds a free port.
 
 ## Live Data Contracts
-All live fields rendered in the dashboard originate from the SQLite database, are assembled by the backend, and transported via HTTP/WebSockets. The browser does not reconcile competing states. See the [Live Runtime Contract](../architecture/live-runtime-contract.md) for details on ownership of fields like `projectId`, `status`, and `execution`.
+All live fields rendered in the dashboard originate from the SQLite database, are assembled by the backend, and transported via HTTP/WebSockets. The browser does not reconcile competing states. See the [Live Runtime Contract](../architecture/live-runtime-contract.md) for details on ownership of fields like `projectId`, `status`, `execution`, and `startup`.
 
 ## API Endpoints
 
