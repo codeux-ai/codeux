@@ -22,19 +22,19 @@ import { fetchExternalSettingsHints } from "../lib/api/dashboard-api.js";
 import type { InvocationRoutingId, ProjectSettings, ProviderId, SettingsValueSource, SystemSettings, ThinkingMode } from "../types.js";
 import { ActionButton, NoticePanel } from "./components/settings/SettingsSurface.js";
 import { useProjectData } from "./context/project-data.js";
+import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import {
-  fetchProjectEffectiveSettings,
-  fetchSystemSettings,
+    fetchSystemSettings,
   resetProjectSettings,
   resetSystemDatabase,
   saveProjectSettings,
   saveSystemSettings,
 } from "./lib/settings-api.js";
 import {
+  applyEffectiveProjectSettings,
   applyExternalHintsToSystemSettings,
   cloneProjectSettings,
   cloneSystemSettings,
-  dashboardSettingsToProjectSettings,
   getFieldSource,
   getFieldSourceLabel,
   getProviderModelOptions,
@@ -367,6 +367,7 @@ export const SettingsPage: FunctionComponent = () => {
   const contentRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { deleteProject, selectedProject, selectedProjectId } = useProjectData();
+  const { data: effectiveProjectData, refresh: refreshProjectSettings } = useProjectEffectiveSettings(selectedProjectId);
 
   // Tracks whether user has unsaved edits. Used as a guard in loadSettings so that
   // background realtime refreshes cannot clobber in-progress user changes.
@@ -405,40 +406,45 @@ export const SettingsPage: FunctionComponent = () => {
     );
   }, []);
 
+  const refreshAllSources = useCallback(async (options?: { forceOverwrite?: boolean }): Promise<void> => {
+    try {
+      const nextSystem = await fetchSystemSettings();
+      if (options?.forceOverwrite || !isDirtyRef.current) {
+        setSystemSettings(cloneSystemSettings(nextSystem));
+        setSavedSystemSettings(cloneSystemSettings(nextSystem));
+      }
+
+      await refreshProjectSettings();
+
+      if (options?.forceOverwrite) {
+        isDirtyRef.current = false;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [refreshProjectSettings]);
+
   const loadSettings = useCallback(async (): Promise<void> => {
-    // Do not overwrite in-progress user edits with a background refresh.
+    setLoading(true);
+    await refreshAllSources();
+    setLoading(false);
+  }, [refreshAllSources]);
+
+  useEffect(() => {
     if (isDirtyRef.current) {
       return;
     }
-    setLoading(true);
-    try {
-      const nextSystem = await fetchSystemSettings();
-      setSystemSettings(cloneSystemSettings(nextSystem));
-      setSavedSystemSettings(cloneSystemSettings(nextSystem));
-
-      if (selectedProjectId) {
-        const effectiveProject = await fetchProjectEffectiveSettings(selectedProjectId);
-        const nextProject = dashboardSettingsToProjectSettings(effectiveProject.settings);
-        setProjectSettings(cloneProjectSettings(nextProject));
-        setSavedProjectSettings(cloneProjectSettings(nextProject));
-        setProjectSources(effectiveProject.sources);
-      } else {
-        setProjectSettings(null);
-        setSavedProjectSettings(null);
-        setProjectSources({});
-      }
-
-      setError(null);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : String(loadError));
-    } finally {
-      setLoading(false);
+    if (effectiveProjectData) {
+      const { settings, sources } = applyEffectiveProjectSettings(effectiveProjectData);
+      setProjectSettings(settings);
+      setSavedProjectSettings(cloneProjectSettings(settings));
+      setProjectSources(sources);
+    } else {
+      setProjectSettings(null);
+      setSavedProjectSettings(null);
+      setProjectSources({});
     }
-  // Depend on the stable project ID string, not the selectedProject object reference.
-  // The project-data context recreates selectedProject on every realtime broadcast even
-  // when the selected project has not actually changed, which previously caused this
-  // callback to get a new reference → useEffect re-ran → settings reloaded → edits lost.
-  }, [selectedProjectId]);
+  }, [effectiveProjectData]);
 
   useEffect(() => {
     void loadSettings();
@@ -569,7 +575,8 @@ export const SettingsPage: FunctionComponent = () => {
     try {
       const hints = await fetchExternalSettingsHints();
       const nextSettings = applyExternalHintsToSystemSettings(systemSettings, hints);
-      setSystemSettings(nextSettings);
+      await saveSystemSettings(nextSettings);
+      await refreshAllSources({ forceOverwrite: true });
       setSaveMessage("Imported missing integration secrets from env/settings.json.");
       setError(null);
     } catch (hintError) {
@@ -577,7 +584,7 @@ export const SettingsPage: FunctionComponent = () => {
     } finally {
       setImportingHints(false);
     }
-  }, [systemSettings]);
+  }, [systemSettings, refreshAllSources]);
 
   const handleSave = useCallback(async (): Promise<void> => {
     if (activeScope === "system") {
@@ -591,11 +598,7 @@ export const SettingsPage: FunctionComponent = () => {
         setSavedSystemSettings(cloneSystemSettings(saved));
 
         if (selectedProject) {
-          const effectiveProject = await fetchProjectEffectiveSettings(selectedProject.id);
-          const nextProject = dashboardSettingsToProjectSettings(effectiveProject.settings);
-          setProjectSettings(cloneProjectSettings(nextProject));
-          setSavedProjectSettings(cloneProjectSettings(nextProject));
-          setProjectSources(effectiveProject.sources);
+          await refreshAllSources({ forceOverwrite: true });
         }
 
         setError(null);
@@ -615,11 +618,7 @@ export const SettingsPage: FunctionComponent = () => {
     setSavingProject(true);
     try {
       await saveProjectSettings(selectedProject.id, projectSettings);
-      const effectiveProject = await fetchProjectEffectiveSettings(selectedProject.id);
-      const nextProject = dashboardSettingsToProjectSettings(effectiveProject.settings);
-      setProjectSettings(cloneProjectSettings(nextProject));
-      setSavedProjectSettings(cloneProjectSettings(nextProject));
-      setProjectSources(effectiveProject.sources);
+      await refreshAllSources({ forceOverwrite: true });
       setError(null);
       setSaveMessage(`Project settings saved for ${selectedProject.name}.`);
     } catch (saveError) {
@@ -627,7 +626,7 @@ export const SettingsPage: FunctionComponent = () => {
     } finally {
       setSavingProject(false);
     }
-  }, [activeScope, systemSettings, selectedProject, projectSettings]);
+  }, [activeScope, systemSettings, selectedProject, projectSettings, refreshAllSources]);
 
   const handleResetProject = useCallback(async (): Promise<void> => {
     if (!selectedProject) {
@@ -636,11 +635,7 @@ export const SettingsPage: FunctionComponent = () => {
     setResettingProject(true);
     try {
       await resetProjectSettings(selectedProject.id);
-      const effectiveProject = await fetchProjectEffectiveSettings(selectedProject.id);
-      const nextProject = dashboardSettingsToProjectSettings(effectiveProject.settings);
-      setProjectSettings(cloneProjectSettings(nextProject));
-      setSavedProjectSettings(cloneProjectSettings(nextProject));
-      setProjectSources(effectiveProject.sources);
+      await refreshAllSources({ forceOverwrite: true });
       setError(null);
       setSaveMessage(`Project overrides reset for ${selectedProject.name}.`);
     } catch (resetError) {
@@ -648,7 +643,7 @@ export const SettingsPage: FunctionComponent = () => {
     } finally {
       setResettingProject(false);
     }
-  }, [selectedProject]);
+  }, [selectedProject, refreshAllSources]);
 
   const handleDeleteProject = useCallback(async (): Promise<void> => {
     if (!selectedProject) {
