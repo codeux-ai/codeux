@@ -102,6 +102,18 @@ export function createSprintDependencies(
     executionRepository,
   );
 
+  const workerInboxReplyService = new WorkerInboxReplyService({
+    projectManagementRepository,
+    connectionChatRepository: coreDeps.connectionChatRepository,
+    taskService,
+    agentPresetSyncService,
+    executionRepository,
+    getDashboardSettings: resolveDashboardSettings,
+    getGithubToken: () => context.getEffectiveGithubToken(),
+    providerRunner: coreDeps.providerRunner,
+    logger: logger.child({ component: "worker-inbox-reply-service" }),
+  });
+
   const virtualWorkerService = new VirtualWorkerService({
     settingsRepository: coreDeps.settingsRepository,
     sessionTracking,
@@ -136,6 +148,11 @@ export function createSprintDependencies(
       },
     ),
     cliWorkflowService,
+    sprintExecutionStateService,
+    workerInboxReplyService,
+    instructionService,
+    approveSessionPlan: (sessionId) => julesApi.approveSessionPlan(sessionId),
+    sendSessionMessage: (sessionId, prompt) => julesApi.sendSessionMessage(sessionId, prompt),
     logger: logger.child({ component: "virtual-worker-service" }),
   });
 
@@ -146,18 +163,6 @@ export function createSprintDependencies(
     (projectId) => virtualWorkerService.scheduleProject(projectId, "worker_dispatch_queued"),
     logger.child({ component: "sprint-task-dispatch-service" }),
   );
-
-  const workerInboxReplyService = new WorkerInboxReplyService({
-    projectManagementRepository,
-    connectionChatRepository: coreDeps.connectionChatRepository,
-    taskService,
-    agentPresetSyncService,
-    executionRepository,
-    getDashboardSettings: resolveDashboardSettings,
-    getGithubToken: () => context.getEffectiveGithubToken(),
-    providerRunner: coreDeps.providerRunner,
-    logger: logger.child({ component: "worker-inbox-reply-service" }),
-  });
 
   projectAttentionService.setWorkerAttentionOpenedCallback((projectId) => {
     virtualWorkerService.scheduleProject(projectId, "worker_attention_opened");
