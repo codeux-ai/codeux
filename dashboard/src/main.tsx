@@ -37,13 +37,13 @@ const IdleDeepOceanBackground = () => {
     if ("requestIdleCallback" in window) {
       handle = (window as any).requestIdleCallback(() => setMounted(true), { timeout: 2000 });
     } else {
-      handle = window.setTimeout(() => setMounted(true), 500);
+      handle = setTimeout(() => setMounted(true), 500) as any;
     }
     return () => {
       if ("requestIdleCallback" in window) {
         (window as any).cancelIdleCallback(handle);
       } else {
-        window.clearTimeout(handle);
+        clearTimeout(handle);
       }
     };
   }, []);
