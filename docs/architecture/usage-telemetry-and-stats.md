@@ -133,7 +133,7 @@ It focuses on:
 - alternate composition and reliability views with donut charts
 - task, sprint, provider, and purpose leaderboards
 - a relocated analysis-mode control that focuses the workspace on trend, composition, or reliability
-- a full-width interactive trend graph with hover bucket inspection, a clickable detailed-series sidebar for configuring the chart, staged smooth line-draw animation, and mouse drag zoom selection
+- a full-width interactive trend graph with hover bucket inspection, an active-series rail, grouped in-chart sidebar controls, and refresh-safe selection reconciliation without any API contract change, staged smooth line-draw animation, and mouse drag zoom selection
 - hourly windows keep one-hour hover buckets while rendering visible axis labels every three hours
 - tabbed task and sprint telemetry sections replacing the always-visible ledger layout, complete with search, recency, richer token breakdowns, and client-side sorting by date and usage dimensions
 - animated donut charts now expose slice-level hover focus with center-detail readouts instead of only static composition rings

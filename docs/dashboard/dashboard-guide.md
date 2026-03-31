@@ -231,7 +231,7 @@ Legacy runtime:
   - animated metric cards
   - a unified glass-panel system that mirrors the premium live card surfaces instead of using a separate visual treatment
   - a relocated analysis-mode control that focuses the workspace on trend, composition, or reliability
-  - a full-width interactive trend graph with hover bucket inspection, a clickable detailed-series sidebar for configuring the chart, smooth staged line-draw animation that matches the metric-card sparkline language, and drag-to-zoom timeframe selection
+  - a full-width interactive trend graph with hover bucket inspection, an active-series rail, grouped in-chart sidebar controls, and refresh-safe selection reconciliation that keeps chosen metrics stable during live refresh, smooth staged line-draw animation that matches the metric-card sparkline language, and drag-to-zoom timeframe selection
   - hourly views keep one-hour hover targets while reducing visible axis labels to a three-hour rhythm for readability
   - donut-style composition charts for providers, token anatomy, and telemetry-source mix now animate as interactive slices with hover emphasis and center-detail readouts
   - tabbed task and sprint telemetry sections replacing the always-visible ledger layout, complete with search, sort-by-recency/tokens/time/input/output/name, and richer token/time breakdowns

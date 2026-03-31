@@ -100,6 +100,12 @@ describe("StatsPage Shell", () => {
 
     // Default mode from mock is "trend"
     expect(screen.getByText("Trend analysis")).toBeInTheDocument();
+
+    // Verify the trend workspace exposes the new filter trigger near the Interactive Legend
+    expect(screen.getByRole("button", { name: /Series Filters/i })).toBeInTheDocument();
+
+    // The drawer contents should not be visible by default
+    expect(screen.queryByText("Configure Graph Series")).not.toBeInTheDocument();
   });
 
   it("renders telemetry ledgers", () => {
