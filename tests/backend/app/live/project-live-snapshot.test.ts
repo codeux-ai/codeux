@@ -16,7 +16,6 @@ describe("getProjectLiveSnapshot", () => {
       } as any,
       getProjectExecutionSnapshot: vi.fn().mockReturnValue({ sprintRuns: [] }),
       getGitStatus: vi.fn().mockResolvedValue({ status: "clean" } as unknown as GitTrackingStatus),
-      getStartupState: vi.fn().mockReturnValue({ status: "completed", jobs: [] }),
       logger: { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() } as any,
     };
   });

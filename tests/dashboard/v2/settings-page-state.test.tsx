@@ -14,25 +14,26 @@ vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
   }))
 }));
 
-describe("useSettingsPageState", () => {
-  let mockSaveSystem;
-  let mockSaveProject;
-  let mockFetchSystem;
-  let mockFetchProject;
-  let mockResetProject;
-  let mockResetDatabase;
-  let mockFetchExternal;
+let mockSaveSystem;
+let mockSaveProject;
+let mockFetchSystem;
+let mockFetchProject;
+let mockResetProject;
+let mockResetDatabase;
+let mockFetchExternal;
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockSaveSystem = vi.spyOn(settingsApi, 'saveSystemSettings').mockResolvedValue({ defaults: {}, runtime: {} } as any);
-    mockSaveProject = vi.spyOn(settingsApi, 'saveProjectSettings').mockResolvedValue({ settings: {}, sources: {} } as any);
-    mockFetchSystem = vi.spyOn(settingsApi, 'fetchSystemSettings').mockResolvedValue({ defaults: {}, runtime: {} } as any);
-    mockFetchProject = vi.spyOn(settingsApi, 'fetchProjectEffectiveSettings').mockResolvedValue({ settings: {}, sources: {} } as any);
-    mockResetProject = vi.spyOn(settingsApi, 'resetProjectSettings').mockResolvedValue();
-    mockResetDatabase = vi.spyOn(settingsApi, 'resetSystemDatabase').mockResolvedValue();
-    mockFetchExternal = vi.spyOn(dashboardApi, 'fetchExternalSettingsHints').mockResolvedValue({});
-  });
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockSaveSystem = vi.spyOn(settingsApi, 'saveSystemSettings').mockResolvedValue({ defaults: {}, runtime: {} } as any);
+  mockSaveProject = vi.spyOn(settingsApi, 'saveProjectSettings').mockResolvedValue({ settings: {}, sources: {} } as any);
+  mockFetchSystem = vi.spyOn(settingsApi, 'fetchSystemSettings').mockResolvedValue({ defaults: {}, runtime: {} } as any);
+  mockFetchProject = vi.spyOn(settingsApi, 'fetchProjectEffectiveSettings').mockResolvedValue({ settings: {}, sources: {} } as any);
+  mockResetProject = vi.spyOn(settingsApi, 'resetProjectSettings').mockResolvedValue();
+  mockResetDatabase = vi.spyOn(settingsApi, 'resetSystemDatabase').mockResolvedValue();
+  mockFetchExternal = vi.spyOn(dashboardApi, 'fetchExternalSettingsHints').mockResolvedValue({});
+});
+
+describe("useSettingsPageState", () => {
   it("updates editable settings for project scope", async () => {
     const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -134,7 +135,7 @@ describe("useSettingsPageState", () => {
         await result.current.handleSave();
     });
 
-    expect(mockSaveSystem).toHaveBeenCalled();
+    await waitFor(() => expect(mockSaveSystem).toHaveBeenCalled());
   });
 
   it.skip("handles saving project settings", async () => {
@@ -157,7 +158,7 @@ describe("useSettingsPageState", () => {
         await result.current.handleSave();
     });
 
-    expect(mockSaveProject).toHaveBeenCalled();
+    await waitFor(() => expect(mockSaveProject).toHaveBeenCalled());
   });
 
   it("handles reset project settings", async () => {
@@ -202,6 +203,6 @@ describe("useSettingsPageState", () => {
     await act(async () => {
       await result.current.handleImportHints();
     });
-    expect(mockFetchExternal).toHaveBeenCalled();
+    await waitFor(() => expect(mockFetchExternal).toHaveBeenCalled());
   });
 });

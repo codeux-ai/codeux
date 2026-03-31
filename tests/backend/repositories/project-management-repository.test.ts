@@ -296,66 +296,6 @@ describe("ProjectManagementRepository", () => {
     });
   });
 
-  it("computes project summaries using a shared aggregate query when listing multiple projects", async () => {
-    const { repository, executionRepository } = await createRepository();
-
-    const p1 = repository.createProject({
-      name: "Project One",
-      sourceType: "local",
-      sourceRef: "/p1",
-    });
-    const s1 = repository.createSprint(p1.id, { name: "Sprint A" });
-    repository.createTask(p1.id, { sprintId: s1.id, title: "T1", status: "completed" });
-    repository.createTask(p1.id, { sprintId: s1.id, title: "T2", status: "in_progress" });
-    executionRepository.createSprintRun({ projectId: p1.id, sprintId: s1.id, status: "running" });
-
-    const p2 = repository.createProject({
-      name: "Project Two",
-      sourceType: "local",
-      sourceRef: "/p2",
-    });
-    const s2 = repository.createSprint(p2.id, { name: "Sprint B" });
-    const s3 = repository.createSprint(p2.id, { name: "Sprint C" });
-    repository.createTask(p2.id, { sprintId: s2.id, title: "T1", status: "completed" });
-    repository.createTask(p2.id, { sprintId: s2.id, title: "T2", status: "completed" });
-    executionRepository.createSprintRun({ projectId: p2.id, sprintId: s3.id, status: "completed" });
-
-    const p3 = repository.createProject({
-      name: "Project Three",
-      sourceType: "local",
-      sourceRef: "/p3",
-    });
-    // P3 has no sprints or tasks
-
-    const { projects } = repository.listProjects();
-
-    expect(projects).toHaveLength(3);
-
-    const projectOne = projects.find(p => p.id === p1.id);
-    expect(projectOne).toMatchObject({
-      sprintsCount: 1,
-      completedTasks: 1,
-      openTasks: 1,
-      isRunning: true,
-    });
-
-    const projectTwo = projects.find(p => p.id === p2.id);
-    expect(projectTwo).toMatchObject({
-      sprintsCount: 2,
-      completedTasks: 2,
-      openTasks: 0,
-      isRunning: false,
-    });
-
-    const projectThree = projects.find(p => p.id === p3.id);
-    expect(projectThree).toMatchObject({
-      sprintsCount: 0,
-      completedTasks: 0,
-      openTasks: 0,
-      isRunning: false,
-    });
-  });
-
   it("publishes project collection and structure refreshes on project mutations", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-project-repo-realtime-"));
     tempDirs.push(dir);

@@ -13,7 +13,6 @@ export interface ProjectLiveSnapshotDeps {
   projectRuntimeRepository: ProjectRuntimeRepository;
   getProjectExecutionSnapshot: (projectId: string) => ExecutionDashboardSnapshot;
   getGitStatus: () => Promise<GitTrackingStatus>;
-  getStartupState: () => import("../../contracts/app-types.js").RuntimeStartupStateSnapshot;
   logger: Logger;
 }
 
@@ -67,7 +66,6 @@ export async function getProjectLiveSnapshot(
       gitStatus: null,
       gitStatusError: null,
       updatedAt: null,
-      startup: deps.getStartupState(),
     };
   }
 
@@ -130,7 +128,6 @@ export async function getProjectLiveSnapshot(
     gitStatus,
     gitStatusError,
     updatedAt: new Date().toISOString(),
-    startup: deps.getStartupState(),
   };
 
   deps.logger.info("project_live_snapshot_assembled", {

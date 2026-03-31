@@ -372,7 +372,6 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
       projectRuntimeRepository: deps.projectRuntimeRepository,
       getProjectExecutionSnapshot,
       getGitStatus: deps.getGitStatus,
-      getStartupState: () => deps.runtimeContext.startupState.getSnapshot(),
       logger: deps.logger.child({ component: "project-live-snapshot" })
     }, projectIdHint),
     getOverviewTelemetrySnapshot,
@@ -403,7 +402,6 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
       projectRuntimeRepository: deps.projectRuntimeRepository,
       getProjectExecutionSnapshot,
       getGitStatus: deps.getGitStatus,
-      getStartupState: () => deps.runtimeContext.startupState.getSnapshot(),
       logger: deps.logger.child({ component: "project-live-snapshot" })
     }, projectIdHint),
     getExecutionSnapshot: () => {

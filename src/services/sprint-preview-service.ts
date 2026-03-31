@@ -293,37 +293,30 @@ export class SprintPreviewService {
 
   async cleanupStaleContainersOnStartup(): Promise<void> {
     const containerIds = await this.listPreviewContainerIds();
-    await Promise.allSettled(
-      containerIds.map((containerId) =>
-        runCommandStrict("docker", ["rm", "-f", containerId], process.cwd())
-      )
-    );
-
+    for (const containerId of containerIds) {
+      await runCommandStrict("docker", ["rm", "-f", containerId], process.cwd()).catch(() => undefined);
+    }
     await this.cleanupOrphanedSetupContainers(process.cwd());
 
     const projects = this.deps.projectManagementRepository.listProjects().projects;
-    await Promise.allSettled(
-      projects.map((project) => this.cleanupLegacyPreviewWorkspaces(project.baseDir))
-    );
+    for (const project of projects) {
+      await this.cleanupLegacyPreviewWorkspaces(project.baseDir);
+    }
 
     const sessions = this.deps.sprintPreviewRepository.listSessions();
-    await Promise.allSettled(
-      sessions.map((session) => {
-        if (!session.containerId && !session.containerName && session.status === "stopped") {
-          return Promise.resolve();
-        }
-        return Promise.resolve().then(() => {
-          this.deps.sprintPreviewRepository.updateSession(session.id, {
-            status: "stopped",
-            containerId: null,
-            containerName: null,
-            healthStatus: "unknown",
-            lastError: null,
-            lastStoppedAt: new Date().toISOString(),
-          });
-        });
-      })
-    );
+    for (const session of sessions) {
+      if (!session.containerId && !session.containerName && session.status === "stopped") {
+        continue;
+      }
+      this.deps.sprintPreviewRepository.updateSession(session.id, {
+        status: "stopped",
+        containerId: null,
+        containerName: null,
+        healthStatus: "unknown",
+        lastError: null,
+        lastStoppedAt: new Date().toISOString(),
+      });
+    }
 
     if (containerIds.length > 0) {
       this.deps.logger?.info("Stopped stale sprint preview containers on startup", {

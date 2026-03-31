@@ -38,10 +38,10 @@ interface ProjectRow {
   updated_at: string;
   source_type: ProjectSourceType | null;
   source_ref: string | null;
-  sprints_count?: number | string | null;
-  open_tasks?: number | string | null;
-  completed_tasks?: number | string | null;
-  has_active_runs?: number | string | null;
+  sprints_count: number | string | null;
+  open_tasks: number | string | null;
+  completed_tasks: number | string | null;
+  has_active_runs: number | string | null;
 }
 
 interface SprintRow {
@@ -116,7 +116,11 @@ export class ProjectManagementRepository {
         p.created_at,
         p.updated_at,
         ps.source_type,
-        ps.source_ref
+        ps.source_ref,
+        (SELECT COUNT(*) FROM sprints s WHERE s.project_id = p.id) AS sprints_count,
+        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'completed') AS completed_tasks,
+        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status != 'completed') AS open_tasks,
+        (SELECT MAX(CASE WHEN sr.status IN ('running', 'queued') THEN 1 ELSE 0 END) FROM sprint_runs sr WHERE sr.project_id = p.id) AS has_active_runs
       FROM projects p
       LEFT JOIN project_sources ps ON ps.project_id = p.id
       ORDER BY p.updated_at DESC, p.name ASC
@@ -142,7 +146,11 @@ export class ProjectManagementRepository {
         p.created_at,
         p.updated_at,
         ps.source_type,
-        ps.source_ref
+        ps.source_ref,
+        (SELECT COUNT(*) FROM sprints s WHERE s.project_id = p.id) AS sprints_count,
+        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'completed') AS completed_tasks,
+        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status != 'completed') AS open_tasks,
+        (SELECT MAX(CASE WHEN sr.status IN ('running', 'queued') THEN 1 ELSE 0 END) FROM sprint_runs sr WHERE sr.project_id = p.id) AS has_active_runs
       FROM projects p
       LEFT JOIN project_sources ps ON ps.project_id = p.id
       WHERE p.id = ?
@@ -169,7 +177,11 @@ export class ProjectManagementRepository {
         p.created_at,
         p.updated_at,
         ps.source_type,
-        ps.source_ref
+        ps.source_ref,
+        (SELECT COUNT(*) FROM sprints s WHERE s.project_id = p.id) AS sprints_count,
+        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'completed') AS completed_tasks,
+        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status != 'completed') AS open_tasks,
+        (SELECT MAX(CASE WHEN sr.status IN ('running', 'queued') THEN 1 ELSE 0 END) FROM sprint_runs sr WHERE sr.project_id = p.id) AS has_active_runs
       FROM projects p
       LEFT JOIN project_sources ps ON ps.project_id = p.id
       WHERE p.base_dir IN (?, ?)
@@ -782,42 +794,6 @@ export class ProjectManagementRepository {
     }));
   }
 
-  private loadProjectSummaries(projectIds: string[]): Map<string, { sprints_count: number; open_tasks: number; completed_tasks: number; has_active_runs: number }> {
-    if (projectIds.length === 0) {
-      return new Map();
-    }
-
-    const rows = this.storage.executeChunkedInQuery<{
-      project_id: string;
-      sprints_count: number;
-      completed_tasks: number;
-      open_tasks: number;
-      has_active_runs: number;
-    }>({
-      sqlPrefix: `
-        SELECT
-          p.id AS project_id,
-          (SELECT COUNT(*) FROM sprints s WHERE s.project_id = p.id) AS sprints_count,
-          (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'completed') AS completed_tasks,
-          (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status != 'completed') AS open_tasks,
-          (SELECT COALESCE(MAX(CASE WHEN sr.status IN ('running', 'queued') THEN 1 ELSE 0 END), 0) FROM sprint_runs sr WHERE sr.project_id = p.id) AS has_active_runs
-        FROM projects p
-        WHERE p.id`,
-      items: projectIds,
-    });
-
-    const map = new Map<string, { sprints_count: number; open_tasks: number; completed_tasks: number; has_active_runs: number }>();
-    for (const row of rows) {
-      map.set(row.project_id, {
-        sprints_count: Number(row.sprints_count),
-        completed_tasks: Number(row.completed_tasks),
-        open_tasks: Number(row.open_tasks),
-        has_active_runs: Number(row.has_active_runs),
-      });
-    }
-    return map;
-  }
-
   private hydrateProjects(rows: ProjectRow[]): ProjectSummary[] {
     if (rows.length === 0) {
       return [];
@@ -826,19 +802,11 @@ export class ProjectManagementRepository {
     const projectIds = rows.map((row) => row.id);
     const settingsOverridesMap = this.settingsRepository.getProjectSettingsBatch(projectIds);
     const agentBindingsMap = this.projectWorkerAssignmentRepository.listAssignmentsForProjects(projectIds, { activeOnly: true });
-    const summariesMap = this.loadProjectSummaries(projectIds);
 
     return rows.map((row) => {
       const settingsOverrides = settingsOverridesMap.get(row.id) || {};
       const agentBindings = agentBindingsMap.get(row.id) || [];
-      const summaries = summariesMap.get(row.id) || {
-        sprints_count: 0,
-        open_tasks: 0,
-        completed_tasks: 0,
-        has_active_runs: 0,
-      };
-
-      return this.mapProjectRow({ ...row, ...summaries }, settingsOverrides, agentBindings);
+      return this.mapProjectRow(row, settingsOverrides, agentBindings);
     });
   }
 

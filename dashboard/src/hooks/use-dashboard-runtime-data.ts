@@ -8,7 +8,6 @@ import type {
   GitTrackingStatus,
   ProjectLiveDashboardSnapshot,
 } from "../types.js";
-import type { RuntimeStartupStateSnapshot } from "../../../src/contracts/app-types.js";
 import { subscribeToDashboardRealtime, type TransportState } from "../lib/realtime/dashboard-realtime-client.js";
 
 const EMPTY_STATUS: DashboardStatus = { subtasks: [], timestamp: null };
@@ -33,7 +32,6 @@ const EMPTY_LIVE_SNAPSHOT: ProjectLiveDashboardSnapshot = {
   gitStatus: null,
   gitStatusError: null,
   updatedAt: null,
-  startup: { status: "completed", jobs: [] },
 };
 
 interface RuntimeState {
@@ -103,7 +101,6 @@ export interface UseDashboardRuntimeDataResult {
   selectedSprintId: string | null;
   status: DashboardStatus;
   execution: ExecutionDashboardSnapshot;
-  startup: RuntimeStartupStateSnapshot;
   stats: ReturnType<typeof computeStats>;
   tasksWithLiveActivities: DashboardStatus["subtasks"];
 }
@@ -168,7 +165,6 @@ export const useDashboardRuntimeData = (projectIdHint: string | null = null): Us
     selectedSprintId: state.snapshot.selectedSprintId,
     status: state.snapshot.status,
     execution: state.snapshot.execution,
-    startup: state.snapshot.startup,
     stats,
     tasksWithLiveActivities,
   };

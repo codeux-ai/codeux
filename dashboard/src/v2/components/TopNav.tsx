@@ -127,12 +127,9 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
     const workerKb = useDropdownKeyboard(workerDropdownOpen, setWorkerDropdownOpen, workerDropdownRef);
 
     useLayoutEffect(() => {
-        const timer = setTimeout(() => {
-            if (navRef.current) {
-                gsap.fromTo(navRef.current, { y: -20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.9, ease: "power3.out" });
-            }
-        }, 0);
-        return () => clearTimeout(timer);
+        if (navRef.current) {
+            gsap.fromTo(navRef.current, { y: -20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.9, ease: "power3.out" });
+        }
     }, []);
 
     const refreshWorkerRouting = useCallback(async (): Promise<void> => {

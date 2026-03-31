@@ -7,15 +7,12 @@ import { SourcesGrid } from "./components/SourcesGrid.js";
 import { TasksList } from "./components/TasksList.js";
 import { SkeletonPanel } from "./components/ui/ListSkeletons.js";
 import { useOverviewPageData } from "./hooks/use-overview-page-data.js";
-import { useDashboardRuntimeData } from "../hooks/use-dashboard-runtime-data.js";
-import { StartupStatusBanner } from "./components/ui/StartupStatusBanner.js";
 
 const OverviewTelemetry = lazy(() => import("./components/OverviewTelemetry.js").then(m => ({ default: m.OverviewTelemetry })));
 
 export const DashboardV2: FunctionComponent = () => {
     const mainContentRef = useRef<HTMLElement>(null);
     const pageData = useOverviewPageData();
-    const { startup } = useDashboardRuntimeData(pageData.selectedProject?.id || null);
 
     useLayoutEffect(() => {
         if (mainContentRef.current) {
@@ -48,8 +45,6 @@ export const DashboardV2: FunctionComponent = () => {
                     </div>
                 </div>
             </header>
-
-            <StartupStatusBanner startup={startup} />
 
             {/* Metrics Section */}
             <section aria-label="Metrics" className="w-full relative z-20">

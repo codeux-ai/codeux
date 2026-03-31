@@ -215,9 +215,9 @@ describe("setupDashboardServer", () => {
       getStatus: () => ({ ok: true }),
 
     getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
-      getLiveSnapshot: () => ({ projectId: "project-1", selectedSprintId: null, status: { project_id: "project-1", timestamp: null, subtasks: [] }, execution: { projectId: "project-1", projectName: "Project 1", sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null, startup: { status: "completed", jobs: [] } }),
+      getLiveSnapshot: () => ({ projectId: "project-1", selectedSprintId: null, status: { project_id: "project-1", timestamp: null, subtasks: [] }, execution: { projectId: "project-1", projectName: "Project 1", sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null }),
       getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
-      getProjectLiveSnapshot: (projectId: string) => ({ projectId, selectedSprintId: null, status: { project_id: projectId, timestamp: null, subtasks: [] }, execution: { projectId, projectName: "Project 1", sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null, startup: { status: "completed", jobs: [] } } as any),
+      getProjectLiveSnapshot: (projectId: string) => ({ projectId, selectedSprintId: null, status: { project_id: projectId, timestamp: null, subtasks: [] }, execution: { projectId, projectName: "Project 1", sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null } as any),
       getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
       getProjectStatsSnapshot: () => ({
         projectId: "project-test",
@@ -744,7 +744,7 @@ describe("setupDashboardServer", () => {
         purposes: [],
         tokenSources: [],
       }),
-      getLiveSnapshot: () => ({ projectId: "project-1", selectedSprintId: null, status: { project_id: "project-1", timestamp: null, subtasks: [] }, execution: { projectId: "project-1", projectName: "Project 1", sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null, startup: { status: "completed", jobs: [] } } as any),
+      getLiveSnapshot: () => ({ projectId: "project-1", selectedSprintId: null, status: { project_id: "project-1", timestamp: null, subtasks: [] }, execution: { projectId: "project-1", projectName: "Project 1", sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null } as any),
       getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
       getLiveActivities: async () => ({}),
       getGitStatus: async () => ({} as any),

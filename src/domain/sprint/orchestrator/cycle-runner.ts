@@ -23,7 +23,6 @@ import { FeaturePrGateService } from "../ci/feature-pr-gate.js";
 import { matchPrForTask } from "../ci/feature-pr/pr-matcher.js";
 import type { MemoryCategory } from "../../../contracts/memory-types.js";
 import { buildTaskAttentionPayload } from "./attention-payload-builder.js";
-import { buildAttentionPlan, shouldEscalateFeatureMergeConflict } from "./attention-plan-builder.js";
 import { buildConflictSummaryMarkdown, selectMergedTaskContexts, type MergeConflictTaskContext } from "./conflict-summary-utils.js";
 
 
@@ -476,29 +475,165 @@ export class CycleRunner {
     activeWorkerMergeConflictTaskIds: Set<string>,
   ): void {
     const projectId = args.executionContext.project.id;
-    const plan = buildAttentionPlan(
-      subtasks,
-      protocolResult,
-      args,
-      gitStatus,
-      activeWorkerMergeConflictTaskIds,
-    );
+    const sprintId = args.executionContext.sprint.id;
+    const sprintRunId = args.sprintRunId;
+    const knownTaskIds = subtasks
+      .map((task) => task.record_id?.trim())
+      .filter((taskId): taskId is string => Boolean(taskId));
 
-    for (const item of plan.toOpen) {
-      this.deps.projectAttentionService.openItem(item.payload);
+    const mergeTaskIds = new Set<string>();
+    for (const task of protocolResult.awaitingMerge) {
+      const taskId = task.record_id?.trim();
+      if (!taskId) {
+        continue;
+      }
+      mergeTaskIds.add(taskId);
+      const pr = gitStatus?.available ? matchPrForTask(task, gitStatus) : undefined;
+      const mergeConflictDetected = shouldEscalateFeatureMergeConflict(
+        task,
+        args,
+        gitStatus,
+        activeWorkerMergeConflictTaskIds,
+      );
+      const mergedFeatureTasks = selectMergedFeatureTaskContexts(subtasks, taskId);
+
+      this.deps.projectAttentionService.openItem(buildTaskAttentionPayload({
+        projectId,
+        sprintId,
+        taskId,
+        sprintRunId: sprintRunId || "",
+        attentionType: mergeConflictDetected ? "merge_conflict" : "merge_required",
+        severity: mergeConflictDetected || task.merge_indicator === "MERGE_BLOCKED" ? "high" : "medium",
+        ownerType: "worker",
+        title: mergeConflictDetected ? `Merge conflict for ${task.id}` : `Merge required for ${task.id}`,
+        summaryMarkdown: mergeConflictDetected
+          ? buildMergeConflictSummary(task, args, pr || null, mergedFeatureTasks)
+          : task.merge_indicator === "MERGE_BLOCKED"
+            ? `Task \`${task.id}\` is complete but blocked on merge work that could not be resolved automatically.`
+            : `Task \`${task.id}\` is complete and awaiting merge into \`${args.defaultFeatureBranch}\`.`,
+        payload: {
+          repoPath: args.repoPath,
+          workingDirectoryHint: `cd ${args.repoPath}`,
+          featureBranch: args.defaultFeatureBranch,
+          defaultBranch: args.defaultBranch,
+          taskKey: task.id,
+          taskTitle: task.title,
+          taskPrompt: task.prompt,
+          mergeIndicator: task.merge_indicator || null,
+          workerBranch: task.worker_branch || null,
+          prUrl: task.pr_url || null,
+          prNumber: pr?.number ?? null,
+          mergeStateStatus: pr?.mergeStateStatus ?? null,
+          conflictingBranches: {
+            source: task.worker_branch || pr?.headRefName || null,
+            target: args.defaultFeatureBranch,
+          },
+          currentTask: buildTaskContext(task),
+          featureBranchTaskContexts: mergedFeatureTasks,
+        },
+      }));
+      this.deps.projectAttentionService.resolveItemsForTask(
+        projectId,
+        taskId,
+        [mergeConflictDetected ? "merge_required" : "merge_conflict"],
+        mergeConflictDetected ? "merge_conflict_attention_replaced" : "merge_required_attention_replaced",
+      );
     }
 
-    for (const resolution of plan.toResolve) {
-      if (resolution.typesToResolve.length > 0) {
+    const actionTaskIds = new Set<string>();
+    for (const task of protocolResult.actionRequiredTasks) {
+      const taskId = task.record_id?.trim();
+      if (!taskId) {
+        continue;
+      }
+      actionTaskIds.add(taskId);
+      const ownerType: ProjectAttentionOwnerType = task.intervention_owner === "AGENT" ? "worker" : "human";
+      this.deps.projectAttentionService.openItem(buildTaskAttentionPayload({
+        projectId,
+        sprintId,
+        taskId,
+        sprintRunId: sprintRunId || "",
+        attentionType: "action_required",
+        severity: task.intervention_owner === "AGENT" ? "high" : "medium",
+        ownerType,
+        title: `Action required for ${task.id}`,
+        summaryMarkdown: task.intervention_hint?.trim()
+          || `Task \`${task.id}\` is blocked in session state \`${task.session_state || "UNKNOWN"}\`.`,
+        payload: {
+          repoPath: args.repoPath,
+          featureBranch: args.defaultFeatureBranch,
+          defaultBranch: args.defaultBranch,
+          taskKey: task.id,
+          taskTitle: task.title,
+          sessionState: task.session_state || null,
+          provider: task.provider || null,
+          interventionOwner: task.intervention_owner || "HUMAN",
+        },
+      }));
+    }
+
+    const ciFixTaskIds = new Set<string>();
+    for (const task of subtasks) {
+      const taskId = task.record_id?.trim();
+      if (taskId && task.merge_indicator === "CI" && task.status === "RUNNING") {
+        ciFixTaskIds.add(taskId);
+      }
+    }
+
+    for (const taskId of knownTaskIds) {
+      if (!mergeTaskIds.has(taskId)) {
         this.deps.projectAttentionService.resolveItemsForTask(
           projectId,
-          resolution.taskId,
-          resolution.typesToResolve,
-          resolution.reason,
+          taskId,
+          ["merge_required", "merge_conflict"],
+          "merge_attention_cleared",
+        );
+      }
+      if (!actionTaskIds.has(taskId)) {
+        this.deps.projectAttentionService.resolveItemsForTask(
+          projectId,
+          taskId,
+          ["action_required"],
+          "action_required_cleared",
+        );
+      }
+      if (!ciFixTaskIds.has(taskId)) {
+        this.deps.projectAttentionService.resolveItemsForTask(
+          projectId,
+          taskId,
+          ["ci_fix_required"],
+          "ci_fix_attention_cleared",
         );
       }
     }
   }
+}
+
+function shouldEscalateFeatureMergeConflict(
+  task: Subtask,
+  args: CycleRunnerArgs,
+  gitStatus: GitTrackingStatus | null,
+  activeWorkerMergeConflictTaskIds: Set<string>,
+): boolean {
+  if (!args.ciIntelligence.resolveMergeConflicts) {
+    return false;
+  }
+
+  const taskId = task.record_id?.trim();
+  if (taskId && activeWorkerMergeConflictTaskIds.has(taskId)) {
+    return true;
+  }
+
+  if (task.merge_indicator === "MERGE_CONFLICT") {
+    return true;
+  }
+
+  if (!gitStatus?.available) {
+    return false;
+  }
+
+  const pr = matchPrForTask(task, gitStatus);
+  return pr?.mergeStateStatus === "DIRTY";
 }
 
 function collectActiveWorkerMergeConflictTaskIds(subtasks: Array<{
@@ -576,3 +711,41 @@ function mapSubtaskStatusToPlanningStatus(status: Subtask["status"]): PlanningTa
   }
 }
 
+function buildTaskContext(task: Subtask): MergeConflictTaskContext {
+  return {
+    taskKey: task.id,
+    taskTitle: task.title,
+    taskPrompt: task.prompt,
+    workerBranch: task.worker_branch || null,
+    prUrl: task.pr_url || null,
+  };
+}
+
+function selectMergedFeatureTaskContexts(subtasks: Subtask[], excludedTaskId: string): MergeConflictTaskContext[] {
+  return selectMergedTaskContexts(subtasks, { excludedTaskId, limit: 5 });
+}
+
+function buildMergeConflictSummary(
+  task: Subtask,
+  args: CycleRunnerArgs,
+  pr: GitPullRequestStatus | null,
+  mergedFeatureTasks: MergeConflictTaskContext[],
+): string {
+  const sourceBranch = task.worker_branch || pr?.headRefName || "the task worker branch";
+  return buildConflictSummaryMarkdown({
+    repoPath: args.repoPath,
+    workingDir: `cd ${args.repoPath}`,
+    conflictingBranches: {
+      source: sourceBranch,
+      target: args.defaultFeatureBranch,
+    },
+    prInfo: pr ? { number: pr.number, url: pr.url } : undefined,
+    taskContext: {
+      id: task.id,
+      title: task.title,
+      prompt: task.prompt,
+    },
+    mergedTaskContexts: mergedFeatureTasks,
+    isMainMerge: false,
+  });
+}
