@@ -125,6 +125,8 @@ export interface ProjectLiveDashboardSnapshot {
   gitStatusError: string | null;
   /** Owned by the server assembly module. Mutated upon every assembly call to track the snapshot timestamp. */
   updatedAt: string | null;
+  /** Represents background startup tasks that block or warn in the dashboard UI. */
+  startup: RuntimeStartupStateSnapshot;
 }
 
 export interface LiveActivitiesResponse {
