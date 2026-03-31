@@ -20,6 +20,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const [localPath, setLocalPath] = useState('');
     const [gitUrl, setGitUrl]       = useState('');
     const [cloneDir, setCloneDir]   = useState('');
+    const [error, setError]         = useState<string | null>(null);
 
     useLayoutEffect(() => {
         gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.35, ease: "power2.out" });
@@ -53,7 +54,18 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const handleSubmit = (e: Event) => {
         e.preventDefault();
         const path = sourceType === 'local' ? localPath.trim() : gitUrl.trim();
-        if (!name.trim() || !path) return;
+
+        if (!name.trim()) {
+            setError("Project Name is required.");
+            return;
+        }
+
+        if (!path) {
+            setError(sourceType === 'local' ? "Directory Path is required." : "Repository URL is required.");
+            return;
+        }
+
+        setError(null);
         onAdd({
             name: name.trim(),
             type: sourceType,
@@ -137,6 +149,12 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                     <form onSubmit={handleSubmit} className="flex flex-col flex-1">
                         <div ref={fieldsRef} className="flex flex-col gap-6 flex-1">
 
+                            {error && (
+                                <div role="alert" aria-live="assertive" id="project-form-error" className="text-status-red text-sm font-medium">
+                                    {error}
+                                </div>
+                            )}
+
                             {/* Project Name */}
                             <div className="group/field">
                                 <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors">
@@ -145,11 +163,16 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 <input
                                     type="text"
                                     value={name}
-                                    onInput={(e) => setName((e.target as HTMLInputElement).value)}
+                                    onInput={(e) => {
+                                        setName((e.target as HTMLInputElement).value);
+                                        if (error) setError(null);
+                                    }}
                                     placeholder="My Awesome Project"
                                     className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-[1.6rem] font-black text-slate-900 dark:text-white placeholder-slate-200 dark:placeholder-slate-700 focus:outline-none transition-colors font-display tracking-tight leading-none"
                                     required
                                     autoFocus
+                                    aria-invalid={!!error && !name.trim()}
+                                    aria-describedby={error && !name.trim() ? "project-form-error" : undefined}
                                 />
                             </div>
 
@@ -189,10 +212,15 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                     <input
                                         type="text"
                                         value={localPath}
-                                        onInput={(e) => setLocalPath((e.target as HTMLInputElement).value)}
+                                        onInput={(e) => {
+                                            setLocalPath((e.target as HTMLInputElement).value);
+                                            if (error) setError(null);
+                                        }}
                                         placeholder="/home/user/projects/my-project"
                                         className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none transition-colors"
                                         required
+                                        aria-invalid={!!error && !localPath.trim()}
+                                        aria-describedby={error && !localPath.trim() ? "project-form-error" : undefined}
                                     />
                                 </div>
                             ) : (
@@ -204,10 +232,15 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         <input
                                             type="text"
                                             value={gitUrl}
-                                            onInput={(e) => setGitUrl((e.target as HTMLInputElement).value)}
+                                            onInput={(e) => {
+                                                setGitUrl((e.target as HTMLInputElement).value);
+                                                if (error) setError(null);
+                                            }}
                                             placeholder="https://github.com/user/repo.git"
                                             className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none transition-colors"
                                             required
+                                            aria-invalid={!!error && !gitUrl.trim()}
+                                            aria-describedby={error && !gitUrl.trim() ? "project-form-error" : undefined}
                                         />
                                     </div>
                                     <div className="group/field">

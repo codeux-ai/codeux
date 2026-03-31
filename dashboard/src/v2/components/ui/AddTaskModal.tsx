@@ -55,6 +55,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   const [priority, setPriority] = useState<TaskPriority>(initialTask?.priority || "medium");
   const [executorType, setExecutorType] = useState<TaskExecutorType>(initialTask?.executorType || "auto");
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(initialTask?.dependsOnTaskIds || []);
+  const [error, setError] = useState<string | null>(null);
 
   useLayoutEffect(() => {
     gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
@@ -125,10 +126,16 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
-    if (!title.trim() || !sprintId) {
+    if (!sprintId) {
+      setError("Sprint is required.");
+      return;
+    }
+    if (!title.trim()) {
+      setError("Title is required.");
       return;
     }
 
+    setError(null);
     await onSubmit({
       sprintId,
       title: title.trim(),
@@ -205,14 +212,24 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+            {error && (
+              <div role="alert" aria-live="assertive" id="task-form-error" className="text-status-red text-sm font-medium">
+                {error}
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="group/field">
                 <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Sprint</label>
                 <select
                   value={sprintId}
-                  onInput={(event) => setSprintId((event.target as HTMLSelectElement).value)}
+                  onInput={(event) => {
+                    setSprintId((event.target as HTMLSelectElement).value);
+                    if (error) setError(null);
+                  }}
                   className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500"
                   required
+                  aria-invalid={!!error && !sprintId}
+                  aria-describedby={error && !sprintId ? "task-form-error" : undefined}
                 >
                   <option value="" disabled>Select sprint</option>
                   {sprints.map((sprint) => (
@@ -226,10 +243,15 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                 <input
                   type="text"
                   value={title}
-                  onInput={(event) => setTitle((event.target as HTMLInputElement).value)}
+                  onInput={(event) => {
+                    setTitle((event.target as HTMLInputElement).value);
+                    if (error) setError(null);
+                  }}
                   className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500"
                   placeholder="Define the task scope"
                   required
+                  aria-invalid={!!error && !title.trim()}
+                  aria-describedby={error && !title.trim() ? "task-form-error" : undefined}
                 />
               </div>
             </div>
