@@ -33,7 +33,7 @@ const IdleDeepOceanBackground = () => {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    let handle: number;
+    let handle: any;
     if ("requestIdleCallback" in window) {
       handle = (window as any).requestIdleCallback(() => setMounted(true), { timeout: 2000 });
     } else {
