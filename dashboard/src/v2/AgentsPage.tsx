@@ -12,7 +12,7 @@ import {
   syncAllAgentPresetsFromMarkdown,
   updateAgentPreset,
 } from "./lib/agent-preset-api.js";
-import { fetchProjectEffectiveSettings } from "./lib/settings-api.js";
+import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
@@ -240,22 +240,26 @@ export const AgentsPage: FunctionComponent = () => {
   const [projectFileSavingEnabled, setProjectFileSavingEnabled] = useState(true);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
+
+  useEffect(() => {
+    if (effectiveSettings) {
+      setProjectFileSavingEnabled(effectiveSettings.settings.agents.saveToProjectDirectory);
+    } else if (!selectedProject) {
+      setProjectFileSavingEnabled(true);
+    }
+  }, [effectiveSettings, selectedProject]);
 
   const refreshPresets = async (): Promise<void> => {
     if (!selectedProject) {
       setPresets([]);
       setError(null);
-      setProjectFileSavingEnabled(true);
       return;
     }
     setLoading(true);
     try {
-      const [nextPresets, effectiveSettings] = await Promise.all([
-        fetchAgentPresets(selectedProject.id),
-        fetchProjectEffectiveSettings(selectedProject.id),
-      ]);
+      const nextPresets = await fetchAgentPresets(selectedProject.id);
       setPresets(nextPresets);
-      setProjectFileSavingEnabled(effectiveSettings.settings.agents.saveToProjectDirectory);
 
       if (!selectedPresetId && nextPresets.length > 0) {
         setSelectedPresetId(nextPresets[0].id);

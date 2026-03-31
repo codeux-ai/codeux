@@ -93,6 +93,9 @@ describe("useProjectEffectiveSettings", () => {
     expect(result.current.data).toBeNull();
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
+
+    // Test that the fallback state transitions correctly
+    expect(fetchProjectEffectiveSettings).toHaveBeenCalledTimes(1);
   });
 
   it("should fetch new data and abort stale requests when projectId changes", async () => {
