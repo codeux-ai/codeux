@@ -11,7 +11,7 @@ export function derivePlanningETA(stats: ProjectExecutionStatsSnapshot | null): 
     return FALLBACK_MS;
   }
 
-  const planningStats = stats.purposes.find(p => p.purpose === "planning");
+  const planningStats = (stats?.purposes ?? []).find(p => p.purpose === "planning");
   if (!planningStats || !planningStats.usage) {
     return FALLBACK_MS;
   }

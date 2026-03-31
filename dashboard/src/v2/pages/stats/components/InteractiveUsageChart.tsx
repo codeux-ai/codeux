@@ -26,6 +26,7 @@ import {
   formatAxisLabel,
 } from './StatsShared.js';
 import { UsageSeriesSidebar } from './UsageSeriesSidebar.js';
+import { buildInitialSeriesState, reconcileSeriesState } from '../usage-series-state.js';
 import { ActiveUsageSeriesRail } from './ActiveUsageSeriesRail.js';
 
 export const InteractiveUsageChart: FunctionComponent<{
@@ -36,12 +37,17 @@ export const InteractiveUsageChart: FunctionComponent<{
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
   const [dragCurrentIndex, setDragCurrentIndex] = useState<number | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  // We need to know when the query itself actually changes (e.g. going from 7d to 30d or a new custom range)
+  // so we can hard-reset the selections to default. Otherwise, for polling refreshes, we reconcile.
+  const lastRangeKey = useRef<string>(stats.range.label);
 
   const [enabledSeries, setEnabledSeries] = useState<Record<string, boolean>>(() => {
-    return stats.chartSeries.reduce((acc, s) => {
-      acc[s.id] = s.defaultEnabled;
-      return acc;
-    }, {} as Record<string, boolean>);
+    return buildInitialSeriesState(
+      stats.chartSeries,
+      stats.chartSeries.filter(s => s.defaultEnabled).map(s => s.id)
+    );
   });
 
   const buckets = stats.buckets;
@@ -129,11 +135,25 @@ export const InteractiveUsageChart: FunctionComponent<{
     setZoomRange(null);
     setDragStartIndex(null);
     setDragCurrentIndex(null);
-    setEnabledSeries(stats.chartSeries.reduce((acc, s) => {
-      acc[s.id] = s.defaultEnabled;
-      return acc;
-    }, {} as Record<string, boolean>));
-  }, [stats.range.from, stats.range.to, stats.range.resolution, stats.chartSeries]);
+
+    const currentRangeKey = stats.range.label;
+    if (currentRangeKey !== lastRangeKey.current) {
+      // The time window actually changed (e.g., 7d -> 30d). Hard reset selections to defaults.
+      lastRangeKey.current = currentRangeKey;
+      setEnabledSeries(
+        buildInitialSeriesState(
+          stats.chartSeries,
+          stats.chartSeries.filter(s => s.defaultEnabled).map(s => s.id)
+        )
+      );
+      // Close the drawer if the query range fully changed
+      setIsDrawerOpen(false);
+    } else {
+      // Just a polling or realtime refresh within the same window.
+      // Reconcile our existing selections against any new/missing series.
+      setEnabledSeries((prev) => reconcileSeriesState(stats.chartSeries, prev));
+    }
+  }, [stats.range.from, stats.range.to, stats.range.resolution, stats.chartSeries, stats.range.label]);
 
   useLayoutEffect(() => {
     if (!panelRef.current) {
@@ -211,6 +231,13 @@ export const InteractiveUsageChart: FunctionComponent<{
               <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
                 {zoomLabel}
               </div>
+              <button
+                type="button"
+                onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+                className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] transition-colors hover:text-slate-900 dark:hover:text-white ${isDrawerOpen ? 'bg-black/[0.05] text-slate-900 dark:bg-white/[0.08] dark:text-white' : 'text-slate-500 dark:text-slate-300'} ${CHIP_CLASS}`}
+              >
+                Series Filters
+              </button>
               {zoomRange ? (
                 <button
                   type="button"
@@ -242,7 +269,31 @@ export const InteractiveUsageChart: FunctionComponent<{
                   </div>
                 </div>
               ) : null}
-              <svg viewBox={`0 0 ${width} ${height + 40}`} className="h-[24rem] w-full overflow-visible">
+
+              {isDrawerOpen && (
+                <div className="absolute inset-x-0 bottom-0 top-0 z-20 flex flex-col gap-4 overflow-y-auto rounded-3xl bg-white/95 p-6 shadow-2xl backdrop-blur-3xl dark:bg-void-900/95 dark:shadow-[0_24px_48px_rgba(0,0,0,0.4)]">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Configure Graph Series</div>
+                    <button
+                      type="button"
+                      onClick={() => setIsDrawerOpen(false)}
+                      className="rounded-full bg-black/5 p-2 text-slate-500 hover:bg-black/10 hover:text-slate-900 dark:bg-white/5 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                  </div>
+                  <UsageSeriesSidebar
+                    series={stats.chartSeries}
+                    enabledSeries={enabledSeries}
+                    activeIndex={activeIndex}
+                    onToggle={(id) => {
+                      if (activeSeriesCount === 1 && enabledSeries[id]) return;
+                      setEnabledSeries((curr) => ({ ...curr, [id]: !curr[id] }));
+                    }}
+                  />
+                </div>
+              )}
+<svg viewBox={`0 0 ${width} ${height + 40}`} className="h-[24rem] w-full overflow-visible">
                 <defs>
                   {chartData.map((series) => (
                     <linearGradient key={`fill-${series.id}`} id={`stats-area-${series.id}`} x1="0" x2="0" y1="0" y2="1">
@@ -382,22 +433,8 @@ export const InteractiveUsageChart: FunctionComponent<{
 
           <div className="flex flex-col gap-4">
             <ActiveUsageSeriesRail
-              series={stats.chartSeries}
-              enabledSeries={enabledSeries}
+              series={visibleSeries}
               activeIndex={activeIndex}
-              onToggle={(id) => {
-                if (activeSeriesCount === 1 && enabledSeries[id]) return;
-                setEnabledSeries((curr) => ({ ...curr, [id]: !curr[id] }));
-              }}
-            />
-            <UsageSeriesSidebar
-              series={stats.chartSeries}
-              enabledSeries={enabledSeries}
-              activeIndex={activeIndex}
-              onToggle={(id) => {
-                if (activeSeriesCount === 1 && enabledSeries[id]) return;
-                setEnabledSeries((curr) => ({ ...curr, [id]: !curr[id] }));
-              }}
             />
             <div className={`${SUBPANEL_CLASS} p-5`}>
               <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Focused Bucket</div>

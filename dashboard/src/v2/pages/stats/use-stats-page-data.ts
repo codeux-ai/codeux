@@ -25,7 +25,7 @@ export function useStatsPageData(projectId: string | null) {
   const tokenSeries = useMemo(() => createSeries(stats?.buckets || [], (bucket) => bucket.usage.totalTokens), [stats?.buckets]);
   const activeTimeSeries = useMemo(() => createSeries(stats?.buckets || [], (bucket) => bucket.usage.activeTimeMs / 1000), [stats?.buckets]);
   const wallTimeSeries = useMemo(() => createSeries(stats?.buckets || [], (bucket) => bucket.usage.wallTimeMs / 1000), [stats?.buckets]);
-  const planningUsage = useMemo(() => stats?.purposes.find((purpose) => purpose.id === "planning") || null, [stats?.purposes]);
+  const planningUsage = useMemo(() => (stats?.purposes ?? []).find((purpose) => purpose.id === "planning") || null, [stats?.purposes]);
   
   const { providerSegments, sourceSegments, tokenSegments } = useMemo(
     () => createStatsSegments(stats, usage),
