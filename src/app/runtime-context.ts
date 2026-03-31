@@ -1,4 +1,5 @@
 import type { DashboardSettings, DashboardStatus, Settings } from "../contracts/app-types.js";
+import { RuntimeStartupState } from "./lifecycle/runtime-startup-state.js";
 
 export interface RuntimeContext {
   settings: Settings;
@@ -6,6 +7,7 @@ export interface RuntimeContext {
   consecutiveFailures: number;
   lastStatus: Partial<DashboardStatus> | null;
   dashboardRuntimePort: number | null;
+  startupState: RuntimeStartupState;
 }
 
 export class DefaultRuntimeContext implements RuntimeContext {
@@ -14,6 +16,7 @@ export class DefaultRuntimeContext implements RuntimeContext {
   private _consecutiveFailures: number = 0;
   private _lastStatus: Partial<DashboardStatus> | null = { subtasks: [], timestamp: null };
   private _dashboardRuntimePort: number | null = null;
+  private _startupState = new RuntimeStartupState();
 
   get settings(): Settings {
     return this._settings;
@@ -53,5 +56,9 @@ export class DefaultRuntimeContext implements RuntimeContext {
 
   set dashboardRuntimePort(value: number | null) {
     this._dashboardRuntimePort = value;
+  }
+
+  get startupState(): RuntimeStartupState {
+    return this._startupState;
   }
 }

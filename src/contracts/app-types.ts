@@ -847,3 +847,20 @@ export interface SprintPreviewScript {
   detectedBuildCommand: string | null;
   detectedRunCommand: string | null;
 }
+
+export type StartupJobStatus = "pending" | "running" | "completed" | "failed";
+
+export interface StartupJobState {
+  name: string;
+  status: StartupJobStatus;
+  error: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export type StartupAggregateStatus = "pending" | "running" | "completed" | "failed";
+
+export interface RuntimeStartupStateSnapshot {
+  status: StartupAggregateStatus;
+  jobs: StartupJobState[];
+}
