@@ -158,7 +158,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
 
           <div data-composer-stagger className="mt-8 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Task Details</label>
+              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Task Details</label>
             </div>
 
             <div className="grid gap-4 xl:grid-cols-2">
@@ -185,7 +185,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
           <div data-composer-stagger className="mt-8">
             <div className="flex items-center gap-2 mb-3">
               <Target className="w-3.5 h-3.5 text-ember-500" strokeWidth={2.3} />
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Dependencies</label>
+              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Dependencies</label>
             </div>
             {state.dependencyOptions.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-black/[0.08] dark:border-white/[0.08] px-4 py-4 text-xs text-slate-400">
@@ -243,7 +243,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
           <div data-composer-stagger>
             <div className="flex items-center gap-2 mb-3">
               <Bot className="w-3.5 h-3.5 text-signal-500" strokeWidth={2.3} />
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Executor</label>
+              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Executor</label>
             </div>
             <div className="grid gap-3">
               {EXECUTOR_OPTIONS.map((option) => {

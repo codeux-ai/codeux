@@ -159,7 +159,7 @@ export const MetricPill: FunctionComponent<{
       : "border-black/[0.06] bg-black/[0.03] dark:border-white/[0.06] dark:bg-white/[0.03]"
   }`}
   >
-    <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">{label}</div>
+    <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{label}</div>
     <div className={`mt-1 text-sm font-semibold ${
       tone === "signal" ? "text-signal-700 dark:text-signal-200" : "text-slate-800 dark:text-slate-100"
     }`}

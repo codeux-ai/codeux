@@ -69,6 +69,58 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
   const state = useSprintComposerState(initialSprint);
 
+  const FOCUSABLE_SELECTOR = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+
+  const triggerRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    triggerRef.current = document.activeElement as HTMLElement | null;
+
+    if (cardRef.current) {
+      const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
+      if (focusableElements.length > 0) {
+        focusableElements[0].focus();
+      }
+    }
+
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        handleCancel();
+      } else if (event.key === "Tab") {
+        if (!cardRef.current) return;
+
+        const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
+        if (focusableElements.length === 0) return;
+
+        const first = focusableElements[0];
+        const last = focusableElements[focusableElements.length - 1];
+
+        if (!cardRef.current.contains(document.activeElement)) {
+          event.preventDefault();
+          first.focus();
+          return;
+        }
+
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    document.addEventListener("keydown", handler);
+    return () => {
+      document.removeEventListener("keydown", handler);
+      if (triggerRef.current) {
+        triggerRef.current.focus();
+      }
+    };
+  }, []);
+
+
   useEffect(() => {
     if (state.planningAgentPresetId && !planningPresets.find(p => p.id === state.planningAgentPresetId)) {
       state.setPlanningAgentPresetId(null);
@@ -225,6 +277,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
   return (
     <section
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sprint-composer-title"
       ref={cardRef}
       className="relative w-full overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/78 shadow-[0_20px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/72 dark:shadow-[0_24px_56px_rgba(0,0,0,0.28)]"
     >
@@ -255,7 +310,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 {state.isEditing ? (state.hasTasks ? "Edit Planned Sprint" : "Edit Draft Sprint") : "Sprint Composer"}
               </div>
               <div className="space-y-3">
-                <h2 className="font-display text-[2rem] font-black leading-none tracking-tight text-slate-900 dark:text-white sm:text-[2.35rem]">
+                <h2 id="sprint-composer-title" className="font-display text-[2rem] font-black leading-none tracking-tight text-slate-900 dark:text-white sm:text-[2.35rem]">
                   {state.isEditing ? "Refine The Sprint." : "Compose The Next Sprint."}
                 </h2>
                 <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400 sm:text-[15px]">
@@ -340,7 +395,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
           <div data-composer-stagger className="mt-8 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Sprint Prompt</label>
+              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Sprint Prompt</label>
               <button
                 type="button"
                 onClick={() => { void handleImprovePrompt(); }}

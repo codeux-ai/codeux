@@ -243,7 +243,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 {/* Search Bar */}
                 <div className="relative group w-full max-w-xs">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                        <Search aria-hidden="true" className="w-3.5 h-3.5 text-slate-400 group-focus-within:text-signal-500 transition-colors" strokeWidth={2} />
+                        <Search aria-hidden="true" className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 group-focus-within:text-signal-500 transition-colors" strokeWidth={2} />
                     </div>
                     <input
                         type="text"
@@ -251,7 +251,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                         className="w-full h-9 pl-10 pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] focus:border-signal-500/40 dark:focus:border-signal-500/40 rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-signal-500/10 transition-all"
                     />
                     <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
-                        <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-mono font-medium text-slate-400 border border-black/10 dark:border-white/10 rounded-md">
+                        <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-mono font-medium text-slate-500 dark:text-slate-400 border border-black/10 dark:border-white/10 rounded-md">
                             <Command aria-hidden="true" className="w-2.5 h-2.5" /> K
                         </kbd>
                     </div>
@@ -273,14 +273,14 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                         <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">
                             {selectedProject?.name || (loading ? "Loading..." : "Select Project")}
                         </span>
-                        <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${dropdownOpen ? 'rotate-180' : ''}`} />
+                        <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-500 dark:text-slate-400 transition-transform duration-300 ${dropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
 
                     {/* Project Dropdown */}
                     {dropdownOpen && (
                         <div role="listbox" aria-label="Project list" className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
                             <div className="px-3 pt-3 pb-1.5">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Projects</span>
+                                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Projects</span>
                             </div>
                             {projects.map((source) => (
                                 <button
@@ -303,7 +303,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                 </button>
                             ))}
                             {!loading && projects.length === 0 && (
-                                <div className="px-3 py-4 text-xs text-slate-400 font-medium">
+                                <div className="px-3 py-4 text-xs text-slate-500 dark:text-slate-400 font-medium">
                                     No projects connected yet.
                                 </div>
                             )}
@@ -348,7 +348,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                 {sprintsLoading ? "Loading..." : (selectedSprint ? selectedSprint.name : "All Sprints")}
                             </span>
                             {sprints.length > 0 && (
-                                <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${sprintDropdownOpen ? 'rotate-180' : ''}`} />
+                                <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-500 dark:text-slate-400 transition-transform duration-300 ${sprintDropdownOpen ? 'rotate-180' : ''}`} />
                             )}
                         </button>
 
@@ -356,7 +356,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                         {sprintDropdownOpen && sprints.length > 0 && (
                             <div role="listbox" aria-label="Sprint list" className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
                                 <div className="px-3 pt-3 pb-1.5">
-                                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Sprint Scope</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Sprint Scope</span>
                                 </div>
                                 <button
                                     role="option"
@@ -416,14 +416,14 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">
                                 {selectedWorker?.label || (executionLoading ? "Loading..." : "Select Worker")}
                             </span>
-                            <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${workerDropdownOpen ? 'rotate-180' : ''}`} />
+                            <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-500 dark:text-slate-400 transition-transform duration-300 ${workerDropdownOpen ? 'rotate-180' : ''}`} />
                         </button>
 
                         {/* Worker Dropdown */}
                         {workerDropdownOpen && (
                             <div role="listbox" aria-label="Worker list" className="absolute right-0 top-full mt-2 w-64 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
                                 <div className="px-3 pt-3 pb-1.5">
-                                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Available Workers</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Available Workers</span>
                                 </div>
                                 <div className="max-h-64 overflow-y-auto">
                                     {workerOptions.map((option) => (
@@ -442,7 +442,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                             }`}
                                         >
                                             <div className="relative">
-                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${option.isPrimary ? 'bg-signal-500/20 text-signal-500' : 'bg-slate-100 dark:bg-white/5 text-slate-400'}`}>
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${option.isPrimary ? 'bg-signal-500/20 text-signal-500' : 'bg-slate-100 dark:bg-white/5 text-slate-500 dark:text-slate-400'}`}>
                                                     <Cpu aria-hidden="true" className="w-4 h-4" />
                                                 </div>
                                                 <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-void-800 ${workerStatusClass(option)}`} />
@@ -451,7 +451,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                                 <span className={`text-sm font-bold truncate transition-colors ${option.isPrimary ? 'text-signal-600 dark:text-signal-400' : 'text-slate-700 dark:text-slate-200'}`}>
                                                     {option.label}
                                                 </span>
-                                                <span className="text-[10px] font-medium text-slate-400 truncate uppercase tracking-wider">
+                                                <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 truncate uppercase tracking-wider">
                                                     {option.subLabel || (option.isSelectable ? "Available" : "Unavailable")}
                                                 </span>
                                             </div>
@@ -466,7 +466,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                         <div className="w-10 h-10 rounded-full bg-slate-50 dark:bg-white/5 flex items-center justify-center mx-auto mb-2">
                                             <Cpu aria-hidden="true" className="w-5 h-5 text-slate-300" />
                                         </div>
-                                        <p className="text-xs text-slate-400 font-medium">
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
                                             No workers available.
                                         </p>
                                     </div>
@@ -509,7 +509,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                     className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/50"
                 >
                     {isDark
-                        ? <Sun aria-hidden="true" className="w-4 h-4 text-slate-400 hover:text-white transition-colors" strokeWidth={1.5} />
+                        ? <Sun aria-hidden="true" className="w-4 h-4 text-slate-500 dark:text-slate-400 hover:text-white transition-colors" strokeWidth={1.5} />
                         : <Moon aria-hidden="true" className="w-4 h-4 text-slate-500 hover:text-slate-900 transition-colors" strokeWidth={1.5} />
                     }
                 </button>

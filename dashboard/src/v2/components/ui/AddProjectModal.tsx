@@ -41,11 +41,55 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         gsap.to(backdropRef.current, { opacity: 0, duration: 0.28, delay: 0.05, onComplete: onClose });
     };
 
+
+    const FOCUSABLE_SELECTOR = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+    const triggerRef = useRef<HTMLElement | null>(null);
+
     useEffect(() => {
-        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose(); };
+        triggerRef.current = document.activeElement as HTMLElement | null;
+
+        if (cardRef.current) {
+            const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
+            if (focusableElements.length > 0) {
+                focusableElements[0].focus();
+            }
+        }
+
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                handleClose();
+            } else if (e.key === 'Tab') {
+                if (!cardRef.current) return;
+                const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
+                if (focusableElements.length === 0) return;
+
+                const first = focusableElements[0];
+                const last = focusableElements[focusableElements.length - 1];
+
+                if (!cardRef.current.contains(document.activeElement)) {
+                    e.preventDefault();
+                    first.focus();
+                    return;
+                }
+
+                if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            }
+        };
         document.addEventListener('keydown', handler);
-        return () => document.removeEventListener('keydown', handler);
+        return () => {
+            document.removeEventListener('keydown', handler);
+            if (triggerRef.current) {
+                triggerRef.current.focus();
+            }
+        };
     }, []);
+
 
     const handleBackdropClick = (e: MouseEvent) => {
         if (e.target === backdropRef.current) handleClose();
@@ -157,7 +201,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
 
                             {/* Project Name */}
                             <div className="group/field">
-                                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors">
+                                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors">
                                     Project Name
                                 </label>
                                 <input
@@ -178,7 +222,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
 
                             {/* Source Type Toggle */}
                             <div>
-                                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 block mb-2.5">
+                                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400 block mb-2.5">
                                     Source Type
                                 </label>
                                 <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1">
@@ -206,7 +250,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                             {/* Conditional fields */}
                             {sourceType === 'local' ? (
                                 <div className="group/field">
-                                    <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors flex items-center gap-1.5">
+                                    <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors flex items-center gap-1.5">
                                         <FolderInput className="w-3 h-3" /> Directory Path
                                     </label>
                                     <input
@@ -226,7 +270,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                             ) : (
                                 <>
                                     <div className="group/field">
-                                        <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors flex items-center gap-1.5">
+                                        <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors flex items-center gap-1.5">
                                             <Link2 className="w-3 h-3" /> Repository URL
                                         </label>
                                         <input
@@ -244,7 +288,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         />
                                     </div>
                                     <div className="group/field">
-                                        <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors flex items-center gap-1.5">
+                                        <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors flex items-center gap-1.5">
                                             <FolderInput className="w-3 h-3" /> Clone Into Directory
                                             <span className="ml-1 text-slate-300 dark:text-slate-600 normal-case font-medium tracking-normal">(optional)</span>
                                         </label>

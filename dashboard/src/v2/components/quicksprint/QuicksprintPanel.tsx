@@ -490,7 +490,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
               {/* Additional prompt for this run */}
               <div data-qs-stagger className="mt-8 space-y-2">
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Additional Instructions (optional)</label>
+                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Additional Instructions (optional)</label>
                 <textarea
                   value={additionalPrompt}
                   onInput={(e) => setAdditionalPrompt((e.target as HTMLTextAreaElement).value)}

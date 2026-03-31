@@ -219,7 +219,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="group/field">
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Sprint</label>
+                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Sprint</label>
                 <select
                   value={sprintId}
                   onInput={(event) => {
@@ -239,7 +239,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               </div>
 
               <div className="group/field">
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Title</label>
+                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Title</label>
                 <input
                   type="text"
                   value={title}
@@ -258,7 +258,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 block mb-2.5">Status</label>
+                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400 block mb-2.5">Status</label>
                 <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                   {STATUS_OPTIONS.map((option) => (
                     <button
@@ -278,7 +278,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               </div>
 
               <div>
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 block mb-2.5">Priority</label>
+                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400 block mb-2.5">Priority</label>
                 <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                   {PRIORITY_OPTIONS.map((option) => (
                     <button
@@ -301,7 +301,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             <div>
               <div className="flex items-center gap-2 mb-2.5">
                 <Bot className="w-3.5 h-3.5 text-signal-500" strokeWidth={2.3} />
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Executor</label>
+                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Executor</label>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {EXECUTOR_OPTIONS.map((option) => (
@@ -323,7 +323,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             </div>
 
             <div className="group/field">
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Description</label>
+              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Description</label>
               <textarea
                 value={description}
                 onInput={(event) => setDescription((event.target as HTMLTextAreaElement).value)}
@@ -333,7 +333,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             </div>
 
             <div className="group/field">
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Execution Prompt</label>
+              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Execution Prompt</label>
               <textarea
                 value={promptMarkdown}
                 onInput={(event) => setPromptMarkdown((event.target as HTMLTextAreaElement).value)}
@@ -345,7 +345,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <Target className="w-3.5 h-3.5 text-ember-500" strokeWidth={2.3} />
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Dependencies</label>
+                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Dependencies</label>
               </div>
               {dependencyOptions.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-black/[0.08] dark:border-white/[0.08] px-4 py-4 text-xs text-slate-400">

@@ -31,15 +31,55 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
     gsap.fromTo(cardRef.current, { y: 42, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" });
   }, []);
 
+
+  const FOCUSABLE_SELECTOR = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+  const triggerRef = useRef<HTMLElement | null>(null);
+
   useEffect(() => {
+    triggerRef.current = document.activeElement as HTMLElement | null;
+
+    if (cardRef.current) {
+      const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
+      if (focusableElements.length > 0) {
+        focusableElements[0].focus();
+      }
+    }
+
     const handler = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
+      } else if (event.key === "Tab") {
+        if (!cardRef.current) return;
+        const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
+        if (focusableElements.length === 0) return;
+
+        const first = focusableElements[0];
+        const last = focusableElements[focusableElements.length - 1];
+
+        if (!cardRef.current.contains(document.activeElement)) {
+          event.preventDefault();
+          first.focus();
+          return;
+        }
+
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     };
     document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
+    return () => {
+      document.removeEventListener("keydown", handler);
+      if (triggerRef.current) {
+        triggerRef.current.focus();
+      }
+    };
   }, [onClose]);
+
 
   const handleBackdropClick = (event: MouseEvent) => {
     if (event.target === backdropRef.current) {
@@ -86,6 +126,9 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
     >
       <div
         ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sprint-markdown-modal-title"
         className="relative w-full max-w-5xl overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)] flex"
       >
         <div className="relative w-56 shrink-0 bg-void-900 dark:bg-void-950 flex flex-col justify-between p-8 overflow-hidden">
@@ -112,7 +155,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
         <div className="flex-1 bg-white/98 dark:bg-void-800/98 p-8 flex flex-col">
           <div className="flex items-start justify-between mb-8">
             <div>
-              <h2 className="text-[2rem] font-black text-slate-900 dark:text-white tracking-tight font-display leading-none">
+              <h2 id="sprint-markdown-modal-title" className="text-[2rem] font-black text-slate-900 dark:text-white tracking-tight font-display leading-none">
                 {title}
               </h2>
               <p className="text-xs font-medium text-slate-400 mt-2 tracking-wide">
@@ -131,7 +174,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
             <div className="grid grid-cols-1 gap-5 flex-1 min-h-0">
               <div className="flex flex-col min-h-0">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Sprint Markdown</label>
+                  <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Sprint Markdown</label>
                   {mode === "export" && (
                     <div className="flex items-center gap-3">
                       <button
@@ -164,7 +207,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
 
               <div className="flex flex-col min-h-0">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Task Bundle</label>
+                  <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Task Bundle</label>
                   {mode === "export" && (
                     <div className="flex items-center gap-3">
                       <button
