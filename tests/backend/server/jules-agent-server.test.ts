@@ -747,9 +747,15 @@ describe("JulesAgentServer", () => {
         }),
       };
 
+      const runBgSpy = vi.spyOn((server as any).runtimeContext.startupState, "runBackgroundJob");
+      runBgSpy.mockImplementation(async (name: string, jobFn: () => Promise<void>) => {
+        await jobFn();
+      });
+
       const refreshJulesApiKeySpy = vi.spyOn(server as any, "refreshJulesApiKey").mockImplementation(() => {});
 
       await server.run();
+      await new Promise(resolve => setTimeout(resolve, 150));
 
       expect(bootSettings).toHaveBeenCalled();
       expect(bootDashboard).toHaveBeenCalled();
@@ -775,9 +781,15 @@ describe("JulesAgentServer", () => {
         }),
       };
 
+      const runBgSpy = vi.spyOn((server as any).runtimeContext.startupState, "runBackgroundJob");
+      runBgSpy.mockImplementation(async (name: string, jobFn: () => Promise<void>) => {
+        await jobFn();
+      });
+
       const refreshJulesApiKeySpy = vi.spyOn(server as any, "refreshJulesApiKey").mockImplementation(() => {});
 
       await server.run();
+      await new Promise(resolve => setTimeout(resolve, 150));
 
       expect(bootSettings).toHaveBeenCalled();
       expect(bootDashboard).toHaveBeenCalled();
@@ -814,6 +826,11 @@ describe("JulesAgentServer", () => {
         getGitStatus: vi.fn().mockResolvedValue({}),
         getLiveActivitiesForActiveTasks: vi.fn().mockResolvedValue({})
       };
+
+      const runBgSpy = vi.spyOn((server as any).runtimeContext.startupState, "runBackgroundJob");
+      runBgSpy.mockImplementation(async (name: string, jobFn: () => Promise<void>) => {
+        await jobFn();
+      });
 
       vi.spyOn(server as any, "refreshJulesApiKey").mockImplementation(() => {});
 

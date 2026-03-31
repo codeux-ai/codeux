@@ -836,19 +836,6 @@ export class JulesAgentServer {
     } catch (error) {
       this.logger.error("Failed to prune disconnected MCP connections on startup", { error });
     }
-    try {
-      await this.sprintPreviewService.cleanupStaleContainersOnStartup();
-    } catch (error) {
-      this.logger.error("Failed to clean up stale sprint preview containers on startup", { error });
-    }
-    let recoveredSprintRunIds: string[] = [];
-    try {
-      const recoveryResult = await this.runtimeStartupRecoveryService.recover();
-      recoveredSprintRunIds = recoveryResult.resumedSprintRunIds;
-    } catch (error) {
-      this.logger.error("Failed to recover runtime state on startup", { error });
-    }
-
     if (this.isDashboardEnabled()) {
       await bootDashboard({
         app: this.app,
@@ -901,20 +888,37 @@ export class JulesAgentServer {
         memoryRepository: this.memoryRepository,
       });
 
-      // Trigger rehydration of the dashboard after it's fully booted and configured
-      if (recoveredSprintRunIds.length > 0) {
-        for (const runId of recoveredSprintRunIds) {
-           const sprintRun = this.executionRepository.getSprintRun(runId);
-           if (sprintRun) {
-               this.dashboardRealtimeService.scheduleProjectLiveRefresh(sprintRun.projectId);
-           }
-        }
-      }
     } else {
       this.logger.info("Dashboard startup skipped for headless Sprint OS runtime", {
         runtimeRole: this.appConfig.runtimeRole,
       });
     }
+
+    this.runtimeContext.startupState.runBackgroundJob("runtime_startup_recovery", async () => {
+      try {
+        await this.sprintPreviewService.cleanupStaleContainersOnStartup();
+      } catch (error) {
+        this.logger.error("Failed to clean up stale sprint preview containers on startup", { error });
+      }
+      let recoveredSprintRunIds: string[] = [];
+      try {
+        const recoveryResult = await this.runtimeStartupRecoveryService.recover();
+        recoveredSprintRunIds = recoveryResult.resumedSprintRunIds;
+      } catch (error) {
+        this.logger.error("Failed to recover runtime state on startup", { error });
+      }
+
+      if (this.isDashboardEnabled()) {
+        if (recoveredSprintRunIds.length > 0) {
+          for (const runId of recoveredSprintRunIds) {
+             const sprintRun = this.executionRepository.getSprintRun(runId);
+             if (sprintRun) {
+                 this.dashboardRealtimeService.scheduleProjectLiveRefresh(sprintRun.projectId);
+             }
+          }
+        }
+      }
+    });
 
     await bootMcpTransport({
       server: this.server,
