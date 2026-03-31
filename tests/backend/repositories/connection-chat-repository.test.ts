@@ -666,6 +666,112 @@ describe("ConnectionChatRepository", () => {
   });
   });
 
+
+  it("computes accurate connection aggregate counts via batched inflateConnections logic", async () => {
+    const { storage, projectRepository, connectionRepository } = await createRepositories();
+    const executionRepository = new ExecutionRepository(storage);
+    const project = projectRepository.createProject({
+      name: "Aggregate Count Test Project",
+      sourceType: "local",
+      sourceRef: "/workspace/aggregate-project",
+    });
+
+    const conn1 = connectionRepository.startListen({
+      connectionKey: "agg-conn-1",
+      displayName: "Agg Conn 1",
+      role: "worker",
+      projectId: project.id,
+    }).connection;
+
+    const conn2 = connectionRepository.startListen({
+      connectionKey: "agg-conn-2",
+      displayName: "Agg Conn 2",
+      role: "worker",
+      projectId: project.id,
+    }).connection;
+
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      number: 1,
+      featureBranch: "feature/sprint-1",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      triggerType: "manual",
+      executorMode: "managed",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Task 1",
+      promptMarkdown: "Run task",
+      status: "pending",
+      isIndependent: true,
+    });
+
+    storage.getDatabase().prepare(`
+      INSERT INTO task_dispatches (
+        id, project_id, sprint_id, task_id, sprint_run_id, connection_id, executor_type, status, queued_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'worker', 'running', ?, ?, ?)
+    `).run(
+      "dispatch-agg-1",
+      project.id,
+      sprint.id,
+      task.id,
+      sprintRun.id,
+      conn1.id,
+      "2026-03-10T00:00:00.000Z",
+      "2026-03-10T00:00:00.000Z",
+      "2026-03-10T00:00:00.000Z",
+    );
+
+    const thread1 = connectionRepository.createThread(project.id, {
+      title: "Thread 1",
+      connectionId: conn1.id,
+    });
+
+    const threadUnassigned = connectionRepository.createThread(project.id, {
+      title: "Thread Unassigned",
+    });
+
+    connectionRepository.postDashboardMessage(project.id, {
+      threadId: thread1.id,
+      bodyMarkdown: "Assigned pending message",
+    });
+
+    connectionRepository.postDashboardMessage(project.id, {
+      threadId: threadUnassigned.id,
+      bodyMarkdown: "Unassigned pending message",
+    });
+
+    connectionRepository.postDashboardMessage(project.id, {
+      threadId: thread1.id,
+      bodyMarkdown: "Hidden assigned message",
+      metadata: { internalVisibility: "hidden" },
+    });
+
+    const list = connectionRepository.listConnections(project.id);
+    const listedConn1 = list.find(c => c.id === conn1.id);
+    const listedConn2 = list.find(c => c.id === conn2.id);
+
+    expect(listedConn1?.activeDispatchCount).toBe(1);
+    expect(listedConn2?.activeDispatchCount).toBe(0);
+
+    expect(listedConn1?.threadCount).toBe(1);
+    expect(listedConn2?.threadCount).toBe(0);
+
+    expect(listedConn1?.messageCount).toBe(1);
+    expect(listedConn2?.messageCount).toBe(0);
+
+    expect(listedConn1?.pendingInboxCount).toBe(2);
+    expect(listedConn2?.pendingInboxCount).toBe(1);
+
+    const fetchedConn1 = connectionRepository.getConnection(conn1.id);
+    expect(fetchedConn1?.activeDispatchCount).toBe(1);
+  });
+
   describe("ConversationRuntimeState and Metadata", () => {
     it("creates, retrieves, and updates thread with runtimeState and persists message metadata", async () => {
       const { projectRepository, connectionRepository } = await createRepositories();
