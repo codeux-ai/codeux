@@ -1,7 +1,8 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { X, RotateCcw, Trash2 } from "lucide-preact";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 
 const PROVIDER_OPTIONS = [
     { value: "", label: "Auto (use current setting)" },
@@ -26,7 +27,6 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     onClose,
     onConfirm,
 }) => {
-    const backdropRef = useRef<HTMLDivElement>(null);
     const cardRef = useRef<HTMLDivElement>(null);
 
     const [provider, setProvider] = useState("");
@@ -45,13 +45,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
         gsap.to(backdropRef.current, { opacity: 0, duration: 0.22, delay: 0.04, onComplete: onClose });
     };
 
-    useEffect(() => {
-        const handler = (e: KeyboardEvent) => {
-            if (e.key === "Escape") handleClose();
-        };
-        document.addEventListener("keydown", handler);
-        return () => document.removeEventListener("keydown", handler);
-    }, []);
+    const backdropRef = useFocusTrap(true, handleClose);
 
     const handleSubmit = () => {
         onConfirm({
@@ -90,7 +84,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                     <button
                         type="button"
                         onClick={handleClose}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/[0.04] text-slate-400 hover:text-slate-700 dark:bg-white/[0.04] dark:text-slate-500 dark:hover:text-white transition-colors"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/[0.04] text-slate-400 hover:text-slate-700 dark:bg-white/[0.04] dark:text-slate-500 dark:hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber"
                     >
                         <X className="w-3.5 h-3.5" strokeWidth={2} />
                     </button>
@@ -111,7 +105,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                             id="rerun-provider"
                             value={provider}
                             onChange={(e) => setProvider((e.target as HTMLSelectElement).value)}
-                            className="w-full rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.03] px-4 py-2.5 text-[13px] font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-signal-500 focus:border-transparent transition-shadow"
+                            className="w-full rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.03] px-4 py-2.5 text-[13px] font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber focus:border-transparent transition-shadow"
                         >
                             {PROVIDER_OPTIONS.map(opt => (
                                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -130,7 +124,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                             type="checkbox"
                             checked={clearWorktree}
                             onChange={(e) => setClearWorktree((e.target as HTMLInputElement).checked)}
-                            className="mt-0.5 h-4 w-4 rounded border-black/[0.15] dark:border-white/[0.15] text-status-amber focus:ring-signal-500 focus:ring-offset-0 cursor-pointer"
+                            className="mt-0.5 h-4 w-4 rounded border-black/[0.15] dark:border-white/[0.15] text-status-amber focus:ring-status-amber focus-visible:ring-2 focus-visible:ring-status-amber focus:ring-offset-0 cursor-pointer"
                         />
                         <div>
                             <div className="flex items-center gap-1.5">
@@ -151,14 +145,14 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                     <button
                         type="button"
                         onClick={handleClose}
-                        className="px-4 py-2 rounded-xl text-[12px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+                        className="px-4 py-2 rounded-xl text-[12px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800"
                     >
                         Cancel
                     </button>
                     <button
                         type="button"
                         onClick={handleSubmit}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-bold bg-status-amber text-white shadow-[0_4px_16px_rgba(245,158,11,0.25)] hover:shadow-[0_6px_24px_rgba(245,158,11,0.35)] hover:-translate-y-px transition-all duration-200"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-bold bg-status-amber text-white shadow-[0_4px_16px_rgba(245,158,11,0.25)] hover:shadow-[0_6px_24px_rgba(245,158,11,0.35)] hover:-translate-y-px transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-status-amber focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800"
                     >
                         <RotateCcw className="w-3.5 h-3.5" strokeWidth={2} />
                         Rerun Task
