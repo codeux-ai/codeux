@@ -965,9 +965,39 @@ describe("VirtualWorkerService", () => {
     vi.spyOn((virtualWorkerService as any), "ensureMergeConflictResolved").mockResolvedValue(undefined);
     vi.spyOn((virtualWorkerService as any), "finalizeMergeCommit").mockResolvedValue(undefined);
 
-    // Let it run and hit the command runner (which will fail because it's not a real git repo)
-    // This will cover the try and catch blocks!
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+  });
+
+  it("escalates to human when provider execution fails during handleAttentionItem", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
+
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:999",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge Conflict",
+      summaryMarkdown: "Resolve it",
+      payload: { repoPath: "/test", conflictingBranches: { source: "src", target: "tgt" } },
+    });
+
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockRejectedValue(new Error("Provider failed"));
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    const updatedItem = projectAttentionService.getItem(item.id);
+    expect(updatedItem?.status).toBe("resolved"); // The original item is resolved because it's escalated
+
+    const activeItems = projectAttentionService.listActiveProjectItems(project.id);
+    expect(activeItems.some(i => i.attentionType === "human_escalation_required")).toBe(true);
   });
 
   it("resolveActionRequiredAttention covers auto-approve plan path", async () => {
