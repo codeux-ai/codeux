@@ -93,6 +93,7 @@ export const KineticDock: FunctionComponent = () => {
             <Link
                 key={item.label}
                 to={item.path}
+                aria-label={item.label}
                 ref={(el: HTMLAnchorElement | null) => { itemRefs.current[globalIndex] = el; }}
                 className="relative group flex flex-col items-center justify-center w-[52px] h-[52px] rounded-[1.4rem] transition-colors duration-300 decoration-none"
             >

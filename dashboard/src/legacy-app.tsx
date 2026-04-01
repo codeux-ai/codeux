@@ -77,9 +77,9 @@ export const App: FunctionComponent = () => {
             <StatsGrid stats={stats} />
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              <div className="lg:col-span-8">
+              <section aria-labelledby="pipeline-heading" className="lg:col-span-8">
                 <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <h2 id="pipeline-heading" className="text-xl font-bold text-white flex items-center gap-2">
                     Task Pipeline
                     <span className="px-2 py-0.5 bg-slate-800 rounded text-xs text-slate-400 font-mono">{stats.total}</span>
                   </h2>
@@ -94,16 +94,16 @@ export const App: FunctionComponent = () => {
                     tasksWithLiveActivities.map((task) => <TaskCard key={task.id} task={task} onRerunTask={handleRerunTask} />)
                   )}
                 </div>
-              </div>
+              </section>
 
-              <div className="lg:col-span-4">
+              <aside className="lg:col-span-4">
                 <ActivitySidebar
                   reportText={status.reportText}
                   instructions={status.instructions}
                   gitStatus={gitStatus}
                   gitStatusError={gitStatusError}
                 />
-              </div>
+              </aside>
             </div>
           </>
         ) : (
