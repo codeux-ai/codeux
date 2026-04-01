@@ -11,7 +11,9 @@ import { ProjectAttentionRepository } from "../../repositories/project-attention
 import { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
 import { WorkerEndpointRepository } from "../../repositories/worker-endpoint-repository.js";
 import { ExecutionRepository } from "../../repositories/execution-repository.js";
-import type { DashboardSettings, DashboardSettingsScope, WorkerExecutionMode } from "../../contracts/app-types.js";
+import type { DashboardSettings, DashboardSettingsScope, WorkerExecutionMode, ExecutionDashboardSnapshot } from "../../contracts/app-types.js";
+import type { ProjectWorkerAssignmentRecord } from "../../contracts/worker-types.js";
+import type { ProjectAttentionItemRecord } from "../../contracts/project-attention-types.js";
 
 function makeCursor(updatedAt: string, id: string): string {
   return `${updatedAt}::${id}`;
@@ -21,6 +23,15 @@ function compareCursor(left: { updatedAt: string; id: string }, right: { updated
   return makeCursor(left.updatedAt, left.id).localeCompare(makeCursor(right.updatedAt, right.id));
 }
 
+interface WorkerListenProjectCache {
+  assignments?: ProjectWorkerAssignmentRecord[];
+  activeAssignments?: ProjectWorkerAssignmentRecord[];
+  projectPayload?: ListenProjectPayload;
+  contextDigest?: ListenContextDigestPayload;
+  executionSnapshot?: ExecutionDashboardSnapshot;
+  openAttentionItems?: ProjectAttentionItemRecord[];
+  activeSprint?: { sprintId: string | null; sprintName: string | null; sprintNumber: number | null; featureBranch: string | null; } | null;
+}
 
 export class WorkerListenEventService {
   constructor(
@@ -62,12 +73,13 @@ export class WorkerListenEventService {
     const bindings = new Map(
       this.connectionChatRepository.listProjectBindingStates(connection.id).map((binding) => [binding.projectId, binding]),
     );
+    const cache = new Map<string, WorkerListenProjectCache>();
 
     for (const projectId of scopedProjectIds) {
       if (this.resolveWorkerExecutionMode(projectId) !== "CONNECTED_MCP") {
         continue;
       }
-      const event = this.pullAssignmentChangedEvent(workerEndpoint.id, projectId, bindings.get(projectId)?.lastAssignmentCursor || null);
+      const event = this.pullAssignmentChangedEvent(workerEndpoint.id, projectId, bindings.get(projectId)?.lastAssignmentCursor || null, cache);
       if (event) {
         this.connectionChatRepository.updateProjectBindingCursor(connection.id, projectId, {
           assignmentCursor: makeCursor(event.assignment.updatedAt, event.assignment.assignmentId),
@@ -84,7 +96,7 @@ export class WorkerListenEventService {
       if (this.resolveWorkerExecutionMode(projectId) !== "CONNECTED_MCP") {
         continue;
       }
-      const event = this.pullAttentionItemEvent(workerEndpoint.id, projectId, bindings.get(projectId)?.lastAttentionCursor || null);
+      const event = this.pullAttentionItemEvent(workerEndpoint.id, projectId, bindings.get(projectId)?.lastAttentionCursor || null, cache);
       if (event) {
         this.connectionChatRepository.updateProjectBindingCursor(connection.id, projectId, {
           attentionCursor: makeCursor(event.item.updatedAt, event.item.id),
@@ -100,8 +112,18 @@ export class WorkerListenEventService {
     workerEndpointId: string,
     projectId: string,
     lastCursor: string | null,
+    cache: Map<string, WorkerListenProjectCache>,
   ): ListenAssignmentChangedEvent | null {
-    const assignments = this.projectWorkerAssignmentRepository.listAssignmentsForProject(projectId);
+    let projectCache = cache.get(projectId);
+    if (!projectCache) {
+      projectCache = {};
+      cache.set(projectId, projectCache);
+    }
+    if (!projectCache.assignments) {
+      projectCache.assignments = this.projectWorkerAssignmentRepository.listAssignmentsForProject(projectId);
+    }
+    const assignments = projectCache.assignments;
+
     const workerAssignment = assignments
       .filter((assignment) => assignment.workerEndpointId === workerEndpointId)
       .filter((assignment) => !lastCursor || makeCursor(assignment.updatedAt, assignment.id) > lastCursor)
@@ -119,7 +141,7 @@ export class WorkerListenEventService {
       && isAssignableWorkerStatus(assignment.workerStatus)
     ));
     const primary = activeAssignments.find((assignment) => assignment.assignmentRole === "primary") || null;
-    const project = this.buildProjectPayload(projectId);
+    const project = this.buildProjectPayload(projectId, cache);
     return {
       kind: "assignment_changed",
       assignment: {
@@ -139,7 +161,7 @@ export class WorkerListenEventService {
       },
       project,
       workingDirectoryHint: `cd ${project.repoPath}`,
-      contextDigest: this.buildContextDigest(projectId),
+      contextDigest: this.buildContextDigest(projectId, cache),
       continuation: {
         nextTool: "listen",
         instruction: "Update your local project context for this assignment change, then call listen again with the same connection_key to keep supervising work.",
@@ -151,23 +173,36 @@ export class WorkerListenEventService {
     workerEndpointId: string,
     projectId: string,
     _lastCursor: string | null,
+    cache: Map<string, WorkerListenProjectCache>,
   ): ListenAttentionItemEvent | null {
+    let projectCache = cache.get(projectId);
+    if (!projectCache) {
+      projectCache = {};
+      cache.set(projectId, projectCache);
+    }
     if (this.resolveWorkerExecutionMode(projectId) !== "CONNECTED_MCP") {
       return null;
     }
 
-    const activeAssignments = this.projectWorkerAssignmentRepository.listAssignmentsForProject(projectId, {
-      activeOnly: true,
-    });
+    if (!projectCache.assignments) {
+      projectCache.assignments = this.projectWorkerAssignmentRepository.listAssignmentsForProject(projectId);
+    }
+    const activeAssignments = projectCache.assignments.filter((assignment) => (
+      assignment.status === "active"
+    ));
     const workerOwnsProject = activeAssignments.some((assignment) => assignment.workerEndpointId === workerEndpointId);
     if (!workerOwnsProject) {
       return null;
     }
 
-    const item = this.projectAttentionRepository.listProjectAttentionItems(projectId, {
-      statuses: ["open"],
-      limit: 200,
-    }).filter((candidate) => (
+    if (!projectCache.openAttentionItems) {
+      projectCache.openAttentionItems = this.projectAttentionRepository.listProjectAttentionItems(projectId, {
+        statuses: ["open", "claimed"],
+        limit: 200,
+      });
+    }
+
+    const item = projectCache.openAttentionItems.filter((candidate) => candidate.status === "open").filter((candidate) => (
       candidate.ownerType === "worker"
       && this.resolveWorkerExecutionMode(candidate.projectId, candidate.sprintId) === "CONNECTED_MCP"
       && (candidate.assignedWorkerEndpointId === workerEndpointId || candidate.assignedWorkerEndpointId === null)
@@ -177,7 +212,7 @@ export class WorkerListenEventService {
       return null;
     }
 
-    const project = this.buildProjectPayload(projectId);
+    const project = this.buildProjectPayload(projectId, cache);
     return {
       kind: "attention_item",
       item: {
@@ -200,7 +235,7 @@ export class WorkerListenEventService {
       },
       project,
       workingDirectoryHint: `cd ${project.repoPath}`,
-      contextDigest: this.buildContextDigest(projectId),
+      contextDigest: this.buildContextDigest(projectId, cache),
       continuation: {
         nextTool: "listen",
         instruction: this.buildAttentionContinuationInstruction(project.repoPath, item),
@@ -208,12 +243,22 @@ export class WorkerListenEventService {
     };
   }
 
-  private buildProjectPayload(projectId: string): ListenProjectPayload {
+  private buildProjectPayload(projectId: string, cache: Map<string, WorkerListenProjectCache>): ListenProjectPayload {
+    const projectCache = cache.get(projectId) || {};
+    if (!cache.has(projectId)) cache.set(projectId, projectCache);
+
+    if (projectCache.projectPayload) {
+      return projectCache.projectPayload;
+    }
+
+    if (!projectCache.executionSnapshot) {
+      projectCache.executionSnapshot = this.executionRepository.getProjectExecutionSnapshot(projectId);
+    }
     const project = this.projectManagementRepository.getProject(projectId);
     if (!project) {
       throw new Error(`Project not found for worker event: ${projectId}`);
     }
-    const snapshot = this.executionRepository.getProjectExecutionSnapshot(projectId);
+    const snapshot = projectCache.executionSnapshot;
     const activeSprintSummary = snapshot.sprintRuns.find((run) => ["running", "queued", "paused", "cancel_requested"].includes(run.status))
       || snapshot.sprintRuns[0]
       || null;
@@ -228,33 +273,48 @@ export class WorkerListenEventService {
     });
     const defaultBranch = settings.git.defaultBranch || project.defaultBranch || "main";
 
-    return {
+    projectCache.projectPayload = {
       id: project.id,
       name: project.name,
       repoPath: project.baseDir,
       defaultBranch,
       featureBranch: sprint?.featureBranch || null,
     };
+    return projectCache.projectPayload;
   }
 
-  private buildContextDigest(projectId: string): ListenContextDigestPayload {
-    const snapshot = this.executionRepository.getProjectExecutionSnapshot(projectId);
+  private buildContextDigest(projectId: string, cache: Map<string, WorkerListenProjectCache>): ListenContextDigestPayload {
+    const projectCache = cache.get(projectId) || {};
+    if (!cache.has(projectId)) cache.set(projectId, projectCache);
+
+    if (projectCache.contextDigest) {
+      return projectCache.contextDigest;
+    }
+
+    if (!projectCache.executionSnapshot) {
+      projectCache.executionSnapshot = this.executionRepository.getProjectExecutionSnapshot(projectId);
+    }
+    const snapshot = projectCache.executionSnapshot;
     const activeSprint = snapshot.sprintRuns.find((run) => ["running", "queued", "paused", "cancel_requested"].includes(run.status))
       || snapshot.sprintRuns[0]
       || null;
-    const unresolvedAttention = this.projectAttentionRepository.listProjectAttentionItems(projectId, {
-      statuses: ["open", "claimed"],
-      limit: 5,
-    });
+    if (!projectCache.openAttentionItems) {
+      projectCache.openAttentionItems = this.projectAttentionRepository.listProjectAttentionItems(projectId, {
+        statuses: ["open", "claimed"],
+        limit: 200,
+      });
+    }
+    const unresolvedAttention = projectCache.openAttentionItems.slice(0, 5);
 
-    return {
+    projectCache.contextDigest = {
       activeSprintId: activeSprint?.sprintId || null,
       activeSprintName: activeSprint?.sprintName || null,
       activeSprintNumber: activeSprint?.sprintNumber ?? null,
-      unresolvedAttentionCount: unresolvedAttention.length,
+      unresolvedAttentionCount: projectCache.openAttentionItems.length,
       unresolvedAttentionTitles: unresolvedAttention.slice(0, 3).map((item) => item.title),
       recentEventTypes: snapshot.recentEvents.slice(0, 5).map((event) => event.eventType),
     };
+    return projectCache.contextDigest;
   }
 
   private buildAttentionContinuationInstruction(

@@ -13,6 +13,16 @@ Test files are organized under `tests/`:
 npm test
 ```
 
+- Run coverage report (verifies 80% global thresholds)
+```bash
+npm run test:coverage
+```
+
+- Run full CI verification suite (lint, typecheck, build, test, and coverage)
+```bash
+npm run ci
+```
+
 - Build backend and dashboard
 ```bash
 npm run build

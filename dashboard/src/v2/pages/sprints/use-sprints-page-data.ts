@@ -28,7 +28,7 @@ import { fetchAgentPresets } from "../../lib/agent-preset-api.js";
 import { buildTaskBundle, parseTaskBundle } from "../../lib/markdown-transfer.js";
 import { toTaskViewModel } from "../../lib/view-models.js";
 import { derivePlanningETA } from "../../lib/planning-telemetry.js";
-import { fetchProjectEffectiveSettings } from "../../lib/settings-api.js";
+import { useProjectEffectiveSettings } from "../../hooks/use-project-effective-settings.js";
 import { cancelSprintRun, orchestrateSprint } from "../../../lib/api/dashboard-api.js";
 import { getSprintHumanInterventionBySprintId } from "../../../lib/execution-intervention.js";
 import { filterShowcaseSprints, sortSprintsByRecency } from "../../lib/sprint-gallery.js";
@@ -167,36 +167,18 @@ export function useSprintsPageData() {
     };
   }, [selectedProject?.id, showQuicksprint]);
 
+  const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
+
   useEffect(() => {
-    let cancelled = false;
-
-    if (!selectedProject) {
+    if (!selectedProject || !effectiveSettings) {
       setWorkerMode(null);
-      return () => {
-        cancelled = true;
-      };
+      return;
     }
-
-    void fetchProjectEffectiveSettings(selectedProject.id)
-      .then((response) => {
-        if (cancelled) {
-          return;
-        }
-        setWorkerMode({
-          executionMode: response.settings.workers.executionMode,
-          virtualWorkerProvider: response.settings.workers.virtualWorkerProvider,
-        });
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setWorkerMode(null);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedProject?.id]);
+    setWorkerMode({
+      executionMode: effectiveSettings.settings.workers.executionMode,
+      virtualWorkerProvider: effectiveSettings.settings.workers.virtualWorkerProvider,
+    });
+  }, [selectedProject?.id, effectiveSettings]);
 
   const nextSprintNumber = useMemo(() => (
     sprints.reduce((maxNumber: number, sprint: Sprint) => Math.max(maxNumber, sprint.number || 0), 0) + 1

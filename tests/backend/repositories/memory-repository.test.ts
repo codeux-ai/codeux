@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { randomUUID } from "crypto";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -95,6 +96,7 @@ describe("MemoryRepository", () => {
       expect(result.id).toBeDefined();
       expect(result.createdAt).toBeDefined();
       expect(result.updatedAt).toBeDefined();
+      expect(result).toEqual(repo.getMemory(result.id));
     });
 
     it("trims content whitespace", () => {
@@ -144,11 +146,33 @@ describe("MemoryRepository", () => {
     });
   });
 
+  describe("getMemories", () => {
+    it("returns empty array for empty input", () => {
+      expect(repo.getMemories([])).toEqual([]);
+    });
+
+    it("returns items in the requested order and drops missing ids", () => {
+      const mem1 = repo.createMemory(projectId, makeInput({ content: "First" }));
+      const mem2 = repo.createMemory(projectId, makeInput({ content: "Second" }));
+      const mem3 = repo.createMemory(projectId, makeInput({ content: "Third" }));
+
+      const ids = [mem3.id, randomUUID(), mem1.id, mem3.id, mem2.id];
+      const results = repo.getMemories(ids);
+
+      expect(results).toHaveLength(4);
+      expect(results[0]).toEqual(mem3);
+      expect(results[1]).toEqual(mem1);
+      expect(results[2]).toEqual(mem3);
+      expect(results[3]).toEqual(mem2);
+    });
+  });
+
   describe("updateMemory", () => {
     it("updates content", () => {
       const created = repo.createMemory(projectId, makeInput({ content: "Original" }));
       const updated = repo.updateMemory(created.id, { content: "  Updated  " });
       expect(updated.content).toBe("Updated");
+      expect(updated).toEqual(repo.getMemory(updated.id));
     });
 
     it("updates category", () => {
@@ -393,6 +417,7 @@ describe("MemoryRepository", () => {
         originType: "memory",
         originId: original.id,
       });
+      expect(promoted).toEqual(repo.getMemory(promoted.id));
     });
 
     it("caps strength at 1.0", () => {

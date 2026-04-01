@@ -7,30 +7,11 @@ import type { MemoryRecord, MemoryScope, MemoryCategory } from "./memory-types.j
 import { useProjectData } from "./context/project-data.js";
 import { fetchSprints } from "./lib/project-api.js";
 import { fetchAgentPresets } from "./lib/agent-preset-api.js";
+import { prepareMemoryGraph, type MemNode, type Edge, type GraphMetadata, CLUSTER } from "./lib/memory-graph.js";
 import type { SprintRecord, AgentPreset } from "./types.js";
 
 /* ─── Types ──────────────────────────────────────────────────────────────── */
 
-type MemCat = MemoryCategory;
-
-interface MemNode {
-    id: string;
-    content: string;
-    category: MemCat;
-    strength: number;
-    scope: MemoryScope;
-    x: number;
-    y: number;
-    targetX: number;
-    targetY: number;
-    radius: number;
-    opacity: number;
-    scale: number;
-    glow: number;
-    alive: boolean;
-}
-
-interface Edge { a: number; b: number; similarity: number }
 interface Pulse { edgeIdx: number; progress: number; speed: number }
 
 /* ─── Config ─────────────────────────────────────────────────────────────── */
@@ -46,17 +27,6 @@ const CAT: Record<string, { label: string; hex: string; r: number; g: number; b:
     learning:     { label: "Learning",     hex: "#33FFB8", r: 51,  g: 255, b: 184 },
 };
 
-const CLUSTER: Record<string, [number, number]> = {
-    architecture: [0,    -270],
-    codebase:     [240,  -135],
-    context:      [240,   135],
-    preferences:  [0,     270],
-    patterns:     [-240, -135],
-    decision:     [-240,  135],
-    error:        [170,   250],
-    learning:     [-170,  -250],
-};
-
 type MemTier = "short_term" | "long_term";
 const TIER_TABS: { key: MemTier; label: string; scope: MemoryScope }[] = [
     { key: "short_term", label: "Short Term", scope: "sprint" },
@@ -66,74 +36,6 @@ const TIER_TABS: { key: MemTier; label: string; scope: MemoryScope }[] = [
 const CATEGORIES: MemoryCategory[] = ["architecture", "codebase", "context", "preferences", "patterns", "decision", "error", "learning"];
 
 /* ─── Build nodes + edges from API data ─────────────────────────────────── */
-
-function buildNodesFromRecords(records: MemoryRecord[], embeddingMap: EmbeddingMapResult | null): MemNode[] {
-    // Build a lookup from memory id → projected position
-    const posMap = new Map<string, { x: number; y: number }>();
-    if (embeddingMap?.hasEmbeddings) {
-        for (const n of embeddingMap.nodes) posMap.set(n.id, { x: n.x, y: n.y });
-    }
-
-    const hasProjections = posMap.size > 0;
-
-    // Fallback: category-based ring layout for memories without embeddings
-    const counts: Record<string, number> = {};
-
-    return records.map(r => {
-        let tx: number, ty: number;
-        const projected = posMap.get(r.id);
-
-        if (projected && hasProjections) {
-            tx = projected.x;
-            ty = projected.y;
-        } else {
-            // Fallback to category ring layout
-            const cat = r.category in CLUSTER ? r.category : "context";
-            const ci = counts[cat] = (counts[cat] || 0);
-            counts[cat]++;
-            const [cx, cy] = CLUSTER[cat] || [0, 0];
-            const catCount = records.filter(m => m.category === cat).length;
-            const angle = ci * (Math.PI * 2 / Math.max(3, catCount)) + Math.PI / 4;
-            const dist = 45 + r.strength * 35;
-            tx = cx + Math.cos(angle) * dist;
-            ty = cy + Math.sin(angle) * dist;
-        }
-
-        return {
-            id: r.id, content: r.content, category: r.category as MemCat,
-            strength: r.strength, scope: r.scope,
-            x: 0, y: 0, targetX: tx, targetY: ty,
-            radius: 4 + r.strength * 7, opacity: 0, scale: 0,
-            glow: r.strength * 0.4, alive: true,
-        };
-    });
-}
-
-function buildEdges(nodes: MemNode[], embeddingMap: EmbeddingMapResult | null): Edge[] {
-    const edges: Edge[] = [];
-
-    if (embeddingMap?.hasEmbeddings && embeddingMap.edges.length > 0) {
-        // Build index lookup: memory id → node index
-        const idxMap = new Map<string, number>();
-        nodes.forEach((n, i) => idxMap.set(n.id, i));
-
-        for (const e of embeddingMap.edges) {
-            const ai = idxMap.get(e.source);
-            const bi = idxMap.get(e.target);
-            if (ai !== undefined && bi !== undefined) {
-                edges.push({ a: ai, b: bi, similarity: e.similarity });
-            }
-        }
-    } else {
-        // Fallback: category-based edges
-        for (let i = 0; i < nodes.length; i++)
-            for (let j = i + 1; j < nodes.length; j++)
-                if (nodes[i].category === nodes[j].category)
-                    edges.push({ a: i, b: j, similarity: 0.5 });
-    }
-
-    return edges;
-}
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
@@ -477,8 +379,7 @@ export const MemoryPage: FunctionComponent = () => {
 
     // Mutable render state
     const S = useRef({
-        nodes: [] as MemNode[],
-        edges: [] as Edge[],
+        graph: { nodes: [], edges: [], catCentroids: {} } as GraphMetadata,
         embeddingMap: null as EmbeddingMapResult | null,
         cam: { x: 0, y: 0, zoom: 0.55 },
         hoveredIdx: -1,
@@ -551,9 +452,8 @@ export const MemoryPage: FunctionComponent = () => {
             // Update canvas
             const s = S.current;
             s.embeddingMap = mapData;
-            s.nodes = buildNodesFromRecords(memoriesData, mapData);
-            s.edges = buildEdges(s.nodes, mapData);
-            s.pulses = s.edges.map((_, i) => ({ edgeIdx: i, progress: Math.random(), speed: 0.002 + Math.random() * 0.003 }));
+            s.graph = prepareMemoryGraph(memoriesData, mapData);
+            s.pulses = s.graph.edges.map((_, i) => ({ edgeIdx: i, progress: Math.random(), speed: 0.002 + Math.random() * 0.003 }));
             s.selectedIdx = -1;
             s.searchMatch = null;
             setSelectedNode(null);
@@ -562,7 +462,7 @@ export const MemoryPage: FunctionComponent = () => {
             gsap.to(s.cam, { x: 0, y: 0, zoom: 0.55, duration: 0.01, overwrite: true });
             const tl = gsap.timeline();
             tl.to(s.cam, { zoom: 1, duration: 1.8, ease: "power2.out" }, 0);
-            s.nodes.forEach((node, i) => {
+            s.graph.nodes.forEach((node, i) => {
                 tl.to(node, {
                     x: node.targetX, y: node.targetY,
                     scale: 1, opacity: 1,
@@ -630,7 +530,8 @@ export const MemoryPage: FunctionComponent = () => {
             const w = canvas.width / dpr;
             const h = canvas.height / dpr;
             const dark = document.documentElement.classList.contains("dark");
-            const { cam, nodes, edges, pulses, hoveredIdx, selectedIdx } = s;
+            const { cam, graph, pulses, hoveredIdx, selectedIdx } = s;
+            const { nodes, edges, catCentroids } = graph;
             const lob = lobRef.current;
 
             ctx.clearRect(0, 0, w, h);
@@ -648,27 +549,6 @@ export const MemoryPage: FunctionComponent = () => {
             ctx.translate(w / 2, h / 2);
             ctx.scale(cam.zoom, cam.zoom);
             ctx.translate(-cam.x, -cam.y);
-
-            // Compute dynamic category centroids from actual node positions
-            const catCentroids: Record<string, { x: number; y: number; count: number; radius: number }> = {};
-            for (const n of nodes) {
-                if (!n.alive || n.opacity < 0.05) continue;
-                if (!catCentroids[n.category]) catCentroids[n.category] = { x: 0, y: 0, count: 0, radius: 0 };
-                const c = catCentroids[n.category];
-                c.x += n.x; c.y += n.y; c.count++;
-            }
-            for (const cat of Object.keys(catCentroids)) {
-                const c = catCentroids[cat];
-                if (c.count > 0) { c.x /= c.count; c.y /= c.count; }
-            }
-            // Compute radius as max distance from centroid to any node in the category + padding
-            for (const n of nodes) {
-                if (!n.alive || n.opacity < 0.05) continue;
-                const c = catCentroids[n.category];
-                if (!c) continue;
-                const dist = Math.sqrt((n.x - c.x) ** 2 + (n.y - c.y) ** 2);
-                if (dist > c.radius) c.radius = dist;
-            }
 
             for (const [cat, centroid] of Object.entries(catCentroids)) {
                 const c = CAT[cat];
@@ -889,7 +769,7 @@ export const MemoryPage: FunctionComponent = () => {
                 canvas.style.cursor = "grabbing";
                 return;
             }
-            const idx = hitTest(wx, wy, s.nodes);
+            const idx = hitTest(wx, wy, s.graph.nodes);
             s.hoveredIdx = idx;
             canvas.style.cursor = idx >= 0 ? "pointer" : "grab";
         };
@@ -903,11 +783,11 @@ export const MemoryPage: FunctionComponent = () => {
         const onUp = (e: MouseEvent) => {
             if (!s.dragMoved) {
                 const { wx, wy } = getWorld(e);
-                const idx = hitTest(wx, wy, s.nodes);
+                const idx = hitTest(wx, wy, s.graph.nodes);
                 if (idx >= 0) {
                     s.selectedIdx = idx;
-                    setSelectedNode({ ...s.nodes[idx] });
-                    gsap.to(s.cam, { x: s.nodes[idx].x, y: s.nodes[idx].y, zoom: 1.4, duration: 1, ease: "power3.out", overwrite: true });
+                    setSelectedNode({ ...s.graph.nodes[idx] });
+                    gsap.to(s.cam, { x: s.graph.nodes[idx].x, y: s.graph.nodes[idx].y, zoom: 1.4, duration: 1, ease: "power3.out", overwrite: true });
                 } else {
                     s.selectedIdx = -1;
                     setSelectedNode(null);
@@ -934,7 +814,7 @@ export const MemoryPage: FunctionComponent = () => {
         // Neural fire (random node pulses)
         function startNeuralFire() {
             const fire = () => {
-                const alive = s.nodes.filter(n => n.alive);
+                const alive = s.graph.nodes.filter(n => n.alive);
                 if (alive.length === 0) return;
                 const node = alive[Math.floor(Math.random() * alive.length)];
                 const baseGlow = node.strength * 0.4;
@@ -972,13 +852,13 @@ export const MemoryPage: FunctionComponent = () => {
         const s = S.current;
         if (!q.trim()) {
             s.searchMatch = null;
-            s.nodes.forEach(n => { if (n.alive) gsap.to(n, { opacity: 1, duration: 0.4 }); });
+            s.graph.nodes.forEach(n => { if (n.alive) gsap.to(n, { opacity: 1, duration: 0.4 }); });
             return;
         }
         // Local text filter
         const lower = q.toLowerCase();
         const matches = new Set<number>();
-        s.nodes.forEach((n, i) => {
+        s.graph.nodes.forEach((n, i) => {
             if (n.alive && (n.content.toLowerCase().includes(lower) || n.category.includes(lower)))
                 matches.add(i);
         });
@@ -986,7 +866,7 @@ export const MemoryPage: FunctionComponent = () => {
 
         if (matches.size > 0) {
             let cx = 0, cy = 0;
-            matches.forEach(i => { cx += s.nodes[i].x; cy += s.nodes[i].y; });
+            matches.forEach(i => { cx += s.graph.nodes[i].x; cy += s.graph.nodes[i].y; });
             cx /= matches.size; cy /= matches.size;
             gsap.to(s.cam, { x: cx, y: cy, zoom: 1.1, duration: 0.8, ease: "power3.out", overwrite: true });
         }
@@ -1011,9 +891,9 @@ export const MemoryPage: FunctionComponent = () => {
     /* ── Delete ────────────────────────────────────────────────────────── */
     const handleDelete = useCallback(async (id: string) => {
         const s = S.current;
-        const idx = s.nodes.findIndex(n => n.id === id);
+        const idx = s.graph.nodes.findIndex(n => n.id === id);
         if (idx < 0) return;
-        const node = s.nodes[idx];
+        const node = s.graph.nodes[idx];
 
         // API delete
         try { await apiDeleteMemory(id); } catch { /* ignore */ }
@@ -1022,7 +902,7 @@ export const MemoryPage: FunctionComponent = () => {
             onComplete: () => {
                 node.alive = false;
                 if (s.selectedIdx === idx) { s.selectedIdx = -1; setSelectedNode(null); }
-                setMemoryCount(s.nodes.filter(n => n.alive).length);
+                setMemoryCount(s.graph.nodes.filter(n => n.alive).length);
                 setDeletedCount(c => c + 1);
             },
         })
@@ -1403,8 +1283,8 @@ export const MemoryPage: FunctionComponent = () => {
                 {/* Inspector panel */}
                 <Inspector
                     node={selectedNode}
-                    allNodes={S.current.nodes}
-                    edges={S.current.edges}
+                    allNodes={S.current.graph.nodes}
+                    edges={S.current.graph.edges}
                     lobotomize={lobotomize}
                     onClose={() => { S.current.selectedIdx = -1; setSelectedNode(null); }}
                     onDelete={handleDelete}
@@ -1414,7 +1294,7 @@ export const MemoryPage: FunctionComponent = () => {
             {/* ── Category summary ────────────────────────────────────── */}
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
                 {Object.entries(CAT).map(([key, cfg]) => {
-                    const alive = S.current.nodes.filter(n => n.category === key && n.alive).length;
+                    const alive = S.current.graph.nodes.filter(n => n.category === key && n.alive).length;
                     const total = records.filter(r => r.category === key).length;
                     return (
                         <div key={key}

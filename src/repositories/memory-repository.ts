@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import { AppDbStorage } from "./app-db-storage.js";
-import { requireRecord } from "./repository-utils.js";
+import { requireRecord, executeChunkedInQuery } from "./repository-utils.js";
 import type {
   MemoryRecord,
   MemoryScope,
@@ -65,6 +65,25 @@ export class MemoryRepository {
     const id = randomUUID();
     const source: MemorySource = input.source ?? { type: "manual" };
 
+    const row: MemoryRow = {
+      id,
+      project_id: projectId,
+      scope: input.scope,
+      sprint_id: input.sprintId ?? null,
+      agent_preset_id: input.agentPresetId ?? null,
+      content: input.content.trim(),
+      category: input.category,
+      strength: input.strength ?? 0.5,
+      source_json: JSON.stringify(source),
+      embedding_model: null,
+      embedding_dimension: null,
+      embedding_blob: null,
+      promoted_from_id: null,
+      promotion_reason: null,
+      created_at: now,
+      updated_at: now,
+    };
+
     this.db.prepare(`
       INSERT INTO memories (
         id, project_id, scope, sprint_id, agent_preset_id,
@@ -72,20 +91,20 @@ export class MemoryRepository {
         created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      id,
-      projectId,
-      input.scope,
-      input.sprintId ?? null,
-      input.agentPresetId ?? null,
-      input.content.trim(),
-      input.category,
-      input.strength ?? 0.5,
-      JSON.stringify(source),
-      now,
-      now,
+      row.id,
+      row.project_id,
+      row.scope,
+      row.sprint_id,
+      row.agent_preset_id,
+      row.content,
+      row.category,
+      row.strength,
+      row.source_json,
+      row.created_at,
+      row.updated_at,
     );
 
-    return requireRecord(this.getMemory(id), "Memory", id);
+    return this.mapRow(row);
   }
 
   getMemory(memoryId: string): MemoryRecord | null {
@@ -96,23 +115,54 @@ export class MemoryRepository {
     return row ? this.mapRow(row) : null;
   }
 
+  getMemories(memoryIds: string[]): MemoryRecord[] {
+    const rows = executeChunkedInQuery<MemoryRow>(
+      (sql) => this.db.prepare(sql),
+      { sqlPrefix: "SELECT * FROM memories WHERE id", items: memoryIds }
+    );
+
+    const map = new Map<string, MemoryRecord>();
+    for (const row of rows) {
+      map.set(row.id, this.mapRow(row));
+    }
+
+    const results: MemoryRecord[] = [];
+    for (const id of memoryIds) {
+      const mem = map.get(id);
+      if (mem) {
+        results.push(mem);
+      }
+    }
+    return results;
+  }
+
   updateMemory(memoryId: string, input: UpdateMemoryInput): MemoryRecord {
     const current = requireRecord(this.getMemory(memoryId), "Memory", memoryId);
     const now = new Date().toISOString();
+
+    const updatedContent = input.content?.trim() ?? current.content;
+    const updatedCategory = input.category ?? current.category;
+    const updatedStrength = input.strength ?? current.strength;
 
     this.db.prepare(`
       UPDATE memories
       SET content = ?, category = ?, strength = ?, updated_at = ?
       WHERE id = ?
     `).run(
-      input.content?.trim() ?? current.content,
-      input.category ?? current.category,
-      input.strength ?? current.strength,
+      updatedContent,
+      updatedCategory,
+      updatedStrength,
       now,
       memoryId,
     );
 
-    return requireRecord(this.getMemory(memoryId), "Memory", memoryId);
+    return {
+      ...current,
+      content: updatedContent,
+      category: updatedCategory,
+      strength: updatedStrength,
+      updatedAt: now,
+    };
   }
 
   deleteMemory(memoryId: string): void {
@@ -254,6 +304,25 @@ export class MemoryRepository {
     const id = randomUUID();
     const source: MemorySource = { type: "promotion", originType: "memory", originId: sourceMemory.id };
 
+    const row: MemoryRow = {
+      id,
+      project_id: projectId,
+      scope: 'project',
+      sprint_id: null,
+      agent_preset_id: sourceMemory.agentPresetId,
+      content: sourceMemory.content,
+      category: sourceMemory.category,
+      strength: Math.min(1, sourceMemory.strength + 0.1),
+      source_json: JSON.stringify(source),
+      embedding_model: null,
+      embedding_dimension: null,
+      embedding_blob: null,
+      promoted_from_id: sourceMemory.id,
+      promotion_reason: reason,
+      created_at: now,
+      updated_at: now,
+    };
+
     this.db.prepare(`
       INSERT INTO memories (
         id, project_id, scope, sprint_id, agent_preset_id,
@@ -262,20 +331,20 @@ export class MemoryRepository {
         created_at, updated_at
       ) VALUES (?, ?, 'project', NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      id,
-      projectId,
-      sourceMemory.agentPresetId,
-      sourceMemory.content,
-      sourceMemory.category,
-      Math.min(1, sourceMemory.strength + 0.1),
-      JSON.stringify(source),
-      sourceMemory.id,
-      reason,
-      now,
-      now,
+      row.id,
+      row.project_id,
+      row.agent_preset_id,
+      row.content,
+      row.category,
+      row.strength,
+      row.source_json,
+      row.promoted_from_id,
+      row.promotion_reason,
+      row.created_at,
+      row.updated_at,
     );
 
-    return requireRecord(this.getMemory(id), "Memory", id);
+    return this.mapRow(row);
   }
 
   // --- Embedding model status ---
