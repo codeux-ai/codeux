@@ -3,6 +3,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/ho
 import gsap from "gsap";
 import { X, ListChecks, Target, Bot, Plus } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
+import { mergeRefs } from "../../utils/mergeRefs.js";
 
 interface TaskDraft {
   sprintId: string;
@@ -24,8 +26,6 @@ interface AddTaskModalProps {
   onClose: () => void;
   onSubmit: (task: TaskDraft) => Promise<void> | void;
 }
-
-const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
 const PRIORITY_OPTIONS: TaskPriority[] = ["critical", "high", "medium", "low"];
 const STATUS_OPTIONS: TaskStatus[] = ["pending", "in_progress", "completed"];
@@ -57,62 +57,12 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(initialTask?.dependsOnTaskIds || []);
   const [error, setError] = useState<string | null>(null);
 
+  const focusContainerRef = useFocusTrap(true, onClose);
+
   useLayoutEffect(() => {
     gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
     gsap.fromTo(cardRef.current, { y: 40, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" });
   }, []);
-
-  const triggerRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    triggerRef.current = document.activeElement as HTMLElement | null;
-
-    // Initial focus setup
-    if (cardRef.current) {
-      const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
-      if (focusableElements.length > 0) {
-        focusableElements[0].focus();
-      }
-    }
-
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      } else if (event.key === "Tab") {
-        if (!cardRef.current) return;
-
-        const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
-
-        if (focusableElements.length === 0) return;
-
-        const first = focusableElements[0];
-        const last = focusableElements[focusableElements.length - 1];
-
-        // If focus has escaped the modal (e.g. user clicked background), force it back in
-        if (!cardRef.current.contains(document.activeElement)) {
-          event.preventDefault();
-          first.focus();
-          return;
-        }
-
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        }
-      }
-    };
-
-    document.addEventListener("keydown", handler);
-    return () => {
-      document.removeEventListener("keydown", handler);
-      if (triggerRef.current) {
-        triggerRef.current.focus();
-      }
-    };
-  }, [onClose]);
 
   const dependencyOptions = useMemo(() => {
     return availableTasks.filter((task) => task.sprintId === sprintId && task.recordId !== initialTask?.recordId);
@@ -168,7 +118,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
       className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-black/55 dark:bg-black/75 backdrop-blur-xl"
     >
       <div
-        ref={cardRef}
+        ref={mergeRefs(cardRef, focusContainerRef)}
         className="relative w-full max-w-4xl overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)] flex"
       >
         <div className="relative w-56 shrink-0 bg-void-900 dark:bg-void-950 flex flex-col justify-between p-8 overflow-hidden">

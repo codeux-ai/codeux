@@ -240,7 +240,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
           <div
             ref={listboxRef}
             tabIndex={-1}
-            className="max-h-[17rem] overflow-y-auto overscroll-contain py-1.5 outline-none"
+            className="max-h-[17rem] overflow-y-auto overscroll-contain py-1.5 outline-none focus:outline-none"
             role="listbox"
             onKeyDown={onKeyDown}
             aria-label={ariaLabel}
@@ -295,9 +295,20 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
         type="button"
         onClick={() => !disabled && setOpen(!open)}
         onKeyDown={(e) => {
-          if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === " ")) {
+          if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === " " || e.key === "Enter")) {
             e.preventDefault();
             setOpen(true);
+            // After setting open to true, focus the listbox to allow keyboard navigation immediately
+            setTimeout(() => {
+                if (listboxRef.current) {
+                    listboxRef.current.focus();
+                }
+            }, 0);
+          } else if (open && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === " " || e.key === "Enter" || e.key === "Escape")) {
+            // Forward keyboard events to the panel when it's open
+            if (listboxRef.current) {
+               listboxRef.current.focus();
+            }
           }
         }}
         className={triggerClass}

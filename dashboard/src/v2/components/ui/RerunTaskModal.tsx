@@ -2,6 +2,8 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { X, RotateCcw, Trash2 } from "lucide-preact";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
+import { mergeRefs } from "../../utils/mergeRefs.js";
 
 const PROVIDER_OPTIONS = [
     { value: "", label: "Auto (use current setting)" },
@@ -31,6 +33,8 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
 
     const [provider, setProvider] = useState("");
     const [clearWorktree, setClearWorktree] = useState(false);
+
+    const focusContainerRef = useFocusTrap(true, onClose);
 
     useLayoutEffect(() => {
         gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
@@ -68,7 +72,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
             className="fixed inset-0 z-[250] flex items-center justify-center bg-black/50 px-6 py-8 backdrop-blur-md dark:bg-black/70"
         >
             <div
-                ref={cardRef}
+                ref={mergeRefs(cardRef, focusContainerRef)}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="rerun-modal-title"

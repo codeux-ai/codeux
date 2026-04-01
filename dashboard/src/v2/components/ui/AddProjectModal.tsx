@@ -2,6 +2,8 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { X, Plus, FolderOpen, GitBranch, FolderInput, Link2 } from "lucide-preact";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
+import { mergeRefs } from "../../utils/mergeRefs.js";
 
 interface AddProjectModalProps {
     onClose: () => void;
@@ -21,6 +23,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const [gitUrl, setGitUrl]       = useState('');
     const [cloneDir, setCloneDir]   = useState('');
     const [error, setError]         = useState<string | null>(null);
+
+    const focusContainerRef = useFocusTrap(true, onClose);
 
     useLayoutEffect(() => {
         gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.35, ease: "power2.out" });
@@ -97,7 +101,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
             className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-black/50 dark:bg-black/70 backdrop-blur-xl"
         >
             <div
-                ref={cardRef}
+        ref={mergeRefs(cardRef, focusContainerRef)}
                 className="relative w-full max-w-2xl overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)] flex"
                 style={{ minHeight: '520px' }}
             >
