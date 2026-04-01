@@ -86,7 +86,7 @@ export const SettingsGeneralPanel: FunctionComponent<{ state: SettingsPageState 
               </div>
             </Row>
             <Row label="Project inheritance" description="System defaults stay live until a project explicitly overrides a field." last>
-              <div className="rounded-xl bg-black/[0.04] px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-500 dark:bg-white/[0.04] dark:text-slate-300">
+              <div className="rounded-xl bg-black/[0.04] px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-600 dark:bg-white/[0.04] dark:text-slate-300">
                 Live inheritance
               </div>
             </Row>

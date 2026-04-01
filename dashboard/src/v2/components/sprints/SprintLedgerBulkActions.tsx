@@ -43,7 +43,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
         <button
           type="button"
           onClick={onClearSelection}
-          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
         >
           Clear
         </button>

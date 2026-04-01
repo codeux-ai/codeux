@@ -74,7 +74,7 @@ export const SettingsPage: FunctionComponent = () => {
 
       <div ref={headerRef} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-end">
         <div className="flex flex-col gap-5">
-          <div className="flex items-center gap-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 font-mono">
+          <div className="flex items-center gap-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400 font-mono">
             <Settings className="h-3.5 w-3.5" strokeWidth={2.5} />
             Configuration
           </div>
@@ -89,11 +89,11 @@ export const SettingsPage: FunctionComponent = () => {
             <h1 className="relative z-10 font-display text-5xl font-black leading-[0.92] tracking-tighter text-slate-900 dark:text-white md:text-7xl">
               Settings
               <br />
-              <span className="text-slate-400 dark:text-slate-500">Integration.</span>
+              <span className="text-slate-500 dark:text-slate-400">Integration.</span>
             </h1>
           </div>
 
-          <p className="mt-1 max-w-2xl text-lg font-medium leading-relaxed text-slate-500 dark:text-slate-500">
+          <p className="mt-1 max-w-2xl text-lg font-medium leading-relaxed text-slate-600 dark:text-slate-400">
             Tune the system baseline, then shape project-level behavior with faster wayfinding, denser controls, and focused routing workspaces.
           </p>
 
@@ -105,7 +105,7 @@ export const SettingsPage: FunctionComponent = () => {
                 className={`rounded-[0.9rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors ${
                   activeScope === "system"
                     ? "bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
-                    : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                    : "text-slate-600 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                 }`}
               >
                 System
@@ -117,14 +117,14 @@ export const SettingsPage: FunctionComponent = () => {
                 className={`rounded-[0.9rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                   activeScope === "project"
                     ? "bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
-                    : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                    : "text-slate-600 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
                 }`}
               >
                 Project
               </button>
             </div>
 
-            <div className="rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-xs font-semibold text-slate-500 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-300">
+            <div className="rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-xs font-semibold text-slate-600 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-400">
               {activeScope === "system"
                 ? "Editing live system defaults"
                 : selectedProject
@@ -132,7 +132,7 @@ export const SettingsPage: FunctionComponent = () => {
                   : "Select a project to edit overrides"}
             </div>
 
-            <div className="rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-xs font-semibold text-slate-500 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-300">
+            <div className="rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-xs font-semibold text-slate-600 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:text-slate-400">
               {filteredCategories.length} visible categor{filteredCategories.length === 1 ? "y" : "ies"}
             </div>
 
@@ -145,12 +145,12 @@ export const SettingsPage: FunctionComponent = () => {
         </div>
 
         <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/76 p-4 backdrop-blur-2xl shadow-[0_18px_40px_rgba(15,23,42,0.05)] dark:border-white/[0.06] dark:bg-void-800/66 dark:shadow-[0_24px_52px_rgba(0,0,0,0.24)]">
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
             <Compass className="h-3.5 w-3.5" strokeWidth={2.2} />
             Smart Find
           </div>
           <div className="mt-3 flex items-center gap-3 rounded-[1.2rem] border border-black/[0.06] bg-black/[0.03] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-            <Search className="h-4 w-4 shrink-0 text-slate-400" strokeWidth={2.1} />
+            <Search className="h-4 w-4 shrink-0 text-slate-500 dark:text-slate-400" strokeWidth={2.1} />
             <input
               ref={state.searchInputRef}
               type="text"
@@ -159,7 +159,7 @@ export const SettingsPage: FunctionComponent = () => {
               placeholder="Search categories, providers, CI, auth, prompts"
               className="w-full bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
             />
-            <div className="rounded-full border border-black/[0.06] bg-white/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.04]">
+            <div className="rounded-full border border-black/[0.06] bg-white/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.04]">
               /
             </div>
           </div>
@@ -172,7 +172,7 @@ export const SettingsPage: FunctionComponent = () => {
                 className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors ${
                   activeCategory === category.id
                     ? "border-signal-500/25 bg-signal-500/[0.12] text-signal-700 dark:border-signal-400/25 dark:bg-signal-400/[0.12] dark:text-signal-200"
-                    : "border-black/[0.06] bg-white/80 text-slate-500 hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:text-slate-200"
+                    : "border-black/[0.06] bg-white/80 text-slate-600 hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:text-slate-200"
                 }`}
               >
                 {category.label}
@@ -240,7 +240,7 @@ export const SettingsPage: FunctionComponent = () => {
             >
               {activeCategoryConfig.label}
             </span>
-            <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+            <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-400">
               {activeCategoryConfig.description}
             </span>
             <div className="h-px flex-1 bg-gradient-to-r from-black/[0.06] to-transparent dark:from-white/[0.06]" />

@@ -43,7 +43,7 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                     <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-display">Active Streams</h2>
                     <FilterStrip options={FILTER_OPTIONS} active={activeFilter} onChange={setActiveFilter} />
                 </div>
-                <div className="text-xs font-semibold text-slate-400 dark:text-slate-600 font-mono">
+                <div className="text-xs font-semibold text-slate-500 dark:text-slate-400 font-mono">
                     {filteredTasks.length} active
                 </div>
             </header>
@@ -64,8 +64,8 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                     ))
                 ) : (
                     <div className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
-                        <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">No active tasks</div>
-                        <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">There are no tasks currently matching the selected filter in active sprints.</div>
+                        <div className="text-sm font-semibold text-slate-600 dark:text-slate-400">No active tasks</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">There are no tasks currently matching the selected filter in active sprints.</div>
                     </div>
                 )}
             </div>

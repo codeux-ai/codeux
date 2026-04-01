@@ -20,7 +20,7 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
 
     if (!events || events.length === 0) {
         return (
-            <div className="flex items-center justify-center py-12 text-slate-400 dark:text-slate-600">
+            <div className="flex items-center justify-center py-12 text-slate-500 dark:text-slate-400">
                 <div className="text-center">
                     <Terminal className="w-6 h-6 mx-auto mb-3 opacity-40" strokeWidth={1} />
                     <p className="text-xs font-mono">Awaiting runtime events...</p>
@@ -40,10 +40,10 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
                                 <span className={`text-[9px] font-bold uppercase tracking-[0.12em] ${cfg.text}`}>
                                     {cfg.label}
                                 </span>
-                                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">
                                     {event.eventType.replace(/_/g, " ")}
                                 </span>
-                                <span className="text-[9px] text-slate-400 dark:text-slate-600 font-mono">
+                                <span className="text-[9px] text-slate-500 dark:text-slate-400 font-mono">
                                     {formatTime(event.createdAt)}
                                 </span>
                             </div>

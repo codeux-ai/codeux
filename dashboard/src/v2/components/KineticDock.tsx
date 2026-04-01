@@ -18,7 +18,7 @@ const RIGHT_ITEMS = [
     { icon: Inbox,    label: "Memory",   path: "/memory",  color: "text-ember-400"  },
     { icon: Compass,  label: "Browser",  path: "/browser", color: "text-sky-500"    },
     { icon: Zap,      label: "Live",     path: "/live",    color: "text-status-red" },
-    { icon: Settings, label: "Config",   path: "/config",  color: "text-slate-400 dark:text-slate-400" },
+    { icon: Settings, label: "Config",   path: "/config",  color: "text-slate-500 dark:text-slate-400" },
 ] as const;
 
 const ALL_ITEMS = [...LEFT_ITEMS, ...RIGHT_ITEMS];
@@ -102,7 +102,7 @@ export const KineticDock: FunctionComponent = () => {
                     className={`w-5 h-5 relative z-10 transition-all duration-300
                         ${isActive
                             ? item.color
-                            : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-200'
+                            : 'text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200'
                         }`}
                     strokeWidth={isActive ? 2 : 1.5}
                 />

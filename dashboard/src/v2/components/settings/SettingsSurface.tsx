@@ -67,7 +67,7 @@ export const SettingsHeader: FunctionComponent<{
       <h2 className="mt-3 font-display text-4xl font-black tracking-tight text-slate-900 dark:text-white">
         {title}
       </h2>
-      <p className="mt-2 max-w-3xl text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+      <p className="mt-2 max-w-3xl text-sm font-medium leading-relaxed text-slate-600 dark:text-slate-400">
         {description}
       </p>
     </div>

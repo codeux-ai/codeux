@@ -376,10 +376,10 @@ export const LiveSessionPage: FunctionComponent = () => {
                             <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">
                                 {pausedIntervention.reason}
                             </p>
-                            <div className="mt-4 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                            <div className="mt-4 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
                                 What to do now
                             </div>
-                            <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                            <p className="mt-1 max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-400">
                                 {pausedIntervention.instructions}
                             </p>
                         </div>
@@ -422,7 +422,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             {/* ── Section Divider ─────────────────────────────────────── */}
             <div role="separator" className="w-full flex items-center justify-center py-4 relative z-10 overflow-hidden">
                 <div className="absolute inset-y-1/2 inset-x-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.06] to-transparent" />
-                <div className="bg-[#F9F8F4] dark:bg-void-900 px-6 py-1.5 border border-black/[0.06] dark:border-white/[0.06] rounded-full shadow-sm relative z-10 text-[9px] font-bold uppercase tracking-[0.25em] text-slate-400 dark:text-slate-600">
+                <div className="bg-[#F9F8F4] dark:bg-void-900 px-6 py-1.5 border border-black/[0.06] dark:border-white/[0.06] rounded-full shadow-sm relative z-10 text-[9px] font-bold uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">
                     Task Pipeline
                 </div>
             </div>
@@ -438,14 +438,14 @@ export const LiveSessionPage: FunctionComponent = () => {
                                    transition-all duration-200 flex items-center gap-2
                                    ${activeFilter === filter
                                        ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
-                                       : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                                       : "text-slate-600 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
                                    }`}
                     >
                         {filter}
                         <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded-md
                             ${activeFilter === filter
                                 ? "bg-signal-500/[0.12] text-signal-600 dark:text-signal-400"
-                                : "bg-black/[0.06] dark:bg-white/[0.06] text-slate-400"
+                                : "bg-black/[0.06] dark:bg-white/[0.06] text-slate-500 dark:text-slate-400"
                             }`}>
                             {taskCounts[filter]}
                         </span>
@@ -472,7 +472,7 @@ export const LiveSessionPage: FunctionComponent = () => {
                         <div className="group relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border-2 border-dashed border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-16 text-center">
                             <div className="relative z-10">
                                 <Play aria-hidden="true" className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-4" strokeWidth={1} />
-                                <p className="text-sm text-slate-400 dark:text-slate-600 font-medium">
+                                <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
                                     {activeFilter === "All"
                                         ? "Awaiting sprint decomposition..."
                                         : `No ${activeFilter.toLowerCase()} tasks.`

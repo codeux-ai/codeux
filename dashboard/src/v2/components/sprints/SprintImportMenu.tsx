@@ -42,7 +42,7 @@ export const SprintImportMenu = ({ disabled, onImportMarkdown }: SprintImportMen
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         disabled={disabled}
-        className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
+        className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
       >
         <Download className="h-3.5 w-3.5" strokeWidth={2.2} />
         Import
@@ -71,7 +71,7 @@ export const SprintImportMenu = ({ disabled, onImportMarkdown }: SprintImportMen
               <span className="text-xs font-bold text-slate-700 transition-colors group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-white">
                 Markdown
               </span>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400">
+              <span className="text-[10px] text-slate-600 dark:text-slate-400">
                 Import from text bundle
               </span>
             </div>
@@ -88,11 +88,11 @@ export const SprintImportMenu = ({ disabled, onImportMarkdown }: SprintImportMen
               <span className="text-xs font-bold text-slate-700 transition-colors group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-white">
                 Jira
               </span>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400">
+              <span className="text-[10px] text-slate-600 dark:text-slate-400">
                 Connect your backlog
               </span>
             </div>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-slate-500 dark:bg-void-900 dark:text-slate-400">
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-bold uppercase tracking-wider text-slate-600 dark:bg-void-900 dark:text-slate-400">
               Soon
             </span>
           </button>

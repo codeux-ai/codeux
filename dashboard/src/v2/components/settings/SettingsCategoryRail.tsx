@@ -43,11 +43,11 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   return (
     <div className="sticky top-16 flex flex-col gap-3 rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-3 backdrop-blur-2xl shadow-[0_12px_32px_rgba(15,23,42,0.05)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_18px_38px_rgba(0,0,0,0.24)]">
       <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.03] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-        <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-600">
+        <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
           <Layers3 className="h-3.5 w-3.5" strokeWidth={2} />
           Categories
         </div>
-        <div className="mt-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+        <div className="mt-2 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
           {normalizedSearch
             ? `Showing ${filteredCategories.length} categories for “${settingsSearch.trim()}”.`
             : "Jump directly into the area you need without digging through the full settings tree."}
@@ -75,7 +75,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
               <div className={`absolute left-0 top-3 bottom-3 w-[2.5px] rounded-full ${isDanger ? "bg-status-red" : "bg-signal-500"}`} />
             ) : null}
 
-            <span className="w-5 shrink-0 text-right font-mono text-[9px] font-bold text-slate-300 dark:text-slate-600">
+            <span className="w-5 shrink-0 text-right font-mono text-[9px] font-bold text-slate-400 dark:text-slate-500">
               {category.num}
             </span>
 
@@ -85,7 +85,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
                   ? isDanger
                     ? "text-status-red"
                     : "text-signal-500"
-                  : "text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300"
+                  : "text-slate-500 group-hover:text-slate-700 dark:text-slate-400 dark:group-hover:text-slate-200"
               }`}
               strokeWidth={1.75}
             />
@@ -101,7 +101,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
               >
                 {category.label}
               </div>
-              <div className="mt-0.5 truncate text-[10px] font-medium leading-tight text-slate-400 dark:text-slate-600">
+              <div className="mt-0.5 truncate text-[10px] font-medium leading-tight text-slate-500 dark:text-slate-400">
                 {category.description}
               </div>
             </div>

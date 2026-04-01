@@ -121,7 +121,7 @@ import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadge
 
         <SectionCard title="Worker Learnings Instruction" watermark="LRN" badge={getBadge("memory")}>
           <div className="pt-2 pb-1">
-            <div className="text-xs font-medium leading-relaxed text-slate-400 mb-3">
+            <div className="text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400 mb-3">
               This instruction is appended to every worker task prompt when auto-capture is enabled. It tells the AI provider what to observe and record in a temporary learnings file that gets processed into sprint memories.
             </div>
             <TextAreaInput

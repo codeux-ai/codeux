@@ -21,7 +21,7 @@ export const SectionCard: FunctionComponent<{
     </div>
 
     <div className={`relative z-10 flex items-center justify-between gap-3 border-b border-black/[0.05] px-6 py-4 dark:border-white/[0.04] ${danger ? "bg-status-red/[0.03]" : ""}`}>
-      <h3 className={`text-[11px] font-bold uppercase tracking-[0.18em] ${danger ? "text-status-red/70" : "text-slate-400 dark:text-slate-500"}`}>
+      <h3 className={`text-[11px] font-bold uppercase tracking-[0.18em] ${danger ? "text-status-red/70" : "text-slate-500 dark:text-slate-400"}`}>
         {title}
       </h3>
       {badge ? (
@@ -60,7 +60,7 @@ export const IntegrationConfigRow: FunctionComponent<{
           </span>
         ) : null}
       </div>
-      <div className="mt-1 max-w-sm text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+      <div className="mt-1 max-w-sm text-xs leading-relaxed text-slate-600 dark:text-slate-400">
         {description}
       </div>
     </div>

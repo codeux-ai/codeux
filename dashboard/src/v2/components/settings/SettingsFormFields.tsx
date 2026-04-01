@@ -70,7 +70,7 @@ export const PillChoiceGroup: FunctionComponent<{
         >
           <div className="text-[11px] font-bold uppercase tracking-[0.14em]">{option.label}</div>
           {option.hint ? (
-            <div className="mt-1 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
+            <div className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
               {option.hint}
             </div>
           ) : null}
@@ -157,15 +157,14 @@ export const MetricPill: FunctionComponent<{
 }> = ({ label, value, tone = "neutral" }) => (
   <div className={`rounded-[1rem] border px-3 py-2 ${
     tone === "signal"
-      ? "border-signal-500/20 bg-signal-500/[0.08] dark:border-signal-400/20 dark:bg-signal-400/[0.1]"
-      : "border-black/[0.06] bg-black/[0.03] dark:border-white/[0.06] dark:bg-white/[0.03]"
-  }`}
-  >
-    <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">{label}</div>
-    <div className={`mt-1 text-sm font-semibold ${
-      tone === "signal" ? "text-signal-700 dark:text-signal-200" : "text-slate-800 dark:text-slate-100"
+    ? "border-signal-500/20 bg-signal-500/[0.08] dark:border-signal-400/20 dark:bg-signal-400/[0.1]"
+    : "border-black/[0.06] bg-black/[0.03] dark:border-white/[0.06] dark:bg-white/[0.03]"
     }`}
     >
+    <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{label}</div>
+    <div className={`mt-1 text-sm font-semibold ${
+    tone === "signal" ? "text-signal-700 dark:text-signal-200" : "text-slate-800 dark:text-slate-100"
+    }`}    >
       {value}
     </div>
   </div>
@@ -194,7 +193,7 @@ export const Row: FunctionComponent<{
         ) : badge}
       </div>
       {description ? (
-        <div className="mt-0.5 text-xs font-medium leading-relaxed text-slate-400">{description}</div>
+        <div className="mt-0.5 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">{description}</div>
       ) : null}
     </div>
     <div className="shrink-0 rounded-[1.15rem] border border-black/[0.05] bg-white/75 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] dark:border-white/[0.05] dark:bg-white/[0.04]">
@@ -213,7 +212,7 @@ export const Card: FunctionComponent<{ title: string; description: string; badge
     <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
       <div>
         <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</h3>
-        <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">{description}</p>
+        <p className="mt-1 max-w-2xl text-sm font-medium text-slate-600 dark:text-slate-400">{description}</p>
       </div>
       {badge ? (
         <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-300">
