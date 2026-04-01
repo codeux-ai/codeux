@@ -32,21 +32,21 @@ vi.mock("../../../src/infrastructure/providers/cli/docker-runtime-paths.js", () 
 }));
 
 vi.mock("../../../src/infrastructure/providers/cli/docker-bootstrap-builder.js", () => ({
-  DockerBootstrapBuilder: vi.fn().mockImplementation(() => ({
-    build: vi.fn(() => "echo bootstrap"),
-  })),
+  DockerBootstrapBuilder: class DockerBootstrapBuilder {
+    build = vi.fn(() => "echo bootstrap");
+  },
 }));
 
 vi.mock("../../../src/infrastructure/providers/cli/docker-credential-mount-builder.js", () => ({
-  DockerCredentialMountBuilder: vi.fn().mockImplementation(() => ({
-    build: vi.fn(async () => []),
-  })),
+  DockerCredentialMountBuilder: class DockerCredentialMountBuilder {
+    build = vi.fn(async () => []);
+  },
 }));
 
 vi.mock("../../../src/infrastructure/providers/cli/docker-setup-image-cache.js", () => ({
-  DockerSetupImageCache: vi.fn().mockImplementation(() => ({
-    resolveImage: vi.fn(async () => ({ image: "node:24-bookworm" })),
-  })),
+  DockerSetupImageCache: class DockerSetupImageCache {
+    resolveImage = vi.fn(async () => ({ image: "node:24-bookworm" }));
+  },
 }));
 
 vi.mock("../../../src/git/sprint-branch-scheme.js", () => ({
@@ -266,28 +266,12 @@ describe("SprintPreviewService unit tests", () => {
     it("calls startSession with rebuild flag", async () => {
       const session = makeSession();
       deps.sprintPreviewRepository.getSession.mockReturnValue(session);
-      deps.sprintPreviewRepository.getSessionByProjectSprint.mockReturnValue(session);
-
-      vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
-        if (command === "docker" && args?.[0] === "run") {
-          return { exitCode: 0, stdout: "new-container-id", stderr: "", durationMs: 1 };
-        }
-        if (command === "docker" && args?.[0] === "ps") {
-          return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
-        }
-        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
-      });
 
       const service = new SprintPreviewService(deps as any);
-      // The startSession will eventually call docker run and waitForReadiness
-      // which may throw, but we're testing the flow calls startSession with rebuild: true
-      await service.rebuildSession("session-1").catch(() => {});
-      // Verify it tried to remove the old container
-      expect(runCommandStrict).toHaveBeenCalledWith(
-        "docker",
-        ["rm", "-f", expect.any(String)],
-        expect.any(String),
-      );
+      const startSessionSpy = vi.spyOn(service, "startSession").mockResolvedValue(session);
+
+      await expect(service.rebuildSession("session-1")).resolves.toEqual(session);
+      expect(startSessionSpy).toHaveBeenCalledWith("proj-1", "sprint-1", { rebuild: true });
     });
   });
 

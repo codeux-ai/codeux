@@ -4,6 +4,7 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   root: "dashboard",
+  cacheDir: "../.cache/vite/dashboard",
   plugins: [preact(), tailwindcss()],
   resolve: {
     alias: {

@@ -13,9 +13,24 @@ Test files are organized under `tests/`:
 npm test
 ```
 
+- Run backend tests only
+```bash
+npm run test:backend
+```
+
+- Run dashboard tests only
+```bash
+npm run test:dashboard
+```
+
 - Run coverage report (verifies 80% global thresholds)
 ```bash
 npm run test:coverage
+```
+
+- Run backend coverage only
+```bash
+npm run test:backend:coverage
 ```
 
 - Run the local fast CI mirror (strict TS validation plus tests)
@@ -26,9 +41,11 @@ npm run ci
 GitHub Actions optimization notes:
 - the hosted CI workflow is broader than the local `npm run ci` script: it also runs coverage, build, and audit gates
 - the hosted CI workflow cancels superseded runs for the same branch or PR
-- lint/typecheck, coverage-backed test execution, build, and audit run in parallel jobs
-- CI avoids a second plain `vitest` pass because `npm run test:coverage` already executes the full suite while enforcing thresholds
+- lint/typecheck, backend coverage, dashboard tests, build, and audit run in parallel jobs
+- CI avoids a second plain `vitest` pass because backend coverage already executes the backend suite while enforcing thresholds
+- dashboard tests run in their own non-coverage job because coverage thresholds target `src/**/*.ts`, not the dashboard bundle under `dashboard/`
 - dependency installation uses the cached npm package store with `npm ci --prefer-offline --no-audit`; the security scan still runs in its own audit job
+- Vite and Vitest now write transform and test caches into repo-local `.cache/` directories so GitHub Actions can restore them across workflow runs
 
 - Build backend and dashboard
 ```bash
