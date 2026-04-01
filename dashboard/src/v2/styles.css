@@ -1,0 +1,429 @@
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
+@plugin "@tailwindcss/typography";
+@source "../index.html";
+@source "./**/*.{ts,tsx}";
+
+@layer base {
+  :root {
+    --color-status-green: #007A5E;
+    --color-status-red: #D32F2F;
+    --color-status-amber: #9E5B00;
+    --color-status-violet: #7A00A3;
+    --color-form-border: #64748b;
+  }
+  .dark {
+    --color-status-green: #34D399;
+    --color-status-red: #F87171;
+    --color-status-amber: #FBBF24;
+    --color-status-violet: #C084FC;
+    --color-form-border: #64748b;
+  }
+
+  *:focus-visible {
+    outline: 2px solid #3b82f6;
+    outline-offset: 2px;
+  }
+
+  input,
+  textarea,
+  select {
+    border-color: var(--color-form-border);
+  }
+}
+
+@layer utilities {
+  .expand-grid {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .expand-grid.expanded {
+    grid-template-rows: 1fr;
+  }
+
+  .expand-content {
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(-8px) scale(0.99);
+    transition: opacity 300ms ease, transform 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .expanded .expand-content {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    transition-delay: 50ms;
+  }
+
+  /* Signal-tinted scrollbar — jade on warm void */
+  .dashboard-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 224, 160, 0.35) rgba(14, 12, 10, 0.3);
+  }
+
+  .dashboard-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .dashboard-scrollbar::-webkit-scrollbar-track {
+    background: linear-gradient(180deg, rgba(14, 12, 10, 0.15), rgba(14, 12, 10, 0.4));
+    border-radius: 9999px;
+  }
+
+  .dashboard-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(0, 224, 160, 0.5), rgba(0, 184, 130, 0.4));
+    border: 2px solid rgba(14, 12, 10, 0.5);
+    border-radius: 9999px;
+  }
+
+  .dashboard-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(0, 224, 160, 0.8), rgba(0, 184, 130, 0.7));
+  }
+
+  @keyframes qs-picker-in {
+    from {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.96);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes organic-morph {
+    0% {
+      border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+    }
+
+    34% {
+      border-radius: 70% 30% 50% 50% / 30% 30% 70% 70%;
+    }
+
+    67% {
+      border-radius: 30% 70% 60% 40% / 60% 50% 50% 40%;
+    }
+
+    100% {
+      border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+    }
+  }
+
+  @keyframes organic-morph-reverse {
+    0% {
+      border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+    }
+
+    34% {
+      border-radius: 30% 70% 60% 40% / 60% 50% 50% 40%;
+    }
+
+    67% {
+      border-radius: 70% 30% 50% 50% / 30% 30% 70% 70%;
+    }
+
+    100% {
+      border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+    }
+  }
+
+  .animate-organic {
+    animation: organic-morph 12s ease-in-out infinite;
+  }
+
+  .animate-organic-reverse {
+    animation: organic-morph-reverse 15s ease-in-out infinite;
+  }
+
+  /* Wave fluid — stat card hover
+     Uses a 2-cycle SVG at 200% container width.
+     translateX(-50%) = exactly one cycle width → mathematically seamless loop. */
+  @keyframes wave-drift {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  @keyframes shimmer {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(200%); }
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0; }
+  }
+
+  /* Chat page — typing indicator dots */
+  @keyframes typing-dot {
+    0%, 60%, 100% { transform: translateY(0);    opacity: 0.35; }
+    30%            { transform: translateY(-4px); opacity: 1;    }
+  }
+
+  /* Memory page — neural pulse traveling along SVG connection lines */
+  @keyframes dash-travel {
+    from { stroke-dashoffset: 24; }
+    to   { stroke-dashoffset: 0;  }
+  }
+
+  /* Memory page — slow radial breathe on brain core */
+  @keyframes brain-breathe {
+    0%, 100% { transform: scale(1)    rotate(0deg);   opacity: 0.7; }
+    50%       { transform: scale(1.06) rotate(180deg); opacity: 1;   }
+  }
+
+  /* Memory page — lobotomize mode red pulse on canvas */
+  @keyframes lobotomize-pulse {
+    0%, 100% { opacity: 0.04; }
+    50%       { opacity: 0.1;  }
+  }
+
+  /* ── Boat Race Animations ───────────────────────────────────────────── */
+
+  /* Ocean wave horizontal drift */
+  @keyframes ocean-drift {
+    0%   { transform: translateX(0) translateY(0); }
+    50%  { transform: translateX(30px) translateY(2px); }
+    100% { transform: translateX(0) translateY(0); }
+  }
+
+  .ocean-wave {
+    animation: ocean-drift 6s ease-in-out infinite;
+  }
+
+  /* Ship bobbing */
+  @keyframes ship-bob {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    25%      { transform: translateY(-3px) rotate(1deg); }
+    75%      { transform: translateY(2px) rotate(-0.5deg); }
+  }
+
+  .ship-bob {
+    animation: ship-bob 4s ease-in-out infinite;
+  }
+
+  /* Wake trail pulse */
+  @keyframes wake-pulse {
+    0%, 100% { opacity: 0.15; }
+    50%      { opacity: 0.3; }
+  }
+
+  /* Smoke float */
+  @keyframes smoke-float {
+    0%   { transform: translateY(0) scale(1); opacity: 0.3; }
+    100% { transform: translateY(-20px) scale(2); opacity: 0; }
+  }
+
+  /* Finish flag wave */
+  @keyframes flag-wave {
+    0%, 100% { transform: skewX(0deg); }
+    50%      { transform: skewX(-3deg); }
+  }
+
+  /* Boat race — soft edge fade */
+  .boat-race-bleed {
+    -webkit-mask-image:
+      linear-gradient(to right, transparent 0%, black 3%, black 97%, transparent 100%);
+    mask-image:
+      linear-gradient(to right, transparent 0%, black 3%, black 97%, transparent 100%);
+  }
+
+  /* View toggle glow underline */
+  @keyframes toggle-glow {
+    0%, 100% { box-shadow: 0 2px 8px rgba(0, 224, 160, 0.2); }
+    50%      { box-shadow: 0 2px 16px rgba(0, 224, 160, 0.4); }
+  }
+
+  /* Collapsible section animation */
+  .collapsible-section {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 500ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .collapsible-section.open {
+    grid-template-rows: 1fr;
+  }
+
+  .collapsible-content {
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 400ms ease, transform 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .collapsible-section.open .collapsible-content {
+    opacity: 1;
+    transform: translateY(0);
+    transition-delay: 80ms;
+  }
+
+  /* Stat card premium shimmer */
+  @keyframes stat-shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  .stat-card-premium::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      105deg,
+      transparent 40%,
+      rgba(255, 255, 255, 0.03) 45%,
+      rgba(255, 255, 255, 0.06) 50%,
+      rgba(255, 255, 255, 0.03) 55%,
+      transparent 60%
+    );
+    background-size: 200% 100%;
+    animation: stat-shimmer 4s ease-in-out infinite;
+    pointer-events: none;
+    border-radius: inherit;
+  }
+
+  @keyframes stats-delta-pop {
+    0% {
+      opacity: 0;
+      transform: translateY(8px) scale(0.92);
+    }
+    18% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    84% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.94);
+    }
+  }
+
+  .stats-delta-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 9999px;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    animation: stats-delta-pop 1.6s ease forwards;
+  }
+
+  .stats-delta-chip-positive {
+    border: 1px solid rgba(0, 224, 160, 0.18);
+    background: rgba(0, 224, 160, 0.12);
+    color: rgb(0, 171, 132);
+  }
+
+  .stats-delta-chip-negative {
+    border: 1px solid rgba(227, 0, 15, 0.18);
+    background: rgba(227, 0, 15, 0.1);
+    color: rgb(227, 0, 15);
+  }
+
+  /* DAG view ambient motion */
+  @keyframes dag-aurora-drift {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.65; }
+    33%      { transform: translate3d(20px, -18px, 0) scale(1.08); opacity: 0.85; }
+    66%      { transform: translate3d(-16px, 14px, 0) scale(0.94); opacity: 0.6; }
+  }
+
+  @keyframes dag-grid-drift {
+    0%   { transform: translate3d(0, 0, 0); }
+    100% { transform: translate3d(26px, 26px, 0); }
+  }
+
+  @keyframes dag-running-ring {
+    0%, 100% { opacity: 0.5; transform: scale(1); }
+    50%      { opacity: 1; transform: scale(1.02); }
+  }
+
+  .dag-aurora {
+    animation: dag-aurora-drift 14s ease-in-out infinite;
+  }
+
+  .dag-grid-pan {
+    animation: dag-grid-drift 22s linear infinite;
+  }
+
+  .dag-running-ring {
+    animation: dag-running-ring 2.4s ease-in-out infinite;
+  }
+
+  /* Text overflow breaking utilities */
+  .break-words {
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* Accessible touch target helpers */
+  .touch-target {
+    position: relative;
+  }
+  .touch-target::after {
+    content: '';
+    position: absolute;
+    inset: -8px; /* Expand hit area by 8px on all sides */
+    min-width: 44px;
+    min-height: 44px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  /* ── Chat Avatar & Widget Animations ───────────────────────────────────────────── */
+
+  /* Jules animated J */
+  @keyframes jules-j-draw {
+    0%   { stroke-dasharray: 0 100; stroke-dashoffset: 0; opacity: 0; }
+    50%  { stroke-dasharray: 100 0; stroke-dashoffset: 0; opacity: 1; }
+    100% { stroke-dasharray: 100 0; stroke-dashoffset: 100; opacity: 0; }
+  }
+
+  @keyframes jules-j-glow {
+    0%, 100% { filter: drop-shadow(0 0 2px rgba(0, 224, 160, 0.4)); }
+    50%      { filter: drop-shadow(0 0 6px rgba(0, 224, 160, 0.8)); }
+  }
+
+  .jules-j-glow {
+    animation: jules-j-glow 3s ease-in-out infinite;
+  }
+
+  /* Widget runtime pulsing */
+  @keyframes widget-running-border {
+    0%, 100% { box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.1); }
+    50%      { box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.3); }
+  }
+
+  .widget-running {
+    animation: widget-running-border 2.5s ease-in-out infinite;
+  }
+
+  @keyframes widget-queued-border {
+    0%, 100% { box-shadow: inset 0 0 0 1px rgba(100, 116, 139, 0.1); }
+    50%      { box-shadow: inset 0 0 0 1px rgba(100, 116, 139, 0.3); }
+  }
+
+  .widget-queued {
+    animation: widget-queued-border 2.5s ease-in-out infinite;
+  }
+
+  /* Reduced motion fallback */
+  @media (prefers-reduced-motion: reduce) {
+    .widget-running,
+    .widget-queued,
+    .ocean-wave,
+    .ship-bob,
+    .jules-j-glow,
+    .jules-j-draw {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+}
