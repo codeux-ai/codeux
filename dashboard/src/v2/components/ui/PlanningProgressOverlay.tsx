@@ -64,7 +64,11 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
   };
 
   return (
-    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 p-8 backdrop-blur-xl dark:bg-void-900/80">
+    <div 
+      className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/80 p-8 backdrop-blur-xl dark:bg-void-900/80"
+      role="status"
+      aria-busy="true"
+    >
       <button
         type="button"
         onClick={onDismiss}
