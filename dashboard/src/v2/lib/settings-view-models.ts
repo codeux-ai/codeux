@@ -1,5 +1,6 @@
 import type {
   DashboardSettings,
+  EffectiveSettingsResponse,
   ExternalSettingsHints,
   McpToolToggle,
   ProviderId,
@@ -146,6 +147,14 @@ export const cloneSystemSettings = (settings: SystemSettings): SystemSettings =>
   defaults: cloneProjectSettings(settings.defaults),
   mcpTools: cloneMcpTools(settings.mcpTools),
 });
+
+export const applyEffectiveProjectSettings = (effectiveProject: EffectiveSettingsResponse): { settings: ProjectSettings, sources: Record<string, SettingsValueSource> } => {
+  const nextProject = dashboardSettingsToProjectSettings(effectiveProject.settings);
+  return {
+    settings: cloneProjectSettings(nextProject),
+    sources: effectiveProject.sources,
+  };
+};
 
 export const applyExternalHintsToSystemSettings = (
   settings: SystemSettings,

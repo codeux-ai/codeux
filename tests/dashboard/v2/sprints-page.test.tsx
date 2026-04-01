@@ -11,6 +11,10 @@ import { useSprintsPageData } from "../../../dashboard/src/v2/pages/sprints/use-
 
 expect.extend(matchers);
 
+vi.mock("../../../dashboard/src/v2/hooks/use-project-effective-settings.js", () => ({
+  useProjectEffectiveSettings: vi.fn().mockReturnValue({ data: null, loading: false, error: null, refresh: vi.fn() }),
+}));
+
 vi.mock("../../../dashboard/src/v2/pages/sprints/use-sprints-page-data");
 vi.mock("../../../dashboard/src/v2/components/ui/SprintMarkdownModal", () => ({
   SprintMarkdownModal: ({ onClose }: { onClose: () => void }) => (

@@ -31,6 +31,7 @@ export const ChatRuntimeBadge: FunctionComponent<ChatRuntimeBadgeProps> = ({ sta
     <div
       class={`w-2 h-2 rounded-full ${getStatusColor()}`}
       role="status"
+      aria-live="polite"
       aria-label={getAriaLabel()}
       title={getAriaLabel()}
     />

@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { DashboardSettings, JulesSession, WorkerExecutionMode } from "../contracts/app-types.js";
+import type { DashboardSettings, JulesSession, WorkerExecutionMode, Subtask } from "../contracts/app-types.js";
 import type { WorkerTaskDispatchClaim } from "../contracts/execution-types.js";
 import type { ProjectAttentionItemRecord } from "../contracts/project-attention-types.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
@@ -22,6 +22,9 @@ import { ProjectWorkerAssignmentService } from "../domain/workers/project-worker
 import { WorkerTaskDispatchService } from "./worker-task-dispatch-service.js";
 import { CliWorkflowService } from "./cli-workflow-service.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
+import type { WorkerInboxReplyService } from "./worker-inbox-reply-service.js";
+import type { InstructionService } from "../instructions/instruction-template-service.js";
+import type { SprintExecutionStateService } from "./sprint-execution-state-service.js";
 
 const VIRTUAL_WORKER_RECONCILE_MS = 3_000;
 const VIRTUAL_WORKER_SESSION_POLL_MS = 2_000;
@@ -71,6 +74,11 @@ export interface VirtualWorkerServiceDependencies {
   projectAttentionService: ProjectAttentionService;
   workerTaskDispatchService: WorkerTaskDispatchService;
   cliWorkflowService: CliWorkflowService;
+  sprintExecutionStateService: SprintExecutionStateService;
+  workerInboxReplyService: WorkerInboxReplyService;
+  instructionService: InstructionService;
+  approveSessionPlan: (sessionId: string) => Promise<unknown>;
+  sendSessionMessage: (sessionId: string, prompt: string) => Promise<unknown>;
   logger?: Logger;
 }
 
@@ -84,6 +92,9 @@ export class VirtualWorkerService {
   private readonly scheduledProjects = new Set<string>();
 
   private reconcileTimer: ReturnType<typeof setInterval> | null = null;
+
+  private readonly ciAutofixRetryCounts = new Map<string, number>();
+  private readonly clarificationRetryCounts = new Map<string, number>();
 
   constructor(private readonly deps: VirtualWorkerServiceDependencies) {}
 
@@ -110,10 +121,10 @@ export class VirtualWorkerService {
   }
 
   scheduleProject(projectId: string, reason: string): void {
-    if (!this.projectNeedsVirtualWorker(projectId)) {
+    if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId)) {
       return;
     }
-    if (this.activeCycles.has(projectId) || this.scheduledProjects.has(projectId)) {
+    if (!this.projectNeedsVirtualWorker(projectId)) {
       return;
     }
 
@@ -169,19 +180,23 @@ export class VirtualWorkerService {
     if (!this.projectUsesVirtualWorkers(projectId)) {
       return false;
     }
+    if (this.activeCycles.has(projectId)) {
+      return false;
+    }
 
-    const openWorkerAttention = this.deps.projectAttentionService.listActiveProjectItems(projectId)
-      .some((item) => item.ownerType === "worker");
-    if (openWorkerAttention) {
+    const pickableAttention = this.pickNextWorkerAttention(projectId);
+    if (pickableAttention) {
       return true;
     }
 
-    return this.deps.executionRepository.listTaskDispatches({ projectId })
+    const pickableDispatch = this.deps.executionRepository.listTaskDispatches({ projectId })
       .some((dispatch) => (
         dispatch.executorType === "mcp_worker"
         && dispatch.status === "queued"
         && this.projectUsesVirtualWorkers(dispatch.projectId, dispatch.sprintId)
       ));
+
+    return pickableDispatch;
   }
 
   private async runProjectCycle(projectId: string, reason: string): Promise<void> {
@@ -223,11 +238,40 @@ export class VirtualWorkerService {
 
   private pickNextWorkerAttention(projectId: string): ProjectAttentionItemRecord | null {
     return this.deps.projectAttentionService.listActiveProjectItems(projectId)
-      .find((item) => (
-        item.ownerType === "worker"
-        && item.attentionType !== "merge_required"
-        && (item.status === "open" || (item.status === "claimed" && !item.assignedWorkerEndpointId))
-      )) || null;
+      .find((item) => {
+        if (item.ownerType !== "worker") {
+          return false;
+        }
+        if (item.status !== "open" && !(item.status === "claimed" && !item.assignedWorkerEndpointId)) {
+          return false;
+        }
+
+        // Avoid items that are in cooldown handled by orchestrator
+        if (item.summaryMarkdown.includes("Clarification cooldown active")) {
+          return false;
+        }
+
+        const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
+
+        if (item.attentionType === "merge_required") {
+          return false;
+        }
+
+        if (item.attentionType === "merge_conflict") {
+          return settings.ciIntelligence.resolveMergeConflicts;
+        }
+
+        if (item.attentionType === "ci_fix_required") {
+          return settings.ciIntelligence.waitForJulesCiAutofix;
+        }
+
+        if (item.attentionType === "action_required") {
+          return settings.automationInterventions.autoAnswerClarification || settings.automationInterventions.autoApprovePlan;
+        }
+
+        // Default: worker-owned items are handleable unless explicitly excluded above
+        return true;
+      }) || null;
   }
 
   private async handleTaskDispatch(workerEndpointId: string, claim: WorkerTaskDispatchClaim): Promise<void> {
@@ -349,12 +393,18 @@ export class VirtualWorkerService {
   }
 
   private async handleAttentionItem(workerEndpointId: string, item: ProjectAttentionItemRecord, reason: string): Promise<void> {
+    // Check if it's a cooldown item that we somehow claimed anyway
+    if (item.summaryMarkdown.includes("Clarification cooldown active")) {
+      // Just release it, don't escalate. The orchestrator will handle it.
+      return;
+    }
+
     const claimed = item.status === "claimed"
       ? this.deps.projectAttentionService.claimItem(item.id, workerEndpointId, `virtual_worker_reclaimed:${reason}`)
       : this.deps.projectAttentionService.claimItem(item.id, workerEndpointId, `virtual_worker_claimed:${reason}`);
     this.deps.workerEndpointRepository.touchWorkerEndpointHeartbeat(workerEndpointId, "connected");
 
-    if (claimed.attentionType === "merge_conflict") {
+    if (claimed.attentionType === "merge_conflict" || claimed.attentionType === "merge_required") {
       await this.resolveMergeConflictAttention(workerEndpointId, claimed);
       return;
     }
@@ -364,11 +414,88 @@ export class VirtualWorkerService {
       return;
     }
 
+    if (claimed.attentionType === "action_required") {
+      await this.resolveActionRequiredAttention(workerEndpointId, claimed);
+      return;
+    }
+
     this.escalateAttentionToHuman(workerEndpointId, claimed, [
       "Virtual worker cannot handle this worker-owned attention item automatically.",
       "",
       claimed.summaryMarkdown.trim(),
     ].join("\n"));
+  }
+
+  private async resolveActionRequiredAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
+    const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
+    const payload = item.payload || {};
+    const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : null;
+    const sessionState = typeof payload.sessionState === "string" ? payload.sessionState : null;
+
+    if (!sessionId) {
+      this.escalateAttentionToHuman(workerEndpointId, item, "No session ID available for action-required attention.");
+      return;
+    }
+
+    try {
+      if (sessionState === "AWAITING_PLAN_APPROVAL" && settings.automationInterventions.autoApprovePlan) {
+        await this.deps.approveSessionPlan(sessionId);
+        this.deps.projectAttentionService.resolveItem(item.id, {
+          status: "resolved",
+          reason: "virtual_worker_auto_approved_plan",
+          resolutionSummaryMarkdown: "Virtual worker automatically approved the session plan.",
+          workerEndpointId,
+        });
+        return;
+      }
+
+      if (sessionState === "AWAITING_USER_FEEDBACK" && settings.automationInterventions.autoAnswerClarification) {
+        const retryKey = item.taskId || item.id;
+        const retryCount = this.clarificationRetryCounts.get(retryKey) || 0;
+        const maxRetries = 3; // Policy: 3 auto-answers before escalation
+
+        if (retryCount >= maxRetries) {
+          this.escalateAttentionToHuman(workerEndpointId, item, `Virtual worker reached maximum clarification auto-answers (${maxRetries}). Escalating to human.`);
+          return;
+        }
+
+        const task = this.deps.projectManagementRepository.getTask(item.taskId || "");
+        const sprint = this.deps.projectManagementRepository.getSprint(item.sprintId || "");
+        if (!task || !sprint) {
+          throw new Error("Missing task or sprint context for clarification reply.");
+        }
+
+        const subtasks = await this.deps.sprintExecutionStateService.loadSubtasks(item.projectId, item.sprintId || "");
+
+        const reply = await this.deps.workerInboxReplyService.generateClarificationReply({
+          projectId: item.projectId,
+          sprintGoal: sprint.goal || "",
+          subtasks,
+          task: task as unknown as Subtask,
+        });
+
+        await this.deps.sendSessionMessage(sessionId, reply);
+        this.clarificationRetryCounts.set(retryKey, retryCount + 1);
+
+        this.deps.projectAttentionService.resolveItem(item.id, {
+          status: "resolved",
+          reason: "virtual_worker_auto_answered_clarification",
+          resolutionSummaryMarkdown: [
+            "Virtual worker automatically answered clarification request.",
+            "",
+            "Reply:",
+            reply,
+          ].join("\n"),
+          workerEndpointId,
+        });
+        return;
+      }
+
+      this.escalateAttentionToHuman(workerEndpointId, item, `Virtual worker cannot handle action-required state: ${sessionState || "unknown"}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.escalateAttentionToHuman(workerEndpointId, item, `Virtual worker failed to handle action-required attention: ${message}`);
+    }
   }
 
   private async resolveMergeConflictAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
@@ -530,6 +657,16 @@ export class VirtualWorkerService {
       payload.workerBranch ?? payload.branchName,
       "branchName",
     );
+
+    const retryKey = item.taskId || item.id;
+    const retryCount = this.ciAutofixRetryCounts.get(retryKey) || 0;
+    const maxRetries = settings.ciIntelligence.julesCiAutofixMaxRetries || 3;
+
+    if (retryCount >= maxRetries) {
+      this.escalateAttentionToHuman(workerEndpointId, item, `Virtual worker reached maximum CI autofix retries (${maxRetries}). Escalating to human.`);
+      return;
+    }
+
     const sessionId = `virtual-cifix-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     let worktreePath = this.workspaceManager.buildWorktreePath(repoPath, sessionId, workflowSettings.executionMode);
     const title = item.title;
@@ -548,7 +685,7 @@ export class VirtualWorkerService {
     });
     this.deps.sessionTracking.appendActivity(sessionId, {
       originator: "system",
-      description: `Virtual worker claimed CI fix for branch ${branchName}.`,
+      description: `Virtual worker claimed CI fix for branch ${branchName} (Attempt ${retryCount + 1}/${maxRetries}).`,
     });
 
     let cleanedUp = false;
@@ -581,6 +718,9 @@ export class VirtualWorkerService {
         originator: "system",
         description: `Pushed CI fix to ${branchName} at ${headSha}.`,
       });
+
+      this.ciAutofixRetryCounts.set(retryKey, retryCount + 1);
+
       this.deps.projectAttentionService.resolveItem(item.id, {
         status: "resolved",
         reason: "virtual_worker_ci_fix_resolved",
@@ -590,6 +730,7 @@ export class VirtualWorkerService {
           `Virtual ${this.getProviderLabel(provider)} worker fixed CI issues and pushed the updated branch.`,
           `Branch: ${branchName}`,
           `Head SHA: ${headSha}`,
+          `Attempt: ${retryCount + 1}/${maxRetries}`,
         ].join("\n"),
         workerEndpointId,
         payloadPatch: {
@@ -597,6 +738,7 @@ export class VirtualWorkerService {
           provider,
           branchName,
           headSha,
+          attempt: retryCount + 1,
         },
       });
       succeeded = true;

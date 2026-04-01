@@ -40,6 +40,41 @@ afterEach(async () => {
 });
 
 describe("ProjectRuntimeRepository", () => {
+  it("rolls back transaction on error", async () => {
+    const { projectRepository, runtimeRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Transaction Test Project",
+      sourceType: "local",
+      sourceRef: "/workspace/tx-project",
+    });
+
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "TX Sprint",
+      number: 1,
+    });
+
+    // Trigger rollback via throw inside runInTransaction
+    const db = (runtimeRepository as any).db;
+    const originalExec = db.exec.bind(db);
+    db.exec = (sql: string) => {
+      if (sql === "COMMIT") throw new Error("Mock rollback");
+      originalExec(sql);
+    };
+
+    try {
+      expect(() => {
+        runtimeRepository.syncDashboardStatus({
+          project_id: project.id,
+          sprint_id: sprint.id,
+          subtasks: [],
+          status: "AWAITING_PLAN_APPROVAL",
+        });
+      }).toThrow("Mock rollback");
+    } finally {
+      db.exec = originalExec;
+    }
+  });
+
   it("persists orchestration context and task runs for the selected project", async () => {
     const { storage, projectRepository, runtimeRepository, realtimeNotifier } = await createRepositories();
 

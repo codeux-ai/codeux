@@ -136,6 +136,10 @@ export class SettingsRepository {
     this.storage.resetAllData();
   }
 
+  createScopedResolver(): ScopedEffectiveSettingsResolver {
+    return new ScopedEffectiveSettingsResolver(this);
+  }
+
   resolveProjectDashboardSettings(projectId: string): EffectiveSettingsResponse {
     return resolveDashboardSettings({
       systemSettings: this.getSystemSettings(),
@@ -249,6 +253,68 @@ export class SettingsRepository {
     } catch {
       // Ignore migration failures and fall back to new defaults.
     }
+  }
+}
+
+export class ScopedEffectiveSettingsResolver {
+  private readonly repo: SettingsRepository;
+  private systemSettingsCache: SystemSettings | null = null;
+  private readonly projectSettingsCache = new Map<string, ProjectSettingsOverride>();
+  private readonly sprintSettingsCache = new Map<string, SprintSettingsOverride>();
+  private readonly projectResolvedCache = new Map<string, EffectiveSettingsResponse>();
+  private readonly sprintResolvedCache = new Map<string, EffectiveSettingsResponse>();
+
+  constructor(repo: SettingsRepository) {
+    this.repo = repo;
+  }
+
+  getSystemSettings(): SystemSettings {
+    if (!this.systemSettingsCache) {
+      this.systemSettingsCache = this.repo.getSystemSettings();
+    }
+    return this.systemSettingsCache;
+  }
+
+  getProjectSettings(projectId: string): ProjectSettingsOverride {
+    if (!this.projectSettingsCache.has(projectId)) {
+      this.projectSettingsCache.set(projectId, this.repo.getProjectSettings(projectId));
+    }
+    return this.projectSettingsCache.get(projectId)!;
+  }
+
+  getSprintSettings(sprintId: string): SprintSettingsOverride {
+    if (!this.sprintSettingsCache.has(sprintId)) {
+      this.sprintSettingsCache.set(sprintId, this.repo.getSprintSettings(sprintId));
+    }
+    return this.sprintSettingsCache.get(sprintId)!;
+  }
+
+  resolveProjectDashboardSettings(projectId: string): EffectiveSettingsResponse {
+    if (!this.projectResolvedCache.has(projectId)) {
+      this.projectResolvedCache.set(
+        projectId,
+        resolveDashboardSettings({
+          systemSettings: this.getSystemSettings(),
+          projectOverride: this.getProjectSettings(projectId),
+        })
+      );
+    }
+    return this.projectResolvedCache.get(projectId)!;
+  }
+
+  resolveSprintDashboardSettings(projectId: string, sprintId: string): EffectiveSettingsResponse {
+    const key = `${projectId}:${sprintId}`;
+    if (!this.sprintResolvedCache.has(key)) {
+      this.sprintResolvedCache.set(
+        key,
+        resolveDashboardSettings({
+          systemSettings: this.getSystemSettings(),
+          projectOverride: this.getProjectSettings(projectId),
+          sprintOverride: this.getSprintSettings(sprintId),
+        })
+      );
+    }
+    return this.sprintResolvedCache.get(key)!;
   }
 }
 

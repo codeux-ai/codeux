@@ -113,7 +113,10 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
             </div>
           </div>
         </div>
-        <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+        <h3
+          className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white"
+          aria-live="polite"
+        >
           {feedback.text}
         </h3>
         <p className="mx-auto max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">

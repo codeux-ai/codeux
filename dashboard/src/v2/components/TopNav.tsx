@@ -17,8 +17,8 @@ import {
     type WorkerRoutingPreference,
 } from "../lib/project-worker-options.js";
 import { setProjectPreferredWorker } from "../lib/project-api.js";
-import { fetchProjectEffectiveSettings, saveProjectSettings } from "../lib/settings-api.js";
-
+import { saveProjectSettings } from "../lib/settings-api.js";
+import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
 
 export function useDropdownKeyboard(
     isOpen: boolean,
@@ -105,7 +105,6 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [workerDropdownOpen, setWorkerDropdownOpen] = useState(false);
     const [showAddProject, setShowAddProject] = useState(false);
-    const [workerRouting, setWorkerRouting] = useState<WorkerRoutingPreference | null>(null);
     const [workerSwitchBusy, setWorkerSwitchBusy] = useState(false);
     const [sprintDropdownOpen, setSprintDropdownOpen] = useState(false);
     const sprintDropdownRef = useRef<HTMLDivElement>(null);
@@ -120,6 +119,14 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
 
     const { data: execution, loading: executionLoading, refetch: refreshExecution } = useExecutions(selectedProject?.id || null);
     const { data: sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
+
+    const { data: effectiveSettings, refresh: refreshEffectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
+
+    const workerRouting: WorkerRoutingPreference | null = effectiveSettings ? {
+        executionMode: effectiveSettings.settings.workers.executionMode,
+        virtualWorkerProvider: effectiveSettings.settings.workers.virtualWorkerProvider,
+    } : null;
+
     const { options: workerOptions, selectedOption: selectedWorker } = getProjectWorkerOptions(execution, workerRouting, executionLoading);
 
     const projectKb = useDropdownKeyboard(dropdownOpen, setDropdownOpen, dropdownRef);
@@ -131,25 +138,6 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
             gsap.fromTo(navRef.current, { y: -20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.9, ease: "power3.out" });
         }
     }, []);
-
-    const refreshWorkerRouting = useCallback(async (): Promise<void> => {
-        if (!selectedProject) {
-            setWorkerRouting(null);
-            return;
-        }
-
-        const response = await fetchProjectEffectiveSettings(selectedProject.id);
-        setWorkerRouting({
-            executionMode: response.settings.workers.executionMode,
-            virtualWorkerProvider: response.settings.workers.virtualWorkerProvider,
-        });
-    }, [selectedProject]);
-
-    useEffect(() => {
-        void refreshWorkerRouting().catch(() => {
-            setWorkerRouting(null);
-        });
-    }, [refreshWorkerRouting]);
 
     // Close dropdowns on outside click
     useEffect(() => {
@@ -178,11 +166,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
     };
 
     const handleWorkerSelect = async (option: WorkerOption) => {
-        if (!selectedProject || !option.isSelectable || workerSwitchBusy) return;
+        if (!selectedProject || !option.isSelectable || workerSwitchBusy || !effectiveSettings) return;
         setWorkerDropdownOpen(false);
         setWorkerSwitchBusy(true);
         try {
-            const effectiveSettings = await fetchProjectEffectiveSettings(selectedProject.id);
             const nextSettings = dashboardSettingsToProjectSettings(effectiveSettings.settings);
 
             if (option.type === "virtual" && option.providerId) {
@@ -203,7 +190,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                     workerEndpointKey: option.workerEndpointKey,
                 });
             }
-            await Promise.all([refreshExecution(), refreshWorkerRouting()]);
+            await Promise.all([refreshExecution(), refreshEffectiveSettings()]);
         } catch (err) {
             console.error("Failed to update preferred worker:", err);
         } finally {

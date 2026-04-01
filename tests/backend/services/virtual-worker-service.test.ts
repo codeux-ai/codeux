@@ -37,10 +37,10 @@ async function createFixture() {
   const projectAttentionService = new ProjectAttentionService(
     projectAttentionRepository,
     projectWorkerAssignmentRepository,
-    (projectId, sprintId) => (
+    (projectId, sprintId, resolver) => (
       sprintId
-        ? settingsRepository.resolveSprintDashboardSettings(projectId, sprintId).settings.workers.executionMode
-        : settingsRepository.resolveProjectDashboardSettings(projectId).settings.workers.executionMode
+        ? (resolver || settingsRepository).resolveSprintDashboardSettings(projectId, sprintId).settings.workers.executionMode
+        : (resolver || settingsRepository).resolveProjectDashboardSettings(projectId).settings.workers.executionMode
     ),
   );
   const workerTaskDispatchService = new WorkerTaskDispatchService(
@@ -51,10 +51,10 @@ async function createFixture() {
     projectWorkerAssignmentService,
     projectAttentionService,
     () => DEFAULT_DASHBOARD_SETTINGS,
-    (projectId, sprintId) => (
+    (projectId, sprintId, resolver) => (
       sprintId
-        ? settingsRepository.resolveSprintDashboardSettings(projectId, sprintId).settings.workers.executionMode
-        : settingsRepository.resolveProjectDashboardSettings(projectId).settings.workers.executionMode
+        ? (resolver || settingsRepository).resolveSprintDashboardSettings(projectId, sprintId).settings.workers.executionMode
+        : (resolver || settingsRepository).resolveProjectDashboardSettings(projectId).settings.workers.executionMode
     ),
   );
 
@@ -411,6 +411,12 @@ describe("VirtualWorkerService", () => {
       title: "Merge required",
       summaryMarkdown: "PR ready for merge.",
       payload: null,
+    });
+
+    settingsRepository.saveProjectSettings(project.id, {
+      ciIntelligence: {
+        resolveMergeConflicts: true,
+      },
     });
 
     const virtualWorkerService = new VirtualWorkerService({
@@ -959,9 +965,129 @@ describe("VirtualWorkerService", () => {
     vi.spyOn((virtualWorkerService as any), "ensureMergeConflictResolved").mockResolvedValue(undefined);
     vi.spyOn((virtualWorkerService as any), "finalizeMergeCommit").mockResolvedValue(undefined);
 
-    // Let it run and hit the command runner (which will fail because it's not a real git repo)
-    // This will cover the try and catch blocks!
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+  });
+
+  it("escalates to human when provider execution fails during handleAttentionItem", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
+
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:999",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "merge_conflict",
+      severity: "high",
+      ownerType: "worker",
+      title: "Merge Conflict",
+      summaryMarkdown: "Resolve it",
+      payload: { repoPath: "/test", conflictingBranches: { source: "src", target: "tgt" } },
+    });
+
+    vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockRejectedValue(new Error("Provider failed"));
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    const updatedItem = projectAttentionService.getItem(item.id);
+    expect(updatedItem?.status).toBe("resolved"); // The original item is resolved because it's escalated
+
+    const activeItems = projectAttentionService.listActiveProjectItems(project.id);
+    expect(activeItems.some(i => i.attentionType === "human_escalation_required")).toBe(true);
+  });
+
+  it("resolveActionRequiredAttention covers auto-approve plan path", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository, settingsRepository } = await setupServiceWithProject();
+
+    settingsRepository.saveProjectSettings(project.id, {
+      automationInterventions: {
+        autoApprovePlan: true,
+      },
+    });
+
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:789",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      attentionType: "action_required",
+      severity: "medium",
+      ownerType: "worker",
+      title: "Action Required",
+      summaryMarkdown: "Awaiting plan approval",
+      payload: { sessionId: "sess-1", sessionState: "AWAITING_PLAN_APPROVAL" },
+    });
+
+    const approveSpy = vi.spyOn((virtualWorkerService as any).deps, "approveSessionPlan").mockResolvedValue(undefined);
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    expect(approveSpy).toHaveBeenCalledWith("sess-1");
+    const updatedItem = projectAttentionService.getItem(item.id);
+    expect(updatedItem?.status).toBe("resolved");
+    expect(updatedItem?.payload?.resolutionReason).toBe("virtual_worker_auto_approved_plan");
+  });
+
+  it("resolveActionRequiredAttention covers auto-answer clarification path", async () => {
+    const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository, settingsRepository, projectManagementRepository } = await setupServiceWithProject();
+
+    settingsRepository.saveProjectSettings(project.id, {
+      automationInterventions: {
+        autoAnswerClarification: true,
+      },
+    });
+
+    const sprint = projectManagementRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      number: 1,
+      goal: "Test Goal",
+    });
+    const task = projectManagementRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      id: "TASK-1",
+      title: "Test Task",
+    });
+
+    const endpoint = workerEndpointRepository.createVirtualEndpoint({
+      endpointKey: "virtual:012",
+      displayName: "Virtual Worker",
+      status: "connected",
+      transport: "internal",
+      capabilities: {},
+    });
+
+    const item = projectAttentionService.openItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      attentionType: "action_required",
+      severity: "medium",
+      ownerType: "worker",
+      title: "Action Required",
+      summaryMarkdown: "Awaiting user feedback",
+      payload: { sessionId: "sess-2", sessionState: "AWAITING_USER_FEEDBACK" },
+    });
+
+    vi.spyOn((virtualWorkerService as any).deps.sprintExecutionStateService, "loadSubtasks").mockResolvedValue([]);
+    const replySpy = vi.spyOn((virtualWorkerService as any).deps.workerInboxReplyService, "generateClarificationReply").mockResolvedValue("Test Reply");
+    const sendSpy = vi.spyOn((virtualWorkerService as any).deps, "sendSessionMessage").mockResolvedValue(undefined);
+
+    await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    expect(replySpy).toHaveBeenCalled();
+    expect(sendSpy).toHaveBeenCalledWith("sess-2", "Test Reply");
+    const updatedItem = projectAttentionService.getItem(item.id);
+    expect(updatedItem?.status).toBe("resolved");
+    expect(updatedItem?.payload?.resolutionReason).toBe("virtual_worker_auto_answered_clarification");
   });
 
   async function setupService() {
@@ -973,6 +1099,11 @@ describe("VirtualWorkerService", () => {
         deps.workerEndpointRepository,
       ),
       cliWorkflowService: { startTask: vi.fn() } as any,
+      sprintExecutionStateService: { loadSubtasks: vi.fn() } as any,
+      workerInboxReplyService: { generateClarificationReply: vi.fn() } as any,
+      instructionService: {} as any,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: vi.fn(),
     });
     return { ...deps, virtualWorkerService };
   }

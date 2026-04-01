@@ -1,33 +1,36 @@
 import { h, type FunctionComponent } from "preact";
 import { AlertCircle, Zap, Activity } from "lucide-preact";
 import type { ChatThread } from "../../types.js";
+import { buildWorkerOptionIndex } from "../../lib/chat-entity-index.js";
 import type { WorkerOption } from "../../lib/project-worker-options.js";
 
 const resolveSelectedRouteId = (thread: ChatThread | null, workerOptions: WorkerOption[]): string => {
-  const defaultOption = workerOptions.find((option) => option.isPrimary) || null;
+  const index = buildWorkerOptionIndex(workerOptions);
+
   if (!thread) {
-    return defaultOption?.id || "";
+    return index.primary?.id || "";
   }
 
   if (thread.runtimeState?.routeKind === "virtual" && thread.runtimeState.virtualProvider) {
-    return workerOptions.find((option) => option.providerId === thread.runtimeState?.virtualProvider)?.id || "";
+    return index.byProvider.get(thread.runtimeState.virtualProvider)?.id || "";
   }
 
   if (thread.runtimeState?.routeKind === "worker") {
-    const explicitWorkerOption = workerOptions.find((option) => (
-      (thread.runtimeState?.workerEndpointId && option.workerEndpointId === thread.runtimeState.workerEndpointId)
-      || (thread.connectionId && option.connectionId === thread.connectionId)
-    ));
-    if (explicitWorkerOption) {
-      return explicitWorkerOption.id;
+    if (thread.runtimeState.workerEndpointId) {
+      const option = index.byEndpoint.get(thread.runtimeState.workerEndpointId);
+      if (option) return option.id;
+    }
+    if (thread.connectionId) {
+      const option = index.byConnection.get(thread.connectionId);
+      if (option) return option.id;
     }
   }
 
   if (thread.connectionId) {
-    return workerOptions.find((option) => option.connectionId === thread.connectionId)?.id || "";
+    return index.byConnection.get(thread.connectionId)?.id || "";
   }
 
-  return defaultOption?.id || "";
+  return index.primary?.id || "";
 };
 
 interface ChatThreadHeaderProps {
