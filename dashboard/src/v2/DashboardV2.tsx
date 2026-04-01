@@ -25,19 +25,19 @@ export const DashboardV2: FunctionComponent = () => {
     }, []);
 
     return (
-        <main ref={mainContentRef} className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-24">
+        <main ref={mainContentRef} className="max-w-[2400px] mx-auto px-4 md:px-20 py-12 md:py-24 flex flex-col gap-12 md:gap-24">
             {/* Page Header */}
             <header className="flex flex-col md:flex-row items-start md:items-end justify-between w-full gap-6">
                 <div>
-                    <h2 className="text-5xl md:text-6xl font-black tracking-tighter text-slate-900 dark:text-white mb-4 font-display leading-[0.95]">
+                    <h2 className="text-4xl md:text-6xl font-black tracking-tighter text-slate-900 dark:text-white mb-4 font-display leading-[0.95]">
                         Overview.
                     </h2>
-                    <p className="text-lg text-slate-500 dark:text-slate-500 font-medium max-w-xl leading-relaxed">
+                    <p className="text-base md:text-lg text-slate-500 dark:text-slate-500 font-medium max-w-xl leading-relaxed">
                         Real-time metrics and operational intelligence across your cluster.
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <div role="status" aria-label="Status: Cluster Optimal" className="px-5 py-2.5 text-xs font-bold uppercase tracking-widest rounded-full bg-signal-500/8 dark:bg-signal-500/10 text-signal-600 dark:text-signal-400 border border-signal-500/15 dark:border-signal-500/20 flex items-center gap-2.5 shadow-[0_0_20px_rgba(0,224,160,0.08)] backdrop-blur-md">
+                    <div role="status" aria-label="Status: Cluster Optimal" className="px-4 md:px-5 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-widest rounded-full bg-signal-500/8 dark:bg-signal-500/10 text-signal-600 dark:text-signal-400 border border-signal-500/15 dark:border-signal-500/20 flex items-center gap-2.5 shadow-[0_0_20px_rgba(0,224,160,0.08)] backdrop-blur-md">
                         <span aria-hidden="true" className="w-2 h-2 rounded-full bg-signal-500 relative">
                             <span className="absolute inset-0 rounded-full animate-ping bg-signal-400 opacity-60" />
                         </span>
@@ -52,7 +52,7 @@ export const DashboardV2: FunctionComponent = () => {
             </section>
 
             {/* Section Divider */}
-            <div className="w-full flex items-center justify-center py-4 relative z-10 overflow-hidden">
+            <div className="w-full flex items-center justify-center py-2 md:py-4 relative z-10 overflow-hidden">
                 <div className="absolute inset-y-1/2 inset-x-0 h-px bg-gradient-to-r from-transparent via-black/[0.06] dark:via-white/[0.06] to-transparent" />
                 <div className="bg-[#F9F8F4] dark:bg-void-900 px-6 py-1.5 border border-black/[0.06] dark:border-white/[0.06] rounded-full shadow-sm relative z-10 text-[9px] font-bold uppercase tracking-[0.25em] text-slate-400 dark:text-slate-600">
                     Data Streams
@@ -60,7 +60,7 @@ export const DashboardV2: FunctionComponent = () => {
             </div>
 
             {/* Main Grid */}
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-20 flex-grow relative z-20">
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-12 md:gap-24 flex-grow relative z-20">
                 {/* Sources and Tasks */}
                 <div className="xl:col-span-8 flex flex-col gap-24">
                     <section aria-label="Sources" className="w-full relative">

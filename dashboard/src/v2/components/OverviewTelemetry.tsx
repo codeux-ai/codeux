@@ -78,18 +78,18 @@ export const OverviewTelemetry: FunctionComponent = () => {
           </div>
         ) : (
           <div className="relative z-10 h-full flex flex-col">
-            <div className="grid grid-cols-3 gap-3 mb-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
               <div className="rounded-2xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-4">
                 <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Active Projects</div>
-                <div className="mt-2 text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry.activeProjects.length}</div>
+                <div className="mt-2 text-2xl md:text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry.activeProjects.length}</div>
               </div>
               <div className="rounded-2xl border border-status-amber/15 bg-status-amber/8 p-4">
                 <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-status-amber">Needs Attention</div>
-                <div className="mt-2 text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry.attentionProjects.length}</div>
+                <div className="mt-2 text-2xl md:text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry.attentionProjects.length}</div>
               </div>
-              <div className="rounded-2xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-4">
+              <div className="rounded-2xl border border-black/[0.05] dark:border-white/[0.06] bg-black/[0.02] dark:bg-white/[0.02] p-4 col-span-2 sm:col-span-1">
                 <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Timeline Events</div>
-                <div className="mt-2 text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry.recentEvents.length}</div>
+                <div className="mt-2 text-2xl md:text-3xl font-black font-mono text-slate-900 dark:text-white">{telemetry.recentEvents.length}</div>
               </div>
             </div>
 

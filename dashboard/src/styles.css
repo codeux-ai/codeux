@@ -372,6 +372,15 @@
     transform: translate(-50%, -50%);
   }
 
+  /* Scrollbar hiding utility */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Safari and Chrome */
+  }
+
   /* ── Chat Avatar & Widget Animations ───────────────────────────────────────────── */
 
   /* Jules animated J */

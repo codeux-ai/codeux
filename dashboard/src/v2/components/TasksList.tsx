@@ -38,12 +38,14 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
     return (
         <div className="w-full relative z-10 px-2">
             {/* Section Header */}
-            <div className="flex items-center justify-between mb-12">
-                <div className="flex items-center gap-8">
-                    <h2 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-display">Active Streams</h2>
-                    <FilterStrip options={FILTER_OPTIONS} active={activeFilter} onChange={setActiveFilter} />
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 md:mb-12 gap-6 sm:gap-8">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
+                    <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-display">Active Streams</h2>
+                    <div className="w-full sm:w-auto">
+                        <FilterStrip options={FILTER_OPTIONS} active={activeFilter} onChange={setActiveFilter} />
+                    </div>
                 </div>
-                <div className="text-xs font-semibold text-slate-400 dark:text-slate-600 font-mono">
+                <div className="text-xs font-semibold text-slate-400 dark:text-slate-600 font-mono hidden sm:block">
                     {filteredTasks.length} active
                 </div>
             </div>
