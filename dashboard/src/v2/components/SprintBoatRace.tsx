@@ -576,6 +576,14 @@ const FinishLine: FunctionComponent<{ x: number; isDark: boolean }> = memo(({ x,
 
 /* ─── Celestial body (moon in dark mode, sun in light mode) ──────────────── */
 
+const STAR_DATA = Array.from({ length: 30 }, (_, i) => ({
+    cx: 40 + hashStr(`sx${i}`) % (SVG_W - 80),
+    cy: 4 + hashStr(`sy${i}`) % 55,
+    r: 0.3 + (hashStr(`sr${i}`) % 8) / 10,
+    dur: 2 + (hashStr(`sd${i}`) % 40) / 10,
+    op: 0.04 + (hashStr(`so${i}`) % 10) / 100,
+}));
+
 const CelestialBody: FunctionComponent<{ isDark: boolean }> = memo(({ isDark }) => {
     if (isDark) {
         return (
@@ -587,15 +595,10 @@ const CelestialBody: FunctionComponent<{ isDark: boolean }> = memo(({ isDark }) 
                 {/* Crescent shadow */}
                 <circle cx={SVG_W * 0.88 + 5} cy={26} r={9} fill="#030810" opacity={0.06} />
                 {/* Stars */}
-                {[...Array(30)].map((_, i) => {
-                    const cx = 40 + hashStr(`sx${i}`) % (SVG_W - 80);
-                    const cy = 4 + hashStr(`sy${i}`) % 55;
-                    const r = 0.3 + (hashStr(`sr${i}`) % 8) / 10;
-                    const dur = 2 + (hashStr(`sd${i}`) % 40) / 10;
-                    const op = 0.04 + (hashStr(`so${i}`) % 10) / 100;
+                {STAR_DATA.map((star, i) => {
                     return (
-                        <circle key={`s${i}`} cx={cx} cy={cy} r={r} fill="white" opacity={op}>
-                            <animate attributeName="opacity" values={`${op};${op + 0.12};${op}`} dur={`${dur}s`} repeatCount="indefinite" />
+                        <circle key={`s${i}`} cx={star.cx} cy={star.cy} r={star.r} fill="white" opacity={star.op}>
+                            <animate attributeName="opacity" values={`${star.op};${star.op + 0.12};${star.op}`} dur={`${star.dur}s`} repeatCount="indefinite" />
                         </circle>
                     );
                 })}
@@ -685,14 +688,15 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
     const svgRef = useRef<SVGSVGElement>(null);
     const [ripples, setRipples] = useState<{ x: number; y: number; id: number }[]>([]);
     const rippleIdRef = useRef(0);
+    const lastRippleRef = useRef(0);
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
         const svg = svgRef.current;
         if (!svg) return;
         // Throttle: only add ripple every ~200ms
         const now = performance.now();
-        if ((handleMouseMove as any)._lastRipple && now - (handleMouseMove as any)._lastRipple < 200) return;
-        (handleMouseMove as any)._lastRipple = now;
+        if (now - lastRippleRef.current < 200) return;
+        lastRippleRef.current = now;
 
         const rect = svg.getBoundingClientRect();
         const x = ((e.clientX - rect.left) / rect.width) * SVG_W;
@@ -976,7 +980,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                     className="w-full"
                     style={{ height: `${raceHeightPx}px` }}
                     preserveAspectRatio="xMidYMid meet"
-                    onMouseMove={handleMouseMove as any}
+                    onMouseMove={handleMouseMove}
                 >
                     <defs>
                         {/* Wake */}
