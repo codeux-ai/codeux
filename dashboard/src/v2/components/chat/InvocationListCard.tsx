@@ -26,9 +26,9 @@ export const InvocationListCard: FunctionComponent<{
   selectedInvocationId: string | null;
   onSelect: (invocationId: string) => void;
 }> = ({ invocations, selectedInvocationId, onSelect }) => (
-  <div className="space-y-3">
+  <div className="space-y-3" role="list">
     {invocations.map((invocation) => (
-      <div key={invocation.id} className="relative overflow-hidden rounded-[1.25rem]">
+      <article key={invocation.id} role="listitem" className="relative overflow-hidden rounded-[1.25rem]">
         <button
           type="button"
           onClick={() => onSelect(invocation.id)}
@@ -75,7 +75,7 @@ export const InvocationListCard: FunctionComponent<{
             </div>
           </div>
         </button>
-      </div>
+      </article>
     ))}
   </div>
 );

@@ -29,9 +29,9 @@ export const DashboardV2: FunctionComponent = () => {
             {/* Page Header */}
             <header className="flex flex-col md:flex-row items-start md:items-end justify-between w-full gap-6">
                 <div>
-                    <h2 className="text-5xl md:text-6xl font-black tracking-tighter text-slate-900 dark:text-white mb-4 font-display leading-[0.95]">
+                    <h1 className="text-5xl md:text-6xl font-black tracking-tighter text-slate-900 dark:text-white mb-4 font-display leading-[0.95]">
                         Overview.
-                    </h2>
+                    </h1>
                     <p className="text-lg text-slate-500 dark:text-slate-500 font-medium max-w-xl leading-relaxed">
                         Real-time metrics and operational intelligence across your cluster.
                     </p>

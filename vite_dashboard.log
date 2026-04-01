@@ -1,0 +1,23 @@
+
+> jules-subagents@1.2.0 dev:dashboard
+> vite
+
+
+  VITE v7.3.1  ready in 568 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+12:42:45 PM [vite] (client) hmr update /src/v2/components/KineticDock.tsx, /src/styles.css
+12:44:43 PM [vite] (client) hmr update /src/styles.css
+12:47:28 PM [vite] (client) hmr update /src/styles.css
+12:54:43 PM [vite] (client) page reload index.html
+12:55:40 PM [vite] (client) hmr update /src/v2/components/LiveTaskCard.tsx, /src/styles.css
+1:00:02 PM [vite] (client) hmr update /src/styles.css
+1:00:43 PM [vite] (client) hmr update /src/styles.css
+1:01:49 PM [vite] (client) hmr update /src/styles.css
+1:02:19 PM [vite] (client) hmr update /src/v2/components/LiveTaskCard.tsx, /src/styles.css
+1:06:09 PM [vite] (client) hmr update /src/styles.css
+1:06:43 PM [vite] (client) hmr update /src/v2/components/LiveTaskCard.tsx, /src/styles.css
+1:15:15 PM [vite] (client) page reload index.html
+1:17:49 PM [vite] (client) hmr update /src/styles.css
+1:18:25 PM [vite] (client) hmr update /src/styles.css

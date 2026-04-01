@@ -186,8 +186,8 @@ export const SprintsPage: FunctionComponent = () => {
       execution={execution}
       pendingActionIds={pendingActionIds}
     >
-      <div className="relative z-10 mx-auto flex max-w-[1920px] flex-col gap-20 px-8 py-24 md:px-20">
-        <div ref={headerRef} className="flex flex-wrap items-end justify-between gap-8">
+      <main className="relative z-10 mx-auto flex max-w-[1920px] flex-col gap-20 px-8 py-24 md:px-20">
+        <header ref={headerRef} className="flex flex-wrap items-end justify-between gap-8">
           <div className="flex flex-col gap-5">
             <div className="flex items-center gap-2.5 font-mono text-xs font-bold uppercase tracking-[0.15em] text-signal-500">
               <Target className="h-4 w-4" strokeWidth={2.5} />
@@ -275,7 +275,7 @@ export const SprintsPage: FunctionComponent = () => {
               {(showCreateComposer || editingSprint) ? "Close Composer" : "New Sprint"}
             </button>
           </div>
-        </div>
+        </header>
 
         {selectedProject ? (
           <>
@@ -427,7 +427,7 @@ export const SprintsPage: FunctionComponent = () => {
             Projects scope the sprint gallery. Select a project from the top navigation before creating or planning sprints.
           </div>
         )}
-      </div>
+      </main>
 
       {rowMenu && activeRowMenuSprint && (
         <div

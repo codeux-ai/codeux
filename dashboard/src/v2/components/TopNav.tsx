@@ -234,6 +234,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                     </div>
                     <input
                         type="text"
+                        aria-label="Search"
                         placeholder="Search projects, sprints, tasks..."
                         className="w-full h-9 pl-10 pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] focus:border-signal-500/40 dark:focus:border-signal-500/40 rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-signal-500/10 transition-all"
                     />
@@ -252,6 +253,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                         ref={projectKb.toggleRef}
                         onKeyDown={projectKb.onToggleKeyDown}
                         onClick={() => setDropdownOpen(!dropdownOpen)}
+                        aria-label="Select Project"
                         aria-haspopup="listbox"
                         aria-expanded={dropdownOpen}
                         className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group focus-visible:ring-2 focus-visible:ring-signal-500/50"
@@ -322,6 +324,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                             ref={sprintKb.toggleRef}
                             onKeyDown={sprintKb.onToggleKeyDown}
                             onClick={() => setSprintDropdownOpen(!sprintDropdownOpen)}
+                            aria-label="Select Sprint"
                             aria-haspopup="listbox"
                             aria-expanded={sprintDropdownOpen}
                             disabled={sprints.length === 0}
@@ -393,6 +396,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                             ref={workerKb.toggleRef}
                             onKeyDown={workerKb.onToggleKeyDown}
                             onClick={() => setWorkerDropdownOpen(!workerDropdownOpen)}
+                            aria-label="Select Worker"
                             aria-haspopup="listbox"
                             aria-expanded={workerDropdownOpen}
                             className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group focus-visible:ring-2 focus-visible:ring-signal-500/50"
@@ -504,7 +508,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 <div className="w-px h-5 bg-black/10 dark:bg-white/10" />
 
                 {/* Avatar */}
-                <div className="flex items-center gap-2.5 cursor-pointer group">
+                <button aria-label="User profile" className="flex items-center gap-2.5 cursor-pointer group focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-full">
                     <div className="w-8 h-8 rounded-full bg-signal-500/20 dark:bg-signal-500/15 p-[1.5px] shadow-[0_0_12px_rgba(0,224,160,0.15)] group-hover:shadow-[0_0_16px_rgba(0,224,160,0.25)] transition-shadow">
                         <div className="w-full h-full rounded-full bg-white dark:bg-void-800 flex items-center justify-center overflow-hidden">
                             <img
@@ -514,7 +518,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                             />
                         </div>
                     </div>
-                </div>
+                </button>
             </div>
             </nav>
         </header>

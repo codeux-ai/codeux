@@ -39,8 +39,8 @@ export const Sidebar: FunctionComponent = () => {
     }, [activeIndex]);
 
     return (
-        <nav
-            aria-label="Primary Navigation"
+        <aside
+            aria-label="Sidebar Navigation"
             ref={sidebarRef}
             className="w-[260px] h-screen shrink-0 border-r border-black/[0.05] dark:border-white/[0.04] bg-[#F5F3EF]/60 dark:bg-void-900 flex flex-col justify-between py-8 relative z-40"
         >
@@ -71,7 +71,7 @@ export const Sidebar: FunctionComponent = () => {
             </svg>
 
             {/* Logo */}
-            <a href="/" className="px-7 mb-10 flex items-center gap-3 group cursor-pointer relative z-10 w-fit">
+            <a href="/" aria-label="Jules Agent OS Home" className="px-7 mb-10 flex items-center gap-3 group cursor-pointer relative z-10 w-fit">
                 <div aria-hidden="true" className="w-9 h-9 rounded-2xl bg-void-900 dark:bg-[#F9F8F4] p-[1px] shadow-[0_0_16px_rgba(0,224,160,0.2)] group-hover:shadow-[0_0_24px_rgba(0,224,160,0.35)] transition-shadow duration-500">
                     <div className="w-full h-full bg-[#F9F8F4] dark:bg-void-900 rounded-[14px] flex items-center justify-center">
                         <div className="w-4 h-4 rounded-full bg-void-900 dark:bg-[#F9F8F4] relative">
@@ -85,7 +85,7 @@ export const Sidebar: FunctionComponent = () => {
             </a>
 
             {/* Navigation */}
-            <div ref={navRef} className="flex-1 px-4 flex flex-col relative z-10">
+            <nav ref={navRef} aria-label="Primary Navigation" className="flex-1 px-4 flex flex-col relative z-10">
                 <div className="px-4 text-[9px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.2em] mb-3">Workspace</div>
                 {navItems.map((item, idx) => {
                     const isActive = activeIndex === idx;
@@ -107,7 +107,7 @@ export const Sidebar: FunctionComponent = () => {
                         </button>
                     );
                 })}
-            </div>
+            </nav>
 
             {/* Settings */}
             <div className="px-4 relative z-10">
@@ -119,6 +119,6 @@ export const Sidebar: FunctionComponent = () => {
             </div>
 
             <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#F5F3EF] dark:from-void-900 to-transparent pointer-events-none z-0" />
-        </nav>
+        </aside>
     );
 };

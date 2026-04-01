@@ -239,17 +239,18 @@ export const BrowserPage: FunctionComponent = () => {
 
   if (!selectedProject) {
     return (
-      <div className="p-8">
+      <main className="p-8">
         <div className="rounded-[2rem] border border-black/[0.06] bg-white/60 p-8 text-sm text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+          <h1 className="sr-only">Sprint Browser</h1>
           Select a project first. The in-app browser launches one isolated preview container per sprint.
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div ref={shellRef} className="min-h-full px-6 py-6 md:px-8">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+    <main ref={shellRef} className="min-h-full px-6 py-6 md:px-8">
+      <header className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-signal-500">
             <Compass className="h-3.5 w-3.5" strokeWidth={2} />
@@ -281,7 +282,7 @@ export const BrowserPage: FunctionComponent = () => {
             Start Preview
           </button>
         </div>
-      </div>
+      </header>
 
       {error && (
         <div className="mb-5 rounded-2xl border border-status-red/20 bg-status-red/10 px-4 py-3 text-sm text-status-red">
@@ -383,19 +384,19 @@ export const BrowserPage: FunctionComponent = () => {
         </PreviewWindowChrome>
 
         <div className="space-y-5">
-          <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Runtime notes</div>
+          <section className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+            <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Runtime notes</h2>
             <div className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">
               <p>Ports are assigned from the sprint preview range and bound to `127.0.0.1` to avoid conflicts with the main dashboard.</p>
               <p>Each preview container runs from a dedicated sprint snapshot directory, so multiple active sprints from the same project stay isolated without registering git worktrees.</p>
             </div>
-          </div>
+          </section>
 
           {showScriptEditor && (
-            <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+            <section className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Startup script</div>
+                  <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Startup script</h2>
                   <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
                     {script?.mode === "script" ? "Custom file" : "Auto-generated fallback"}
                   </div>
@@ -412,20 +413,21 @@ export const BrowserPage: FunctionComponent = () => {
               </div>
               <textarea
                 value={scriptDraft}
+                aria-label="Startup script content"
                 onInput={(event) => setScriptDraft((event.currentTarget as HTMLTextAreaElement).value)}
                 className="h-72 w-full rounded-[1.5rem] border border-black/[0.08] bg-[#f7f3ea] p-4 font-mono text-[12px] leading-6 text-slate-800 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-[#05080d] dark:text-slate-100"
               />
-            </div>
+            </section>
           )}
 
-          <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
-            <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Container logs</div>
+          <section className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+            <h2 className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Container logs</h2>
             <pre className="max-h-[360px] overflow-auto rounded-[1.5rem] bg-[#f7f3ea] p-4 font-mono text-[11px] leading-6 text-slate-700 dark:bg-[#05080d] dark:text-slate-300">
               {logs || "No logs yet."}
             </pre>
-          </div>
+          </section>
         </div>
       </div>
-    </div>
+    </main>
   );
 };

@@ -186,9 +186,10 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     }, []);
 
     return (
-        <div
+        <article
             ref={cardRef}
             tabIndex={0}
+            aria-label={`Task: ${task.title}`}
             className="group relative overflow-hidden focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-signal-500 focus-visible:ring-offset-4 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800
                        bg-white/70 dark:bg-void-800/60
                        backdrop-blur-2xl
@@ -384,7 +385,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                 />,
                 document.body,
             )}
-        </div>
+        </article>
     );
 });
 

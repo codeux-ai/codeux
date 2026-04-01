@@ -16,9 +16,9 @@ export const ThreadListCard: FunctionComponent<{
   onDelete: (threadId: string) => void;
   deletingThreadId: string | null;
 }> = ({ threads, selectedThreadId, onSelect, onDelete, deletingThreadId }) => (
-  <div className="space-y-3">
+  <div className="space-y-3" role="list">
     {threads.map((thread) => (
-      <div key={thread.id} className="group relative overflow-hidden rounded-[1.25rem]">
+      <article key={thread.id} role="listitem" className="group relative overflow-hidden rounded-[1.25rem]">
         <button
           type="button"
           onClick={() => onSelect(thread.id)}
@@ -65,7 +65,7 @@ export const ThreadListCard: FunctionComponent<{
         >
           {deletingThreadId === thread.id ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.1} /> : <Trash2 className="h-4 w-4" strokeWidth={2.1} />}
         </button>
-      </div>
+      </article>
     ))}
   </div>
 );
