@@ -622,7 +622,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
             />
           </Row>
-          <Row label="Feature PR auto-merge" description="Policy for merging feature PRs after checks and comments are satisfied." badge={getBadge("ciIntelligence.featurePrAutoMergeMode")}>
+          <Row label="Feature PR auto-merge" description="Policy for leaving feature work at PR creation or merging after checks and comments are satisfied." badge={getBadge("ciIntelligence.featurePrAutoMergeMode")}>
             <SelectInput
               value={settings.ciIntelligence.featurePrAutoMergeMode}
               onChange={(value) => update({
@@ -633,12 +633,13 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
               options={[
                 { value: "OFF", label: "Off" },
+                { value: "CREATE_PR", label: "Create PR" },
                 { value: "WHEN_GREEN", label: "When green" },
                 { value: "ALWAYS", label: "Always" },
               ]}
             />
           </Row>
-          <Row label="Main branch auto-merge" description="Policy for merging the main branch PR after checks and comments are satisfied." badge={getBadge("ciIntelligence.mainBranchAutoMergeMode")}>
+          <Row label="Main branch auto-merge" description="Policy for leaving the final main PR at creation or merging it after checks and comments are satisfied." badge={getBadge("ciIntelligence.mainBranchAutoMergeMode")}>
             <SelectInput
               value={settings.ciIntelligence.mainBranchAutoMergeMode}
               onChange={(value) => update({
@@ -649,6 +650,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
               options={[
                 { value: "OFF", label: "Off" },
+                { value: "CREATE_PR", label: "Create PR" },
                 { value: "WHEN_GREEN", label: "When green" },
                 { value: "ALWAYS", label: "Always" },
               ]}
