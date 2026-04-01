@@ -14,5 +14,5 @@ interface StatusDotProps {
 }
 
 export const StatusDot: FunctionComponent<StatusDotProps> = ({ status, className = "w-1.5 h-1.5" }) => (
-    <span className={`rounded-full shrink-0 ${className} ${dotClasses[status] ?? dotClasses.idle}`} />
+    <span role="status" aria-label={`Status: ${status}`} className={`rounded-full shrink-0 ${className} ${dotClasses[status] ?? dotClasses.idle}`} />
 );

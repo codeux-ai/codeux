@@ -504,7 +504,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 <div className="w-px h-5 bg-black/10 dark:bg-white/10" />
 
                 {/* Avatar */}
-                <div tabIndex={0} className="flex items-center gap-2.5 cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-full">
+                <button aria-label="User Profile" className="flex items-center gap-2.5 cursor-pointer group focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-full">
                     <div className="w-8 h-8 rounded-full bg-signal-500/20 dark:bg-signal-500/15 p-[1.5px] shadow-[0_0_12px_rgba(0,224,160,0.15)] group-hover:shadow-[0_0_16px_rgba(0,224,160,0.25)] transition-shadow">
                         <div className="w-full h-full rounded-full bg-white dark:bg-void-800 flex items-center justify-center overflow-hidden">
                             <img
@@ -514,7 +514,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                             />
                         </div>
                     </div>
-                </div>
+                </button>
             </div>
             </nav>
         </header>
