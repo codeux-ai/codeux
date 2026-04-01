@@ -133,14 +133,14 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
                 onClick={() => setWindowState("closed")}
               className="group flex h-3 w-3 items-center justify-center rounded-full bg-status-red/80 hover:bg-status-red"
             >
-              <X className="h-2 w-2 text-red-900 opacity-0 group-hover:opacity-100" strokeWidth={3} />
+              <X className="h-2 w-2 text-red-900 opacity-0 group-hover:opacity-100 group-active:opacity-100 group-focus-within:opacity-100" strokeWidth={3} />
             </button>
             <button
               type="button"
               onClick={() => setWindowState("minimized")}
               className="group flex h-3 w-3 items-center justify-center rounded-full bg-amber-400/80 hover:bg-amber-400"
             >
-              <Minus className="h-2 w-2 text-amber-900 opacity-0 group-hover:opacity-100" strokeWidth={3} />
+              <Minus className="h-2 w-2 text-amber-900 opacity-0 group-hover:opacity-100 group-active:opacity-100 group-focus-within:opacity-100" strokeWidth={3} />
             </button>
             <button
               type="button"
@@ -148,9 +148,9 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               className="group flex h-3 w-3 items-center justify-center rounded-full bg-signal-500/90 hover:bg-signal-500"
             >
               {isFullscreen ? (
-                <Minimize2 className="h-2 w-2 text-green-900 opacity-0 group-hover:opacity-100" strokeWidth={3} />
+                <Minimize2 className="h-2 w-2 text-green-900 opacity-0 group-hover:opacity-100 group-active:opacity-100 group-focus-within:opacity-100" strokeWidth={3} />
               ) : (
-                <Maximize2 className="h-2 w-2 text-green-900 opacity-0 group-hover:opacity-100" strokeWidth={3} />
+                <Maximize2 className="h-2 w-2 text-green-900 opacity-0 group-hover:opacity-100 group-active:opacity-100 group-focus-within:opacity-100" strokeWidth={3} />
               )}
             </button>
           </div>

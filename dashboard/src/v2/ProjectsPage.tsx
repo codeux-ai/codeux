@@ -180,11 +180,11 @@ const ProjectCard: FunctionComponent<{
                 {/* Actions — slide up on hover */}
                 <div
                     className="flex items-center gap-1
-                               opacity-0 group-hover:opacity-100
-                               translate-y-1.5 group-hover:translate-y-0
+                               opacity-0 group-hover:opacity-100 group-active:opacity-100 group-focus-within:opacity-100
+                               translate-y-1.5 group-hover:translate-y-0 group-active:translate-y-0 group-focus-within:translate-y-0
                                transition-[opacity,transform] duration-300"
                 >
-                    <button className="w-7 h-7 flex items-center justify-center rounded-xl
+                    <button className="touch-target w-7 h-7 flex items-center justify-center rounded-xl
                                        bg-black/[0.04] dark:bg-white/[0.04]
                                        hover:bg-black/[0.08] dark:hover:bg-white/[0.08]
                                        text-slate-400 hover:text-slate-900 dark:hover:text-white
@@ -195,7 +195,7 @@ const ProjectCard: FunctionComponent<{
                             }}>
                         <ExternalLink className="w-3 h-3" strokeWidth={2} />
                     </button>
-                    <button className="w-7 h-7 flex items-center justify-center rounded-xl
+                    <button className="touch-target w-7 h-7 flex items-center justify-center rounded-xl
                                        bg-black/[0.04] dark:bg-white/[0.04]
                                        hover:bg-black/[0.08] dark:hover:bg-white/[0.08]
                                        text-slate-400 hover:text-slate-900 dark:hover:text-white
@@ -206,7 +206,7 @@ const ProjectCard: FunctionComponent<{
                             }}>
                         <Settings className="w-3 h-3" strokeWidth={2} />
                     </button>
-                    <button className="w-7 h-7 flex items-center justify-center rounded-xl
+                    <button className="touch-target w-7 h-7 flex items-center justify-center rounded-xl
                                        bg-black/[0.04] dark:bg-white/[0.04]
                                        hover:bg-status-red/[0.1]
                                        text-slate-400 hover:text-status-red

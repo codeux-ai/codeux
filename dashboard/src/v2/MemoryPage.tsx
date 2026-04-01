@@ -130,7 +130,7 @@ const ModelCard: FunctionComponent<{
             )}
             {model.active && !reembedding && (
                 <button onClick={onReembed}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
+                    className="touch-target flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
                                bg-signal-500/10 text-signal-500 hover:bg-signal-500/20 transition-colors duration-200">
                     <RefreshCw className="w-3 h-3" strokeWidth={2.5} />
                     Re-embed{staleCount > 0 ? ` (${staleCount} stale)` : " All"}
@@ -192,7 +192,7 @@ const Inspector: FunctionComponent<{
             }}
         >
             <button onClick={onClose}
-                className="absolute top-4 right-4 w-7 h-7 rounded-full flex items-center justify-center
+                className="touch-target absolute top-4 right-4 w-7 h-7 rounded-full flex items-center justify-center
                            bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08]
                            transition-colors duration-200">
                 <X className="w-3.5 h-3.5 text-slate-500" strokeWidth={2} />
@@ -328,13 +328,13 @@ const AddMemoryModal: FunctionComponent<{
                 </div>
                 <div className="flex items-center gap-2 pt-2">
                     <button onClick={onClose}
-                        className="flex-1 py-2.5 rounded-xl text-xs font-bold
+                        className="touch-target flex-1 py-2.5 rounded-xl text-xs font-bold
                                    bg-black/[0.04] dark:bg-white/[0.04] text-slate-500 hover:text-slate-900 dark:hover:text-white
                                    transition-colors duration-200">
                         Cancel
                     </button>
                     <button onClick={handleSubmit} disabled={!content.trim() || saving}
-                        className="flex-1 py-2.5 rounded-xl text-xs font-bold
+                        className="touch-target flex-1 py-2.5 rounded-xl text-xs font-bold
                                    bg-signal-500 text-void-900 hover:bg-signal-400
                                    shadow-[0_2px_12px_rgba(0,224,160,0.3)]
                                    transition-colors duration-200 disabled:opacity-50">
@@ -1129,7 +1129,7 @@ export const MemoryPage: FunctionComponent = () => {
                         </p>
                     </div>
                     <button onClick={handleReembed}
-                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-bold shrink-0
+                        className="touch-target flex items-center gap-1.5 px-4 py-2 rounded-xl text-[11px] font-bold shrink-0
                                    bg-amber-500 text-white hover:bg-amber-600
                                    transition-colors duration-200 shadow-[0_2px_8px_rgba(245,158,11,0.25)]">
                         <RefreshCw className="w-3 h-3" strokeWidth={2.5} />

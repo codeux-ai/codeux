@@ -277,7 +277,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 </button>
                                 <button
                                     type="submit"
-                                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] hover:-translate-y-px"
+                                    className="touch-target group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] hover:-translate-y-px"
                                 >
                                     <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                                     Add Project

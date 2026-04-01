@@ -150,7 +150,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
       )}
 
       <div className="relative z-20 flex h-full w-full flex-col items-center justify-center p-8 text-center">
-        <div className={`absolute top-5 flex items-center gap-1.5 opacity-0 transition-opacity duration-300 group-hover:opacity-100 ${state.text}`}>
+        <div className={`absolute top-5 flex items-center gap-1.5 opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-active:opacity-100 group-focus-within:opacity-100 ${state.text}`}>
           <StatusIcon className={`h-3.5 w-3.5 ${isRunning ? "animate-pulse" : ""}`} strokeWidth={2.5} />
           <span className="text-[10px] font-bold uppercase tracking-widest">{state.label}</span>
         </div>
@@ -194,7 +194,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
           </div>
         )}
 
-        <div className="absolute bottom-5 flex w-full translate-y-2 items-center justify-center gap-3 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+        <div className="absolute bottom-5 flex w-full translate-y-2 items-center justify-center gap-3 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-active:translate-y-0 group-focus-within:translate-y-0 group-hover:opacity-100 group-active:opacity-100 group-focus-within:opacity-100">
           <button
             type="button"
             onClick={(event) => {

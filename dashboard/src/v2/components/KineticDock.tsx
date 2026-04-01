@@ -114,7 +114,7 @@ export const KineticDock: FunctionComponent = () => {
                                  text-white dark:text-void-900
                                  text-[11px] font-bold tracking-wide rounded-xl
                                  opacity-0 scale-75
-                                 group-hover:opacity-100 group-hover:scale-100
+                                 group-hover:opacity-100 group-active:opacity-100 group-focus-within:opacity-100 group-hover:scale-100
                                  -translate-y-1 group-hover:-translate-y-0
                                  pointer-events-none
                                  transition-all duration-200 ease-out
