@@ -15,6 +15,7 @@ import {
   dashboardSettingsToProjectSettings,
 } from "../../lib/settings-view-models.js";
 import type { ProjectSettings, SettingsValueSource } from "../../../types.js";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 
 interface SprintSettingsOverrideModalProps {
   projectId: string;
@@ -30,7 +31,7 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
   onSaved,
 }) => {
   const backdropRef = useRef<HTMLDivElement>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
+  const cardRef = useFocusTrap(true, onClose);
 
   const [settings, setSettings] = useState<ProjectSettings | null>(null);
   const [savedSettings, setSavedSettings] = useState<ProjectSettings | null>(null);
@@ -65,16 +66,6 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
   useEffect(() => {
     void loadSettings();
   }, [projectId, sprint.id]);
-
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
 
   useEffect(() => {
     if (!message) {

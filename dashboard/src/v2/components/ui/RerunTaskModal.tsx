@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { X, RotateCcw, Trash2 } from "lucide-preact";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 
 const PROVIDER_OPTIONS = [
     { value: "", label: "Auto (use current setting)" },
@@ -27,10 +28,16 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     onConfirm,
 }) => {
     const backdropRef = useRef<HTMLDivElement>(null);
-    const cardRef = useRef<HTMLDivElement>(null);
 
     const [provider, setProvider] = useState("");
     const [clearWorktree, setClearWorktree] = useState(false);
+
+    const handleClose = () => {
+        gsap.to(cardRef.current, { y: 18, opacity: 0, scale: 0.97, duration: 0.22, ease: "power3.in" });
+        gsap.to(backdropRef.current, { opacity: 0, duration: 0.22, delay: 0.04, onComplete: onClose });
+    };
+
+    const cardRef = useFocusTrap(true, handleClose);
 
     useLayoutEffect(() => {
         gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
@@ -38,19 +45,6 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
             { y: 36, opacity: 0, scale: 0.96 },
             { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out", delay: 0.04 },
         );
-    }, []);
-
-    const handleClose = () => {
-        gsap.to(cardRef.current, { y: 18, opacity: 0, scale: 0.97, duration: 0.22, ease: "power3.in" });
-        gsap.to(backdropRef.current, { opacity: 0, duration: 0.22, delay: 0.04, onComplete: onClose });
-    };
-
-    useEffect(() => {
-        const handler = (e: KeyboardEvent) => {
-            if (e.key === "Escape") handleClose();
-        };
-        document.addEventListener("keydown", handler);
-        return () => document.removeEventListener("keydown", handler);
     }, []);
 
     const handleSubmit = () => {

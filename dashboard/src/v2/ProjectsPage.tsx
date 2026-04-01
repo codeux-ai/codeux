@@ -76,7 +76,17 @@ const ProjectCard: FunctionComponent<{
     return (
         <div
             ref={cardRef}
+            tabIndex={0}
+            role="button"
+            aria-label={`Select project ${source.name}`}
             onClick={onSelect}
+            onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                    if ((e.target as HTMLElement).closest('button')) return;
+                    e.preventDefault();
+                    onSelect();
+                }
+            }}
             onMouseEnter={onEnter}
             onMouseLeave={onLeave}
             className="group relative flex flex-col
@@ -86,7 +96,8 @@ const ProjectCard: FunctionComponent<{
                        rounded-[1.75rem]
                        p-7
                        shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
-                       overflow-hidden cursor-pointer"
+                       overflow-hidden cursor-pointer
+                       focus-visible:ring-2 focus-visible:ring-ember-500 focus-visible:outline-none"
             style={{
                 borderColor: isSelected ? "rgba(255,184,0,0.45)" : undefined,
                 boxShadow: isSelected ? "0 0 0 1px rgba(255,184,0,0.18), 0 8px 30px rgba(255,184,0,0.08)" : undefined,
