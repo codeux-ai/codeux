@@ -70,6 +70,22 @@ vi.mock("../../../dashboard/src/v2/hooks/use-preview-sessions.js", () => ({
   })),
 }));
 
+vi.mock("../../../dashboard/src/v2/hooks/use-project-effective-settings.js", () => ({
+  useProjectEffectiveSettings: vi.fn(() => ({
+    data: {
+      settings: {
+        sprintPreview: {
+          enabled: true,
+          showInAppBrowser: true,
+        },
+      },
+    },
+    loading: false,
+    error: null,
+    refresh: vi.fn(),
+  })),
+}));
+
 vi.mock("../../../dashboard/src/v2/lib/browser-api.js", () => ({
   fetchPreviewLogs: vi.fn().mockResolvedValue({ logs: "mock logs" }),
   fetchPreviewScript: vi.fn().mockResolvedValue({ content: "mock script", mode: "script", path: "/script.sh" }),

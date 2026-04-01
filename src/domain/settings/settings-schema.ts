@@ -292,10 +292,14 @@ const validateSprintPreview = (
     issues.push({ path, message: "Expected an object" });
     return;
   }
+  if (typeof value.enabled !== "boolean") issues.push({ path: `${path}.enabled`, message: "Expected a boolean" });
+  if (typeof value.showInAppBrowser !== "boolean") issues.push({ path: `${path}.showInAppBrowser`, message: "Expected a boolean" });
   if (typeof value.autoStartOnRunningSprint !== "boolean") issues.push({ path: `${path}.autoStartOnRunningSprint`, message: "Expected a boolean" });
   if (typeof value.rebuildOnTaskCompletion !== "boolean") issues.push({ path: `${path}.rebuildOnTaskCompletion`, message: "Expected a boolean" });
   if (typeof value.rebuildOnSprintCompletion !== "boolean") issues.push({ path: `${path}.rebuildOnSprintCompletion`, message: "Expected a boolean" });
+  if (typeof value.pullLatestOnRebuild !== "boolean") issues.push({ path: `${path}.pullLatestOnRebuild`, message: "Expected a boolean" });
   if (typeof value.autoStopOnTerminalSprint !== "boolean") issues.push({ path: `${path}.autoStopOnTerminalSprint`, message: "Expected a boolean" });
+  if (typeof value.maxConcurrentContainers !== "number") issues.push({ path: `${path}.maxConcurrentContainers`, message: "Expected a number" });
   if (typeof value.hostPortRangeStart !== "number") issues.push({ path: `${path}.hostPortRangeStart`, message: "Expected a number" });
   if (typeof value.hostPortRangeEnd !== "number") issues.push({ path: `${path}.hostPortRangeEnd`, message: "Expected a number" });
   if (typeof value.containerAppPort !== "number") issues.push({ path: `${path}.containerAppPort`, message: "Expected a number" });

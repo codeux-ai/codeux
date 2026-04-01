@@ -854,16 +854,19 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
       </Card>
 
       <Card
-        title="Sprint Browser"
-        description="Preview container behavior, routing range, and startup script overrides for the in-app browser."
+        title="Browser Preview"
+        description="Preview runtime controls, browser visibility, rebuild policy, and container limits for the in-app browser."
         badge={sprintPreviewSource ? sourceLabel(sprintPreviewSource) : undefined}
       >
         <div className="grid gap-3 xl:grid-cols-2">
           {[
-            ["autoStartOnRunningSprint", "Auto-start running sprint previews"],
-            ["rebuildOnTaskCompletion", "Rebuild after task completion"],
-            ["rebuildOnSprintCompletion", "Rebuild after sprint completion"],
-            ["autoStopOnTerminalSprint", "Auto-stop on terminal sprint"],
+            ["enabled", "Preview runtime enabled"],
+            ["showInAppBrowser", "Show in-app browser workspace"],
+            ["autoStartOnRunningSprint", "Launch preview when sprint starts"],
+            ["rebuildOnTaskCompletion", "Rebuild preview on task completion"],
+            ["rebuildOnSprintCompletion", "Rebuild preview on sprint completion"],
+            ["pullLatestOnRebuild", "Pull latest Git changes before rebuild"],
+            ["autoStopOnTerminalSprint", "Stop preview when sprint ends"],
           ].map(([field, label]) => (
             <Row key={field} label={label} description={`Enable ${label.toLowerCase()} for this scope.`} badge={getBadge(`sprintPreview.${field}`)}>
               <Toggle
@@ -879,6 +882,19 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           ))}
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
+          <Row label="Maximum active preview containers" description="Stop the oldest active previews before launching another one when this limit is exceeded." badge={getBadge("sprintPreview.maxConcurrentContainers")}>
+            <NumberInput
+              value={settings.sprintPreview.maxConcurrentContainers}
+              onChange={(value) => update({
+                sprintPreview: {
+                  ...settings.sprintPreview,
+                  maxConcurrentContainers: value,
+                },
+              })}
+              min={1}
+              max={100}
+            />
+          </Row>
           <Row label="Host port range start" description="Lower bound for localhost preview port allocation." badge={getBadge("sprintPreview.hostPortRangeStart")}>
             <NumberInput
               value={settings.sprintPreview.hostPortRangeStart}

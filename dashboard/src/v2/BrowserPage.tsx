@@ -24,6 +24,7 @@ import {
 } from "./lib/browser-api.js";
 import { normalizePath, buildPreviewOrigin } from "./lib/preview-origin.js";
 import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
+import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { PreviewSessionSlider } from "./components/browser/PreviewSessionSlider.js";
 import { PreviewWindowChrome } from "./components/browser/PreviewWindowChrome.js";
 
@@ -52,6 +53,7 @@ export const BrowserPage: FunctionComponent = () => {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const { selectedProject } = useProjectData();
   const { data: sprints, selectedSprint, selectedSprintId } = useSprints(selectedProject?.id || null);
+  const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
 
   const [script, setScript] = useState<SprintPreviewScript | null>(null);
   const [scriptDraft, setScriptDraft] = useState("");
@@ -99,6 +101,9 @@ export const BrowserPage: FunctionComponent = () => {
   }, [selectedSprint?.id, sprints]);
 
   const removingSessionIdSet = useMemo(() => new Set(removingSessionIds), [removingSessionIds]);
+  const previewEnabled = effectiveSettings?.settings.sprintPreview.enabled ?? true;
+  const showInAppBrowser = effectiveSettings?.settings.sprintPreview.showInAppBrowser ?? true;
+  const launchEnabled = previewEnabled && showInAppBrowser;
   const visibleSelectedSession = selectedSession && !removingSessionIdSet.has(selectedSession.id)
     ? selectedSession
     : null;
@@ -195,6 +200,10 @@ export const BrowserPage: FunctionComponent = () => {
 
   const handleStart = async (sprintId = launchSprintId) => {
     if (!selectedProject || !sprintId) return;
+    if (!previewEnabled) {
+      setError("Browser Preview is disabled for this project.");
+      return;
+    }
     setLaunching(true);
     try {
       const session = await startPreviewSession(selectedProject.id, sprintId);
@@ -209,6 +218,10 @@ export const BrowserPage: FunctionComponent = () => {
 
   const handleRebuild = async () => {
     if (!visibleSelectedSession) return;
+    if (!previewEnabled) {
+      setError("Browser Preview is disabled for this project.");
+      return;
+    }
     setSessionActionPending(true);
     try {
       await rebuildPreviewSession(visibleSelectedSession.id);
@@ -332,11 +345,27 @@ export const BrowserPage: FunctionComponent = () => {
           onLaunchSprintChange={setLaunchSprintId}
           onLaunchContainer={() => void handleStart()}
           onRemoveSession={(sessionId) => void handleRemove(sessionId)}
+          launchEnabled={launchEnabled}
           launchBusy={launching}
           removingSessionIds={removingSessionIds}
         />
       </div>
 
+      {(!showInAppBrowser || !previewEnabled) && (
+        <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-8 text-sm text-slate-500 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Browser Preview</div>
+          <div className="mt-3 text-lg font-semibold text-slate-900 dark:text-white">
+            {!previewEnabled ? "Preview runtime is disabled." : "In-app browser workspace is hidden."}
+          </div>
+          <p className="mt-2 max-w-2xl leading-6">
+            {!previewEnabled
+              ? "Enable `Preview runtime enabled` in Browser Preview settings to launch and rebuild preview containers again."
+              : "Enable `Show in-app browser workspace` in Browser Preview settings to restore the embedded browser surface in the dashboard."}
+          </p>
+        </div>
+      )}
+
+      {showInAppBrowser && previewEnabled && (
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <PreviewWindowChrome
           session={visibleSelectedSession}
@@ -466,6 +495,7 @@ export const BrowserPage: FunctionComponent = () => {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 };

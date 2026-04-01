@@ -121,6 +121,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
     const { data: sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
 
     const { data: effectiveSettings, refresh: refreshEffectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
+    const browserVisible = !selectedProject || (
+        (effectiveSettings?.settings.sprintPreview.enabled ?? true)
+        && (effectiveSettings?.settings.sprintPreview.showInAppBrowser ?? true)
+    );
 
     const workerRouting: WorkerRoutingPreference | null = effectiveSettings ? {
         executionMode: effectiveSettings.settings.workers.executionMode,
@@ -478,7 +482,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 {/* Docker Status */}
                 <DockerStatusMenu />
 
-                <BrowserSessionsMenu />
+                <BrowserSessionsMenu enabled={browserVisible} />
 
                 {/* Notifications */}
                 <button

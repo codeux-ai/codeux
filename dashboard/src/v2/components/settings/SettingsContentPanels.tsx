@@ -3,6 +3,7 @@ import type { SettingsPageState } from "../../hooks/use-settings-page-state.js";
 import { SettingsGeneralPanel } from "./panels/SettingsGeneralPanel.js";
 import { SettingsModelsPanel } from "./panels/SettingsModelsPanel.js";
 import { SettingsSprintPanel } from "./panels/SettingsSprintPanel.js";
+import { SettingsBrowserPanel } from "./panels/SettingsBrowserPanel.js";
 import { SettingsAgentsPanel } from "./panels/SettingsAgentsPanel.js";
 import { SettingsMemoryPanel } from "./panels/SettingsMemoryPanel.js";
 import { SettingsIntegrationsPanel } from "./panels/SettingsIntegrationsPanel.js";
@@ -20,6 +21,8 @@ export const SettingsContentPanels: FunctionComponent<{
       return <SettingsModelsPanel state={state} />;
     case "sprint":
       return <SettingsSprintPanel state={state} />;
+    case "browser":
+      return <SettingsBrowserPanel state={state} />;
     case "agents":
       return <SettingsAgentsPanel state={state} />;
     case "memory":

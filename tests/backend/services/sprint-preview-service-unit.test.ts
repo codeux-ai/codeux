@@ -78,6 +78,24 @@ import { SprintPreviewService } from "../../../src/services/sprint-preview-servi
 import { runCommandStrict } from "../../../src/services/cli-process-runner.js";
 import { normalizePreviewPath, readOptionalSprintPreviewScript } from "../../../src/services/sprint-preview-utils.js";
 
+function makePreviewSettings(overrides: Record<string, unknown> = {}) {
+  return {
+    enabled: true,
+    showInAppBrowser: true,
+    autoStartOnRunningSprint: true,
+    rebuildOnTaskCompletion: true,
+    rebuildOnSprintCompletion: true,
+    pullLatestOnRebuild: true,
+    autoStopOnTerminalSprint: false,
+    maxConcurrentContainers: 5,
+    hostPortRangeStart: 5555,
+    hostPortRangeEnd: 5560,
+    containerAppPort: 3000,
+    startupScriptPath: ".sprint-os/browser/start-preview.sh",
+    ...overrides,
+  };
+}
+
 function makeSession(overrides: Partial<SprintPreviewSession> = {}): SprintPreviewSession {
   return {
     id: "session-1",
@@ -159,16 +177,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     settingsRepository: {
       resolveSprintDashboardSettings: vi.fn(() => ({
         settings: {
-          sprintPreview: {
-            autoStartOnRunningSprint: true,
-            rebuildOnTaskCompletion: true,
-            rebuildOnSprintCompletion: true,
-            autoStopOnTerminalSprint: false,
-            hostPortRangeStart: 5555,
-            hostPortRangeEnd: 5560,
-            containerAppPort: 3000,
-            startupScriptPath: ".sprint-os/browser/start-preview.sh",
-          },
+          sprintPreview: makePreviewSettings(),
           git: { defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
           cliWorkflow: {
             containerImage: "node:24-bookworm",
@@ -272,6 +281,41 @@ describe("SprintPreviewService unit tests", () => {
 
       await expect(service.rebuildSession("session-1")).resolves.toEqual(session);
       expect(startSessionSpy).toHaveBeenCalledWith("proj-1", "sprint-1", { rebuild: true });
+    });
+  });
+
+  describe("startSession", () => {
+    it("rejects launches when preview runtime is disabled", async () => {
+      deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
+        settings: {
+          sprintPreview: makePreviewSettings({ enabled: false }),
+          git: { defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
+          cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
+        },
+      });
+
+      const service = new SprintPreviewService(deps as any);
+      await expect(service.startSession("proj-1", "sprint-1")).rejects.toThrow("Browser Preview is disabled");
+    });
+
+    it("stops the oldest active previews when the max concurrent limit would be exceeded", async () => {
+      deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
+        settings: {
+          sprintPreview: makePreviewSettings({ maxConcurrentContainers: 1 }),
+          git: { defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
+          cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
+        },
+      });
+
+      const service = new SprintPreviewService(deps as any);
+      vi.spyOn(service, "listSessions").mockResolvedValue([
+        makeSession({ id: "oldest", sprintId: "sprint-oldest", lastStartedAt: "2026-01-01T00:00:00Z" }),
+      ]);
+      const stopSessionSpy = vi.spyOn(service, "stopSession").mockResolvedValue(makeSession({ status: "stopped" }));
+
+      await service.startSession("proj-1", "sprint-1");
+
+      expect(stopSessionSpy).toHaveBeenCalledWith("oldest");
     });
   });
 
@@ -583,16 +627,12 @@ describe("SprintPreviewService unit tests", () => {
       });
       deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
         settings: {
-          sprintPreview: {
+          sprintPreview: makePreviewSettings({
             autoStartOnRunningSprint: false,
             rebuildOnTaskCompletion: false,
             rebuildOnSprintCompletion: false,
             autoStopOnTerminalSprint: true,
-            hostPortRangeStart: 5555,
-            hostPortRangeEnd: 5560,
-            containerAppPort: 3000,
-            startupScriptPath: ".sprint-os/browser/start-preview.sh",
-          },
+          }),
           git: { defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
           cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
         },
@@ -640,16 +680,12 @@ describe("SprintPreviewService unit tests", () => {
       });
       deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
         settings: {
-          sprintPreview: {
+          sprintPreview: makePreviewSettings({
             autoStartOnRunningSprint: false,
             rebuildOnTaskCompletion: false,
             rebuildOnSprintCompletion: false,
             autoStopOnTerminalSprint: false,
-            hostPortRangeStart: 5555,
-            hostPortRangeEnd: 5560,
-            containerAppPort: 3000,
-            startupScriptPath: ".sprint-os/browser/start-preview.sh",
-          },
+          }),
           git: { defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
           cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
         },
@@ -682,16 +718,12 @@ describe("SprintPreviewService unit tests", () => {
       });
       deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
         settings: {
-          sprintPreview: {
+          sprintPreview: makePreviewSettings({
             autoStartOnRunningSprint: true,
             rebuildOnTaskCompletion: false,
             rebuildOnSprintCompletion: false,
             autoStopOnTerminalSprint: false,
-            hostPortRangeStart: 5555,
-            hostPortRangeEnd: 5560,
-            containerAppPort: 3000,
-            startupScriptPath: ".sprint-os/browser/start-preview.sh",
-          },
+          }),
           git: { defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
           cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
         },
@@ -730,16 +762,12 @@ describe("SprintPreviewService unit tests", () => {
       deps.sprintPreviewRepository.getSessionByProjectSprint.mockReturnValue(null);
       deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
         settings: {
-          sprintPreview: {
+          sprintPreview: makePreviewSettings({
             autoStartOnRunningSprint: true,
             rebuildOnTaskCompletion: false,
             rebuildOnSprintCompletion: false,
             autoStopOnTerminalSprint: false,
-            hostPortRangeStart: 5555,
-            hostPortRangeEnd: 5560,
-            containerAppPort: 3000,
-            startupScriptPath: ".sprint-os/browser/start-preview.sh",
-          },
+          }),
           git: { defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
           cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
         },
@@ -759,6 +787,35 @@ describe("SprintPreviewService unit tests", () => {
       await service.reconcileSessions();
 
       expect(service.startSession).toHaveBeenCalledWith("proj-1", "sprint-1");
+    });
+
+    it("stops active preview sessions when preview runtime is disabled", async () => {
+      const session = makeSession({ status: "running", containerId: null, containerName: null });
+      deps.sprintPreviewRepository.listSessions.mockReturnValue([session]);
+      deps.projectManagementRepository.getSprint.mockReturnValue({
+        id: "sprint-1",
+        projectId: "proj-1",
+        name: "Sprint 1",
+        number: 1,
+        status: "running",
+        featureBranch: "feature/sprint-1",
+      });
+      deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
+        settings: {
+          sprintPreview: makePreviewSettings({ enabled: false }),
+          git: { defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
+          cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
+        },
+      });
+      deps.sprintPreviewRepository.updateSession.mockImplementation(
+        (id: string, patch: Partial<SprintPreviewSession>) => makeSession({ id, ...patch }),
+      );
+
+      const service = new SprintPreviewService(deps as any);
+      const stopSessionSpy = vi.spyOn(service, "stopSession").mockResolvedValue(makeSession({ status: "stopped" }));
+      await service.reconcileSessions();
+
+      expect(stopSessionSpy).toHaveBeenCalledWith("session-1");
     });
   });
 

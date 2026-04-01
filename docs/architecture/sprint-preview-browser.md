@@ -117,6 +117,20 @@ Rebuild behaviors:
 
 These behaviors are controlled through scoped settings under `sprintPreview`.
 
+Current preview controls include:
+- `enabled`
+- `showInAppBrowser`
+- `autoStartOnRunningSprint`
+- `rebuildOnTaskCompletion`
+- `rebuildOnSprintCompletion`
+- `pullLatestOnRebuild`
+- `autoStopOnTerminalSprint`
+- `maxConcurrentContainers`
+- `hostPortRangeStart`
+- `hostPortRangeEnd`
+- `containerAppPort`
+- `startupScriptPath`
+
 Startup hygiene:
 - Sprint OS now removes any existing `sprint-os.preview=true` containers on server startup before the preview reconciliation loop begins
 - Sprint OS also removes orphaned unlabeled setup-helper containers that were created by older inline setup-image preview flows
@@ -131,11 +145,14 @@ The dashboard now exposes:
 - a dedicated horizontal session slider strip above the browser surface, so the iframe starts directly below the cards instead of sharing a stretched header row
 - session cards in that rail are limited to persisted preview containers (`running`, `starting`, `stopped`, or `error`) rather than every sprint in the project
 - the rail ends with a placeholder-style `Launch Container` card that lets the operator choose any sprint from a selector and start a preview container without changing the current sprint scope elsewhere in the dashboard
-- sprint-preview controls in the `Sprint Engine` settings category
+- a dedicated `Browser Preview` settings category in the left settings rail for preview enablement, visibility, rebuild policy, Git sync, and container-cap controls
 - project-level `Sprint Browser` settings in the project settings editor for port range, startup script path, and automation overrides
 - per-sprint startup script editing in the browser page itself
 - preview logs, rebuild, stop, open, and remove actions
 - port routing status on preview cards, including container-port to host-port mappings such as `:4444 -> :5653`
+- when `showInAppBrowser` is disabled, Browser entry points are hidden from the dashboard shell and the `/browser` route shows a configuration notice instead of the embedded workspace
+- when `enabled` is disabled, preview reconciliation stops active preview containers and prevents new launches or rebuilds
+- when `maxConcurrentContainers` would be exceeded, Sprint OS stops the oldest active previews in the same project before starting the next one
 
 ## API Surface
 

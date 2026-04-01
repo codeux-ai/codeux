@@ -14,6 +14,7 @@ interface PreviewSessionSliderProps {
   onLaunchSprintChange: (sprintId: string) => void;
   onLaunchContainer: () => void;
   onRemoveSession: (sessionId: string) => void;
+  launchEnabled?: boolean;
   launchBusy?: boolean;
   removingSessionIds?: string[];
 }
@@ -55,6 +56,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
   onLaunchSprintChange,
   onLaunchContainer,
   onRemoveSession,
+  launchEnabled = true,
   launchBusy = false,
   removingSessionIds = [],
 }) => {
@@ -197,7 +199,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
             <select
               value={launchSprintId}
               onChange={(event) => onLaunchSprintChange((event.currentTarget as HTMLSelectElement).value)}
-              disabled={launchBusy || sprints.length === 0}
+              disabled={!launchEnabled || launchBusy || sprints.length === 0}
               className="w-full rounded-[1rem] border border-black/[0.08] bg-white/85 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {sprints.length === 0 && <option value="">No sprints available</option>}
@@ -211,7 +213,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
             <button
               type="button"
               onClick={onLaunchContainer}
-              disabled={launchBusy || sprints.length === 0 || !launchSprintId}
+              disabled={!launchEnabled || launchBusy || sprints.length === 0 || !launchSprintId}
               className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-[1rem] bg-signal-500 px-4 text-sm font-semibold text-void-900 transition hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Play className="h-4 w-4" strokeWidth={2.2} />

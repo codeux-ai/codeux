@@ -206,10 +206,14 @@ Dashboard behavior:
   - `containerMountGithubAuth`
 
 `sprintPreview` contains:
+- `enabled`
+- `showInAppBrowser`
 - `autoStartOnRunningSprint`
 - `rebuildOnTaskCompletion`
 - `rebuildOnSprintCompletion`
+- `pullLatestOnRebuild`
 - `autoStopOnTerminalSprint`
+- `maxConcurrentContainers`
 - `hostPortRangeStart`
 - `hostPortRangeEnd`
 - `containerAppPort`
@@ -220,6 +224,10 @@ Preview runtime notes:
 - preview session runtime state is stored in the app DB table `sprint_preview_sessions`, not the settings DB
 - `startupScriptPath` points to the editable preview startup script and is separate from `cliWorkflow.containerSetupScriptPath`
 - preview host ports are allocated from the configured range and bound to `127.0.0.1`
+- `showInAppBrowser` controls whether Browser entry points stay visible in the dashboard shell for the selected project scope
+- `enabled` disables new preview launches and causes reconciliation to stop active previews for that scope
+- `pullLatestOnRebuild` controls whether rebuilds sync the latest remote branch state before the preview export is regenerated
+- `maxConcurrentContainers` caps active preview containers per project by stopping the oldest previews before starting another
 
 `agents` contains:
 - `saveToProjectDirectory` (default `true`)

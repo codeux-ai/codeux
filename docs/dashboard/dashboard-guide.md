@@ -272,7 +272,7 @@ Legacy runtime:
 - Chat composer now sends on `Enter` and inserts a newline on `Shift+Enter`
 - Thread assignment control is explicitly labeled as `Worker:` in the thread header to make routing intent clearer
 - Worker-routed tasks are created from the same task modal and appear in the same board; the executor badge shows whether work is automatic, CLI-backed, Jules-backed, or queued for a connected worker
-- Settings page `Sprint Engine` now includes sprint-preview controls for auto-start, rebuild cadence, auto-stop, container app port, preview host port range, and the project-relative preview startup script path
+- Settings page now exposes Browser Preview as its own primary left-rail category, covering preview enablement, in-app browser visibility, launch/rebuild automation, Git sync on rebuild, maximum active preview containers, port allocation, and the project-relative preview startup script path
 
 ### Dashboard view
 - Task statistics

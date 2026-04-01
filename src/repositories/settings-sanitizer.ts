@@ -171,6 +171,14 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     ? input.sprintPreview
     : {}) as Partial<DashboardSettings["sprintPreview"]>;
   const sprintPreview = {
+    enabled: readBoolean(
+      sprintPreviewInput.enabled,
+      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.enabled,
+    ),
+    showInAppBrowser: readBoolean(
+      sprintPreviewInput.showInAppBrowser,
+      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.showInAppBrowser,
+    ),
     autoStartOnRunningSprint: readBoolean(
       sprintPreviewInput.autoStartOnRunningSprint,
       DEFAULT_DASHBOARD_SETTINGS.sprintPreview.autoStartOnRunningSprint,
@@ -183,10 +191,19 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
       sprintPreviewInput.rebuildOnSprintCompletion,
       DEFAULT_DASHBOARD_SETTINGS.sprintPreview.rebuildOnSprintCompletion,
     ),
+    pullLatestOnRebuild: readBoolean(
+      sprintPreviewInput.pullLatestOnRebuild,
+      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.pullLatestOnRebuild,
+    ),
     autoStopOnTerminalSprint: readBoolean(
       sprintPreviewInput.autoStopOnTerminalSprint,
       DEFAULT_DASHBOARD_SETTINGS.sprintPreview.autoStopOnTerminalSprint,
     ),
+    maxConcurrentContainers: Math.max(1, Math.min(100,
+      typeof sprintPreviewInput.maxConcurrentContainers === "number" && Number.isFinite(sprintPreviewInput.maxConcurrentContainers)
+        ? Math.round(sprintPreviewInput.maxConcurrentContainers)
+        : DEFAULT_DASHBOARD_SETTINGS.sprintPreview.maxConcurrentContainers
+    )),
     hostPortRangeStart: Math.max(1, Math.min(65535,
       typeof sprintPreviewInput.hostPortRangeStart === "number" && Number.isFinite(sprintPreviewInput.hostPortRangeStart)
         ? Math.round(sprintPreviewInput.hostPortRangeStart)

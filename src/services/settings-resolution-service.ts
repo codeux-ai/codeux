@@ -209,6 +209,12 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
     : defaults.hostPortRangeEnd;
 
   return {
+    enabled: typeof input.enabled === "boolean"
+      ? input.enabled
+      : defaults.enabled,
+    showInAppBrowser: typeof input.showInAppBrowser === "boolean"
+      ? input.showInAppBrowser
+      : defaults.showInAppBrowser,
     autoStartOnRunningSprint: typeof input.autoStartOnRunningSprint === "boolean"
       ? input.autoStartOnRunningSprint
       : defaults.autoStartOnRunningSprint,
@@ -218,9 +224,15 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
     rebuildOnSprintCompletion: typeof input.rebuildOnSprintCompletion === "boolean"
       ? input.rebuildOnSprintCompletion
       : defaults.rebuildOnSprintCompletion,
+    pullLatestOnRebuild: typeof input.pullLatestOnRebuild === "boolean"
+      ? input.pullLatestOnRebuild
+      : defaults.pullLatestOnRebuild,
     autoStopOnTerminalSprint: typeof input.autoStopOnTerminalSprint === "boolean"
       ? input.autoStopOnTerminalSprint
       : defaults.autoStopOnTerminalSprint,
+    maxConcurrentContainers: typeof input.maxConcurrentContainers === "number" && Number.isFinite(input.maxConcurrentContainers)
+      ? Math.max(1, Math.min(100, Math.round(input.maxConcurrentContainers)))
+      : defaults.maxConcurrentContainers,
     hostPortRangeStart,
     hostPortRangeEnd: Math.max(hostPortRangeStart, hostPortRangeEndCandidate),
     containerAppPort: typeof input.containerAppPort === "number" && Number.isFinite(input.containerAppPort)

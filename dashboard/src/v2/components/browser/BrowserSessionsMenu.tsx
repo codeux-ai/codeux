@@ -7,7 +7,7 @@ import { fetchPreviewSessions } from "../../lib/browser-api.js";
 import { buildPreviewUrl } from "../../lib/preview-origin.js";
 import type { SprintPreviewSession } from "../../../types.js";
 
-export const BrowserSessionsMenu: FunctionComponent = () => {
+export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ enabled = true }) => {
     const { selectedProject } = useProjectData();
     const [sessions, setSessions] = useState<SprintPreviewSession[]>([]);
     const [loading, setLoading] = useState(false);
@@ -72,6 +72,10 @@ export const BrowserSessionsMenu: FunctionComponent = () => {
         stopped: "bg-slate-500",
         error: "bg-ember-500",
     };
+
+    if (!enabled) {
+        return null;
+    }
 
     return (
         <div

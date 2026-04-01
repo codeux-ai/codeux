@@ -595,10 +595,14 @@ export interface CliWorkflowSettings {
 }
 
 export interface SprintPreviewSettings {
+  enabled: boolean;
+  showInAppBrowser: boolean;
   autoStartOnRunningSprint: boolean;
   rebuildOnTaskCompletion: boolean;
   rebuildOnSprintCompletion: boolean;
+  pullLatestOnRebuild: boolean;
   autoStopOnTerminalSprint: boolean;
+  maxConcurrentContainers: number;
   hostPortRangeStart: number;
   hostPortRangeEnd: number;
   containerAppPort: number;

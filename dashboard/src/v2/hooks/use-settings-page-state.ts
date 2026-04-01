@@ -26,7 +26,7 @@ import type {
 import { AlertTriangle, Bot, BrainCircuit, Cpu, Plug, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
 type SettingsScope = "system" | "project";
-type CategoryId = "general" | "models" | "sprint" | "agents" | "memory" | "integrations" | "danger";
+type CategoryId = "general" | "models" | "sprint" | "browser" | "agents" | "memory" | "integrations" | "danger";
 type AgentInstructionTemplateId = keyof ProjectSettings["agents"]["instructionTemplates"];
 
 interface Category {

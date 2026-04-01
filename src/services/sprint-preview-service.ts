@@ -97,6 +97,7 @@ export class SprintPreviewService {
       const sprint = this.requireSprint(projectId, sprintId);
       const effectiveSettings = this.resolveSettings(projectId, sprintId);
       const settings = effectiveSettings.sprintPreview;
+      this.assertPreviewEnabled(settings);
       const preparedScript = await this.prepareStartupScript(project.baseDir, settings);
       const featureBranch = sprint.featureBranch?.trim() || this.resolveSprintFeatureBranch(projectId, sprintId);
       const defaultBranch = effectiveSettings.git.defaultBranch?.trim() || project.defaultBranch?.trim() || "main";
@@ -121,6 +122,8 @@ export class SprintPreviewService {
           return refreshedExisting;
         }
       }
+
+      await this.enforceMaxConcurrentContainers(projectId, settings.maxConcurrentContainers, existing?.id || null);
 
       const session = existing || this.deps.sprintPreviewRepository.createSession({
         projectId,
@@ -171,7 +174,13 @@ export class SprintPreviewService {
         await fs.mkdir(runtimeHome, { recursive: true });
         await fs.mkdir(runtimeNpmPrefix, { recursive: true });
         await fs.mkdir(runtimeNpmCache, { recursive: true });
-        await this.materializePreviewWorkspace(project.baseDir, workspacePath, featureBranch, defaultBranch);
+        await this.materializePreviewWorkspace(
+          project.baseDir,
+          workspacePath,
+          featureBranch,
+          defaultBranch,
+          !options?.rebuild || settings.pullLatestOnRebuild !== false,
+        );
         await fs.mkdir(path.dirname(startupRuntimePath), { recursive: true });
         await fs.writeFile(startupRuntimePath, preparedScript.content, "utf8");
         await fs.chmod(startupRuntimePath, 0o755);
@@ -490,6 +499,13 @@ export class SprintPreviewService {
         .sprintRuns
         .some((run) => run.sprintId === session.sprintId && run.status === "running");
 
+      if (settings.enabled === false) {
+        if (refreshed.status === "running" || refreshed.status === "starting") {
+          await this.stopSession(refreshed.id).catch(() => undefined);
+        }
+        continue;
+      }
+
       if (settings.autoStartOnRunningSprint && activeRun && refreshed.status === "stopped") {
         await this.startSession(session.projectId, session.sprintId).catch((error) => {
           this.deps.logger?.warn("Failed to auto-start sprint preview session", {
@@ -555,6 +571,9 @@ export class SprintPreviewService {
         }
         const existing = this.deps.sprintPreviewRepository.getSessionByProjectSprint(project.id, sprint.id);
         const settings = this.resolveSettings(project.id, sprint.id).sprintPreview;
+        if (settings.enabled === false) {
+          continue;
+        }
         if (!existing && settings.autoStartOnRunningSprint) {
           await this.startSession(project.id, sprint.id).catch(() => undefined);
         }
@@ -931,8 +950,11 @@ export class SprintPreviewService {
     workspacePath: string,
     featureBranch: string,
     defaultBranch: string,
+    syncLatestFromOrigin: boolean,
   ): Promise<void> {
-    await this.fetchOriginIfAvailable(repoPath);
+    if (syncLatestFromOrigin) {
+      await this.fetchOriginIfAvailable(repoPath);
+    }
     await this.ensurePreviewBranchExists(repoPath, featureBranch, defaultBranch);
     const exportRef = await this.resolvePreviewExportRef(repoPath, featureBranch);
     const archivePath = `${workspacePath}.tar`;
@@ -1032,6 +1054,44 @@ export class SprintPreviewService {
     return this.deps.projectManagementRepository.listTasks(projectId, sprintId)
       .filter((task) => task.status === "completed")
       .length;
+  }
+
+  private assertPreviewEnabled(settings: SprintPreviewSettings): void {
+    if (settings.enabled === false) {
+      throw new Error("Browser Preview is disabled for this project or sprint.");
+    }
+  }
+
+  private async enforceMaxConcurrentContainers(
+    projectId: string,
+    maxConcurrentContainers: number,
+    excludeSessionId: string | null,
+  ): Promise<void> {
+    const maxConcurrent = Number.isFinite(maxConcurrentContainers)
+      ? Math.max(1, Math.round(maxConcurrentContainers))
+      : Number.MAX_SAFE_INTEGER;
+    const sessions = await this.listSessions(projectId);
+    const activeSessions = sessions
+      .filter((session) =>
+        session.id !== excludeSessionId
+        && (session.status === "running" || session.status === "starting")
+      )
+      .sort((left, right) => this.getSessionAge(left) - this.getSessionAge(right));
+    const overflowCount = activeSessions.length - maxConcurrent + 1;
+
+    if (overflowCount <= 0) {
+      return;
+    }
+
+    for (const session of activeSessions.slice(0, overflowCount)) {
+      await this.stopSession(session.id);
+    }
+  }
+
+  private getSessionAge(session: SprintPreviewSession): number {
+    const timestamp = session.lastStartedAt || session.createdAt || session.updatedAt;
+    const parsed = Date.parse(timestamp || "");
+    return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
   }
 
   private requireProject(projectId: string) {
