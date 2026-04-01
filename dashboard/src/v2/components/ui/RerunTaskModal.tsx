@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { X, RotateCcw, Trash2 } from "lucide-preact";
 
 const PROVIDER_OPTIONS = [
@@ -32,6 +33,8 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     const [provider, setProvider] = useState("");
     const [clearWorktree, setClearWorktree] = useState(false);
 
+    const trapRef = useFocusTrap(true, () => handleClose());
+
     useLayoutEffect(() => {
         gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
         gsap.fromTo(cardRef.current,
@@ -45,14 +48,6 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
         gsap.to(backdropRef.current, { opacity: 0, duration: 0.22, delay: 0.04, onComplete: onClose });
     };
 
-    useEffect(() => {
-        const handler = (e: KeyboardEvent) => {
-            if (e.key === "Escape") handleClose();
-        };
-        document.addEventListener("keydown", handler);
-        return () => document.removeEventListener("keydown", handler);
-    }, []);
-
     const handleSubmit = () => {
         onConfirm({
             provider: provider || undefined,
@@ -63,16 +58,17 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
 
     return (
         <div
-            ref={backdropRef}
-            onClick={(e) => { if (e.target === backdropRef.current) handleClose(); }}
-            className="fixed inset-0 z-[250] flex items-center justify-center bg-black/50 px-6 py-8 backdrop-blur-md dark:bg-black/70"
+            ref={trapRef}
+            onClick={(e) => { if (e.target === trapRef.current || e.target === backdropRef.current) handleClose(); }}
+            className="fixed inset-0 z-[250] flex items-center justify-center px-6 py-8"
         >
+            <div ref={backdropRef} className="absolute inset-0 bg-black/50 backdrop-blur-md dark:bg-black/70" />
             <div
                 ref={cardRef}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="rerun-modal-title"
-                className="w-full max-w-md rounded-[2rem] bg-white shadow-[0_32px_80px_rgba(0,0,0,0.18)] dark:bg-void-900 dark:shadow-[0_32px_80px_rgba(0,0,0,0.6)] overflow-hidden"
+                className="relative w-full max-w-md rounded-[2rem] bg-white shadow-[0_32px_80px_rgba(0,0,0,0.18)] dark:bg-void-900 dark:shadow-[0_32px_80px_rgba(0,0,0,0.6)] overflow-hidden"
             >
                 {/* Header */}
                 <div className="flex items-center justify-between px-7 pt-6 pb-4">
@@ -90,7 +86,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                     <button
                         type="button"
                         onClick={handleClose}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/[0.04] text-slate-400 hover:text-slate-700 dark:bg-white/[0.04] dark:text-slate-500 dark:hover:text-white transition-colors"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/[0.04] text-slate-400 hover:text-slate-700 dark:bg-white/[0.04] dark:text-slate-500 dark:hover:text-white transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
                     >
                         <X className="w-3.5 h-3.5" strokeWidth={2} />
                     </button>
@@ -151,14 +147,14 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                     <button
                         type="button"
                         onClick={handleClose}
-                        className="px-4 py-2 rounded-xl text-[12px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+                        className="px-4 py-2 rounded-xl text-[12px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
                     >
                         Cancel
                     </button>
                     <button
                         type="button"
                         onClick={handleSubmit}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-bold bg-status-amber text-white shadow-[0_4px_16px_rgba(245,158,11,0.25)] hover:shadow-[0_6px_24px_rgba(245,158,11,0.35)] hover:-translate-y-px transition-all duration-200"
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-bold bg-status-amber text-white shadow-[0_4px_16px_rgba(245,158,11,0.25)] hover:shadow-[0_6px_24px_rgba(245,158,11,0.35)] hover:-translate-y-px transition-all duration-200 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
                     >
                         <RotateCcw className="w-3.5 h-3.5" strokeWidth={2} />
                         Rerun Task

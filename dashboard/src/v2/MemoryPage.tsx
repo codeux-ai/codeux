@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef, useState, useCallback, useEffect } from "preact/hooks";
 import gsap from "gsap";
+import { useFocusTrap } from "./hooks/use-focus-trap.js";
 import { Brain, Search, X, AlertTriangle, Save, Check, RotateCcw, ZoomIn, ZoomOut, Maximize2, Plus, Download, Trash2, Power, Loader2, HardDrive, RefreshCw } from "lucide-preact";
 import { listMemories, createMemory, deleteMemory as apiDeleteMemory, searchMemories, listEmbeddingModels, downloadEmbeddingModel, selectEmbeddingModel, deleteEmbeddingModel, getMemoryStats, startReembed, getReembedProgress, getEmbeddingMap, type EmbeddingModelWithStatus, type ReembedProgress, type EmbeddingMapResult } from "./lib/memory-api.js";
 import type { MemoryRecord, MemoryScope, MemoryCategory } from "./memory-types.js";
@@ -279,6 +280,8 @@ const AddMemoryModal: FunctionComponent<{
     const [strength, setStrength] = useState(0.7);
     const [saving, setSaving] = useState(false);
 
+    const trapRef = useFocusTrap(open, onClose);
+
     if (!open) return null;
 
     const handleSubmit = async () => {
@@ -294,9 +297,12 @@ const AddMemoryModal: FunctionComponent<{
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/50 backdrop-blur-sm"
+        <div
+            ref={trapRef}
+            className="fixed inset-0 z-50 flex items-center justify-center"
             onClick={onClose}>
-            <div className="w-full max-w-md bg-white dark:bg-void-800 rounded-[1.5rem] p-6 flex flex-col gap-4
+            <div className="absolute inset-0 bg-black/30 dark:bg-black/50 backdrop-blur-sm" />
+            <div className="relative w-full max-w-md bg-white dark:bg-void-800 rounded-[1.5rem] p-6 flex flex-col gap-4
                            border border-black/[0.06] dark:border-white/[0.06]
                            shadow-[0_24px_80px_rgba(0,0,0,0.15)] dark:shadow-[0_24px_80px_rgba(0,0,0,0.5)]"
                 onClick={e => e.stopPropagation()}>
@@ -1015,14 +1021,14 @@ export const MemoryPage: FunctionComponent = () => {
                                 ? (stats.sprint + stats.agent)
                                 : stats.project;
                             return (
-                                <span key={tab.key} className={`text-[10px] font-bold font-mono px-3.5 py-1.5 rounded-full cursor-pointer transition-all duration-200
+                                <button key={tab.key} className={`text-[10px] font-bold font-mono px-3.5 py-1.5 rounded-full cursor-pointer transition-all duration-200 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none
                                     ${activeTier === tab.key
                                         ? "bg-signal-500/[0.12] border border-signal-500/30 text-signal-500"
                                         : "bg-black/[0.04] dark:bg-white/[0.04] border border-transparent text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                                     }`}
                                     onClick={() => setActiveTier(tab.key)}>
                                     {tab.label} · {count}
-                                </span>
+                                </button>
                             );
                         })}
                     </div>

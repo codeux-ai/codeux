@@ -984,7 +984,7 @@ export const ChatPage: FunctionComponent = () => {
                 value={input}
                 rows={1}
                 placeholder={activeConnection ? "Send a dashboard message to the active listener…" : "Write a project note or queue a message for a future listener…"}
-                className="max-h-[180px] min-h-[38px] w-full resize-none bg-transparent px-2 py-2 text-[15px] leading-relaxed text-slate-900 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-600"
+                className="max-h-[180px] min-h-[38px] w-full resize-none bg-transparent px-2 py-2 text-[15px] leading-relaxed text-slate-900 outline-none placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-600 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
                 onInput={(event) => {
                   const element = event.currentTarget;
                   element.style.height = "auto";

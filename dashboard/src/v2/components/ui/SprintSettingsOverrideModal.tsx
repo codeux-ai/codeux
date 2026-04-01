@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { Check, RefreshCw, SlidersHorizontal, X, Zap } from "lucide-preact";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import type { Sprint } from "../../types.js";
 import { ProjectSettingsEditor } from "../settings/ProjectSettingsEditor.js";
 import { ActionButton, SettingsBody, SettingsHeader } from "../settings/SettingsSurface.js";
@@ -41,6 +42,8 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  const trapRef = useFocusTrap(true, onClose);
+
   const loadSettings = async (): Promise<void> => {
     setLoading(true);
     try {
@@ -65,16 +68,6 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
   useEffect(() => {
     void loadSettings();
   }, [projectId, sprint.id]);
-
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
 
   useEffect(() => {
     if (!message) {
@@ -123,14 +116,15 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
 
   return (
     <div
-      ref={backdropRef}
+      ref={trapRef}
       onClick={(event) => {
-        if (event.target === backdropRef.current) {
+        if (event.target === backdropRef.current || event.target === trapRef.current) {
           onClose();
         }
       }}
-      className="fixed inset-0 z-[240] flex items-center justify-center bg-black/55 px-6 py-8 backdrop-blur-xl dark:bg-black/75"
+      className="fixed inset-0 z-[240] flex items-center justify-center px-6 py-8"
     >
+      <div ref={backdropRef} className="absolute inset-0 bg-black/55 backdrop-blur-xl dark:bg-black/75" />
       <div
         ref={cardRef}
         className="flex max-h-[92vh] w-full max-w-7xl flex-col overflow-hidden rounded-[2.5rem] bg-[#f9f8f4] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:bg-void-900 dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)]"
@@ -183,7 +177,7 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/[0.05] text-slate-500 transition-colors hover:text-slate-900 dark:bg-white/[0.05] dark:text-slate-400 dark:hover:text-white"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/[0.05] text-slate-500 transition-colors hover:text-slate-900 dark:bg-white/[0.05] dark:text-slate-400 dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
               >
                 <X className="h-4 w-4" strokeWidth={2.1} />
               </button>

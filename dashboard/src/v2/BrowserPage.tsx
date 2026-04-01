@@ -275,7 +275,7 @@ export const BrowserPage: FunctionComponent = () => {
             type="button"
             onClick={handleStart}
             disabled={!selectedSprint || mutating}
-            className="inline-flex h-11 items-center gap-2 rounded-2xl bg-signal-500 px-4 text-sm font-semibold text-void-900 transition hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-11 items-center gap-2 rounded-2xl bg-signal-500 px-4 text-sm font-semibold text-void-900 transition hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
           >
             <Play className="h-4 w-4" strokeWidth={2.2} />
             Start Preview
@@ -329,7 +329,7 @@ export const BrowserPage: FunctionComponent = () => {
                 type="button"
                 onClick={handleRebuild}
                 disabled={!selectedSession || mutating}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
               >
                 <RotateCcw className="h-4 w-4" strokeWidth={2} />
                 Rebuild
@@ -338,7 +338,7 @@ export const BrowserPage: FunctionComponent = () => {
                 type="button"
                 onClick={handleStop}
                 disabled={!selectedSession || mutating}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
+                className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
               >
                 <Square className="h-4 w-4" strokeWidth={2} />
                 Stop
@@ -404,7 +404,7 @@ export const BrowserPage: FunctionComponent = () => {
                   type="button"
                   onClick={handleSaveScript}
                   disabled={mutating || !scriptTargetSprint}
-                  className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                  className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
                 >
                   <Save className="h-4 w-4" strokeWidth={2} />
                   Save

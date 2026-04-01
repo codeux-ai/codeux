@@ -193,16 +193,16 @@ const TaskCard: FunctionComponent<{
         </div>
       )}
 
-      <div className="absolute top-3 right-3 flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] translate-y-[-8px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] z-20">
+      <div className="absolute top-3 right-3 flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] translate-y-[-8px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100 transition-all duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] z-20">
         <button
-          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 rounded-full transition-colors"
+          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
           title="Edit task"
           onClick={() => onEdit(task)}
         >
           <Settings className="w-3 h-3" />
         </button>
         <button
-          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-status-red rounded-full transition-colors"
+          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-status-red rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
           title="Delete task"
           onClick={() => onDelete(task)}
         >

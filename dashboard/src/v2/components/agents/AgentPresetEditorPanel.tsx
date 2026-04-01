@@ -52,7 +52,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
             type="button"
             onClick={onCancel}
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-transparent px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-black/5 disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+            className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-transparent px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-black/5 disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
           >
             <X className="h-4 w-4" strokeWidth={2.5} />
             Cancel

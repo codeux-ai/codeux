@@ -359,7 +359,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="inline-flex min-h-[44px] min-w-[44px] h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/78 text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-white"
+                className="inline-flex min-h-[44px] min-w-[44px] h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/78 text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
                 aria-label="Close quicksprint"
               >
                 <X className="h-4 w-4" />
@@ -793,7 +793,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               <button
                 onClick={handleEditorSave}
                 disabled={edSaving || (!edName.trim() || (!edInstruction.trim() && !edAgentPresetId))}
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-[1.35rem] bg-ember-600 px-6 py-3 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(255,107,0,0.25)] transition-all hover:bg-ember-500 hover:shadow-[0_0_28px_rgba(255,107,0,0.35)] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-[1.35rem] bg-ember-600 px-6 py-3 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_0_20px_rgba(255,107,0,0.25)] transition-all hover:bg-ember-500 hover:shadow-[0_0_28px_rgba(255,107,0,0.35)] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
               >
                 {edSaving ? "Saving..." : editorTemplate ? "Save Changes" : "Create Template"}
               </button>
@@ -820,13 +820,13 @@ const TemplateCard: FunctionComponent<{
     <button
       type="button"
       onClick={onSelect}
-      className="group relative flex flex-col rounded-[1.4rem] border border-black/[0.06] bg-white/60 p-5 text-left transition-all hover:border-ember-500/30 hover:shadow-[0_0_24px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.025] dark:hover:border-ember-500/30"
+      className="group relative flex flex-col rounded-[1.4rem] border border-black/[0.06] bg-white/60 p-5 text-left transition-all hover:border-ember-500/30 hover:shadow-[0_0_24px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.025] dark:hover:border-ember-500/30 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
     >
       {!template.isBuiltIn && onEdit && (
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          className="absolute top-4 right-4 rounded-lg min-h-[44px] min-w-[44px] p-1.5 text-slate-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-ember-500/10 hover:text-ember-500 dark:text-slate-500"
+          className="absolute top-4 right-4 rounded-lg min-h-[44px] min-w-[44px] p-1.5 text-slate-300 opacity-0 transition-all group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-ember-500/10 hover:text-ember-500 dark:text-slate-500 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:opacity-100 focus-visible:outline-none"
           title="Edit template"
         >
           <Settings2 className="h-3.5 w-3.5" />

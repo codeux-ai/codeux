@@ -51,7 +51,7 @@ export function AgentAvatarCustomizer({
         <button
           onClick={handleRandomize}
           disabled={disabled}
-          className="absolute bottom-4 right-4 p-2 bg-white rounded-full shadow-md hover:bg-gray-50 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="absolute bottom-4 right-4 p-2 bg-white rounded-full shadow-md hover:bg-gray-50 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
           title="Randomize Avatar"
           type="button"
         >

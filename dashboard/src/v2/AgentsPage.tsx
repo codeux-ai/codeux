@@ -41,7 +41,7 @@ const EmptyState: FunctionComponent<{ hasProject: boolean; onCreate?: () => void
         <button
           type="button"
           onClick={onCreate}
-          className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-void-900 transition-colors hover:bg-signal-400"
+          className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-void-900 transition-colors hover:bg-signal-400 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
         >
           <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
           New Agent

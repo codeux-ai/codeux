@@ -79,7 +79,7 @@ export const SprintImportMenu = ({ disabled, onImportMarkdown }: SprintImportMen
 
           <button
             type="button"
-            className="group flex w-full items-center gap-3 rounded-[0.9rem] px-3 py-2.5 text-left transition-all hover:bg-black/[0.04] dark:hover:bg-white/[0.05]"
+            className="group flex w-full items-center gap-3 rounded-[0.9rem] px-3 py-2.5 text-left transition-all hover:bg-black/[0.04] dark:hover:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
           >
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0052CC]/10 text-[#0052CC] transition-transform group-hover:scale-110 group-hover:bg-[#0052CC]/20 dark:bg-[#4C9AFF]/10 dark:text-[#4C9AFF]">
               <Trello className="h-4 w-4" strokeWidth={2} />

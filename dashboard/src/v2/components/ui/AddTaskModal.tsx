@@ -1,8 +1,9 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { X, ListChecks, Target, Bot, Plus } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 
 interface TaskDraft {
   sprintId: string;
@@ -57,62 +58,12 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(initialTask?.dependsOnTaskIds || []);
   const [error, setError] = useState<string | null>(null);
 
+  const trapRef = useFocusTrap(true, onClose);
+
   useLayoutEffect(() => {
     gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
     gsap.fromTo(cardRef.current, { y: 40, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" });
   }, []);
-
-  const triggerRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    triggerRef.current = document.activeElement as HTMLElement | null;
-
-    // Initial focus setup
-    if (cardRef.current) {
-      const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
-      if (focusableElements.length > 0) {
-        focusableElements[0].focus();
-      }
-    }
-
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      } else if (event.key === "Tab") {
-        if (!cardRef.current) return;
-
-        const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
-
-        if (focusableElements.length === 0) return;
-
-        const first = focusableElements[0];
-        const last = focusableElements[focusableElements.length - 1];
-
-        // If focus has escaped the modal (e.g. user clicked background), force it back in
-        if (!cardRef.current.contains(document.activeElement)) {
-          event.preventDefault();
-          first.focus();
-          return;
-        }
-
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        }
-      }
-    };
-
-    document.addEventListener("keydown", handler);
-    return () => {
-      document.removeEventListener("keydown", handler);
-      if (triggerRef.current) {
-        triggerRef.current.focus();
-      }
-    };
-  }, [onClose]);
 
   const dependencyOptions = useMemo(() => {
     return availableTasks.filter((task) => task.sprintId === sprintId && task.recordId !== initialTask?.recordId);
@@ -160,13 +111,14 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
 
   return (
     <div
-      ref={backdropRef}
+      ref={trapRef}
       onClick={handleBackdropClick}
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-task-modal-title"
-      className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-black/55 dark:bg-black/75 backdrop-blur-xl"
+      className="fixed inset-0 z-[200] flex items-center justify-center px-6"
     >
+      <div ref={backdropRef} className="absolute inset-0 bg-black/55 dark:bg-black/75 backdrop-blur-xl" />
       <div
         ref={cardRef}
         className="relative w-full max-w-4xl overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)] flex"
@@ -205,7 +157,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             <button
               onClick={onClose}
               aria-label="Close"
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
             >
               <X className="w-4 h-4" />
             </button>
@@ -382,13 +334,13 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="group/btn flex items-center gap-2.5 px-6 py-3 bg-signal-500 hover:bg-signal-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] hover:-translate-y-px"
+                className="group/btn flex items-center gap-2.5 px-6 py-3 bg-signal-500 hover:bg-signal-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] hover:-translate-y-px focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
               >
                 <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                 {initialTask ? "Save Task" : "Create Task"}

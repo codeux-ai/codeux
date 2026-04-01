@@ -179,7 +179,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 <button
                   type="button"
                   onClick={handleToggleSelectAll}
-                  className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
                   title={allFilteredSelected ? "Deselect all" : "Select all visible"}
                 >
                   {allFilteredSelected

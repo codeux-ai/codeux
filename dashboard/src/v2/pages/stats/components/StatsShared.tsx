@@ -359,7 +359,7 @@ export const RangeToggle: FunctionComponent<{
       <button
         type="button"
         onClick={onApplyCustom}
-        className="inline-flex h-11 items-center justify-center rounded-2xl bg-white/78 px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900"
+        className="inline-flex h-11 items-center justify-center rounded-2xl bg-white/78 px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
       >
         Apply
       </button>

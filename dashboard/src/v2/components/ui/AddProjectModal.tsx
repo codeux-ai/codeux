@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { X, Plus, FolderOpen, GitBranch, FolderInput, Link2 } from "lucide-preact";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 
 interface AddProjectModalProps {
     onClose: () => void;
@@ -22,6 +23,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const [cloneDir, setCloneDir]   = useState('');
     const [error, setError]         = useState<string | null>(null);
 
+    const trapRef = useFocusTrap(true, () => handleClose());
+
     useLayoutEffect(() => {
         gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.35, ease: "power2.out" });
         gsap.fromTo(cardRef.current,
@@ -40,12 +43,6 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         gsap.to(cardRef.current, { y: 24, opacity: 0, scale: 0.96, duration: 0.28, ease: "power3.in" });
         gsap.to(backdropRef.current, { opacity: 0, duration: 0.28, delay: 0.05, onComplete: onClose });
     };
-
-    useEffect(() => {
-        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose(); };
-        document.addEventListener('keydown', handler);
-        return () => document.removeEventListener('keydown', handler);
-    }, []);
 
     const handleBackdropClick = (e: MouseEvent) => {
         if (e.target === backdropRef.current) handleClose();
@@ -89,13 +86,14 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
 
     return (
         <div
-            ref={backdropRef}
+            ref={trapRef}
             onClick={handleBackdropClick}
             role="dialog"
             aria-modal="true"
             aria-labelledby="add-project-modal-title"
-            className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-black/50 dark:bg-black/70 backdrop-blur-xl"
+            className="fixed inset-0 z-[200] flex items-center justify-center px-6"
         >
+            <div ref={backdropRef} className="absolute inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-xl" />
             <div
                 ref={cardRef}
                 className="relative w-full max-w-2xl overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)] flex"
@@ -139,7 +137,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         <button
                             onClick={handleClose}
                             aria-label="Close"
-                            className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
+                            className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
                         >
                             <X className="w-4 h-4" />
                         </button>
@@ -267,13 +265,13 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 <button
                                     type="button"
                                     onClick={handleClose}
-                                    className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                                    className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
-                                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] hover:-translate-y-px"
+                                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] hover:-translate-y-px focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
                                 >
                                     <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                                     Add Project

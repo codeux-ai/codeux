@@ -133,14 +133,14 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
                 onClick={() => setWindowState("closed")}
               className="group flex h-3 w-3 items-center justify-center rounded-full bg-status-red/80 hover:bg-status-red"
             >
-              <X className="h-2 w-2 text-red-900 opacity-0 group-hover:opacity-100" strokeWidth={3} />
+              <X className="h-2 w-2 text-red-900 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100" strokeWidth={3} />
             </button>
             <button
               type="button"
               onClick={() => setWindowState("minimized")}
               className="group flex h-3 w-3 items-center justify-center rounded-full bg-amber-400/80 hover:bg-amber-400"
             >
-              <Minus className="h-2 w-2 text-amber-900 opacity-0 group-hover:opacity-100" strokeWidth={3} />
+              <Minus className="h-2 w-2 text-amber-900 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100" strokeWidth={3} />
             </button>
             <button
               type="button"
@@ -148,9 +148,9 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
               className="group flex h-3 w-3 items-center justify-center rounded-full bg-signal-500/90 hover:bg-signal-500"
             >
               {isFullscreen ? (
-                <Minimize2 className="h-2 w-2 text-green-900 opacity-0 group-hover:opacity-100" strokeWidth={3} />
+                <Minimize2 className="h-2 w-2 text-green-900 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100" strokeWidth={3} />
               ) : (
-                <Maximize2 className="h-2 w-2 text-green-900 opacity-0 group-hover:opacity-100" strokeWidth={3} />
+                <Maximize2 className="h-2 w-2 text-green-900 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100" strokeWidth={3} />
               )}
             </button>
           </div>
@@ -162,21 +162,21 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
           <button
             type="button"
             onClick={onNavigateBack}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={2.2} />
           </button>
           <button
             type="button"
             onClick={onNavigateForward}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
           >
             <ChevronRight className="h-4 w-4" strokeWidth={2.2} />
           </button>
           <button
             type="button"
             onClick={onReload}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:outline-none"
           >
             <RefreshCw className="h-4 w-4" strokeWidth={2.2} />
           </button>
