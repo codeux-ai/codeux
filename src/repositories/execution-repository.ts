@@ -1742,14 +1742,10 @@ export class ExecutionRepository {
     }
     const activeAttentionItems = this.listActiveAttentionRowsForSprintRuns(telemetrySprintRunIds);
 
-    const paddedSprintRunIds = [...telemetrySprintRunIds];
-    while (paddedSprintRunIds.length > 0 && paddedSprintRunIds.length < 48) {
-      paddedSprintRunIds.push(paddedSprintRunIds[paddedSprintRunIds.length - 1]!);
-    }
-    const placeholders = Array(48).fill("?").join(", ");
+    const placeholders = Array(telemetrySprintRunIds.length).fill("?").join(", ");
     const recentEvents = telemetrySprintRunIds.length === 0
       ? []
-      : this.storage.getCachedStatement(`
+      : this.db.prepare(`
         SELECT *
         FROM (
           SELECT
@@ -1825,7 +1821,7 @@ export class ExecutionRepository {
         )
         ORDER BY created_at DESC, id DESC
         LIMIT 80
-      `).all(...paddedSprintRunIds, ...paddedSprintRunIds) as unknown as ExecutionRuntimeEventSummaryRow[];
+      `).all(...telemetrySprintRunIds, ...telemetrySprintRunIds) as unknown as ExecutionRuntimeEventSummaryRow[];
 
     const eventAwareHumanInterventionBySprintRunId = this.buildHumanInterventionSummaryBySprintRun(
       [...activeProjects, ...pausedProjects].map((row) => ({
@@ -1917,7 +1913,7 @@ export class ExecutionRepository {
     payload: Record<string, unknown>,
     options?: { createdAt?: string; sourceEventKey?: string | null },
   ): boolean {
-    this.requireTaskRun(taskRunId);
+    const taskRun = this.requireTaskRun(taskRunId);
     const result = this.db.prepare(`
       INSERT OR IGNORE INTO task_run_events (id, task_run_id, event_type, originator, payload_json, source_event_key, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -1932,7 +1928,6 @@ export class ExecutionRepository {
     );
     const inserted = Number((result as { changes?: number }).changes || 0) > 0;
     if (inserted) {
-      const taskRun = this.requireTaskRun(taskRunId);
       this.notifyRealtime(taskRun.projectId, false);
     }
     return inserted;
@@ -1945,7 +1940,7 @@ export class ExecutionRepository {
     payload: Record<string, unknown>,
     options?: { createdAt?: string; sourceEventKey?: string | null },
   ): boolean {
-    this.requireSprintRun(sprintRunId);
+    const sprintRun = this.requireSprintRun(sprintRunId);
     const result = this.db.prepare(`
       INSERT OR IGNORE INTO sprint_run_events (id, sprint_run_id, event_type, originator, payload_json, source_event_key, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -1960,7 +1955,6 @@ export class ExecutionRepository {
     );
     const inserted = Number((result as { changes?: number }).changes || 0) > 0;
     if (inserted) {
-      const sprintRun = this.requireSprintRun(sprintRunId);
       this.notifyRealtime(sprintRun.projectId, true);
     }
     return inserted;
