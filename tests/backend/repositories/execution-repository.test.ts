@@ -112,6 +112,110 @@ describe("ExecutionRepository", () => {
     expect(list[1]!.id).toBe(invocation1.id);
   });
 
+  it("filters task dispatches by complex options combinations", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Complex Options Project",
+      sourceType: "local",
+      sourceRef: "/workspace/complex-options-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      number: 1,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Task 1",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "mixed",
+    });
+
+    // Create a matching dispatch
+    const matchingDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "mcp_worker",
+      status: "queued",
+    });
+
+    // Create a non-matching dispatch (different executorType)
+    const nonMatchingDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "queued",
+    });
+
+    const results = executionRepository.listTaskDispatchesByStatus(["queued"], {
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      executorType: "mcp_worker",
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe(matchingDispatch.id);
+
+    // Test empty status filter returns empty array
+    const emptyResults = executionRepository.listTaskDispatchesByStatus([]);
+    expect(emptyResults).toHaveLength(0);
+  });
+
+  it("lists stale cancel requested dispatches", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Stale Dispatch Project",
+      sourceType: "local",
+      sourceRef: "/workspace/stale-dispatch",
+    });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
+    const task = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 1", status: "pending" });
+    const sprintRun = executionRepository.createSprintRun({ projectId: project.id, sprintId: sprint.id, status: "running", executorMode: "mixed" });
+
+    const oldDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "mcp_worker",
+      status: "cancel_requested",
+    });
+
+    const freshDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "mcp_worker",
+      status: "cancel_requested",
+    });
+
+    // Backdate oldDispatch updated_at using raw SQL to make it stale
+    const oldDate = new Date(Date.now() - 1000 * 60 * 60).toISOString(); // 1 hour ago
+    (executionRepository as any).db.prepare(`UPDATE task_dispatches SET queued_at = ?, updated_at = ? WHERE id = ?`).run(oldDate, oldDate, oldDispatch.id);
+
+    const cutoffIso = new Date(Date.now() - 1000 * 60 * 30).toISOString(); // 30 mins ago
+    const staleResults = executionRepository.listStaleCancelRequestedDispatches(cutoffIso);
+
+    expect(staleResults).toHaveLength(1);
+    expect(staleResults[0].id).toBe(oldDispatch.id);
+  });
+
+  it("handles null summary from buildHumanInterventionSummaryFromAttentionRows", async () => {
+    const { executionRepository } = await createRepositories();
+    const result = (executionRepository as any).buildHumanInterventionSummaryFromAttentionRows([]);
+    expect(result).toBeNull();
+  });
+
   it("creates sprint runs and queues task dispatches against project/sprint tasks", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({

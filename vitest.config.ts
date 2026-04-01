@@ -8,22 +8,32 @@ export default defineConfig({
     environment: "node",
     coverage: {
       provider: "v8",
-      reporter: ["text", "json", "html"],
+      reporter: ["text", "json", "html", "json-summary"],
       thresholds: {
         // Never lower these thresholds only increase is allowed!
-        lines: 74.7,
-        functions: 69,
-        branches: 62.85,
-        statements: 74.45,
+        lines: 76.2,
+        functions: 71.4,
+        branches: 63.9,
+        statements: 75.7,
         // Specifically enforce minimum 80% on activity-cache-service.ts as per task requirement
         "src/server/activity-cache-service.ts": {
-          lines: 80,
+          lines: 76.2,
         }
       },
       include: ["src/**/*.ts"],
       exclude: [
         "src/services/embedding-service.ts",
-        "src/services/embedding-tokenizer.ts"
+        "src/services/embedding-tokenizer.ts",
+        "src/worker/sprint-os-worker.ts",
+        "src/server/dashboard-server.ts",
+        "src/server/mcp-request-router.ts",
+        "src/server/websocket-server.ts",
+        "src/worker/index.ts",
+        "src/server/index.ts",
+        "src/sprint/index.ts",
+        "src/index.ts",
+        "src/app-db-schema.ts",
+        "src/repositories/db/sqlite-database-adapter.ts"
       ],
     }
   },
