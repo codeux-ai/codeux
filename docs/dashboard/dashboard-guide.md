@@ -226,8 +226,12 @@ Legacy runtime:
   - one preview session per sprint
   - the slider shows preview container cards only, then appends a placeholder `Launch Container` card as the final entry
   - the launch card includes a sprint selector so any sprint can start a preview container directly from the rail
+  - the browser chrome includes a compact tab view with the container name plus recently visited preview paths for the active session
   - browser window chrome state for fullscreen, minimize, and close
   - same-origin iframe navigation with back, forward, refresh, and editable URL
+  - route changes coming from the Browser chrome use the preview bridge and HTML5 history where possible, so SPA previews stop hard-refreshing on every in-app navigation
+  - the Browser page refreshes preview-session state on a tighter interval so newly started or rebuilt containers reconnect into the iframe quickly once healthy
+  - when the active preview is stopped, still starting, or otherwise unavailable, the iframe is replaced with a standby panel and container actions instead of exposing raw proxy connection errors inside the browser surface
   - remove actions on session cards fully delete preview-session entries after stopping any live container
   - rebuild, stop, open-in-tab, startup-script editing, and log viewing
   - sprint previews are proxied through the dashboard instead of embedding raw localhost origins directly

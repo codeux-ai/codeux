@@ -20,6 +20,10 @@ interface PreviewWindowChromeProps {
   onAddressSubmit: (value: string) => void;
   addressValue: string;
   onAddressChange: (value: string) => void;
+  tabs?: Array<{ path: string; label: string }>;
+  activeTabPath?: string;
+  onSelectTab?: (path: string) => void;
+  navigationEnabled?: boolean;
   children: ComponentChildren;
 }
 
@@ -40,6 +44,10 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
   onAddressSubmit,
   addressValue,
   onAddressChange,
+  tabs = [],
+  activeTabPath = "/",
+  onSelectTab,
+  navigationEnabled = true,
   children,
 }) => {
   const [windowState, setWindowState] = useState<WindowState>("normal");
@@ -158,10 +166,36 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             {session.status}
           </div>
         </div>
+        <div className="border-b border-black/[0.06] bg-white/50 px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.02]">
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
+            <div className="shrink-0 rounded-full border border-black/[0.08] bg-black/[0.03] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
+              {session.containerName || session.sprintName}
+            </div>
+            {tabs.map((tab) => {
+              const active = tab.path === activeTabPath;
+              return (
+                <button
+                  key={tab.path}
+                  type="button"
+                  onClick={() => onSelectTab?.(tab.path)}
+                  className={`shrink-0 rounded-[1rem] border px-3 py-2 text-xs font-semibold transition ${
+                    active
+                      ? "border-signal-500/30 bg-signal-500/12 text-signal-700 dark:text-signal-300"
+                      : "border-black/[0.08] bg-white/85 text-slate-500 hover:border-black/[0.16] hover:text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:border-white/[0.16] dark:hover:text-slate-100"
+                  }`}
+                  title={tab.path}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={onNavigateBack}
+            disabled={!navigationEnabled}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
           >
             <ChevronLeft className="h-4 w-4" strokeWidth={2.2} />
@@ -169,6 +203,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
           <button
             type="button"
             onClick={onNavigateForward}
+            disabled={!navigationEnabled}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
           >
             <ChevronRight className="h-4 w-4" strokeWidth={2.2} />
@@ -176,6 +211,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
           <button
             type="button"
             onClick={onReload}
+            disabled={!navigationEnabled}
             className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
           >
             <RefreshCw className="h-4 w-4" strokeWidth={2.2} />
@@ -190,6 +226,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             <input
               value={addressValue}
               onInput={(event) => onAddressChange((event.currentTarget as HTMLInputElement).value)}
+              disabled={!navigationEnabled}
               className="h-10 w-full rounded-2xl border border-black/[0.08] bg-white/80 px-4 font-mono text-sm text-slate-800 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100"
             />
           </form>

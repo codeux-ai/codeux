@@ -7,6 +7,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { BrowserPage } from "../../../dashboard/src/v2/BrowserPage.js";
 import { PreviewSessionSlider } from "../../../dashboard/src/v2/components/browser/PreviewSessionSlider.js";
 import { PreviewWindowChrome } from "../../../dashboard/src/v2/components/browser/PreviewWindowChrome.js";
+import { usePreviewSessions } from "../../../dashboard/src/v2/hooks/use-preview-sessions.js";
 
 expect.extend(matchers);
 
@@ -30,44 +31,46 @@ const { mockStartPreviewSession, mockRemovePreviewSession } = vi.hoisted(() => (
   mockRemovePreviewSession: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../../../dashboard/src/v2/hooks/use-preview-sessions.js", () => ({
-  usePreviewSessions: vi.fn(() => ({
-    sessions: [
-      {
-        id: "sess-1",
-        projectId: "p1",
-        sprintId: "s1",
-        sprintName: "Sprint 1",
-        status: "running",
-        healthStatus: "healthy",
-        containerAppPort: 3000,
-        hostPort: 8080,
-      },
-      {
-        id: "sess-2",
-        projectId: "p1",
-        sprintId: "s2",
-        sprintName: "Sprint 2",
-        status: "stopped",
-        healthStatus: "unknown",
-        containerAppPort: 3000,
-        hostPort: null,
-      },
-    ],
-    selectedSession: {
+const buildDefaultPreviewSessionsResult = () => ({
+  sessions: [
+    {
       id: "sess-1",
       projectId: "p1",
       sprintId: "s1",
       sprintName: "Sprint 1",
-      status: "running",
-      healthStatus: "healthy",
+      status: "running" as const,
+      healthStatus: "healthy" as const,
       containerAppPort: 3000,
       hostPort: 8080,
     },
-    loading: false,
-    error: null,
-    refresh: mockRefreshSessions,
-  })),
+    {
+      id: "sess-2",
+      projectId: "p1",
+      sprintId: "s2",
+      sprintName: "Sprint 2",
+      status: "stopped" as const,
+      healthStatus: "unknown" as const,
+      containerAppPort: 3000,
+      hostPort: null,
+    },
+  ],
+  selectedSession: {
+    id: "sess-1",
+    projectId: "p1",
+    sprintId: "s1",
+    sprintName: "Sprint 1",
+    status: "running" as const,
+    healthStatus: "healthy" as const,
+    containerAppPort: 3000,
+    hostPort: 8080,
+  },
+  loading: false,
+  error: null,
+  refresh: mockRefreshSessions,
+});
+
+vi.mock("../../../dashboard/src/v2/hooks/use-preview-sessions.js", () => ({
+  usePreviewSessions: vi.fn(() => buildDefaultPreviewSessionsResult()),
 }));
 
 vi.mock("../../../dashboard/src/v2/hooks/use-project-effective-settings.js", () => ({
@@ -98,6 +101,8 @@ vi.mock("../../../dashboard/src/v2/lib/browser-api.js", () => ({
 
 afterEach(() => {
   cleanup();
+  vi.mocked(usePreviewSessions).mockReset();
+  vi.mocked(usePreviewSessions).mockImplementation(() => buildDefaultPreviewSessionsResult());
 });
 
 describe("PreviewSessionSlider", () => {
@@ -393,6 +398,70 @@ describe("BrowserPage", () => {
     expect(iframe).toBeInTheDocument();
     const selectedSprintLabel = screen.getByText("Selected Sprint");
     expect((iframe?.compareDocumentPosition(selectedSprintLabel) || 0) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  });
+
+  it("does not hard-rebind the iframe src on in-app navigation updates", async () => {
+    let container!: HTMLElement;
+    await act(async () => {
+      const result = render(<BrowserPage />);
+      container = result.container;
+    });
+
+    const iframe = container.querySelector("iframe");
+    expect(iframe).toBeInTheDocument();
+    const initialSrc = iframe?.getAttribute("src");
+    const previewOrigin = initialSrc ? new URL(initialSrc).origin : "http://preview-sess-1.localhost";
+
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent("message", {
+        origin: previewOrigin,
+        data: {
+          type: "sprint-preview:state",
+          path: "/sprints",
+        },
+      }));
+    });
+
+    expect((container.querySelector("iframe"))?.getAttribute("src")).toBe(initialSrc);
+    expect(screen.getByDisplayValue("/sprints")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "sprints" })).toBeInTheDocument();
+  });
+
+  it("shows a standby placeholder instead of the iframe when the selected container is unavailable", async () => {
+    vi.mocked(usePreviewSessions).mockImplementation(() => ({
+      sessions: [
+        {
+          id: "sess-2",
+          projectId: "p1",
+          sprintId: "s2",
+          sprintName: "Sprint 2",
+          status: "stopped",
+          healthStatus: "unknown",
+          containerAppPort: 3000,
+          hostPort: null,
+        } as any,
+      ],
+      selectedSession: {
+        id: "sess-2",
+        projectId: "p1",
+        sprintId: "s2",
+        sprintName: "Sprint 2",
+        status: "stopped",
+        healthStatus: "unknown",
+        containerAppPort: 3000,
+        hostPort: null,
+      } as any,
+      loading: false,
+      error: null,
+      refresh: mockRefreshSessions,
+    }));
+
+    render(<BrowserPage />);
+
+    expect(screen.queryByTitle("Sprint preview Sprint 2")).not.toBeInTheDocument();
+    expect(screen.getByText("Container is stopped")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start Container" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rebuild Container" })).toBeInTheDocument();
   });
 
   it("launches a container from the placeholder card for any sprint", async () => {

@@ -99,6 +99,7 @@ Benefits:
 The dashboard injects a small preview bridge script into proxied HTML responses. The bridge:
 - reports `location` and `title` changes to the parent browser page via `postMessage`
 - accepts back/forward/reload/navigate commands from the parent browser chrome
+- uses `history.pushState` / `history.replaceState` for parent-driven path changes before falling back to hard navigations, so SPA previews can switch routes without reloading the entire app
 
 Host-based preview routing also proxies websocket upgrades so preview apps that derive websocket URLs from `window.location` continue to work on their own preview origin.
 
@@ -145,6 +146,10 @@ The dashboard now exposes:
 - a dedicated horizontal session slider strip above the browser surface, so the iframe starts directly below the cards instead of sharing a stretched header row
 - session cards in that rail are limited to persisted preview containers (`running`, `starting`, `stopped`, or `error`) rather than every sprint in the project
 - the rail ends with a placeholder-style `Launch Container` card that lets the operator choose any sprint from a selector and start a preview container without changing the current sprint scope elsewhere in the dashboard
+- the browser chrome includes a lightweight tab rail that shows the active container name plus recently visited preview routes for the selected session
+- in-app navigation no longer rebinds the iframe `src` for every route change; Browser chrome updates use the preview bridge so client-side routers can transition in place
+- when the selected preview session is stopped, starting, unhealthy, or missing a reachable host port, the embedded iframe is replaced with a standby panel that explains the state and exposes `Start Container` / `Rebuild Container` actions instead of surfacing raw proxy socket errors
+- the Browser page polls preview-session state more aggressively than the generic default so the embedded preview reconnects quickly after a start or rebuild once the container becomes healthy
 - a dedicated `Browser Preview` settings category in the left settings rail for preview enablement, visibility, rebuild policy, Git sync, and container-cap controls
 - project-level `Sprint Browser` settings in the project settings editor for port range, startup script path, and automation overrides
 - per-sprint startup script editing in the browser page itself

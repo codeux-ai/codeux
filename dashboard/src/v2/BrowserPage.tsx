@@ -46,11 +46,56 @@ const formatPortMapping = (session: SprintPreviewSession): string => {
   return "port pending";
 };
 
+const buildPathTabLabel = (path: string, sprintName: string): string => {
+  const normalized = normalizePath(path);
+  if (normalized === "/") {
+    return sprintName;
+  }
+  const trimmed = normalized.replace(/\/$/, "");
+  const segment = trimmed.split("/").filter(Boolean).at(-1) || sprintName;
+  return segment.length > 18 ? `${segment.slice(0, 18)}...` : segment;
+};
+
+const isPreviewSessionReady = (session: SprintPreviewSession | null): boolean => (
+  Boolean(session && session.status === "running" && session.healthStatus === "healthy" && session.hostPort)
+);
+
+const getStandbyCopy = (session: SprintPreviewSession | null): { title: string; description: string } => {
+  if (!session) {
+    return {
+      title: "No preview active",
+      description: "Launch a container from the rail to open the sprint inside the in-app browser.",
+    };
+  }
+
+  if (session.status === "starting") {
+    return {
+      title: "Container is starting",
+      description: "Sprint OS is waiting for the preview container to become reachable. The browser will reconnect as soon as it is ready.",
+    };
+  }
+
+  if (session.status === "stopped") {
+    return {
+      title: "Container is stopped",
+      description: "This preview container is not running right now. Start it again or rebuild it to restore the in-app browser.",
+    };
+  }
+
+  return {
+    title: "Container is unavailable",
+    description: session.lastError?.trim()
+      || "The preview container is down or still warming up. Start or rebuild it to bring the browser back online.",
+  };
+};
+
 
 
 export const BrowserPage: FunctionComponent = () => {
   const shellRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const currentPathRef = useRef("/");
+  const previousReadyRef = useRef<{ sessionId: string | null; ready: boolean }>({ sessionId: null, ready: false });
   const { selectedProject } = useProjectData();
   const { data: sprints, selectedSprint, selectedSprintId } = useSprints(selectedProject?.id || null);
   const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
@@ -69,6 +114,9 @@ export const BrowserPage: FunctionComponent = () => {
   const [showScriptEditor, setShowScriptEditor] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [launchSprintId, setLaunchSprintId] = useState("");
+  const [frameSrc, setFrameSrc] = useState("");
+  const [frameKey, setFrameKey] = useState(0);
+  const [sessionTabs, setSessionTabs] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     if (shellRef.current) {
@@ -80,6 +128,7 @@ export const BrowserPage: FunctionComponent = () => {
     projectId: selectedProject?.id || null,
     selectedSprintId,
     activeSessionId,
+    pollInterval: 2000,
   });
 
   useEffect(() => {
@@ -107,6 +156,16 @@ export const BrowserPage: FunctionComponent = () => {
   const visibleSelectedSession = selectedSession && !removingSessionIdSet.has(selectedSession.id)
     ? selectedSession
     : null;
+  const sessionReady = isPreviewSessionReady(visibleSelectedSession);
+  const activeTabs = useMemo(() => {
+    if (!visibleSelectedSession) {
+      return [];
+    }
+    return (sessionTabs[visibleSelectedSession.id] || [normalizePath(currentPath)]).map((path) => ({
+      path,
+      label: buildPathTabLabel(path, visibleSelectedSession.sprintName),
+    }));
+  }, [currentPath, sessionTabs, visibleSelectedSession]);
 
   const scriptTargetSprint = useMemo(() => {
     if (visibleSelectedSession) {
@@ -119,10 +178,33 @@ export const BrowserPage: FunctionComponent = () => {
     if (visibleSelectedSession) {
       setActiveSessionId(visibleSelectedSession.id);
       const nextPath = normalizePath(visibleSelectedSession.lastKnownPath || "/");
+      currentPathRef.current = nextPath;
       setCurrentPath(nextPath);
       setAddressValue(nextPath);
+      setSessionTabs((current) => (
+        current[visibleSelectedSession.id]
+          ? current
+          : { ...current, [visibleSelectedSession.id]: [nextPath] }
+      ));
     }
   }, [visibleSelectedSession?.id]);
+
+  useEffect(() => {
+    currentPathRef.current = currentPath;
+    if (!visibleSelectedSession) {
+      return;
+    }
+    setSessionTabs((current) => {
+      const existing = current[visibleSelectedSession.id] || [];
+      if (existing.includes(currentPath)) {
+        return current;
+      }
+      return {
+        ...current,
+        [visibleSelectedSession.id]: [...existing, currentPath].slice(-8),
+      };
+    });
+  }, [currentPath, visibleSelectedSession?.id]);
 
   useEffect(() => {
     if (!selectedProject || !scriptTargetSprint) {
@@ -183,9 +265,22 @@ export const BrowserPage: FunctionComponent = () => {
     return () => window.removeEventListener("message", handlePreviewMessage);
   }, [visibleSelectedSession?.id]);
 
-  const currentFrameSrc = visibleSelectedSession
-    ? `${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(currentPath)}`
-    : "";
+  useEffect(() => {
+    const sessionId = visibleSelectedSession?.id || null;
+    const ready = sessionReady;
+    const becameReady = Boolean(sessionId && ready && (previousReadyRef.current.sessionId !== sessionId || !previousReadyRef.current.ready));
+
+    if (becameReady && visibleSelectedSession) {
+      setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(currentPathRef.current)}`);
+      setFrameKey((current) => current + 1);
+    }
+
+    if (!sessionId) {
+      setFrameSrc("");
+    }
+
+    previousReadyRef.current = { sessionId, ready };
+  }, [sessionReady, visibleSelectedSession?.id]);
 
   const postNavigationCommand = (action: "back" | "forward" | "reload" | "push", path?: string) => {
     if (!visibleSelectedSession || !frameRef.current?.contentWindow) {
@@ -196,6 +291,14 @@ export const BrowserPage: FunctionComponent = () => {
       action,
       path,
     }, buildPreviewOrigin(visibleSelectedSession.id));
+  };
+
+  const reloadFrame = (path = currentPathRef.current) => {
+    if (!visibleSelectedSession || !isPreviewSessionReady(visibleSelectedSession)) {
+      return;
+    }
+    setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(path)}`);
+    setFrameKey((current) => current + 1);
   };
 
   const handleStart = async (sprintId = launchSprintId) => {
@@ -209,6 +312,9 @@ export const BrowserPage: FunctionComponent = () => {
       const session = await startPreviewSession(selectedProject.id, sprintId);
       setActiveSessionId(session.id);
       await refreshSessions(true);
+      if (session.id === visibleSelectedSession?.id) {
+        reloadFrame();
+      }
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : String(actionError));
     } finally {
@@ -226,6 +332,7 @@ export const BrowserPage: FunctionComponent = () => {
     try {
       await rebuildPreviewSession(visibleSelectedSession.id);
       await refreshSessions(true);
+      reloadFrame();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : String(actionError));
     } finally {
@@ -285,7 +392,9 @@ export const BrowserPage: FunctionComponent = () => {
     const nextPath = normalizePath(addressValue);
     setCurrentPath(nextPath);
     setAddressValue(nextPath);
-    postNavigationCommand("push", nextPath);
+    if (sessionReady) {
+      postNavigationCommand("push", nextPath);
+    }
   };
 
   const sessionCards = sessions.filter((session) =>
@@ -374,20 +483,58 @@ export const BrowserPage: FunctionComponent = () => {
           onReload={() => postNavigationCommand("reload")}
           addressValue={addressValue}
           onAddressChange={setAddressValue}
-          onAddressSubmit={(value) => {
-            const nextPath = normalizePath(value);
+          onAddressSubmit={(_value) => navigate()}
+          tabs={activeTabs}
+          activeTabPath={currentPath}
+          onSelectTab={(path) => {
+            const nextPath = normalizePath(path);
             setCurrentPath(nextPath);
             setAddressValue(nextPath);
-            postNavigationCommand("push", nextPath);
+            if (sessionReady) {
+              postNavigationCommand("push", nextPath);
+            }
           }}
+          navigationEnabled={sessionReady}
         >
-          {visibleSelectedSession && (
+          {visibleSelectedSession && sessionReady && (
             <iframe
+              key={`${visibleSelectedSession.id}:${frameKey}`}
               ref={frameRef}
               title={`Sprint preview ${visibleSelectedSession.sprintName}`}
-              src={currentFrameSrc}
+              src={frameSrc}
               className="h-full w-full border-0 bg-white"
             />
+          )}
+          {(!visibleSelectedSession || !sessionReady) && (
+            <div className="flex h-full flex-col items-center justify-center px-8 text-center">
+              <Compass className="h-12 w-12 text-slate-300 dark:text-slate-600" strokeWidth={1.5} />
+              <h2 className="mt-4 text-xl font-semibold text-slate-800 dark:text-slate-100">
+                {getStandbyCopy(visibleSelectedSession).title}
+              </h2>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500 dark:text-slate-400">
+                {getStandbyCopy(visibleSelectedSession).description}
+              </p>
+              {visibleSelectedSession && (
+                <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void handleStart(visibleSelectedSession.sprintId)}
+                    disabled={launching}
+                    className="inline-flex h-11 items-center justify-center rounded-2xl bg-signal-500 px-5 text-sm font-semibold text-void-900 transition hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Start Container
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRebuild}
+                    disabled={sessionActionPending || launching}
+                    className="inline-flex h-11 items-center justify-center rounded-2xl border border-black/[0.08] px-5 text-sm font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
+                  >
+                    Rebuild Container
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </PreviewWindowChrome>
 
@@ -440,10 +587,10 @@ export const BrowserPage: FunctionComponent = () => {
                   Stop
                 </button>
                 <a
-                  href={currentFrameSrc || undefined}
+                  href={sessionReady && visibleSelectedSession ? `${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(currentPath)}` : undefined}
                   target="_blank"
                   rel="noreferrer"
-                  className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white ${!currentFrameSrc ? "pointer-events-none opacity-50" : ""}`}
+                  className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white ${!sessionReady ? "pointer-events-none opacity-50" : ""}`}
                 >
                   <ExternalLink className="h-4 w-4" strokeWidth={2} />
                   Open
