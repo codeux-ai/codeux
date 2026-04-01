@@ -346,7 +346,14 @@ const SprintProgressCard: FunctionComponent<{
         </div>
       </div>
 
-      <div className="flex gap-1 h-2.5 rounded-full overflow-hidden mb-5">
+      <div 
+        className="flex gap-1 h-2.5 rounded-full overflow-hidden mb-5"
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`Sprint progress: ${pct}%`}
+      >
         {completed > 0 && <div className="bg-status-green rounded-full transition-all duration-700" style={{ width: `${(completed / total) * 100}%` }} />}
         {inProgress > 0 && <div className="bg-signal-500 rounded-full transition-all duration-700" style={{ width: `${(inProgress / total) * 100}%` }} />}
         {pending > 0 && <div className="bg-slate-200 dark:bg-slate-700 rounded-full transition-all duration-700" style={{ width: `${(pending / total) * 100}%` }} />}
@@ -622,7 +629,7 @@ export const TasksPage: FunctionComponent = () => {
       )}
 
       {error && (
-        <div className="px-6 py-4 rounded-2xl border border-status-red/20 bg-status-red/[0.06] text-status-red text-sm">
+        <div role="alert" className="px-6 py-4 rounded-2xl border border-status-red/20 bg-status-red/[0.06] text-status-red text-sm">
           {error}
         </div>
       )}

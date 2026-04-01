@@ -70,8 +70,8 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
   return (
     <div
       className={`flex items-center gap-4 px-5 py-4 rounded-2xl border backdrop-blur-md mb-6 ${wrapperClass}`}
-      role="status"
-      aria-live="polite"
+      role={error ? "alert" : "status"}
+      aria-live={error ? "assertive" : "polite"}
     >
       <div className={`flex items-center justify-center ${iconClass}`}>
         {icon}

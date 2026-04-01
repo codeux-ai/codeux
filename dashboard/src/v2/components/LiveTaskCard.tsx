@@ -313,7 +313,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
 
                 {/* Dispatch error / quota countdown */}
                 {dispatchInfo?.errorMessage && (
-                    <div className="mb-4 rounded-xl border border-status-amber/15 bg-status-amber/[0.04] px-4 py-2.5">
+                    <div role="alert" className="mb-4 rounded-xl border border-status-amber/15 bg-status-amber/[0.04] px-4 py-2.5">
                         <QuotaCountdown errorMessage={dispatchInfo.errorMessage} />
                     </div>
                 )}

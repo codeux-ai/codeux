@@ -25,6 +25,7 @@ export const IntelPanel: FunctionComponent<{
                            prose-code:text-signal-600 dark:prose-code:text-signal-400
                            prose-code:bg-signal-500/[0.06] prose-code:px-1 prose-code:rounded-md
                            font-mono text-[12px] leading-relaxed max-h-64 overflow-y-auto dashboard-scrollbar"
+                aria-live="polite"
                 dangerouslySetInnerHTML={{ __html: renderMarkdown(content) || `<p class="text-slate-400 dark:text-slate-600 italic">${fallback}</p>` }}
             />
         </div>

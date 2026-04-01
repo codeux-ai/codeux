@@ -30,7 +30,7 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
     }
 
     return (
-        <div ref={feedRef} className="max-h-64 overflow-y-auto pr-2 dashboard-scrollbar space-y-1">
+        <div ref={feedRef} className="max-h-64 overflow-y-auto pr-2 dashboard-scrollbar space-y-1" aria-live="polite">
             {events.map((event) => {
                 const cfg = getOriginatorCfg(event.originator || "system");
                 return (

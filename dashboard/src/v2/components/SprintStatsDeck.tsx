@@ -225,7 +225,14 @@ const StageBand: FunctionComponent<{
           <div className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-200">{formatPercent(share)}</div>
         </div>
       </div>
-      <div className="mt-4 h-2 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.06]">
+      <div 
+        className="mt-4 h-2 overflow-hidden rounded-full bg-black/[0.06] dark:bg-white/[0.06]"
+        role="progressbar"
+        aria-valuenow={Math.round(share)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`${meta.label} stage share: ${formatPercent(share)}`}
+      >
         <div
           className="h-full rounded-full"
           style={{

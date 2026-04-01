@@ -74,7 +74,14 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
         <X className="h-4 w-4" />
       </button>
 
-      <div className="relative mb-12 flex h-32 w-full max-w-md items-center justify-center overflow-hidden">
+      <div 
+        className="relative mb-12 flex h-32 w-full max-w-md items-center justify-center overflow-hidden"
+        role="progressbar"
+        aria-valuenow={Math.round(feedback.shipProgress * 100)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={feedback.text}
+      >
         <div className="absolute inset-x-0 bottom-8 h-px bg-gradient-to-r from-transparent via-slate-200 to-transparent dark:via-white/10" />
         <div
           className="absolute transition-[left] duration-200 ease-linear"
