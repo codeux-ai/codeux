@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -410,5 +410,67 @@ describe("WorkerListenEventService", () => {
 
     expect(event?.kind).toBe("attention_item");
     expect(event && "item" in event ? event.item.id : null).toBe(item.id);
+  });
+
+  it("computes project context only once per project during a single pullNextEvent pass", async () => {
+    const {
+      projectRepository,
+      connectionRepository,
+      workerEndpointRepository,
+      projectWorkerAssignmentRepository,
+      projectAttentionRepository,
+      executionRepository,
+      service,
+    } = await createFixture();
+
+    const project = projectRepository.createProject({
+      name: "Cache Verification Project",
+      sourceType: "local",
+      sourceRef: "/repo/cache-verification",
+    });
+
+    connectionRepository.startListen({
+      connectionKey: "worker-cache-test",
+      displayName: "Worker Cache Test",
+      role: "worker",
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+
+    const connection = connectionRepository.getConnectionByKey("worker-cache-test");
+    const workerEndpoint = workerEndpointRepository.getWorkerEndpointByConnectionId(connection!.id);
+    projectWorkerAssignmentRepository.createAssignment(project.id, workerEndpoint!, "primary");
+
+    // Clear initial assignment event
+    service.pullNextEvent({ connectionKey: "worker-cache-test" });
+
+    // Open an attention item so it pulls that
+    projectAttentionRepository.openOrRefreshItem({
+      projectId: project.id,
+      attentionType: "merge_required",
+      severity: "high",
+      ownerType: "worker",
+      assignedWorkerEndpointId: workerEndpoint!.id,
+      title: "Merge required",
+      summaryMarkdown: "Needs merge handling",
+    });
+
+    const listAssignmentsSpy = vi.spyOn(projectWorkerAssignmentRepository, "listAssignmentsForProject");
+    const getExecutionSnapshotSpy = vi.spyOn(executionRepository, "getProjectExecutionSnapshot");
+    const listAttentionSpy = vi.spyOn(projectAttentionRepository, "listProjectAttentionItems");
+
+    // This should evaluate assignment (return null) and then evaluate attention (return event)
+    const event = service.pullNextEvent({ connectionKey: "worker-cache-test", includeAttentionItems: true });
+
+    expect(event?.kind).toBe("attention_item");
+
+    // Assert exactly 1 query to assignments
+    expect(listAssignmentsSpy).toHaveBeenCalledTimes(1);
+
+    // Assert exactly 1 query to execution snapshot
+    expect(getExecutionSnapshotSpy).toHaveBeenCalledTimes(1);
+
+    // Assert exactly 1 query to attention items
+    expect(listAttentionSpy).toHaveBeenCalledTimes(1);
   });
 });

@@ -5,7 +5,7 @@ import gsap from "gsap";
 import { Anchor } from "lucide-preact";
 import type { Subtask, ExecutionTaskDispatchSummary } from "../../types.js";
 import { getTaskProgressPhase } from "../../lib/task-progress.js";
-import { getBoatRaceHeightPx, getBoatRaceTaskKey } from "../lib/boat-race.js";
+import { getBoatRaceHeightPx, getBoatRaceTaskKey, buildBoatRaceDispatchIndex, getShipType } from "../lib/boat-race.js";
 
 /* ─── Props ──────────────────────────────────────────────────────────────── */
 
@@ -38,16 +38,6 @@ const useIsDark = (): boolean => {
         return () => observer.disconnect();
     }, []);
     return isDark;
-};
-
-/* ─── Ship type: docker → container, mcp/local → wooden ─────────────────── */
-
-const getShipType = (task: Subtask, dispatches: ExecutionTaskDispatchSummary[]): "container" | "wooden" => {
-    const d = dispatches.find(dd => dd.taskKey === task.id || dd.taskId === task.record_id);
-    if (d?.executorType === "docker_cli") return "container";
-    if (d?.executorType === "mcp_worker") return "wooden";
-    if (task.provider === "jules") return "wooden";
-    return "container";
 };
 
 /* ─── Checkpoint system for continuous movement ──────────────────────────── */
@@ -728,6 +718,8 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
         const totalH = laneH * count;
         const offsetY = LANE_TOP + (usable - totalH) / 2;
 
+        const dispatchIndex = buildBoatRaceDispatchIndex(dispatches);
+
         const ships: ShipDatum[] = active.map((task, i) => {
             const raceKey = getBoatRaceTaskKey(task);
             const progress = getProgressTarget(task);
@@ -737,7 +729,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
             return {
                 key: raceKey,
                 task,
-                shipType: getShipType(task, dispatches),
+                shipType: getShipType(task, dispatchIndex),
                 progress,
                 laneY: offsetY + i * laneH + laneH / 2 + yJitter,
                 style,

@@ -37,10 +37,10 @@ async function createFixture() {
   const projectAttentionService = new ProjectAttentionService(
     projectAttentionRepository,
     projectWorkerAssignmentRepository,
-    (projectId, sprintId) => (
+    (projectId, sprintId, resolver) => (
       sprintId
-        ? settingsRepository.resolveSprintDashboardSettings(projectId, sprintId).settings.workers.executionMode
-        : settingsRepository.resolveProjectDashboardSettings(projectId).settings.workers.executionMode
+        ? (resolver || settingsRepository).resolveSprintDashboardSettings(projectId, sprintId).settings.workers.executionMode
+        : (resolver || settingsRepository).resolveProjectDashboardSettings(projectId).settings.workers.executionMode
     ),
   );
   const workerTaskDispatchService = new WorkerTaskDispatchService(
@@ -51,10 +51,10 @@ async function createFixture() {
     projectWorkerAssignmentService,
     projectAttentionService,
     () => DEFAULT_DASHBOARD_SETTINGS,
-    (projectId, sprintId) => (
+    (projectId, sprintId, resolver) => (
       sprintId
-        ? settingsRepository.resolveSprintDashboardSettings(projectId, sprintId).settings.workers.executionMode
-        : settingsRepository.resolveProjectDashboardSettings(projectId).settings.workers.executionMode
+        ? (resolver || settingsRepository).resolveSprintDashboardSettings(projectId, sprintId).settings.workers.executionMode
+        : (resolver || settingsRepository).resolveProjectDashboardSettings(projectId).settings.workers.executionMode
     ),
   );
 

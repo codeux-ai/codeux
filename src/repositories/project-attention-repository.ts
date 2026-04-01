@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import { AppDbStorage } from "./app-db-storage.js";
+import { executeChunkedInQuery } from "./repository-utils.js";
 import { requireRecord } from "./repository-utils.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
 import type {
@@ -222,28 +223,34 @@ export class ProjectAttentionRepository {
         ${clause}
     `).all(...params) as Array<{ id: string; project_id: string }>;
 
-    const status = resolution.status || "resolved";
-    const statement = this.db.prepare(`
-      UPDATE project_attention_items
-      SET status = ?,
-          resolved_at = ?,
-          updated_at = ?,
-          payload_json = CASE
-            WHEN payload_json IS NULL THEN json_object('resolutionReason', ?)
-            ELSE json_set(payload_json, '$.resolutionReason', ?)
-          END
-      WHERE id = ?
-    `);
-
-    for (const row of rows) {
-      statement.run(status, now, now, resolution.reason ?? null, resolution.reason ?? null, row.id);
+    if (rows.length === 0) {
+      return 0;
     }
+
+    const status = resolution.status || "resolved";
+
+    executeChunkedInQuery((sql) => this.db.prepare(sql), {
+      sqlPrefix: `
+        UPDATE project_attention_items
+        SET status = ?,
+            resolved_at = ?,
+            updated_at = ?,
+            payload_json = CASE
+              WHEN payload_json IS NULL THEN json_object('resolutionReason', ?)
+              ELSE json_set(payload_json, '$.resolutionReason', ?)
+            END
+        WHERE id
+      `,
+      items: rows.map(r => r.id),
+      bindParamsBefore: [status, now, now, resolution.reason ?? null, resolution.reason ?? null]
+    });
 
     for (const projectId of new Set(rows.map((row) => row.project_id).filter(Boolean))) {
       this.notifyProjectRefresh(projectId, true);
     }
     return rows.length;
   }
+
 
   claimAttentionItem(itemId: string, input: ClaimProjectAttentionItemInput): ProjectAttentionItemRecord {
     const current = this.mapRow(requireRecord(this.db.prepare('SELECT * FROM project_attention_items WHERE id = ?').get(itemId) as any, "Project attention item", itemId));

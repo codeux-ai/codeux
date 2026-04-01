@@ -272,4 +272,88 @@ describe("ProjectAttentionRepository", () => {
     });
     expect(resolved.resolvedAt).toBeTruthy();
   });
+
+  it("resolves multiple items via chunked updates and deduplicates refresh signals", async () => {
+    const { attention, project, sprint, task, sprintRun } = await buildFixture();
+
+    attention.openOrRefreshItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      attentionType: "action_required",
+      severity: "medium",
+      ownerType: "human",
+      title: "Action 1",
+      summaryMarkdown: "Action 1",
+    });
+
+    attention.openOrRefreshItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      attentionType: "worker_dispatch_blocked",
+      severity: "high",
+      ownerType: "worker",
+      title: "Worker Blocked",
+      summaryMarkdown: "Worker Blocked",
+    });
+
+    attention.openOrRefreshItem({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      attentionType: "merge_required",
+      severity: "low",
+      ownerType: "human",
+      title: "Merge 1",
+      summaryMarkdown: "Merge 1",
+    });
+
+    const initialOpen = attention.listProjectAttentionItems(project.id, { statuses: ["open"] });
+    expect(initialOpen).toHaveLength(3);
+
+    const resolvedCount = attention.resolveAttentionItems(
+      {
+        projectId: project.id,
+        taskId: task.id,
+      },
+      {
+        status: "dismissed",
+        reason: "chunk_resolved"
+      }
+    );
+
+    expect(resolvedCount).toBe(3);
+
+    const openItemsAfter = attention.listProjectAttentionItems(project.id, { statuses: ["open"] });
+    expect(openItemsAfter).toHaveLength(0);
+
+    const resolvedItemsAfter = attention.listProjectAttentionItems(project.id, { statuses: ["dismissed"] });
+    expect(resolvedItemsAfter).toHaveLength(3);
+
+    for (const resItem of resolvedItemsAfter) {
+      expect(resItem.payload?.resolutionReason).toBe("chunk_resolved");
+      expect(resItem.resolvedAt).toBeTruthy();
+    }
+  });
+
+  it("resolves to zero cleanly if no items match the filter", async () => {
+    const { attention, project, sprint, task, sprintRun } = await buildFixture();
+
+    const resolvedCount = attention.resolveAttentionItems(
+      {
+        projectId: project.id,
+        taskId: task.id,
+      },
+      {
+        status: "dismissed",
+        reason: "chunk_resolved"
+      }
+    );
+
+    expect(resolvedCount).toBe(0);
+  });
 });
