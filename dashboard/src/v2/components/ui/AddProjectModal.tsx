@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { X, Plus, FolderOpen, GitBranch, FolderInput, Link2 } from "lucide-preact";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 
 interface AddProjectModalProps {
     onClose: () => void;
@@ -12,7 +13,6 @@ type SourceType = 'local' | 'git';
 
 export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClose, onAdd }) => {
     const backdropRef = useRef<HTMLDivElement>(null);
-    const cardRef     = useRef<HTMLDivElement>(null);
     const fieldsRef   = useRef<HTMLDivElement>(null);
 
     const [name, setName]           = useState('');
@@ -21,6 +21,13 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const [gitUrl, setGitUrl]       = useState('');
     const [cloneDir, setCloneDir]   = useState('');
     const [error, setError]         = useState<string | null>(null);
+
+    const handleClose = () => {
+        gsap.to(cardRef.current, { y: 24, opacity: 0, scale: 0.96, duration: 0.28, ease: "power3.in" });
+        gsap.to(backdropRef.current, { opacity: 0, duration: 0.28, delay: 0.05, onComplete: onClose });
+    };
+
+    const cardRef = useFocusTrap(true, handleClose);
 
     useLayoutEffect(() => {
         gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.35, ease: "power2.out" });
@@ -34,17 +41,6 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                 { y: 0, opacity: 1, stagger: 0.07, duration: 0.45, ease: "power3.out", delay: 0.25 }
             );
         }
-    }, []);
-
-    const handleClose = () => {
-        gsap.to(cardRef.current, { y: 24, opacity: 0, scale: 0.96, duration: 0.28, ease: "power3.in" });
-        gsap.to(backdropRef.current, { opacity: 0, duration: 0.28, delay: 0.05, onComplete: onClose });
-    };
-
-    useEffect(() => {
-        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose(); };
-        document.addEventListener('keydown', handler);
-        return () => document.removeEventListener('keydown', handler);
     }, []);
 
     const handleBackdropClick = (e: MouseEvent) => {

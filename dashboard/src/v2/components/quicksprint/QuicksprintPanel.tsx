@@ -817,10 +817,19 @@ const TemplateCard: FunctionComponent<{
   const tagColor = template.categoryColor || "#94a3b8";
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={`Select template ${template.name}`}
       onClick={onSelect}
-      className="group relative flex flex-col rounded-[1.4rem] border border-black/[0.06] bg-white/60 p-5 text-left transition-all hover:border-ember-500/30 hover:shadow-[0_0_24px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.025] dark:hover:border-ember-500/30"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          if ((e.target as HTMLElement).closest('button')) return;
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      className="group relative flex flex-col rounded-[1.4rem] border border-black/[0.06] bg-white/60 p-5 text-left transition-all hover:border-ember-500/30 hover:shadow-[0_0_24px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.025] dark:hover:border-ember-500/30 cursor-pointer focus-visible:ring-2 focus-visible:ring-ember-500 focus-visible:outline-none"
     >
       {!template.isBuiltIn && onEdit && (
         <button
@@ -854,7 +863,7 @@ const TemplateCard: FunctionComponent<{
           {template.defaultTaskCount} subtask{template.defaultTaskCount !== 1 ? "s" : ""}
         </span>
       </div>
-    </button>
+    </div>
   );
 };
 
