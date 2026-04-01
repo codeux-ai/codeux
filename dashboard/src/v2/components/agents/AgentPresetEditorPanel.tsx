@@ -52,7 +52,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
             type="button"
             onClick={onCancel}
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-transparent px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-black/5 disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+            className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-transparent px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-black/5 disabled:opacity-70 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
           >
             <X className="h-4 w-4" strokeWidth={2.5} />
             Cancel
@@ -60,7 +60,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
           <button
             type="submit"
             disabled={saving || !name.trim()}
-            className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/20 transition-all hover:scale-105 hover:bg-signal-400 focus:outline-none focus:ring-4 focus:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+            className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/20 transition-all hover:scale-105 hover:bg-signal-400 focus:outline-none focus:ring-4 focus:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:scale-100"
           >
             {saving ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.5} /> : <Save className="h-4 w-4" strokeWidth={2.5} />}
             Save Agent

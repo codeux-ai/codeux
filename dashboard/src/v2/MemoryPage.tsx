@@ -337,7 +337,7 @@ const AddMemoryModal: FunctionComponent<{
                         className="flex-1 py-2.5 rounded-xl text-xs font-bold
                                    bg-signal-500 text-void-900 hover:bg-signal-400
                                    shadow-[0_2px_12px_rgba(0,224,160,0.3)]
-                                   transition-colors duration-200 disabled:opacity-50">
+                                   transition-colors duration-200 disabled:opacity-70">
                         {saving ? "Saving…" : "Add Memory"}
                     </button>
                 </div>

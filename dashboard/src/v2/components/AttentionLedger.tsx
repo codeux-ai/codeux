@@ -126,7 +126,7 @@ export const AttentionLedger: FunctionComponent = memo(() => {
                                             type="button"
                                             onClick={() => onClaimAttentionItem(snapshot.projectId!, item.id)}
                                             disabled={pendingActionIds.has(claimActionId)}
-                                            className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-500 transition-colors hover:bg-signal-500/15 disabled:opacity-50"
+                                            className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-500 transition-colors hover:bg-signal-500/15 disabled:opacity-70"
                                         >
                                             <Bot className="w-3 h-3" strokeWidth={2} />
                                             {pendingActionIds.has(claimActionId) ? "Claiming" : "Claim"}
@@ -137,7 +137,7 @@ export const AttentionLedger: FunctionComponent = memo(() => {
                                             type="button"
                                             onClick={() => onResolveAttentionItem(snapshot.projectId!, item.id)}
                                             disabled={pendingActionIds.has(resolveActionId)}
-                                            className="inline-flex items-center gap-1.5 rounded-full border border-status-green/20 bg-status-green/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-green transition-colors hover:bg-status-green/15 disabled:opacity-50"
+                                            className="inline-flex items-center gap-1.5 rounded-full border border-status-green/20 bg-status-green/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-green transition-colors hover:bg-status-green/15 disabled:opacity-70"
                                         >
                                             <CheckCircle2 className="w-3 h-3" strokeWidth={2} />
                                             {pendingActionIds.has(resolveActionId) ? "Resolving" : "Resolve"}
@@ -148,7 +148,7 @@ export const AttentionLedger: FunctionComponent = memo(() => {
                                             type="button"
                                             onClick={() => onDismissAttentionItem(snapshot.projectId!, item.id)}
                                             disabled={pendingActionIds.has(dismissActionId)}
-                                            className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:bg-black/[0.05] dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:bg-white/[0.05] disabled:opacity-50"
+                                            className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:bg-black/[0.05] dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:bg-white/[0.05] disabled:opacity-70"
                                         >
                                             <XCircle className="w-3 h-3" strokeWidth={2} />
                                             {pendingActionIds.has(dismissActionId) ? "Dismissing" : "Dismiss"}

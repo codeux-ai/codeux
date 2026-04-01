@@ -150,7 +150,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               value={state.title}
               onInput={(event) => state.setTitle((event.target as HTMLInputElement).value)}
               placeholder="Fix navigation layout shift"
-              className="w-full border-0 border-b-2 border-black/[0.08] bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
+              className="w-full border-0 border-b-2 border-black/[0.08] bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-500 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-400 sm:text-[1.9rem]"
               required
               autoFocus
             />
@@ -167,7 +167,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                   value={state.description}
                   onInput={(event) => state.setDescription((event.target as HTMLTextAreaElement).value)}
                   placeholder="Summarize the intent and outcome."
-                  className="min-h-[160px] w-full resize-none rounded-[1.7rem] bg-transparent px-4 py-4 text-sm leading-relaxed text-slate-700 outline-none placeholder:text-slate-300 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-slate-300 dark:placeholder:text-slate-600 sm:px-5"
+                  className="min-h-[160px] w-full resize-none rounded-[1.7rem] bg-transparent px-4 py-4 text-sm leading-relaxed text-slate-700 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-slate-300 dark:placeholder:text-slate-400 sm:px-5"
                 />
               </div>
 
@@ -176,7 +176,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                   value={state.promptMarkdown}
                   onInput={(event) => state.setPromptMarkdown((event.target as HTMLTextAreaElement).value)}
                   placeholder="Detailed markdown instructions for the agent."
-                  className="min-h-[160px] w-full resize-none rounded-[1.7rem] bg-transparent px-4 py-4 text-sm leading-relaxed font-mono text-slate-700 outline-none placeholder:text-slate-300 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-slate-300 dark:placeholder:text-slate-600 sm:px-5"
+                  className="min-h-[160px] w-full resize-none rounded-[1.7rem] bg-transparent px-4 py-4 text-sm leading-relaxed font-mono text-slate-700 outline-none placeholder:text-slate-500 focus-visible:ring-2 focus-visible:ring-signal-500/50 dark:text-slate-300 dark:placeholder:text-slate-400 sm:px-5"
                 />
               </div>
             </div>
@@ -276,7 +276,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
             <button
               type="submit"
               disabled={!state.isValid}
-              className="inline-flex items-center justify-center gap-2.5 rounded-[1.2rem] bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-px hover:opacity-92 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:bg-white dark:text-void-900 dark:focus-visible:ring-offset-void-900"
+              className="inline-flex items-center justify-center gap-2.5 rounded-[1.2rem] bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-px hover:opacity-92 disabled:cursor-not-allowed disabled:opacity-70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:bg-white dark:text-void-900 dark:focus-visible:ring-offset-void-900"
             >
               {state.isEditing ? <Save className="h-4 w-4" strokeWidth={2.3} /> : <Plus className="h-4 w-4" strokeWidth={2.3} />}
               {state.isEditing ? "Save Task" : "Create Task"}

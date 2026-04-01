@@ -150,7 +150,7 @@ const AgentPresetCard: FunctionComponent<{
                 type="button"
                 onClick={() => void onImport(preset.id)}
                 disabled={importing || preset.syncStatus === "manual"}
-                className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-300"
+                className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/20 disabled:cursor-not-allowed disabled:opacity-70 dark:text-signal-300"
                 title={preset.syncStatus === "out_of_sync" ? "Import updated markdown" : "Re-import markdown"}
               >
                 {importing ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} /> : <FileUp className="h-3.5 w-3.5" strokeWidth={2.1} />}
@@ -161,7 +161,7 @@ const AgentPresetCard: FunctionComponent<{
               type="button"
               onClick={() => void onDelete(preset.id)}
               disabled={deleting}
-              className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/20 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/20 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {deleting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} /> : <Trash2 className="h-3.5 w-3.5" strokeWidth={2.1} />}
               Delete
@@ -216,7 +216,7 @@ const AgentPresetCard: FunctionComponent<{
             type="button"
             onClick={() => void onSave(preset.id, { name, labels: splitLabels(labels), instructionMarkdown })}
             disabled={saving || !name.trim()}
-            className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 font-bold uppercase tracking-[0.12em] text-void-900 transition-all hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 font-bold uppercase tracking-[0.12em] text-void-900 transition-all hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {saving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} /> : <Save className="h-3.5 w-3.5" strokeWidth={2.1} />}
             Save

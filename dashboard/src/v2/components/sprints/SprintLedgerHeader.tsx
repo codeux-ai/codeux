@@ -43,13 +43,13 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
         />
         {/* Search */}
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" strokeWidth={2.2} />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500 dark:text-slate-400" strokeWidth={2.2} />
           <input
             type="text"
             value={searchQuery}
             onInput={(e) => onSearchQueryChange((e.target as HTMLInputElement).value)}
             placeholder="Search sprints…"
-            className="h-9 w-56 rounded-full border border-black/[0.08] bg-white/80 pl-9 pr-8 text-xs text-slate-700 placeholder:text-slate-400 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/10 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder:text-slate-500"
+            className="h-9 w-56 rounded-full border border-black/[0.08] bg-white/80 pl-9 pr-8 text-xs text-slate-700 placeholder:text-slate-500 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/10 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder:text-slate-400"
             aria-label="Search sprints"
           />
           {/* Hidden live region to announce search results to screen readers */}
@@ -60,13 +60,13 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
             <button
               type="button"
               onClick={() => onSearchQueryChange("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
             >
               <X className="h-3.5 w-3.5" strokeWidth={2.2} />
             </button>
           )}
         </div>
-        <div className="text-xs font-mono text-slate-400">
+        <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
           {searchQuery ? `${ledgerSprintsCount} / ${sprintsCount}` : `${sprintsCount} total`}
         </div>
       </div>
