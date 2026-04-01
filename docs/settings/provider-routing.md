@@ -52,10 +52,11 @@ Each `aiProvider.invocationRouting.<routeId>` entry contains:
 1. Start from the selected route.
 2. Build the baseline provider config from the route profile.
 3. Apply worker-profile defaults when `profile = WORKER`.
-4. Apply invocation-specific per-provider overrides.
-5. Filter by `allowedProviders`, then by any runtime provider pool restriction.
-6. Run the selected strategy.
-7. If Jules is selected but unavailable, Sprint OS reroutes within the remaining eligible providers.
+4. If a `GLOBAL` route is still using its untouched default routing block, inherit the top-level `aiProvider.strategy`.
+5. Apply invocation-specific per-provider overrides.
+6. Filter by `allowedProviders`, then by any runtime provider pool restriction.
+7. Run the selected strategy.
+8. If Jules is selected but unavailable, Sprint OS reroutes within the remaining eligible providers.
 
 ## Current Defaults
 
@@ -66,7 +67,9 @@ Each `aiProvider.invocationRouting.<routeId>` entry contains:
 - `ci_fix` uses `WORKER`
 - `merge_conflict` uses `WORKER`
 
-That means dashboard chat replies and clarification auto-answer both follow the preferred worker CLI provider/model by default instead of inheriting the global primary provider.
+That means:
+- task coding inherits the top-level global routing strategy unless the task route itself is explicitly customized
+- dashboard chat replies and clarification auto-answer follow the preferred worker CLI provider/model by default instead of inheriting the global primary provider
 
 ## Services Using Invocation Routing
 

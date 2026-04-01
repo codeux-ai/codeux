@@ -6,6 +6,7 @@ This runbook covers day-to-day operation and incident handling for the MCP serve
 
 1. Confirm API key source is available (recommended, but startup is allowed without key).
 2. Start server (`npm run dev` or `npm start`).
+   - `npm run dev` runs the TypeScript entrypoint through Node's `ts-node` ESM register hook.
 3. Open dashboard and verify settings.
 4. Confirm `/api/status` and `/api/git-status` are responding.
 

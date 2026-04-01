@@ -136,6 +136,24 @@ describe("Provider Routing Logic", () => {
       }, task);
       expect(result).toBe("gemini");
     });
+
+    it("treats missing dependency metadata as a simple task", () => {
+      const task = {
+        id: "T-2",
+        title: "Loose task shape",
+        prompt: "Fix typo",
+        is_independent: true,
+        status: "PENDING",
+      } as Subtask;
+      const result = strategy.choose({
+        strategy: "ORCHESTRATOR",
+        manualProvider: null,
+        providers: buildProviders(),
+        enabledProviders: ["jules", "gemini"],
+      }, task);
+
+      expect(result).toBe("gemini");
+    });
   });
 
   describe("resolveProviderForInvocation", () => {
@@ -208,6 +226,29 @@ describe("Provider Routing Logic", () => {
       });
       const result = chooseProviderForTask(settings, mockTask());
       expect(result).toBe("jules");
+    });
+
+    it("inherits the global weighted strategy for the default task route", () => {
+      const settings = mockSettings("MANUAL", "gemini");
+      settings.aiProvider.strategy = "WEIGHTED";
+      settings.aiProvider.providers.jules.weight = 100;
+      settings.aiProvider.providers.gemini.weight = 0;
+      settings.aiProvider.providers.codex.weight = 0;
+      settings.aiProvider.providers["claude-code"].weight = 0;
+
+      expect(chooseProviderForTask(settings, mockTask())).toBe("jules");
+    });
+
+    it("keeps explicit task route overrides ahead of the global strategy", () => {
+      const settings = mockSettings("MANUAL", "gemini");
+      settings.aiProvider.strategy = "WEIGHTED";
+      settings.aiProvider.invocationRouting.task_coding = {
+        ...settings.aiProvider.invocationRouting.task_coding,
+        strategy: "MANUAL",
+        provider: "codex",
+      };
+
+      expect(chooseProviderForTask(settings, mockTask())).toBe("codex");
     });
 
     it("dispatches to the configured task strategy", () => {
