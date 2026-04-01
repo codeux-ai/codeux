@@ -45,7 +45,7 @@ const STAGE_META: Record<LiveTaskStageKey, {
     label: "Queued",
     shortLabel: "Queue",
     accent: "#64748B",
-    tone: "text-slate-500 dark:text-slate-300",
+    tone: "text-slate-600 dark:text-slate-300",
     chip: "border-black/[0.06] bg-white/70 dark:border-white/[0.06] dark:bg-void-900/55",
   },
   coding: {
@@ -221,7 +221,7 @@ const StageBand: FunctionComponent<{
           </div>
         </div>
         <div className="text-right">
-          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Share</div>
+          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Share</div>
           <div className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-200">{formatPercent(share)}</div>
         </div>
       </div>
@@ -235,7 +235,7 @@ const StageBand: FunctionComponent<{
           }}
         />
       </div>
-      <div className="mt-3 flex items-center justify-between gap-3 text-[10px] font-mono text-slate-500 dark:text-slate-400">
+      <div className="mt-3 flex items-center justify-between gap-3 text-[10px] font-mono text-slate-600 dark:text-slate-400">
         <span>{activeCount} active</span>
         <span>{seconds > 0 ? `${Math.round(seconds / Math.max(activeCount, 1))}s / active` : "idle"}</span>
       </div>
@@ -310,7 +310,7 @@ export const TaskStagePills: FunctionComponent<{
           </span>
         );
       })}
-      <span className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300">
+      <span className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300">
         <Timer className="h-3 w-3" strokeWidth={2.2} />
         Total
         <span className="font-mono normal-case tracking-normal text-slate-700 dark:text-white">{formatDurationTight(timing.totalSeconds)}</span>
@@ -342,7 +342,7 @@ export const SprintStatsDeck: FunctionComponent<{
           <h3 className="mt-3 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
             The telemetry field wakes up with the sprint.
           </h3>
-          <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+          <p className="mt-3 max-w-xl text-sm leading-relaxed text-slate-600 dark:text-slate-400">
             Start a sprint to visualize elapsed time, stage timing, merge pressure, and live task-state deltas in the same view language as the DAG.
           </p>
         </div>
@@ -377,7 +377,7 @@ export const SprintStatsDeck: FunctionComponent<{
             <h3 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white md:text-[2.35rem]">
               Live sprint stats, rendered in the same surface.
             </h3>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-400">
               Elapsed sprint time, task-state deltas, merge pressure, and stage durations are projected from runtime events without leaving the Live page visual language.
             </p>
           </div>
@@ -387,7 +387,7 @@ export const SprintStatsDeck: FunctionComponent<{
               <SummaryPill label="Elapsed" value={formatDuration(sprintTiming.sprintElapsedSeconds)} icon={Timer} accent="text-signal-500" />
               <SummaryPill label="Completion" value={formatPercent(completionRate)} icon={CheckCircle2} accent="text-status-green" />
               <SummaryPill label="Avg Finish" value={formatDurationTight(sprintTiming.averageCompletedTaskSeconds)} icon={Sparkles} accent="text-ember-500" />
-              <SummaryPill label="Longest" value={sprintTiming.longestTask ? `${sprintTiming.longestTask.taskKey} · ${formatDurationTight(sprintTiming.longestTask.totalSeconds)}` : "No runtime"} icon={Layers} accent="text-slate-500" />
+              <SummaryPill label="Longest" value={sprintTiming.longestTask ? `${sprintTiming.longestTask.taskKey} · ${formatDurationTight(sprintTiming.longestTask.totalSeconds)}` : "No runtime"} icon={Layers} accent="text-slate-600 dark:text-slate-400" />
               <SummaryPill label="Pressure" value={String(mergePressure)} icon={GitPullRequest} accent="text-ember-500" />
             </div>
           </div>
@@ -405,7 +405,7 @@ export const SprintStatsDeck: FunctionComponent<{
                   <div className="text-[3.5rem] font-black leading-none tracking-[-0.07em] text-slate-900 dark:text-white md:text-[4.6rem]">
                     {formatDuration(sprintTiming.sprintElapsedSeconds)}
                   </div>
-                  <div className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+                  <div className="mt-3 text-sm text-slate-600 dark:text-slate-400">
                     {sprintTiming.sprintStartedAt
                       ? `Started ${formatTime(sprintTiming.sprintStartedAt)}`
                       : "Awaiting first task start"}
@@ -420,15 +420,15 @@ export const SprintStatsDeck: FunctionComponent<{
               </div>
               <div className="mt-5 grid gap-3 md:grid-cols-3">
                 <div className="rounded-[1.1rem] border border-black/[0.05] bg-black/[0.025] px-4 py-3 dark:border-white/[0.05] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Finished</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Finished</div>
                   <div className="mt-2 text-lg font-black tracking-tight text-slate-900 dark:text-white">{sprintTiming.completedTaskCount}</div>
                 </div>
                 <div className="rounded-[1.1rem] border border-black/[0.05] bg-black/[0.025] px-4 py-3 dark:border-white/[0.05] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Avg Finish</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Avg Finish</div>
                   <div className="mt-2 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatDurationTight(sprintTiming.averageCompletedTaskSeconds)}</div>
                 </div>
                 <div className="rounded-[1.1rem] border border-black/[0.05] bg-black/[0.025] px-4 py-3 dark:border-white/[0.05] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Accumulated</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Accumulated</div>
                   <div className="mt-2 text-lg font-black tracking-tight text-slate-900 dark:text-white">{formatDuration(totalTrackedStageSeconds)}</div>
                 </div>
               </div>
@@ -436,7 +436,7 @@ export const SprintStatsDeck: FunctionComponent<{
 
             <div className="xl:col-span-5 space-y-3">
               <div className="rounded-[1.45rem] border border-black/[0.05] bg-white/68 p-4 backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35">
-                <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
                   <Activity className="h-3.5 w-3.5 text-signal-500" strokeWidth={1.9} />
                   Flow State
                 </div>
@@ -449,7 +449,7 @@ export const SprintStatsDeck: FunctionComponent<{
               </div>
 
               <div className="rounded-[1.45rem] border border-black/[0.05] bg-white/68 p-4 backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35">
-                <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+                <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
                   <WandSparkles className="h-3.5 w-3.5 text-ember-500" strokeWidth={1.9} />
                   Merge Surface
                 </div>
@@ -465,11 +465,11 @@ export const SprintStatsDeck: FunctionComponent<{
 
           <div className="mt-3 rounded-[1.45rem] border border-black/[0.05] bg-white/68 p-4 backdrop-blur-xl dark:border-white/[0.05] dark:bg-void-900/35">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
+              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
                 <Sparkles className="h-3.5 w-3.5 text-signal-500" strokeWidth={1.9} />
                 Stage Ledger
               </div>
-              <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-slate-400">
+              <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
                 Split from runtime milestones
               </div>
             </div>

@@ -72,7 +72,7 @@ import { Bot } from "lucide-preact";
                 </span>
               ) : null}
             </div>
-            <div className="mb-4 text-xs font-medium leading-relaxed text-slate-400">
+            <div className="mb-4 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
               {selectedTemplateConfig.description}
             </div>
             <TextAreaInput

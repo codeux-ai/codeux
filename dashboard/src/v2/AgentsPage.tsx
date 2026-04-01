@@ -32,7 +32,7 @@ const EmptyState: FunctionComponent<{ hasProject: boolean; onCreate?: () => void
       <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
         {hasProject ? "No Agent Presets Yet" : "Select A Project"}
       </h3>
-      <p className="max-w-xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+      <p className="max-w-xl text-sm leading-relaxed text-slate-600 dark:text-slate-400">
         {hasProject
           ? "Create reusable agent definitions with instructions and labels. Agents stay separate from live connections and can now sync from `.sprint-os/agents/*.md`."
           : "Choose a project from the top navigation to manage its project agents."}
@@ -74,7 +74,7 @@ const syncStatusTone = (preset: AgentPreset): { badge: string; label: string } =
       };
     default:
       return {
-        badge: "border-black/[0.08] bg-black/[0.04] text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400",
+        badge: "border-black/[0.08] bg-black/[0.04] text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400",
         label: "Database Only",
       };
   }
@@ -138,7 +138,7 @@ const AgentPresetCard: FunctionComponent<{
                   {preset.syncStatus === "out_of_sync" && <AlertTriangle className="h-3 w-3" strokeWidth={2.1} />}
                   {syncTone.label}
                 </span>
-                <span className="font-mono text-[10px] text-slate-400">
+                <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400">
                   Updated {new Date(preset.updatedAt).toLocaleDateString()}
                 </span>
               </div>
@@ -170,7 +170,7 @@ const AgentPresetCard: FunctionComponent<{
         </div>
 
         <label className="space-y-2">
-          <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Agent Name</span>
+          <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Agent Name</span>
           <input
             value={name}
             onInput={(event) => setName((event.target as HTMLInputElement).value)}
@@ -180,7 +180,7 @@ const AgentPresetCard: FunctionComponent<{
         </label>
 
         <label className="space-y-2">
-          <span className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">
+          <span className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
             <Tags className="h-3.5 w-3.5" strokeWidth={2} />
             Labels
           </span>
@@ -193,7 +193,7 @@ const AgentPresetCard: FunctionComponent<{
         </label>
 
         <label className="space-y-2">
-          <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Instruction Markdown</span>
+          <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Instruction Markdown</span>
           <textarea
             value={instructionMarkdown}
             onInput={(event) => setInstructionMarkdown((event.target as HTMLTextAreaElement).value)}
@@ -204,14 +204,14 @@ const AgentPresetCard: FunctionComponent<{
         </label>
 
         {preset.sourcePath && (
-          <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
-            <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400">Markdown Source</div>
+          <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-xs leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
+            <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Markdown Source</div>
             <div className="mt-2 break-all font-mono text-[11px]">{preset.sourcePath}</div>
           </div>
         )}
 
         <div className="flex items-center justify-between border-t border-black/[0.05] pt-4 text-[10px] font-mono dark:border-white/[0.05]">
-          <span className="truncate text-slate-400">{preset.id}</span>
+          <span className="truncate text-slate-500 dark:text-slate-400">{preset.id}</span>
           <button
             type="button"
             onClick={() => void onSave(preset.id, { name, labels: splitLabels(labels), instructionMarkdown })}
@@ -404,7 +404,7 @@ export const AgentsPage: FunctionComponent = () => {
       )}
 
       {selectedProject && (
-        <div className="rounded-[1.5rem] border border-black/[0.06] bg-white/60 px-5 py-4 text-sm leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
+        <div className="rounded-[1.5rem] border border-black/[0.06] bg-white/60 px-5 py-4 text-sm leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
           {projectFileSavingEnabled
             ? "Project markdown mirroring is enabled. Saving an agent from the dashboard writes its markdown companion under `.sprint-os/agents` for this project."
             : "Project markdown mirroring is disabled for this project. Dashboard edits stay in the database, but local `.sprint-os/agents` markdown is still discovered and can be imported."}

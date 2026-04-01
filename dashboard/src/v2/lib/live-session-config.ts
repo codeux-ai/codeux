@@ -14,7 +14,7 @@ export const TASK_STATUS_CFG = {
     COMPLETED: { label: "Completed", hex: "#00AB84", dot: "bg-status-green shadow-[0_0_8px_rgba(0,171,132,0.5)]",                text: "text-status-green", bg: "bg-status-green/8", border: "border-status-green/20", icon: CheckCircle2 },
     FAILED:    { label: "Failed",    hex: "#E3000F", dot: "bg-status-red shadow-[0_0_10px_rgba(227,0,15,0.7)]",                  text: "text-status-red",   bg: "bg-status-red/8",   border: "border-status-red/20", icon: XCircle },
     BLOCKED:   { label: "Blocked",   hex: "#F59E0B", dot: "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.5)]",               text: "text-status-amber", bg: "bg-status-amber/8", border: "border-status-amber/20", icon: AlertTriangle },
-    PENDING:   { label: "Pending",   hex: "#64748b", dot: "bg-slate-400 dark:bg-slate-600",                                      text: "text-slate-400",    bg: "bg-slate-500/8",    border: "border-slate-500/20", icon: Clock },
+    PENDING:   { label: "Pending",   hex: "#64748b", dot: "bg-slate-400 dark:bg-slate-600",                                      text: "text-slate-500 dark:text-slate-400",    bg: "bg-slate-500/8",    border: "border-slate-500/20", icon: Clock },
     QUOTA:     { label: "Quota",     hex: "#F59E0B", dot: "bg-status-amber shadow-[0_0_8px_rgba(245,158,11,0.5)] animate-pulse",  text: "text-status-amber", bg: "bg-status-amber/8", border: "border-status-amber/20", icon: PauseCircle },
 } as const;
 
@@ -23,8 +23,8 @@ export type TaskStatusKey = keyof typeof TASK_STATUS_CFG;
 export const getTaskCfg = (status?: string) => TASK_STATUS_CFG[(status as TaskStatusKey) ?? "PENDING"] ?? TASK_STATUS_CFG.PENDING;
 
 export const MERGE_INDICATOR_CFG: Record<string, { label: string; text: string; bg: string; border: string }> = {
-    CI:            { label: "CI",            text: "text-signal-400",     bg: "bg-signal-500/8",      border: "border-signal-500/15" },
-    AUTOMERGE:     { label: "Automerge",     text: "text-ember-400",      bg: "bg-ember-500/8",       border: "border-ember-500/15" },
+    CI:            { label: "CI",            text: "text-signal-500 dark:text-signal-400",     bg: "bg-signal-500/8",      border: "border-signal-500/15" },
+    AUTOMERGE:     { label: "Automerge",     text: "text-ember-500 dark:text-ember-400",      bg: "bg-ember-500/8",       border: "border-ember-500/15" },
     MERGED:        { label: "Merged",        text: "text-status-green",   bg: "bg-status-green/8",    border: "border-status-green/15" },
     MERGE_BLOCKED: { label: "Merge Blocked", text: "text-status-amber",   bg: "bg-status-amber/8",    border: "border-status-amber/15" },
     MERGE_CONFLICT:{ label: "Merge Conflict",text: "text-status-red",     bg: "bg-status-red/8",      border: "border-status-red/15" },
@@ -34,7 +34,7 @@ export const ORIGINATOR_CFG: Record<string, { border: string; text: string; labe
     agent:    { border: "border-signal-500/30", text: "text-signal-400", label: "Agent" },
     user:     { border: "border-ember-500/30",  text: "text-ember-400",  label: "User" },
     provider: { border: "border-status-amber/30", text: "text-status-amber", label: "Provider" },
-    system:   { border: "border-white/[0.06]",  text: "text-slate-500",  label: "System" },
+    system:   { border: "border-white/[0.06]",  text: "text-slate-600 dark:text-slate-400",  label: "System" },
 };
 
 export const getOriginatorCfg = (originator?: string) => {

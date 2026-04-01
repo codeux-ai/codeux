@@ -174,12 +174,12 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
       <div className="overflow-x-auto">
         <table className="min-w-full text-left">
           <thead>
-            <tr className="border-b border-black/[0.06] text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:border-white/[0.06]">
+            <tr className="border-b border-black/[0.06] text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400 dark:border-white/[0.06]">
               <th className="px-4 py-3 pl-6 w-10">
                 <button
                   type="button"
                   onClick={handleToggleSelectAll}
-                  className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
                   title={allFilteredSelected ? "Deselect all" : "Select all visible"}
                 >
                   {allFilteredSelected
@@ -272,7 +272,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
             ) : windowedSprints.length === 0 ? (
               <tr>
                 <td colSpan={9}>
-                  <div className="px-6 py-8 text-sm text-slate-400">
+                  <div className="px-6 py-8 text-sm text-slate-500 dark:text-slate-400">
                     {searchQuery
                       ? `No sprints match "${searchQuery}".`
                       : "No sprints exist yet. Create one above and it will appear in the showcase and in the ledger below."}

@@ -1002,7 +1002,7 @@ export const ChatPage: FunctionComponent = () => {
                 }}
               />
               <div className="mt-3 flex items-center justify-between">
-                <div className="text-[10px] font-mono text-slate-400">
+                <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                   {activeConnection
                     ? `${activeConnection.displayName} · ${activeConnection.status} · Enter sends`
                     : "Messages will stay queued until a listener claims or is assigned to this thread · Enter sends · Shift+Enter newline"}
@@ -1011,7 +1011,7 @@ export const ChatPage: FunctionComponent = () => {
                   type="button"
                   onClick={() => void handleSend()}
                   disabled={!selectedProject || !input.trim() || sending}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-[1rem] bg-signal-500 text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-black/[0.06] disabled:text-slate-400 disabled:shadow-none dark:disabled:bg-white/[0.06]"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-[1rem] bg-signal-500 text-void-900 shadow-[0_0_24px_rgba(0,224,160,0.28)] transition-all hover:bg-signal-400 disabled:cursor-not-allowed disabled:bg-black/[0.06] disabled:text-slate-500 dark:disabled:bg-white/[0.06] dark:disabled:text-slate-500 disabled:shadow-none"
                 >
                   {sending ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.2} /> : <ArrowUp className="h-4 w-4" strokeWidth={2.5} />}
                 </button>
@@ -1039,7 +1039,7 @@ export const ChatPage: FunctionComponent = () => {
                 {selectedInvocation?.type || "No Invocation Selected"}
               </h2>
               {selectedInvocation && (
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600 dark:text-slate-400">
                   {selectedInvocation.provider && (
                     <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-1 font-mono dark:border-white/[0.06] dark:bg-white/[0.03]">
                       {selectedInvocation.provider}
@@ -1055,7 +1055,7 @@ export const ChatPage: FunctionComponent = () => {
                       ? "border-status-red/30 bg-status-red/10 text-status-red"
                       : selectedInvocation.status === "completed"
                         ? "border-signal-500/20 bg-signal-500/10 text-signal-500"
-                        : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"
+                        : "border-black/[0.06] bg-black/[0.03] text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"
                   }`}>
                     {selectedInvocation.status}
                   </span>
@@ -1068,7 +1068,7 @@ export const ChatPage: FunctionComponent = () => {
                 </div>
               )}
             </div>
-            <div className="text-right text-[10px] font-mono text-slate-400">
+            <div className="text-right text-[10px] font-mono text-slate-500 dark:text-slate-400">
               <div className="mb-2">{selectedInvocation ? `${selectedInvocation.messageCount} messages` : "0 messages"}</div>
             </div>
           </div>
@@ -1092,7 +1092,7 @@ export const ChatPage: FunctionComponent = () => {
 
         <div className="shrink-0 border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
           <div className="rounded-[1.5rem] border border-black/[0.06] bg-black/[0.03] p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-            <div className="min-h-[38px] w-full px-2 py-2 text-[15px] leading-relaxed text-slate-400 dark:text-slate-600">
+            <div className="min-h-[38px] w-full px-2 py-2 text-[15px] leading-relaxed text-slate-500 dark:text-slate-400">
               Invocation execution logs are read-only. Switch to Threads to communicate.
             </div>
           </div>

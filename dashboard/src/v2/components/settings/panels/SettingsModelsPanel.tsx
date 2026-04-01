@@ -323,8 +323,8 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
               <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
                 <div className="rounded-[1.6rem] border border-black/[0.06] bg-black/[0.02] p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
                   <div className="mb-3 px-2">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Provider deck</div>
-                    <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Provider deck</div>
+                    <div className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
                       Pick one provider to edit. The right panel shows the full default model, weight, and thinking configuration.
                     </div>
                   </div>
@@ -360,7 +360,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                                   </span>
                                 ) : null}
                               </div>
-                              <div className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                              <div className="mt-1 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
                                 {providerKey === "jules" ? "Managed by Jules API defaults." : provider.model}
                               </div>
                               <div className="mt-2 flex flex-wrap gap-2">
@@ -430,7 +430,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                               <div className="text-xl font-semibold text-slate-900 dark:text-white">
                                 {providerLabels[providerKey as ProviderId]}
                               </div>
-                              <div className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                              <div className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-slate-400">
                                 {providerKey === "jules"
                                   ? "Use routing weight and availability to place Jules into the provider pool. Model behavior stays API-managed."
                                   : "Set the global fallback model and thinking behavior used by any invocation route that does not override this provider."}
@@ -462,7 +462,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                         <div className={`grid gap-4 ${supportsModelSelection && supportsThinkingMode ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
                           {supportsModelSelection ? (
                             <div>
-                              <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                              <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
                                 <span>Model</span>
                                 {getFieldBadge(`aiProvider.providers.${providerKey}.model`) ? (
                                   <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
@@ -495,7 +495,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
 
                           {supportsThinkingMode ? (
                             <div>
-                              <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                              <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
                                 <span>Thinking mode</span>
                                 {getFieldBadge(`aiProvider.providers.${providerKey}.thinkingMode`) ? (
                                   <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
@@ -517,7 +517,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                           ) : null}
 
                           <div>
-                            <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                            <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
                               <span>Weight</span>
                               {getFieldBadge(`aiProvider.providers.${providerKey}.weight`) ? (
                                 <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
@@ -559,8 +559,8 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                 <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
                   <div className="rounded-[1.6rem] border border-black/[0.06] bg-black/[0.02] p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
                     <div className="mb-3 px-2">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Invocation routes</div>
-                      <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Invocation routes</div>
+                      <div className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
                         Choose the workflow you want to tune, then adjust its provider profile and overrides.
                       </div>
                     </div>
@@ -586,7 +586,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                                 <div className={`text-sm font-semibold ${isActive ? "text-signal-700 dark:text-signal-200" : "text-slate-800 dark:text-slate-100"}`}>
                                   {definition.label}
                                 </div>
-                                <div className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                                <div className="mt-1 text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
                                   {definition.description}
                                 </div>
                               </div>
@@ -598,7 +598,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                                 {definitionRoute.profile}
                               </div>
                             </div>
-                            <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                            <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
                               <span>{definitionRoute.strategy}</span>
                               <span className="rounded-full bg-black/[0.04] px-2 py-1 dark:bg-white/[0.04]">
                                 {poolCount} provider{poolCount === 1 ? "" : "s"}
@@ -614,15 +614,15 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                     <div className="mb-5 flex flex-wrap items-start justify-between gap-4 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
                       <div>
                         <div className="text-lg font-semibold text-slate-900 dark:text-white">{activeRouteDefinition.label}</div>
-                        <div className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                        <div className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600 dark:text-slate-400">
                           {activeRouteDefinition.description}
                         </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+                        <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
                           {route.profile} profile
                         </span>
-                        <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+                        <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
                           {route.strategy}
                         </span>
                       </div>
@@ -648,7 +648,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
 
                     <div className="grid gap-4 md:grid-cols-2">
                       <div>
-                        <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Profile</div>
+                        <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Profile</div>
                         <PillChoiceGroup
                           value={route.profile}
                           onChange={(value) => updateEditableSettings((current) => updateInvocationRouteSettings(current, activeRouteDefinition.id, {
@@ -659,7 +659,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                         />
                       </div>
                       <div>
-                        <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Strategy</div>
+                        <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Strategy</div>
                         <PillChoiceGroup
                           value={route.strategy}
                           onChange={(value) => updateEditableSettings((current) => updateInvocationRouteSettings(current, activeRouteDefinition.id, {
@@ -675,7 +675,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                     </div>
 
                     <div className="mt-4">
-                      <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Primary provider</div>
+                      <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Primary provider</div>
                       <SelectInput
                         value={manualProviderValue}
                         onChange={(value) => updateEditableSettings((current) => updateInvocationRouteSettings(current, activeRouteDefinition.id, {
@@ -699,8 +699,8 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
 
                     <div className="mt-5 rounded-[1.35rem] border border-black/[0.06] bg-black/[0.02] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
                       <div className="mb-2 flex items-center justify-between gap-3">
-                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Allowed providers</div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                        <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">Allowed providers</div>
+                        <div className="text-[11px] text-slate-600 dark:text-slate-400">
                           {route.allowedProviders.length === 0
                             ? "Using all eligible providers"
                             : `${route.allowedProviders.length} pinned`}
@@ -717,7 +717,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                               className={`rounded-full border px-3 py-2 text-[11px] font-semibold tracking-wide transition-colors ${
                                 active
                                   ? "border-signal-500/35 bg-signal-500/12 text-signal-700 dark:border-signal-400/35 dark:bg-signal-400/12 dark:text-signal-200"
-                                  : "border-black/[0.08] bg-white/78 text-slate-500 dark:border-white/[0.08] dark:bg-void-900/60 dark:text-slate-400"
+                                  : "border-black/[0.08] bg-white/78 text-slate-600 dark:border-white/[0.08] dark:bg-void-900/60 dark:text-slate-400"
                               }`}
                             >
                               {providerLabels[providerId]}
@@ -746,7 +746,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                               <div className={`grid gap-3 ${supportsModelSelection && supportsThinkingMode ? "md:grid-cols-2" : "md:grid-cols-1"}`}>
                                 {supportsModelSelection ? (
                                   <div>
-                                    <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Model</div>
+                                    <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Model</div>
                                     <SelectInput
                                       value={override.model || "__inherit__"}
                                       onChange={(value) => updateEditableSettings((current) => updateInvocationProviderOverride(current, activeRouteDefinition.id, providerId, {
@@ -761,7 +761,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                                 ) : null}
                                 {supportsThinkingMode ? (
                                   <div>
-                                    <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Thinking mode</div>
+                                    <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Thinking mode</div>
                                     <SelectInput
                                       value={override.thinkingMode || "__inherit__"}
                                       onChange={(value) => updateEditableSettings((current) => updateInvocationProviderOverride(current, activeRouteDefinition.id, providerId, {

@@ -926,10 +926,10 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                                 <div className="absolute inset-0 rounded-full border border-black/[0.04] dark:border-white/[0.04]" />
                                 <div className="absolute inset-2 rounded-full border border-black/[0.03] dark:border-white/[0.03] animate-[spin_30s_linear_infinite]" />
                                 <div className="absolute inset-4 rounded-full bg-signal-500/[0.06] animate-pulse" />
-                                <Anchor className="w-7 h-7 text-slate-400 dark:text-white/20" strokeWidth={1.2} />
+                                <Anchor className="w-7 h-7 text-slate-500 dark:text-slate-400" strokeWidth={1.2} />
                             </div>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500 dark:text-white/25">Fleet Awaiting Departure</p>
-                            <p className="text-[11px] text-slate-400/60 dark:text-white/12 mt-3 font-mono max-w-xs mx-auto">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-600 dark:text-slate-400">Fleet Awaiting Departure</p>
+                            <p className="text-[11px] text-slate-500/60 dark:text-slate-400/60 mt-3 font-mono max-w-xs mx-auto">
                                 {hasLiveSprint ? "No tasks currently in the pipeline" : "Launch a sprint to begin the race"}
                             </p>
                         </div>
@@ -953,12 +953,12 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                             <div className="absolute inset-0 rounded-full bg-signal-500 shadow-[0_0_10px_rgba(0,224,160,0.6)]" />
                             <div className="absolute inset-0 rounded-full bg-signal-500 animate-ping opacity-30" />
                         </div>
-                        <span className="text-[9px] font-bold uppercase tracking-[0.25em] text-slate-500 dark:text-white/35">Sprint Race</span>
-                        <span className="text-[8px] font-mono text-slate-400 dark:text-white/15 ml-1">
+                        <span className="text-[9px] font-bold uppercase tracking-[0.25em] text-slate-600 dark:text-slate-400">Sprint Race</span>
+                        <span className="text-[8px] font-mono text-slate-500 dark:text-slate-400 ml-1">
                             {activeShips.length + harbourCount} vessel{(activeShips.length + harbourCount) !== 1 ? "s" : ""}
                         </span>
                     </div>
-                    <div className="flex items-center gap-5 text-[7px] font-mono text-slate-400 dark:text-white/20 uppercase tracking-wider">
+                    <div className="flex items-center gap-5 text-[7px] font-mono text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                         <span className="flex items-center gap-1.5">
                             <span className="inline-block w-2.5 h-1.5 rounded-[1px] bg-gradient-to-r from-[#E74C3C]/60 to-[#3498DB]/60" />
                             Container

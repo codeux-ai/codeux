@@ -24,7 +24,7 @@ const statusColor: Record<SourceStatus, string> = {
     running:      'text-status-green',
     failed:       'text-status-red',
     intervention: 'text-status-amber',
-    idle:         'text-slate-400 dark:text-slate-500',
+    idle:         'text-slate-500 dark:text-slate-400',
 };
 
 const timeAgo = (iso: string) => {
@@ -119,7 +119,7 @@ const ProjectCard: FunctionComponent<{
                         <h3 className="font-bold text-[15px] text-slate-900 dark:text-white tracking-tight truncate leading-snug">
                             {source.name}
                         </h3>
-                        <span className="text-[9px] font-mono text-slate-400 uppercase tracking-[0.14em]">{source.id}</span>
+                        <span className="text-[9px] font-mono text-slate-500 dark:text-slate-400 uppercase tracking-[0.14em]">{source.id}</span>
                     </div>
                 </div>
 
@@ -146,7 +146,7 @@ const ProjectCard: FunctionComponent<{
                         <span className="text-[1.6rem] font-black text-slate-900 dark:text-white font-mono leading-none">
                             {value}
                         </span>
-                        <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-slate-400 mt-1.5">
+                        <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400 mt-1.5">
                             {l}
                         </span>
                     </div>
@@ -156,8 +156,8 @@ const ProjectCard: FunctionComponent<{
             {/* ── Progress bar ──────────────────────────────────────── */}
             <div className="mb-6 relative z-10">
                 <div className="flex items-center justify-between mb-2">
-                    <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Completion</span>
-                    <span className="text-[10px] font-mono font-bold text-slate-600 dark:text-slate-400">{completion}%</span>
+                    <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400">Completion</span>
+                    <span className="text-[10px] font-mono font-bold text-slate-600 dark:text-slate-300">{completion}%</span>
                 </div>
                 <div className="h-1.5 w-full bg-black/[0.05] dark:bg-white/[0.05] rounded-full overflow-hidden">
                     <div
@@ -173,7 +173,7 @@ const ProjectCard: FunctionComponent<{
 
             {/* ── Footer ────────────────────────────────────────────── */}
             <div className="flex items-center justify-between relative z-10 mt-auto">
-                <span className="text-[9px] font-mono text-slate-400 dark:text-slate-600">
+                <span className="text-[9px] font-mono text-slate-500 dark:text-slate-400">
                     {timeAgo(source.updatedAt)}
                 </span>
 
@@ -187,7 +187,7 @@ const ProjectCard: FunctionComponent<{
                     <button className="w-7 h-7 flex items-center justify-center rounded-xl
                                        bg-black/[0.04] dark:bg-white/[0.04]
                                        hover:bg-black/[0.08] dark:hover:bg-white/[0.08]
-                                       text-slate-400 hover:text-slate-900 dark:hover:text-white
+                                       text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white
                                        transition-colors duration-200"
                             onClick={(event) => {
                                 event.stopPropagation();
@@ -198,7 +198,7 @@ const ProjectCard: FunctionComponent<{
                     <button className="w-7 h-7 flex items-center justify-center rounded-xl
                                        bg-black/[0.04] dark:bg-white/[0.04]
                                        hover:bg-black/[0.08] dark:hover:bg-white/[0.08]
-                                       text-slate-400 hover:text-slate-900 dark:hover:text-white
+                                       text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white
                                        transition-colors duration-200"
                             onClick={(event) => {
                                 event.stopPropagation();
@@ -209,7 +209,7 @@ const ProjectCard: FunctionComponent<{
                     <button className="w-7 h-7 flex items-center justify-center rounded-xl
                                        bg-black/[0.04] dark:bg-white/[0.04]
                                        hover:bg-status-red/[0.1]
-                                       text-slate-400 hover:text-status-red
+                                       text-slate-500 dark:text-slate-400 hover:text-status-red
                                        transition-colors duration-200"
                             onClick={(event) => {
                                 event.stopPropagation();
@@ -254,11 +254,11 @@ const AddCard: FunctionComponent<{ onClick: () => void }> = ({ onClick }) => (
 
         <div className="flex flex-col items-center gap-1.5">
             <span className="text-xs font-bold uppercase tracking-[0.2em]
-                             text-slate-300 dark:text-slate-600
+                             text-slate-500 dark:text-slate-400
                              group-hover:text-ember-500 transition-colors duration-300">
                 Add Project
             </span>
-            <span className="text-[9px] font-mono text-slate-200 dark:text-slate-700
+            <span className="text-[9px] font-mono text-slate-400 dark:text-slate-500
                              group-hover:text-slate-400 transition-colors duration-200">
                 Local or Git
             </span>
@@ -363,7 +363,7 @@ export const ProjectsPage: FunctionComponent = () => {
                             </h1>
                         </div>
 
-                        <p className="text-lg text-slate-500 dark:text-slate-500 font-medium max-w-xl mt-1 leading-relaxed">
+                        <p className="text-lg text-slate-600 dark:text-slate-400 font-medium max-w-xl mt-1 leading-relaxed">
                             Connected repositories and local directories. Monitor health, tasks, and sprint activity.
                         </p>
                     </div>
@@ -385,7 +385,7 @@ export const ProjectsPage: FunctionComponent = () => {
                                 </div>
                             )}
                             <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-full
-                                           bg-black/[0.04] dark:bg-white/[0.04] text-slate-500
+                                           bg-black/[0.04] dark:bg-white/[0.04] text-slate-600 dark:text-slate-300
                                            border border-black/[0.06] dark:border-white/[0.06]
                                            flex items-center gap-2">
                                 <FolderOpen className="w-3 h-3" strokeWidth={2} />
@@ -419,14 +419,14 @@ export const ProjectsPage: FunctionComponent = () => {
                             className={`text-xs font-semibold tracking-wide px-4 py-1.5 rounded-lg transition-all duration-200 flex items-center gap-2
                                 ${activeFilter === f
                                     ? 'bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]'
-                                    : 'text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                                 }`}
                         >
                             {f}
                             <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded-md
                                 ${activeFilter === f
                                     ? 'bg-ember-500/[0.12] text-ember-600 dark:text-ember-400'
-                                    : 'bg-black/[0.06] dark:bg-white/[0.06] text-slate-400'
+                                    : 'bg-black/[0.06] dark:bg-white/[0.06] text-slate-500 dark:text-slate-400'
                                 }`}>
                                 {counts[f]}
                             </span>

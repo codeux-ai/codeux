@@ -30,7 +30,7 @@ const Card: FunctionComponent<{ title: string; description: string; badge?: stri
     <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
       <div>
         <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</h3>
-        <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">{description}</p>
+        <p className="mt-1 max-w-2xl text-sm font-medium text-slate-600 dark:text-slate-400">{description}</p>
       </div>
       {badge ? (
         <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-300">
@@ -180,7 +180,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                 className={`px-3 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all duration-200 ${
                   settings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE"
                     ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
-                    : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                 }`}
               >
                 Template
@@ -192,7 +192,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                 className={`px-3 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all duration-200 ${
                   settings.automationInterventions.autoAnswerClarificationMode === "WORKER"
                     ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
-                    : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
                 }`}
               >
                 Worker
@@ -384,7 +384,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                       <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{providerLabels[providerId as keyof typeof providerLabels]}</div>
                       {getBadge(`aiProvider.providers.${providerId}.enabled`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.enabled`)!} /> : null}
                     </div>
-                    <div className="mt-1 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+                    <div className="mt-1 text-xs font-medium leading-relaxed text-slate-600 dark:text-slate-400">
                       {providerId === "jules"
                         ? "Enabled state and routing weight. Jules follows API-managed defaults for model behavior."
                         : "Model choice, weight, and thinking mode."}
@@ -415,7 +415,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               <div className={`relative z-10 grid gap-3 ${supportsModelSelection && supportsThinkingMode ? "md:grid-cols-2" : "md:grid-cols-1"}`}>
                 {supportsModelSelection ? (
                 <div>
-                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
                     <span>Model</span>
                     {getBadge(`aiProvider.providers.${providerId}.model`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.model`)!} /> : null}
                   </div>
@@ -458,7 +458,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                 ) : null}
                 {supportsThinkingMode ? (
                 <div>
-                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
                     <span>Thinking mode</span>
                     {getBadge(`aiProvider.providers.${providerId}.thinkingMode`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.thinkingMode`)!} /> : null}
                   </div>
@@ -481,7 +481,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
                 </div>
                 ) : null}
                 <div>
-                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
                     <span>Weight</span>
                     {getBadge(`aiProvider.providers.${providerId}.weight`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.weight`)!} /> : null}
                   </div>
