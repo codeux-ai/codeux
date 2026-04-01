@@ -35,6 +35,7 @@ import {
 } from "./lib/live-session-config.js";
 import { LiveTaskCard, TaskDuration, QuotaCountdown } from "./components/LiveTaskCard.js";
 import { LiveTransportBanner } from "./components/live-session/LiveTransportBanner.js";
+import { LoadingSpinner } from "./components/common/LoadingSpinner.js";
 import { RuntimeEventFeed } from "./components/RuntimeEventFeed.js";
 import { GitCIStatusPanel } from "./components/GitCIStatusPanel.js";
 import { deriveLiveDurationDisplay } from "./lib/live-duration-display.js";
@@ -338,7 +339,10 @@ export const LiveSessionPage: FunctionComponent = () => {
 
 
     return (
-        <div className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-16 relative z-10">
+        <div 
+            className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-16 relative z-10"
+            aria-busy={!initialLoadComplete || isRecovering}
+        >
             <LiveTransportBanner
                 transportState={transportState}
                 isRecovering={isRecovering}
@@ -456,8 +460,9 @@ export const LiveSessionPage: FunctionComponent = () => {
                 {/* Task cards */}
                 <div className="xl:col-span-8 flex flex-col gap-5">
                     {!hasSprintContext && !initialLoadComplete ? (
-                        /* Initial load in progress — render nothing to avoid flashing idle placeholder */
-                        null
+                        <div className="flex items-center justify-center p-20">
+                            <LoadingSpinner label="Connecting to live stream..." size={32} />
+                        </div>
                     ) : !hasSprintContext ? (
                         <IdleRuntimeState
                             title={pausedIntervention ? "Human Intervention Needed" : "Waiting for Sprint Start"}
