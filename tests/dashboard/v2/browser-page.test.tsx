@@ -275,8 +275,12 @@ describe("BrowserPage", () => {
     expect(screen.getByText("Build previews per sprint, isolated by container.")).toBeInTheDocument();
 
     expect(screen.getByText("Sprint 2")).toBeInTheDocument();
+    expect(screen.getByText("Selected Sprint")).toBeInTheDocument();
     expect(screen.getAllByText("Open Link").length).toBeGreaterThan(0);
 
-    expect(container.querySelector("iframe")).toBeInTheDocument();
+    const iframe = container.querySelector("iframe");
+    expect(iframe).toBeInTheDocument();
+    const selectedSprintLabel = screen.getByText("Selected Sprint");
+    expect((iframe?.compareDocumentPosition(selectedSprintLabel) || 0) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
   });
 });

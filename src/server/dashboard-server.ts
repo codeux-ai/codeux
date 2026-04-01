@@ -245,6 +245,91 @@ function buildDashboardOriginForPreviewHost(req: express.Request): string {
   return `${protocol}://${rawHost}`;
 }
 
+function shouldAttemptPreviewSpaFallback(req: express.Request): boolean {
+  const accept = String(req.headers.accept || "").toLowerCase();
+  return req.method === "GET"
+    && req.path !== "/"
+    && path.extname(req.path) === ""
+    && !req.path.startsWith("/api/")
+    && !req.path.startsWith(PREVIEW_BRIDGE_PATH)
+    && accept.includes("text/html");
+}
+
+function buildPreviewProxyRequestHeaders(
+  req: express.Request,
+  upstreamPort: number,
+): Record<string, string | string[] | undefined> {
+  const headers = { ...req.headers } as Record<string, string | string[] | undefined>;
+  delete headers["accept-encoding"];
+  headers["x-forwarded-host"] = String(req.headers.host || "");
+  headers.host = `127.0.0.1:${upstreamPort}`;
+  headers["x-forwarded-proto"] = req.protocol || "http";
+  if (req.socket.localPort) {
+    headers["x-forwarded-port"] = String(req.socket.localPort);
+  }
+  return headers;
+}
+
+async function requestBufferedPreviewResponse(args: {
+  method: string;
+  upstreamPort: number;
+  targetPath: string;
+  headers: Record<string, string | string[] | undefined>;
+}): Promise<{ statusCode: number; headers: Record<string, string | string[] | undefined>; body: Buffer }> {
+  return await new Promise((resolve, reject) => {
+    const proxyRequest = httpRequest({
+      protocol: "http:",
+      hostname: "127.0.0.1",
+      port: args.upstreamPort,
+      method: args.method,
+      path: args.targetPath,
+      headers: args.headers,
+    }, (proxyResponse) => {
+      const chunks: Buffer[] = [];
+      proxyResponse.on("data", (chunk) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      });
+      proxyResponse.on("end", () => {
+        resolve({
+          statusCode: proxyResponse.statusCode || 502,
+          headers: { ...proxyResponse.headers },
+          body: Buffer.concat(chunks),
+        });
+      });
+    });
+
+    proxyRequest.on("error", reject);
+    proxyRequest.end();
+  });
+}
+
+function sendBufferedPreviewResponse(args: {
+  req: express.Request;
+  res: express.Response;
+  upstreamPort: number;
+  response: { statusCode: number; headers: Record<string, string | string[] | undefined>; body: Buffer };
+}): void {
+  const contentType = String(args.response.headers["content-type"] || "");
+  const isHtml = contentType.toLowerCase().includes("text/html");
+  const responseHeaders = { ...args.response.headers };
+
+  if (typeof responseHeaders.location === "string") {
+    responseHeaders.location = rewritePreviewLocationHeader(responseHeaders.location, args.req, args.upstreamPort);
+  }
+
+  if (!isHtml) {
+    args.res.writeHead(args.response.statusCode, responseHeaders);
+    args.res.end(args.response.body);
+    return;
+  }
+
+  delete responseHeaders["content-length"];
+  delete responseHeaders["content-security-policy"];
+  delete responseHeaders["content-security-policy-report-only"];
+  args.res.writeHead(args.response.statusCode, responseHeaders);
+  args.res.end(injectPreviewBridgeIntoHtml(args.response.body.toString("utf8")));
+}
+
 function buildPreviewBridgeScript(): string {
   return [
     "(() => {",
@@ -483,13 +568,34 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       return;
     }
 
-    const headers = { ...req.headers } as Record<string, string | string[] | undefined>;
-    delete headers["accept-encoding"];
-    headers["x-forwarded-host"] = String(req.headers.host || "");
-    headers.host = `127.0.0.1:${session.hostPort}`;
-    headers["x-forwarded-proto"] = req.protocol || "http";
-    if (req.socket.localPort) {
-      headers["x-forwarded-port"] = String(req.socket.localPort);
+    const upstreamHeaders = buildPreviewProxyRequestHeaders(req, session.hostPort);
+    const targetPath = req.originalUrl || req.url || "/";
+    if (shouldAttemptPreviewSpaFallback(req)) {
+      try {
+        const primaryResponse = await requestBufferedPreviewResponse({
+          method: req.method,
+          upstreamPort: session.hostPort,
+          targetPath,
+          headers: upstreamHeaders,
+        });
+        const response = primaryResponse.statusCode === 404
+          ? await requestBufferedPreviewResponse({
+            method: req.method,
+            upstreamPort: session.hostPort,
+            targetPath: "/",
+            headers: upstreamHeaders,
+          })
+          : primaryResponse;
+        sendBufferedPreviewResponse({
+          req,
+          res,
+          upstreamPort: session.hostPort,
+          response,
+        });
+      } catch (error) {
+        res.status(502).send(toErrorMessage(error, "Failed to proxy sprint preview host request"));
+      }
+      return;
     }
 
     const proxyRequest = httpRequest({
@@ -497,8 +603,8 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       hostname: "127.0.0.1",
       port: session.hostPort,
       method: req.method,
-      path: req.originalUrl || req.url,
-      headers,
+      path: targetPath,
+      headers: upstreamHeaders,
     }, (proxyResponse) => {
       const contentType = String(proxyResponse.headers["content-type"] || "");
       const isHtml = contentType.toLowerCase().includes("text/html");

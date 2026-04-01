@@ -289,72 +289,12 @@ export const BrowserPage: FunctionComponent = () => {
         </div>
       )}
 
-      <div className="mb-5 grid gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="mb-5">
         <PreviewSessionSlider
           sessions={sessionCards}
           selectedSessionId={activeSessionId}
           onSelectSession={setActiveSessionId}
         />
-
-        <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Selected Sprint</div>
-              <div className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">
-                {scriptTargetSprint?.name || "All sprints"}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowScriptEditor((value) => !value)}
-              className="inline-flex h-10 items-center gap-2 rounded-2xl border border-black/[0.08] px-3 text-xs font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
-            >
-              <FileCode2 className="h-4 w-4" strokeWidth={2} />
-              Script
-            </button>
-          </div>
-            <div className="mt-4 space-y-3 text-sm">
-            {selectedSession && (
-              <div className="rounded-2xl border border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Port routing</div>
-                <div className="mt-1 font-mono text-[12px] text-slate-700 dark:text-slate-300">{formatPortMapping(selectedSession)}</div>
-              </div>
-            )}
-            <div className="rounded-2xl border border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Script path</div>
-              <div className="mt-1 break-all font-mono text-[12px] text-slate-700 dark:text-slate-300">{script?.path || "Loading..."}</div>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={handleRebuild}
-                disabled={!selectedSession || mutating}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
-              >
-                <RotateCcw className="h-4 w-4" strokeWidth={2} />
-                Rebuild
-              </button>
-              <button
-                type="button"
-                onClick={handleStop}
-                disabled={!selectedSession || mutating}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
-              >
-                <Square className="h-4 w-4" strokeWidth={2} />
-                Stop
-              </button>
-              <a
-                href={currentFrameSrc || undefined}
-                target="_blank"
-                rel="noreferrer"
-                className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white ${!currentFrameSrc ? "pointer-events-none opacity-50" : ""}`}
-              >
-                <ExternalLink className="h-4 w-4" strokeWidth={2} />
-                Open
-              </a>
-            </div>
-          </div>
-        </div>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
@@ -383,6 +323,66 @@ export const BrowserPage: FunctionComponent = () => {
         </PreviewWindowChrome>
 
         <div className="space-y-5">
+          <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Selected Sprint</div>
+                <div className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">
+                  {scriptTargetSprint?.name || "All sprints"}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowScriptEditor((value) => !value)}
+                className="inline-flex h-10 items-center gap-2 rounded-2xl border border-black/[0.08] px-3 text-xs font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+              >
+                <FileCode2 className="h-4 w-4" strokeWidth={2} />
+                Script
+              </button>
+            </div>
+            <div className="mt-4 space-y-3 text-sm">
+              {selectedSession && (
+                <div className="rounded-2xl border border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Port routing</div>
+                  <div className="mt-1 font-mono text-[12px] text-slate-700 dark:text-slate-300">{formatPortMapping(selectedSession)}</div>
+                </div>
+              )}
+              <div className="rounded-2xl border border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Script path</div>
+                <div className="mt-1 break-all font-mono text-[12px] text-slate-700 dark:text-slate-300">{script?.path || "Loading..."}</div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={handleRebuild}
+                  disabled={!selectedSession || mutating}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
+                >
+                  <RotateCcw className="h-4 w-4" strokeWidth={2} />
+                  Rebuild
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStop}
+                  disabled={!selectedSession || mutating}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
+                >
+                  <Square className="h-4 w-4" strokeWidth={2} />
+                  Stop
+                </button>
+                <a
+                  href={currentFrameSrc || undefined}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white ${!currentFrameSrc ? "pointer-events-none opacity-50" : ""}`}
+                >
+                  <ExternalLink className="h-4 w-4" strokeWidth={2} />
+                  Open
+                </a>
+              </div>
+            </div>
+          </div>
+
           <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
             <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Runtime notes</div>
             <div className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">

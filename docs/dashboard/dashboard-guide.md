@@ -221,12 +221,14 @@ Legacy runtime:
 - The Tasks board entrance animation now replays only for project/view/filter changes instead of every background task refresh
 - Stats page is project-scoped and visualizes tracked token/time usage for the selected project with `24h`, `7d`, `30d`, `all time`, and custom date windows
 - Browser page is project-scoped and provides a polished in-app browser surface for sprint preview containers:
-  - floating horizontal slider with large-screen five-card visibility for preview selection
+  - floating horizontal slider in its own top strip, with large-screen five-card visibility for preview selection
+  - the browser window starts directly below the slider instead of sharing a stretched first-row layout with the sprint controls
   - one preview session per sprint
   - browser window chrome state for fullscreen, minimize, and close
   - same-origin iframe navigation with back, forward, refresh, and editable URL
   - rebuild, stop, open-in-tab, startup-script editing, and log viewing
   - sprint previews are proxied through the dashboard instead of embedding raw localhost origins directly
+  - extensionless preview-host deep links such as `/sprints` now recover to the preview app shell when the upstream dev server returns `404`, so direct loads and refreshes stay routable
 - Stats page now matches the high-interaction v2 dashboard card language more closely:
   - animated metric cards
   - a unified glass-panel system that mirrors the premium live card surfaces instead of using a separate visual treatment

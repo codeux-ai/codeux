@@ -91,7 +91,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
       )}
       <div
         ref={scrollContainerRef}
-        className="flex w-full snap-x snap-mandatory gap-3 overflow-x-auto pb-4 pt-1 px-1 scrollbar-hide"
+        className="flex w-full snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-2 pt-1 scrollbar-hide"
       >
         {sessions.map((session) => {
           const active = selectedSessionId === session.id;

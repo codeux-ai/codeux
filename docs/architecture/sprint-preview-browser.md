@@ -94,6 +94,7 @@ Benefits:
 - relative `/api/...` and websocket calls stay inside the preview container instead of hitting the main dashboard APIs
 - cookies, local storage, and service workers stay isolated per preview session
 - open-in-new-tab uses the preview origin directly instead of a rewritten proxy path
+- extensionless direct loads such as `/sprints` now retry the preview app shell when a dev server returns `404`, so SPA routes keep working on refresh and on copied deep links
 
 The dashboard injects a small preview bridge script into proxied HTML responses. The bridge:
 - reports `location` and `title` changes to the parent browser page via `postMessage`
@@ -127,6 +128,7 @@ Startup hygiene:
 The dashboard now exposes:
 - `/browser` route for the in-app browser workspace
 - dock and top-nav entry points for the browser
+- a dedicated horizontal session slider strip above the browser surface, so the iframe starts directly below the cards instead of sharing a stretched header row
 - sprint-preview controls in the `Sprint Engine` settings category
 - project-level `Sprint Browser` settings in the project settings editor for port range, startup script path, and automation overrides
 - per-sprint startup script editing in the browser page itself
