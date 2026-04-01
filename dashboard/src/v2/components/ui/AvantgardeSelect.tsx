@@ -18,6 +18,8 @@ interface AvantgardeSelectProps {
   /** Compact variant for inline/card usage (smaller text, no border bg) */
   variant?: "default" | "compact" | "card";
   className?: string;
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
 }
 
 interface DropdownPosition {
@@ -51,9 +53,13 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   placeholder = "Select\u2026",
   variant = "default",
   className = "",
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledby,
 }) => {
   const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const listboxRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<DropdownPosition | null>(null);
 
@@ -116,6 +122,24 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
     };
   }, [open, updatePosition]);
 
+
+  useEffect(() => {
+    if (open) {
+      const idx = options.findIndex(o => o.value === value);
+      setActiveIndex(idx >= 0 ? idx : 0);
+    } else {
+      setActiveIndex(-1);
+    }
+  }, [open, value, options]);
+
+
+  useEffect(() => {
+    if (open && listboxRef.current) {
+      listboxRef.current.focus();
+    }
+  }, [open, position]);
+
+
   // Click outside
   useEffect(() => {
     if (!open) return;
@@ -131,17 +155,53 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  // Escape key
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!open) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setOpen(false);
+        triggerRef.current?.focus();
+        return;
+      }
+      if (!options.length) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveIndex(prev => (prev + 1) % options.length);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveIndex(prev => (prev - 1 + options.length) % options.length);
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        setActiveIndex(0);
+      } else if (e.key === "End") {
+        e.preventDefault();
+        setActiveIndex(options.length - 1);
+      } else if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        if (activeIndex >= 0 && activeIndex < options.length) {
+          onChange(options[activeIndex].value);
+          setOpen(false);
+          triggerRef.current?.focus();
+        }
+      }
     };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open]);
+
+
 
   const selected = options.find((o) => o.value === value);
+
+
+  const activeOptionRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (open && activeOptionRef.current) {
+      if (typeof activeOptionRef.current.scrollIntoView === "function") {
+        activeOptionRef.current.scrollIntoView({ block: "nearest" });
+      }
+    }
+  }, [activeIndex, open]);
+
 
   const triggerClass =
     variant === "compact"
@@ -177,26 +237,43 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
           }}
           className="overflow-hidden rounded-2xl border border-black/[0.06] bg-white/[0.97] shadow-[0_20px_40px_rgba(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.03)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/[0.97] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4),0_0_0_1px_rgba(255,255,255,0.04)]"
         >
-          <div className="max-h-[17rem] overflow-y-auto overscroll-contain py-1.5">
-            {options.map((option) => {
-              const isActive = option.value === value;
+          <div
+            ref={listboxRef}
+            tabIndex={-1}
+            className="max-h-[17rem] overflow-y-auto overscroll-contain py-1.5 outline-none"
+            role="listbox"
+            onKeyDown={onKeyDown}
+            aria-label={ariaLabel}
+            aria-labelledby={ariaLabelledby}
+            aria-activedescendant={activeIndex >= 0 && options[activeIndex] ? `select-option-${options[activeIndex].value.replace(/\W/g, '-')}` : undefined}
+          >
+            {options.map((option, idx) => {
+              const isSelected = option.value === value;
+              const isFocused = idx === activeIndex;
               return (
                 <button
                   key={option.value}
+                  id={`select-option-${option.value.replace(/\W/g, '-')}`}
+                  role="option"
+                  aria-selected={isSelected}
                   type="button"
+                  ref={isFocused ? activeOptionRef : null}
                   onClick={() => {
                     onChange(option.value);
                     setOpen(false);
+                    triggerRef.current?.focus();
                   }}
                   className={`flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm transition-colors ${
-                    isActive
+                    isFocused ? "bg-signal-500/10 " : ""
+                  }${
+                    isSelected
                       ? "bg-signal-500/8 font-semibold text-signal-600 dark:text-signal-400"
                       : "text-slate-700 hover:bg-signal-500/5 dark:text-slate-300 dark:hover:bg-signal-500/5"
                   }`}
                 >
                   {option.icon && <span className="flex-shrink-0">{option.icon}</span>}
                   <span className="truncate">{option.label}</span>
-                  {isActive && (
+                  {isSelected && (
                     <Check className="ml-auto h-3.5 w-3.5 flex-shrink-0 text-signal-500" strokeWidth={2.5} />
                   )}
                 </button>
@@ -217,8 +294,18 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
         ref={triggerRef}
         type="button"
         onClick={() => !disabled && setOpen(!open)}
+        onKeyDown={(e) => {
+          if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === " ")) {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
         className={triggerClass}
         disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+        aria-labelledby={ariaLabelledby}
       >
         <span className="truncate">{selected?.label || placeholder}</span>
         <ChevronDown

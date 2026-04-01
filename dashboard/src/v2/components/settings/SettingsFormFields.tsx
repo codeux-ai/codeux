@@ -39,9 +39,11 @@ export const SelectInput: FunctionComponent<{
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
   disabled?: boolean;
-}> = ({ value, onChange, options, disabled }) => (
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+}> = ({ value, onChange, options, disabled, "aria-label": ariaLabel, "aria-labelledby": ariaLabelledby }) => (
   <div className="min-w-[220px]">
-    <AvantgardeSelect value={value} onChange={onChange} options={options} disabled={disabled} />
+    <AvantgardeSelect value={value} onChange={onChange} options={options} disabled={disabled} aria-label={ariaLabel} aria-labelledby={ariaLabelledby} />
   </div>
 );
 
