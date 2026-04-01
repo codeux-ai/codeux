@@ -822,6 +822,10 @@ describe("CycleRunner attention sync", () => {
           defaultBranch: "main",
         },
         loopSteps: {},
+      } as any,
+      {
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        memory: { enabled: true, autoCaptureSprint: true },
       } as any
     );
 
@@ -884,6 +888,10 @@ describe("CycleRunner attention sync", () => {
           defaultBranch: "main",
         },
         loopSteps: {},
+      } as any,
+      {
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        memory: { enabled: false, autoCaptureSprint: true },
       } as any
     );
 
@@ -941,6 +949,10 @@ describe("CycleRunner attention sync", () => {
           defaultBranch: "main",
         },
         loopSteps: {},
+      } as any,
+      {
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        memory: { enabled: true, autoCaptureSprint: false },
       } as any
     );
 
@@ -997,6 +1009,10 @@ describe("CycleRunner attention sync", () => {
           defaultBranch: "main",
         },
         loopSteps: {},
+      } as any,
+      {
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        memory: { enabled: true, autoCaptureSprint: false },
       } as any
     );
 
@@ -1054,6 +1070,10 @@ describe("CycleRunner attention sync", () => {
           defaultBranch: "main",
         },
         loopSteps: {},
+      } as any,
+      {
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        memory: { enabled: true, autoCaptureSprint: true },
       } as any
     );
 
@@ -1111,6 +1131,10 @@ describe("CycleRunner attention sync", () => {
           defaultBranch: "main",
         },
         loopSteps: {},
+      } as any,
+      {
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        memory: { enabled: false, autoCaptureSprint: true },
       } as any
     );
 
@@ -1219,6 +1243,10 @@ describe("CycleRunner attention sync", () => {
           defaultBranch: "main",
         },
         loopSteps: {},
+      } as any,
+      {
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        memory: { enabled: true, autoCaptureSprint: true },
       } as any
     );
 

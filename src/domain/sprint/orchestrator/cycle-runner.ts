@@ -63,6 +63,11 @@ export class CycleRunner {
     manualMergeTasks: Subtask[];
     workerEscalatedMergeConflictTasks: Subtask[];
   }> {
+    const dashboardSettings = this.deps.getDashboardSettings({
+      projectId: args.executionContext.project.id,
+      sprintId: args.executionContext.sprint.id,
+    });
+
     let subtasks: Subtask[] = args.loopSteps.loadSubtasks
       ? await this.deps.sprintExecutionStateService.loadSubtasks(
           args.executionContext.project.id,
@@ -70,6 +75,10 @@ export class CycleRunner {
           args.sprintRunId,
         )
       : [];
+    const activeProjectAttentionItems = typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
+      ? this.deps.projectAttentionService.listActiveProjectItems(args.executionContext.project.id)
+      : [];
+
     const appendTaskEvent = (
       task: Subtask,
       eventType: string,
@@ -106,18 +115,9 @@ export class CycleRunner {
         {
           repoPath: args.repoPath,
           sprintNumber: args.executionContext.sprintNumber,
-          maxQuotaRetriesWithoutTimer: this.deps.getDashboardSettings({
-            projectId: args.executionContext.project.id,
-            sprintId: args.executionContext.sprint.id,
-          }).cliWorkflow.maxQuotaRetriesWithoutTimer,
-          maxRateLimitRetries: this.deps.getDashboardSettings({
-            projectId: args.executionContext.project.id,
-            sprintId: args.executionContext.sprint.id,
-          }).cliWorkflow.maxRateLimitRetries,
-          retryOnRateLimit: this.deps.getDashboardSettings({
-            projectId: args.executionContext.project.id,
-            sprintId: args.executionContext.sprint.id,
-          }).cliWorkflow.retryOnRateLimit,
+          maxQuotaRetriesWithoutTimer: dashboardSettings.cliWorkflow.maxQuotaRetriesWithoutTimer,
+          maxRateLimitRetries: dashboardSettings.cliWorkflow.maxRateLimitRetries,
+          retryOnRateLimit: dashboardSettings.cliWorkflow.retryOnRateLimit,
         },
       );
       subtasks = syncResult.subtasks;
@@ -129,7 +129,7 @@ export class CycleRunner {
         retryFailed: args.retryFailed,
         isActionRequiredState: this.deps.isActionRequiredState,
       });
-      await this.captureTaskCompletionMemories(subtasks, preDerivationStates, args);
+      await this.captureTaskCompletionMemories(subtasks, preDerivationStates, args, dashboardSettings);
     }
 
     let reportText = "";
@@ -161,9 +161,6 @@ export class CycleRunner {
 
     let gitStatus: GitTrackingStatus | null = null;
     if (subtasks.length > 0) {
-      const activeProjectAttentionItems = typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
-        ? this.deps.projectAttentionService.listActiveProjectItems(args.executionContext.project.id)
-        : [];
       const taskStateBeforeCiGate = snapshotTaskState(subtasks);
       gitStatus = this.deps.getCiStatusForScope
         ? await this.deps.getCiStatusForScope({
@@ -240,7 +237,7 @@ export class CycleRunner {
       });
       subtasks = ciAutofixResult.subtasks;
       reportText += ciAutofixResult.reportText;
-      await this.captureCiFailureMemories(subtasks, taskStateBeforeCiGate, args);
+      await this.captureCiFailureMemories(subtasks, taskStateBeforeCiGate, args, dashboardSettings);
 
       this.persistCiGateTaskStateChanges(taskStateBeforeCiGate, subtasks);
 
@@ -259,11 +256,7 @@ export class CycleRunner {
       }
     }
 
-    const activeWorkerMergeConflictTaskIds = collectActiveWorkerMergeConflictTaskIds(
-      typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
-        ? this.deps.projectAttentionService.listActiveProjectItems(args.executionContext.project.id)
-        : [],
-    );
+    const activeWorkerMergeConflictTaskIds = collectActiveWorkerMergeConflictTaskIds(activeProjectAttentionItems);
 
     const protocolResult = await runProtocolStep(subtasks, {
       featureBranch: args.defaultFeatureBranch,
@@ -332,13 +325,10 @@ export class CycleRunner {
     subtasks: Subtask[],
     preDerivationStates: Map<string, Subtask["status"]>,
     args: CycleRunnerArgs,
+    settings: ReturnType<SprintOrchestratorDependencies["getDashboardSettings"]>,
   ): Promise<void> {
     const memoryService = this.deps.memoryService;
-    const settings = this.deps.getDashboardSettings({
-      projectId: args.executionContext.project.id,
-      sprintId: args.executionContext.sprint.id,
-    });
-    if (!memoryService || !settings.memory?.enabled || !settings.memory.autoCaptureSprint) return;
+    if (!memoryService || !settings?.memory?.enabled || !settings?.memory?.autoCaptureSprint) return;
 
     const pendingCaptures: { taskId: string; promise: Promise<void> }[] = [];
     for (const task of subtasks) {
@@ -379,28 +369,17 @@ export class CycleRunner {
       });
     }
 
-    const results = await Promise.allSettled(pendingCaptures.map(p => p.promise));
-    results.forEach((result, index) => {
-      if (result.status === "rejected") {
-        this.deps.logger.warn("Failed to auto-capture task memory", {
-          taskId: pendingCaptures[index].taskId,
-          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
-        });
-      }
-    });
+    await this.captureMemoriesForTasks(pendingCaptures, args);
   }
 
   private async captureCiFailureMemories(
     subtasks: Subtask[],
     preGateStates: Map<string, TaskStateSnapshot>,
     args: CycleRunnerArgs,
+    settings: ReturnType<SprintOrchestratorDependencies["getDashboardSettings"]>,
   ): Promise<void> {
     const memoryService = this.deps.memoryService;
-    const settings = this.deps.getDashboardSettings({
-      projectId: args.executionContext.project.id,
-      sprintId: args.executionContext.sprint.id,
-    });
-    if (!memoryService || !settings.memory?.enabled || !settings.memory.autoCaptureSprint) return;
+    if (!memoryService || !settings?.memory?.enabled || !settings?.memory?.autoCaptureSprint) return;
 
     const pendingCaptures: { taskId: string; promise: Promise<void> }[] = [];
     for (const task of subtasks) {
@@ -428,11 +407,20 @@ export class CycleRunner {
       });
     }
 
-    const results = await Promise.allSettled(pendingCaptures.map(p => p.promise));
+    await this.captureMemoriesForTasks(pendingCaptures, args);
+  }
+
+  private async captureMemoriesForTasks(
+    captures: { taskId: string; promise: Promise<void> }[],
+    args: CycleRunnerArgs,
+  ): Promise<void> {
+    if (captures.length === 0) return;
+
+    const results = await Promise.allSettled(captures.map(p => p.promise));
     results.forEach((result, index) => {
       if (result.status === "rejected") {
-        this.deps.logger.warn("Failed to auto-capture CI failure memory", {
-          taskId: pendingCaptures[index].taskId,
+        this.deps.logger.warn("Failed to auto-capture task memory", {
+          taskId: captures[index].taskId,
           error: result.reason instanceof Error ? result.reason.message : String(result.reason),
         });
       }
