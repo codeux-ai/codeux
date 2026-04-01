@@ -204,6 +204,36 @@ describe("PreviewSessionSlider", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
     expect(onRemoveSession).toHaveBeenCalledWith("slider-sess-1");
   });
+
+  it("keeps remove enabled while launch is busy", () => {
+    render(
+      <PreviewSessionSlider
+        sessions={[
+          {
+            id: "slider-sess-1",
+            projectId: "p1",
+            sprintId: "s1",
+            sprintName: "Sprint Alpha",
+            status: "running",
+            healthStatus: "healthy",
+            createdAt: "",
+            updatedAt: ""
+          },
+        ]}
+        sprints={[{ id: "s1", name: "Sprint Alpha" } as any]}
+        selectedSessionId="slider-sess-1"
+        launchSprintId="s1"
+        onSelectSession={vi.fn()}
+        onLaunchSprintChange={vi.fn()}
+        onLaunchContainer={vi.fn()}
+        onRemoveSession={vi.fn()}
+        launchBusy
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Remove" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Launch Container" })).toBeDisabled();
+  });
 });
 
 describe("PreviewWindowChrome", () => {
@@ -373,5 +403,29 @@ describe("BrowserPage", () => {
 
     expect(mockRemovePreviewSession).toHaveBeenCalledWith("sess-1");
     expect(mockRefreshSessions).toHaveBeenCalled();
+  });
+
+  it("removes the session card immediately while deletion is in flight", async () => {
+    let resolveRemoval: (() => void) | null = null;
+    mockRemovePreviewSession.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRemoval = resolve;
+        })
+    );
+
+    render(<BrowserPage />);
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole("button", { name: "Remove" })[0]!);
+    });
+
+    expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(1);
+
+    await act(async () => {
+      resolveRemoval?.();
+    });
+
+    expect(mockRemovePreviewSession).toHaveBeenCalledWith("sess-1");
   });
 });

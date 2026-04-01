@@ -14,7 +14,8 @@ interface PreviewSessionSliderProps {
   onLaunchSprintChange: (sprintId: string) => void;
   onLaunchContainer: () => void;
   onRemoveSession: (sessionId: string) => void;
-  busy?: boolean;
+  launchBusy?: boolean;
+  removingSessionIds?: string[];
 }
 
 const statusTone: Record<SprintPreviewSession["status"], string> = {
@@ -54,10 +55,12 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
   onLaunchSprintChange,
   onLaunchContainer,
   onRemoveSession,
-  busy = false,
+  launchBusy = false,
+  removingSessionIds = [],
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const cardCount = sessions.length + 1;
+  const removingSessionIdSet = new Set(removingSessionIds);
 
   const scrollLeft = () => {
     if (scrollContainerRef.current) {
@@ -101,6 +104,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
           const active = selectedSessionId === session.id;
           const origin = buildPreviewOrigin(session.id);
           const canOpen = Boolean(session.hostPort);
+          const removing = removingSessionIdSet.has(session.id);
 
           return (
             <div
@@ -151,10 +155,10 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                   }}
                   className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-status-red/15 px-3 text-[11px] font-semibold text-status-red transition hover:border-status-red/30 hover:bg-status-red/8 disabled:cursor-not-allowed disabled:opacity-50"
                   title="Remove preview container"
-                  disabled={busy}
+                  disabled={removing}
                 >
                   <Trash2 className="h-3 w-3" strokeWidth={2.5} />
-                  Remove
+                  {removing ? "Removing..." : "Remove"}
                 </button>
                 <a
                   href={canOpen ? origin : undefined}
@@ -193,7 +197,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
             <select
               value={launchSprintId}
               onChange={(event) => onLaunchSprintChange((event.currentTarget as HTMLSelectElement).value)}
-              disabled={busy || sprints.length === 0}
+              disabled={launchBusy || sprints.length === 0}
               className="w-full rounded-[1rem] border border-black/[0.08] bg-white/85 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {sprints.length === 0 && <option value="">No sprints available</option>}
@@ -207,7 +211,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
             <button
               type="button"
               onClick={onLaunchContainer}
-              disabled={busy || sprints.length === 0 || !launchSprintId}
+              disabled={launchBusy || sprints.length === 0 || !launchSprintId}
               className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-[1rem] bg-signal-500 px-4 text-sm font-semibold text-void-900 transition hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Play className="h-4 w-4" strokeWidth={2.2} />

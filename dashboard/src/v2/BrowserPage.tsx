@@ -57,7 +57,10 @@ export const BrowserPage: FunctionComponent = () => {
   const [scriptDraft, setScriptDraft] = useState("");
   const [logs, setLogs] = useState("");
 
-  const [mutating, setMutating] = useState(false);
+  const [launching, setLaunching] = useState(false);
+  const [sessionActionPending, setSessionActionPending] = useState(false);
+  const [savingScript, setSavingScript] = useState(false);
+  const [removingSessionIds, setRemovingSessionIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [addressValue, setAddressValue] = useState("/");
   const [currentPath, setCurrentPath] = useState("/");
@@ -95,21 +98,26 @@ export const BrowserPage: FunctionComponent = () => {
     });
   }, [selectedSprint?.id, sprints]);
 
+  const removingSessionIdSet = useMemo(() => new Set(removingSessionIds), [removingSessionIds]);
+  const visibleSelectedSession = selectedSession && !removingSessionIdSet.has(selectedSession.id)
+    ? selectedSession
+    : null;
+
   const scriptTargetSprint = useMemo(() => {
-    if (selectedSession) {
-      return sprints.find((sprint) => sprint.id === selectedSession.sprintId) || null;
+    if (visibleSelectedSession) {
+      return sprints.find((sprint) => sprint.id === visibleSelectedSession.sprintId) || null;
     }
     return selectedSprint || null;
-  }, [selectedSession, selectedSprint, sprints]);
+  }, [visibleSelectedSession, selectedSprint, sprints]);
 
   useEffect(() => {
-    if (selectedSession) {
-      setActiveSessionId(selectedSession.id);
-      const nextPath = normalizePath(selectedSession.lastKnownPath || "/");
+    if (visibleSelectedSession) {
+      setActiveSessionId(visibleSelectedSession.id);
+      const nextPath = normalizePath(visibleSelectedSession.lastKnownPath || "/");
       setCurrentPath(nextPath);
       setAddressValue(nextPath);
     }
-  }, [selectedSession?.id]);
+  }, [visibleSelectedSession?.id]);
 
   useEffect(() => {
     if (!selectedProject || !scriptTargetSprint) {
@@ -128,33 +136,33 @@ export const BrowserPage: FunctionComponent = () => {
   }, [selectedProject?.id, scriptTargetSprint?.id]);
 
   useEffect(() => {
-    if (!selectedSession) {
+    if (!visibleSelectedSession) {
       setLogs("");
       return;
     }
-    void fetchPreviewLogs(selectedSession.id, 160)
+    void fetchPreviewLogs(visibleSelectedSession.id, 160)
       .then((result) => setLogs(result.logs))
       .catch(() => setLogs(""));
-  }, [selectedSession?.id]);
+  }, [visibleSelectedSession?.id]);
 
   useEffect(() => {
-    if (!selectedSession) {
+    if (!visibleSelectedSession) {
       return;
     }
     const timer = window.setInterval(() => {
-      void fetchPreviewLogs(selectedSession.id, 160)
+      void fetchPreviewLogs(visibleSelectedSession.id, 160)
         .then((result) => setLogs(result.logs))
         .catch(() => undefined);
     }, 8000);
     return () => window.clearInterval(timer);
-  }, [selectedSession?.id]);
+  }, [visibleSelectedSession?.id]);
 
   useEffect(() => {
     const handlePreviewMessage = (event: MessageEvent) => {
-      if (!selectedSession) {
+      if (!visibleSelectedSession) {
         return;
       }
-      if (event.origin !== buildPreviewOrigin(selectedSession.id)) {
+      if (event.origin !== buildPreviewOrigin(visibleSelectedSession.id)) {
         return;
       }
       const payload = event.data as { type?: string; path?: string } | null;
@@ -168,26 +176,26 @@ export const BrowserPage: FunctionComponent = () => {
 
     window.addEventListener("message", handlePreviewMessage);
     return () => window.removeEventListener("message", handlePreviewMessage);
-  }, [selectedSession?.id]);
+  }, [visibleSelectedSession?.id]);
 
-  const currentFrameSrc = selectedSession
-    ? `${buildPreviewOrigin(selectedSession.id)}${normalizePath(currentPath)}`
+  const currentFrameSrc = visibleSelectedSession
+    ? `${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(currentPath)}`
     : "";
 
   const postNavigationCommand = (action: "back" | "forward" | "reload" | "push", path?: string) => {
-    if (!selectedSession || !frameRef.current?.contentWindow) {
+    if (!visibleSelectedSession || !frameRef.current?.contentWindow) {
       return;
     }
     frameRef.current.contentWindow.postMessage({
       type: PREVIEW_NAVIGATION_TYPE,
       action,
       path,
-    }, buildPreviewOrigin(selectedSession.id));
+    }, buildPreviewOrigin(visibleSelectedSession.id));
   };
 
   const handleStart = async (sprintId = launchSprintId) => {
     if (!selectedProject || !sprintId) return;
-    setMutating(true);
+    setLaunching(true);
     try {
       const session = await startPreviewSession(selectedProject.id, sprintId);
       setActiveSessionId(session.id);
@@ -195,55 +203,60 @@ export const BrowserPage: FunctionComponent = () => {
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : String(actionError));
     } finally {
-      setMutating(false);
+      setLaunching(false);
     }
   };
 
   const handleRebuild = async () => {
-    if (!selectedSession) return;
-    setMutating(true);
+    if (!visibleSelectedSession) return;
+    setSessionActionPending(true);
     try {
-      await rebuildPreviewSession(selectedSession.id);
+      await rebuildPreviewSession(visibleSelectedSession.id);
       await refreshSessions(true);
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : String(actionError));
     } finally {
-      setMutating(false);
+      setSessionActionPending(false);
     }
   };
 
   const handleStop = async () => {
-    if (!selectedSession) return;
-    setMutating(true);
+    if (!visibleSelectedSession) return;
+    setSessionActionPending(true);
     try {
-      await stopPreviewSession(selectedSession.id);
+      await stopPreviewSession(visibleSelectedSession.id);
       await refreshSessions(true);
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : String(actionError));
     } finally {
-      setMutating(false);
+      setSessionActionPending(false);
     }
   };
 
   const handleRemove = async (sessionId: string) => {
-    setMutating(true);
+    if (removingSessionIdSet.has(sessionId)) {
+      return;
+    }
+    setRemovingSessionIds((current) => [...current, sessionId]);
+    if (activeSessionId === sessionId) {
+      setActiveSessionId(null);
+      setLogs("");
+      setCurrentPath("/");
+      setAddressValue("/");
+    }
     try {
       await removePreviewSession(sessionId);
-      if (activeSessionId === sessionId) {
-        setActiveSessionId(null);
-        setLogs("");
-      }
       await refreshSessions(true);
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : String(actionError));
     } finally {
-      setMutating(false);
+      setRemovingSessionIds((current) => current.filter((id) => id !== sessionId));
     }
   };
 
   const handleSaveScript = async () => {
     if (!selectedProject || !scriptTargetSprint) return;
-    setMutating(true);
+    setSavingScript(true);
     try {
       const nextScript = await savePreviewScript(selectedProject.id, scriptTargetSprint.id, scriptDraft);
       setScript(nextScript);
@@ -251,7 +264,7 @@ export const BrowserPage: FunctionComponent = () => {
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : String(actionError));
     } finally {
-      setMutating(false);
+      setSavingScript(false);
     }
   };
 
@@ -262,7 +275,9 @@ export const BrowserPage: FunctionComponent = () => {
     postNavigationCommand("push", nextPath);
   };
 
-  const sessionCards = sessions.filter((session) => !selectedProject || session.projectId === selectedProject.id);
+  const sessionCards = sessions.filter((session) =>
+    (!selectedProject || session.projectId === selectedProject.id) && !removingSessionIdSet.has(session.id)
+  );
 
   if (!selectedProject) {
     return (
@@ -317,13 +332,14 @@ export const BrowserPage: FunctionComponent = () => {
           onLaunchSprintChange={setLaunchSprintId}
           onLaunchContainer={() => void handleStart()}
           onRemoveSession={(sessionId) => void handleRemove(sessionId)}
-          busy={mutating}
+          launchBusy={launching}
+          removingSessionIds={removingSessionIds}
         />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <PreviewWindowChrome
-          session={selectedSession}
+          session={visibleSelectedSession}
           onNavigateBack={() => postNavigationCommand("back")}
           onNavigateForward={() => postNavigationCommand("forward")}
           onReload={() => postNavigationCommand("reload")}
@@ -336,10 +352,10 @@ export const BrowserPage: FunctionComponent = () => {
             postNavigationCommand("push", nextPath);
           }}
         >
-          {selectedSession && (
+          {visibleSelectedSession && (
             <iframe
               ref={frameRef}
-              title={`Sprint preview ${selectedSession.sprintName}`}
+              title={`Sprint preview ${visibleSelectedSession.sprintName}`}
               src={currentFrameSrc}
               className="h-full w-full border-0 bg-white"
             />
@@ -365,10 +381,10 @@ export const BrowserPage: FunctionComponent = () => {
               </button>
             </div>
             <div className="mt-4 space-y-3 text-sm">
-              {selectedSession && (
+              {visibleSelectedSession && (
                 <div className="rounded-2xl border border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Port routing</div>
-                  <div className="mt-1 font-mono text-[12px] text-slate-700 dark:text-slate-300">{formatPortMapping(selectedSession)}</div>
+                  <div className="mt-1 font-mono text-[12px] text-slate-700 dark:text-slate-300">{formatPortMapping(visibleSelectedSession)}</div>
                 </div>
               )}
               <div className="rounded-2xl border border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
@@ -379,7 +395,7 @@ export const BrowserPage: FunctionComponent = () => {
                 <button
                   type="button"
                   onClick={handleRebuild}
-                  disabled={!selectedSession || mutating}
+                  disabled={!visibleSelectedSession || sessionActionPending}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
                 >
                   <RotateCcw className="h-4 w-4" strokeWidth={2} />
@@ -388,7 +404,7 @@ export const BrowserPage: FunctionComponent = () => {
                 <button
                   type="button"
                   onClick={handleStop}
-                  disabled={!selectedSession || mutating}
+                  disabled={!visibleSelectedSession || sessionActionPending}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
                 >
                   <Square className="h-4 w-4" strokeWidth={2} />
@@ -427,7 +443,7 @@ export const BrowserPage: FunctionComponent = () => {
                 <button
                   type="button"
                   onClick={handleSaveScript}
-                  disabled={mutating || !scriptTargetSprint}
+                  disabled={savingScript || !scriptTargetSprint}
                   className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                 >
                   <Save className="h-4 w-4" strokeWidth={2} />
