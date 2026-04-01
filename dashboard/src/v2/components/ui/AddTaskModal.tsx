@@ -205,7 +205,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             <button
               onClick={onClose}
               aria-label="Close"
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
             >
               <X className="w-4 h-4" />
             </button>
@@ -265,7 +265,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                       key={option}
                       type="button"
                       onClick={() => setStatus(option)}
-                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition-all ${
+                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
                         status === option
                           ? "bg-signal-500 text-void-900 shadow-[0_2px_12px_rgba(0,224,160,0.3)]"
                           : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
@@ -285,7 +285,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                       key={option}
                       type="button"
                       onClick={() => setPriority(option)}
-                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition-all ${
+                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/50 ${
                         priority === option
                           ? "bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]"
                           : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
@@ -309,7 +309,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     key={option.value}
                     type="button"
                     onClick={() => setExecutorType(option.value)}
-                    className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+                    className={`rounded-2xl border px-4 py-3 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
                       executorType === option.value
                         ? "border-signal-500/45 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300"
                         : "border-black/[0.08] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] text-slate-500 dark:text-slate-400"
@@ -327,7 +327,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               <textarea
                 value={description}
                 onInput={(event) => setDescription((event.target as HTMLTextAreaElement).value)}
-                className="mt-2.5 w-full min-h-[110px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none"
+                className="mt-2.5 w-full min-h-[110px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus:ring-2 focus:ring-signal-500/10 resize-none"
                 placeholder="Summarize the intent and outcome."
               />
             </div>
@@ -337,7 +337,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               <textarea
                 value={promptMarkdown}
                 onInput={(event) => setPromptMarkdown((event.target as HTMLTextAreaElement).value)}
-                className="mt-2.5 w-full min-h-[150px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none font-mono"
+                className="mt-2.5 w-full min-h-[150px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus:ring-2 focus:ring-signal-500/10 resize-none font-mono"
                 placeholder="Detailed markdown instructions for the agent."
               />
             </div>
@@ -360,7 +360,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                         key={task.recordId}
                         type="button"
                         onClick={() => toggleDependency(task.recordId)}
-                        className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-left transition-all ${
+                        className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/50 ${
                           active
                             ? "border-ember-500/45 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400"
                             : "border-black/[0.07] dark:border-white/[0.07] bg-black/[0.02] dark:bg-white/[0.02] text-slate-500"
@@ -382,13 +382,13 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-lg px-2"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="group/btn flex items-center gap-2.5 px-6 py-3 bg-signal-500 hover:bg-signal-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] hover:-translate-y-px"
+                className="group/btn flex items-center gap-2.5 px-6 py-3 bg-signal-500 hover:bg-signal-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
               >
                 <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                 {initialTask ? "Save Task" : "Create Task"}

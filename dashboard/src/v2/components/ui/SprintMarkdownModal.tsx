@@ -31,14 +31,54 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
     gsap.fromTo(cardRef.current, { y: 42, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" });
   }, []);
 
+  const triggerRef = useRef<HTMLElement | null>(null);
+  const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
   useEffect(() => {
+    triggerRef.current = document.activeElement as HTMLElement | null;
+
+    // Initial focus setup
+    if (cardRef.current) {
+      const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
+      if (focusableElements.length > 0) {
+        focusableElements[0].focus();
+      }
+    }
+
     const handler = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
+      } else if (event.key === "Tab") {
+        if (!cardRef.current) return;
+
+        const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
+        if (focusableElements.length === 0) return;
+
+        const first = focusableElements[0];
+        const last = focusableElements[focusableElements.length - 1];
+
+        if (!cardRef.current.contains(document.activeElement)) {
+          event.preventDefault();
+          first.focus();
+          return;
+        }
+
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       }
     };
     document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
+    return () => {
+      document.removeEventListener("keydown", handler);
+      if (triggerRef.current) {
+        triggerRef.current.focus();
+      }
+    };
   }, [onClose]);
 
   const handleBackdropClick = (event: MouseEvent) => {
@@ -121,7 +161,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
             </div>
             <button
               onClick={onClose}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
             >
               <X className="w-4 h-4" />
             </button>
@@ -137,7 +177,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                       <button
                         type="button"
                         onClick={() => handleDownload(`${(sprintLabel || "sprint").replace(/\s+/g, "-").toLowerCase()}.md`, sprintText)}
-                        className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-ember-600 hover:text-ember-500 transition-colors"
+                        className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-ember-600 hover:text-ember-500 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/50 px-1 rounded"
                       >
                         <Download className="w-3 h-3" />
                         Download
@@ -145,7 +185,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                       <button
                         type="button"
                         onClick={() => { void handleCopy("sprint", sprintText); }}
-                        className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+                        className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 px-1 rounded"
                       >
                         {copiedField === "sprint" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                         {copiedField === "sprint" ? "Copied" : "Copy"}
@@ -157,7 +197,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                   value={sprintText}
                   onInput={(event) => setSprintText((event.target as HTMLTextAreaElement).value)}
                   readOnly={mode === "export"}
-                  className="w-full min-h-[180px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none font-mono"
+                  className="w-full min-h-[180px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus:ring-2 focus:ring-signal-500/10 resize-none font-mono"
                   placeholder="name: Sprint Name&#10;number: 1&#10;status: running&#10;goal:&#10;Describe the sprint scope."
                 />
               </div>
@@ -170,7 +210,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                       <button
                         type="button"
                         onClick={() => handleDownload(`${(sprintLabel || "sprint").replace(/\s+/g, "-").toLowerCase()}-tasks.md`, tasksText)}
-                        className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-ember-600 hover:text-ember-500 transition-colors"
+                        className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-ember-600 hover:text-ember-500 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/50 px-1 rounded"
                       >
                         <Download className="w-3 h-3" />
                         Download
@@ -178,7 +218,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                       <button
                         type="button"
                         onClick={() => { void handleCopy("tasks", tasksText); }}
-                        className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+                        className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 px-1 rounded"
                       >
                         {copiedField === "tasks" ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
                         {copiedField === "tasks" ? "Copied" : "Copy"}
@@ -190,7 +230,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                   value={tasksText}
                   onInput={(event) => setTasksText((event.target as HTMLTextAreaElement).value)}
                   readOnly={mode === "export"}
-                  className="w-full min-h-[240px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none font-mono"
+                  className="w-full min-h-[240px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus:ring-2 focus:ring-signal-500/10 resize-none font-mono"
                   placeholder={'--- FILE: T01.md ---\ntitle: Task Title\ndepends_on: []\nis_independent: true\nmerged: false\nprompt:\nDetailed instructions'}
                 />
               </div>
@@ -204,14 +244,14 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
                 <button
                   type="button"
                   onClick={onClose}
-                  className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                  className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-lg px-2"
                 >
                   Close
                 </button>
                 {mode === "import" && (
                   <button
                     type="submit"
-                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-signal-500 hover:bg-signal-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] hover:-translate-y-px"
+                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-signal-500 hover:bg-signal-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
                   >
                     <Upload className="w-4 h-4" />
                     Import Sprint

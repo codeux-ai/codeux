@@ -41,10 +41,57 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         gsap.to(backdropRef.current, { opacity: 0, duration: 0.28, delay: 0.05, onComplete: onClose });
     };
 
+    const triggerRef = useRef<HTMLElement | null>(null);
+    const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
     useEffect(() => {
-        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose(); };
+        triggerRef.current = document.activeElement as HTMLElement | null;
+
+        // Initial focus setup
+        if (cardRef.current) {
+            const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
+            if (focusableElements.length > 0) {
+                // Find first input or first button
+                const firstInput = focusableElements.find(el => el.tagName === 'INPUT');
+                if (firstInput) (firstInput as HTMLElement).focus();
+                else focusableElements[0].focus();
+            }
+        }
+
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                handleClose();
+            } else if (e.key === 'Tab') {
+                if (!cardRef.current) return;
+
+                const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
+                if (focusableElements.length === 0) return;
+
+                const first = focusableElements[0];
+                const last = focusableElements[focusableElements.length - 1];
+
+                if (!cardRef.current.contains(document.activeElement)) {
+                    e.preventDefault();
+                    first.focus();
+                    return;
+                }
+
+                if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            }
+        };
         document.addEventListener('keydown', handler);
-        return () => document.removeEventListener('keydown', handler);
+        return () => {
+            document.removeEventListener('keydown', handler);
+            if (triggerRef.current) {
+                triggerRef.current.focus();
+            }
+        };
     }, []);
 
     const handleBackdropClick = (e: MouseEvent) => {
@@ -139,7 +186,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         <button
                             onClick={handleClose}
                             aria-label="Close"
-                            className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
+                            className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/50"
                         >
                             <X className="w-4 h-4" />
                         </button>
@@ -168,7 +215,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         if (error) setError(null);
                                     }}
                                     placeholder="My Awesome Project"
-                                    className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-[1.6rem] font-black text-slate-900 dark:text-white placeholder-slate-200 dark:placeholder-slate-700 focus:outline-none transition-colors font-display tracking-tight leading-none"
+                                    className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-[1.6rem] font-black text-slate-900 dark:text-white placeholder-slate-200 dark:placeholder-slate-700 focus:outline-none transition-colors font-display tracking-tight leading-none focus:ring-2 focus:ring-ember-500/10 rounded-sm"
                                     required
                                     autoFocus
                                     aria-invalid={!!error && !name.trim()}
@@ -187,7 +234,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             key={type}
                                             type="button"
                                             onClick={() => handleSourceTypeChange(type)}
-                                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-[0.12em] transition-all duration-250 ${
+                                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-[0.12em] transition-all duration-250 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/50 ${
                                                 sourceType === type
                                                     ? 'bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]'
                                                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
@@ -217,7 +264,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             if (error) setError(null);
                                         }}
                                         placeholder="/home/user/projects/my-project"
-                                        className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none transition-colors"
+                                        className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none transition-colors focus:ring-2 focus:ring-ember-500/10 rounded-sm"
                                         required
                                         aria-invalid={!!error && !localPath.trim()}
                                         aria-describedby={error && !localPath.trim() ? "project-form-error" : undefined}
@@ -237,7 +284,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                                 if (error) setError(null);
                                             }}
                                             placeholder="https://github.com/user/repo.git"
-                                            className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none transition-colors"
+                                            className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none transition-colors focus:ring-2 focus:ring-ember-500/10 rounded-sm"
                                             required
                                             aria-invalid={!!error && !gitUrl.trim()}
                                             aria-describedby={error && !gitUrl.trim() ? "project-form-error" : undefined}
@@ -253,7 +300,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             value={cloneDir}
                                             onInput={(e) => setCloneDir((e.target as HTMLInputElement).value)}
                                             placeholder="/home/user/projects"
-                                            className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none transition-colors"
+                                            className="mt-2.5 w-full bg-transparent border-0 border-b-2 border-black/[0.08] dark:border-white/[0.08] focus:border-ember-500 dark:focus:border-ember-500 pb-2.5 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none transition-colors focus:ring-2 focus:ring-ember-500/10 rounded-sm"
                                         />
                                     </div>
                                 </>
@@ -267,13 +314,13 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 <button
                                     type="button"
                                     onClick={handleClose}
-                                    className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                                    className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/50 rounded-lg px-2"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
-                                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] hover:-translate-y-px"
+                                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500/50"
                                 >
                                     <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                                     Add Project
