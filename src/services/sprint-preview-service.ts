@@ -950,7 +950,7 @@ export class SprintPreviewService {
     workspacePath: string,
     featureBranch: string,
     defaultBranch: string,
-    syncLatestFromOrigin: boolean,
+    syncLatestFromOrigin = true,
   ): Promise<void> {
     if (syncLatestFromOrigin) {
       await this.fetchOriginIfAvailable(repoPath);
