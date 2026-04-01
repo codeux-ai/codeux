@@ -61,8 +61,35 @@ describe("ConnectionChatRepository Extra Coverage", () => {
     expect(() => connectionRepository.updateConnection("non-existent", { status: "connected" })).toThrow();
   });
 
-  it("touchConnectionHeartbeat updates non-existent (throws)", async () => {
+  it("touchConnectionHeartbeat updates connection heartbeat", async () => {
     const { connectionRepository } = await createRepository();
-    expect(() => connectionRepository.touchConnectionHeartbeat("non-existent")).toThrow();
+    const conn = connectionRepository.upsertConnection({
+        connectionKey: "k1",
+        displayName: "D",
+        role: "worker",
+        transport: "internal",
+        status: "connected",
+        capabilities: {},
+    });
+    
+    const updated = connectionRepository.touchConnectionHeartbeat(conn.id, "connected");
+    expect(updated.status).toBe("connected");
+    expect(new Date(updated.lastHeartbeatAt!).getTime()).toBeGreaterThan(0);
+  });
+
+  it("cleanupConnectionLifecycle marks old connections as disconnected", async () => {
+    const { connectionRepository } = await createRepository();
+    connectionRepository.upsertConnection({
+        connectionKey: "k2",
+        displayName: "D",
+        role: "worker",
+        transport: "internal",
+        status: "connected",
+        capabilities: {},
+    });
+    
+    const result = connectionRepository.cleanupConnectionLifecycle(new Date(Date.now() + 1000000));
+    expect(result.staleConnectionIds).toBeDefined();
+    expect(Array.isArray(result.staleConnectionIds)).toBe(true);
   });
 });

@@ -10,7 +10,6 @@ import { ProjectWorkerAssignmentRepository } from "../../../src/repositories/pro
 import { ProjectAttentionRepository } from "../../../src/repositories/project-attention-repository.js";
 import { ProjectAttentionService } from "../../../src/domain/workers/project-attention-service.js";
 import { ProjectWorkerAssignmentService } from "../../../src/domain/workers/project-worker-assignment-service.js";
-import { ProjectAttentionService as ProjectAttentionServiceDomain } from "../../../src/domain/workers/project-attention-service.js";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -25,7 +24,15 @@ async function createFixture() {
   const workerEndpointRepository = new WorkerEndpointRepository(appStorage);
   const projectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(appStorage);
   const projectAttentionRepository = new ProjectAttentionRepository(appStorage);
-  const projectAttentionService = new ProjectAttentionServiceDomain(projectAttentionRepository, projectWorkerAssignmentRepository, () => ({ workers: { executionMode: "VIRTUAL" } } as any));
+  
+  const projectAttentionService = new ProjectAttentionService(
+    projectAttentionRepository, 
+    projectWorkerAssignmentRepository,
+    (pid) => {
+        const s = settingsRepository.getProjectSettings(pid);
+        return s?.workers?.executionMode || "CONNECTED_MCP";
+    }
+  );
 
   const deps = {
     settingsRepository,
@@ -36,9 +43,13 @@ async function createFixture() {
     projectWorkerAssignmentRepository,
     projectWorkerAssignmentService: new ProjectWorkerAssignmentService(projectWorkerAssignmentRepository, workerEndpointRepository),
     projectAttentionService,
-    workerTaskDispatchService: {} as any,
+    workerTaskDispatchService: {
+        claimNextTaskDispatch: vi.fn(),
+    } as any,
     cliWorkflowService: {} as any,
-    sprintExecutionStateService: {} as any,
+    sprintExecutionStateService: {
+        getSprintStatus: vi.fn().mockReturnValue("idle"),
+    } as any,
     workerInboxReplyService: {} as any,
     instructionService: {} as any,
     approveSessionPlan: vi.fn(),
@@ -51,26 +62,6 @@ async function createFixture() {
 }
 
 describe("VirtualWorkerService Extra Coverage", () => {
-  it("sleep handles non-positive values", async () => {
-    const { service } = await createFixture();
-    // Access private sleep via any
-    await (service as any).constructor.name; // just to make sure service is initialized
-    const sleep = (VirtualWorkerService as any).prototype.sleep || (service as any).sleep;
-    
-    // Test direct call to the function if it's exported or accessible
-    // It's a top-level function in the file, not a class method.
-    // So we can't easily test it unless we find a method that calls it.
-    // handleTaskDispatch calls sleep.
-  });
-
-  it("extractPullRequest handles empty or null outputs", async () => {
-    const { service } = await createFixture();
-    const extractPullRequest = (service as any).constructor.__proto__.extractPullRequest; 
-    // Wait, it's a top-level function, not exported.
-    // I can't test it directly unless I use rewire or similar, but I can't.
-    // I'll test it via handleTaskDispatch.
-  });
-
   it("readRequiredString throws on various invalid values", async () => {
     const { service } = await createFixture();
     const readRequiredString = (service as any).readRequiredString.bind(service);
@@ -150,5 +141,84 @@ describe("VirtualWorkerService Extra Coverage", () => {
     
     expect(deps.projectWorkerAssignmentRepository.listActiveAssignmentsForWorker(endpoint.id)).toHaveLength(0);
     expect(deps.workerEndpointRepository.getWorkerEndpoint(endpoint.id)).toBeFalsy();
+  });
+
+  it("projectUsesVirtualWorkers checks settings", async () => {
+    const { deps, service } = await createFixture();
+    const project = deps.projectManagementRepository.createProject({ name: "P", sourceType: "local", sourceRef: "/t" });
+    
+    expect((service as any).projectUsesVirtualWorkers(project.id)).toBe(false);
+    
+    deps.settingsRepository.saveProjectSettings(project.id, { workers: { executionMode: "VIRTUAL" } });
+    expect((service as any).projectUsesVirtualWorkers(project.id)).toBe(true);
+  });
+
+  it("resolveWorkerExecutionMode returns mode from settings", async () => {
+    const { deps, service } = await createFixture();
+    const project = deps.projectManagementRepository.createProject({ name: "P", sourceType: "local", sourceRef: "/t" });
+    
+    expect((service as any).resolveWorkerExecutionMode(project.id)).toBe("CONNECTED_MCP");
+    
+    deps.settingsRepository.saveProjectSettings(project.id, { workers: { executionMode: "VIRTUAL" } });
+    expect((service as any).resolveWorkerExecutionMode(project.id)).toBe("VIRTUAL");
+  });
+
+  it("projectNeedsVirtualWorker checks assignment and status", async () => {
+    const { deps, service } = await createFixture();
+    const project = deps.projectManagementRepository.createProject({ name: "P", sourceType: "local", sourceRef: "/t" });
+    
+    expect((service as any).projectNeedsVirtualWorker(project.id)).toBe(false);
+    
+    deps.settingsRepository.saveProjectSettings(project.id, { workers: { executionMode: "VIRTUAL" } });
+    
+    // Create pickable attention to make it true
+    deps.projectAttentionService.openItem({
+        projectId: project.id,
+        attentionType: "action_required",
+        severity: "medium",
+        title: "T",
+        summaryMarkdown: "S",
+        ownerType: "worker",
+    });
+    
+    expect((service as any).projectNeedsVirtualWorker(project.id)).toBe(true);
+    
+    // Test with active cycle
+    (service as any).activeCycles.set(project.id, Promise.resolve());
+    expect((service as any).projectNeedsVirtualWorker(project.id)).toBe(false);
+  });
+
+  it("pickNextWorkerAttention picks from repo", async () => {
+    const { deps, service } = await createFixture();
+    const project = deps.projectManagementRepository.createProject({ name: "P", sourceType: "local", sourceRef: "/t" });
+    
+    expect((service as any).pickNextWorkerAttention(project.id)).toBeNull();
+    
+    deps.projectAttentionService.openItem({
+        projectId: project.id,
+        attentionType: "action_required",
+        severity: "medium",
+        title: "T",
+        summaryMarkdown: "S",
+        ownerType: "worker",
+    });
+    
+    const item = (service as any).pickNextWorkerAttention(project.id);
+    expect(item).toBeDefined();
+    expect(item.title).toBe("T");
+  });
+
+  it("buildDispatchSummary handles empty session", async () => {
+    const { service } = await createFixture();
+    const claim = { 
+        project: { name: "Proj" },
+        sprint: { name: "Sprint" },
+        task: { taskKey: "T1", title: "Title" }
+    } as any;
+    const session = { state: "RUNNING" } as any;
+    
+    const summary = (service as any).buildDispatchSummary(claim, session);
+    expect(summary).toContain("T1 Title");
+    expect(summary).toContain("RUNNING");
   });
 });
