@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useId } from "preact/hooks";
 import gsap from "gsap";
 import { X, ListChecks, Target, Bot, Plus } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
@@ -55,6 +55,15 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   const [executorType, setExecutorType] = useState<TaskExecutorType>(initialTask?.executorType || "auto");
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(initialTask?.dependsOnTaskIds || []);
   const [error, setError] = useState<string | null>(null);
+
+  const sprintIdFieldId = useId();
+  const titleId = useId();
+  const statusGroupId = useId();
+  const priorityGroupId = useId();
+  const executorGroupId = useId();
+  const descriptionId = useId();
+  const promptId = useId();
+  const dependencyGroupId = useId();
 
   useLayoutEffect(() => {
     gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
@@ -166,8 +175,9 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="group/field">
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Sprint</label>
+                <label htmlFor={sprintIdFieldId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Sprint</label>
                 <select
+                  id={sprintIdFieldId}
                   value={sprintId}
                   onInput={(event) => {
                     setSprintId((event.target as HTMLSelectElement).value);
@@ -186,8 +196,9 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               </div>
 
               <div className="group/field">
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Title</label>
+                <label htmlFor={titleId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Title</label>
                 <input
+                  id={titleId}
                   type="text"
                   value={title}
                   onInput={(event) => {
@@ -204,13 +215,15 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div>
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 block mb-2.5">Status</label>
-                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
+              <fieldset>
+                <legend id={statusGroupId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 block mb-2.5">Status</legend>
+                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap" role="radiogroup" aria-labelledby={statusGroupId}>
                   {STATUS_OPTIONS.map((option) => (
                     <button
                       key={option}
                       type="button"
+                      role="radio"
+                      aria-checked={status === option}
                       onClick={() => setStatus(option)}
                       className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition-all ${
                         status === option
@@ -222,15 +235,17 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     </button>
                   ))}
                 </div>
-              </div>
+              </fieldset>
 
-              <div>
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 block mb-2.5">Priority</label>
-                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
+              <fieldset>
+                <legend id={priorityGroupId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 block mb-2.5">Priority</legend>
+                <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap" role="radiogroup" aria-labelledby={priorityGroupId}>
                   {PRIORITY_OPTIONS.map((option) => (
                     <button
                       key={option}
                       type="button"
+                      role="radio"
+                      aria-checked={priority === option}
                       onClick={() => setPriority(option)}
                       className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition-all ${
                         priority === option
@@ -242,19 +257,21 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     </button>
                   ))}
                 </div>
-              </div>
+              </fieldset>
             </div>
 
-            <div>
+            <fieldset>
               <div className="flex items-center gap-2 mb-2.5">
                 <Bot className="w-3.5 h-3.5 text-signal-500" strokeWidth={2.3} />
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Executor</label>
+                <legend id={executorGroupId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Executor</legend>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2" role="radiogroup" aria-labelledby={executorGroupId}>
                 {EXECUTOR_OPTIONS.map((option) => (
                   <button
                     key={option.value}
                     type="button"
+                    role="radio"
+                    aria-checked={executorType === option.value}
                     onClick={() => setExecutorType(option.value)}
                     className={`rounded-2xl border px-4 py-3 text-left transition-all ${
                       executorType === option.value
@@ -267,11 +284,12 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                   </button>
                 ))}
               </div>
-            </div>
+            </fieldset>
 
             <div className="group/field">
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Description</label>
+              <label htmlFor={descriptionId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Description</label>
               <textarea
+                id={descriptionId}
                 value={description}
                 onInput={(event) => setDescription((event.target as HTMLTextAreaElement).value)}
                 className="mt-2.5 w-full min-h-[110px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none"
@@ -280,8 +298,9 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             </div>
 
             <div className="group/field">
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Execution Prompt</label>
+              <label htmlFor={promptId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Execution Prompt</label>
               <textarea
+                id={promptId}
                 value={promptMarkdown}
                 onInput={(event) => setPromptMarkdown((event.target as HTMLTextAreaElement).value)}
                 className="mt-2.5 w-full min-h-[150px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none font-mono"
@@ -289,23 +308,25 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               />
             </div>
 
-            <div>
+            <fieldset>
               <div className="flex items-center gap-2 mb-3">
                 <Target className="w-3.5 h-3.5 text-ember-500" strokeWidth={2.3} />
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Dependencies</label>
+                <legend id={dependencyGroupId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Dependencies</legend>
               </div>
               {dependencyOptions.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-black/[0.08] dark:border-white/[0.08] px-4 py-4 text-xs text-slate-400">
                   No existing tasks in this sprint yet.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1" role="group" aria-labelledby={dependencyGroupId}>
                   {dependencyOptions.map((task) => {
                     const active = dependsOnTaskIds.includes(task.recordId);
                     return (
                       <button
                         key={task.recordId}
                         type="button"
+                        role="checkbox"
+                        aria-checked={active}
                         onClick={() => toggleDependency(task.recordId)}
                         className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-left transition-all ${
                           active
@@ -323,7 +344,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                   })}
                 </div>
               )}
-            </div>
+            </fieldset>
 
             <div className="flex items-center justify-between pt-2">
               <button

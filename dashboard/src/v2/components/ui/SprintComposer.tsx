@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef, useState, useEffect, useMemo } from "preact/hooks";
+import { useLayoutEffect, useRef, useState, useEffect, useMemo, useId } from "preact/hooks";
 import gsap from "gsap";
 import {
   ClipboardList,
@@ -66,6 +66,10 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
+
+  const sprintNameId = useId();
+  const sprintPromptId = useId();
+  const executionModeGroupId = useId();
 
   const state = useSprintComposerState(initialSprint);
 
@@ -327,9 +331,10 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             </div>
           </div>
 
-          <label data-composer-stagger className="mt-8 block space-y-2">
-            <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Sprint Name</span>
+          <div data-composer-stagger className="mt-8 block space-y-2">
+            <label htmlFor={sprintNameId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Sprint Name</label>
             <input
+              id={sprintNameId}
               type="text"
               value={state.name}
               onInput={(event) => state.setName((event.target as HTMLInputElement).value)}
@@ -338,11 +343,11 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
               required
               autoFocus
             />
-          </label>
+          </div>
 
           <div data-composer-stagger className="mt-8 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Sprint Prompt</label>
+              <label htmlFor={sprintPromptId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Sprint Prompt</label>
               <button
                 type="button"
                 onClick={() => { void handleImprovePrompt(); }}
@@ -361,6 +366,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                   : "border-black/[0.07] dark:border-white/[0.08]"
               }`}>
                 <textarea
+                  id={sprintPromptId}
                   value={state.goal}
                   onInput={(event) => state.setGoal((event.target as HTMLTextAreaElement).value)}
                   placeholder="Describe the outcome, affected systems, and what done looks like when this sprint lands."
@@ -398,9 +404,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             </div>
           </div>
 
-          <div data-composer-stagger>
-            <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Execution Mode</div>
-            <div className="mt-3 grid gap-3">
+          <fieldset data-composer-stagger>
+            <legend id={executionModeGroupId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Execution Mode</legend>
+            <div className="mt-3 grid gap-3" role="radiogroup" aria-labelledby={executionModeGroupId}>
               {state.availableModes.map((mode) => {
                 const ModeIcon = mode.icon;
                 const isActive = state.submitMode === mode.id;
@@ -408,6 +414,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                   <button
                     key={mode.id}
                     type="button"
+                    role="radio"
+                    aria-checked={isActive}
                     onClick={() => state.setSubmitMode(mode.id)}
                     className={`rounded-[1.35rem] border p-4 text-left transition-all ${
                       isActive
@@ -426,7 +434,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                 );
               })}
             </div>
-          </div>
+          </fieldset>
 
           <div data-composer-stagger className="mt-auto flex flex-col gap-3 pt-2">
             {submitError && (

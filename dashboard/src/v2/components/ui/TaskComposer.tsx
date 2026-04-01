@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef } from "preact/hooks";
+import { useLayoutEffect, useRef, useId } from "preact/hooks";
 import gsap from "gsap";
 import { Bot, Plus, Target, X, Save } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
@@ -33,6 +33,15 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const fieldsRef = useRef<HTMLFormElement>(null);
+
+  const sprintIdFieldId = useId();
+  const statusGroupId = useId();
+  const titleId = useId();
+  const descriptionId = useId();
+  const promptId = useId();
+  const dependencyGroupId = useId();
+  const priorityGroupId = useId();
+  const executorGroupId = useId();
 
   const state = useTaskComposerState(sprints, availableTasks, initialTask, initialSprintId);
 
@@ -108,8 +117,9 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
 
           <div data-composer-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
             <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-              <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-2">Sprint</div>
+              <label htmlFor={sprintIdFieldId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-2 block">Sprint</label>
               <select
+                id={sprintIdFieldId}
                 value={state.sprintId}
                 onInput={(event) => state.setSprintId((event.target as HTMLSelectElement).value)}
                 className="w-full bg-transparent text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-lg px-1 py-0.5 -ml-1"
@@ -122,13 +132,15 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               </select>
             </div>
 
-            <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-              <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-2">Status</div>
-              <div className="flex gap-2 flex-wrap">
+            <fieldset className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+              <legend id={statusGroupId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-2">Status</legend>
+              <div className="flex gap-2 flex-wrap" role="radiogroup" aria-labelledby={statusGroupId}>
                 {STATUS_OPTIONS.map((option) => (
                   <button
                     key={option}
                     type="button"
+                    role="radio"
+                    aria-checked={state.status === option}
                     onClick={() => state.setStatus(option)}
                     className={`px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
                       state.status === option
@@ -140,12 +152,13 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                   </button>
                 ))}
               </div>
-            </div>
+            </fieldset>
           </div>
 
-          <label data-composer-stagger className="mt-8 block space-y-2">
-            <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Task Title</span>
+          <div data-composer-stagger className="mt-8 block space-y-2">
+            <label htmlFor={titleId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Task Title</label>
             <input
+              id={titleId}
               type="text"
               value={state.title}
               onInput={(event) => state.setTitle((event.target as HTMLInputElement).value)}
@@ -154,16 +167,18 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               required
               autoFocus
             />
-          </label>
+          </div>
 
           <div data-composer-stagger className="mt-8 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Task Details</label>
+              <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Task Details</span>
             </div>
 
             <div className="grid gap-4 xl:grid-cols-2">
               <div className="rounded-[1.7rem] border border-black/[0.07] bg-black/[0.025] dark:border-white/[0.08] dark:bg-white/[0.03]">
+                <label htmlFor={descriptionId} className="sr-only">Description</label>
                 <textarea
+                  id={descriptionId}
                   value={state.description}
                   onInput={(event) => state.setDescription((event.target as HTMLTextAreaElement).value)}
                   placeholder="Summarize the intent and outcome."
@@ -172,7 +187,9 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               </div>
 
               <div className="rounded-[1.7rem] border border-black/[0.07] bg-black/[0.025] dark:border-white/[0.08] dark:bg-white/[0.03]">
+                <label htmlFor={promptId} className="sr-only">Execution Prompt</label>
                 <textarea
+                  id={promptId}
                   value={state.promptMarkdown}
                   onInput={(event) => state.setPromptMarkdown((event.target as HTMLTextAreaElement).value)}
                   placeholder="Detailed markdown instructions for the agent."
@@ -182,23 +199,25 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
             </div>
           </div>
 
-          <div data-composer-stagger className="mt-8">
+          <fieldset data-composer-stagger className="mt-8">
             <div className="flex items-center gap-2 mb-3">
               <Target className="w-3.5 h-3.5 text-ember-500" strokeWidth={2.3} />
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Dependencies</label>
+              <legend id={dependencyGroupId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Dependencies</legend>
             </div>
             {state.dependencyOptions.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-black/[0.08] dark:border-white/[0.08] px-4 py-4 text-xs text-slate-400">
                 No existing tasks in this sprint yet.
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1" role="group" aria-labelledby={dependencyGroupId}>
                 {state.dependencyOptions.map((task) => {
                   const active = state.dependsOnTaskIds.includes(task.recordId);
                   return (
                     <button
                       key={task.recordId}
                       type="button"
+                      role="checkbox"
+                      aria-checked={active}
                       onClick={() => state.toggleDependency(task.recordId)}
                       className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
                         active
@@ -216,17 +235,19 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                 })}
               </div>
             )}
-          </div>
+          </fieldset>
         </div>
 
         <aside className="flex flex-col gap-4 p-6 sm:p-8">
-          <div data-composer-stagger>
-            <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-3">Priority</div>
-            <div className="grid grid-cols-2 gap-2">
+          <fieldset data-composer-stagger>
+            <legend id={priorityGroupId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-3">Priority</legend>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-labelledby={priorityGroupId}>
               {PRIORITY_OPTIONS.map((option) => (
                 <button
                   key={option}
                   type="button"
+                  role="radio"
+                  aria-checked={state.priority === option}
                   onClick={() => state.setPriority(option)}
                   className={`px-3 py-2 rounded-[1.1rem] border text-[10px] font-bold uppercase tracking-[0.12em] transition-all text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
                     state.priority === option
@@ -238,20 +259,22 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                 </button>
               ))}
             </div>
-          </div>
+          </fieldset>
 
-          <div data-composer-stagger>
+          <fieldset data-composer-stagger>
             <div className="flex items-center gap-2 mb-3">
               <Bot className="w-3.5 h-3.5 text-signal-500" strokeWidth={2.3} />
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Executor</label>
+              <legend id={executorGroupId} className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Executor</legend>
             </div>
-            <div className="grid gap-3">
+            <div className="grid gap-3" role="radiogroup" aria-labelledby={executorGroupId}>
               {EXECUTOR_OPTIONS.map((option) => {
                 const isActive = state.executorType === option.value;
                 return (
                   <button
                     key={option.value}
                     type="button"
+                    role="radio"
+                    aria-checked={isActive}
                     onClick={() => state.setExecutorType(option.value)}
                     className={`rounded-[1.35rem] border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
                       isActive
@@ -270,7 +293,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                 );
               })}
             </div>
-          </div>
+          </fieldset>
 
           <div data-composer-stagger className="mt-auto flex flex-col gap-3 pt-2">
             <button

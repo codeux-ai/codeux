@@ -1,7 +1,7 @@
 import type { FunctionComponent, ComponentChildren } from "preact";
 import type { ProjectSettings, SettingsValueSource, ThinkingMode } from "../../../types.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
-import { TextInput, TextAreaInput, NumberInput, SelectInput, Toggle, Row as SharedRow } from "./SettingsFormFields.js";
+import { TextInput, TextAreaInput, NumberInput, SelectInput, Toggle, Row as SharedRow, PillChoiceGroup } from "./SettingsFormFields.js";
 import {
   getFieldSource,
   getFieldSourceLabel,
@@ -172,41 +172,28 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         </Row>
         {settings.automationInterventions.autoAnswerClarification && (
           <Row label="Clarification answer mode" description="Choose whether to use a static template or let a worker generate a contextual answer." badge={getBadge("automationInterventions.autoAnswerClarificationMode")}>
-            <div className="flex gap-1 p-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.04]">
-              <button
-                onClick={() => update({
-                  automationInterventions: { ...settings.automationInterventions, autoAnswerClarificationMode: "TEMPLATE" },
-                })}
-                className={`px-3 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all duration-200 ${
-                  settings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE"
-                    ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
-                    : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                }`}
-              >
-                Template
-              </button>
-              <button
-                onClick={() => update({
-                  automationInterventions: { ...settings.automationInterventions, autoAnswerClarificationMode: "WORKER" },
-                })}
-                className={`px-3 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all duration-200 ${
-                  settings.automationInterventions.autoAnswerClarificationMode === "WORKER"
-                    ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
-                    : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                }`}
-              >
-                Worker
-              </button>
-            </div>
+            <PillChoiceGroup
+              value={settings.automationInterventions.autoAnswerClarificationMode}
+              onChange={(value) => update({
+                automationInterventions: { ...settings.automationInterventions, autoAnswerClarificationMode: value as "TEMPLATE" | "WORKER" },
+              })}
+              options={[
+                { value: "TEMPLATE", label: "Template" },
+                { value: "WORKER", label: "Worker" },
+              ]}
+            />
           </Row>
         )}
         {(!settings.automationInterventions.autoAnswerClarification || settings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE") && (
-          <div>
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">Clarification answer template</div>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <label htmlFor="clarification-template" className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                Clarification answer template
+              </label>
               {getBadge("automationInterventions.clarificationAnswerTemplate") ? <OverrideBadge label={getBadge("automationInterventions.clarificationAnswerTemplate")!} /> : null}
             </div>
             <TextAreaInput
+              id="clarification-template"
               value={settings.automationInterventions.clarificationAnswerTemplate}
               onChange={(value) => update({
                 automationInterventions: {
