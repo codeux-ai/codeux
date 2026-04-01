@@ -340,7 +340,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 type="button"
                                                 onClick={() => onOrchestrateSprint(run.projectId, run.sprintId)}
                                                 disabled={pendingActionIds.has(`sprint-start:${run.sprintId}`)}
-                                                className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-500 transition-colors hover:bg-signal-500/15 disabled:opacity-50"
+                                                className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-500 transition-colors hover:bg-signal-500/15 disabled:opacity-70"
                                             >
                                                 <Play className="w-3 h-3" strokeWidth={2} />
                                                 {pendingActionIds.has(`sprint-start:${run.sprintId}`) ? "Starting" : (run.status === "paused" ? "Resume" : "Run Again")}
@@ -351,7 +351,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 type="button"
                                                 onClick={() => onPauseSprintRun(run.id)}
                                                 disabled={pendingActionIds.has(`sprint-pause:${run.id}`)}
-                                                className="inline-flex items-center gap-1.5 rounded-full border border-status-amber/20 bg-status-amber/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-amber transition-colors hover:bg-status-amber/15 disabled:opacity-50"
+                                                className="inline-flex items-center gap-1.5 rounded-full border border-status-amber/20 bg-status-amber/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-amber transition-colors hover:bg-status-amber/15 disabled:opacity-70"
                                             >
                                                 <PauseCircle className="w-3 h-3" strokeWidth={2} />
                                                 {pendingActionIds.has(`sprint-pause:${run.id}`) ? "Pausing" : "Pause"}
@@ -362,7 +362,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 type="button"
                                                 onClick={() => onCancelSprintRun(run.id)}
                                                 disabled={pendingActionIds.has(`sprint-cancel:${run.id}`)}
-                                                className="inline-flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 disabled:opacity-50"
+                                                className="inline-flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 disabled:opacity-70"
                                             >
                                                 <XCircle className="w-3 h-3" strokeWidth={2} />
                                                 {pendingActionIds.has(`sprint-cancel:${run.id}`) ? "Cancelling" : "Cancel"}
@@ -378,7 +378,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                     type="button"
                                                     onClick={() => onForceCancelSprintRun(run.id)}
                                                     disabled={pendingActionIds.has(`sprint-force-cancel:${run.id}`)}
-                                                    className="inline-flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 disabled:opacity-50"
+                                                    className="inline-flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 disabled:opacity-70"
                                                 >
                                                     <XCircle className="w-3 h-3" strokeWidth={2} />
                                                     {pendingActionIds.has(`sprint-force-cancel:${run.id}`) ? "Force Cancelling" : "Force Cancel"}
@@ -473,7 +473,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 type="button"
                                                 onClick={() => onCancelTaskDispatch(dispatch.id)}
                                                 disabled={pendingActionIds.has(`dispatch-cancel:${dispatch.id}`)}
-                                                className="inline-flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 disabled:opacity-50"
+                                                className="inline-flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 disabled:opacity-70"
                                             >
                                                 <XCircle className="w-3 h-3" strokeWidth={2} />
                                                 {pendingActionIds.has(`dispatch-cancel:${dispatch.id}`) ? "Cancelling" : "Cancel"}
@@ -489,7 +489,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                     type="button"
                                                     onClick={() => onForceCancelTaskDispatch(dispatch.id)}
                                                     disabled={pendingActionIds.has(`dispatch-force-cancel:${dispatch.id}`)}
-                                                    className="inline-flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 disabled:opacity-50"
+                                                    className="inline-flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/15 disabled:opacity-70"
                                                 >
                                                     <XCircle className="w-3 h-3" strokeWidth={2} />
                                                     {pendingActionIds.has(`dispatch-force-cancel:${dispatch.id}`) ? "Force Cancelling" : "Force Cancel"}
@@ -501,7 +501,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                                                 type="button"
                                                 onClick={() => onRetryTaskDispatch(dispatch.id)}
                                                 disabled={pendingActionIds.has(`dispatch-retry:${dispatch.id}`)}
-                                                className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-500 transition-colors hover:bg-signal-500/15 disabled:opacity-50"
+                                                className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-500 transition-colors hover:bg-signal-500/15 disabled:opacity-70"
                                             >
                                                 <RotateCcw className={`w-3 h-3 ${pendingActionIds.has(`dispatch-retry:${dispatch.id}`) ? 'animate-spin' : ''}`} strokeWidth={2} />
                                                 {pendingActionIds.has(`dispatch-retry:${dispatch.id}`) ? "Retrying" : "Retry"}

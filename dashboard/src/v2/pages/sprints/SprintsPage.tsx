@@ -242,7 +242,7 @@ export const SprintsPage: FunctionComponent = () => {
                 setShowQuicksprint(!showQuicksprint);
               }}
               disabled={!selectedProject}
-              className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-all disabled:cursor-not-allowed disabled:opacity-70 ${
                 showQuicksprint
                   ? "border border-black/[0.06] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
                   : "bg-ember-500 text-void-900 hover:-translate-y-px hover:bg-ember-400"
@@ -265,7 +265,7 @@ export const SprintsPage: FunctionComponent = () => {
                 setShowCreateComposer(true);
               }}
               disabled={!selectedProject}
-              className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-all disabled:cursor-not-allowed disabled:opacity-70 ${
                 showCreateComposer
                   ? "border border-black/[0.06] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
                   : "bg-signal-500 text-void-900 hover:-translate-y-px hover:bg-signal-400"
@@ -470,7 +470,7 @@ export const SprintsPage: FunctionComponent = () => {
                 void handleToggleShowcase(activeRowMenuSprint);
               }}
               disabled={pendingActionIds.has(`sprint-showcase:${activeRowMenuSprint.id}`)}
-              className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+              className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-70 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
             >
               <Heart className="h-3.5 w-3.5" fill={activeRowMenuSprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
               {activeRowMenuSprint.showcasePinned ? "Remove" : "Add"}

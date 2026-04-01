@@ -145,7 +145,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
 
   const renderSortIndicator = (key: SprintTableSortKey) => {
     if (sort.key !== key) {
-      return <ArrowUpDown className="h-3 w-3 text-slate-300 dark:text-slate-600" strokeWidth={2.2} />;
+      return <ArrowUpDown className="h-3 w-3 text-slate-400 dark:text-slate-600" strokeWidth={2.2} />;
     }
     return sort.direction === "asc"
       ? <ArrowUp className="h-3 w-3 text-signal-500" strokeWidth={2.2} />
@@ -174,12 +174,12 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
       <div className="overflow-x-auto">
         <table className="min-w-full text-left">
           <thead>
-            <tr className="border-b border-black/[0.06] text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:border-white/[0.06]">
+            <tr className="border-b border-black/[0.06] text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400 dark:border-white/[0.06]">
               <th className="px-4 py-3 pl-6 w-10">
                 <button
                   type="button"
                   onClick={handleToggleSelectAll}
-                  className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
                   title={allFilteredSelected ? "Deselect all" : "Select all visible"}
                 >
                   {allFilteredSelected

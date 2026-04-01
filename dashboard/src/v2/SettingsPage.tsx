@@ -114,7 +114,7 @@ export const SettingsPage: FunctionComponent = () => {
                 type="button"
                 onClick={() => selectedProject && setActiveScope("project")}
                 disabled={!selectedProject}
-                className={`rounded-[0.9rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                className={`rounded-[0.9rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors disabled:cursor-not-allowed disabled:opacity-70 ${
                   activeScope === "project"
                     ? "bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
                     : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
@@ -193,7 +193,7 @@ export const SettingsPage: FunctionComponent = () => {
               type="button"
               onClick={() => void handleSave()}
               disabled={!activeDirty || activeSaving || loading || (activeScope === "project" && !selectedProject)}
-              className={`group inline-flex items-center gap-2.5 rounded-2xl px-5 py-3 text-sm font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`group inline-flex items-center gap-2.5 rounded-2xl px-5 py-3 text-sm font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-70 ${
                 saveMessage && !error
                   ? "bg-status-green text-white shadow-[0_4px_20px_rgba(0,171,132,0.3)]"
                   : "bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100"

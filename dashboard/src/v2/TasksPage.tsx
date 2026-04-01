@@ -550,7 +550,7 @@ export const TasksPage: FunctionComponent = () => {
               }
             }}
             disabled={!selectedProject || sprints.length === 0}
-            className="group flex items-center gap-2.5 px-6 py-3.5 bg-signal-500 hover:bg-signal-400 disabled:opacity-50 disabled:cursor-not-allowed text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.45)] hover:-translate-y-px shrink-0"
+            className="group flex items-center gap-2.5 px-6 py-3.5 bg-signal-500 hover:bg-signal-400 disabled:opacity-70 disabled:cursor-not-allowed text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.45)] hover:-translate-y-px shrink-0"
           >
             {(showComposer || editingTask) ? <X className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" strokeWidth={2.3} /> : <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" strokeWidth={2.3} />}
             {(showComposer || editingTask) ? "Close Composer" : "New Task"}

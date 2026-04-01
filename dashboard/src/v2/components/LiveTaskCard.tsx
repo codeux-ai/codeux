@@ -353,7 +353,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             type="button"
                             onClick={handleRerunClick}
                             disabled={isRerunning}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] bg-black/[0.03] dark:bg-white/[0.03] text-slate-400 border border-transparent hover:text-status-amber hover:border-status-amber/15 disabled:opacity-40 disabled:pointer-events-none transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] bg-black/[0.03] dark:bg-white/[0.03] text-slate-400 border border-transparent hover:text-status-amber hover:border-status-amber/15 disabled:opacity-70 disabled:pointer-events-none transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
                         >
                             <RotateCcw className={`w-3 h-3 ${isRerunning ? 'animate-spin' : ''}`} strokeWidth={2} />
                             {isRerunning ? "Rerunning" : "Rerun"}

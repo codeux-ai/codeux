@@ -18,9 +18,9 @@ import { formatSprintKey, STATUS_LABELS } from "../../lib/sprint-ledger-state.js
 const STATUS_BADGE_TONES: Record<SprintStatus, string> = {
   running: "border-status-green/30 bg-status-green/15 text-status-green",
   paused: "border-ember-500/30 bg-ember-500/15 text-ember-500",
-  completed: "border-black/[0.1] bg-black/[0.06] text-slate-500 dark:border-white/[0.1] dark:bg-white/[0.06] dark:text-slate-300",
+  completed: "border-black/[0.15] bg-black/[0.06] text-slate-600 dark:border-white/[0.1] dark:bg-white/[0.06] dark:text-slate-300",
   failed: "border-status-red/30 bg-status-red/15 text-status-red",
-  cancelled: "border-slate-300/60 bg-slate-200/60 text-slate-500 dark:border-white/[0.1] dark:bg-white/[0.06] dark:text-slate-400",
+  cancelled: "border-slate-400/60 bg-slate-200/60 text-slate-600 dark:border-white/[0.1] dark:bg-white/[0.06] dark:text-slate-400",
   idle: "border-signal-500/30 bg-signal-500/15 text-signal-700 dark:text-signal-300",
 };
 
@@ -82,7 +82,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
         <button
           type="button"
           onClick={() => onToggleRow(sprint.id)}
-          className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-signal-500"
+          className="inline-flex items-center justify-center text-slate-500 dark:text-slate-400 transition-colors hover:text-signal-500"
         >
           {isSelected
             ? <CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} />
@@ -97,21 +97,21 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           className={`inline-flex h-10 w-10 items-center justify-center rounded-full border transition-colors ${
             sprint.showcasePinned
               ? "border-status-red/20 bg-status-red/10 text-status-red"
-              : "border-black/[0.06] bg-black/[0.03] text-slate-400 hover:text-status-red dark:border-white/[0.06] dark:bg-white/[0.03]"
-          } disabled:cursor-not-allowed disabled:opacity-50`}
+              : "border-black/[0.06] bg-black/[0.03] text-slate-500 hover:text-status-red dark:text-slate-500 dark:text-slate-400 dark:border-white/[0.06] dark:bg-white/[0.03]"
+          } disabled:cursor-not-allowed disabled:opacity-70`}
         >
           <Heart className="h-3.5 w-3.5" fill={sprint.showcasePinned ? "currentColor" : "none"} strokeWidth={2.1} />
         </button>
       </td>
       <td className="px-4 py-3 min-w-[8rem] align-top">
         <div className="font-mono text-sm font-bold text-slate-700 dark:text-white truncate">{formatSprintKey(sprint)}</div>
-        <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 truncate">
+        <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400 truncate">
           {shortenId(sprint.id)}
         </div>
       </td>
       <td className="px-4 py-3 min-w-0 max-w-full align-top">
         <div className={`font-display text-lg font-black tracking-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-slate-900 dark:text-white"}`}>{sprint.name}</div>
-        <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-500 dark:text-slate-400">
           <span>Updated {formatMetaDate(sprint.updatedAt)}</span>
           <span>·</span>
           <span>{formatTableDate(sprint.createdAt)}</span>
@@ -122,7 +122,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           </div>
         )}
         {sprint.goal ? (
-          <p className={`mt-2 max-w-xl text-sm leading-relaxed ${isCompleted ? "text-slate-400 dark:text-slate-500" : "text-slate-500 dark:text-slate-400"}`}>
+          <p className={`mt-2 max-w-xl text-sm leading-relaxed ${isCompleted ? "text-slate-500 dark:text-slate-500" : "text-slate-600 dark:text-slate-400"}`}>
             {sprint.goal}
           </p>
         ) : null}
@@ -142,7 +142,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       </td>
       <td className="px-4 py-3 align-top">
         <div className="font-mono text-lg font-bold text-slate-700 dark:text-white">{sprint.tasksCount}</div>
-        <div className="text-[10px] uppercase tracking-[0.14em] text-slate-400">planned tasks</div>
+        <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">planned tasks</div>
       </td>
       <td className="px-4 py-3 min-w-[11rem] align-top">
         <div className="flex items-center gap-3">
@@ -157,7 +157,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       </td>
       <td className="px-4 py-3 align-top">
         <div className="font-medium text-slate-700 dark:text-slate-200">{formatTableDate(sprint.createdAt)}</div>
-        <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-400">created</div>
+        <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">created</div>
       </td>
       <td className="px-4 py-3 pr-6 align-top">
         <div className="flex items-center justify-end gap-2 whitespace-nowrap">
@@ -169,7 +169,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
               activeRun
                 ? "border-status-red/20 bg-status-red/[0.1] text-status-red hover:bg-status-red/[0.14]"
                 : "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 hover:bg-signal-500/[0.12] dark:text-signal-300"
-            } disabled:cursor-not-allowed disabled:opacity-50`}
+            } disabled:cursor-not-allowed disabled:opacity-70`}
           >
             {activeRun ? <Square className="h-3.5 w-3.5" fill="currentColor" /> : <Play className="h-3.5 w-3.5" fill="currentColor" />}
             {activeRun ? "Stop" : "Start"}
