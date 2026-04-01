@@ -32,10 +32,10 @@ export default {
         },
         // Semantic status colors
         status: {
-          green: "#008667",
-          red: "#E42A2B",
-          amber: "#AD6500",
-          violet: "#8A00B5", // Legacy
+          green: "var(--color-status-green)",
+          red: "var(--color-status-red)",
+          amber: "var(--color-status-amber)",
+          violet: "var(--color-status-violet)", // Legacy
         },
         // Backwards compat alias for any remaining obsidian refs
         obsidian: {
