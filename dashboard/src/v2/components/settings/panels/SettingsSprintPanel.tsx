@@ -150,7 +150,7 @@ import { ExternalLink } from "lucide-preact";
               max={20}
             />
           </Row>
-          <Row label="Feature PR auto-merge mode" description="Controls whether feature PRs auto-merge immediately, only when green, or never." badge={getFieldBadge("ciIntelligence.featurePrAutoMergeMode")}>
+          <Row label="Feature PR auto-merge mode" description="Controls whether feature PRs stay at PR creation, auto-merge when green, auto-merge immediately when allowed, or stay off." badge={getFieldBadge("ciIntelligence.featurePrAutoMergeMode")}>
             <PillChoiceGroup
               value={editableSettings.ciIntelligence.featurePrAutoMergeMode}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -162,12 +162,13 @@ import { ExternalLink } from "lucide-preact";
               }))}
               options={[
                 { value: "OFF", label: "Off", hint: "Never auto-merge." },
+                { value: "CREATE_PR", label: "Create PR", hint: "Open a PR without auto-merging it." },
                 { value: "WHEN_GREEN", label: "When green", hint: "Merge only after checks pass." },
                 { value: "ALWAYS", label: "Always", hint: "Merge as soon as policy allows." },
               ]}
             />
           </Row>
-          <Row label="Main branch auto-merge mode" description="Controls whether the main branch PR auto-merges immediately, only when green, or never." badge={getFieldBadge("ciIntelligence.mainBranchAutoMergeMode")} last>
+          <Row label="Main branch auto-merge mode" description="Controls whether the final main-branch PR stays off, is only created, auto-merges when green, or auto-merges immediately when allowed." badge={getFieldBadge("ciIntelligence.mainBranchAutoMergeMode")} last>
             <PillChoiceGroup
               value={editableSettings.ciIntelligence.mainBranchAutoMergeMode}
               onChange={(value) => updateEditableSettings((current) => ({
@@ -179,6 +180,7 @@ import { ExternalLink } from "lucide-preact";
               }))}
               options={[
                 { value: "OFF", label: "Off", hint: "Never auto-merge." },
+                { value: "CREATE_PR", label: "Create PR", hint: "Open the PR without auto-merging it." },
                 { value: "WHEN_GREEN", label: "When green", hint: "Merge only after checks pass." },
                 { value: "ALWAYS", label: "Always", hint: "Merge as soon as policy allows." },
               ]}

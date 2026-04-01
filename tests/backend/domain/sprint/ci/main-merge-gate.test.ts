@@ -55,6 +55,32 @@ describe("MainMergeGateService", () => {
     expect(result).toContain("No open PR `feature/sprint1 -> main` found");
   });
 
+  it("treats an already merged main PR as settled", async () => {
+    const context: MergeFeedbackContext = {
+      ...defaultContext,
+      gitStatus: {
+        ...defaultContext.gitStatus!,
+        mergedPullRequests: [
+          {
+            number: 101,
+            title: "Sprint 1",
+            url: "https://github.com/repo/pull/101",
+            headRefName: "feature/sprint1",
+            baseRefName: "main",
+            mergedAt: "2026-04-01T00:00:00.000Z",
+            mergedBy: "octocat",
+          },
+        ],
+      },
+    };
+
+    const result = await MainMergeGateService.renderMergeFeedback(context);
+    const structured = MainMergeGateService.evaluateMergeFeedback(context);
+
+    expect(structured.state).toBe("merged");
+    expect(result).toContain("already merged into `main`");
+  });
+
   it("still reports missing main PR when CI wait is disabled but auto-merge mode is active", async () => {
     const result = await MainMergeGateService.renderMergeFeedback({
       ...defaultContext,

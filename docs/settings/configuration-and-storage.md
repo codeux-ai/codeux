@@ -263,10 +263,12 @@ Preview runtime notes:
 - `julesCiAutofixMaxRetries` (default `3`, clamped to `0..20`): max Jules CI autofix notify attempts before escalation to intervention (`FULL -> AGENT`, `SEMI_AUTO/ALWAYS_ASK -> HUMAN`) with explicit task IDs, PR links, and failed check names.
 - `featurePrAutoMergeMode` (default `"OFF"`):
   - `"OFF"`: no feature PR auto-merge
+  - `"CREATE_PR"`: open or reuse the feature PR, then stop before auto-merge and mark the task settled with `PR_ONLY`
   - `"WHEN_GREEN"`: auto-merge when merge gates are clear. If `waitForCiBeforeFeatureMerge` is enabled, this requires green checks; if disabled, CI status is not waited on.
   - `"ALWAYS"`: bypass CI waiting only when `waitForCiBeforeFeatureMerge` is disabled. If CI waiting is enabled, Sprint OS still waits for green checks before attempting auto-merge.
 - `mainBranchAutoMergeMode` (default `"OFF"`):
   - `"OFF"`: Sprint OS does not automatically open or merge the final `feature -> default` PR
+  - `"CREATE_PR"`: when sprint work is complete, Sprint OS opens or resolves the main PR but does not auto-merge it
   - `"WHEN_GREEN"`: when sprint work is complete, Sprint OS opens or resolves the main PR if needed, then auto-merges after the main merge gate is green
   - `"ALWAYS"`: when sprint work is complete, Sprint OS opens or resolves the main PR if needed and can merge without CI waiting when `waitForCiBeforeMainMerge` is disabled
 
