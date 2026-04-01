@@ -212,10 +212,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
         <>
         <header
             ref={navRef}
-            className="sticky top-0 z-50 flex items-center justify-between w-full h-[60px] px-8 md:px-12 bg-[#F9F8F4]/70 dark:bg-void-900/70 backdrop-blur-3xl border-b border-black/[0.05] dark:border-white/[0.04]"
+            className="sticky top-0 z-50 flex items-center justify-between w-full h-[60px] px-4 sm:px-8 md:px-12 bg-[#F9F8F4]/70 dark:bg-void-900/70 backdrop-blur-3xl border-b border-black/[0.05] dark:border-white/[0.04]"
         >
             <nav aria-label="Primary navigation" className="contents">
-            <div className="flex items-center gap-10 flex-1">
+            <div className="flex items-center gap-4 md:gap-10 flex-1">
                 {/* Logo */}
                 <div className="flex items-center gap-3 cursor-pointer group shrink-0">
                     <div className="relative w-8 h-8 flex items-center justify-center bg-void-900 dark:bg-white rounded-xl overflow-hidden shadow-[0_0_20px_rgba(0,224,160,0.25)]">
@@ -228,7 +228,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 </div>
 
                 {/* Search Bar */}
-                <div className="relative group w-full max-w-xs">
+                <div className="relative group hidden sm:block w-full max-w-xs">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                         <Search aria-hidden="true" className="w-3.5 h-3.5 text-slate-400 group-focus-within:text-signal-500 transition-colors" strokeWidth={2} />
                     </div>

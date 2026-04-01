@@ -826,7 +826,7 @@ const TemplateCard: FunctionComponent<{
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          className="absolute top-4 right-4 rounded-lg min-h-[44px] min-w-[44px] p-1.5 text-slate-300 opacity-0 transition-all group-hover:opacity-100 hover:bg-ember-500/10 hover:text-ember-500 dark:text-slate-500"
+          className="absolute top-4 right-4 rounded-lg min-h-[44px] min-w-[44px] p-1.5 text-slate-300 opacity-0 transition-all group-hover:opacity-100 group-active:opacity-100 group-focus-within:opacity-100 hover:bg-ember-500/10 hover:text-ember-500 dark:text-slate-500"
           title="Edit template"
         >
           <Settings2 className="h-3.5 w-3.5" />

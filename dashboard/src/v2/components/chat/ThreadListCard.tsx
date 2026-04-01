@@ -61,7 +61,7 @@ export const ThreadListCard: FunctionComponent<{
           }}
           disabled={deletingThreadId === thread.id}
           aria-label={`Delete ${thread.title}`}
-          className="absolute inset-y-0 right-0 flex w-12 translate-x-full items-center justify-center border-l border-status-red/15 bg-status-red/10 text-status-red opacity-0 transition-all duration-150 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100 disabled:translate-x-0 disabled:opacity-100"
+          className="absolute inset-y-0 right-0 flex w-12 translate-x-full items-center justify-center border-l border-status-red/15 bg-status-red/10 text-status-red opacity-0 transition-all duration-150 ease-out group-hover:translate-x-0 group-active:translate-x-0 group-focus-within:translate-x-0 group-hover:opacity-100 group-active:opacity-100 group-focus-within:opacity-100 disabled:translate-x-0 disabled:opacity-100"
         >
           {deletingThreadId === thread.id ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.1} /> : <Trash2 className="h-4 w-4" strokeWidth={2.1} />}
         </button>

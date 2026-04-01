@@ -119,7 +119,7 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
                   href={pr.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="group/pr block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-signal-500/20 hover:bg-signal-500/[0.02] dark:border-white/[0.04] dark:bg-white/[0.015]"
+                  className="touch-target group/pr block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-signal-500/20 hover:bg-signal-500/[0.02] dark:border-white/[0.04] dark:bg-white/[0.015]"
                 >
                   <div className="mb-1 flex items-center justify-between">
                     <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">#{pr.number} {pr.title}</span>
@@ -150,7 +150,7 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
                   href={run.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-signal-500/20 dark:border-white/[0.04] dark:bg-white/[0.015]"
+                  className="touch-target block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-signal-500/20 dark:border-white/[0.04] dark:bg-white/[0.015]"
                 >
                   <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{run.workflowName || run.name}</span>
                   <p className={`mt-0.5 text-[10px] font-mono ${statusTone(run.conclusion || run.status)}`}>
@@ -177,7 +177,7 @@ const GitCIStatusPanel: FunctionComponent<GitCIStatusPanelProps> = memo(({ statu
                   href={merged.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-status-green/20 dark:border-white/[0.04] dark:bg-white/[0.015]"
+                  className="touch-target block rounded-xl border border-black/[0.04] bg-black/[0.015] p-3 transition-all duration-200 hover:border-status-green/20 dark:border-white/[0.04] dark:bg-white/[0.015]"
                 >
                   <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">#{merged.number} {merged.title}</span>
                   <p className="mt-0.5 text-[10px] font-mono text-slate-400">{merged.headRefName ?? "?"} → {merged.baseRefName ?? "?"}</p>

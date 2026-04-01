@@ -78,7 +78,7 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
             {/* Content */}
             <div className="relative z-20 flex flex-col items-center justify-center text-center p-5 w-full h-full transform-gpu group-hover:translate-z-12 transition-transform duration-500 ease-out">
                 {/* Status label on hover */}
-                <div className={`absolute top-5 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 ${state.text}`}>
+                <div className={`absolute top-5 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 group-active:opacity-100 group-focus-within:opacity-100 transition-opacity duration-300 ${state.text}`}>
                     <StatusIcon className={`w-3.5 h-3.5 ${source.status === 'running' ? 'animate-pulse' : ''}`} strokeWidth={2.5} />
                     <span className="text-[10px] font-bold uppercase tracking-widest">{state.label}</span>
                 </div>

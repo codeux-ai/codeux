@@ -90,7 +90,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                     <button
                         type="button"
                         onClick={handleClose}
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/[0.04] text-slate-400 hover:text-slate-700 dark:bg-white/[0.04] dark:text-slate-500 dark:hover:text-white transition-colors"
+                        className="touch-target inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/[0.04] text-slate-400 hover:text-slate-700 dark:bg-white/[0.04] dark:text-slate-500 dark:hover:text-white transition-colors"
                     >
                         <X className="w-3.5 h-3.5" strokeWidth={2} />
                     </button>
@@ -151,14 +151,14 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                     <button
                         type="button"
                         onClick={handleClose}
-                        className="px-4 py-2 rounded-xl text-[12px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
+                        className="touch-target px-4 py-2 rounded-xl text-[12px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
                     >
                         Cancel
                     </button>
                     <button
                         type="button"
                         onClick={handleSubmit}
-                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-bold bg-status-amber text-white shadow-[0_4px_16px_rgba(245,158,11,0.25)] hover:shadow-[0_6px_24px_rgba(245,158,11,0.35)] hover:-translate-y-px transition-all duration-200"
+                        className="touch-target inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-[12px] font-bold bg-status-amber text-white shadow-[0_4px_16px_rgba(245,158,11,0.25)] hover:shadow-[0_6px_24px_rgba(245,158,11,0.35)] hover:-translate-y-px transition-all duration-200"
                     >
                         <RotateCcw className="w-3.5 h-3.5" strokeWidth={2} />
                         Rerun Task

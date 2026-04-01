@@ -15,10 +15,10 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
         }}
     >
         {/* Hover backdrop */}
-        <div className="absolute inset-0 bg-gradient-to-r from-signal-500/0 via-signal-500/[0.03] to-signal-500/0 dark:via-signal-500/[0.05] opacity-0 group-hover:opacity-100 transition-opacity duration-400 -z-10 rounded-xl" />
-        <div className="absolute inset-y-1 inset-x-0 bg-white/50 dark:bg-void-700/40 opacity-0 group-hover:opacity-100 transition-all duration-300 -z-10 rounded-xl" />
+        <div className="absolute inset-0 bg-gradient-to-r from-signal-500/0 via-signal-500/[0.03] to-signal-500/0 dark:via-signal-500/[0.05] opacity-0 group-hover:opacity-100 group-active:opacity-100 group-focus-within:opacity-100 transition-opacity duration-400 -z-10 rounded-xl" />
+        <div className="absolute inset-y-1 inset-x-0 bg-white/50 dark:bg-void-700/40 opacity-0 group-hover:opacity-100 group-active:opacity-100 group-focus-within:opacity-100 transition-all duration-300 -z-10 rounded-xl" />
 
-        <div className="flex-1 grid grid-cols-12 gap-5 items-center min-w-0">
+        <div className="flex-1 flex flex-wrap md:grid md:grid-cols-12 gap-3 md:gap-5 items-center min-w-0">
             {/* ID */}
             <div className="col-span-1 font-mono text-[10px] font-bold text-slate-500 dark:text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">
                 #{task.id.split('-')[0].substring(0, 4)}
@@ -67,7 +67,7 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
                 </div>
 
                 {/* Quick actions */}
-                <div className="flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] absolute right-0 translate-x-[115%] opacity-0 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100 transition-all duration-350 ease-[cubic-bezier(0.175,0.885,0.32,1.275)]">
+                <div className="flex items-center gap-3 sm:gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] absolute right-0 translate-x-[115%] opacity-0 group-hover:translate-x-0 group-active:translate-x-0 group-focus-within:translate-x-0 group-hover:opacity-100 group-active:opacity-100 group-focus-within:opacity-100 transition-all duration-350 ease-[cubic-bezier(0.175,0.885,0.32,1.275)]">
                     <button className="touch-target p-1.5 text-slate-600 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 disabled:opacity-50 disabled:cursor-not-allowed rounded-full transition-colors active:scale-95" title="Play/Stop">
                         {task.status === 'in_progress' ? <Square className="w-3 h-3" fill="currentColor" /> : <Play className="w-3 h-3" fill="currentColor" />}
                     </button>

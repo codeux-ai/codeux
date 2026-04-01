@@ -21,7 +21,7 @@ export const CellActions: FunctionComponent<CellActionsProps> = ({
     primaryBusy = false,
     onPrimaryAction,
 }) => (
-    <div className="absolute bottom-5 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0 group-focus-within:translate-y-0 w-full">
+    <div className="absolute bottom-5 flex items-center justify-center gap-3 opacity-0 group-hover:opacity-100 group-active:opacity-100 group-focus-within:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0 group-active:translate-y-0 group-focus-within:translate-y-0 w-full">
         <button
             className={`touch-target flex items-center justify-center w-9 h-9 rounded-full text-slate-800 dark:text-white transition-all duration-300 ${
                 isRunning
@@ -43,7 +43,7 @@ export const CellActions: FunctionComponent<CellActionsProps> = ({
         <Link 
             to={to}
             onClick={(e: any) => e.stopPropagation()}
-            className="flex items-center gap-1.5 px-5 h-9 bg-slate-900 dark:bg-white hover:opacity-85 rounded-full text-white dark:text-void-900 font-bold text-[10px] uppercase tracking-[0.1em] transition-all shadow-[0_4px_12px_rgba(0,0,0,0.15)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
+            className="flex items-center gap-3 sm:gap-1.5 px-5 h-9 bg-slate-900 dark:bg-white hover:opacity-85 rounded-full text-white dark:text-void-900 font-bold text-[10px] uppercase tracking-[0.1em] transition-all shadow-[0_4px_12px_rgba(0,0,0,0.15)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50"
         >
             {label} <Maximize2 className="w-2.5 h-2.5" />
         </Link>

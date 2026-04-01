@@ -127,7 +127,7 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
             <button
               type="button"
               onClick={onCancel}
-              className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/66 px-4 py-2 text-xs font-semibold text-slate-500 transition-colors hover:border-status-red/30 hover:text-status-red dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:border-status-red/30 dark:hover:text-status-red"
+              className="touch-target inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/66 px-4 py-2 text-xs font-semibold text-slate-500 transition-colors hover:border-status-red/30 hover:text-status-red dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:border-status-red/30 dark:hover:text-status-red"
             >
               <X className="h-3.5 w-3.5" />
               Cancel
@@ -136,7 +136,7 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
           <button
             type="button"
             onClick={onDismiss}
-            className="inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/66 px-4 py-2 text-xs font-semibold text-slate-500 transition-colors hover:border-black/[0.15] hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:border-white/[0.15] dark:hover:text-white"
+            className="touch-target inline-flex items-center gap-2 rounded-full border border-black/[0.08] bg-white/66 px-4 py-2 text-xs font-semibold text-slate-500 transition-colors hover:border-black/[0.15] hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:border-white/[0.15] dark:hover:text-white"
           >
             Close
           </button>

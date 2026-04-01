@@ -41,8 +41,8 @@ export const ChatPageShell: FunctionComponent<{
   }, []);
 
   return (
-    <div className="relative z-10 mx-auto flex h-[calc(100vh-48px)] max-w-[1900px] flex-col gap-8 px-8 py-12 md:px-20">
-      <div ref={headerRef} className="shrink-0 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+    <div className="relative z-10 mx-auto flex h-[calc(100vh-48px)] max-w-[1900px] flex-col gap-6 sm:gap-8 px-4 sm:px-8 py-6 sm:py-12 md:px-20">
+      <div ref={headerRef} className="shrink-0 flex flex-col gap-4 sm:gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
             <MessageCircle className="h-3.5 w-3.5" strokeWidth={2.2} />
@@ -106,7 +106,7 @@ export const ChatPageShell: FunctionComponent<{
             type="button"
             onClick={onRefresh}
             disabled={manualRefreshing}
-            className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
+            className="touch-target inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${manualRefreshing ? "animate-spin" : ""}`} strokeWidth={2.1} />
             Refresh
@@ -116,7 +116,7 @@ export const ChatPageShell: FunctionComponent<{
               type="button"
               onClick={onCreateThread}
               disabled={!selectedProject}
-              className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-void-900 transition-colors hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
+              className="touch-target inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-void-900 transition-colors hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
               New Thread
