@@ -20,6 +20,7 @@ import { renderMarkdown } from "../lib/markdown.js";
 import type { Subtask, ExecutionRuntimeEventSummary } from "../types.js";
 import { deriveLiveSessionRuntimeState } from "./lib/live-session-runtime.js";
 import { getTaskProgressPhase } from "../lib/task-progress.js";
+import { LiveRuntimeProjection } from "./lib/live-runtime-history.js";
 
 import { IntelPanel } from "./components/ui/IntelPanel.js";
 import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
@@ -242,46 +243,10 @@ export const LiveSessionPage: FunctionComponent = () => {
         return () => window.clearInterval(timer);
     }, [hasLiveDurationTicker]);
 
-    const taskEventsByRecordId = useMemo(() => {
-        const byRecordId = new Map<string, ExecutionRuntimeEventSummary[]>();
-        const byTaskKey = new Map<string, ExecutionRuntimeEventSummary[]>();
-        for (const event of sprintEvents) {
-            if (event.taskId) {
-                const existing = byRecordId.get(event.taskId) || [];
-                existing.push(event);
-                byRecordId.set(event.taskId, existing);
-            }
-            if (event.taskKey) {
-                const existing = byTaskKey.get(event.taskKey) || [];
-                existing.push(event);
-                byTaskKey.set(event.taskKey, existing);
-            }
-        }
-        return { byRecordId, byTaskKey };
-    }, [sprintEvents]);
-
-    const dispatchInfoByTaskId = useMemo(() => {
-        const map = new Map<string, {
-            errorMessage: string | null;
-            startedAt: string | null;
-            finishedAt: string | null;
-            status: string | null;
-        }>();
-        for (const dispatch of sprintDispatches) {
-            if (!dispatch.taskId) continue;
-            const existing = map.get(dispatch.taskId);
-            // Keep the most recent dispatch (last in list), but prefer one with error if present
-            if (!existing || dispatch.errorMessage || (!existing.errorMessage && dispatch.startedAt)) {
-                map.set(dispatch.taskId, {
-                    errorMessage: dispatch.errorMessage,
-                    startedAt: dispatch.startedAt,
-                    finishedAt: dispatch.finishedAt,
-                    status: dispatch.status,
-                });
-            }
-        }
-        return map;
-    }, [sprintDispatches]);
+    const runtimeProjection = useMemo(
+        () => new LiveRuntimeProjection(sprintDispatches, sprintEvents),
+        [sprintDispatches, sprintEvents]
+    );
 
     const { filteredTasks, taskCounts } = useMemo(() => {
         const filteredTasks: Subtask[] = [];
@@ -320,20 +285,23 @@ export const LiveSessionPage: FunctionComponent = () => {
     const taskCardItems = useMemo(() => (
         filteredTasks.map((task) => {
             const taskRuntimeId = task.record_id || task.id;
-            const dispatchInfo = task.record_id ? dispatchInfoByTaskId.get(task.record_id) : undefined;
+            const runtime = runtimeProjection.getTaskRuntime(task);
 
             return {
                 key: taskRuntimeId,
                 task,
                 taskTiming: taskTimingMap.get(taskRuntimeId) || taskTimingMap.get(task.id) || null,
-                events: (task.record_id && taskEventsByRecordId.byRecordId.get(task.record_id))
-                    || taskEventsByRecordId.byTaskKey.get(task.id)
-                    || EMPTY_RUNTIME_EVENTS,
+                events: runtime.events.length > 0 ? runtime.events : EMPTY_RUNTIME_EVENTS,
                 isRerunning: rerunningIds.has(taskRuntimeId),
-                dispatchInfo: dispatchInfo ?? null,
+                dispatchInfo: runtime.dispatch ? {
+                    errorMessage: runtime.dispatch.errorMessage,
+                    startedAt: runtime.dispatch.startedAt,
+                    finishedAt: runtime.dispatch.finishedAt,
+                    status: runtime.dispatch.status,
+                } : null,
             };
         })
-    ), [dispatchInfoByTaskId, filteredTasks, rerunningIds, taskEventsByRecordId, taskTimingMap]);
+    ), [filteredTasks, rerunningIds, runtimeProjection, taskTimingMap]);
 
 
 

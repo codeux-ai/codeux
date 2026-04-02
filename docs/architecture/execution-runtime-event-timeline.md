@@ -164,9 +164,10 @@ so each row already has the sprint, task when applicable, connection, provider, 
 
 ## UI Usage
 
-The v2 live page now uses this DB timeline in two places:
+The v2 live page now uses this DB timeline through the `LiveRuntimeProjection` module:
 
-- the execution runtime sidebar panel (OverviewTelemetry) shows a project-scoped runtime timeline with compact presentation and differentiated event coloring
-- each task card can open a runtime feed derived from recent `task_run_events`
+- The `LiveRuntimeProjection` handles runtime indexing and stage classification.
+- The execution runtime sidebar panel (`OverviewTelemetry`) shows a project-scoped runtime timeline with compact presentation and differentiated event coloring.
+- The `LiveSessionPage`, task timing summaries (`live-stats`), and task-card event selection all consume the same projected execution history instead of rebuilding separate views of the same dispatch and event streams.
 
-This means the main live feed is now DB-native even when execution is happening through Docker/CLI providers, connected MCP workers, or sprint-scoped orchestration control paths.
+This means the main live feed is now DB-native even when execution is happening through Docker/CLI providers, connected MCP workers, or sprint-scoped orchestration control paths, providing one shared event history with idempotent processing.

@@ -1059,4 +1059,104 @@ describe("live stats timing model", () => {
     // But the stats deck order should not include it
     expect(STATS_DECK_VISIBLE_STAGES).not.toContain("queued");
   });
+
+  it("handles quota paths by marking the task as terminal correctly", () => {
+    const task = makeTask({
+      id: "T06",
+      title: "Quota Exhausted",
+      record_id: "task-record-6",
+      status: "QUOTA",
+    });
+    const dispatch = makeDispatch({
+      id: "dispatch-6",
+      taskId: "task-record-6",
+      taskKey: "T06",
+      taskTitle: "Quota Exhausted",
+      status: "quota",
+      startedAt: "2026-03-19T10:00:00.000Z",
+      finishedAt: "2026-03-19T10:05:00.000Z",
+    });
+    const events = [
+      makeEvent({
+        id: "evt-6-start",
+        dispatchId: "dispatch-6",
+        taskRunId: "dispatch-6-task-run",
+        taskId: "task-record-6",
+        taskKey: "T06",
+        eventType: "dispatch_started",
+        createdAt: "2026-03-19T10:00:00.000Z",
+      }),
+      makeEvent({
+        id: "evt-6-quota",
+        dispatchId: "dispatch-6",
+        taskRunId: "dispatch-6-task-run",
+        taskId: "task-record-6",
+        taskKey: "T06",
+        eventType: "cli_workflow_quota",
+        createdAt: "2026-03-19T10:05:00.000Z",
+      }),
+    ];
+
+    const summary = buildLiveTaskTimingSummary({
+      task,
+      dispatches: [dispatch],
+      events,
+      nowIso: "2026-03-19T10:10:00.000Z",
+    });
+
+    expect(summary.phase).toBe("QUOTA");
+    expect(summary.endedAt).toBe("2026-03-19T10:05:00.000Z");
+    expect(summary.totalSeconds).toBe(300);
+    expect(summary.stageTotals.coding).toBe(300);
+    expect(summary.activeStage).toBeNull();
+  });
+
+  it("ensures consistent event ordering across cards and timing summaries via LiveRuntimeProjection", () => {
+    const task = makeTask({
+      id: "T07",
+      title: "Out of order events",
+      record_id: "task-record-7",
+      status: "RUNNING",
+    });
+    const dispatch = makeDispatch({
+      id: "dispatch-7",
+      taskId: "task-record-7",
+      taskKey: "T07",
+      taskTitle: "Out of order events",
+      status: "running",
+      startedAt: "2026-03-19T10:00:00.000Z",
+      finishedAt: null,
+    });
+    const events = [
+      makeEvent({
+        id: "evt-7-sync",
+        dispatchId: "dispatch-7",
+        taskRunId: "dispatch-7-task-run",
+        taskId: "task-record-7",
+        taskKey: "T07",
+        eventType: "session_state_synced",
+        createdAt: "2026-03-19T10:02:00.000Z",
+      }),
+      makeEvent({
+        id: "evt-7-start",
+        dispatchId: "dispatch-7",
+        taskRunId: "dispatch-7-task-run",
+        taskId: "task-record-7",
+        taskKey: "T07",
+        eventType: "dispatch_started",
+        createdAt: "2026-03-19T10:00:00.000Z", // Out of order!
+      }),
+    ];
+
+    const summary = buildLiveTaskTimingSummary({
+      task,
+      dispatches: [dispatch],
+      events,
+      nowIso: "2026-03-19T10:05:00.000Z",
+    });
+
+    expect(summary.startedAt).toBe("2026-03-19T10:00:00.000Z");
+    expect(summary.totalSeconds).toBe(300);
+    expect(summary.activeStage).toBe("coding");
+  });
 });

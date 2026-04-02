@@ -1,30 +1,16 @@
-1. **Extract `useSettingsPageState` Hook**:
-    - Create `dashboard/src/v2/hooks/use-settings-page-state.ts`.
-    - Move types `SettingsScope`, `CategoryId`, `AgentInstructionTemplateId`, `IntegrationId`, `Category`, `IntegrationDefinition`, `CATEGORIES`, `CATEGORY_SEARCH_HINTS`, `providerLabels`, `thinkingModeOptions`, `invocationRouteDefinitions`, `routingProfileOptions`, `INTEGRATIONS`, `AGENT_INSTRUCTION_TEMPLATE_OPTIONS` from `SettingsPage.tsx` or expose them so they can be imported.
-    - Extract state management (useState calls, useEffect hooks for fetching/saving/resetting settings, and calculated values like `filteredCategories`) into `useSettingsPageState` hook.
-    - Return a comprehensive object exposing the state, computed values, and action handlers.
+# Plan
 
-2. **Extract `SettingsCategoryRail` Component**:
-    - Create `dashboard/src/v2/components/settings/SettingsCategoryRail.tsx`.
-    - Accept props for `categories`, `filteredCategories`, `activeCategory`, `settingsSearch`, `onSearchChange`, `onCategoryChange`.
-    - Move the sticky sidebar rendering code from `SettingsPage.tsx` into this component.
+1. **Write Regression Tests**
+   - Add new tests in `tests/dashboard/lib/live-stats.test.ts` to cover the requested paths: no-merge completions, merge-backed tasks, blocked and quota paths, and consistent event ordering across cards and timing summaries. Wait, the prompt says "Add regression tests for no-merge completions, merge-backed tasks, blocked and quota paths, and consistent event ordering across cards and timing summaries."
+   - Check what's already tested. `tests/dashboard/lib/live-stats.test.ts` currently covers some of these. I need to make sure `live-session-runtime.test.ts` and `live-session-page-runtime.test.tsx` have sufficient coverage or add specific tests that were requested.
+   - Wait, `live-stats.test.ts` actually has tests for "no-merge completions" ("keeps no-change tasks in coding time"), "merge-backed tasks" ("splits task time across coding, ci, autofix, and merge windows"), "blocked paths" ("does not inherit stale timing for blocked tasks"). Wait! I should just verify if I need to *add* them or if they already exist, or if I need to add more. Let me double check what is missing.
+   - Ah, the instructions literally said: "Add regression tests for no-merge completions, merge-backed tasks, blocked and quota paths, and consistent event ordering across cards and timing summaries." Let me add a new test file or append to `live-stats.test.ts` to explicitly test `LiveRuntimeProjection` for these cases.
 
-3. **Extract `SettingsContentPanels` Component**:
-    - Create `dashboard/src/v2/components/settings/SettingsContentPanels.tsx`.
-    - Accept props for all necessary state and handlers to render the active category's content panel.
-    - Move the `renderContent`, `renderGeneralSection`, etc., and `IntegrationConfigRow`, `SectionCard` from `SettingsPage.tsx` or keep `SectionCard` in `SettingsSurface.tsx` if it's there. Actually, `SectionCard` and `IntegrationConfigRow` are defined in `SettingsPage.tsx` and should be moved or exported. We'll likely move them to `SettingsContentPanels.tsx` or export them. The requirement mentions `SettingsSurface.tsx`, maybe `SectionCard` belongs there? Let's check `SettingsSurface.tsx`.
+2. **Update Architecture Documentation**
+   - The user requested updating `docs/architecture/execution-runtime-event-timeline.md`.
+   - Update it to mention `LiveRuntimeProjection` inside `live-runtime-history.ts` as the central projection mechanism for tasks and live stats.
 
-4. **Update `SettingsSurface.tsx`**:
-    - Move `SectionCard` and `IntegrationConfigRow` to `SettingsSurface.tsx` if they fit as generic layout surfaces for settings, or keep them local to panels if they are highly specific. The prompt mentions `- dashboard/src/v2/components/settings/SettingsSurface.tsx`.
+3. **Complete Pre-commit Steps**
+   - Run tests, run code review, initiate memory recording.
 
-5. **Refactor `SettingsPage.tsx`**:
-    - Import the new hook `useSettingsPageState`.
-    - Import `SettingsCategoryRail` and `SettingsContentPanels`.
-    - Re-wire the component to be a thin wrapper around these extracted parts.
-
-6. **Add Tests**:
-    - Update/Create `tests/dashboard/v2/settings-page-state.test.tsx` to verify the state transitions, filtering, and hook behavior.
-    - Run `npm run lint`, `npm run typecheck:dashboard`, `npm run test`, `npm run build`.
-
-7. **Submit**:
-    - Commit pre-commit steps and submit.
+4. **Submit**
