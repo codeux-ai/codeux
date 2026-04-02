@@ -43,6 +43,7 @@
 - [Atomic Sprint Loop](./sprint-loop/atomic-loop.md)
 - [Instruction Template System](./instructions/markdown-template-system.md)
 - [Dashboard Guide](./dashboard/dashboard-guide.md)
+- [Quicksprint Templates](./dashboard/quicksprint-templates.md)
 - [Configuration and Storage](./settings/configuration-and-storage.md)
 - [Provider Routing](./settings/provider-routing.md)
 - [Operations Runbook](./operations/runbook.md)

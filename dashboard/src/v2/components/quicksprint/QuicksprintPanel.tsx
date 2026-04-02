@@ -18,6 +18,7 @@ import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { getProviderModelOptions } from "../../lib/settings-view-models.js";
 import { getPlanningFeedback } from "../../lib/sprint-planning-feedback.js";
 import { PlanningProgressOverlay } from "../ui/PlanningProgressOverlay.js";
+import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 
 /* ─── Icon Map ──────────────────────────────────────────────────────── */
 const IconMap: Record<string, FunctionComponent<any>> = {
@@ -83,7 +84,11 @@ const ICON_OPTIONS: ReadonlyArray<{ value: string; Icon: FunctionComponent<any> 
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 type Phase = "browse" | "configure" | "editor";
-import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
+type BuiltinPurposeOption = {
+  value: string;
+  label: string;
+  description?: string;
+};
 
 interface QuicksprintPanelProps {
   projectId: string;
@@ -137,6 +142,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   /* ── Phase / Navigation ─────────────────────────────────────────── */
   const [phase, setPhase] = useState<Phase>("browse");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [selectedBuiltinPurpose, setSelectedBuiltinPurpose] = useState("");
 
   /* ── Configure state ────────────────────────────────────────────── */
   const [taskCount, setTaskCount] = useState(5);
@@ -171,6 +177,56 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     () => templates.find((t) => t.id === selectedTemplateId) || null,
     [templates, selectedTemplateId],
   );
+
+  const builtinTemplates = useMemo(
+    () => templates.filter((t) => t.isBuiltIn),
+    [templates],
+  );
+
+  const customTemplates = useMemo(
+    () => templates.filter((t) => !t.isBuiltIn),
+    [templates],
+  );
+
+  const builtinPurposeOptions = useMemo<BuiltinPurposeOption[]>(() => {
+    const purposes = new Map<string, BuiltinPurposeOption>();
+    for (const template of builtinTemplates) {
+      const value = template.purpose || "general";
+      if (purposes.has(value)) {
+        continue;
+      }
+      purposes.set(value, {
+        value,
+        label: template.purposeLabel || "General",
+        description: template.purposeDescription,
+      });
+    }
+    return Array.from(purposes.values());
+  }, [builtinTemplates]);
+
+  useEffect(() => {
+    if (builtinPurposeOptions.length === 0) {
+      if (selectedBuiltinPurpose) {
+        setSelectedBuiltinPurpose("");
+      }
+      return;
+    }
+    if (!builtinPurposeOptions.some((option) => option.value === selectedBuiltinPurpose)) {
+      setSelectedBuiltinPurpose(builtinPurposeOptions[0].value);
+    }
+  }, [builtinPurposeOptions, selectedBuiltinPurpose]);
+
+  const activeBuiltinPurpose = useMemo(
+    () => builtinPurposeOptions.find((option) => option.value === selectedBuiltinPurpose) || builtinPurposeOptions[0] || null,
+    [builtinPurposeOptions, selectedBuiltinPurpose],
+  );
+
+  const visibleBuiltinTemplates = useMemo(() => {
+    if (!activeBuiltinPurpose) {
+      return builtinTemplates;
+    }
+    return builtinTemplates.filter((template) => (template.purpose || "general") === activeBuiltinPurpose.value);
+  }, [activeBuiltinPurpose, builtinTemplates]);
 
   /* ── Combined prompt preview (agent + template + additional) ────── */
   const combinedPrompt = useMemo(() => {
@@ -327,9 +383,6 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     }
   }, [selectedTemplate, taskCount, additionalPrompt, onExecute, routeOverride, modelOverride]);
 
-  const builtinTemplates = templates.filter((t) => t.isBuiltIn);
-  const customTemplates = templates.filter((t) => !t.isBuiltIn);
-
   /* ─── Render ──────────────────────────────────────────────────── */
   return (
     <section
@@ -368,7 +421,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                     Launch A Quicksprint.
                   </h2>
                   <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400 sm:text-[15px]">
-                    Select a template to rapidly bootstrap a new sprint. Built-in audits and your custom flows are ready to go.
+                    Browse purpose-specific default templates or launch your own reusable custom flows to spin up a focused sprint fast.
                   </p>
                 </div>
               </div>
@@ -390,9 +443,37 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               <>
                 {/* Built-in templates */}
                 <div data-qs-stagger className="mt-10">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-5">Built-in Templates</div>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {builtinTemplates.map((t) => (
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="space-y-2">
+                      <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Default Templates</div>
+                      <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                        Built-in templates are organized by purpose so the catalog can expand into additional language and product families over time.
+                      </p>
+                    </div>
+                    <div className="w-full max-w-sm rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                      <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Purpose</div>
+                      <div className="mt-2">
+                        <AvantgardeSelect
+                          aria-label="Default template purpose"
+                          variant="compact"
+                          value={activeBuiltinPurpose?.value || ""}
+                          onChange={setSelectedBuiltinPurpose}
+                          options={builtinPurposeOptions.map((option) => ({
+                            value: option.value,
+                            label: option.label,
+                          }))}
+                          placeholder="Select Purpose"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  {activeBuiltinPurpose?.description && (
+                    <p className="mt-4 max-w-3xl text-xs leading-relaxed text-slate-400 dark:text-slate-500">
+                      {activeBuiltinPurpose.description}
+                    </p>
+                  )}
+                  <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {visibleBuiltinTemplates.map((t) => (
                       <TemplateCard key={t.id} template={t} onSelect={() => handleSelectTemplate(t)} />
                     ))}
                   </div>

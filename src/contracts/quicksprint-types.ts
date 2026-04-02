@@ -10,6 +10,9 @@ export interface QuicksprintTemplateRecord {
   defaultTaskCount: number;
   isBuiltIn: boolean;
   agentPresetId?: string;
+  purpose?: string;
+  purposeLabel?: string;
+  purposeDescription?: string;
   createdAt: string;
   updatedAt: string;
 }
