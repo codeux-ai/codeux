@@ -152,7 +152,7 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
       <div className="relative z-20 flex h-full w-full flex-col items-center justify-center p-8 text-center">
         <div className={`absolute top-5 flex items-center gap-1.5 opacity-0 transition-opacity duration-300 group-hover:opacity-100 ${state.text}`}>
           <StatusIcon className={`h-3.5 w-3.5 ${isRunning ? "animate-pulse" : ""}`} strokeWidth={2.5} />
-          <span className="text-[10px] font-bold uppercase tracking-widest">{state.label}</span>
+          <span className="text-[10px] font-bold uppercase tracking-[0.14em]">{state.label}</span>
         </div>
 
         <div className={`absolute left-7 top-7 inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.16em] ${accentColor}`}>
@@ -178,12 +178,12 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
         <div className="mt-6 flex items-center justify-center gap-7 text-center transition-transform duration-300 group-hover:-translate-y-3">
           <div className="flex flex-col items-center">
             <div className="font-mono text-[2rem] font-black text-slate-900 dark:text-white">{sprint.tasksCount}</div>
-            <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Tasks</div>
+            <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Tasks</div>
           </div>
           <div className="h-10 w-px bg-black/[0.08] dark:bg-white/[0.08]" />
           <div className="flex flex-col items-center">
             <div className="font-mono text-[2rem] font-black text-slate-900 dark:text-white">{sprint.completion}%</div>
-            <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Done</div>
+            <div className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Done</div>
           </div>
         </div>
 

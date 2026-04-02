@@ -274,7 +274,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                     {dropdownOpen && (
                         <div role="listbox" aria-label="Project list" className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
                             <div className="px-3 pt-3 pb-1.5">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Projects</span>
+                                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Projects</span>
                             </div>
                             {projects.map((source) => (
                                 <button
@@ -350,7 +350,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                         {sprintDropdownOpen && sprints.length > 0 && (
                             <div role="listbox" aria-label="Sprint list" className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
                                 <div className="px-3 pt-3 pb-1.5">
-                                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Sprint Scope</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Sprint Scope</span>
                                 </div>
                                 <button
                                     role="option"
@@ -417,7 +417,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                         {workerDropdownOpen && (
                             <div role="listbox" aria-label="Worker list" className="absolute right-0 top-full mt-2 w-64 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
                                 <div className="px-3 pt-3 pb-1.5">
-                                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Available Workers</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Available Workers</span>
                                 </div>
                                 <div className="max-h-64 overflow-y-auto">
                                     {workerOptions.map((option) => (

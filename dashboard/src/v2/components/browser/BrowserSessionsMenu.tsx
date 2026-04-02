@@ -102,7 +102,7 @@ export const BrowserSessionsMenu: FunctionComponent<{ enabled?: boolean }> = ({ 
                     className="absolute right-0 top-full mt-2 w-72 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50"
                 >
                     <div className="px-3 pt-3 pb-1.5 flex justify-between items-center">
-                        <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Active Sessions</span>
+                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Active Sessions</span>
                     </div>
                     <div className="max-h-64 overflow-y-auto pb-1">
                         {loading ? (

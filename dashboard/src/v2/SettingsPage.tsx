@@ -98,7 +98,7 @@ export const SettingsPage: FunctionComponent = () => {
           </p>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-[1.25rem] border border-black/[0.06] bg-white/70 p-1 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60">
+            <div className="rounded-2xl border border-black/[0.06] bg-white/70 p-1 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60">
               <button
                 type="button"
                 onClick={() => setActiveScope("system")}

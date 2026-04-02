@@ -27,7 +27,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
         <button
           type="button"
           onClick={onBulkStart}
-          className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-600 transition-colors hover:bg-signal-500/20 dark:text-signal-300"
+          className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 transition-colors hover:bg-signal-500/20 dark:text-signal-300"
         >
           <Play className="h-3 w-3" fill="currentColor" />
           Start
@@ -35,7 +35,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
         <button
           type="button"
           onClick={onBulkDelete}
-          className="inline-flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-status-red transition-colors hover:bg-status-red/20"
+          className="inline-flex items-center gap-1.5 rounded-full border border-status-red/20 bg-status-red/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-status-red transition-colors hover:bg-status-red/20"
         >
           <Trash2 className="h-3 w-3" />
           Delete
@@ -43,7 +43,7 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
         <button
           type="button"
           onClick={onClearSelection}
-          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
         >
           Clear
         </button>

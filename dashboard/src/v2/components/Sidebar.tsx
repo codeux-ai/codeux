@@ -80,7 +80,7 @@ export const Sidebar: FunctionComponent = () => {
                     </div>
                 </div>
                 <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white flex flex-col leading-none font-display">
-                    Jules <span className="text-[9px] uppercase font-bold font-mono tracking-[0.18em] text-signal-500 mt-1 opacity-90">Agent OS</span>
+                    Jules <span className="text-[9px] uppercase font-bold font-mono tracking-[0.2em] text-signal-500 mt-1 opacity-90">Agent OS</span>
                 </h1>
             </a>
 

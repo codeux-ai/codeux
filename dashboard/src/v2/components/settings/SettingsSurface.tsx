@@ -60,7 +60,7 @@ export const SettingsHeader: FunctionComponent<{
 }> = ({ icon: Icon, eyebrow, title, description, actions }) => (
   <div className="flex flex-wrap items-start justify-between gap-5 border-b border-black/[0.05] px-7 py-6 dark:border-white/[0.04]">
     <div>
-      <div className="flex items-center gap-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-signal-500">
+      <div className="flex items-center gap-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
         <Icon className="h-3.5 w-3.5" strokeWidth={2.3} />
         {eyebrow}
       </div>

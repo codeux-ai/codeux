@@ -33,8 +33,8 @@ export const AttentionLedger: FunctionComponent = memo(() => {
     return (
         <div>
             <div className="mb-3 flex items-center justify-between gap-3">
-                <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 block">Attention Queue</span>
-                <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.12em]">
+                <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400 block">Attention Queue</span>
+                <div className="flex flex-wrap items-center gap-2 text-[9px] font-bold uppercase tracking-[0.14em]">
                     <span className="rounded-full border border-status-amber/20 bg-status-amber/10 px-2 py-1 text-status-amber">
                         open {openCount}
                     </span>
@@ -77,12 +77,12 @@ export const AttentionLedger: FunctionComponent = memo(() => {
                                             <span className="truncate text-xs font-semibold text-slate-700 dark:text-slate-300">
                                                 {item.title}
                                             </span>
-                                            <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${
+                                            <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
                                                 ATTENTION_SEVERITY_TONE[item.severity] || ATTENTION_SEVERITY_TONE.medium
                                             }`}>
                                                 {item.severity}
                                             </span>
-                                            <span className="rounded-full border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
+                                            <span className="rounded-full border border-black/[0.05] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
                                                 {ATTENTION_TYPE_LABELS[item.attentionType] || item.attentionType.replace(/_/g, " ")}
                                             </span>
                                         </div>
@@ -126,7 +126,7 @@ export const AttentionLedger: FunctionComponent = memo(() => {
                                             type="button"
                                             onClick={() => onClaimAttentionItem(snapshot.projectId!, item.id)}
                                             disabled={pendingActionIds.has(claimActionId)}
-                                            className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-signal-500 transition-colors hover:bg-signal-500/15 disabled:opacity-50"
+                                            className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500 transition-colors hover:bg-signal-500/15 disabled:opacity-50"
                                         >
                                             <Bot className="w-3 h-3" strokeWidth={2} />
                                             {pendingActionIds.has(claimActionId) ? "Claiming" : "Claim"}
@@ -137,7 +137,7 @@ export const AttentionLedger: FunctionComponent = memo(() => {
                                             type="button"
                                             onClick={() => onResolveAttentionItem(snapshot.projectId!, item.id)}
                                             disabled={pendingActionIds.has(resolveActionId)}
-                                            className="inline-flex items-center gap-1.5 rounded-full border border-status-green/20 bg-status-green/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-green transition-colors hover:bg-status-green/15 disabled:opacity-50"
+                                            className="inline-flex items-center gap-1.5 rounded-full border border-status-green/20 bg-status-green/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-green transition-colors hover:bg-status-green/15 disabled:opacity-50"
                                         >
                                             <CheckCircle2 className="w-3 h-3" strokeWidth={2} />
                                             {pendingActionIds.has(resolveActionId) ? "Resolving" : "Resolve"}
@@ -148,7 +148,7 @@ export const AttentionLedger: FunctionComponent = memo(() => {
                                             type="button"
                                             onClick={() => onDismissAttentionItem(snapshot.projectId!, item.id)}
                                             disabled={pendingActionIds.has(dismissActionId)}
-                                            className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:bg-black/[0.05] dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:bg-white/[0.05] disabled:opacity-50"
+                                            className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-black/[0.03] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-black/[0.05] dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:bg-white/[0.05] disabled:opacity-50"
                                         >
                                             <XCircle className="w-3 h-3" strokeWidth={2} />
                                             {pendingActionIds.has(dismissActionId) ? "Dismissing" : "Dismiss"}

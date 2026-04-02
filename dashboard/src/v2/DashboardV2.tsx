@@ -37,7 +37,7 @@ export const DashboardV2: FunctionComponent = () => {
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <div role="status" aria-live="polite" aria-label="Status: Cluster Optimal" className="px-4 md:px-5 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-widest rounded-full bg-signal-500/8 dark:bg-signal-500/10 text-signal-600 dark:text-signal-400 border border-signal-500/15 dark:border-signal-500/20 flex items-center gap-2.5 shadow-[0_0_20px_rgba(0,224,160,0.08)] backdrop-blur-md">
+                    <div role="status" aria-live="polite" aria-label="Status: Cluster Optimal" className="px-4 md:px-5 py-2 md:py-2.5 text-[10px] md:text-xs font-bold uppercase tracking-[0.14em] rounded-full bg-signal-500/8 dark:bg-signal-500/10 text-signal-600 dark:text-signal-400 border border-signal-500/15 dark:border-signal-500/20 flex items-center gap-2.5 shadow-[0_0_20px_rgba(0,224,160,0.08)] backdrop-blur-md">
                         <span aria-hidden="true" className="w-2 h-2 rounded-full bg-signal-500 relative">
                             <span className="absolute inset-0 rounded-full animate-ping bg-signal-400 opacity-60" />
                         </span>

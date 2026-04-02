@@ -16,7 +16,7 @@ export const ExecutionTimeline: FunctionComponent<ExecutionTimelineProps> = ({ a
 
   return (
     <div>
-      <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 block mb-3">Runtime Timeline</span>
+      <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400 block mb-3">Runtime Timeline</span>
       {timelineEvents.length === 0 ? (
         <p role="status" className="text-[11px] text-slate-400 dark:text-slate-600 font-mono">No task run events recorded yet.</p>
       ) : (

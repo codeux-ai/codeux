@@ -108,7 +108,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
 
           <div data-composer-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
             <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-              <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-2">Sprint</div>
+              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Sprint</div>
               <select
                 value={state.sprintId}
                 onInput={(event) => state.setSprintId((event.target as HTMLSelectElement).value)}
@@ -123,14 +123,14 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
             </div>
 
             <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-              <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-2">Status</div>
+              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Status</div>
               <div className="flex gap-2 flex-wrap">
                 {STATUS_OPTIONS.map((option) => (
                   <button
                     key={option}
                     type="button"
                     onClick={() => state.setStatus(option)}
-                    className={`px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
+                    className={`px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.14em] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
                       state.status === option
                         ? "bg-signal-500 text-void-900 shadow-[0_2px_12px_rgba(0,224,160,0.3)]"
                         : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
@@ -144,7 +144,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
           </div>
 
           <label data-composer-stagger className="mt-8 block space-y-2">
-            <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Task Title</span>
+            <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Task Title</span>
             <input
               type="text"
               value={state.title}
@@ -158,7 +158,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
 
           <div data-composer-stagger className="mt-8 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Task Details</label>
+              <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Task Details</label>
             </div>
 
             <div className="grid gap-4 xl:grid-cols-2">
@@ -185,7 +185,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
           <div data-composer-stagger className="mt-8">
             <div className="flex items-center gap-2 mb-3">
               <Target className="w-3.5 h-3.5 text-ember-500" strokeWidth={2.3} />
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Dependencies</label>
+              <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Dependencies</label>
             </div>
             {state.dependencyOptions.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-black/[0.08] dark:border-white/[0.08] px-4 py-4 text-xs text-slate-400">
@@ -221,14 +221,14 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
 
         <aside className="flex flex-col gap-4 p-6 sm:p-8">
           <div data-composer-stagger>
-            <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-3">Priority</div>
+            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-3">Priority</div>
             <div className="grid grid-cols-2 gap-2">
               {PRIORITY_OPTIONS.map((option) => (
                 <button
                   key={option}
                   type="button"
                   onClick={() => state.setPriority(option)}
-                  className={`px-3 py-2 rounded-[1.1rem] border text-[10px] font-bold uppercase tracking-[0.12em] transition-all text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
+                  className={`px-3 py-2 rounded-[1.1rem] border text-[10px] font-bold uppercase tracking-[0.14em] transition-all text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
                     state.priority === option
                       ? "border-ember-500/45 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400"
                       : "border-black/[0.06] bg-black/[0.025] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"
@@ -243,7 +243,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
           <div data-composer-stagger>
             <div className="flex items-center gap-2 mb-3">
               <Bot className="w-3.5 h-3.5 text-signal-500" strokeWidth={2.3} />
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Executor</label>
+              <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Executor</label>
             </div>
             <div className="grid gap-3">
               {EXECUTOR_OPTIONS.map((option) => {

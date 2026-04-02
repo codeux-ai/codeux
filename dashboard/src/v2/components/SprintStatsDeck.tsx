@@ -301,7 +301,7 @@ export const TaskStagePills: FunctionComponent<{
         return (
           <span
             key={stage}
-            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${meta.chip} ${meta.tone} ${active ? "shadow-[0_0_0_1px_rgba(0,224,160,0.12)]" : ""}`}
+            className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${meta.chip} ${meta.tone} ${active ? "shadow-[0_0_0_1px_rgba(0,224,160,0.12)]" : ""}`}
           >
             <span
               className="h-1.5 w-1.5 rounded-full"
@@ -317,7 +317,7 @@ export const TaskStagePills: FunctionComponent<{
           </span>
         );
       })}
-      <span className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300">
+      <span className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300">
         <Timer className="h-3 w-3" strokeWidth={2.2} />
         Total
         <span className="font-mono normal-case tracking-normal text-slate-700 dark:text-white">{formatDurationTight(timing.totalSeconds)}</span>
@@ -377,7 +377,7 @@ export const SprintStatsDeck: FunctionComponent<{
       <div className="relative z-10">
         <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-signal-500">
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
               <Timer className="h-4 w-4" strokeWidth={1.6} />
               Telemetry Field
             </div>

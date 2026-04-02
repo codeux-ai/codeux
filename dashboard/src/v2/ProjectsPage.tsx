@@ -121,7 +121,7 @@ const ProjectCard: FunctionComponent<{
                     </div>
                 </div>
 
-                <div className={`flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.15em] shrink-0 ml-3 ${color}`}>
+                <div className={`flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.14em] shrink-0 ml-3 ${color}`}>
                     <StatusDot status={source.status} />
                     {label}
                 </div>
@@ -154,7 +154,7 @@ const ProjectCard: FunctionComponent<{
             {/* ── Progress bar ──────────────────────────────────────── */}
             <div className="mb-6 relative z-10">
                 <div className="flex items-center justify-between mb-2">
-                    <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Completion</span>
+                    <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Completion</span>
                     <span className="text-[10px] font-mono font-bold text-slate-600 dark:text-slate-400">{completion}%</span>
                 </div>
                 <div className="h-1.5 w-full bg-black/[0.05] dark:bg-white/[0.05] rounded-full overflow-hidden">
@@ -371,7 +371,7 @@ export const ProjectsPage: FunctionComponent = () => {
                         {/* Status pills */}
                         <div className="flex items-center gap-2.5">
                             {runningCount > 0 && (
-                                <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-full
+                                <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] rounded-full
                                                bg-status-green/[0.08] text-status-green
                                                border border-status-green/20
                                                flex items-center gap-2
@@ -382,7 +382,7 @@ export const ProjectsPage: FunctionComponent = () => {
                                     {runningCount} Running
                                 </div>
                             )}
-                            <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-widest rounded-full
+                            <div className="px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] rounded-full
                                            bg-black/[0.04] dark:bg-white/[0.04] text-slate-500
                                            border border-black/[0.06] dark:border-white/[0.06]
                                            flex items-center gap-2">

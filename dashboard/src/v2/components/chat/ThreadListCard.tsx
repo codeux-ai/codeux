@@ -46,7 +46,7 @@ export const ThreadListCard: FunctionComponent<{
               </div>
             </div>
             <div className="shrink-0 text-right">
-              <div className={`text-[10px] font-bold uppercase tracking-[0.12em] ${statusTone(thread.pendingMessageCount)}`}>
+              <div className={`text-[10px] font-bold uppercase tracking-[0.14em] ${statusTone(thread.pendingMessageCount)}`}>
                 {thread.pendingMessageCount > 0 ? `${thread.pendingMessageCount} pending` : "synced"}
               </div>
               <div className="mt-1 text-[10px] font-mono text-slate-400">{formatRelativeChatTime(thread.lastMessageAt)}</div>

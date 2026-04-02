@@ -19,7 +19,7 @@ export const AgentsHero: FunctionComponent<{
           <Bot className="h-6 w-6" strokeWidth={1.8} />
         </div>
         <div className="flex flex-col">
-          <span className="text-xs font-bold uppercase tracking-widest text-signal-400">Role</span>
+          <span className="text-xs font-bold uppercase tracking-[0.14em] text-signal-400">Role</span>
           <h1 className="font-display text-3xl font-black tracking-tight text-white md:text-4xl">
             Project Agents
           </h1>
