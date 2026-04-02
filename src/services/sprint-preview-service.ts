@@ -35,6 +35,11 @@ import {
 } from "./sprint-preview-utils.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { getHomeSprintOsPath, getRepoSprintOsPath } from "../shared/config/sprint-os-paths.js";
+import {
+  type DockerContainerSummary,
+  type SprintPreviewRuntimeSnapshot,
+  buildRuntimeSnapshot,
+} from "./sprint-preview-runtime-snapshot.js";
 
 const BUNDLED_CONTAINER_SETUP_SCRIPT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -52,7 +57,7 @@ export interface SprintPreviewProxyResponse {
   body: Buffer;
 }
 
-interface SprintPreviewServiceDeps {
+export interface SprintPreviewServiceDeps {
   sprintPreviewRepository: SprintPreviewRepository;
   projectManagementRepository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;
@@ -69,26 +74,26 @@ interface PreparedStartupScript {
   runCommand: string | null;
 }
 
-interface DockerContainerSummary {
-  id: string;
-  name: string | null;
-  status: string | null;
-  labels: Record<string, string>;
-}
-
 export class SprintPreviewService {
   private readonly sessionLocks = new Map<string, Promise<unknown>>();
 
   constructor(private readonly deps: SprintPreviewServiceDeps) {}
 
+  private async getBatchedSnapshot(): Promise<SprintPreviewRuntimeSnapshot> {
+    return buildRuntimeSnapshot(this.deps);
+  }
+
   async listSessions(projectId?: string): Promise<SprintPreviewSession[]> {
     const sessions = this.deps.sprintPreviewRepository.listSessions(projectId);
-    return await Promise.all(sessions.map((session) => this.refreshRuntimeState(session)));
+    const snapshot = await this.getBatchedSnapshot();
+    return await Promise.all(sessions.map((session) => this.refreshRuntimeState(session, snapshot)));
   }
 
   async getSession(sessionId: string): Promise<SprintPreviewSession | null> {
     const session = this.deps.sprintPreviewRepository.getSession(sessionId);
-    return session ? await this.refreshRuntimeState(session) : null;
+    if (!session) return null;
+    const snapshot = await this.getBatchedSnapshot();
+    return await this.refreshRuntimeState(session, snapshot);
   }
 
   async startSession(projectId: string, sprintId: string, options?: { rebuild?: boolean }): Promise<SprintPreviewSession> {
@@ -487,17 +492,16 @@ export class SprintPreviewService {
 
   async reconcileSessions(): Promise<void> {
     const sessions = this.deps.sprintPreviewRepository.listSessions();
+    const snapshot = await this.getBatchedSnapshot();
     for (const session of sessions) {
       const sprint = this.deps.projectManagementRepository.getSprint(session.sprintId);
       if (!sprint) {
         continue;
       }
       const settings = this.resolveSettings(session.projectId, session.sprintId).sprintPreview;
-      const refreshed = await this.refreshRuntimeState(session);
+      const refreshed = await this.refreshRuntimeState(session, snapshot);
       const completedTaskCount = this.countCompletedTasks(session.projectId, session.sprintId);
-      const activeRun = this.deps.executionRepository.getProjectExecutionSnapshot(session.projectId)
-        .sprintRuns
-        .some((run) => run.sprintId === session.sprintId && run.status === "running");
+      const activeRun = snapshot.activeRunsBySprintId.has(session.sprintId);
 
       if (settings.enabled === false) {
         if (refreshed.status === "running" || refreshed.status === "starting") {
@@ -581,8 +585,12 @@ export class SprintPreviewService {
     }
   }
 
-  private async refreshRuntimeState(session: SprintPreviewSession): Promise<SprintPreviewSession> {
-    const container = await this.findManagedContainerForSession(session);
+  private async refreshRuntimeState(
+    session: SprintPreviewSession,
+    snapshot?: SprintPreviewRuntimeSnapshot,
+  ): Promise<SprintPreviewSession> {
+    const effectiveSnapshot = snapshot || (await this.getBatchedSnapshot());
+    const container = this.findManagedContainerForSession(session, effectiveSnapshot.containers);
     if (!container) {
       if (!session.containerId && !session.containerName) {
         return session;
@@ -664,7 +672,8 @@ export class SprintPreviewService {
   private async waitForReadiness(session: SprintPreviewSession, timeoutMs: number): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      const refreshed = await this.refreshRuntimeState(session);
+      const snapshot = await this.getBatchedSnapshot();
+      const refreshed = await this.refreshRuntimeState(session, snapshot);
       if (refreshed.status === "running") {
         return;
       }
@@ -685,7 +694,8 @@ export class SprintPreviewService {
       }
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
-    const latest = await this.refreshRuntimeState(session);
+    const finalSnapshot = await this.getBatchedSnapshot();
+    const latest = await this.refreshRuntimeState(session, finalSnapshot);
     if (latest.status !== "running") {
       throw new Error(latest.lastError || `Sprint preview did not become reachable within ${Math.round(timeoutMs / 1000)} seconds.`);
     }
@@ -722,43 +732,10 @@ export class SprintPreviewService {
     }
   }
 
-  private async listPreviewContainers(cwd: string): Promise<DockerContainerSummary[]> {
-    try {
-      const result = await runCommandStrict(
-        "docker",
-        [
-          "ps",
-          "-a",
-          "--filter", "label=sprint-os.preview=true",
-          "--format",
-          "{{.ID}}\t{{.Names}}\t{{.Status}}\t{{.Label \"sprint-os.project-id\"}}\t{{.Label \"sprint-os.sprint-id\"}}\t{{.Label \"sprint-os.session-id\"}}",
-        ],
-        cwd,
-      );
-      return result.stdout
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((line) => {
-          const [id, name, rawStatus, projectId, sprintId, sessionId] = line.split("\t");
-          return {
-            id,
-            name: name || null,
-            status: this.normalizeDockerState(rawStatus),
-            labels: {
-              "sprint-os.project-id": projectId || "",
-              "sprint-os.sprint-id": sprintId || "",
-              "sprint-os.session-id": sessionId || "",
-            },
-          } satisfies DockerContainerSummary;
-        });
-    } catch {
-      return [];
-    }
-  }
-
-  private async findManagedContainerForSession(session: SprintPreviewSession): Promise<DockerContainerSummary | null> {
-    const containers = await this.listPreviewContainers(session.worktreePath || process.cwd());
+  private findManagedContainerForSession(
+    session: SprintPreviewSession,
+    containers: DockerContainerSummary[]
+  ): DockerContainerSummary | null {
     const bySession = containers.find((container) => container.labels["sprint-os.session-id"] === session.id);
     if (bySession) {
       return bySession;
@@ -778,26 +755,6 @@ export class SprintPreviewService {
       || (session.containerName ? container.name === session.containerName : false),
     );
     return matchingRef || null;
-  }
-
-  private normalizeDockerState(rawStatus: string | null | undefined): string | null {
-    const normalized = String(rawStatus || "").trim().toLowerCase();
-    if (!normalized) {
-      return null;
-    }
-    if (normalized.startsWith("up ")) {
-      return "running";
-    }
-    if (normalized.startsWith("exited ")) {
-      return "exited";
-    }
-    if (normalized.startsWith("created")) {
-      return "created";
-    }
-    if (normalized.startsWith("restarting")) {
-      return "restarting";
-    }
-    return normalized;
   }
 
   private async removeContainerIfPresent(containerRef: string, cwd: string): Promise<void> {

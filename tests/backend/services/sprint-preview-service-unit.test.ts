@@ -834,18 +834,6 @@ describe("SprintPreviewService unit tests", () => {
       expect(key).toBe("proj-1:sprint-1");
     });
 
-    it("normalizeDockerState maps status strings correctly", () => {
-      const service = new SprintPreviewService(deps as any);
-      const normalize = (service as any).normalizeDockerState.bind(service);
-      expect(normalize("Up 5 minutes")).toBe("running");
-      expect(normalize("Exited (1) 2 hours ago")).toBe("exited");
-      expect(normalize("Created")).toBe("created");
-      expect(normalize("Restarting (1) 5 seconds ago")).toBe("restarting");
-      expect(normalize("")).toBeNull();
-      expect(normalize(null)).toBeNull();
-      expect(normalize(undefined)).toBeNull();
-      expect(normalize("paused")).toBe("paused");
-    });
 
     it("extractPreviewError finds error lines", () => {
       const service = new SprintPreviewService(deps as any);
@@ -1052,72 +1040,50 @@ describe("SprintPreviewService unit tests", () => {
     });
   });
 
-  describe("listPreviewContainers parsing", () => {
-    it("parses docker ps output into container summaries", async () => {
-      vi.mocked(runCommandStrict).mockImplementation(async (command, args) => {
-        if (command === "docker" && args?.[0] === "ps" && args?.includes("-a")) {
-          const lines = [
-            "abc123\tpreview-proj-1\tUp 5 minutes\tproj-1\tsprint-1\tsession-1",
-            "def456\tpreview-proj-2\tExited (0) 1 hour ago\tproj-2\tsprint-2\tsession-2",
-          ].join("\n");
-          return { exitCode: 0, stdout: lines, stderr: "", durationMs: 1 };
-        }
-        return { exitCode: 0, stdout: "", stderr: "", durationMs: 1 };
-      });
-
-      const service = new SprintPreviewService(deps as any);
-      const containers = await (service as any).listPreviewContainers("/cwd");
-      expect(containers).toHaveLength(2);
-      expect(containers[0].id).toBe("abc123");
-      expect(containers[0].status).toBe("running");
-      expect(containers[1].status).toBe("exited");
-    });
-
-    it("returns empty array when docker command fails", async () => {
-      vi.mocked(runCommandStrict).mockRejectedValue(new Error("docker not found"));
-
-      const service = new SprintPreviewService(deps as any);
-      const containers = await (service as any).listPreviewContainers("/cwd");
-      expect(containers).toEqual([]);
-    });
-  });
-
   describe("findManagedContainerForSession", () => {
-    it("finds container by session ID label first", async () => {
-      vi.mocked(runCommandStrict).mockResolvedValue({
-        exitCode: 0,
-        stdout: "abc123\tpreview\tUp 5m\tproj-1\tsprint-1\tsession-1",
-        stderr: "",
-        durationMs: 1,
-      });
-
+    it("finds container by session ID label first", () => {
       const session = makeSession();
       const service = new SprintPreviewService(deps as any);
-      const container = await (service as any).findManagedContainerForSession(session);
+      const containers = [
+        {
+          id: "abc123",
+          name: "preview",
+          status: "running",
+          labels: {
+            "sprint-os.project-id": "proj-1",
+            "sprint-os.sprint-id": "sprint-1",
+            "sprint-os.session-id": "session-1",
+          },
+        },
+      ];
+      const container = (service as any).findManagedContainerForSession(session, containers);
       expect(container).toBeTruthy();
       expect(container.id).toBe("abc123");
     });
 
-    it("falls back to project+sprint labels", async () => {
-      vi.mocked(runCommandStrict).mockResolvedValue({
-        exitCode: 0,
-        stdout: "abc123\tpreview\tUp 5m\tproj-1\tsprint-1\tother-session",
-        stderr: "",
-        durationMs: 1,
-      });
-
+    it("falls back to project+sprint labels", () => {
       const session = makeSession();
       const service = new SprintPreviewService(deps as any);
-      const container = await (service as any).findManagedContainerForSession(session);
+      const containers = [
+        {
+          id: "abc123",
+          name: "preview",
+          status: "running",
+          labels: {
+            "sprint-os.project-id": "proj-1",
+            "sprint-os.sprint-id": "sprint-1",
+            "sprint-os.session-id": "other-session",
+          },
+        },
+      ];
+      const container = (service as any).findManagedContainerForSession(session, containers);
       expect(container).toBeTruthy();
     });
 
-    it("returns null when no container matches and no prior refs", async () => {
-      vi.mocked(runCommandStrict).mockResolvedValue({ exitCode: 0, stdout: "", stderr: "", durationMs: 1 });
-
+    it("returns null when no container matches and no prior refs", () => {
       const session = makeSession({ containerId: null, containerName: null });
       const service = new SprintPreviewService(deps as any);
-      const container = await (service as any).findManagedContainerForSession(session);
+      const container = (service as any).findManagedContainerForSession(session, []);
       expect(container).toBeNull();
     });
   });
