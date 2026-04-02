@@ -11,7 +11,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   deleting: boolean;
   importing: boolean;
 }> = ({ preset, onEdit, onDelete, onImport, deleting, importing }) => (
-  <div className="flex flex-col overflow-hidden rounded-[2rem] border border-black/[0.08] bg-white shadow-2xl dark:border-white/[0.08] dark:bg-void-900">
+  <div className="flex flex-col overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-2xl dark:border-white/[0.08] dark:bg-void-900">
     <div className="relative h-48 w-full bg-slate-100 dark:bg-void-800 md:h-64">
       <AgentAvatarScene config={preset.avatarConfig} expression="happy" className="h-full w-full object-cover" />
       <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-white to-transparent dark:from-void-900" />

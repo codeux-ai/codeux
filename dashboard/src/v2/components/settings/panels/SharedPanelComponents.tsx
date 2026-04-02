@@ -9,7 +9,7 @@ export const SectionCard: FunctionComponent<{
   danger?: boolean;
   badge?: string;
 }> = ({ title, watermark, children, danger, badge }) => (
-  <div className="group relative overflow-hidden rounded-[1.85rem] border border-black/[0.06] bg-white/76 backdrop-blur-2xl shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-void-800/66 dark:shadow-[0_24px_64px_rgba(0,0,0,0.28)]">
+  <div className="group relative overflow-hidden rounded-[1.75rem] border border-black/[0.06] bg-white/70 backdrop-blur-2xl shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
     <div aria-hidden className={`absolute inset-x-0 top-0 h-20 bg-[linear-gradient(180deg,rgba(15,23,42,0.045),transparent)] dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.045),transparent)] ${danger ? "opacity-60" : "opacity-100"}`} />
     <div
       aria-hidden

@@ -41,7 +41,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col gap-8 rounded-[2rem] border border-black/[0.08] bg-white p-8 shadow-2xl dark:border-white/[0.08] dark:bg-void-900"
+      className="flex flex-col gap-8 rounded-[1.75rem] border border-black/[0.08] bg-white p-8 shadow-2xl dark:border-white/[0.08] dark:bg-void-900"
     >
       <div className="flex items-center justify-between border-b border-black/5 pb-4 dark:border-white/5">
         <h2 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
