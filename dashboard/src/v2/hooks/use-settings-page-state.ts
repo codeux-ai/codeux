@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { fetchExternalSettingsHints } from "../../lib/api/dashboard-api.js";
 import { useProjectData } from "../context/project-data.js";
+import { useActionFeedback } from "./use-action-feedback.js";
 import {
   fetchProjectEffectiveSettings,
   fetchSystemSettings,
@@ -159,13 +160,17 @@ export const useSettingsPageState = (
   const [projectSources, setProjectSources] = useState<Record<string, SettingsValueSource>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const { feedback, setFeedback, clearFeedback } = useActionFeedback();
   const [savingSystem, setSavingSystem] = useState(false);
   const [savingProject, setSavingProject] = useState(false);
   const [resettingProject, setResettingProject] = useState(false);
   const [deletingProject, setDeletingProject] = useState(false);
   const [resettingDatabase, setResettingDatabase] = useState(false);
   const [importingHints, setImportingHints] = useState(false);
+
+  const [isDeleteProjectDialogOpen, setDeleteProjectDialogOpen] = useState(false);
+  const [isResetDatabaseDialogOpen, setResetDatabaseDialogOpen] = useState(false);
+  const [isResetProjectDialogOpen, setResetProjectDialogOpen] = useState(false);
 
   const loadSettings = useCallback(async (): Promise<void> => {
     if (isDirtyRef.current) {
@@ -205,14 +210,6 @@ export const useSettingsPageState = (
       setActiveScope("system");
     }
   }, [activeScope, selectedProject]);
-
-  useEffect(() => {
-    if (!saveMessage) {
-      return;
-    }
-    const timeoutId = window.setTimeout(() => setSaveMessage(null), 2400);
-    return () => window.clearTimeout(timeoutId);
-  }, [saveMessage]);
 
   const systemDirty = useMemo(() => (
     systemSettings && savedSystemSettings
@@ -260,11 +257,13 @@ export const useSettingsPageState = (
 
   const updateSystem = useCallback((recipe: (current: SystemSettings) => SystemSettings): void => {
     setSystemSettings((current) => (current ? recipe(current) : current));
-  }, []);
+    clearFeedback();
+  }, [clearFeedback]);
 
   const updateProject = useCallback((recipe: (current: ProjectSettings) => ProjectSettings): void => {
     setProjectSettings((current) => (current ? recipe(current) : current));
-  }, []);
+    clearFeedback();
+  }, [clearFeedback]);
 
   const updateEditableSettings = useCallback((recipe: (current: ProjectSettings) => ProjectSettings): void => {
     if (activeScope === "system") {
@@ -283,7 +282,7 @@ export const useSettingsPageState = (
       const hints = await fetchExternalSettingsHints();
       const nextSettings = applyExternalHintsToSystemSettings(systemSettings, hints);
       setSystemSettings(nextSettings);
-      setSaveMessage("Imported missing integration secrets from env/settings.json.");
+      setFeedback("success", "Imported missing integration secrets from env/settings.json.");
       setError(null);
     } catch (hintError) {
       setError(hintError instanceof Error ? hintError.message : String(hintError));
@@ -312,7 +311,7 @@ export const useSettingsPageState = (
         }
 
         setError(null);
-        setSaveMessage("System settings saved.");
+        setFeedback("success", "System settings saved.");
       } catch (saveError) {
         setError(saveError instanceof Error ? saveError.message : String(saveError));
       } finally {
@@ -334,7 +333,7 @@ export const useSettingsPageState = (
       setSavedProjectSettings(cloneProjectSettings(nextProject));
       setProjectSources(effectiveProject.sources);
       setError(null);
-      setSaveMessage(`Project settings saved for ${selectedProject.name}.`);
+      setFeedback("success", `Project settings saved for ${selectedProject.name}.`);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : String(saveError));
     } finally {
@@ -355,19 +354,17 @@ export const useSettingsPageState = (
       setSavedProjectSettings(cloneProjectSettings(nextProject));
       setProjectSources(effectiveProject.sources);
       setError(null);
-      setSaveMessage(`Project overrides reset for ${selectedProject.name}.`);
+      setFeedback("success", `Project overrides reset for ${selectedProject.name}.`);
     } catch (resetError) {
       setError(resetError instanceof Error ? resetError.message : String(resetError));
     } finally {
       setResettingProject(false);
+      setResetProjectDialogOpen(false);
     }
   }, [selectedProject]);
 
   const handleDeleteProject = useCallback(async (): Promise<void> => {
     if (!selectedProject) {
-      return;
-    }
-    if (!window.confirm(`Delete project "${selectedProject.name}" and all of its sprints, tasks, chats, and runtime records?`)) {
       return;
     }
 
@@ -376,32 +373,30 @@ export const useSettingsPageState = (
       await deleteProject(selectedProject.id);
       setActiveScope("system");
       setActiveCategory("general");
-      setSaveMessage(`Project ${selectedProject.name} deleted.`);
+      setFeedback("success", `Project ${selectedProject.name} deleted.`);
       setError(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : String(deleteError));
     } finally {
       setDeletingProject(false);
+      setDeleteProjectDialogOpen(false);
     }
   }, [selectedProject, deleteProject]);
 
   const handleResetDatabase = useCallback(async (): Promise<void> => {
-    if (!window.confirm("Reset the full database and scoped settings back to a clean development state? This deletes all projects, sprints, tasks, runtime state, chats, and saved settings.")) {
-      return;
-    }
-
     setResettingDatabase(true);
     try {
       await resetSystemDatabase();
       setActiveScope("system");
       setActiveCategory("general");
       await loadSettings();
-      setSaveMessage("Database reset to a clean state.");
+      setFeedback("success", "Database reset to a clean state.");
       setError(null);
     } catch (resetError) {
       setError(resetError instanceof Error ? resetError.message : String(resetError));
     } finally {
       setResettingDatabase(false);
+      setResetDatabaseDialogOpen(false);
     }
   }, [loadSettings]);
 
@@ -420,9 +415,13 @@ export const useSettingsPageState = (
     projectSettings,
     projectSources,
     editableSettings,
-    loading, error, saveMessage,
+    loading, error,
+    feedback, clearFeedback,
     savingSystem, savingProject, activeSaving, activeDirty,
     resettingProject, deletingProject, resettingDatabase, importingHints,
+    isDeleteProjectDialogOpen, setDeleteProjectDialogOpen,
+    isResetDatabaseDialogOpen, setResetDatabaseDialogOpen,
+    isResetProjectDialogOpen, setResetProjectDialogOpen,
     activeCategoryConfig, filteredCategories,
     categories: categories,
     providerLabels,

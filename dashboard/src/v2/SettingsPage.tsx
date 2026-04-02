@@ -6,6 +6,8 @@ import { ActionButton, NoticePanel } from "./components/settings/SettingsSurface
 import { useSettingsPageState } from "./hooks/use-settings-page-state.js";
 import { SettingsCategoryRail, CATEGORIES, CATEGORY_SEARCH_HINTS } from "./components/settings/SettingsCategoryRail.js";
 import { SettingsContentPanels } from "./components/settings/SettingsContentPanels.js";
+import { ConfirmationDialog } from "./components/ui/ConfirmationDialog.js";
+import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 
 export const SettingsPage: FunctionComponent = () => {
   const headerRef = useRef<HTMLDivElement>(null);
@@ -25,7 +27,8 @@ export const SettingsPage: FunctionComponent = () => {
     activeDirty,
     activeSaving,
     loading,
-    saveMessage,
+    feedback,
+    clearFeedback,
     resettingProject,
     handleSave,
     handleResetProject,
@@ -181,33 +184,35 @@ export const SettingsPage: FunctionComponent = () => {
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
             {activeScope === "project" ? (
-              <ActionButton
-                label="Reset Project"
-                onClick={() => void handleResetProject()}
-                tone="danger"
-                busy={resettingProject}
-                disabled={!selectedProject}
-              />
+              <>
+                <ActionButton
+                  label="Reset Project"
+                  onClick={() => state.setResetProjectDialogOpen(true)}
+                  tone="danger"
+                  busy={resettingProject}
+                  disabled={!selectedProject}
+                />
+                <ConfirmationDialog
+                  isOpen={state.isResetProjectDialogOpen}
+                  title="Reset Project Overrides"
+                  message={`Are you sure you want to reset all project-level overrides for "${selectedProject?.name}" back to system defaults?`}
+                  confirmText="Reset Overrides"
+                  variant="destructive"
+                  onConfirm={() => void handleResetProject()}
+                  onCancel={() => state.setResetProjectDialogOpen(false)}
+                />
+              </>
             ) : null}
             <button
               type="button"
               onClick={() => void handleSave()}
               disabled={!activeDirty || activeSaving || loading || (activeScope === "project" && !selectedProject)}
-              className={`group inline-flex items-center gap-2.5 rounded-2xl px-5 py-3 text-sm font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${
-                saveMessage && !error
-                  ? "bg-status-green text-white shadow-[0_4px_20px_rgba(0,171,132,0.3)]"
-                  : "bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100"
-              }`}
+              className={`group inline-flex items-center gap-2.5 rounded-2xl px-5 py-3 text-sm font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100`}
             >
               {activeSaving ? (
                 <>
                   <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.5} />
                   Saving
-                </>
-              ) : saveMessage && !error ? (
-                <>
-                  <Check className="h-4 w-4" strokeWidth={2.5} />
-                  Saved
                 </>
               ) : (
                 <>
@@ -251,6 +256,12 @@ export const SettingsPage: FunctionComponent = () => {
               {error}
             </NoticePanel>
           ) : null}
+
+          {feedback.status !== "idle" && (
+            <div className="mb-2">
+              <ActionFeedbackRegion feedback={feedback} onDismiss={clearFeedback} />
+            </div>
+          )}
 
           <SettingsContentPanels state={state} />
         </div>
