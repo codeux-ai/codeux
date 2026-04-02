@@ -79,18 +79,16 @@ const ProjectCard: FunctionComponent<{
             onClick={onSelect}
             onMouseEnter={onEnter}
             onMouseLeave={onLeave}
-            className="group relative flex flex-col
+            className={`group relative flex flex-col
                        bg-white/70 dark:bg-void-800/60
                        backdrop-blur-2xl
-                       border dark:border-white/[0.06]
                        rounded-[1.75rem]
                        p-7
-                       shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
-                       overflow-hidden cursor-pointer"
-            style={{
-                borderColor: isSelected ? "rgba(255,184,0,0.45)" : undefined,
-                boxShadow: isSelected ? "0 0 0 1px rgba(255,184,0,0.18), 0 8px 30px rgba(255,184,0,0.08)" : undefined,
-            }}
+                       overflow-hidden cursor-pointer
+                       ${isSelected
+                         ? "border border-ember-500/45 shadow-[0_8px_30px_rgba(255,184,0,0.08)] ring-1 ring-ember-500/18"
+                         : "border border-black/[0.06] dark:border-white/[0.06] shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
+                       }`}
         >
             {/* Ghost watermark */}
             <div
@@ -103,7 +101,7 @@ const ProjectCard: FunctionComponent<{
             </div>
 
             {/* Hover tint */}
-            <div className="absolute inset-0 bg-ember-500/0 group-hover:bg-ember-500/[0.025] transition-colors duration-300 pointer-events-none" />
+            <div className="absolute inset-0 bg-signal-500/0 group-hover:bg-signal-500/[0.03] dark:group-hover:bg-signal-500/[0.05] transition-colors duration-300 pointer-events-none" />
 
             {/* Wave + border trace */}
             <WaveFluid accentHex={EMBER_HEX} />
@@ -229,24 +227,24 @@ const AddCard: FunctionComponent<{ onClick: () => void }> = ({ onClick }) => (
     <button
         onClick={onClick}
         className="group relative flex flex-col items-center justify-center gap-5
-                   border-2 border-dashed border-ember-500/20 hover:border-ember-500/50
+                   border-2 border-dashed border-signal-500/25 hover:border-signal-500/50
                    rounded-[1.75rem] min-h-[260px]
                    transition-colors duration-500
-                   hover:bg-ember-500/[0.02] cursor-pointer"
+                   hover:bg-signal-500/[0.02] cursor-pointer"
     >
         {/* Morphing organic icon */}
         <div
             className="relative w-16 h-16 flex items-center justify-center
-                       border-2 border-dashed border-ember-500/25
-                       group-hover:border-ember-500 group-hover:bg-ember-500/[0.1]
+                       border-2 border-dashed border-signal-500/25
+                       group-hover:border-signal-500 group-hover:bg-signal-500/[0.1]
                        transition-all duration-400 animate-organic"
         >
             <div
-                className="absolute inset-0 bg-ember-500/0 group-hover:bg-ember-500/[0.08]
+                className="absolute inset-0 bg-signal-500/0 group-hover:bg-signal-500/[0.08]
                            transition-colors duration-300 animate-organic-reverse"
             />
             <Plus
-                className="w-6 h-6 text-ember-500/40 group-hover:text-ember-500
+                className="w-6 h-6 text-signal-500/40 group-hover:text-signal-500
                            group-hover:rotate-90 transition-all duration-400 relative z-10"
                 strokeWidth={2}
             />
@@ -255,7 +253,7 @@ const AddCard: FunctionComponent<{ onClick: () => void }> = ({ onClick }) => (
         <div className="flex flex-col items-center gap-1.5">
             <span className="text-xs font-bold uppercase tracking-[0.2em]
                              text-slate-300 dark:text-slate-600
-                             group-hover:text-ember-500 transition-colors duration-300">
+                             group-hover:text-signal-500 transition-colors duration-300">
                 Add Project
             </span>
             <span className="text-[9px] font-mono text-slate-200 dark:text-slate-700

@@ -41,7 +41,7 @@ export const HeaderStats: FunctionComponent<{ pageData: ReturnType<typeof import
             <MetricCard hoverTint="group-hover:bg-signal-500/[0.025]" accentHex="#00E0A0">
                 <Sparkline points={stats.tokensTrend} color="#00E0A0" />
                 <div className="relative z-10 flex items-center justify-between mb-6">
-                    <h3 className="text-slate-500 dark:text-slate-500 font-medium text-xs tracking-widest uppercase group-hover:text-signal-600 dark:group-hover:text-signal-400 transition-colors">Total Tokens</h3>
+                    <h3 className="text-slate-500 dark:text-slate-500 font-medium text-xs tracking-[0.2em] uppercase group-hover:text-signal-600 dark:group-hover:text-signal-400 transition-colors">Total Tokens</h3>
                     <div className="w-2 h-2 rounded-full bg-signal-500 shadow-[0_0_10px_rgba(0,224,160,0.6)]" />
                 </div>
                 <div className="relative z-10">
@@ -61,7 +61,7 @@ export const HeaderStats: FunctionComponent<{ pageData: ReturnType<typeof import
             <MetricCard hoverTint="group-hover:bg-cyan-500/[0.025]" accentHex="#00AAFF">
                 <Sparkline points={stats.sprintsTrend} color="#00AAFF" />
                 <div className="relative z-10 flex items-center justify-between mb-6">
-                    <h3 className="text-slate-500 dark:text-slate-500 font-medium text-xs tracking-widest uppercase group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors">Sprints</h3>
+                    <h3 className="text-slate-500 dark:text-slate-500 font-medium text-xs tracking-[0.2em] uppercase group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors">Sprints</h3>
                     <div className="w-2 h-2 rounded-full bg-cyan-500 shadow-[0_0_10px_rgba(0,170,255,0.6)]" />
                 </div>
                 <div className="relative z-10">
@@ -85,7 +85,7 @@ export const HeaderStats: FunctionComponent<{ pageData: ReturnType<typeof import
             <MetricCard hoverTint="group-hover:bg-amber-500/[0.025]" accentHex="#FFB800">
                 <Sparkline points={stats.openTasksTrend} color="#FFB800" />
                 <div className="relative z-10 flex items-center justify-between mb-6">
-                    <h3 className="text-slate-500 dark:text-slate-500 font-medium text-xs tracking-widest uppercase group-hover:text-ember-600 dark:group-hover:text-ember-400 transition-colors">Open Tasks</h3>
+                    <h3 className="text-slate-500 dark:text-slate-500 font-medium text-xs tracking-[0.2em] uppercase group-hover:text-ember-600 dark:group-hover:text-ember-400 transition-colors">Open Tasks</h3>
                     <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_10px_rgba(255,184,0,0.6)] animate-pulse" />
                 </div>
                 <div className="relative z-10">
@@ -110,7 +110,7 @@ export const HeaderStats: FunctionComponent<{ pageData: ReturnType<typeof import
             <MetricCard hoverTint="group-hover:bg-signal-500/[0.025]" accentHex="#00E0A0">
                 <Sparkline points={stats.completedTasksTrend} color="#00E0A0" />
                 <div className="relative z-10 flex items-center justify-between mb-6">
-                    <h3 className="text-slate-500 dark:text-slate-500 font-medium text-xs tracking-widest uppercase group-hover:text-signal-600 dark:group-hover:text-signal-400 transition-colors">Completed Tasks</h3>
+                    <h3 className="text-slate-500 dark:text-slate-500 font-medium text-xs tracking-[0.2em] uppercase group-hover:text-signal-600 dark:group-hover:text-signal-400 transition-colors">Completed Tasks</h3>
                     <div className="relative w-2 h-2">
                         <div className="w-full h-full rounded-full bg-signal-500 relative z-10 shadow-[0_0_10px_rgba(0,224,160,0.7)]" />
                         <div className="absolute inset-0 bg-signal-500 rounded-full animate-ping opacity-60" />
