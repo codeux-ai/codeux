@@ -56,6 +56,8 @@ import { EmptyChat, LoadingChat } from "./components/chat/ChatEmptyState.js";
 import { ChatMessageBubble } from "./components/chat/ChatMessageBubble.js";
 import { InvocationMessageBubble } from "./components/chat/InvocationMessageBubble.js";
 import { WorkingBubble } from "./components/chat/WorkingBubble.js";
+import { useActionFeedback } from "./hooks/use-action-feedback.js";
+import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 
 const formatInvocationErrorCategory = (value: ExecutionInvocationRecord["lastErrorCategory"]): string | null => {
   switch (value) {
@@ -207,6 +209,10 @@ export const ChatPage: FunctionComponent = () => {
   const [selectedInvocationId, setSelectedInvocationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessageRecord[]>([]);
   const [invocationMessages, setInvocationMessages] = useState<ExecutionInvocationMessageRecord[]>([]);
+
+  const routeFeedbackHook = useActionFeedback();
+  const sendFeedbackHook = useActionFeedback();
+
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -744,6 +750,7 @@ export const ChatPage: FunctionComponent = () => {
       return;
     }
 
+    routeFeedbackHook.setFeedback("pending", `Routing to ${option.label}...`);
     setAssigningRoute(true);
     try {
       let updated: ChatThread;
@@ -768,13 +775,21 @@ export const ChatPage: FunctionComponent = () => {
       }
       setThreadsSnapshot(nextThreads);
       await refreshMessages(updated.id);
+      if (option.id) {
+        routeFeedbackHook.setFeedback("success", `Route updated to ${option.label}.`);
+      } else {
+        routeFeedbackHook.setFeedback("success", "Route unassigned.");
+      }
+      setTimeout(() => routeFeedbackHook.clearFeedback(), 1500);
       setError(null);
     } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : String(updateError));
+      const msg = updateError instanceof Error ? updateError.message : String(updateError);
+      setError(msg);
+      routeFeedbackHook.setFeedback("error", msg);
     } finally {
       setAssigningRoute(false);
     }
-  }, [refreshMessages, selectedProject, selectedThread, setThreadsSnapshot]);
+  }, [refreshMessages, selectedProject, selectedThread, setThreadsSnapshot, routeFeedbackHook]);
 
   const handleCompactThread = useCallback(async (): Promise<void> => {
     if (!selectedThread) {
@@ -810,6 +825,14 @@ export const ChatPage: FunctionComponent = () => {
     try {
       let thread = selectedThread || await createThreadForCompose();
 
+      const hasRoutePrior = !!(thread.connectionId || thread.runtimeState?.workerEndpointId || thread.runtimeState?.virtualProvider);
+
+      if (hasRoutePrior) {
+        sendFeedbackHook.setFeedback("pending", "Sending...");
+      } else {
+        sendFeedbackHook.setFeedback("pending", "Queued...");
+      }
+
       if (thread.messageCount === 0 && !thread.connectionId && !thread.runtimeState?.virtualProvider && !thread.runtimeState?.workerEndpointId) {
         const { options: defaultOptions, selectedOption } = getProjectWorkerOptions(execution, workerRouting, false);
         const hasActiveRoute = selectedOption !== null;
@@ -828,25 +851,58 @@ export const ChatPage: FunctionComponent = () => {
         }
       }
 
-      const created = await postConversationMessage(selectedProject.id, {
+      const optimisticId = `opt-${Date.now()}`;
+      const optimisticMsg: ChatMessageRecord = {
+        id: optimisticId,
         threadId: thread.id,
         bodyMarkdown,
-      });
+        direction: "dashboard_to_connection",
+        deliveryStatus: "pending",
+        authorType: "dashboard_user",
+        authorConnectionId: null,
+        createdAt: new Date().toISOString(),
+        metadata: {}
+      };
+
+      const messagesWithOptimistic = upsertMessage(cache.getMessages(thread.id) || [], optimisticMsg);
+      cache.setMessages(thread.id, messagesWithOptimistic);
+      setMessagesSnapshot(messagesWithOptimistic);
+
       setInput("");
       if (composerRef.current) {
         composerRef.current.style.height = "auto";
       }
-      const nextMessages = upsertMessage(cache.getMessages(thread.id) || [], created);
+
+      const created = await postConversationMessage(selectedProject.id, {
+        threadId: thread.id,
+        bodyMarkdown,
+      });
+
+      let nextMessages = cache.getMessages(thread.id) || [];
+      nextMessages = nextMessages.filter(m => m.id !== optimisticId);
+      nextMessages = upsertMessage(nextMessages, created);
+
       cache.setMessages(thread.id, nextMessages);
       setMessagesSnapshot(nextMessages);
       await refreshThreads();
+
+      const hasRoute = !!(thread.connectionId || thread.runtimeState?.workerEndpointId || thread.runtimeState?.virtualProvider);
+      if (hasRoute) {
+        sendFeedbackHook.setFeedback("success", "Sent!");
+      } else {
+        sendFeedbackHook.setFeedback("success", "Message will send when back online.");
+      }
+      setTimeout(() => sendFeedbackHook.clearFeedback(), 1500);
+
       setError(null);
     } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : String(sendError));
+      const msg = sendError instanceof Error ? sendError.message : String(sendError);
+      setError(msg);
+      sendFeedbackHook.setFeedback("error", msg);
     } finally {
       setSending(false);
     }
-  }, [createThreadForCompose, input, refreshThreads, selectedProject, selectedThread, setMessagesSnapshot]);
+  }, [createThreadForCompose, input, refreshThreads, selectedProject, selectedThread, setMessagesSnapshot, sendFeedbackHook]);
 
   const pendingDashboardMessages = messages.filter((message) => (
     message.direction === "dashboard_to_connection" && message.deliveryStatus !== "processed"
@@ -958,6 +1014,8 @@ export const ChatPage: FunctionComponent = () => {
             onAssignRoute={(option) => void handleAssignRoute(option)}
             onCompact={() => void handleCompactThread()}
             isCompacting={compacting}
+            actionFeedback={routeFeedbackHook.feedback}
+            onDismissFeedback={routeFeedbackHook.clearFeedback}
           />
 
           <div ref={messagesRef} className="flex-1 min-h-0 space-y-6 overflow-y-auto px-6 py-6">
@@ -978,6 +1036,11 @@ export const ChatPage: FunctionComponent = () => {
           </div>
 
           <div className="shrink-0 border-t border-black/[0.05] p-5 dark:border-white/[0.05]">
+            {sendFeedbackHook.feedback.status !== "idle" && (
+              <div className="mb-4">
+                <ActionFeedbackRegion feedback={sendFeedbackHook.feedback} onDismiss={sendFeedbackHook.clearFeedback} />
+              </div>
+            )}
             <div className="rounded-[1.5rem] border border-black/[0.06] bg-black/[0.03] p-3 focus-within:border-signal-500/30 dark:border-white/[0.06] dark:bg-white/[0.03]">
               <textarea
                 ref={composerRef}

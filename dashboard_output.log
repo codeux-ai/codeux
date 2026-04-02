@@ -1,0 +1,18 @@
+
+> jules-subagents@1.2.0 dev:dashboard
+> vite
+
+
+  VITE v7.3.1  ready in 804 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+2:27:32 PM [vite] (client) hmr update /src/styles.css, /src/v2/components/chat/ThreadListCard.tsx
+2:32:05 PM [vite] (client) hmr update /src/v2/ChatPage.tsx, /src/styles.css
+2:34:37 PM [vite] (client) hmr update /src/styles.css, /src/v2/components/chat/ChatMessageBubble.tsx
+2:54:36 PM [vite] (client) hmr update /src/styles.css, /src/v2/components/chat/ThreadListCard.tsx
+2:57:25 PM [vite] (client) hmr update /src/v2/ChatPage.tsx, /src/styles.css
+3:20:37 PM [vite] (client) hmr update /src/v2/ChatPage.tsx, /src/styles.css
+3:21:59 PM [vite] (client) hmr update /src/v2/ChatPage.tsx, /src/styles.css
+3:23:00 PM [vite] (client) hmr update /src/v2/ChatPage.tsx, /src/styles.css
+3:24:09 PM [vite] (client) hmr update /src/v2/ChatPage.tsx, /src/styles.css

@@ -26,10 +26,11 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({ m
   const senderName = fromDashboard ? "User" : (message.metadata?.agentName as string) || "Assistant";
   const providerLabel = message.metadata?.provider as string | undefined;
   const createdAtLabel = formatChatTime(message.createdAt);
+  const isPending = fromDashboard && message.deliveryStatus !== "delivered" && message.deliveryStatus !== "processed";
 
   return (
     <div className={`flex ${fromDashboard ? "justify-end" : "justify-start"}`}>
-      <div className={`flex max-w-[760px] items-start gap-3 w-full ${fromDashboard ? "flex-row-reverse" : "flex-row"}`}>
+      <div className={`flex max-w-[760px] items-start gap-3 w-full ${fromDashboard ? "flex-row-reverse" : "flex-row"} ${isPending ? 'opacity-50' : ''}`}>
         <div className="mt-1 shrink-0 w-8 h-8 flex items-center justify-center">
           <ChatAvatar role={role} provider={providerLabel} agentName={senderName} />
         </div>
@@ -64,7 +65,7 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({ m
 
           {fromDashboard && (
              <div className="mt-2 text-[10px] font-mono text-slate-500 text-right">
-               {message.deliveryStatus}
+               {isPending ? "Sending..." : message.deliveryStatus}
              </div>
           )}
         </div>

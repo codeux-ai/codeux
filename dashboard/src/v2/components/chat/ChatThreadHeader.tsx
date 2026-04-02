@@ -3,6 +3,8 @@ import { AlertCircle, Zap, Activity } from "lucide-preact";
 import type { ChatThread } from "../../types.js";
 import { buildWorkerOptionIndex } from "../../lib/chat-entity-index.js";
 import type { WorkerOption } from "../../lib/project-worker-options.js";
+import type { ActionFeedbackState } from "../../hooks/use-action-feedback.js";
+import { ActionFeedbackRegion } from "../ui/ActionFeedbackRegion.js";
 
 const resolveSelectedRouteId = (thread: ChatThread | null, workerOptions: WorkerOption[]): string => {
   const index = buildWorkerOptionIndex(workerOptions);
@@ -40,6 +42,8 @@ interface ChatThreadHeaderProps {
   onAssignRoute: (option: WorkerOption) => void;
   onCompact: () => void;
   isCompacting: boolean;
+  actionFeedback?: ActionFeedbackState;
+  onDismissFeedback?: () => void;
 }
 
 export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
@@ -49,6 +53,8 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
   onAssignRoute,
   onCompact,
   isCompacting,
+  actionFeedback,
+  onDismissFeedback,
 }) => {
   const selectedRouteId = resolveSelectedRouteId(thread, workerOptions);
 
@@ -128,6 +134,11 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
           </div>
         </div>
       </div>
+      {actionFeedback && actionFeedback.status !== "idle" && (
+        <div className="mt-4">
+          <ActionFeedbackRegion feedback={actionFeedback} onDismiss={onDismissFeedback!} />
+        </div>
+      )}
     </div>
   );
 };

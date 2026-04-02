@@ -38,6 +38,8 @@ describe("ChatThreadHeader", () => {
         onAssignRoute={() => {}}
         onCompact={() => {}}
         isCompacting={false}
+        actionFeedback={{ status: "idle", message: "" }}
+        onDismissFeedback={() => {}}
       />
     );
     expect(screen.getByText("Test Thread")).toBeInTheDocument();
@@ -54,6 +56,8 @@ describe("ChatThreadHeader", () => {
         onAssignRoute={() => {}}
         onCompact={() => {}}
         isCompacting={false}
+        actionFeedback={{ status: "idle", message: "" }}
+        onDismissFeedback={() => {}}
       />
     );
     expect(screen.getAllByText("Replay Required")[0]).toBeInTheDocument();
@@ -69,6 +73,8 @@ describe("ChatThreadHeader", () => {
         onAssignRoute={() => {}}
         onCompact={() => {}}
         isCompacting={false}
+        actionFeedback={{ status: "idle", message: "" }}
+        onDismissFeedback={() => {}}
       />
     );
     expect(screen.getByText("Active Session")).toBeInTheDocument();
@@ -82,6 +88,8 @@ describe("ChatThreadHeader", () => {
         onAssignRoute={() => {}}
         onCompact={() => {}}
         isCompacting={false}
+        actionFeedback={{ status: "idle", message: "" }}
+        onDismissFeedback={() => {}}
       />
     );
     expect(screen.getAllByText("Replay Required")[0]).toBeInTheDocument();
@@ -98,6 +106,8 @@ describe("ChatThreadHeader", () => {
         onAssignRoute={() => {}}
         onCompact={onCompact}
         isCompacting={false}
+        actionFeedback={{ status: "idle", message: "" }}
+        onDismissFeedback={() => {}}
       />
     );
     const compactButton = container.querySelector('button[title="Compact Conversation"]');
@@ -124,6 +134,8 @@ describe("ChatThreadHeader", () => {
         onAssignRoute={() => {}}
         onCompact={() => {}}
         isCompacting={false}
+        actionFeedback={{ status: "idle", message: "" }}
+        onDismissFeedback={() => {}}
       />
     );
 
@@ -142,6 +154,8 @@ describe("ChatThreadHeader", () => {
         onAssignRoute={() => {}}
         onCompact={() => {}}
         isCompacting={false}
+        actionFeedback={{ status: "idle", message: "" }}
+        onDismissFeedback={() => {}}
       />
     );
     const selects = screen.getAllByRole("combobox");
@@ -160,6 +174,8 @@ describe("ChatThreadHeader", () => {
         onAssignRoute={onAssignRoute}
         onCompact={() => {}}
         isCompacting={false}
+        actionFeedback={{ status: "idle", message: "" }}
+        onDismissFeedback={() => {}}
       />
     );
     const selects = screen.getAllByRole("combobox");
