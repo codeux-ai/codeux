@@ -154,7 +154,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
 
                             {/* Project Name */}
                             <div className="group/field">
-                                <label htmlFor="add-project-name" className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors">
+                                <label htmlFor="add-project-name" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors">
                                     Project Name
                                 </label>
                                 <input
@@ -176,7 +176,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
 
                             {/* Source Type Toggle */}
                             <fieldset>
-                                <legend className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 block mb-2.5">
+                                <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">
                                     Source Type
                                 </legend>
                                 <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1">
@@ -185,7 +185,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             key={type}
                                             type="button"
                                             onClick={() => handleSourceTypeChange(type)}
-                                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-[0.12em] transition-all duration-250 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
+                                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-[0.14em] transition-all duration-250 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
                                                 sourceType === type
                                                     ? 'bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]'
                                                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
@@ -204,7 +204,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                             {/* Conditional fields */}
                             {sourceType === 'local' ? (
                                 <div className="group/field">
-                                    <label htmlFor="add-project-path" className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors flex items-center gap-1.5">
+                                    <label htmlFor="add-project-path" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors flex items-center gap-1.5">
                                         <FolderInput className="w-3 h-3" /> Directory Path
                                     </label>
                                     <input
@@ -225,7 +225,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                             ) : (
                                 <>
                                     <div className="group/field">
-                                        <label htmlFor="add-project-git-url" className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors flex items-center gap-1.5">
+                                        <label htmlFor="add-project-git-url" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors flex items-center gap-1.5">
                                             <Link2 className="w-3 h-3" /> Repository URL
                                         </label>
                                         <input
@@ -244,7 +244,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                         />
                                     </div>
                                     <div className="group/field">
-                                        <label htmlFor="add-project-clone-dir" className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors flex items-center gap-1.5">
+                                        <label htmlFor="add-project-clone-dir" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 group-focus-within/field:text-ember-600 dark:group-focus-within/field:text-ember-400 transition-colors flex items-center gap-1.5">
                                             <FolderInput className="w-3 h-3" /> Clone Into Directory
                                             <span className="ml-1 text-slate-300 dark:text-slate-600 normal-case font-medium tracking-normal">(optional)</span>
                                         </label>

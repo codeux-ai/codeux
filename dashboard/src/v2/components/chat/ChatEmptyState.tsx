@@ -21,7 +21,7 @@ export const LoadingChat: FunctionComponent<{ label: string }> = ({ label }) => 
         <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-signal-500 [animation-delay:140ms]" />
         <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-signal-500 [animation-delay:280ms]" />
       </div>
-      <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-signal-500">{label}</div>
+      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-signal-500">{label}</div>
       <p className="max-w-md text-sm leading-relaxed text-slate-500 dark:text-slate-400">
         Sprint OS is loading the latest stored conversation state.
       </p>

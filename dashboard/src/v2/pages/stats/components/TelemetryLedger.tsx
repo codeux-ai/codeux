@@ -74,7 +74,7 @@ export const TelemetryLedger: FunctionComponent<{
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">{eyebrow}</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{eyebrow}</div>
             <div className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</div>
             <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
               Search, sort, and compare {kindLabel} by recency, tokens, active time, and directional token flow.

@@ -189,7 +189,7 @@ export const SprintsPage: FunctionComponent = () => {
       <div className="relative z-10 mx-auto flex max-w-[1920px] flex-col gap-20 px-8 py-24 md:px-20">
         <div ref={headerRef} className="flex flex-wrap items-end justify-between gap-8">
           <div className="flex flex-col gap-5">
-            <div className="flex items-center gap-2.5 font-mono text-xs font-bold uppercase tracking-[0.15em] text-signal-500">
+            <div className="flex items-center gap-2.5 font-mono text-xs font-bold uppercase tracking-[0.14em] text-signal-500">
               <Target className="h-4 w-4" strokeWidth={2.5} />
               Iteration Cycles
             </div>
@@ -222,7 +222,7 @@ export const SprintsPage: FunctionComponent = () => {
             ].map(({ label, value, icon: Icon }) => (
               <div
                 key={label}
-                className="inline-flex items-center gap-3 rounded-full border border-black/[0.06] bg-white/72 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300"
+                className="inline-flex items-center gap-3 rounded-full border border-black/[0.06] bg-white/72 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300"
               >
                 <Icon className="h-3.5 w-3.5 text-signal-500" strokeWidth={2} />
                 {label} <span className="font-mono text-slate-700 dark:text-white">{value}</span>
@@ -242,7 +242,7 @@ export const SprintsPage: FunctionComponent = () => {
                 setShowQuicksprint(!showQuicksprint);
               }}
               disabled={!selectedProject}
-              className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
                 showQuicksprint
                   ? "border border-black/[0.06] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
                   : "bg-ember-500 text-void-900 hover:-translate-y-px hover:bg-ember-400"
@@ -265,7 +265,7 @@ export const SprintsPage: FunctionComponent = () => {
                 setShowCreateComposer(true);
               }}
               disabled={!selectedProject}
-              className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:opacity-50 ${
                 showCreateComposer
                   ? "border border-black/[0.06] bg-white/72 text-slate-600 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white"
                   : "bg-signal-500 text-void-900 hover:-translate-y-px hover:bg-signal-400"

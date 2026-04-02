@@ -168,7 +168,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="group/field">
-                <label htmlFor="add-task-sprint" className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Sprint</label>
+                <label htmlFor="add-task-sprint" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint</label>
                 <select
                   id="add-task-sprint"
                   value={sprintId}
@@ -189,7 +189,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               </div>
 
               <div className="group/field">
-                <label htmlFor="add-task-title" className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Title</label>
+                <label htmlFor="add-task-title" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Title</label>
                 <input
                   id="add-task-title"
                   type="text"
@@ -209,14 +209,14 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <fieldset>
-                <legend className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 block mb-2.5">Status</legend>
+                <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">Status</legend>
                 <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                   {STATUS_OPTIONS.map((option) => (
                     <button
                       key={option}
                       type="button"
                       onClick={() => setStatus(option)}
-                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${
+                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.14em] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${
                         status === option
                           ? "bg-signal-500 text-void-900 shadow-[0_2px_12px_rgba(0,224,160,0.3)]"
                           : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
@@ -229,14 +229,14 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               </fieldset>
 
               <fieldset>
-                <legend className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 block mb-2.5">Priority</legend>
+                <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">Priority</legend>
                 <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                   {PRIORITY_OPTIONS.map((option) => (
                     <button
                       key={option}
                       type="button"
                       onClick={() => setPriority(option)}
-                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
+                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.14em] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
                         priority === option
                           ? "bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]"
                           : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
@@ -252,7 +252,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             <fieldset>
               <legend className="flex items-center gap-2 mb-2.5">
                 <Bot className="w-3.5 h-3.5 text-signal-500" strokeWidth={2.3} />
-                <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Executor</span>
+                <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Executor</span>
               </legend>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {EXECUTOR_OPTIONS.map((option) => (
@@ -274,7 +274,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             </fieldset>
 
             <div className="group/field">
-              <label htmlFor="add-task-description" className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Description</label>
+              <label htmlFor="add-task-description" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Description</label>
               <textarea
                 id="add-task-description"
                 value={description}
@@ -285,7 +285,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             </div>
 
             <div className="group/field">
-              <label htmlFor="add-task-prompt" className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Execution Prompt</label>
+              <label htmlFor="add-task-prompt" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Execution Prompt</label>
               <textarea
                 id="add-task-prompt"
                 value={promptMarkdown}
@@ -298,7 +298,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             <fieldset>
               <legend className="flex items-center gap-2 mb-3">
                 <Target className="w-3.5 h-3.5 text-ember-500" strokeWidth={2.3} />
-                <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Dependencies</span>
+                <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Dependencies</span>
               </legend>
               {dependencyOptions.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-black/[0.08] dark:border-white/[0.08] px-4 py-4 text-xs text-slate-400">

@@ -179,7 +179,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 <button
                   type="button"
                   onClick={handleToggleSelectAll}
-                  className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
                   title={allFilteredSelected ? "Deselect all" : "Select all visible"}
                 >
                   {allFilteredSelected
@@ -191,7 +191,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSort("showcasePinned")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
                 >
                   Showcase
                   {renderSortIndicator("showcasePinned")}
@@ -201,7 +201,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSort("sprintKey")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
                 >
                   Sprint ID
                   {renderSortIndicator("sprintKey")}
@@ -211,7 +211,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSort("name")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
                 >
                   Sprint
                   {renderSortIndicator("name")}
@@ -221,7 +221,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSort("status")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
                 >
                   Status
                   {renderSortIndicator("status")}
@@ -231,7 +231,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSort("tasksCount")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
                 >
                   Tasks
                   {renderSortIndicator("tasksCount")}
@@ -241,7 +241,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSort("completion")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
                 >
                   Completion
                   {renderSortIndicator("completion")}
@@ -251,7 +251,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                 <button
                   type="button"
                   onClick={() => handleSort("createdAt")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
                 >
                   Created
                   {renderSortIndicator("createdAt")}

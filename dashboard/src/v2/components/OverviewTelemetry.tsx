@@ -72,7 +72,7 @@ export const OverviewTelemetry: FunctionComponent = () => {
               <div className="w-14 h-14 rounded-[1.25rem] border border-black/[0.07] dark:border-white/[0.07] shadow-[0_0_28px_rgba(100,116,139,0.12)] mx-auto mb-5 flex items-center justify-center">
                 <FolderKanban className="w-7 h-7 text-slate-400 dark:text-slate-500" strokeWidth={1.5} />
               </div>
-              <span className="text-slate-500 dark:text-slate-500 font-semibold text-sm tracking-widest block uppercase font-display">Awaiting Runtime</span>
+              <span className="text-slate-500 dark:text-slate-500 font-semibold text-sm tracking-[0.14em] block uppercase font-display">Awaiting Runtime</span>
               <span className="text-xs text-slate-400 dark:text-slate-600 font-mono mt-2 block">No active project telemetry yet</span>
             </div>
           </div>
@@ -111,7 +111,7 @@ export const OverviewTelemetry: FunctionComponent = () => {
                             {project.sprintName}{project.sprintNumber != null ? ` · Sprint ${project.sprintNumber}` : ""}
                           </div>
                         </div>
-                        <div className="inline-flex items-center gap-1.5 rounded-full border border-status-amber/20 bg-status-amber/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-amber">
+                        <div className="inline-flex items-center gap-1.5 rounded-full border border-status-amber/20 bg-status-amber/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-amber">
                           <AlertTriangle className="w-3 h-3" strokeWidth={2.2} />
                           Paused
                         </div>
@@ -139,7 +139,7 @@ export const OverviewTelemetry: FunctionComponent = () => {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-status-green/20 bg-status-green/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-status-green">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-status-green/20 bg-status-green/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-status-green">
                         <Activity className="w-3 h-3" strokeWidth={2} />
                         {project.runningDispatchCount}
                       </span>

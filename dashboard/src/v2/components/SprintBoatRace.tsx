@@ -957,7 +957,7 @@ export const SprintBoatRace: FunctionComponent<BoatRaceProps> = ({ tasks, dispat
                             <div className="absolute inset-0 rounded-full bg-signal-500 shadow-[0_0_10px_rgba(0,224,160,0.6)]" />
                             <div className="absolute inset-0 rounded-full bg-signal-500 animate-ping opacity-30" />
                         </div>
-                        <span className="text-[9px] font-bold uppercase tracking-[0.25em] text-slate-500 dark:text-white/35">Sprint Race</span>
+                        <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:text-white/35">Sprint Race</span>
                         <span className="text-[8px] font-mono text-slate-400 dark:text-white/15 ml-1">
                             {activeShips.length + harbourCount} vessel{(activeShips.length + harbourCount) !== 1 ? "s" : ""}
                         </span>

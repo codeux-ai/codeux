@@ -37,10 +37,10 @@ const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummar
                     <div key={event.id} className={`flex gap-3 border-l-2 ${cfg.border} pl-3 py-2 group/entry hover:bg-black/[0.02] dark:hover:bg-white/[0.02] rounded-r-lg transition-colors duration-200`}>
                         <div className="flex-grow min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
-                                <span className={`text-[9px] font-bold uppercase tracking-[0.12em] ${cfg.text}`}>
+                                <span className={`text-[9px] font-bold uppercase tracking-[0.14em] ${cfg.text}`}>
                                     {cfg.label}
                                 </span>
-                                <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">
                                     {event.eventType.replace(/_/g, " ")}
                                 </span>
                                 <span className="text-[9px] text-slate-400 dark:text-slate-600 font-mono">

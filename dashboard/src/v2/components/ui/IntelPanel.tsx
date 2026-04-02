@@ -17,7 +17,7 @@ export const IntelPanel: FunctionComponent<{
         <div className="relative z-10">
             <div className="flex items-center gap-2.5 mb-5">
                 <span style={{ color: accentHex }}><Icon className="w-4 h-4" strokeWidth={1.5} /></span>
-                <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">{title}</span>
+                <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{title}</span>
             </div>
             <div
                 className="prose prose-sm max-w-none text-slate-600 dark:text-slate-400
