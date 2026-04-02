@@ -164,6 +164,7 @@ Legacy runtime:
 - Selecting a virtual worker from the top nav switches the selected project into `workers.executionMode = VIRTUAL` with that provider
 - Selecting a live worker from the top nav switches the project back to `workers.executionMode = CONNECTED_MCP` and updates the preferred live worker assignment
 - Projects page is DB-backed and can create/select/delete projects
+- The `Add Project` dialog now keeps keyboard focus inside the active form field while typing, and its initial focus respects the form's `autofocus` input instead of jumping to the header close button
 - Project selector and project cards now refresh over websocket when the project collection or selected project changes
 - Sprints page is project-scoped, creates sprint records in sqlite, and exposes a structured Import flyout with Markdown (and soon Jira) capabilities, plus markdown export controls
 - Sprints page now also refreshes from project-structure realtime invalidation, so sprint CRUD and status-adjacent updates propagate across open dashboard tabs
