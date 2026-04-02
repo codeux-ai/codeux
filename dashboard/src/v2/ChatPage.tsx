@@ -857,11 +857,10 @@ export const ChatPage: FunctionComponent = () => {
         threadId: thread.id,
         bodyMarkdown,
         direction: "dashboard_to_connection",
-        deliveryStatus: hasRoutePrior ? "sending" : "queued",
-        authorType: "user",
+        deliveryStatus: "pending",
+        authorType: "dashboard_user",
+        authorConnectionId: null,
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        projectId: selectedProject.id,
         metadata: {}
       };
 
