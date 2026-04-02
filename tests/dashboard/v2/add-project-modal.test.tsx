@@ -49,4 +49,20 @@ describe("AddProjectModal", () => {
     expect(nameInput.value).toBe("A");
     expect(document.activeElement).toBe(nameInput);
   });
+
+  it("disables submit button while submitting", async () => {
+    const onAdd = vi.fn(() => new Promise((resolve) => setTimeout(resolve, 100)));
+    render(<AddProjectModal onClose={vi.fn()} onAdd={onAdd} />);
+
+    const nameInput = screen.getByLabelText("Project Name");
+    fireEvent.input(nameInput, { target: { value: "Test Project" } });
+
+    const dirInput = screen.getByLabelText(/Directory Path/i);
+    fireEvent.input(dirInput, { target: { value: "/test/dir" } });
+
+    const submitBtn = screen.getByText("Add Project").closest("button");
+    fireEvent.click(submitBtn!);
+
+    expect(screen.getByText("Adding...")).toBeInTheDocument();
+  });
 });
