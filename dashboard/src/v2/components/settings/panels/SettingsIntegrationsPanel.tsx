@@ -17,6 +17,7 @@ import { Plug } from "lucide-preact";
     setSelectedIntegration,
     integrations,
     importingHints,
+    externalHints,
     handleImportHints,
     updateEditableSettings,
     updateSystem,
@@ -30,11 +31,11 @@ import { Plug } from "lucide-preact";
     }
 
     const connectedState: Record<IntegrationId, boolean> = {
-      jules: Boolean(systemSettings.integrations.julesApiKey.trim()),
-      gemini: Boolean(systemSettings.integrations.geminiApiKey.trim() || editableSettings.cliWorkflow.containerMountGeminiAuth),
-      codex: Boolean(systemSettings.integrations.codexApiKey.trim() || editableSettings.cliWorkflow.containerMountCodexAuth),
-      "claude-code": Boolean(systemSettings.integrations.claudeCodeApiKey.trim() || editableSettings.cliWorkflow.containerMountClaudeCodeAuth),
-      github: Boolean(systemSettings.integrations.githubToken.trim() || editableSettings.cliWorkflow.containerMountGithubAuth),
+      jules: Boolean(systemSettings.integrations.julesApiKey.trim() || externalHints?.resolved.julesApiKey.trim()),
+      gemini: Boolean(systemSettings.integrations.geminiApiKey.trim() || externalHints?.resolved.geminiApiKey.trim()),
+      codex: Boolean(systemSettings.integrations.codexApiKey.trim() || externalHints?.resolved.codexApiKey.trim()),
+      "claude-code": Boolean(systemSettings.integrations.claudeCodeApiKey.trim() || externalHints?.resolved.claudeCodeApiKey.trim()),
+      github: Boolean(systemSettings.integrations.githubToken.trim() || externalHints?.resolved.githubToken.trim() || editableSettings.cliWorkflow.containerMountGithubAuth),
     };
     const dockerExecutionEnabled = editableSettings.cliWorkflow.executionMode === "DOCKER";
 

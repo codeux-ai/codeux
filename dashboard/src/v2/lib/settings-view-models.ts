@@ -265,6 +265,61 @@ export const providerSupportsModelSelection = (providerId: ProviderId): boolean 
 
 export const providerSupportsThinkingMode = (providerId: ProviderId): boolean => providerId !== "jules";
 
+export const isProviderAvailable = (providerId: ProviderId, systemSettings: SystemSettings | null, hints: ExternalSettingsHints | null): boolean => {
+  if (providerId === "jules") {
+    return Boolean(systemSettings?.integrations.julesApiKey?.trim() || hints?.resolved.julesApiKey?.trim());
+  }
+  if (providerId === "gemini") {
+    return Boolean(systemSettings?.integrations.geminiApiKey?.trim() || hints?.resolved.geminiApiKey?.trim());
+  }
+  if (providerId === "codex") {
+    return Boolean(systemSettings?.integrations.codexApiKey?.trim() || hints?.resolved.codexApiKey?.trim());
+  }
+  if (providerId === "claude-code") {
+    return Boolean(systemSettings?.integrations.claudeCodeApiKey?.trim() || hints?.resolved.claudeCodeApiKey?.trim());
+  }
+  return false;
+};
+
+export const getProviderAuthLabel = (
+  providerId: ProviderId,
+  systemSettings: SystemSettings | null,
+  hints: ExternalSettingsHints | null,
+  dockerExecutionEnabled: boolean,
+  mountAuthEnabled: boolean,
+): string | null => {
+  const isAvailableViaKey = isProviderAvailable(providerId, systemSettings, hints);
+
+  if (!isAvailableViaKey) {
+    return null;
+  }
+
+  if (providerId === "jules") {
+    return "API key";
+  }
+
+  const localAuthEnabled = dockerExecutionEnabled && mountAuthEnabled;
+
+  if (localAuthEnabled) {
+    return "Local auth + API key";
+  }
+  return "API key";
+};
+
+export const getEligibleProviders = (
+  systemSettings: SystemSettings | null,
+  editableSettings: ProjectSettings,
+  hints: ExternalSettingsHints | null,
+): ProviderId[] => {
+  const visibleProviders = Object.entries(editableSettings.aiProvider.providers).filter(([providerId]) => {
+    return isProviderAvailable(providerId as ProviderId, systemSettings, hints);
+  });
+
+  return visibleProviders
+    .filter(([providerId, provider]) => provider.enabled)
+    .map(([providerId]) => providerId as ProviderId);
+};
+
 export const getProviderModelOptions = (
   providerId: ProviderId,
 ): Array<{ value: string; label: string }> => {

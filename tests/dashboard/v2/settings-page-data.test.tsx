@@ -8,7 +8,7 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 import { SettingsPage } from "../../../dashboard/src/v2/SettingsPage.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import { fetchSystemSettings, saveSystemSettings, saveProjectSettings, resetProjectSettings, fetchProjectEffectiveSettings } from "../../../dashboard/src/v2/lib/settings-api.js";
-import { fetchExternalSettingsHints } from "../../../dashboard/src/v2/lib/api/dashboard-api.js";
+import { fetchExternalSettingsHints } from "../../../dashboard/src/lib/api/dashboard-api.js";
 
 expect.extend(matchers);
 
@@ -25,7 +25,7 @@ vi.mock("../../../dashboard/src/v2/lib/settings-api.js", () => ({
   fetchProjectEffectiveSettings: vi.fn(),
 }));
 
-vi.mock("../../../dashboard/src/v2/lib/api/dashboard-api.js", () => ({
+vi.mock("../../../dashboard/src/lib/api/dashboard-api.js", () => ({
   fetchExternalSettingsHints: vi.fn(),
 }));
 
@@ -66,6 +66,11 @@ describe("SettingsPage data interactions", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mockFetchProjectSettings = vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue(mockEffectiveSettingsData);
+    vi.mocked(fetchExternalSettingsHints).mockResolvedValue({
+      env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+      settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+      resolved: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+    });
 
     vi.mocked(useProjectData).mockReturnValue({
       selectedProject: { id: "proj-1", name: "Test Project", repositoryPath: "/tmp" },
@@ -122,6 +127,7 @@ describe("SettingsPage data interactions", () => {
     render(<SettingsPage />);
     await waitFor(() => {
       expect(fetchProjectEffectiveSettings).toHaveBeenCalledWith("proj-1");
+      expect(fetchExternalSettingsHints).toHaveBeenCalledTimes(1);
     });
   });
 

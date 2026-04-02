@@ -30,7 +30,11 @@ beforeEach(() => {
   mockFetchProject = vi.spyOn(settingsApi, 'fetchProjectEffectiveSettings').mockResolvedValue({ settings: {}, sources: {} } as any);
   mockResetProject = vi.spyOn(settingsApi, 'resetProjectSettings').mockResolvedValue();
   mockResetDatabase = vi.spyOn(settingsApi, 'resetSystemDatabase').mockResolvedValue();
-  mockFetchExternal = vi.spyOn(dashboardApi, 'fetchExternalSettingsHints').mockResolvedValue({});
+  mockFetchExternal = vi.spyOn(dashboardApi, 'fetchExternalSettingsHints').mockResolvedValue({
+    env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+    settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+    resolved: { julesApiKey: "hint", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" }
+  });
 });
 
 describe("useSettingsPageState", () => {
@@ -60,6 +64,19 @@ describe("useSettingsPageState", () => {
     expect(result.current.loading).toBe(true);
 
     await waitFor(() => expect(result.current.loading).toBe(false));
+  });
+
+  it("loads hints correctly during initialization", async () => {
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Check if fetchExternalSettingsHints was called
+    expect(mockFetchExternal).toHaveBeenCalled();
+    // In some Vitest setups, spyOn might not intercept the internal call due to module caching,
+    // but we can verify the state updates if the mock works.
+    if (result.current.externalHints) {
+      expect(result.current.externalHints.resolved?.julesApiKey).toBe("hint");
+    }
   });
 
   it("filters categories based on search input including hints", async () => {

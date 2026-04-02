@@ -14,7 +14,10 @@ import {
   getProviderModelOptions,
   PROVIDER_CARD_TOKENS,
   providerSupportsModelSelection,
-  providerSupportsThinkingMode
+  providerSupportsThinkingMode,
+  isProviderAvailable,
+  getProviderAuthLabel,
+  getEligibleProviders
 } from "../../../lib/settings-view-models.js";
 import { AlertTriangle, Check, SlidersHorizontal, Settings } from "lucide-preact";
 
@@ -34,6 +37,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
     invocationRouteDefinitions,
     routingProfileOptions,
     updateEditableSettings,
+    externalHints,
   } = state;
 
   const getBadge = (...prefixes: string[]) => getBadgeHelper(activeScope, projectSources, ...prefixes);
@@ -119,54 +123,11 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
 
     const dockerExecutionEnabled = editableSettings.cliWorkflow.executionMode === "DOCKER";
     const virtualWorkerModeEnabled = editableSettings.workers.executionMode === "VIRTUAL";
-    const connectedState = systemSettings ? {
-      jules: Boolean(systemSettings.integrations.julesApiKey.trim()),
-      gemini: Boolean(systemSettings.integrations.geminiApiKey.trim() || editableSettings.cliWorkflow.containerMountGeminiAuth),
-      codex: Boolean(systemSettings.integrations.codexApiKey.trim() || editableSettings.cliWorkflow.containerMountCodexAuth),
-      "claude-code": Boolean(systemSettings.integrations.claudeCodeApiKey.trim() || editableSettings.cliWorkflow.containerMountClaudeCodeAuth),
-    } : null;
-
-    const getProviderAuthLabel = (
-      providerId: keyof ProjectSettings["aiProvider"]["providers"],
-    ): string | null => {
-      if (!systemSettings) {
-        return null;
-      }
-
-      if (providerId === "jules") {
-        return systemSettings.integrations.julesApiKey.trim() ? "API key" : null;
-      }
-
-      const apiKeyPresent = providerId === "gemini"
-        ? Boolean(systemSettings.integrations.geminiApiKey.trim())
-        : providerId === "codex"
-          ? Boolean(systemSettings.integrations.codexApiKey.trim())
-          : Boolean(systemSettings.integrations.claudeCodeApiKey.trim());
-
-      const localAuthEnabled = dockerExecutionEnabled && (
-        providerId === "gemini"
-          ? editableSettings.cliWorkflow.containerMountGeminiAuth
-          : providerId === "codex"
-            ? editableSettings.cliWorkflow.containerMountCodexAuth
-            : editableSettings.cliWorkflow.containerMountClaudeCodeAuth
-      );
-
-      if (localAuthEnabled && apiKeyPresent) {
-        return "Local auth + API key";
-      }
-      if (localAuthEnabled) {
-        return "Local auth";
-      }
-      if (apiKeyPresent) {
-        return "API key";
-      }
-      return null;
-    };
 
     const visibleProviders = Object.entries(editableSettings.aiProvider.providers).filter(([providerId]) => (
-      connectedState ? connectedState[providerId as keyof typeof connectedState] : true
+      isProviderAvailable(providerId as ProviderId, systemSettings, externalHints)
     ));
-    const invocationVisibleProviders = visibleProviders.map(([providerId]) => providerId as ProviderId);
+    const invocationVisibleProviders = getEligibleProviders(systemSettings, editableSettings, externalHints);
     const resolvedActiveProviderId = visibleProviders.some(([providerId]) => providerId === activeProviderPanel)
       ? activeProviderPanel
       : invocationVisibleProviders[0];
@@ -331,7 +292,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   <div className="flex flex-col gap-2">
                     {visibleProviders.map(([providerId, provider]) => {
                       const providerKey = providerId as ProviderId;
-                      const authLabel = getProviderAuthLabel(providerKey);
+                      const authLabel = getProviderAuthLabel(providerKey, systemSettings, externalHints, dockerExecutionEnabled, providerKey === "gemini" ? editableSettings.cliWorkflow.containerMountGeminiAuth : providerKey === "codex" ? editableSettings.cliWorkflow.containerMountCodexAuth : providerKey === "claude-code" ? editableSettings.cliWorkflow.containerMountClaudeCodeAuth : false);
                       const isActive = providerId === resolvedActiveProviderId;
                       const isWorkerDefault = editableSettings.workers.virtualWorkerProvider === providerId;
                       const isGlobalDefault = editableSettings.aiProvider.provider === providerId;
@@ -395,7 +356,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                   const supportsThinkingMode = providerSupportsThinkingMode(providerKey);
                   const modelOptions = getProviderModelOptions(providerKey);
                   const cardTokens = PROVIDER_CARD_TOKENS[providerKey as ProviderId];
-                  const authLabel = getProviderAuthLabel(providerKey);
+                  const authLabel = getProviderAuthLabel(providerKey, systemSettings, externalHints, dockerExecutionEnabled, providerKey === "gemini" ? editableSettings.cliWorkflow.containerMountGeminiAuth : providerKey === "codex" ? editableSettings.cliWorkflow.containerMountCodexAuth : providerKey === "claude-code" ? editableSettings.cliWorkflow.containerMountClaudeCodeAuth : false);
 
                   return (
                     <div
