@@ -1,0 +1,12 @@
+--- tests/dashboard/v2/memory-page-canvas.test.tsx
++++ tests/dashboard/v2/memory-page-canvas.test.tsx
+@@ -166,6 +166,9 @@
+
+     it("should handle wheel events and zoom out correctly", () => {
+         vi.spyOn(window, "requestAnimationFrame").mockImplementation(() => 1);
+         vi.spyOn(window, "setTimeout").mockImplementation(() => 1 as any);
++
++        const mockCanvasRef = { current: document.createElement("canvas") } as any;
++        const mockWrapRef = { current: document.createElement("div") } as any;
+
+         const { result } = renderHook(() => useMemoryGraphCanvas(

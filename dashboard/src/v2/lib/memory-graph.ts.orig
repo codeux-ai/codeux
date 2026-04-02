@@ -159,37 +159,3 @@ export function prepareMemoryGraph(records: MemoryRecord[], embeddingMap: Embedd
 
     return { nodes, edges, catCentroids };
 }
-
-export const CAT: Record<string, { label: string; hex: string; r: number; g: number; b: number }> = {
-    architecture: { label: "Architecture", hex: "#00E0A0", r: 0,   g: 224, b: 160 },
-    codebase:     { label: "Codebase",     hex: "#FFB800", r: 255, g: 184, b: 0   },
-    context:      { label: "Context",      hex: "#00AB84", r: 0,   g: 171, b: 132 },
-    preferences:  { label: "Preferences",  hex: "#94a3b8", r: 148, g: 163, b: 184 },
-    patterns:     { label: "Patterns",     hex: "#F59E0B", r: 245, g: 158, b: 11  },
-    decision:     { label: "Decision",     hex: "#8B5CF6", r: 139, g: 92,  b: 246 },
-    error:        { label: "Error",        hex: "#EF4444", r: 239, g: 68,  b: 68  },
-    learning:     { label: "Learning",     hex: "#33FFB8", r: 51,  g: 255, b: 184 },
-};
-
-export function bezierCtrl(ax: number, ay: number, bx: number, by: number, idx: number) {
-    const mx = (ax + bx) / 2, my = (ay + by) / 2;
-    const dx = bx - ax, dy = by - ay;
-    const len = Math.sqrt(dx * dx + dy * dy) || 1;
-    const off = len * 0.18 * (idx % 2 === 0 ? 1 : -1);
-    return { cx: mx + (-dy / len) * off, cy: my + (dx / len) * off };
-}
-
-export function quadAt(t: number, p0: number, cp: number, p1: number) {
-    return (1 - t) * (1 - t) * p0 + 2 * (1 - t) * t * cp + t * t * p1;
-}
-
-export function hitTest(wx: number, wy: number, nodes: MemNode[]): number {
-    for (let i = nodes.length - 1; i >= 0; i--) {
-        const n = nodes[i];
-        if (!n.alive || n.opacity < 0.1) continue;
-        const dx = wx - n.x, dy = wy - n.y;
-        const hr = (n.radius * n.scale + 12);
-        if (dx * dx + dy * dy < hr * hr) return i;
-    }
-    return -1;
-}

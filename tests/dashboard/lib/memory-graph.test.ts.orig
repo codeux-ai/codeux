@@ -171,6 +171,6 @@ describe("prepareMemoryGraph", () => {
         expect(node.targetX).not.toBe(ctxX);
         expect(node.targetY).not.toBe(ctxY);
 
-        expect(result.catCentroids["unknown-cat"]).toBeDefined();
-        expect(result.catCentroids["unknown-cat"].count).toBe(1);
+        expect(result.catCentroids["context"]).toBeDefined();
+        expect(result.catCentroids["context"].count).toBe(1);
     });
