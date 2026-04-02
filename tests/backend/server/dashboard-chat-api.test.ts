@@ -52,6 +52,115 @@ afterEach(async () => {
 });
 
 describe("Dashboard Chat API", () => {
+
+  it("omits hidden messages from thread list counts and previews", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-chat-api-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectManagementRepository = new ProjectManagementRepository(storage);
+    const connectionChatRepository = new ConnectionChatRepository(storage);
+
+    const project = projectManagementRepository.createProject({
+      name: "Hidden Message Test",
+      sourceType: "local",
+      sourceRef: path.join(dir, "workspace"),
+    });
+
+    const thread = connectionChatRepository.createThread(project.id, {
+      title: "Hidden Msg Thread",
+    });
+
+    connectionChatRepository.postDashboardMessage(project.id, {
+      threadId: thread.id,
+      bodyMarkdown: "Visible message",
+    });
+
+    connectionChatRepository.postSystemMessage(project.id, {
+      threadId: thread.id,
+      bodyMarkdown: "Hidden internal summary",
+      metadata: { internalVisibility: "hidden" },
+    });
+
+    const port = await getAvailablePort();
+    const app = express();
+    const handle = await setupDashboardServer({
+      app,
+      dashboardDir: "dashboard",
+      port,
+      liveActivityCacheMs: 1000,
+      getStatus: () => ({}),
+      getExecutionSnapshot: () => ({} as any),
+      getProjectExecutionSnapshot: () => ({} as any),
+      getProjectStatsSnapshot: () => ({} as any),
+      getOverviewTelemetrySnapshot: () => ({} as any),
+      getLiveActivities: async () => ({}),
+      getGitStatus: async () => ({} as any),
+      getExternalSettingsHints: () => ({} as any),
+      getSystemSettings: () => ({} as any),
+      saveSystemSettings: () => ({} as any),
+      resetDatabase: () => {},
+      getProjectSettings: () => ({} as any),
+      saveProjectSettings: () => ({} as any),
+      resetProjectSettings: () => {},
+      getProjectEffectiveSettings: () => ({} as any),
+      getSprintSettings: () => ({} as any),
+      saveSprintSettings: () => ({} as any),
+      resetSprintSettings: () => {},
+      getSprintEffectiveSettings: () => ({} as any),
+      listProjects: () => ({ projects: [project], selectedProjectId: null }),
+      createProject: () => ({} as any),
+      getProject: () => project,
+      updateProject: () => ({} as any),
+      deleteProject: () => {},
+      selectProject: () => null,
+      selectSprint: () => null,
+      listSprints: () => ({ sprints: [], selectedSprintId: null }),
+      createSprint: () => ({} as any),
+      updateSprint: () => ({} as any),
+      deleteSprint: () => {},
+      importSprintFromMarkdown: () => ({} as any),
+      exportSprintToMarkdown: () => ({} as any),
+      listTasks: () => [],
+      createTask: () => ({} as any),
+      updateTask: () => ({} as any),
+      deleteTask: () => {},
+      listConnections: () => [],
+      updateConnection: () => ({} as any),
+      listAgentPresets: () => [],
+      createAgentPreset: () => ({} as any),
+      updateAgentPreset: () => ({} as any),
+      deleteAgentPreset: () => {},
+      listConversationThreads: () => connectionChatRepository.listThreads(project.id),
+      createConversationThread: () => ({} as any),
+      updateConversationThread: () => ({} as any),
+      deleteConversationThread: () => {},
+      listConversationMessages: () => [],
+      postConversationMessage: () => ({} as any),
+      listProjectInvocations: () => [],
+      listInvocationMessages: () => [],
+      rerunTask: async () => ({}),
+      orchestrateSprint: async () => ({}),
+      pauseSprintRun: async () => ({}),
+      cancelSprintRun: async () => ({}),
+      forceCancelSprintRun: async () => ({}),
+      cancelTaskDispatch: async () => ({}),
+      forceCancelTaskDispatch: async () => ({}),
+      retryTaskDispatch: async () => ({}),
+      updateThreadRoute: () => { throw new Error("Should not be called"); },
+      compactThreadSession: () => ({} as any),
+    });
+    serversToClose.push(handle.server);
+    const baseUrl = `http://127.0.0.1:${handle.port}`;
+
+    const listResponse = await fetch(`${baseUrl}/api/projects/${project.id}/conversations/threads`);
+    expect(listResponse.status).toBe(200);
+    const result = await listResponse.json() as any;
+
+    expect(result.length).toBe(1);
+    expect(result[0].messageCount).toBe(1); // Hidden message omitted
+    expect(result[0].lastMessagePreview).toBe("Visible message");
+  });
   it("supports updating thread route and compacting thread session", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-chat-api-"));
     tempDirs.push(dir);

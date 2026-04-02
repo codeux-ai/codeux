@@ -55,6 +55,79 @@ async function createRepositoriesWithRealtime(): Promise<{
 }
 
 describe("ConnectionChatRepository", () => {
+
+  it("handles hidden messages and pending counts appropriately in summaries", async () => {
+    const { projectRepository, connectionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Summary Proj",
+      sourceType: "local",
+      sourceRef: "/tmp/summary-1",
+    });
+
+    const conn = connectionRepository.upsertConnection({
+      connectionKey: "summary-worker",
+      displayName: "Summary Worker",
+      role: "worker",
+      transport: "stdio",
+      status: "connected",
+      capabilities: {},
+      projectIds: [project.id],
+      activeProjectIds: [project.id],
+    });
+
+    const thread = connectionRepository.createThread(project.id, {
+      title: "Summary Thread",
+      connectionId: conn.id,
+    });
+
+    connectionRepository.postSystemMessage(project.id, {
+      threadId: thread.id,
+      bodyMarkdown: "Visible system message",
+    });
+    vi.setSystemTime(new Date("2026-03-10T00:00:01.000Z"));
+
+    connectionRepository.postDashboardMessage(project.id, {
+      threadId: thread.id,
+      bodyMarkdown: "Visible dashboard message",
+    });
+    vi.setSystemTime(new Date("2026-03-10T00:00:02.000Z"));
+
+    // Add a hidden system message (compact result, etc)
+    connectionRepository.postSystemMessage(project.id, {
+      threadId: thread.id,
+      bodyMarkdown: "Hidden system summary",
+      metadata: { internalVisibility: "hidden" },
+    });
+
+    const threads = connectionRepository.listThreads(project.id);
+    expect(threads).toHaveLength(1);
+    expect(threads[0].messageCount).toBe(2);
+    expect(threads[0].pendingMessageCount).toBe(1);
+    expect(threads[0].lastMessagePreview).toBe("Visible dashboard message");
+
+    const conns = connectionRepository.listConnections(project.id);
+    expect(conns).toHaveLength(1);
+    expect(conns[0].threadCount).toBe(1);
+    expect(conns[0].messageCount).toBe(2);
+    expect(conns[0].pendingInboxCount).toBe(1);
+
+    // mark as delivered via pullInbox
+    connectionRepository.pullInbox({
+      connectionKey: "summary-worker",
+      projectId: project.id,
+    });
+
+    const connsAfter = connectionRepository.listConnections(project.id);
+    expect(connsAfter[0].pendingInboxCount).toBe(0);
+
+    // Test getConnection / requireThread logic uses the CTE correctly
+    const fetchedConn = connectionRepository.getConnection(conn.id);
+    expect(fetchedConn?.threadCount).toBe(0); // Note: single fetch ignores thread count intentionally to stay lightweight, but activeDispatch is preserved
+
+    const fetchedThread = connectionRepository.getThread(thread.id);
+    expect(fetchedThread.messageCount).toBe(2);
+    expect(fetchedThread.lastMessagePreview).toBe("Visible dashboard message");
+  });
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-10T00:00:00.000Z"));
