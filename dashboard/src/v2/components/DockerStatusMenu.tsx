@@ -1,6 +1,15 @@
+/**
+ * Manual Verification Checklist:
+ * - Tab to the Docker status button; press Enter → menu opens, focus moves inside.
+ * - Press Escape → menu closes, focus returns to trigger.
+ * - Arrow-key through container items.
+ * - Hover still opens/closes as before.
+ */
+
 import { FunctionComponent } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import { Box, Play, Square, Terminal } from "lucide-preact";
+import { useFocusTrap } from "../hooks/use-focus-trap";
 
 export interface DockerContainer {
   id: string;
@@ -16,8 +25,31 @@ export const DockerStatusMenu: FunctionComponent = () => {
     const [containers, setContainers] = useState<DockerContainer[]>([]);
     const [loading, setLoading] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
+    const [isOpen, setIsOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
     const timeoutRef = useRef<number | null>(null);
+
+    const trapRef = useFocusTrap(isOpen, () => setIsOpen(false));
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (
+                menuRef.current &&
+                !menuRef.current.contains(event.target as Node) &&
+                trapRef.current &&
+                !trapRef.current.contains(event.target as Node)
+            ) {
+                setIsOpen(false);
+            }
+        };
+
+        if (isOpen) {
+            document.addEventListener("mousedown", handleClickOutside);
+        }
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, [isOpen, trapRef]);
 
     const fetchContainers = async () => {
         try {
@@ -71,11 +103,37 @@ export const DockerStatusMenu: FunctionComponent = () => {
             ref={menuRef}
         >
             <button
+                type="button"
                 aria-label="Docker Status"
                 aria-haspopup="dialog"
-                aria-expanded={isHovered}
+                aria-expanded={isHovered || isOpen}
+                onClick={() => {
+                    const nextOpen = !isOpen;
+                    setIsOpen(nextOpen);
+                    if (nextOpen) {
+                        void fetchContainers();
+                    }
+                }}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        const nextOpen = !isOpen;
+                        setIsOpen(nextOpen);
+                        if (nextOpen) {
+                            void fetchContainers();
+                        }
+                    } else if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        if (!isOpen) {
+                            setIsOpen(true);
+                            void fetchContainers();
+                        }
+                        // Focus will automatically be moved to the first focusable element by `useFocusTrap`
+                        // when `isOpen` becomes true, as it executes a setTimeout after render.
+                    }
+                }}
                 className={`w-11 h-11 flex items-center justify-center rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
-                    isHovered
+                    isHovered || isOpen
                         ? "bg-black/[0.05] dark:bg-white/[0.05]"
                         : "hover:bg-black/[0.05] dark:hover:bg-white/[0.05]"
                 }`}
@@ -92,9 +150,11 @@ export const DockerStatusMenu: FunctionComponent = () => {
                 </div>
             </button>
 
-            {isHovered && (
+            {(isHovered || isOpen) && (
                 <div
+                    ref={trapRef}
                     role="dialog"
+                    aria-modal="true"
                     aria-label="Active Docker Containers"
                     className="absolute right-0 top-full mt-2 w-80 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50 flex flex-col"
                 >
@@ -127,9 +187,21 @@ export const DockerStatusMenu: FunctionComponent = () => {
                                     const commandLabel = container.labels?.["sprint-os.command"];
 
                                     return (
-                                        <div
+                                        <button
+                                            type="button"
                                             key={container.id}
-                                            className="group flex flex-col p-3 rounded-xl hover:bg-black/[0.02] dark:hover:bg-white/[0.02] border border-transparent hover:border-black/[0.04] dark:hover:border-white/[0.04] transition-all"
+                                            className="group w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 flex flex-col p-3 rounded-xl hover:bg-black/[0.02] dark:hover:bg-white/[0.02] border border-transparent hover:border-black/[0.04] dark:hover:border-white/[0.04] transition-all"
+                                            onKeyDown={(e) => {
+                                                if (e.key === "ArrowDown") {
+                                                    e.preventDefault();
+                                                    const next = (e.currentTarget as HTMLElement).nextElementSibling as HTMLElement;
+                                                    if (next) next.focus();
+                                                } else if (e.key === "ArrowUp") {
+                                                    e.preventDefault();
+                                                    const prev = (e.currentTarget as HTMLElement).previousElementSibling as HTMLElement;
+                                                    if (prev) prev.focus();
+                                                }
+                                            }}
                                         >
                                             <div className="flex items-start justify-between mb-1.5">
                                                 <div className="flex items-center gap-2 min-w-0">
@@ -161,7 +233,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
                                                     </span>
                                                 </div>
                                             )}
-                                        </div>
+                                        </button>
                                     );
                                 })}
                             </div>
