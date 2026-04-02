@@ -59,7 +59,7 @@ export const UsageSeriesSidebar: FunctionComponent<{
                   type="button"
                   onClick={() => !disabled && onToggle(s.id)}
                   disabled={disabled}
-                  className={`rounded-[1.25rem] border px-4 py-3 text-left transition-all ${
+                  className={`rounded-[1.25rem] border px-4 py-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${
                     active
                       ? 'bg-white/68 dark:bg-void-900/35 shadow-[0_10px_24px_rgba(15,23,42,0.045)] border-signal-500/18'
                       : 'border-black/[0.05] bg-white/60 dark:border-white/[0.05] dark:bg-void-900/30 opacity-72 hover:opacity-100'

@@ -1,13 +1,15 @@
 import type { FunctionComponent } from "preact";
 import { useMemo, useState } from "preact/hooks";
-import { ArrowDownRight, ArrowUpRight, Brain, Database } from "lucide-preact";
+import { ArrowDownRight, ArrowUpRight, Brain, Database, X } from "lucide-preact";
 import { useProgressiveList } from "../../../../hooks/use-progressive-list.js";
+import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import type { ExecutionStatsEntitySummary } from "../../../types.js";
 import { formatTokens, formatDuration, formatDateTime } from "../stats-utils.js";
 import {
   CHIP_CLASS,
   INPUT_CLASS,
-  LEDGER_ROW_CLASS,
+  LEDGER_ROW_BASE_CLASS,
+  LEDGER_ROW_MOTION_CLASS,
   PANEL_CLASS,
   SUBPANEL_CLASS,
   SortButton,
@@ -67,7 +69,7 @@ export const TelemetryLedger: FunctionComponent<{
     scrollContainerRef,
   } = useProgressiveList(filteredItems, { initialCount: 12, stepCount: 8 });
 
-
+  const isReducedMotion = useReducedMotion();
 
   return (
     <div className={`${PANEL_CLASS} p-6`}>
@@ -112,6 +114,24 @@ export const TelemetryLedger: FunctionComponent<{
           </div>
         </div>
 
+        <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500 dark:text-slate-400">
+          <div role="status" aria-live="polite">
+            Showing <strong className="text-slate-900 dark:text-white">{filteredItems.length}</strong> {filteredItems.length === 1 ? kindLabel.toLowerCase() : `${kindLabel.toLowerCase()}s`}
+            {query.trim().length > 0 && <span> matching "{query.trim()}"</span>}
+            <span> sorted by {sortKey}</span>.
+          </div>
+          {query.trim().length > 0 && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 dark:hover:bg-white/10 dark:hover:text-white"
+            >
+              <X className="h-3.5 w-3.5" strokeWidth={2.5} />
+              Clear Search
+            </button>
+          )}
+        </div>
+
         {filteredItems.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-black/[0.08] px-4 py-12 text-center text-sm text-slate-400 dark:border-white/[0.08]">
             {emptyLabel}
@@ -122,7 +142,7 @@ export const TelemetryLedger: FunctionComponent<{
               {visibleItems.map((item, index) => {
 
                 return (
-                  <div key={item.id} className={LEDGER_ROW_CLASS}>
+                  <div key={item.id} className={`${LEDGER_ROW_BASE_CLASS} ${!isReducedMotion ? LEDGER_ROW_MOTION_CLASS : ""}`}>
                     <div className="flex items-start gap-4">
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-black/[0.06] bg-white/75 text-sm font-black text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.07)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:text-white dark:shadow-[0_12px_28px_rgba(0,0,0,0.22)]">
                         {index + 1}

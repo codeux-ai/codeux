@@ -4,8 +4,19 @@
 import { h, Fragment } from "preact";
 import { render, screen, fireEvent } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
-import { expect, describe, it } from "vitest";
+import { expect, describe, it, vi } from "vitest";
 import { TelemetryLedgerTabs } from "../../../dashboard/src/v2/pages/stats/components/TelemetryLedgerTabs.js";
+
+vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
+  useReducedMotion: () => false
+}));
+
+global.IntersectionObserver = class IntersectionObserver {
+  constructor() {}
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as any;
 
 expect.extend(matchers);
 
@@ -68,5 +79,27 @@ describe("TelemetryLedgerTabs", () => {
     expect(screen.queryByText("Task Ledger")).not.toBeInTheDocument();
     expect(screen.getByText("Sprint Ledger")).toBeInTheDocument();
     expect(screen.getByText("Sprint 1")).toBeInTheDocument();
+  });
+
+  it("handles clear search interaction", () => {
+    render(<TelemetryLedgerTabs stats={mockStats} />);
+    const searchInput = screen.getByPlaceholderText("Search tasks");
+
+    // Check search state summary
+    expect(screen.getAllByText(/Showing/)[0]).toBeInTheDocument();
+
+    fireEvent.input(searchInput, { target: { value: "Unknown Task" } });
+
+    // Summary updates
+    expect(screen.getAllByText(/matching "Unknown Task"/)[0]).toBeInTheDocument();
+
+    // Clear search button should appear and be clickable
+    const clearButton = screen.getByText("Clear Search");
+    expect(clearButton).toBeInTheDocument();
+    fireEvent.click(clearButton);
+
+    // Search input should be empty again
+    expect(searchInput).toHaveValue("");
+    expect(screen.queryByText(/matching "Unknown Task"/)).not.toBeInTheDocument();
   });
 });

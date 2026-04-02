@@ -1,7 +1,8 @@
 import type { FunctionComponent } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import gsap from 'gsap';
-import { Activity } from 'lucide-preact';
+import { Activity, X } from 'lucide-preact';
+import { useReducedMotion } from "../../../hooks/use-reduced-motion.js";
 import type {
   ExecutionUsageBucketSummary,
   ProjectExecutionStatsSnapshot,
@@ -35,6 +36,8 @@ export const InteractiveUsageChart: FunctionComponent<{
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
   const [dragCurrentIndex, setDragCurrentIndex] = useState<number | null>(null);
+
+  const isReducedMotion = useReducedMotion();
 
   const [enabledSeries, setEnabledSeries] = useState<Record<string, boolean>>(() => {
     return stats.chartSeries.reduce((acc, s) => {
@@ -144,6 +147,16 @@ export const InteractiveUsageChart: FunctionComponent<{
     const pointsNodes = Array.from(panelRef.current.querySelectorAll<SVGCircleElement>("[data-chart-point]"));
     const cards = Array.from(panelRef.current.querySelectorAll<HTMLElement>("[data-chart-card]"));
 
+    if (isReducedMotion) {
+      gsap.set(areas, { opacity: (_index, target) => Number((target as SVGPathElement).dataset.areaOpacity || "0.3") });
+      gsap.set(pointsNodes, { opacity: 1, scale: 1 });
+      paths.forEach(path => {
+        gsap.set(path, { strokeDasharray: "none", strokeDashoffset: 0 });
+      });
+      gsap.set(cards, { opacity: 1, y: 0 });
+      return;
+    }
+
     const timeline = gsap.timeline();
     gsap.set(areas, { opacity: 0 });
     gsap.set(pointsNodes, { opacity: 0, scale: 0.35, transformOrigin: "center center" });
@@ -169,12 +182,35 @@ export const InteractiveUsageChart: FunctionComponent<{
               <Activity className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
               Usage Graph
             </div>
-            <div className="mt-4 text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-              {zoomRange ? "Zoomed telemetry window" : stats.range.label}
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <div className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                {zoomRange ? "Zoomed telemetry window" : stats.range.label}
+              </div>
+              {zoomRange && (
+                <div role="status" aria-live="polite" className="inline-flex items-center gap-2 rounded-full border border-signal-500/30 bg-signal-500/10 px-3 py-1 text-sm font-bold text-signal-700 dark:text-signal-400">
+                  <span className="relative flex h-2 w-2">
+                    <span className={`absolute inline-flex h-full w-full rounded-full bg-signal-500 opacity-75 ${!isReducedMotion ? "animate-ping" : ""}`}></span>
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-signal-500"></span>
+                  </span>
+                  Zoom Active
+                </div>
+              )}
             </div>
             <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-              Normalized telemetry lines reveal shape instead of forcing tokens, duration, and invocation counts into one scale. Drag across the plot to zoom a timeframe, keep hourly hover precision, and use the legend to focus the graph.
+              Normalized telemetry lines reveal shape instead of forcing tokens, duration, and invocation counts into one scale. Drag or use arrow keys on the chart to zoom a timeframe, keep hourly hover precision, and use the legend to focus the graph.
             </div>
+            {zoomRange && (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => setZoomRange(null)}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] text-slate-600 transition-colors hover:bg-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:ring-offset-2 dark:bg-void-700 dark:text-slate-300 dark:hover:bg-void-600"
+                >
+                  <X className="h-4 w-4" strokeWidth={2.5} />
+                  Reset Zoom
+                </button>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3 xl:w-[27rem]">
             <div data-chart-card className={SUBPANEL_CLASS}>
@@ -336,17 +372,33 @@ export const InteractiveUsageChart: FunctionComponent<{
                       width={rectWidth}
                       height={height - padding * 2}
                       fill="transparent"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Inspect bucket ${absoluteIndex}`}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          const rangeSpread = Math.max(1, Math.floor(visibleBuckets.length * 0.1));
+                          setZoomRange({
+                            start: Math.max(0, absoluteIndex - rangeSpread),
+                            end: Math.min(buckets.length - 1, absoluteIndex + rangeSpread),
+                          });
+                        }
+                      }}
+                      className="cursor-crosshair focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40"
                       onMouseDown={() => {
                         setDragStartIndex(absoluteIndex);
                         setDragCurrentIndex(absoluteIndex);
                       }}
                       onMouseEnter={() => setHoveredIndex(index)}
+                      onFocus={() => setHoveredIndex(index)}
                       onMouseMove={() => {
                         if (dragStartIndex !== null) {
                           setDragCurrentIndex(absoluteIndex);
                         }
                       }}
                       onMouseLeave={() => setHoveredIndex(null)}
+                      onBlur={() => setHoveredIndex(null)}
                       onMouseUp={() => {
                         if (dragStartIndex === null) {
                           return;
