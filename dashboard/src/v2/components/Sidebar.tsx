@@ -86,12 +86,13 @@ export const Sidebar: FunctionComponent = () => {
 
             {/* Navigation */}
             <nav ref={navRef} className="flex-1 px-4 flex flex-col relative z-10">
-                <div className="px-4 text-[9px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.2em] mb-3">Workspace</div>
+                <h2 className="px-4 text-[9px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.2em] mb-3">Workspace</h2>
                 {navItems.map((item, idx) => {
                     const isActive = activeIndex === idx;
                     return (
                         <button
                             key={item.label}
+                            type="button"
                             onMouseEnter={() => setActiveIndex(idx)}
                             aria-current={isActive ? "page" : undefined}
                             className="relative flex items-center gap-3.5 px-5 py-3 rounded-2xl transition-colors duration-200 w-full text-left group overflow-hidden mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10"
@@ -111,7 +112,7 @@ export const Sidebar: FunctionComponent = () => {
 
             {/* Settings */}
             <div className="px-4 relative z-10">
-                <button aria-label="Settings" className="relative w-full flex items-center gap-3.5 px-5 py-3 rounded-2xl transition-colors duration-200 text-left group overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10">
+                <button type="button" aria-label="Settings" className="relative w-full flex items-center gap-3.5 px-5 py-3 rounded-2xl transition-colors duration-200 text-left group overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10">
                     <div className="absolute inset-0 rounded-2xl bg-transparent group-hover:bg-black/[0.03] dark:group-hover:bg-white/[0.03] transition-opacity duration-300 pointer-events-none opacity-0 group-hover:opacity-100" />
                     <Settings aria-hidden="true" className="relative z-10 w-4 h-4 text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 group-hover:rotate-90 transition-all duration-700 ease-in-out" strokeWidth={1.5} />
                     <span className="relative z-10 font-medium text-sm tracking-wide text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-300">Settings</span>

@@ -25,7 +25,7 @@ export const DashboardV2: FunctionComponent = () => {
     }, []);
 
     return (
-        <main ref={mainContentRef} className="max-w-[2400px] mx-auto px-4 md:px-20 py-12 md:py-24 flex flex-col gap-12 md:gap-24">
+        <main id="main-content" ref={mainContentRef} className="max-w-[2400px] mx-auto px-4 md:px-20 py-12 md:py-24 flex flex-col gap-12 md:gap-24">
             {/* Page Header */}
             <header className="flex flex-col md:flex-row items-start md:items-end justify-between w-full gap-6">
                 <div>
