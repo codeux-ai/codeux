@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { X, Plus, FolderOpen, GitBranch, FolderInput, Link2 } from "lucide-preact";
+import { X, Plus, FolderOpen, GitBranch, FolderInput, Link2, Loader2 } from "lucide-preact";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 
 interface AddProjectModalProps {
@@ -21,6 +21,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const [gitUrl, setGitUrl]       = useState('');
     const [cloneDir, setCloneDir]   = useState('');
     const [error, setError]         = useState<string | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     useLayoutEffect(() => {
         gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.35, ease: "power2.out" });
@@ -47,8 +48,9 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         if (e.target === backdropRef.current) handleClose();
     };
 
-    const handleSubmit = (e: Event) => {
+    const handleSubmit = async (e: Event) => {
         e.preventDefault();
+        if (isSubmitting) return;
         const path = sourceType === 'local' ? localPath.trim() : gitUrl.trim();
 
         if (!name.trim()) {
@@ -62,12 +64,18 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
         }
 
         setError(null);
-        onAdd({
-            name: name.trim(),
-            type: sourceType,
-            path,
-            ...(sourceType === 'git' && cloneDir.trim() ? { cloneDir: cloneDir.trim() } : {}),
-        });
+        setIsSubmitting(true);
+        try {
+            await Promise.resolve(onAdd({
+                name: name.trim(),
+                type: sourceType,
+                path,
+                ...(sourceType === 'git' && cloneDir.trim() ? { cloneDir: cloneDir.trim() } : {}),
+            }));
+        } finally {
+            // modal will be closed, but just in case
+            setIsSubmitting(false);
+        }
         handleClose();
     };
 
@@ -134,6 +142,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         </div>
                         <button
                             onClick={handleClose}
+                            disabled={isSubmitting}
                             aria-label="Close"
                             className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
                         >
@@ -268,16 +277,22 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 <button
                                     type="button"
                                     onClick={handleClose}
+                                    disabled={isSubmitting}
                                     className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 rounded"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
-                                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800"
+                                    disabled={isSubmitting}
+                                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] hover:-translate-y-px disabled:shadow-none disabled:hover:translate-y-0 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800"
                                 >
-                                    <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
-                                    Add Project
+                                    {isSubmitting ? (
+                                        <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" />
+                                    ) : (
+                                        <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
+                                    )}
+                                    {isSubmitting ? 'Adding...' : 'Add Project'}
                                 </button>
                             </div>
                         </div>

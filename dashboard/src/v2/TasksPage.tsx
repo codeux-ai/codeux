@@ -32,6 +32,7 @@ import { deriveTaskBoardState } from "./lib/task-board-state.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "./lib/list-window.js";
 import { ListWindowSelector } from "./components/ui/ListWindowSelector.js";
 import { SkeletonCard } from "./components/ui/ListSkeletons.js";
+import { isReducedMotion } from "./lib/motion.js";
 
 const PRIORITY_CFG: Record<TaskPriority, { label: string; color: string; dot: string; bg: string }> = {
   critical: { label: "Critical", color: "text-status-red", dot: "bg-status-red shadow-[0_0_8px_rgba(227,0,15,0.6)]", bg: "bg-status-red/[0.08] border-status-red/20" },
@@ -75,9 +76,11 @@ const TaskCard: FunctionComponent<{
   onDelete: (task: Task) => void;
 }> = memo(({ task, dependents, onEdit, onDelete }) => {
   const cardRef = useRef<HTMLDivElement>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const pri = PRIORITY_CFG[task.priority];
 
   const handleMouseMove = (event: MouseEvent) => {
+    if (isReducedMotion()) return;
     const element = cardRef.current;
     if (!element) return;
     const bounds = element.getBoundingClientRect();
@@ -194,21 +197,31 @@ const TaskCard: FunctionComponent<{
         </div>
       )}
 
-      <div className="absolute top-3 right-3 flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] translate-y-[-8px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] z-20">
+      <div className="absolute top-3 right-3 flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] translate-y-[-8px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-within:opacity-100 group-focus-within:translate-y-0 focus-within:translate-y-0 transition-all duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] z-20">
+        {isDeleting ? (
+           <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-status-red/[0.08] border border-status-red/20">
+             <span className="text-[10px] font-bold text-status-red uppercase tracking-[0.14em]">Delete?</span>
+             <button className="text-status-red hover:text-red-700 focus:outline-none p-1 touch-target font-bold text-xs" onClick={(e) => { e.stopPropagation(); onDelete(task); setIsDeleting(false); }}>Yes</button>
+             <button className="text-slate-500 hover:text-slate-700 focus:outline-none p-1 touch-target font-bold text-xs" onClick={(e) => { e.stopPropagation(); setIsDeleting(false); }}>No</button>
+           </div>
+        ) : (
+        <>
         <button
-          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 rounded-full transition-colors"
+          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 touch-target"
           title="Edit task"
           onClick={() => onEdit(task)}
         >
           <Settings className="w-3 h-3" />
         </button>
         <button
-          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-status-red rounded-full transition-colors"
+          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-status-red rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30 touch-target"
           title="Delete task"
-          onClick={() => onDelete(task)}
+          onClick={() => setIsDeleting(true)}
         >
           <Trash2 className="w-3 h-3" />
         </button>
+        </>
+        )}
       </div>
     </div>
   );

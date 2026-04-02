@@ -33,6 +33,12 @@ export interface TaskComposerState {
   dependencyOptions: Task[];
   isEditing: boolean;
   isValid: boolean;
+  isSubmitting: boolean;
+  setIsSubmitting: (val: boolean) => void;
+  submitError: string | null;
+  setSubmitError: (val: string | null) => void;
+  submitSuccess: boolean;
+  setSubmitSuccess: (val: boolean) => void;
   getPayload: () => TaskDraft;
 }
 
@@ -52,6 +58,9 @@ export const useTaskComposerState = (
   const [priority, setPriority] = useState<TaskPriority>(initialTask?.priority || "medium");
   const [executorType, setExecutorType] = useState<TaskExecutorType>(initialTask?.executorType || "auto");
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(initialTask?.dependsOnTaskIds || []);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
 
   const isEditing = Boolean(initialTask);
 
@@ -124,6 +133,9 @@ export const useTaskComposerState = (
     dependencyOptions,
     isEditing,
     isValid,
+    isSubmitting, setIsSubmitting,
+    submitError, setSubmitError,
+    submitSuccess, setSubmitSuccess,
     getPayload,
   };
 };

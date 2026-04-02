@@ -27,6 +27,9 @@ describe("Task Composer State Helper", () => {
     expect(result.current.executorType).toBe("auto");
     expect(result.current.dependsOnTaskIds).toEqual([]);
     expect(result.current.isValid).toBe(false);
+    expect(result.current.isSubmitting).toBe(false);
+    expect(result.current.submitError).toBeNull();
+    expect(result.current.submitSuccess).toBe(false);
   });
 
   it("initializes create state with provided sprintId", () => {
@@ -62,6 +65,20 @@ describe("Task Composer State Helper", () => {
     const { result } = renderHook(() => useTaskComposerState(mockSprints, mockTasks, initialTask));
 
     expect(result.current.dependencyOptions.map(t => t.recordId)).toEqual(["t2"]); // t1 is excluded
+  });
+
+  it("handles submitting states correctly", () => {
+    const { result } = renderHook(() => useTaskComposerState(mockSprints, mockTasks));
+
+    act(() => {
+      result.current.setIsSubmitting(true);
+      result.current.setSubmitError("Failed");
+      result.current.setSubmitSuccess(true);
+    });
+
+    expect(result.current.isSubmitting).toBe(true);
+    expect(result.current.submitError).toBe("Failed");
+    expect(result.current.submitSuccess).toBe(true);
   });
 
   it("preserves task submit payload shape", () => {

@@ -45,6 +45,7 @@ const ProjectCard: FunctionComponent<{
     onDelete: () => void;
 }> = ({ source, isSelected, onSelect, onDelete }) => {
     const cardRef  = useRef<HTMLDivElement>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
     const label    = statusLabel[source.status];
     const color    = statusColor[source.status];
     const watermark = source.name.slice(0, 3).toUpperCase();
@@ -178,43 +179,53 @@ const ProjectCard: FunctionComponent<{
                 {/* Actions — slide up on hover */}
                 <div
                     className="flex items-center gap-1
-                               opacity-0 group-hover:opacity-100
-                               translate-y-1.5 group-hover:translate-y-0
+                               opacity-0 group-hover:opacity-100 focus-within:opacity-100 group-focus-within:opacity-100
+                               translate-y-1.5 group-hover:translate-y-0 focus-within:translate-y-0 group-focus-within:translate-y-0
                                transition-[opacity,transform] duration-300"
                 >
-                    <button className="w-7 h-7 flex items-center justify-center rounded-xl
+                    {isDeleting ? (
+                        <div className="flex items-center gap-2 bg-status-red/[0.08] px-3 py-1 rounded-xl border border-status-red/20">
+                            <span className="text-[10px] font-bold text-status-red uppercase tracking-[0.14em]">Delete?</span>
+                            <button className="text-status-red hover:text-red-700 focus:outline-none p-1 touch-target" onClick={(e) => { e.stopPropagation(); onDelete(); setIsDeleting(false); }}>Yes</button>
+                            <button className="text-slate-500 hover:text-slate-700 focus:outline-none p-1 touch-target" onClick={(e) => { e.stopPropagation(); setIsDeleting(false); }}>No</button>
+                        </div>
+                    ) : (
+                        <>
+                    <button className="w-7 h-7 flex items-center justify-center rounded-xl touch-target
                                        bg-black/[0.04] dark:bg-white/[0.04]
                                        hover:bg-black/[0.08] dark:hover:bg-white/[0.08]
                                        text-slate-400 hover:text-slate-900 dark:hover:text-white
-                                       transition-colors duration-200"
+                                       transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
                             onClick={(event) => {
                                 event.stopPropagation();
                                 onSelect();
                             }}>
                         <ExternalLink className="w-3 h-3" strokeWidth={2} />
                     </button>
-                    <button className="w-7 h-7 flex items-center justify-center rounded-xl
+                    <button className="w-7 h-7 flex items-center justify-center rounded-xl touch-target
                                        bg-black/[0.04] dark:bg-white/[0.04]
                                        hover:bg-black/[0.08] dark:hover:bg-white/[0.08]
                                        text-slate-400 hover:text-slate-900 dark:hover:text-white
-                                       transition-colors duration-200"
+                                       transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
                             onClick={(event) => {
                                 event.stopPropagation();
                                 onSelect();
                             }}>
                         <Settings className="w-3 h-3" strokeWidth={2} />
                     </button>
-                    <button className="w-7 h-7 flex items-center justify-center rounded-xl
+                    <button className="w-7 h-7 flex items-center justify-center rounded-xl touch-target
                                        bg-black/[0.04] dark:bg-white/[0.04]
                                        hover:bg-status-red/[0.1]
                                        text-slate-400 hover:text-status-red
-                                       transition-colors duration-200"
+                                       transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30"
                             onClick={(event) => {
                                 event.stopPropagation();
-                                onDelete();
+                                setIsDeleting(true);
                             }}>
                         <Trash2 className="w-3 h-3" strokeWidth={2} />
                     </button>
+                        </>
+                    )}
                 </div>
             </div>
         </div>

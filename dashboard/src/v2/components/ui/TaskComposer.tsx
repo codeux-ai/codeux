@@ -1,9 +1,10 @@
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
-import { Bot, Plus, Target, X, Save } from "lucide-preact";
+import { Bot, Plus, Target, X, Save, Loader2 } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
 import { useTaskComposerState, type TaskDraft } from "../../lib/task-composer-state.js";
+import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
 
 interface TaskComposerProps {
   sprints: Sprint[];
@@ -59,12 +60,21 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
-    if (!state.isValid) {
+    if (!state.isValid || state.isSubmitting) {
       return;
     }
 
-    await onSubmit(state.getPayload());
-    onClose();
+    state.setIsSubmitting(true);
+    state.setSubmitError(null);
+    try {
+      await onSubmit(state.getPayload());
+      state.setSubmitSuccess(true);
+      onClose();
+    } catch (err: any) {
+      state.setSubmitError(err.message || "Failed to submit task");
+    } finally {
+      state.setIsSubmitting(false);
+    }
   };
 
   return (
@@ -104,6 +114,16 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
             >
               <X className="h-4 w-4" />
             </button>
+          </div>
+
+          <div data-composer-stagger className="mt-8">
+            <ActionFeedbackRegion
+              feedback={{
+                status: state.submitError ? "error" : state.isSubmitting ? "pending" : state.submitSuccess ? "success" : "idle",
+                message: state.submitError || (state.isSubmitting ? "Saving..." : state.submitSuccess ? "Saved successfully!" : ""),
+              }}
+              onDismiss={() => { state.setSubmitError(null); state.setSubmitSuccess(false); }}
+            />
           </div>
 
           <div data-composer-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
@@ -275,16 +295,17 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
           <div data-composer-stagger className="mt-auto flex flex-col gap-3 pt-2">
             <button
               type="submit"
-              disabled={!state.isValid}
+              disabled={!state.isValid || state.isSubmitting}
               className="inline-flex items-center justify-center gap-2.5 rounded-[1.2rem] bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-px hover:opacity-92 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:bg-white dark:text-void-900 dark:focus-visible:ring-offset-void-900"
             >
-              {state.isEditing ? <Save className="h-4 w-4" strokeWidth={2.3} /> : <Plus className="h-4 w-4" strokeWidth={2.3} />}
-              {state.isEditing ? "Save Task" : "Create Task"}
+              {state.isSubmitting ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : state.isEditing ? <Save className="h-4 w-4" strokeWidth={2.3} /> : <Plus className="h-4 w-4" strokeWidth={2.3} />}
+              {state.isSubmitting ? (state.isEditing ? "Saving..." : "Creating...") : state.isEditing ? "Save Task" : "Create Task"}
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="rounded-[1.2rem] border border-black/[0.06] bg-white/66 px-5 py-3 text-sm font-semibold text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:text-white dark:focus-visible:ring-offset-void-900"
+              disabled={state.isSubmitting}
+              className="rounded-[1.2rem] border border-black/[0.06] bg-white/66 px-5 py-3 text-sm font-semibold text-slate-500 transition-colors hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:text-white dark:focus-visible:ring-offset-void-900 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Cancel
             </button>
