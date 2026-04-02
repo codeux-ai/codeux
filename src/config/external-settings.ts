@@ -1,8 +1,27 @@
+import os from "os";
+import * as path from "path";
 import * as fs from "fs";
 import type { ExternalSettingsHints } from "../contracts/app-types.js";
 import { buildCandidatePaths } from "../shared/config/search-paths.js";
 import { readString } from "../shared/config/value-readers.js";
 import { getRelativeSprintOsPath } from "../shared/config/sprint-os-paths.js";
+
+/**
+ * Local authentication file artifacts relative to homedir.
+ */
+const PROVIDER_LOCAL_AUTH_MAP = {
+  jules: [],
+  gemini: [
+    ".gemini/settings.json",
+    ".gemini/oauth_creds.json",
+    ".gemini/google_accounts.json",
+    ".gemini/installation_id",
+    ".gemini/state.json",
+    ".gemini/trustedFolders.json",
+  ],
+  codex: [".codex/auth.json", ".codex/config.toml"],
+  claudeCode: [".claude/.credentials.json", ".claude.json"],
+} as const;
 
 /**
  * Normalization map for setting keys across different sources (Env, JSON).
@@ -69,9 +88,34 @@ export const loadExternalSettingsHints = (projectRoot: string): ExternalSettings
     resolvedHints[provider] = envValue || jsonValue;
   }
 
+  const homedir = os.homedir();
+  const providerAvailability: ExternalSettingsHints["providerAvailability"] = {
+    jules: { hasApiKey: false, hasLocalAuth: false },
+    gemini: { hasApiKey: false, hasLocalAuth: false },
+    codex: { hasApiKey: false, hasLocalAuth: false },
+    claudeCode: { hasApiKey: false, hasLocalAuth: false },
+  };
+
+  const keyToProvider: Record<string, keyof ExternalSettingsHints["providerAvailability"]> = {
+    julesApiKey: "jules",
+    geminiApiKey: "gemini",
+    codexApiKey: "codex",
+    claudeCodeApiKey: "claudeCode",
+  };
+
+  for (const [key, provider] of Object.entries(keyToProvider)) {
+    providerAvailability[provider].hasApiKey = !!resolvedHints[key];
+
+    const localAuthFiles = PROVIDER_LOCAL_AUTH_MAP[provider];
+    providerAvailability[provider].hasLocalAuth = localAuthFiles.some((file) =>
+      fs.existsSync(path.join(homedir, file))
+    );
+  }
+
   return {
     env: envHints as ExternalSettingsHints["env"],
     settingsJson: jsonHints as ExternalSettingsHints["settingsJson"],
     resolved: resolvedHints as ExternalSettingsHints["resolved"],
+    providerAvailability,
   };
 };

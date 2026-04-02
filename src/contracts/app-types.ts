@@ -755,6 +755,12 @@ export interface ExternalSettingsHints {
     claudeCodeApiKey: string;
     githubToken: string;
   };
+  providerAvailability: {
+    jules: { hasApiKey: boolean; hasLocalAuth: boolean };
+    gemini: { hasApiKey: boolean; hasLocalAuth: boolean };
+    codex: { hasApiKey: boolean; hasLocalAuth: boolean };
+    claudeCode: { hasApiKey: boolean; hasLocalAuth: boolean };
+  };
 }
 
 export interface GetCiStatusForScopeArgs {

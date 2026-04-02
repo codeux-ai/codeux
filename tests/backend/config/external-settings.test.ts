@@ -86,7 +86,9 @@ describe("external-settings", () => {
       GITHUB_TOKEN: "json-github-caps"
     };
 
-    vi.spyOn(fs, "existsSync").mockReturnValue(true);
+    vi.spyOn(fs, "existsSync").mockImplementation((p: string) => {
+        return p.includes(".sprint-os/settings.json");
+    });
     vi.spyOn(fs, "readFileSync").mockReturnValue(JSON.stringify(mockSettings));
 
     const hints = loadExternalSettingsHints(MOCK_PROJECT_ROOT);
@@ -94,5 +96,47 @@ describe("external-settings", () => {
     expect(hints.resolved.julesApiKey).toBe("json-jules-caps");
     expect(hints.resolved.claudeCodeApiKey).toBe("json-claude-caps");
     expect(hints.resolved.githubToken).toBe("json-github-caps");
+  });
+
+  it("should report empty provider availability when no keys or local auth exist", () => {
+    vi.spyOn(fs, "existsSync").mockReturnValue(false);
+
+    const hints = loadExternalSettingsHints(MOCK_PROJECT_ROOT);
+
+    expect(hints.providerAvailability.jules).toEqual({ hasApiKey: false, hasLocalAuth: false });
+    expect(hints.providerAvailability.gemini).toEqual({ hasApiKey: false, hasLocalAuth: false });
+    expect(hints.providerAvailability.codex).toEqual({ hasApiKey: false, hasLocalAuth: false });
+    expect(hints.providerAvailability.claudeCode).toEqual({ hasApiKey: false, hasLocalAuth: false });
+  });
+
+  it("should correctly report hasApiKey when keys are available", () => {
+    process.env.JULES_API_KEY = "env-jules-key";
+    process.env.ANTHROPIC_API_KEY = "env-claude-key";
+
+    vi.spyOn(fs, "existsSync").mockReturnValue(false);
+
+    const hints = loadExternalSettingsHints(MOCK_PROJECT_ROOT);
+
+    expect(hints.providerAvailability.jules).toEqual({ hasApiKey: true, hasLocalAuth: false });
+    expect(hints.providerAvailability.gemini).toEqual({ hasApiKey: false, hasLocalAuth: false });
+    expect(hints.providerAvailability.codex).toEqual({ hasApiKey: false, hasLocalAuth: false });
+    expect(hints.providerAvailability.claudeCode).toEqual({ hasApiKey: true, hasLocalAuth: false });
+  });
+
+  it("should correctly report hasLocalAuth when auth files exist", () => {
+    vi.spyOn(fs, "existsSync").mockImplementation((p: string) => {
+      // Mock true for a specific gemini path
+      if (p.endsWith(path.join(".gemini", "settings.json"))) {
+        return true;
+      }
+      return false;
+    });
+
+    const hints = loadExternalSettingsHints(MOCK_PROJECT_ROOT);
+
+    expect(hints.providerAvailability.jules).toEqual({ hasApiKey: false, hasLocalAuth: false });
+    expect(hints.providerAvailability.gemini).toEqual({ hasApiKey: false, hasLocalAuth: true });
+    expect(hints.providerAvailability.codex).toEqual({ hasApiKey: false, hasLocalAuth: false });
+    expect(hints.providerAvailability.claudeCode).toEqual({ hasApiKey: false, hasLocalAuth: false });
   });
 });
