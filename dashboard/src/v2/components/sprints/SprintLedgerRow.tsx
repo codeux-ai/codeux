@@ -16,12 +16,12 @@ import { formatSprintKey, STATUS_LABELS } from "../../lib/sprint-ledger-state.js
 
 // Polished badge tones: increased contrast for backgrounds and borders where appropriate
 const STATUS_BADGE_TONES: Record<SprintStatus, string> = {
-  running: "border-status-green/30 bg-status-green/15 text-status-green",
-  paused: "border-ember-500/30 bg-ember-500/15 text-ember-500",
-  completed: "border-black/[0.1] bg-black/[0.06] text-slate-500 dark:border-white/[0.1] dark:bg-white/[0.06] dark:text-slate-300",
-  failed: "border-status-red/30 bg-status-red/15 text-status-red",
-  cancelled: "border-slate-300/60 bg-slate-200/60 text-slate-500 dark:border-white/[0.1] dark:bg-white/[0.06] dark:text-slate-400",
-  idle: "border-signal-500/30 bg-signal-500/15 text-signal-700 dark:text-signal-300",
+  running: "border-status-green/25 bg-status-green/10 text-status-green",
+  paused: "border-ember-500/25 bg-ember-500/10 text-ember-500",
+  completed: "border-black/25 bg-black/10 text-slate-500 dark:border-white/25 dark:bg-white/10 dark:text-slate-300",
+  failed: "border-status-red/25 bg-status-red/10 text-status-red",
+  cancelled: "border-slate-300/25 bg-slate-200/10 text-slate-500 dark:border-white/25 dark:bg-white/10 dark:text-slate-400",
+  idle: "border-signal-500/25 bg-signal-500/10 text-signal-700 dark:text-signal-300",
 };
 
 const TABLE_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {

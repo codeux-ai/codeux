@@ -1030,7 +1030,7 @@ export const ChatPage: FunctionComponent = () => {
               <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">
                 <span>Active Invocation</span>
                 {formatInvocationErrorCategory(selectedInvocation?.lastErrorCategory || null) && (
-                  <span className="rounded border border-status-amber/30 bg-status-amber/10 px-1.5 py-0.5 text-[9px] tracking-[0.14em] text-status-amber">
+                  <span className="rounded-full border border-status-amber/25 bg-status-amber/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-status-amber">
                     {formatInvocationErrorCategory(selectedInvocation?.lastErrorCategory || null)}
                   </span>
                 )}
@@ -1041,21 +1041,21 @@ export const ChatPage: FunctionComponent = () => {
               {selectedInvocation && (
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
                   {selectedInvocation.provider && (
-                    <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-1 font-mono dark:border-white/[0.06] dark:bg-white/[0.03]">
+                    <span className="rounded-full border border-black/25 bg-black/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] dark:border-white/25 dark:bg-white/10">
                       {selectedInvocation.provider}
                     </span>
                   )}
                   {selectedInvocation.model && (
-                    <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-1 font-mono dark:border-white/[0.06] dark:bg-white/[0.03]">
+                    <span className="rounded-full border border-black/25 bg-black/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] dark:border-white/25 dark:bg-white/10">
                       {selectedInvocation.model}
                     </span>
                   )}
-                  <span className={`rounded-full border px-2 py-1 font-mono ${
+                  <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
                     selectedInvocation.status === "failed"
-                      ? "border-status-red/30 bg-status-red/10 text-status-red"
+                      ? "border-status-red/25 bg-status-red/10 text-status-red"
                       : selectedInvocation.status === "completed"
-                        ? "border-signal-500/20 bg-signal-500/10 text-signal-500"
-                        : "border-black/[0.06] bg-black/[0.03] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400"
+                        ? "border-signal-500/25 bg-signal-500/10 text-signal-500"
+                        : "border-black/25 bg-black/10 text-slate-500 dark:border-white/25 dark:bg-white/10 dark:text-slate-400"
                   }`}>
                     {selectedInvocation.status}
                   </span>
