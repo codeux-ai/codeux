@@ -39,7 +39,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
         <button
           type="button"
           onClick={onEdit}
-          className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/20 transition-all hover:scale-105 hover:bg-signal-400 focus:outline-none focus:ring-4 focus:ring-signal-500/30"
+          className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/20 transition-all hover:scale-105 hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
         >
           <Edit2 className="h-4 w-4" strokeWidth={2.5} />
           Edit Agent
@@ -72,7 +72,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
             type="button"
             onClick={() => onImport(preset.id)}
             disabled={importing || preset.syncStatus === "manual"}
-            className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-signal-600 transition-colors hover:bg-signal-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-300"
+            className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-signal-600 transition-colors hover:bg-signal-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
           >
             {importing ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2} /> : <FileUp className="h-4 w-4" strokeWidth={2} />}
             Import Markdown
@@ -82,7 +82,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
           type="button"
           onClick={() => onDelete(preset.id)}
           disabled={deleting}
-          className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-status-red transition-colors hover:bg-status-red/20 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-status-red transition-colors hover:bg-status-red/20 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
         >
           {deleting ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2} /> : <Trash2 className="h-4 w-4" strokeWidth={2} />}
           Delete Agent

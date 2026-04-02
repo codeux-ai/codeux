@@ -4,6 +4,13 @@
 @source "../index.html";
 @source "./**/*.{ts,tsx}";
 
+/*
+  Canonical Badge Scale
+  - Status badges: rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] (border opacity /25, bg opacity /10)
+  - Filter pills / category chips: rounded-full px-3.5 py-1.5 text-[11px] font-semibold (border opacity /[0.06])
+  - Tiny indicators: rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em]
+*/
+
 @layer base {
   :root {
     --status-green: #007A5E; /* WCAG AA on White (4.5:1) */
