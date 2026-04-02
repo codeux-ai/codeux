@@ -439,6 +439,8 @@ Project management requests are centralized in:
 
 ## Multi-Provider Settings
 
+*(Note: `available` means detected credentials/auth presence, whereas `enabled` means user-approved routing participation.)*
+
 AI Provider settings now support:
 - Providers: `jules`, `gemini`, `codex`
 - Routing strategy:
@@ -522,7 +524,7 @@ Use case:
 
 ## No-Key Startup Mode
 
-Server startup no longer exits when Jules API key is missing.
+Server startup no longer exits when Jules API key is missing. Sprint OS also performs startup availability checks for Gemini, Codex, and Claude Code, looking for API-key hints and stable local auth artifacts to prepare future onboarding decisions.
 
 Behavior:
 - MCP server and dashboard still start.

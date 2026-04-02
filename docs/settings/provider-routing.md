@@ -16,6 +16,8 @@ Sprint OS now separates:
 - worker runtime defaults
 - invocation-specific routing rules
 
+*(Note: In routing contexts, `available` means detected credentials/auth presence, whereas `enabled` means user-approved routing participation.)*
+
 ## Configuration Model
 
 Backend types:
@@ -51,7 +53,7 @@ Each `aiProvider.invocationRouting.<routeId>` entry contains:
 
 1. Start from the selected route.
 2. Build the baseline provider config from the route profile.
-3. Apply worker-profile defaults when `profile = WORKER`.
+3. Apply worker-profile defaults when `profile = WORKER`. (WORKER-profile routes no longer silently re-enable disabled CLI providers).
 4. If a `GLOBAL` route is still using its untouched default routing block, inherit the top-level `aiProvider.strategy`.
 5. Apply invocation-specific per-provider overrides.
 6. Filter by `allowedProviders`, then by any runtime provider pool restriction.

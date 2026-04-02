@@ -149,6 +149,8 @@ Dashboard behavior:
   - Jules remains routable with `enabled` and `weight`, but the current Jules REST API does not expose model-selection or thinking controls.
   - Dashboard settings editors therefore hide `model` and `thinkingMode` for Jules and show an informational note instead.
   - Gemini alias entries `pro`, `flash`, and `flash-lite` are labeled as recent aliases in selects so it is clear they track the latest model target.
+  - Sprint OS performs startup availability checks for Gemini, Codex, and Claude Code, looking for API-key hints and stable local auth artifacts to prepare future onboarding decisions.
+  - Note: `available` means detected credentials/auth presence, whereas `enabled` means user-approved routing participation. CLI providers are opt-in on fresh installs and disabled by default.
 - `invocationRouting` map
   - route ids:
     - `task_coding`
@@ -235,9 +237,9 @@ Preview runtime notes:
   - mirrored filenames use lowercase underscore-safe slugs such as `planning_agent.md`
   - clarification auto-answer can read project-local `project_manager.md` as the editable instruction source for worker-routed Jules clarification replies
   - default/home markdown sources are never modified by dashboard edits; Sprint OS creates a project-level override file instead
-  - `containerMountGeminiAuth`
-  - `containerMountCodexAuth`
-  - `containerMountClaudeCodeAuth`
+  - `containerMountGeminiAuth` (default `false`)
+  - `containerMountCodexAuth` (default `false`)
+  - `containerMountClaudeCodeAuth` (default `false`)
   - `containerGithubAuthPath` (default `~/.config/gh`)
   - `containerGeminiAuthPath` (default `~/.gemini`)
   - `containerCodexAuthPath` (default `~/.codex`)
