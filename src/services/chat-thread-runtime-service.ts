@@ -2,11 +2,10 @@ import { randomUUID } from "crypto";
 import type { DashboardSettings, ProviderId, Subtask } from "../contracts/app-types.js";
 import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
 import type { ProjectWorkerAssignmentRepository } from "../repositories/project-worker-assignment-repository.js";
-import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { TaskService } from "./task-service.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
-import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
+import type { ProviderTextInvocationService } from "./provider-text-invocation-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { ConversationCompactionSummary, CreateDashboardConversationMessageInput, ConversationThreadRecord, ConversationMessageRecord, ConversationRuntimeState, UpdateConversationThreadRouteInput } from "../contracts/connection-chat-types.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
@@ -14,13 +13,12 @@ import { buildProviderPrompt } from "./cli-workflow-utils.js";
 interface ChatThreadRuntimeServiceDependencies {
   connectionChatRepository: ConnectionChatRepository;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
-  executionRepository: ExecutionRepository;
   taskService: TaskService;
   getDashboardSettings: () => DashboardSettings;
   getGithubToken: () => string | undefined;
   agentPresetSyncService: AgentPresetSyncService;
   projectManagementRepository: ProjectManagementRepository;
-  providerRunner: IProviderRunner;
+  providerTextInvocationService: ProviderTextInvocationService;
   logger?: Logger;
 }
 
@@ -262,56 +260,20 @@ export class ChatThreadRuntimeService {
 
     const finalPrompt = buildProviderPrompt(promptContent, thinkingMode as any);
 
-    const execInvocation = this.deps.executionRepository.createExecutionInvocation({
-      projectId,
-      type: "worker_reply",
-      provider,
-      model,
-      startedAt: new Date().toISOString(),
-      attentionItemId: null,
-      dispatchId: null,
-      providerInvocationId: null,
-      sprintId: null,
-      sprintRunId: null,
-      taskId: null,
-      taskRunId: null,
-    });
-
-    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-      role: "user",
-      contentMarkdown: finalPrompt,
-    });
-
     try {
-      const result = await this.deps.providerRunner.runProviderForText({
+      const result = await this.deps.providerTextInvocationService.runProviderForText({
+        projectId,
+        type: "worker_reply",
         provider,
-        prompt: finalPrompt,
-        cwd: project.baseDir,
         model,
-        apiKey,
-        sessionId: thread.id,
-        workflowSettings,
+        prompt: finalPrompt,
         repoPath: project.baseDir,
+        apiKey,
         githubToken,
+        workflowSettings,
+        sessionId: thread.id,
         continueSessionId,
-        onActivity: (desc, originator) => {
-          this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-            role: originator === "user" ? "user" : "assistant",
-            contentMarkdown: `[Status] ${desc}`,
-          });
-        },
       });
-
-      this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-        role: "assistant",
-        contentMarkdown: result.text,
-      });
-      this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
-        status: "completed",
-        finishedAt: new Date().toISOString(),
-      });
-
-      const replyMarkdown = this.normalizeProviderReply(result.text);
 
       this.deps.connectionChatRepository.markDashboardMessagesProcessed(thread.id, {
         upToMessageId: latestMessage.id,
@@ -319,7 +281,7 @@ export class ChatThreadRuntimeService {
 
       this.deps.connectionChatRepository.postSystemMessage(projectId, {
         threadId: thread.id,
-        bodyMarkdown: replyMarkdown,
+        bodyMarkdown: result.text,
       });
 
       const newRuntimeState: ConversationRuntimeState = {
@@ -337,11 +299,6 @@ export class ChatThreadRuntimeService {
       });
 
     } catch (err: any) {
-      this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
-        status: "failed",
-        finishedAt: new Date().toISOString(),
-      });
-
       this.deps.connectionChatRepository.postSystemMessage(projectId, {
         threadId: thread.id,
         bodyMarkdown: `Worker execution failed: ${err.message}`,
@@ -400,24 +357,6 @@ export class ChatThreadRuntimeService {
     return `### User\\n${message.bodyMarkdown.trim()}`;
   }
 
-  private normalizeProviderReply(output: string): string {
-    const trimmed = output.trim();
-    if (!trimmed) {
-      return "";
-    }
-
-    try {
-      const parsed = JSON.parse(trimmed) as { response?: unknown };
-      if (typeof parsed?.response === "string") {
-        return parsed.response.trim();
-      }
-    } catch {
-      // Provider returned plain text; keep it as-is.
-    }
-
-    return trimmed;
-  }
-
   private isVirtualProvider(value: string | undefined | null): value is Extract<ProviderId, "gemini" | "codex" | "claude-code"> {
     return value === "gemini" || value === "codex" || value === "claude-code";
   }
@@ -438,59 +377,26 @@ export class ChatThreadRuntimeService {
     const githubToken = this.deps.getGithubToken();
     const promptContent = await this.buildCompactionPrompt(projectId, repoPath, projectName, thread, messages);
     const finalPrompt = buildProviderPrompt(promptContent, thinkingMode as any);
-    const execInvocation = this.deps.executionRepository.createExecutionInvocation({
-      projectId,
-      type: "chat_compaction",
-      provider,
-      model,
-      startedAt: new Date().toISOString(),
-      attentionItemId: null,
-      dispatchId: null,
-      providerInvocationId: null,
-      sprintId: null,
-      sprintRunId: null,
-      taskId: null,
-      taskRunId: null,
-    });
-
-    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-      role: "user",
-      contentMarkdown: finalPrompt,
-    });
 
     try {
-      const result = await this.deps.providerRunner.runProviderForText({
+      const result = await this.deps.providerTextInvocationService.runProviderForText({
+        projectId,
+        type: "chat_compaction",
         provider,
-        prompt: finalPrompt,
-        cwd: repoPath,
         model,
-        apiKey,
-        sessionId: `${thread.id}:compaction`,
-        workflowSettings,
+        prompt: finalPrompt,
         repoPath,
+        apiKey,
         githubToken,
+        workflowSettings,
+        sessionId: `${thread.id}:compaction`,
         continueSessionId: null,
-        onActivity: (desc, originator) => {
-          this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-            role: originator === "user" ? "user" : "assistant",
-            contentMarkdown: `[Status] ${desc}`,
-          });
-        },
       });
 
-      const markdown = this.normalizeProviderReply(result.text);
+      const markdown = result.text;
       if (!markdown) {
         throw new Error(`Provider ${provider} returned an empty compaction summary.`);
       }
-
-      this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-        role: "assistant",
-        contentMarkdown: markdown,
-      });
-      this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
-        status: "completed",
-        finishedAt: new Date().toISOString(),
-      });
 
       return {
         markdown,
@@ -501,10 +407,6 @@ export class ChatThreadRuntimeService {
         sourceMessageCount: messages.length,
       };
     } catch (err: any) {
-      this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
-        status: "failed",
-        finishedAt: new Date().toISOString(),
-      });
       throw err;
     }
   }

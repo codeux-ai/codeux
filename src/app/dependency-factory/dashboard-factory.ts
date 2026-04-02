@@ -38,18 +38,17 @@ export function createDashboardDependencies(
     activeDispatchRegistry,
     providerRunner,
   } = coreDeps;
-  const { sprintTaskDispatchService, sprintOrchestrator, taskService } = sprintDeps;
+  const { sprintTaskDispatchService, sprintOrchestrator, taskService, providerTextInvocationService } = sprintDeps;
 
-    const chatThreadRuntimeService = new ChatThreadRuntimeService({
+  const chatThreadRuntimeService = new ChatThreadRuntimeService({
     connectionChatRepository,
     projectWorkerAssignmentRepository,
-    executionRepository,
     taskService,
     getDashboardSettings: () => settingsRepository.getDefaultDashboardSettings(),
     getGithubToken: () => context.getEffectiveGithubToken(),
     agentPresetSyncService,
     projectManagementRepository,
-    providerRunner,
+    providerTextInvocationService,
     logger: logger.child({ component: "chat-thread-runtime-service" }),
   });
 

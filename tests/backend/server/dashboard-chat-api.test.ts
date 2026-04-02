@@ -80,7 +80,7 @@ describe("Dashboard Chat API", () => {
         getWorkerAgent: async () => ({ instructionMarkdown: "" }),
       } as any,
       projectManagementRepository,
-      providerRunner: {
+      providerTextInvocationService: {
         runProviderForText: vi.fn().mockResolvedValue({ text: "## Current Objective\nCompact thread" }),
       } as any,
     });
@@ -223,7 +223,7 @@ describe("Dashboard Chat API", () => {
       getGithubToken: () => undefined,
       agentPresetSyncService: {} as any,
       projectManagementRepository,
-      providerRunner: {} as any,
+      providerTextInvocationService: {} as any,
     });
 
     const project = projectManagementRepository.createProject({

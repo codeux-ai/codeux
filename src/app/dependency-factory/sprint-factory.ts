@@ -21,6 +21,7 @@ export interface SprintDependencies {
   virtualWorkerService: VirtualWorkerService;
   workerInboxReplyService: WorkerInboxReplyService;
   sprintOrchestrator: SprintOrchestrator;
+  providerTextInvocationService: ProviderTextInvocationService;
 }
 
 export function createSprintDependencies(
@@ -230,5 +231,6 @@ export function createSprintDependencies(
     virtualWorkerService,
     workerInboxReplyService,
     sprintOrchestrator,
+    providerTextInvocationService,
   };
 }

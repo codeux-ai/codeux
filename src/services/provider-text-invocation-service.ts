@@ -14,6 +14,8 @@ export interface RunProviderForTextInput {
   apiKey: string;
   githubToken?: string;
   workflowSettings: CliWorkflowSettings;
+  sessionId?: string;
+  continueSessionId?: string | null;
   attentionItemId?: string | null;
   dispatchId?: string | null;
   sprintId?: string | null;
@@ -66,7 +68,8 @@ export class ProviderTextInvocationService {
         cwd: input.repoPath,
         model: input.model,
         apiKey: input.apiKey,
-        sessionId: input.type + "-" + randomUUID(),
+        sessionId: input.sessionId || (input.type + "-" + randomUUID()),
+        continueSessionId: input.continueSessionId,
         workflowSettings: input.workflowSettings,
         repoPath: input.repoPath,
         githubToken: input.githubToken,

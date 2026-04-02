@@ -14,7 +14,7 @@ This table records each granular interaction loop in an invocation, preserving t
 
 ## Chat Thread Usage
 Execution invocations are heavily used by the Chat page to track activity.
-These discrete operations and interactions generate `execution_invocations` with `type === "chat"` (or handled via the `ProviderTextInvocationService`).
+These discrete operations and interactions (like `worker_reply` and `chat_compaction`) generate `execution_invocations` handled via the `ProviderTextInvocationService`.
 This provides a clear audit log of the agent's work and prompt history separate from the user-facing `ConversationThreadRecord` and `ConversationMessageRecord` items.
 User-facing chat threads show up with `scope === "project"`, while agent background logs and execution runs appear with `scope === "connection"`.
 

@@ -19,11 +19,6 @@ describe("ChatThreadRuntimeService", () => {
       projectWorkerAssignmentRepository: {
         listAssignmentsForProject: vi.fn().mockReturnValue([]),
       },
-      executionRepository: {
-        createExecutionInvocation: vi.fn(),
-        appendExecutionInvocationMessage: vi.fn(),
-        updateExecutionInvocation: vi.fn(),
-      },
       taskService: {
         resolveInvocationProvider: vi.fn(),
       },
@@ -35,7 +30,7 @@ describe("ChatThreadRuntimeService", () => {
       projectManagementRepository: {
         getProject: vi.fn(),
       },
-      providerRunner: {
+      providerTextInvocationService: {
         runProviderForText: vi.fn(),
       },
     };
@@ -53,7 +48,7 @@ describe("ChatThreadRuntimeService", () => {
     await service.postMessage("p1", { bodyMarkdown: "hello" });
 
     expect(deps.connectionChatRepository.updateThread).toHaveBeenCalledWith("t1", { connectionId: "live-conn-1" });
-    expect(deps.providerRunner.runProviderForText).not.toHaveBeenCalled();
+    expect(deps.providerTextInvocationService.runProviderForText).not.toHaveBeenCalled();
   });
 
   it("runs virtual provider and replays history on provider switch", async () => {
@@ -72,12 +67,11 @@ describe("ChatThreadRuntimeService", () => {
       { authorType: "dashboard_user", bodyMarkdown: "first" },
       { authorType: "worker", bodyMarkdown: "reply" },
     ]);
-    deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec1" });
-    deps.providerRunner.runProviderForText.mockResolvedValue({ text: "im a bot", nativeSessionId: "new-session" });
+    deps.providerTextInvocationService.runProviderForText.mockResolvedValue({ text: "im a bot", nativeSessionId: "new-session" });
 
     await service.postMessage("p1", { bodyMarkdown: "hello" });
 
-    expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(
+    expect(deps.providerTextInvocationService.runProviderForText).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "claude-code",
         continueSessionId: null,
@@ -107,12 +101,11 @@ describe("ChatThreadRuntimeService", () => {
       provider: "claude-code",
       providers: { "claude-code": { model: "claude-3", apiKey: "key" } }
     });
-    deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec1" });
-    deps.providerRunner.runProviderForText.mockResolvedValue({ text: "next", nativeSessionId: "existing-session" });
+    deps.providerTextInvocationService.runProviderForText.mockResolvedValue({ text: "next", nativeSessionId: "existing-session" });
 
     await service.postMessage("p1", { bodyMarkdown: "hello" });
 
-    expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(
+    expect(deps.providerTextInvocationService.runProviderForText).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "claude-code",
         continueSessionId: "existing-session",
@@ -141,12 +134,11 @@ describe("ChatThreadRuntimeService", () => {
     deps.connectionChatRepository.listMessages.mockReturnValue([
       { authorType: "dashboard_user", bodyMarkdown: "first" },
     ]);
-    deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec1" });
-    deps.providerRunner.runProviderForText.mockResolvedValue({ text: "codex reply", nativeSessionId: "codex-session" });
+    deps.providerTextInvocationService.runProviderForText.mockResolvedValue({ text: "codex reply", nativeSessionId: "codex-session" });
 
     await service.postMessage("p1", { bodyMarkdown: "hello" });
 
-    expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(
+    expect(deps.providerTextInvocationService.runProviderForText).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "codex",
         model: "gpt-5.3-codex",
@@ -177,8 +169,7 @@ describe("ChatThreadRuntimeService", () => {
       providers: { "claude-code": { model: "claude-3", apiKey: "key", thinkingMode: "HIGH" } },
     });
     deps.agentPresetSyncService.getWorkerAgent.mockResolvedValue({ instructionMarkdown: "" });
-    deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-compact" });
-    deps.providerRunner.runProviderForText.mockResolvedValue({ text: "## Current Objective\nKeep context", nativeSessionId: "ignored" });
+    deps.providerTextInvocationService.runProviderForText.mockResolvedValue({ text: "## Current Objective\nKeep context", nativeSessionId: "ignored" });
     deps.connectionChatRepository.updateThread.mockImplementation((threadId: string, input: any) => ({
       id: threadId,
       projectId: "p1",
@@ -188,14 +179,11 @@ describe("ChatThreadRuntimeService", () => {
 
     const updated = await service.compactThreadSession("t1");
 
-    expect(deps.executionRepository.createExecutionInvocation).toHaveBeenCalledWith(expect.objectContaining({
+    expect(deps.providerTextInvocationService.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
       projectId: "p1",
       type: "chat_compaction",
       provider: "claude-code",
       model: "claude-3",
-    }));
-    expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
-      provider: "claude-code",
       continueSessionId: null,
       sessionId: "t1:compaction",
     }));
@@ -332,18 +320,17 @@ describe("ChatThreadRuntimeService", () => {
       { id: "m1", authorType: "dashboard_user", bodyMarkdown: "historic prompt" },
       { id: "msg-5", authorType: "dashboard_user", bodyMarkdown: "next question" },
     ]);
-    deps.executionRepository.createExecutionInvocation.mockReturnValue({ id: "exec-summary-replay" });
-    deps.providerRunner.runProviderForText.mockResolvedValue({ text: "reply", nativeSessionId: "fresh-session" });
+    deps.providerTextInvocationService.runProviderForText.mockResolvedValue({ text: "reply", nativeSessionId: "fresh-session" });
 
     await service.postMessage("p1", { bodyMarkdown: "next question" });
 
-    expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+    expect(deps.providerTextInvocationService.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
       prompt: expect.stringContaining("## COMPACTED HISTORY"),
     }));
-    expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+    expect(deps.providerTextInvocationService.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
       prompt: expect.stringContaining("## Current Objective\nKeep context"),
     }));
-    expect(deps.providerRunner.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
+    expect(deps.providerTextInvocationService.runProviderForText).toHaveBeenCalledWith(expect.objectContaining({
       prompt: expect.not.stringContaining("historic prompt"),
     }));
   });
