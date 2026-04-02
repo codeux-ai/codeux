@@ -323,7 +323,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
               <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
                 <div className="rounded-[1.6rem] border border-black/[0.06] bg-black/[0.02] p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
                   <div className="mb-3 px-2">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Provider deck</div>
+                    <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Provider deck</div>
                     <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                       Pick one provider to edit. The right panel shows the full default model, weight, and thinking configuration.
                     </div>
@@ -559,7 +559,7 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                 <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
                   <div className="rounded-[1.6rem] border border-black/[0.06] bg-black/[0.02] p-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
                     <div className="mb-3 px-2">
-                      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Invocation routes</div>
+                      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Invocation routes</div>
                       <div className="mt-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                         Choose the workflow you want to tune, then adjust its provider profile and overrides.
                       </div>

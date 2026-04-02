@@ -65,7 +65,7 @@ export const PillChoiceGroup: FunctionComponent<{
           className={`min-w-[104px] rounded-[1rem] border px-3.5 py-2 text-left transition-[border-color,background-color,color,transform,box-shadow] duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${
             active
               ? "border-signal-500/30 bg-signal-500/[0.11] text-signal-700 shadow-[0_10px_20px_rgba(0,224,160,0.08)] dark:border-signal-400/30 dark:bg-signal-400/[0.12] dark:text-signal-200"
-              : "border-black/[0.07] bg-white/78 text-slate-600 hover:-translate-y-px hover:border-black/[0.12] hover:text-slate-800 dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/[0.12] dark:hover:text-white"
+              : "border-black/[0.06] bg-white/70 text-slate-600 hover:-translate-y-px hover:border-black/[0.12] hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/[0.12] dark:hover:text-white"
           }`}
         >
           <div className="text-[11px] font-bold uppercase tracking-[0.14em]">{option.label}</div>
@@ -109,7 +109,7 @@ export const TextInput: FunctionComponent<{
     placeholder={placeholder}
     disabled={disabled}
     onInput={(event) => onChange((event.currentTarget as HTMLInputElement).value)}
-    className={`min-w-[220px] rounded-[1rem] border border-black/[0.07] bg-white/88 px-3.5 py-2.5 text-sm text-slate-700 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-[border-color,box-shadow,background-color] duration-200 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.07] dark:bg-white/[0.05] dark:text-slate-200 ${
+    className={`min-w-[220px] rounded-[1rem] border border-black/[0.06] bg-white/80 px-3.5 py-2.5 text-sm text-slate-700 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-[border-color,box-shadow,background-color] duration-200 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:bg-white/[0.05] dark:text-slate-200 ${
       mono ? "font-mono" : "font-sans"
     }`}
   />
@@ -126,7 +126,7 @@ export const TextAreaInput: FunctionComponent<{
     rows={rows}
     placeholder={placeholder}
     onInput={(event) => onChange((event.currentTarget as HTMLTextAreaElement).value)}
-    className="min-h-[320px] w-full rounded-[1.3rem] border border-black/[0.06] bg-black/[0.04] px-4 py-3 text-sm leading-relaxed text-slate-700 placeholder-slate-400 transition-colors duration-200 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/10 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-200"
+    className="min-h-[320px] w-full rounded-[1rem] border border-black/[0.06] bg-black/[0.04] px-4 py-3 text-sm leading-relaxed text-slate-700 placeholder-slate-400 transition-colors duration-200 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/20 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-200"
   />
 );
 
@@ -146,7 +146,7 @@ export const NumberInput: FunctionComponent<{
     step={step}
     disabled={disabled}
     onInput={(event) => onChange(Number((event.currentTarget as HTMLInputElement).value))}
-    className="w-32 rounded-[1rem] border border-black/[0.07] bg-white/88 px-3.5 py-2.5 text-sm font-mono text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-[border-color,box-shadow,background-color] duration-200 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.07] dark:bg-white/[0.05] dark:text-slate-200"
+    className="w-32 rounded-[1rem] border border-black/[0.06] bg-white/80 px-3.5 py-2.5 text-sm font-mono text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-[border-color,box-shadow,background-color] duration-200 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:bg-white/[0.05] dark:text-slate-200"
   />
 );
 
@@ -161,7 +161,7 @@ export const MetricPill: FunctionComponent<{
       : "border-black/[0.06] bg-black/[0.03] dark:border-white/[0.06] dark:bg-white/[0.03]"
   }`}
   >
-    <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">{label}</div>
+    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{label}</div>
     <div className={`mt-1 text-sm font-semibold ${
       tone === "signal" ? "text-signal-700 dark:text-signal-200" : "text-slate-800 dark:text-slate-100"
     }`}

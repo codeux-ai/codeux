@@ -16,12 +16,12 @@ import { formatSprintKey, STATUS_LABELS } from "../../lib/sprint-ledger-state.js
 
 // Polished badge tones: increased contrast for backgrounds and borders where appropriate
 const STATUS_BADGE_TONES: Record<SprintStatus, string> = {
-  running: "border-status-green/30 bg-status-green/15 text-status-green",
-  paused: "border-ember-500/30 bg-ember-500/15 text-ember-500",
-  completed: "border-black/[0.1] bg-black/[0.06] text-slate-500 dark:border-white/[0.1] dark:bg-white/[0.06] dark:text-slate-300",
-  failed: "border-status-red/30 bg-status-red/15 text-status-red",
-  cancelled: "border-slate-300/60 bg-slate-200/60 text-slate-500 dark:border-white/[0.1] dark:bg-white/[0.06] dark:text-slate-400",
-  idle: "border-signal-500/30 bg-signal-500/15 text-signal-700 dark:text-signal-300",
+  running: "border-status-green/25 bg-status-green/10 text-status-green",
+  paused: "border-ember-500/25 bg-ember-500/10 text-ember-500",
+  completed: "border-black/25 bg-black/10 text-slate-500 dark:border-white/25 dark:bg-white/10 dark:text-slate-300",
+  failed: "border-status-red/25 bg-status-red/10 text-status-red",
+  cancelled: "border-slate-300/25 bg-slate-200/10 text-slate-500 dark:border-white/25 dark:bg-white/10 dark:text-slate-400",
+  idle: "border-signal-500/25 bg-signal-500/10 text-signal-700 dark:text-signal-300",
 };
 
 const TABLE_DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
@@ -129,7 +129,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       </td>
       <td className="px-4 py-3 align-middle">
         <div className="flex flex-col gap-2">
-          <span className={`inline-flex rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] ${STATUS_BADGE_TONES[sprint.status]}`}>
+          <span className={`inline-flex rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${STATUS_BADGE_TONES[sprint.status]}`}>
             {STATUS_LABELS[sprint.status]}
           </span>
           {humanIntervention && (
@@ -165,7 +165,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             type="button"
             onClick={() => onSprintToggle(sprint.id)}
             disabled={pendingActionIds.has(pendingActionId)}
-            className={`inline-flex h-10 min-w-[5.5rem] items-center justify-center gap-2 rounded-full border px-4 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${
+            className={`inline-flex h-10 min-w-[5.5rem] items-center justify-center gap-2 rounded-full border px-4 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${
               activeRun
                 ? "border-status-red/20 bg-status-red/[0.1] text-status-red hover:bg-status-red/[0.14]"
                 : "border-signal-500/20 bg-signal-500/[0.08] text-signal-600 hover:bg-signal-500/[0.12] dark:text-signal-300"
@@ -176,7 +176,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           </button>
           <a
             href={`/tasks?sprint=${encodeURIComponent(sprint.id)}`}
-            className="inline-flex h-10 min-w-[4.8rem] items-center justify-center gap-2 rounded-full border border-black/[0.06] bg-white/80 px-4 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-600 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
+            className="inline-flex h-10 min-w-[4.8rem] items-center justify-center gap-2 rounded-full border border-black/[0.06] bg-white/80 px-4 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-600 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
           >
             Open
             <Maximize2 className="h-3.5 w-3.5" />

@@ -89,7 +89,7 @@ const ModelCard: FunctionComponent<{
                 <span className="text-sm font-bold text-slate-800 dark:text-white">{model.displayName}</span>
             </div>
             {model.active && (
-                <span className="text-[9px] font-bold uppercase tracking-widest text-signal-500 bg-signal-500/10 px-2 py-0.5 rounded-full">Active</span>
+                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500 bg-signal-500/10 px-2 py-0.5 rounded-full">Active</span>
             )}
         </div>
         <p className="text-[11px] text-slate-500 leading-relaxed">{model.description}</p>
@@ -213,7 +213,7 @@ const Inspector: FunctionComponent<{
                     </p>
                     <div className="flex flex-col gap-3 pt-3 border-t border-black/[0.06] dark:border-white/[0.06]">
                         <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Strength</span>
+                            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Strength</span>
                             <div className="flex items-center gap-2">
                                 <div className="w-20 h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.06] overflow-hidden">
                                     <div className="h-full rounded-full transition-all duration-700"
@@ -223,13 +223,13 @@ const Inspector: FunctionComponent<{
                             </div>
                         </div>
                         <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">ID</span>
+                            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">ID</span>
                             <span className="text-[11px] font-mono text-slate-400">{node.id.slice(0, 8)}…</span>
                         </div>
                     </div>
                     {connected.length > 0 && (
                         <div className="flex flex-col gap-2 pt-3 border-t border-black/[0.06] dark:border-white/[0.06]">
-                            <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">
+                            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
                                 Synapses ({connected.length})
                             </span>
                             {connected.slice(0, 8).map(({ node: cn, similarity }) => (
@@ -1185,7 +1185,7 @@ export const MemoryPage: FunctionComponent = () => {
                     style={{ animation: "lobotomize-pulse 2s ease-in-out infinite" }}>
                     <AlertTriangle className="w-4 h-4 shrink-0" strokeWidth={2.5} />
                     <p className="text-xs font-bold">
-                        <span className="uppercase tracking-widest">Warning — Lobotomize mode active.</span>
+                        <span className="uppercase tracking-[0.14em]">Warning — Lobotomize mode active.</span>
                         {" "}Click any node then use the inspector to excise memories permanently.
                     </p>
                 </div>
@@ -1254,7 +1254,7 @@ export const MemoryPage: FunctionComponent = () => {
                     {Object.entries(CAT).map(([, cfg]) => (
                         <div key={cfg.label} className="flex items-center gap-1.5">
                             <div className="w-2 h-2 rounded-full" style={{ background: cfg.hex, boxShadow: `0 0 6px ${cfg.hex}` }} />
-                            <span className="text-[9px] font-bold uppercase tracking-[0.12em]
+                            <span className="text-[9px] font-bold uppercase tracking-[0.14em]
                                            text-slate-400/80 dark:text-slate-500/80">
                                 {cfg.label}
                             </span>

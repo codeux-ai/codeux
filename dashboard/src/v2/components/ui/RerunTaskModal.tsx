@@ -98,7 +98,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
 
                     {/* Provider selector */}
                     <div className="space-y-2">
-                        <label className="text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400" htmlFor="rerun-provider">
+                        <label className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400" htmlFor="rerun-provider">
                             Provider
                         </label>
                         <select

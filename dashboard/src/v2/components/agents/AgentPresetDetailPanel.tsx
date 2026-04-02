@@ -11,7 +11,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
   deleting: boolean;
   importing: boolean;
 }> = ({ preset, onEdit, onDelete, onImport, deleting, importing }) => (
-  <div className="flex flex-col overflow-hidden rounded-[2rem] border border-black/[0.08] bg-white shadow-2xl dark:border-white/[0.08] dark:bg-void-900">
+  <div className="flex flex-col overflow-hidden rounded-[1.75rem] border border-black/[0.08] bg-white shadow-2xl dark:border-white/[0.08] dark:bg-void-900">
     <div className="relative h-48 w-full bg-slate-100 dark:bg-void-800 md:h-64">
       <AgentAvatarScene config={preset.avatarConfig} expression="happy" className="h-full w-full object-cover" />
       <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-white to-transparent dark:from-void-900" />
@@ -39,7 +39,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
         <button
           type="button"
           onClick={onEdit}
-          className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/20 transition-all hover:scale-105 hover:bg-signal-400 focus:outline-none focus:ring-4 focus:ring-signal-500/30"
+          className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/20 transition-all hover:scale-105 hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
         >
           <Edit2 className="h-4 w-4" strokeWidth={2.5} />
           Edit Agent
@@ -47,7 +47,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
       </div>
 
       <div className="prose prose-slate prose-sm max-w-none dark:prose-invert">
-        <h3 className="text-sm font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+        <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
           System Instructions
         </h3>
         <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-slate-700 dark:bg-void-800 dark:text-slate-300">
@@ -57,7 +57,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
 
       {preset.memoryTemplateOverrideEnabled && preset.memoryTemplateMarkdown && (
         <div className="prose prose-slate prose-sm max-w-none dark:prose-invert">
-          <h3 className="text-sm font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+          <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
             Memory Template Override
           </h3>
           <div className="mt-2 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-slate-700 dark:bg-void-800 dark:text-slate-300">
@@ -72,7 +72,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
             type="button"
             onClick={() => onImport(preset.id)}
             disabled={importing || preset.syncStatus === "manual"}
-            className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-signal-600 transition-colors hover:bg-signal-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-300"
+            className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-signal-600 transition-colors hover:bg-signal-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
           >
             {importing ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2} /> : <FileUp className="h-4 w-4" strokeWidth={2} />}
             Import Markdown
@@ -82,7 +82,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
           type="button"
           onClick={() => onDelete(preset.id)}
           disabled={deleting}
-          className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/10 px-4 py-2 text-xs font-bold uppercase tracking-widest text-status-red transition-colors hover:bg-status-red/20 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-status-red transition-colors hover:bg-status-red/20 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
         >
           {deleting ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2} /> : <Trash2 className="h-4 w-4" strokeWidth={2} />}
           Delete Agent

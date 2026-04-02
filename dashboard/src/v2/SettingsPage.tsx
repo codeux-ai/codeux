@@ -98,11 +98,11 @@ export const SettingsPage: FunctionComponent = () => {
           </p>
 
           <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-[1rem] border border-black/[0.06] bg-white/70 p-1 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60">
+            <div className="rounded-2xl border border-black/[0.06] bg-white/70 p-1 backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60">
               <button
                 type="button"
                 onClick={() => setActiveScope("system")}
-                className={`rounded-[0.9rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors ${
+                className={`rounded-[1rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors ${
                   activeScope === "system"
                     ? "bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
                     : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
@@ -114,7 +114,7 @@ export const SettingsPage: FunctionComponent = () => {
                 type="button"
                 onClick={() => selectedProject && setActiveScope("project")}
                 disabled={!selectedProject}
-                className={`rounded-[0.9rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                className={`rounded-[1rem] px-4 py-2 text-xs font-bold uppercase tracking-[0.16em] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                   activeScope === "project"
                     ? "bg-signal-500/[0.12] text-signal-700 dark:text-signal-300"
                     : "text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
@@ -144,12 +144,12 @@ export const SettingsPage: FunctionComponent = () => {
           </div>
         </div>
 
-        <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/76 p-4 backdrop-blur-2xl shadow-[0_18px_40px_rgba(15,23,42,0.05)] dark:border-white/[0.06] dark:bg-void-800/66 dark:shadow-[0_24px_52px_rgba(0,0,0,0.24)]">
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+        <div className="rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-4 backdrop-blur-2xl shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
             <Compass className="h-3.5 w-3.5" strokeWidth={2.2} />
             Smart Find
           </div>
-          <div className="mt-3 flex items-center gap-3 rounded-[1.2rem] border border-black/[0.06] bg-black/[0.03] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+          <div className="mt-3 flex items-center gap-3 rounded-[1rem] border border-black/[0.06] bg-black/[0.03] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
             <Search className="h-4 w-4 shrink-0 text-slate-400" strokeWidth={2.1} />
             <input
               ref={state.searchInputRef}

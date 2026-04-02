@@ -112,10 +112,11 @@ const TaskCard: FunctionComponent<{
       ref={cardRef}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      className="group relative flex flex-col bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.25rem] p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden cursor-default"
+      tabIndex={0}
+      className="group relative flex flex-col bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
       style={{ transformStyle: "preserve-3d", willChange: "transform" }}
     >
-      <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-signal-500/[0.02]" />
+      <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-signal-500/[0.03] dark:group-hover:bg-signal-500/[0.05]" />
       <WaveFluid accentHex={STATUS_CFG[task.status].hex} />
       <BorderTrace accentHex={STATUS_CFG[task.status].hex} />
 
@@ -123,7 +124,7 @@ const TaskCard: FunctionComponent<{
         <span className="font-mono text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-[0.1em]">
           {task.id.toUpperCase()}
         </span>
-        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-widest ${pri.bg} ${pri.color}`}>
+        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-[0.14em] ${pri.bg} ${pri.color}`}>
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${pri.dot}`} />
           {pri.label}
         </div>
@@ -178,7 +179,7 @@ const TaskCard: FunctionComponent<{
           {dependents.map((dep) => (
             <div
               key={dep.recordId}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[9px] font-bold uppercase tracking-widest ${
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[9px] font-bold uppercase tracking-[0.14em] ${
                 dep.status === "completed"
                   ? "bg-status-green/[0.08] border-status-green/20 text-status-green"
                   : dep.status === "coding_completed" || dep.status === "in_progress"
@@ -367,14 +368,14 @@ const SprintProgressCard: FunctionComponent<{
         ].map(({ label, value, color }) => (
           <div key={label} className="flex flex-col items-center py-2.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.04]">
             <span className={`text-xl font-black font-mono leading-none ${color}`}>{value}</span>
-            <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 mt-1">{label}</span>
+            <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400 mt-1">{label}</span>
           </div>
         ))}
       </div>
 
       <Link
         to="/sprints"
-        className="flex items-center gap-1.5 mt-5 pt-4 border-t border-black/[0.05] dark:border-white/[0.04] text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 hover:text-ember-500 transition-colors duration-200 group/link"
+        className="flex items-center gap-1.5 mt-5 pt-4 border-t border-black/[0.05] dark:border-white/[0.04] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 hover:text-ember-500 transition-colors duration-200 group/link"
       >
         <ArrowUpRight className="w-3 h-3 group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform duration-200" strokeWidth={2.5} />
         View Sprint
@@ -527,7 +528,7 @@ export const TasksPage: FunctionComponent = () => {
         <div className="flex flex-col items-start lg:items-end gap-4 shrink-0">
           <div className="flex items-center gap-2.5 flex-wrap">
             {stats.inProgress > 0 && (
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-signal-500/[0.08] border border-signal-500/20 text-[10px] font-bold uppercase tracking-widest text-signal-600 dark:text-signal-400">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-signal-500/[0.08] border border-signal-500/20 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-signal-500 relative">
                   <span className="absolute inset-0 rounded-full animate-ping bg-signal-400 opacity-70" />
                 </span>
@@ -535,12 +536,12 @@ export const TasksPage: FunctionComponent = () => {
               </div>
             )}
             {stats.critical > 0 && (
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-status-red/[0.06] border border-status-red/20 text-[10px] font-bold uppercase tracking-widest text-status-red">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-status-red/[0.06] border border-status-red/20 text-[10px] font-bold uppercase tracking-[0.14em] text-status-red">
                 <Flame className="w-3 h-3" strokeWidth={2.5} />
                 {stats.critical} Critical
               </div>
             )}
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-widest text-slate-500">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
               <ListChecks className="w-3 h-3" strokeWidth={2} />
               {stats.total} Total
             </div>

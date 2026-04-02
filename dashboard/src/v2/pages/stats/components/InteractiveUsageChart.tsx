@@ -165,7 +165,7 @@ export const InteractiveUsageChart: FunctionComponent<{
       <div className="relative flex flex-col gap-6">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300">
+            <div className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300">
               <Activity className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
               Usage Graph
             </div>
@@ -203,7 +203,7 @@ export const InteractiveUsageChart: FunctionComponent<{
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_16rem] 2xl:grid-cols-[minmax(0,1fr)_20rem]">
           <div className={`${SUBPANEL_CLASS} p-4 md:p-5`}>
             <div className="mb-5 flex flex-wrap items-center gap-3">
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Interactive Legend</div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Interactive Legend</div>
               <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
                 Hover buckets for exact values
               </div>
@@ -369,7 +369,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                       x={xPositions[index] ?? padding}
                       y={height + 24}
                       textAnchor="middle"
-                      className="fill-slate-400 text-[9px] font-bold uppercase tracking-[0.18em]"
+                      className="fill-slate-400 text-[9px] font-bold uppercase tracking-[0.2em]"
                     >
                       {formatAxisLabel(bucket, stats.range)}
                     </text>
@@ -390,7 +390,7 @@ export const InteractiveUsageChart: FunctionComponent<{
               }}
             />
             <div className={`${SUBPANEL_CLASS} p-5`}>
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Focused Bucket</div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Focused Bucket</div>
               <div className="mt-3 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
                 {activeBucket ? activeBucket.label : "--"}
               </div>

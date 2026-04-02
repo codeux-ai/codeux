@@ -232,12 +232,12 @@ const DagNode = memo(({ node, dispatch, tone }: { node: SprintDagNodeModel & { x
                 {node.task.id}
               </span>
               {node.incoming.length === 0 && (
-                <span className="rounded-full border border-ember-500/20 bg-ember-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.15em] text-ember-600 dark:text-ember-400">
+                <span className="rounded-full border border-ember-500/20 bg-ember-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-ember-600 dark:text-ember-400">
                   Root
                 </span>
               )}
               {node.isReady && (
-                <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.15em] text-signal-600 dark:text-signal-300">
+                <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-300">
                   Ready
                 </span>
               )}
@@ -258,11 +258,11 @@ const DagNode = memo(({ node, dispatch, tone }: { node: SprintDagNodeModel & { x
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className={`rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.15em] ${tone.badge}`}>
+          <span className={`rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] ${tone.badge}`}>
             {phaseLabel}
           </span>
           {mergeLabel && (
-            <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
+            <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300">
               {mergeLabel}
             </span>
           )}
@@ -410,7 +410,7 @@ export const SprintDag: FunctionComponent<SprintDagProps> = ({ tasks, dispatches
       <div className="relative z-10">
         <div className="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-signal-500">
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
               <Workflow className="h-4 w-4" strokeWidth={1.6} />
               Dependency Constellation
             </div>
