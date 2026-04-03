@@ -77,8 +77,22 @@ import type {
 } from "../contracts/project-management-types.js";
 import { correlationIdMiddleware } from "../shared/logging/correlation-id.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
+
+import { registerProjectRoutes } from "./project-routes.js";
+import { registerSprintRoutes } from "./sprint-routes.js";
+import { registerTaskRoutes } from "./task-routes.js";
+
 import { bootDashboardRealtimeWebSocketServer } from "./dashboard-realtime-websocket-server.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
+
+
+export type DashboardDependencies = Omit<
+  DashboardServerOptions,
+  | "app"
+  | "dashboardDir"
+  | "port"
+  | "liveActivityCacheMs"
+>;
 
 export interface DashboardServerOptions {
   app: Express;
@@ -1269,231 +1283,12 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     }
   });
 
-  app.get("/api/projects", (req, res) => {
-    res.json(options.listProjects());
-  });
 
-  app.post("/api/projects", (req, res) => {
-    try {
-      res.status(201).json(options.createProject(req.body as CreateProjectInput));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to create project") });
-    }
-  });
+  const deps: DashboardDependencies = options;
+  registerProjectRoutes(app, deps);
+  registerSprintRoutes(app, deps);
+  registerTaskRoutes(app, deps);
 
-  app.get("/api/projects/:projectId", (req, res) => {
-    const projectId = String(req.params.projectId || "").trim();
-    const project = options.getProject(projectId);
-    if (!project) {
-      res.status(404).json({ error: `Project not found: ${projectId}` });
-      return;
-    }
-    res.json(project);
-  });
-
-  app.get("/api/projects/:projectId/settings", (req, res) => {
-    try {
-      res.json(getProjectSettings(String(req.params.projectId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to load project settings") });
-    }
-  });
-
-  app.put("/api/projects/:projectId/settings", (req, res) => {
-    try {
-      res.json(saveProjectSettings(String(req.params.projectId || "").trim(), req.body as ProjectSettingsOverride));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to save project settings") });
-    }
-  });
-
-  app.delete("/api/projects/:projectId/settings", (req, res) => {
-    try {
-      resetProjectSettings(String(req.params.projectId || "").trim());
-      res.json({ ok: true });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to reset project settings") });
-    }
-  });
-
-  app.get("/api/projects/:projectId/settings/effective", (req, res) => {
-    try {
-      res.json(getProjectEffectiveSettings(String(req.params.projectId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to load effective project settings") });
-    }
-  });
-
-  app.patch("/api/projects/:projectId", (req, res) => {
-    try {
-      const projectId = String(req.params.projectId || "").trim();
-      res.json(options.updateProject(projectId, req.body as UpdateProjectInput));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to update project") });
-    }
-  });
-
-  app.delete("/api/projects/:projectId", (req, res) => {
-    try {
-      options.deleteProject(String(req.params.projectId || "").trim());
-      res.json({ ok: true });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to delete project") });
-    }
-  });
-
-  app.put("/api/projects/:projectId/select", (req, res) => {
-    try {
-      const projectId = String(req.params.projectId || "").trim();
-      res.json({ selectedProjectId: options.selectProject(projectId || null) });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to select project") });
-    }
-  });
-
-    app.put("/api/projects/:projectId/selected-sprint", (req, res) => {
-    try {
-      const projectId = String(req.params.projectId || "").trim();
-      const sprintId = typeof req.body?.sprintId === "string" && req.body.sprintId.trim()
-        ? req.body.sprintId.trim()
-        : null;
-      res.json({ selectedSprintId: options.selectSprint(projectId, sprintId) });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to select sprint") });
-    }
-  });
-
-  app.get("/api/projects/:projectId/sprints", (req, res) => {
-    try {
-      res.json(options.listSprints(String(req.params.projectId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to list sprints") });
-    }
-  });
-
-  app.post("/api/projects/:projectId/sprints", (req, res) => {
-    try {
-      res.status(201).json(options.createSprint(String(req.params.projectId || "").trim(), req.body as CreateSprintInput));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to create sprint") });
-    }
-  });
-
-  app.post("/api/projects/:projectId/sprints/import", (req, res) => {
-    try {
-      res.status(201).json(
-        options.importSprintFromMarkdown(String(req.params.projectId || "").trim(), req.body as SprintMarkdownImportInput)
-      );
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to import sprint markdown") });
-    }
-  });
-
-  app.get("/api/projects/:projectId/sprints/:sprintId/export", (req, res) => {
-    try {
-      res.json(options.exportSprintToMarkdown(String(req.params.projectId || "").trim(), String(req.params.sprintId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to export sprint markdown") });
-    }
-  });
-
-  app.patch("/api/sprints/:sprintId", (req, res) => {
-    try {
-      res.json(options.updateSprint(String(req.params.sprintId || "").trim(), req.body as UpdateSprintInput));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to update sprint") });
-    }
-  });
-
-  app.get("/api/sprints/:sprintId/settings", (req, res) => {
-    try {
-      res.json(getSprintSettings(String(req.params.sprintId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to load sprint settings") });
-    }
-  });
-
-  app.put("/api/sprints/:sprintId/settings", (req, res) => {
-    const projectId = typeof req.body?.projectId === "string" ? req.body.projectId.trim() : "";
-    if (!projectId) {
-      res.status(400).json({ error: "projectId is required when saving sprint settings." });
-      return;
-    }
-
-    try {
-      const sprintId = String(req.params.sprintId || "").trim();
-      const payload = { ...(req.body as Record<string, unknown>) };
-      delete payload.projectId;
-      res.json(saveSprintSettings(projectId, sprintId, payload as SprintSettingsOverride));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to save sprint settings") });
-    }
-  });
-
-  app.delete("/api/sprints/:sprintId/settings", (req, res) => {
-    try {
-      resetSprintSettings(String(req.params.sprintId || "").trim());
-      res.json({ ok: true });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to reset sprint settings") });
-    }
-  });
-
-  app.get("/api/projects/:projectId/sprints/:sprintId/settings/effective", (req, res) => {
-    try {
-      res.json(getSprintEffectiveSettings(
-        String(req.params.projectId || "").trim(),
-        String(req.params.sprintId || "").trim(),
-      ));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to load effective sprint settings") });
-    }
-  });
-
-  app.delete("/api/sprints/:sprintId", (req, res) => {
-    try {
-      options.deleteSprint(String(req.params.sprintId || "").trim());
-      res.json({ ok: true });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to delete sprint") });
-    }
-  });
-
-  app.get("/api/projects/:projectId/tasks", (req, res) => {
-    try {
-      const sprintId = typeof req.query.sprintId === "string" && req.query.sprintId.trim()
-        ? req.query.sprintId.trim()
-        : undefined;
-      res.json(options.listTasks(String(req.params.projectId || "").trim(), sprintId));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to list tasks") });
-    }
-  });
-
-  app.post("/api/projects/:projectId/tasks", (req, res) => {
-    try {
-      res.status(201).json(options.createTask(String(req.params.projectId || "").trim(), req.body as CreateTaskInput));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to create task") });
-    }
-  });
-
-  app.patch("/api/tasks/:taskId", (req, res) => {
-    try {
-      res.json(options.updateTask(String(req.params.taskId || "").trim(), req.body as UpdateTaskInput));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to update task") });
-    }
-  });
-
-  app.delete("/api/tasks/:taskId", (req, res) => {
-    try {
-      options.deleteTask(String(req.params.taskId || "").trim());
-      res.json({ ok: true });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to delete task") });
-    }
-  });
 
   app.get("/api/projects/:projectId/connections", (req, res) => {
     try {
@@ -1978,7 +1773,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   return handle;
 };
 
-function toErrorMessage(error: unknown, prefix: string): string {
+export function toErrorMessage(error: unknown, prefix: string): string {
   const message = error instanceof Error ? error.message : String(error);
   return `${prefix}: ${message}`;
 }
