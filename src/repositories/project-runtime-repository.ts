@@ -4,6 +4,8 @@ import { DatabaseAdapter } from "./db/database-adapter.js";
 import type { DashboardStatus, JulesActivity, Subtask, SubtaskMergeIndicator, SubtaskStatus } from "../contracts/app-types.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
+import { getSelectedProjectIdFromSettings, getSelectedSprintIdFromSettings } from "../shared/project/project-scope-resolution.js";
+import { mapPlanningStatusToRuntimeStatus, mapRuntimeStatusToPlanningStatus, toMergeIndicator, inflateTaskDependencies } from "../shared/project/task-subtask-projection.js";
 
 const RUNTIME_CONTEXT_PREFIX = "runtime_context:";
 
@@ -109,35 +111,6 @@ function runtimeContextKey(projectId: string, sprintId?: string | null): string 
   return `${RUNTIME_CONTEXT_PREFIX}${projectId}`;
 }
 
-function mapPlanningStatusToRuntimeStatus(status: PlanningTaskStatus): TaskRunState {
-  switch (status) {
-    case "coding_completed":
-      return "CODING_COMPLETED";
-    case "completed":
-      return "COMPLETED";
-    case "in_progress":
-      return "RUNNING";
-    case "pending":
-    default:
-      return "PENDING";
-  }
-}
-
-function mapRuntimeStatusToPlanningStatus(status: TaskRunState): PlanningTaskStatus | null {
-  switch (status) {
-    case "CODING_COMPLETED":
-      return "coding_completed";
-    case "RUNNING":
-      return "in_progress";
-    case "COMPLETED":
-      return "completed";
-    case "PENDING":
-      return "pending";
-    default:
-      return null;
-  }
-}
-
 function normalizePath(value: string | null | undefined): string | null {
   if (typeof value !== "string") {
     return null;
@@ -164,19 +137,6 @@ function subtaskSignature(subtask: Subtask): string {
 
 function toPersistedTaskRunState(status: TaskRunState): Exclude<TaskRunState, "CODING_COMPLETED"> {
   return status === "CODING_COMPLETED" ? "COMPLETED" : status;
-}
-
-function toMergeIndicator(value: string | null | undefined): SubtaskMergeIndicator | undefined {
-  switch (value) {
-    case "CI":
-    case "AUTOMERGE":
-    case "MERGED":
-    case "MERGE_BLOCKED":
-    case "MERGE_CONFLICT":
-      return value;
-    default:
-      return undefined;
-  }
 }
 
 function parsePayloadJson(value: string | null | undefined): Record<string, unknown> | null {
@@ -389,41 +349,11 @@ export class ProjectRuntimeRepository {
   }
 
   getSelectedSprintId(projectId: string): string | null {
-    const row = this.db.prepare(`
-      SELECT payload
-      FROM app_settings
-      WHERE key = ?
-    `).get(`selected_sprint_id_${projectId}`) as { payload: string } | undefined;
-
-    if (!row) {
-      return null;
-    }
-
-    try {
-      const parsed = JSON.parse(row.payload) as { sprintId?: string | null };
-      return parsed.sprintId ?? null;
-    } catch {
-      return null;
-    }
+    return getSelectedSprintIdFromSettings(this.db, projectId);
   }
 
   getSelectedProjectId(): string | null {
-    const row = this.db.prepare(`
-      SELECT payload
-      FROM app_settings
-      WHERE key = 'selected_project_id'
-    `).get() as { payload: string } | undefined;
-
-    if (!row) {
-      return null;
-    }
-
-    try {
-      const parsed = JSON.parse(row.payload) as { projectId?: string | null };
-      return parsed.projectId ?? null;
-    } catch {
-      return null;
-    }
+    return getSelectedProjectIdFromSettings(this.db);
   }
 
   private resolveProjectForStatus(status: Partial<DashboardStatus>): ProjectRow | null {
@@ -619,18 +549,7 @@ export class ProjectRuntimeRepository {
       return [];
     }
 
-    const dependencyRows = this.storage.executeChunkedInQuery<DependencyRow>({
-      sqlPrefix: "SELECT task_id, depends_on_task_id FROM task_dependencies WHERE task_id",
-      sqlSuffix: "ORDER BY depends_on_task_id ASC",
-      items: taskRows.map((row) => row.id),
-    });
-
-    const dependencyMap = new Map<string, string[]>();
-    for (const row of dependencyRows) {
-      const current = dependencyMap.get(row.task_id) || [];
-      current.push(row.depends_on_task_id);
-      dependencyMap.set(row.task_id, current);
-    }
+    const dependencyMap = inflateTaskDependencies(this.storage, taskRows.map((row) => row.id));
 
     return taskRows.map((row) => ({
       row,

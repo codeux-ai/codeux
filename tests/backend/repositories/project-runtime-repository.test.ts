@@ -225,6 +225,28 @@ describe("ProjectRuntimeRepository", () => {
     expect(status.timestamp).toBeNull();
   });
 
+  it("resolves project status via fallback repo path", async () => {
+    const { projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Fallback Path Project",
+      sourceType: "local",
+      sourceRef: "/fallback/path/repo",
+    });
+
+    projectRepository.setSelectedProjectId(null); // Clear selected project
+
+    const synced = runtimeRepository.syncDashboardStatus({
+      repo_path: "/fallback/path/repo",
+      subtasks: [],
+    });
+
+    expect(synced?.project_id).toBe(project.id);
+
+    const status = runtimeRepository.getProjectStatus(project.id);
+    expect(status.repo_path).toBe("/fallback/path/repo");
+  });
+
   it("treats AUTOMERGE indicators as merged in projected runtime status", async () => {
     const { projectRepository, runtimeRepository } = await createRepositories();
 
@@ -261,6 +283,39 @@ describe("ProjectRuntimeRepository", () => {
       is_merged: true,
       merge_indicator: "AUTOMERGE",
     });
+  });
+
+  it("maintains runtime status projection consistency", async () => {
+    const { projectRepository, runtimeRepository } = await createRepositories();
+
+    const project = projectRepository.createProject({
+      name: "Projection Test",
+      sourceType: "local",
+      sourceRef: "/test",
+    });
+
+    const sprint = projectRepository.createSprint(project.id, { name: "Projection Sprint" });
+
+    const task1 = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Task 1",
+      status: "pending",
+    });
+
+    // Sync external completion
+    runtimeRepository.syncDashboardStatus({
+      project_id: project.id,
+      sprint_id: sprint.id,
+      subtasks: [{ id: task1.taskKey, status: "COMPLETED" }],
+    });
+
+    // Subtask should be completed
+    const status = runtimeRepository.getSelectedProjectStatus();
+    expect(status.subtasks[0].status).toBe("COMPLETED");
+
+    // Persisted task status should be 'completed'
+    const updatedTask = projectRepository.getTask(task1.id);
+    expect(updatedTask?.status).toBe("completed");
   });
 
   it("maintains separate runtime context per sprint for the same project and returns the explicitly selected sprint", async () => {

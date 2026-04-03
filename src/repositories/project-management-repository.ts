@@ -22,6 +22,8 @@ import { SettingsRepository } from "./settings-repository.js";
 import { ProjectWorkerAssignmentRepository } from "./project-worker-assignment-repository.js";
 import type { ProjectSettingsOverride } from "../contracts/settings-scope-types.js";
 import type { ProjectWorkerAssignmentRecord } from "../contracts/worker-types.js";
+import { getSelectedProjectIdFromSettings, getSelectedSprintIdFromSettings } from "../shared/project/project-scope-resolution.js";
+import { inflateTaskDependencies } from "../shared/project/task-subtask-projection.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
 
@@ -558,22 +560,7 @@ export class ProjectManagementRepository {
 
   getSelectedSprintId(projectId: string): string | null {
     this.requireProject(projectId);
-    const row = this.db.prepare(`
-      SELECT payload
-      FROM app_settings
-      WHERE key = ?
-    `).get(`selected_sprint_id_${projectId}`) as { payload: string } | undefined;
-
-    if (!row) {
-      return null;
-    }
-
-    try {
-      const parsed = JSON.parse(row.payload) as { sprintId?: string | null };
-      return parsed.sprintId ?? null;
-    } catch {
-      return null;
-    }
+    return getSelectedSprintIdFromSettings(this.db, projectId);
   }
 
   setSelectedSprintId(projectId: string, sprintId: string | null): string | null {
@@ -599,22 +586,7 @@ export class ProjectManagementRepository {
   }
 
   getSelectedProjectId(): string | null {
-    const row = this.db.prepare(`
-      SELECT payload
-      FROM app_settings
-      WHERE key = ?
-    `).get(SELECTED_PROJECT_KEY) as { payload: string } | undefined;
-
-    if (!row) {
-      return null;
-    }
-
-    try {
-      const parsed = JSON.parse(row.payload) as { projectId?: string | null };
-      return parsed.projectId ?? null;
-    } catch {
-      return null;
-    }
+    return getSelectedProjectIdFromSettings(this.db);
   }
 
   setSelectedProjectId(projectId: string | null): string | null {
@@ -758,18 +730,7 @@ export class ProjectManagementRepository {
       return [];
     }
 
-    const dependencyRows = this.storage.executeChunkedInQuery<DependencyRow>({
-      sqlPrefix: "SELECT task_id, depends_on_task_id FROM task_dependencies WHERE task_id",
-      sqlSuffix: "ORDER BY depends_on_task_id ASC",
-      items: rows.map((row) => row.id),
-    });
-
-    const dependencyMap = new Map<string, string[]>();
-    for (const row of dependencyRows) {
-      const current = dependencyMap.get(row.task_id) || [];
-      current.push(row.depends_on_task_id);
-      dependencyMap.set(row.task_id, current);
-    }
+    const dependencyMap = inflateTaskDependencies(this.storage, rows.map((row) => row.id));
 
     return rows.map((row) => ({
       id: row.id,
