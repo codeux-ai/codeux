@@ -4,6 +4,7 @@ import gsap from "gsap";
 import { X, ListChecks, Target, Bot, Plus, AlertCircle } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface TaskDraft {
   sprintId: string;
@@ -44,7 +45,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   onClose,
   onSubmit,
 }) => {
-  const backdropRef = useFocusTrap(true, onClose);
+  const backdropRef = useFocusTrap(true, { onClose: () => handleClose(), restoreFocus: true });
   const cardRef = useRef<HTMLDivElement>(null);
   const [sprintId, setSprintId] = useState(initialTask?.sprintId || defaultSprintId || initialSprintId || sprints[0]?.id || "");
   const [title, setTitle] = useState(initialTask?.title || "");
@@ -56,45 +57,65 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(initialTask?.dependsOnTaskIds || []);
   const [error, setError] = useState<string | null>(null);
 
+  const reducedMotion = useReducedMotion();
+  const isSubmitting = useRef(false);
+
   useLayoutEffect(() => {
-    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
-    gsap.fromTo(cardRef.current, { y: 40, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" });
-  }, []);
+    const d_backdrop = reducedMotion ? 0 : 0.3;
+    const d_card = reducedMotion ? 0 : 0.45;
+    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: "power2.out" });
+    gsap.fromTo(cardRef.current, { y: reducedMotion ? 0 : 40, opacity: 0, scale: reducedMotion ? 1 : 0.96 }, { y: 0, opacity: 1, scale: 1, duration: d_card, ease: "power4.out" });
+  }, [reducedMotion]);
+
+  const handleClose = () => {
+    if (isSubmitting.current) return;
+    const d = reducedMotion ? 0 : 0.25;
+    gsap.to(cardRef.current, { y: 24, opacity: 0, scale: 0.96, duration: d, ease: "power3.in" });
+    gsap.to(backdropRef.current, { opacity: 0, duration: d, delay: reducedMotion ? 0 : 0.05, onComplete: onClose });
+  };
 
   const dependencyOptions = useMemo(() => {
     return availableTasks.filter((task) => task.sprintId === sprintId && task.recordId !== initialTask?.recordId);
   }, [availableTasks, initialTask?.recordId, sprintId]);
 
-  const handleBackdropClick = (event: MouseEvent) => {
+  const handleBackdropClick = (event: PointerEvent) => {
     if (event.target === backdropRef.current) {
-      onClose();
+      handleClose();
     }
   };
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
+    isSubmitting.current = true;
     if (!sprintId) {
       setError("Sprint is required.");
+      isSubmitting.current = false;
       return;
     }
     if (!title.trim()) {
       setError("Title is required.");
+      isSubmitting.current = false;
       return;
     }
 
     setError(null);
-    await onSubmit({
-      sprintId,
-      title: title.trim(),
-      description: description.trim(),
-      promptMarkdown: promptMarkdown.trim(),
-      status,
-      priority,
-      executorType,
-      dependsOnTaskIds,
-    });
-
-    onClose();
+    try {
+      await onSubmit({
+        sprintId,
+        title: title.trim(),
+        description: description.trim(),
+        promptMarkdown: promptMarkdown.trim(),
+        status,
+        priority,
+        executorType,
+        dependsOnTaskIds,
+      });
+      isSubmitting.current = false;
+      handleClose();
+    } catch (err) {
+      isSubmitting.current = false;
+      throw err;
+    }
   };
 
   const toggleDependency = (taskId: string) => {
@@ -108,7 +129,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   return (
     <div
       ref={backdropRef}
-      onClick={handleBackdropClick}
+      onPointerDown={handleBackdropClick}
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-task-modal-title"
@@ -150,7 +171,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               </p>
             </div>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               aria-label="Close"
               className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500"
             >
@@ -334,7 +355,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             <div className="flex items-center justify-between pt-2">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 rounded"
               >
                 Cancel
