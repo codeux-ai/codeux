@@ -114,6 +114,12 @@ export function createDashboardDependencies(
         featureBranch,
       };
     },
+    listSprintTaskDependencies: (projectId, sprintId) => (
+      projectManagementRepository.listTasks(projectId, sprintId).map((task) => ({
+        taskId: task.id,
+        dependsOnTaskIds: task.dependsOnTaskIds,
+      }))
+    ),
     updateTaskPlanningStatus: (taskId, status) => {
       projectManagementRepository.updateTask(taskId, { status });
       activityCacheService.invalidateLiveActivitiesCache();
@@ -158,6 +164,25 @@ export function createDashboardDependencies(
         mergeIndicator: args.merged ? "MERGED" : null,
       });
     },
+    createResetTaskRun: async ({ taskId, projectId, sprintId, sprintRunId, reason }) => {
+      const latestRun = executionRepository.getLatestTaskRun(taskId, sprintRunId)
+        || executionRepository.getLatestTaskRun(taskId);
+      const resetRun = executionRepository.createTaskRun({
+        projectId,
+        sprintId,
+        taskId,
+        sprintRunId,
+        provider: latestRun?.provider ?? null,
+        mode: latestRun?.mode ?? null,
+        state: "PENDING",
+      });
+      executionRepository.appendTaskRunEvent(resetRun.id, "task_reset", "user", {
+        taskId,
+        reason,
+      }, {
+        sourceEventKey: `task-reset:${taskId}:${sprintRunId}:${reason}`,
+      });
+    },
     clearTaskWorktree: async ({ taskId, repoPath }) => {
       const latestRun = executionRepository.getLatestTaskRun(taskId);
       const sessionId = latestRun?.sessionId;
@@ -165,6 +190,18 @@ export function createDashboardDependencies(
       const wsManager = new WorkspaceManager();
       const worktreePath = wsManager.buildWorktreePath(repoPath, sessionId, "HOST");
       await wsManager.removeWorktree(repoPath, worktreePath).catch(() => undefined);
+    },
+    resolveTaskAttention: async ({ taskId, projectId }) => {
+      projectAttentionService.resolveItemsForTask(projectId, taskId, [
+        "worker_dispatch_blocked",
+        "merge_required",
+        "merge_conflict",
+        "action_required",
+        "manual_attention",
+        "dashboard_reply_required",
+        "human_escalation_required",
+        "ci_fix_required",
+      ], "task_rerun_reset");
     },
     updateTaskExecutorOverride: (taskId, provider) => {
       const executorType = provider === "jules" ? "jules" : "docker_cli";
@@ -183,8 +220,25 @@ export function createDashboardDependencies(
         executionRepository.updateTaskDispatch(dispatch.id, {
           status: "cancelled",
           finishedAt: now,
+          lastHeartbeatAt: now,
           errorMessage: "Cancelled: task rerun requested.",
         });
+        const taskRun = executionRepository.getTaskRunByDispatchId(dispatch.id);
+        if (taskRun) {
+          executionRepository.updateTaskRun(taskRun.id, {
+            state: "BLOCKED",
+            finishedAt: now,
+            durationMs: taskRun.startedAt
+              ? Math.max(0, new Date(now).getTime() - new Date(taskRun.startedAt).getTime())
+              : null,
+          });
+          executionRepository.appendTaskRunEvent(taskRun.id, "dispatch_cancelled", "user", {
+            dispatchId: dispatch.id,
+            reason: "task_rerun_requested",
+          }, {
+            sourceEventKey: `task-rerun-cancel:${dispatch.id}`,
+          });
+        }
       }
     },
     logger: logger.child({ component: "task-rerun-service" }),

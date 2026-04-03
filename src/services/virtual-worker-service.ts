@@ -48,9 +48,6 @@ function extractPullRequest(session: JulesSession): { url?: string; workerBranch
 }
 
 function resolveTerminalDispatchState(session: JulesSession): "COMPLETED" | "FAILED" | "QUOTA" | null {
-  if (extractPullRequest(session) || session.state === "COMPLETED") {
-    return "COMPLETED";
-  }
   if (session.state === "QUOTA") {
     return "QUOTA";
   }
@@ -59,6 +56,9 @@ function resolveTerminalDispatchState(session: JulesSession): "COMPLETED" | "FAI
   }
   if (session.state === "FAILED" || session.state === "CANCELLED") {
     return "FAILED";
+  }
+  if (extractPullRequest(session) || session.state === "COMPLETED") {
+    return "COMPLETED";
   }
   return null;
 }

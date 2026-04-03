@@ -286,6 +286,11 @@ Legacy runtime:
 - When no sprint is running but a paused sprint needs human intervention, the overview telemetry now switches from an empty state to an attention state with the exact reason and operator instructions
 - Task pipeline cards
 - Task cards include a `Rerun` action with confirmation prompt; rerun clears session/PR/merge state for that task and starts it again
+- Rerun now performs a full runtime reset instead of only changing task status:
+  - failed-session retries clear stale session ids, provider activity, worker branch, PR URL, merge flags, and intervention metadata before a new run starts
+  - if the operator chooses `Reset downstream tasks`, Sprint OS writes fresh pending execution snapshots for every dependent task so completed/running descendants no longer keep stale PR or session state during a clean rerun
+  - if `Clear worktree` is enabled, the existing task worktree is removed before the reset so the next run starts from a clean workspace
+- Rerun confirmation now warns when the selected task, or the selected downstream reset chain, already merged code; operators are instructed to undo the landed changes before restarting the task
 - Reruns now reuse the same dispatch model as normal dashboard orchestration instead of bypassing execution state
 - Task cards now open a DB-backed runtime feed sourced from `task_run_events`
 - The runtime feed now includes direct CLI stage events, action-required and protocol events, sprint-run lifecycle events, and CI/merge-gate state changes in addition to provider session activity

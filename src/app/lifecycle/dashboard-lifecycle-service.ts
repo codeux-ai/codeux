@@ -583,10 +583,11 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     listProjectInvocations: (projectId) => deps.executionRepository.listExecutionInvocations({ projectId }),
     listInvocationMessages: (invocationId) => deps.executionRepository.listExecutionInvocationMessages(invocationId),
 
-    rerunTask: async (taskId: string, options?: { provider?: string; clearWorktree?: boolean }) => {
+    rerunTask: async (taskId: string, options?: { provider?: string; clearWorktree?: boolean; resetDependents?: boolean }) => {
       const task = await deps.taskRerunService.rerunTask(taskId, {
         provider: options?.provider as import("../../contracts/app-types.js").ProviderId | undefined,
         clearWorktree: options?.clearWorktree,
+        resetDependents: options?.resetDependents,
       });
       deps.activityCacheService.invalidateGitStatusCache();
       return task;

@@ -63,12 +63,20 @@ describe("Dashboard Factory", () => {
         getTask: vi.fn().mockReturnValue({ id: "task1", taskKey: "T1", projectId: "project-1", sprintId: "sprint-1" }),
         getSprint: vi.fn().mockReturnValue({ id: "sprint-1", projectId: "project-1", number: 3, featureBranch: "feature/sprint3" }),
         getProject: vi.fn().mockReturnValue({ id: "project-1", baseDir: "/repo" }),
+        listTasks: vi.fn().mockReturnValue([
+          { id: "task1", dependsOnTaskIds: [] },
+          { id: "task2", dependsOnTaskIds: ["task1"] },
+        ]),
         updateTask: vi.fn(),
       },
       executionRepository: {
         findActiveSprintRun: vi.fn().mockReturnValue({ id: "run-1" }),
         createSprintRun: vi.fn(),
         updateSprintRun: vi.fn(),
+        getLatestTaskRun: vi.fn().mockReturnValue(null),
+        createTaskRun: vi.fn().mockReturnValue({ id: "reset-run-1" }),
+        appendTaskRunEvent: vi.fn(),
+        getTaskRunByDispatchId: vi.fn().mockReturnValue(null),
       },
       settingsRepository: {
         getDefaultDashboardSettings: vi.fn().mockReturnValue({}),
@@ -76,6 +84,7 @@ describe("Dashboard Factory", () => {
       },
       projectAttentionService: {
         resolveItemsForDispatch: vi.fn(),
+        resolveItemsForTask: vi.fn(),
       },
       connectionChatRepository: {},
       projectWorkerAssignmentRepository: {},
@@ -188,6 +197,11 @@ describe("Dashboard Factory", () => {
       "task1",
       { isMerged: true, mergeIndicator: "MERGED" }
     );
+
+    expect(taskRerunArgs.listSprintTaskDependencies("project-1", "sprint-1")).toEqual([
+      { taskId: "task1", dependsOnTaskIds: [] },
+      { taskId: "task2", dependsOnTaskIds: ["task1"] },
+    ]);
   });
 
   it("getSubtasks handles missing lastStatus", () => {
@@ -323,6 +337,75 @@ describe("Dashboard Factory", () => {
     expect(WorkspaceManager).not.toHaveBeenCalled();
   });
 
+  it("creates a clean pending task run snapshot for dependent resets", async () => {
+    mockCoreDeps.executionRepository.getLatestTaskRun = vi.fn()
+      .mockReturnValueOnce({ id: "existing-run", provider: "jules", mode: "jules" })
+      .mockReturnValueOnce({ id: "existing-run", provider: "jules", mode: "jules" });
+
+    createDashboardDependencies(
+      mockContext as unknown as ServerContext,
+      mockCoreDeps as unknown as CoreDependencies,
+      mockSprintDeps as unknown as SprintDependencies
+    );
+
+    const taskRerunArgs = vi.mocked(TaskRerunService).mock.calls[0][0];
+    await taskRerunArgs.createResetTaskRun({
+      taskId: "task1",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      sprintRunId: "run-1",
+      reason: "dependent_task_reset",
+    });
+
+    expect(mockCoreDeps.executionRepository.createTaskRun).toHaveBeenCalledWith({
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      taskId: "task1",
+      sprintRunId: "run-1",
+      provider: "jules",
+      mode: "jules",
+      state: "PENDING",
+    });
+    expect(mockCoreDeps.executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+      "reset-run-1",
+      "task_reset",
+      "user",
+      {
+        taskId: "task1",
+        reason: "dependent_task_reset",
+      },
+      expect.objectContaining({
+        sourceEventKey: "task-reset:task1:run-1:dependent_task_reset",
+      }),
+    );
+  });
+
+  it("resolves task attention when a task is reset", async () => {
+    createDashboardDependencies(
+      mockContext as unknown as ServerContext,
+      mockCoreDeps as unknown as CoreDependencies,
+      mockSprintDeps as unknown as SprintDependencies
+    );
+
+    const taskRerunArgs = vi.mocked(TaskRerunService).mock.calls[0][0];
+    await taskRerunArgs.resolveTaskAttention({
+      taskId: "task1",
+      projectId: "project-1",
+    });
+
+    expect(mockCoreDeps.projectAttentionService.resolveItemsForTask).toHaveBeenCalledWith(
+      "project-1",
+      "task1",
+      expect.arrayContaining([
+        "worker_dispatch_blocked",
+        "merge_required",
+        "merge_conflict",
+        "ci_fix_required",
+      ]),
+      "task_rerun_reset",
+    );
+  });
+
   it("updates executor overrides and cancels active dispatches correctly", async () => {
     mockCoreDeps.executionRepository.listTaskDispatches = vi.fn().mockReturnValue([
       { id: "queued-1", status: "queued" },
@@ -331,6 +414,12 @@ describe("Dashboard Factory", () => {
       { id: "completed-1", status: "completed" },
     ]);
     mockCoreDeps.executionRepository.updateTaskDispatch = vi.fn();
+    mockCoreDeps.executionRepository.getTaskRunByDispatchId = vi.fn()
+      .mockReturnValueOnce({ id: "run-queued", startedAt: "2026-03-09T10:00:00.000Z" })
+      .mockReturnValueOnce({ id: "run-running", startedAt: "2026-03-09T10:01:00.000Z" })
+      .mockReturnValueOnce({ id: "run-cancel", startedAt: "2026-03-09T10:02:00.000Z" });
+    mockCoreDeps.executionRepository.updateTaskRun = vi.fn();
+    mockCoreDeps.executionRepository.appendTaskRunEvent = vi.fn();
 
     createDashboardDependencies(
       mockContext as unknown as ServerContext,
@@ -371,5 +460,7 @@ describe("Dashboard Factory", () => {
         errorMessage: "Cancelled: task rerun requested.",
       }),
     );
+    expect(mockCoreDeps.executionRepository.updateTaskRun).toHaveBeenCalledTimes(3);
+    expect(mockCoreDeps.executionRepository.appendTaskRunEvent).toHaveBeenCalledTimes(3);
   });
 });

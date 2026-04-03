@@ -208,6 +208,69 @@ describe("runSessionSyncStep", () => {
     expect(maxConcurrentFetches).toBeLessThanOrEqual(5);
   });
 
+  it("fully clears stale runtime state before retrying a failed session", async () => {
+    const subtasks: Subtask[] = [
+      {
+        id: "task-1",
+        record_id: "task-record-1",
+        title: "Task One",
+        prompt: "Do it",
+        depends_on: [],
+        is_independent: true,
+        status: "FAILED",
+        session_id: "failed-session",
+        session_name: "sessions/failed-session",
+        session_state: "FAILED",
+        provider: "jules",
+        worker_branch: "worker/task-1",
+        pr_url: "https://example.com/pr/1",
+        is_merged: true,
+        merge_indicator: "MERGED",
+        activities: [{ id: "activity-1", name: "activity-1", createTime: "2026-03-09T10:00:00.000Z" }],
+      },
+    ];
+
+    const deps = {
+      listSessions: vi.fn().mockResolvedValue({
+        sessions: [
+          {
+            id: "failed-session",
+            name: "sessions/failed-session",
+            title: "Sprint 1: [run:my-repo/s1/task-1] [task-1] Task One",
+            state: "FAILED",
+            provider: "jules",
+            outputs: [{ pullRequest: { url: "https://example.com/pr/1", workerBranch: "worker/task-1" } }],
+          },
+        ],
+      }),
+      resolveSessionName: (session: { name?: string }) => session.name,
+      extractSessionId: (session: { id?: string }) => session.id,
+      fetchRecentActivities: vi.fn().mockResolvedValue([]),
+      isActionRequiredState: vi.fn().mockReturnValue(false),
+      logger: { warn: vi.fn() },
+    };
+
+    const result = await runSessionSyncStep(
+      subtasks.map((task) => ({ ...task })),
+      deps as any,
+      true,
+      { repoPath: "/tmp/my-repo", sprintNumber: 1 },
+    );
+
+    expect(result.subtasks[0]).toMatchObject({
+      status: "PENDING",
+      session_id: undefined,
+      session_name: undefined,
+      session_state: undefined,
+      provider: "jules",
+      worker_branch: undefined,
+      pr_url: undefined,
+      is_merged: false,
+      merge_indicator: undefined,
+    });
+    expect(result.subtasks[0]?.activities).toEqual([]);
+  });
+
   it("syncs provider session state and activities into task runs", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-session-sync-"));
     tempDirs.push(dir);

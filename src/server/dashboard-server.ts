@@ -163,7 +163,7 @@ export interface DashboardServerOptions {
   listProjectInvocations: (projectId: string) => ExecutionInvocationRecord[];
   listInvocationMessages: (invocationId: string) => ExecutionInvocationMessageRecord[];
 
-  rerunTask: (taskId: string, options?: { provider?: string; clearWorktree?: boolean }) => Promise<unknown>;
+  rerunTask: (taskId: string, options?: { provider?: string; clearWorktree?: boolean; resetDependents?: boolean }) => Promise<unknown>;
   orchestrateSprint: (projectId: string, sprintId: string) => Promise<unknown>;
 
   improveSprintPrompt?: (projectId: string, input: ImprovePromptInput, signal?: AbortSignal) => Promise<unknown>;
@@ -1691,10 +1691,11 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
         res.status(400).json({ error: "Missing task id." });
         return;
       }
-      const body = req.body as { provider?: string; clearWorktree?: boolean } | undefined;
+      const body = req.body as { provider?: string; clearWorktree?: boolean; resetDependents?: boolean } | undefined;
       const task = await rerunTask(taskId, {
         provider: typeof body?.provider === "string" ? body.provider : undefined,
         clearWorktree: body?.clearWorktree === true,
+        resetDependents: body?.resetDependents === true,
       });
       res.json({ ok: true, task });
     } catch (error) {

@@ -16,10 +16,33 @@ describe("runStatusDerivationStep", () => {
 
   it("retries failed tasks if retryFailed is true and deps met", () => {
     const subtasks: Subtask[] = [
-      { id: "task-1", title: "Task 1", prompt: "", depends_on: [], is_independent: true, is_merged: false, status: "FAILED", session_state: "FAILED" },
+      {
+        id: "task-1",
+        title: "Task 1",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        is_merged: true,
+        status: "FAILED",
+        session_state: "FAILED",
+        provider: "jules",
+        session_id: "failed-session",
+        session_name: "sessions/failed-session",
+        worker_branch: "worker/task-1",
+        pr_url: "https://example.com/pr/1",
+        merge_indicator: "MERGED",
+      },
     ];
     const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState });
     expect(result[0].status).toBe("PENDING");
+    expect(result[0].session_id).toBeUndefined();
+    expect(result[0].session_name).toBeUndefined();
+    expect(result[0].session_state).toBeUndefined();
+    expect(result[0].worker_branch).toBeUndefined();
+    expect(result[0].pr_url).toBeUndefined();
+    expect(result[0].is_merged).toBe(false);
+    expect(result[0].merge_indicator).toBeUndefined();
+    expect(result[0].provider).toBe("jules");
   });
 
   it("blocks failed tasks if retryFailed is true but deps not met", () => {

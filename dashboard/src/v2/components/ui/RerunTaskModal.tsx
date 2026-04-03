@@ -1,8 +1,9 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { X, RotateCcw, Trash2 } from "lucide-preact";
+import { AlertTriangle, GitBranch, RotateCcw, Trash2, X } from "lucide-preact";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
+import type { Subtask } from "../../../types.js";
 
 const PROVIDER_OPTIONS = [
     { value: "", label: "Auto (use current setting)" },
@@ -13,16 +14,19 @@ const PROVIDER_OPTIONS = [
 ] as const;
 
 interface RerunTaskModalProps {
-    taskId: string;
-    taskTitle: string;
+    task: Subtask;
+    allTasks: Subtask[];
     currentProvider?: string | null;
     onClose: () => void;
-    onConfirm: (options: { provider?: string; clearWorktree: boolean }) => void;
+    onConfirm: (options: { provider?: string; clearWorktree: boolean; resetDependents: boolean }) => void;
 }
 
+const MERGED_TASK_INDICATORS = new Set(["MERGED", "AUTOMERGE"]);
+const DOWNSTREAM_RESET_PROMPT_STATUSES = new Set(["RUNNING", "CODING_COMPLETED", "COMPLETED", "FAILED"]);
+
 export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
-    taskId,
-    taskTitle,
+    task,
+    allTasks,
     currentProvider,
     onClose,
     onConfirm,
@@ -31,6 +35,47 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
 
     const [provider, setProvider] = useState("");
     const [clearWorktree, setClearWorktree] = useState(false);
+    const [resetDependents, setResetDependents] = useState(false);
+
+    const downstreamTasks = useMemo(() => {
+        const byId = new Map(allTasks.map(candidate => [candidate.id, candidate]));
+        const visited = new Set<string>();
+        const queue = allTasks
+            .filter(candidate => candidate.depends_on.includes(task.id))
+            .map(candidate => candidate.id);
+        const result: Subtask[] = [];
+
+        while (queue.length > 0) {
+            const currentId = queue.shift();
+            if (!currentId || visited.has(currentId)) {
+                continue;
+            }
+            visited.add(currentId);
+            const currentTask = byId.get(currentId);
+            if (!currentTask) {
+                continue;
+            }
+            result.push(currentTask);
+            for (const candidate of allTasks) {
+                if (!visited.has(candidate.id) && candidate.depends_on.includes(currentId)) {
+                    queue.push(candidate.id);
+                }
+            }
+        }
+
+        return result;
+    }, [allTasks, task.id]);
+
+    const downstreamPromptTasks = useMemo(
+        () => downstreamTasks.filter(candidate => DOWNSTREAM_RESET_PROMPT_STATUSES.has(candidate.status || "PENDING")),
+        [downstreamTasks],
+    );
+    const mergedTaskCount = useMemo(() => (
+        [task, ...downstreamTasks].filter(candidate => (
+            Boolean(candidate.is_merged) || MERGED_TASK_INDICATORS.has(candidate.merge_indicator || "")
+        )).length
+    ), [downstreamTasks, task]);
+    const taskAlreadyMerged = Boolean(task.is_merged) || MERGED_TASK_INDICATORS.has(task.merge_indicator || "");
 
     useLayoutEffect(() => {
         gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
@@ -51,6 +96,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
         onConfirm({
             provider: provider || undefined,
             clearWorktree,
+            resetDependents,
         });
         handleClose();
     };
@@ -78,7 +124,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                             <h2 id="rerun-modal-title" className="text-base font-bold text-slate-900 dark:text-white">
                                 Rerun Task
                             </h2>
-                            <p className="text-[11px] text-slate-400 font-mono">#{taskId}</p>
+                            <p className="text-[11px] text-slate-400 font-mono">#{task.id}</p>
                         </div>
                     </div>
                     <button
@@ -93,8 +139,24 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                 {/* Body */}
                 <div className="px-7 pb-6 space-y-5">
                     <p className="text-[13px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                        This will reset <span className="font-semibold text-slate-700 dark:text-slate-200">{taskTitle}</span> and start a fresh execution.
+                        This will reset <span className="font-semibold text-slate-700 dark:text-slate-200">{task.title}</span> and start a fresh execution.
                     </p>
+
+                    {taskAlreadyMerged && (
+                        <div className="rounded-2xl border border-status-red/20 bg-status-red/5 px-4 py-3">
+                            <div className="flex items-start gap-3">
+                                <AlertTriangle className="mt-0.5 h-4 w-4 text-status-red shrink-0" strokeWidth={2} />
+                                <div className="space-y-1">
+                                    <p className="text-[12px] font-semibold text-status-red">
+                                        This task already merged code.
+                                    </p>
+                                    <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
+                                        Undo the merged changes before rerunning or the new run will build on code that already landed.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Provider selector */}
                     <div className="space-y-2">
@@ -117,6 +179,38 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                             </p>
                         )}
                     </div>
+
+                    {downstreamTasks.length > 0 && (
+                        <label className="flex items-start gap-3 cursor-pointer group">
+                            <input
+                                type="checkbox"
+                                checked={resetDependents}
+                                onChange={(e) => setResetDependents((e.target as HTMLInputElement).checked)}
+                                className="mt-0.5 h-4 w-4 rounded border-black/[0.15] dark:border-white/[0.15] text-status-amber focus:ring-status-amber focus-visible:ring-2 focus-visible:ring-status-amber focus:ring-offset-0 cursor-pointer"
+                            />
+                            <div>
+                                <div className="flex items-center gap-1.5">
+                                    <GitBranch className="w-3 h-3 text-slate-400 group-hover:text-status-amber transition-colors" strokeWidth={2} />
+                                    <span className="text-[12px] font-semibold text-slate-700 dark:text-slate-200">
+                                        Reset downstream tasks
+                                    </span>
+                                </div>
+                                <p className="text-[11px] text-slate-400 mt-0.5 leading-snug">
+                                    Clear {downstreamTasks.length} dependent task{downstreamTasks.length === 1 ? "" : "s"} so the rerun starts from a clean dependency chain.
+                                </p>
+                                {downstreamPromptTasks.length > 0 && (
+                                    <p className="text-[11px] text-status-amber mt-1 leading-snug">
+                                        {downstreamPromptTasks.length} downstream task{downstreamPromptTasks.length === 1 ? "" : "s"} already started or finished and should usually be reset as well.
+                                    </p>
+                                )}
+                                {mergedTaskCount > 1 && resetDependents && (
+                                    <p className="text-[11px] text-status-red mt-1 leading-snug">
+                                        Some selected downstream work already merged. Undo those landed changes before rerunning the chain.
+                                    </p>
+                                )}
+                            </div>
+                        </label>
+                    )}
 
                     {/* Clear worktree checkbox */}
                     <label className="flex items-start gap-3 cursor-pointer group">
