@@ -1,4 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+const fs = require('fs');
+
+let code = `import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getProjectLiveSnapshot, type ProjectLiveSnapshotDeps } from "../../../../src/app/live/project-live-snapshot.js";
 import type { GitTrackingStatus } from "../../../../src/contracts/app-types.js";
 
@@ -120,3 +122,5 @@ describe("getProjectLiveSnapshot", () => {
     );
   });
 });
+`;
+fs.writeFileSync('tests/backend/app/live/project-live-snapshot.test.ts', code);

@@ -1,4 +1,5 @@
-import type {
+const fs = require('fs');
+const code = `import type {
   ProjectLiveDashboardSnapshot,
   DashboardStatus,
   ExecutionDashboardSnapshot,
@@ -26,12 +27,12 @@ export interface ProjectLiveSnapshotDeps {
  * - The browser renders the snapshot without reconciling competing sources.
  *
  * Field Ownership & Mutation Triggers:
- * - `projectId`: Owned by `ProjectManagementRepository`. Mutated when a project is selected or created.
- * - `selectedSprintId`: Owned by `ProjectManagementRepository`. Mutated when a sprint is selected or changed.
- * - `status`: Owned by `ProjectRuntimeRepository`. Mutated when task states change, a sprint is run, or orchestration loop updates progress.
- * - `execution`: Owned by `ExecutionRepository` (via `getProjectExecutionSnapshot`). Mutated when sprint runs are dispatched, worker states change, or attention items are created/claimed.
- * - `gitStatus` / `gitStatusError`: Owned by the external git system. Mutated when local branches or upstream changes are detected.
- * - `updatedAt`: Owned by this assembly module. Mutated upon every assembly call to track the snapshot timestamp.
+ * - \\\`projectId\\\`: Owned by \\\`ProjectManagementRepository\\\`. Mutated when a project is selected or created.
+ * - \\\`selectedSprintId\\\`: Owned by \\\`ProjectManagementRepository\\\`. Mutated when a sprint is selected or changed.
+ * - \\\`status\\\`: Owned by \\\`ProjectRuntimeRepository\\\`. Mutated when task states change, a sprint is run, or orchestration loop updates progress.
+ * - \\\`execution\\\`: Owned by \\\`ExecutionRepository\\\` (via \\\`getProjectExecutionSnapshot\\\`). Mutated when sprint runs are dispatched, worker states change, or attention items are created/claimed.
+ * - \\\`gitStatus\\\` / \\\`gitStatusError\\\`: Owned by the external git system. Mutated when local branches or upstream changes are detected.
+ * - \\\`updatedAt\\\`: Owned by this assembly module. Mutated upon every assembly call to track the snapshot timestamp.
  */
 export async function getProjectLiveSnapshot(
   deps: ProjectLiveSnapshotDeps,
@@ -116,12 +117,12 @@ export async function getProjectLiveSnapshot(
   }
 
   const executionItemCount =
-    (execution.sprintRuns?.length || 0) +
-    (execution.taskDispatches?.length || 0) +
-    (execution.connections?.length || 0) +
-    (execution.attentionItems?.length || 0) +
-    (execution.recentEvents?.length || 0);
-  const statusSubtaskCount = status.subtasks?.length || 0;
+    execution.sprintRuns.length +
+    execution.taskDispatches.length +
+    execution.connections.length +
+    execution.attentionItems.length +
+    execution.recentEvents.length;
+  const statusSubtaskCount = status.subtasks.length;
 
   const snapshot: ProjectLiveDashboardSnapshot = {
     projectId,
@@ -147,3 +148,5 @@ export async function getProjectLiveSnapshot(
 
   return snapshot;
 }
+`;
+fs.writeFileSync('src/app/live/project-live-snapshot.ts', code);
