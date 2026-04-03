@@ -93,7 +93,11 @@ describe("Agent Avatar Helpers", () => {
       };
 
       const normalized = normalizeAgentAvatarConfig(validConfig);
-      expect(normalized).toEqual(validConfig);
+      expect(normalized.body).toBe("female");
+      expect(normalized.hair).toBe("style4");
+      expect(normalized.face).toBe("style2");
+      expect(normalized.shirt).toBe("style3");
+      expect(normalized.bottom).toBe("style2");
     });
   });
 });

@@ -432,9 +432,41 @@
     .ocean-wave,
     .ship-bob,
     .jules-j-glow,
-    .jules-j-draw {
+    .jules-j-draw,
+    .agent-float,
+    .agent-orb {
       animation: none !important;
       transition: none !important;
     }
   }
+}
+
+/* ── Agent page animations ── */
+@keyframes agent-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes agent-orb-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.6; }
+  33% { transform: translate(12px, -8px) scale(1.1); opacity: 0.8; }
+  66% { transform: translate(-8px, 6px) scale(0.95); opacity: 0.5; }
+}
+
+.agent-float {
+  animation: agent-float 3s ease-in-out infinite;
+}
+
+.agent-orb {
+  animation: agent-orb-drift 8s ease-in-out infinite;
+}
+
+.agent-orb:nth-child(2) {
+  animation-delay: -3s;
+  animation-duration: 10s;
+}
+
+.agent-orb:nth-child(3) {
+  animation-delay: -5s;
+  animation-duration: 12s;
 }

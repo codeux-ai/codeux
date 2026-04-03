@@ -16,52 +16,102 @@ Object.defineProperty(window, "matchMedia", {
     matches: false,
     media: query,
     onchange: null,
-    addListener: vi.fn(), // deprecated
-    removeListener: vi.fn(), // deprecated
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
   })),
 });
 
-// Mock Three.js since it won't run properly in pure jsdom without canvas support
+const mockVec3 = () => ({ x: 0, y: 0, z: 0, set: vi.fn(), copy: vi.fn() });
+const mockEuler = () => ({ x: 0, y: 0, z: 0, set: vi.fn(), copy: vi.fn() });
+const mockScale = () => ({ x: 1, y: 1, z: 1, set: vi.fn(), setY: vi.fn(), copy: vi.fn() });
+
+class MockObject3D {
+  position = mockVec3();
+  rotation = mockEuler();
+  scale = mockScale();
+  children: any[] = [];
+  add(child: any) { this.children.push(child); }
+  geometry = { type: "MockGeometry" };
+}
+
+// Mock Three.js
 vi.mock("three", () => {
   return {
-    Scene: class {
-      add() {}
-    },
-    PerspectiveCamera: class {
-      position = { z: 10, y: 2 };
+    Scene: class extends MockObject3D {},
+    PerspectiveCamera: class extends MockObject3D {
+      aspect = 1;
+      lookAt() {}
       updateProjectionMatrix() {}
     },
-    AmbientLight: class {},
-    DirectionalLight: class { position = { set: () => {} } },
-    Group: class {
-      add() {}
-      position = { y: 0 };
-      rotation = { x: 0, y: 0, z: 0 };
+    AmbientLight: class extends MockObject3D {},
+    DirectionalLight: class extends MockObject3D {},
+    Group: class extends MockObject3D {
+      isGroup = true;
     },
+    Mesh: class extends MockObject3D {
+      material = { opacity: 0, dispose: vi.fn() };
+    },
+    Points: class extends MockObject3D {},
     MeshStandardMaterial: class {
       dispose() {}
-      color = { setHex: () => {} };
+      color = { setHex: vi.fn() };
     },
     MeshBasicMaterial: class {
+      opacity = 0;
       dispose() {}
-      color = { setHex: () => {} };
+      color = { setHex: vi.fn() };
     },
-    Mesh: class {
-      position = { set: () => {}, y: 0, x: 0, z: 0 };
-      rotation = { set: () => {}, x: 0, y: 0, z: 0, copy: () => {} };
-      scale = { set: () => {}, setY: () => {}, copy: () => {} };
-      add() {}
+    PointsMaterial: class {
+      dispose() {}
     },
-    SphereGeometry: class { dispose() {} },
-    CylinderGeometry: class { dispose() {} },
-    CapsuleGeometry: class { dispose() {} },
-    BoxGeometry: class { dispose() {} },
+    SphereGeometry: class {
+      type = "SphereGeometry";
+      scale() {}
+      dispose() {}
+    },
+    CylinderGeometry: class {
+      type = "CylinderGeometry";
+      dispose() {}
+    },
+    CapsuleGeometry: class {
+      type = "CapsuleGeometry";
+      dispose() {}
+    },
+    BoxGeometry: class {
+      type = "BoxGeometry";
+      scale() {}
+      dispose() {}
+    },
+    TorusGeometry: class {
+      type = "TorusGeometry";
+      dispose() {}
+    },
+    CircleGeometry: class {
+      type = "CircleGeometry";
+      dispose() {}
+    },
+    BufferGeometry: class {
+      setAttribute() {}
+      getAttribute() {
+        return {
+          count: 0,
+          getX: () => 0,
+          getY: () => 0,
+          setX: vi.fn(),
+          setY: vi.fn(),
+          needsUpdate: false,
+        };
+      }
+      dispose() {}
+    },
+    BufferAttribute: class {},
     Vector3: class {
-      set() {}
-      copy() {}
+      x = 0; y = 0; z = 0;
+      set() { return this; }
+      copy() { return this; }
     },
     MathUtils: {
       lerp: (start: number, end: number, amt: number) => start + (end - start) * amt,
@@ -103,11 +153,7 @@ describe("AgentAvatarScene", () => {
     const { unmount } = render(
       <AgentAvatarScene config={DEFAULT_AGENT_AVATAR_CONFIG} />
     );
-
-    // Unmounting should trigger the useEffect cleanup function
     unmount();
-
-    // We can't easily assert on the inner workings of the unmount without exposing
-    // the mocked instances, but we can verify it doesn't crash on unmount.
+    // Verify it doesn't crash on unmount.
   });
 });
