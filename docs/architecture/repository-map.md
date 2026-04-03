@@ -83,14 +83,14 @@ This map explains where major responsibilities live.
 
 ## Dashboard (`dashboard/src/`)
 
-- `app.tsx`
-  - Main view orchestration and polling.
-- `components/`
-  - UI pieces (`SettingsPage`, `TaskCard`, `ActivitySidebar`, etc.).
+- `main.tsx`
+  - Main Preact mount point and router.
+- `v2/`
+  - Current frontend application routes and features (`TasksPage`, `ChatPage`, `SprintsPage`, etc.).
+  - `components/`
+    - Shared UI elements and panels.
 - `lib/`
-  - Frontend helpers (`settings`, `status`, `activity`, `markdown`).
-- `types.ts`
-  - Dashboard-side type contracts.
+  - Shared runtime hooks and helpers.
 
 ## Local Configuration and Templates (`.sprint-os/`)
 
