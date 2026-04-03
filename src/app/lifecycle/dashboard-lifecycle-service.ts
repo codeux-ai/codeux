@@ -46,6 +46,7 @@ import type { EmbeddingService } from "../../services/embedding-service.js";
 import type { MemoryRepository } from "../../repositories/memory-repository.js";
 import { getRepoDebugLogPath, SPRINT_OS_SERVICE_NAME } from "../../shared/config/sprint-os-paths.js";
 import { getProjectLiveSnapshot } from "../live/project-live-snapshot.js";
+import { DashboardSnapshotCache, mapAssignedWorkers } from "./dashboard-snapshot-cache.js";
 
 export interface BootDashboardDeps {
   app: Express;
@@ -114,87 +115,6 @@ export function reinitializeLogger(deps: { projectRoot: string, runtimeContext: 
     bindings: { service: SPRINT_OS_SERVICE_NAME },
     logFilePath,
   });
-}
-
-function mapExecutionConnections(connections: McpConnectionRecord[]): ExecutionConnectionSummary[] {
-  return connections.map((connection) => ({
-    id: connection.id,
-    connectionKey: connection.connectionKey,
-    displayName: connection.displayName,
-    role: connection.role,
-    transport: connection.transport,
-    status: connection.status,
-    model: typeof connection.capabilities.model === "string" ? connection.capabilities.model : null,
-    instruction: typeof connection.capabilities.instruction === "string" ? connection.capabilities.instruction : null,
-    labels: Array.isArray(connection.capabilities.labels)
-      ? connection.capabilities.labels.map((label) => String(label || "").trim()).filter(Boolean)
-      : [],
-    listenMode: connection.capabilities.listenMode === true,
-    machineName: typeof connection.capabilities.machineName === "string" ? connection.capabilities.machineName : null,
-    platform: typeof connection.capabilities.platform === "string" ? connection.capabilities.platform : null,
-    arch: typeof connection.capabilities.arch === "string" ? connection.capabilities.arch : null,
-    localExecutionRuntime: typeof connection.capabilities.localExecutionRuntime === "string"
-      ? connection.capabilities.localExecutionRuntime
-      : null,
-    lastHeartbeatAt: connection.lastHeartbeatAt,
-    projectIds: connection.projectIds,
-    activeProjectIds: connection.activeProjectIds,
-    tasksRunCount: connection.tasksRunCount,
-    threadCount: connection.threadCount,
-    messageCount: connection.messageCount,
-    pendingInboxCount: connection.pendingInboxCount,
-    activeDispatchCount: connection.activeDispatchCount,
-  }));
-}
-
-function mapAssignedWorkers(assignments: ReturnType<ProjectWorkerAssignmentRepository["listAssignmentsForProject"]>): {
-  primaryAssignedWorker: ExecutionAssignedWorkerSummary | null;
-  overflowAssignedWorkers: ExecutionAssignedWorkerSummary[];
-} {
-  const mapped = assignments.map((assignment) => ({
-    assignmentId: assignment.id,
-    workerEndpointId: assignment.workerEndpointId,
-    workerEndpointKey: assignment.workerEndpointKey,
-    workerEndpointType: assignment.workerEndpointType,
-    workerDisplayName: assignment.workerDisplayName,
-    connectionId: assignment.connectionId,
-    connectionKey: assignment.connectionKey,
-    transport: assignment.transport,
-    assignmentRole: assignment.assignmentRole,
-    status: assignment.status,
-    assignedAt: assignment.assignedAt,
-    lastAffinityAt: assignment.lastAffinityAt,
-    workerStatus: assignment.workerStatus,
-    canSuperviseProjects: assignment.capabilities.canSuperviseProjects,
-    canExecuteTasks: assignment.capabilities.canExecuteTasks,
-  }));
-
-  return {
-    primaryAssignedWorker: mapped.find((assignment) => assignment.assignmentRole === "primary") || null,
-    overflowAssignedWorkers: mapped.filter((assignment) => assignment.assignmentRole === "overflow"),
-  };
-}
-
-function mapAttentionItems(attentionItems: ReturnType<ProjectAttentionRepository["listProjectAttentionItems"]>) {
-  return attentionItems.map((item) => ({
-    id: item.id,
-    sprintId: item.sprintId,
-    taskId: item.taskId,
-    sprintRunId: item.sprintRunId,
-    dispatchId: item.dispatchId,
-    attentionType: item.attentionType,
-    severity: item.severity,
-    ownerType: item.ownerType,
-    status: item.status,
-    assignedWorkerEndpointId: item.assignedWorkerEndpointId,
-    title: item.title,
-    summaryMarkdown: item.summaryMarkdown,
-    payload: item.payload,
-    openedAt: item.openedAt,
-    claimedAt: item.claimedAt,
-    resolvedAt: item.resolvedAt,
-    updatedAt: item.updatedAt,
-  }));
 }
 
 function mapAttentionItem(item: NonNullable<ReturnType<ProjectAttentionRepository["getAttentionItem"]>>): ExecutionAttentionItemSummary {
@@ -283,99 +203,27 @@ function resolveAttentionClaimWorkerEndpointId(
 export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
   const dashboardDir = `${deps.projectRoot}/dashboard`;
   const port = deps.getDashboardPort();
-  const PROJECT_EXECUTION_CACHE_TTL_MS = 2_000;
-  const PROJECT_STATS_CACHE_TTL_MS = 2_000;
-  const OVERVIEW_CACHE_TTL_MS = 500;
-  const PROJECTS_CACHE_TTL_MS = 500;
 
-  const projectExecutionSnapshotCache = new Map<string, { snapshot: ReturnType<typeof deps.executionRepository.getProjectExecutionSnapshot>; expiresAt: number }>();
-  const projectStatsSnapshotCache = new Map<string, { snapshot: ReturnType<typeof deps.executionRepository.getProjectStatsSnapshot>; expiresAt: number }>();
-  let overviewTelemetryCache: { snapshot: ReturnType<typeof deps.executionRepository.getOverviewTelemetrySnapshot>; expiresAt: number } | null = null;
-  let projectsSnapshotCache: { snapshot: ReturnType<typeof deps.projectManagementRepository.listProjects>; expiresAt: number } | null = null;
-
-  const getProjectsSnapshot = () => {
-    const now = Date.now();
-    if (projectsSnapshotCache && projectsSnapshotCache.expiresAt > now) {
-      return projectsSnapshotCache.snapshot;
-    }
-    const snapshot = deps.projectManagementRepository.listProjects();
-    projectsSnapshotCache = {
-      snapshot,
-      expiresAt: now + PROJECTS_CACHE_TTL_MS,
-    };
-    return snapshot;
-  };
-
-  const getOverviewTelemetrySnapshot = () => {
-    const now = Date.now();
-    if (overviewTelemetryCache && overviewTelemetryCache.expiresAt > now) {
-      return overviewTelemetryCache.snapshot;
-    }
-    const snapshot = deps.executionRepository.getOverviewTelemetrySnapshot();
-    overviewTelemetryCache = {
-      snapshot,
-      expiresAt: now + OVERVIEW_CACHE_TTL_MS,
-    };
-    return snapshot;
-  };
-
-  const getProjectExecutionSnapshot = (projectId: string) => {
-    const now = Date.now();
-    const cached = projectExecutionSnapshotCache.get(projectId);
-    if (cached && cached.expiresAt > now) {
-      return cached.snapshot;
-    }
-
-    const assignedWorkers = mapAssignedWorkers(
-      deps.projectWorkerAssignmentRepository.listAssignmentsForProject(projectId, { activeOnly: true }),
-    );
-
-    const snapshot = {
-      ...deps.executionRepository.getProjectExecutionSnapshot(projectId),
-      connections: mapExecutionConnections(deps.connectionChatRepository.listConnections(projectId)),
-      ...assignedWorkers,
-      attentionItems: mapAttentionItems(
-        deps.projectAttentionRepository.listProjectAttentionItems(projectId, {
-          statuses: ["open", "claimed"],
-          limit: 50,
-        }),
-      ),
-    };
-    projectExecutionSnapshotCache.set(projectId, {
-      snapshot,
-      expiresAt: now + PROJECT_EXECUTION_CACHE_TTL_MS,
-    });
-    return snapshot;
-  };
-
-  const getProjectStatsSnapshot = (projectId: string, query: ProjectStatsQuery = { window: "7d" }) => {
-    const now = Date.now();
-    const cacheKey = `${projectId}:${JSON.stringify(query)}`;
-    const cached = projectStatsSnapshotCache.get(cacheKey);
-    if (cached && cached.expiresAt > now) {
-      return cached.snapshot;
-    }
-    const snapshot = deps.executionRepository.getProjectStatsSnapshot(projectId, query);
-    projectStatsSnapshotCache.set(cacheKey, {
-      snapshot,
-      expiresAt: now + PROJECT_STATS_CACHE_TTL_MS,
-    });
-    return snapshot;
-  };
-
+  const cache = new DashboardSnapshotCache({
+    projectManagementRepository: deps.projectManagementRepository,
+    executionRepository: deps.executionRepository,
+    connectionChatRepository: deps.connectionChatRepository,
+    projectWorkerAssignmentRepository: deps.projectWorkerAssignmentRepository,
+    projectAttentionRepository: deps.projectAttentionRepository,
+  });
 
   deps.dashboardRealtimeService.setSnapshotLoaders({
-    getProjectsSnapshot,
-    getProjectExecutionSnapshot,
+    getProjectsSnapshot: cache.getProjectsSnapshot,
+    getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
     getProjectStatusSnapshot: (projectId) => deps.projectRuntimeRepository.getProjectLiveStatus(projectId),
     getProjectLiveSnapshot: (projectIdHint) => getProjectLiveSnapshot({
       projectManagementRepository: deps.projectManagementRepository,
       projectRuntimeRepository: deps.projectRuntimeRepository,
-      getProjectExecutionSnapshot,
+      getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
       getGitStatus: deps.getGitStatus,
       logger: deps.logger.child({ component: "project-live-snapshot" })
     }, projectIdHint),
-    getOverviewTelemetrySnapshot,
+    getOverviewTelemetrySnapshot: cache.getOverviewTelemetrySnapshot,
   });
 
   registerMemoryRoutes(deps.app, {
@@ -401,14 +249,14 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     getLiveSnapshot: (projectIdHint) => getProjectLiveSnapshot({
       projectManagementRepository: deps.projectManagementRepository,
       projectRuntimeRepository: deps.projectRuntimeRepository,
-      getProjectExecutionSnapshot,
+      getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
       getGitStatus: deps.getGitStatus,
       logger: deps.logger.child({ component: "project-live-snapshot" })
     }, projectIdHint),
     getExecutionSnapshot: () => {
       const projectId = deps.projectManagementRepository.getSelectedProjectId();
       return projectId
-        ? getProjectExecutionSnapshot(projectId)
+        ? cache.getProjectExecutionSnapshot(projectId)
         : {
           projectId: null,
           projectName: null,
@@ -422,13 +270,14 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
           updatedAt: null,
         };
     },
-    getOverviewTelemetrySnapshot,
-    getProjectExecutionSnapshot,
-    getProjectStatsSnapshot,
+    getOverviewTelemetrySnapshot: cache.getOverviewTelemetrySnapshot,
+    getProjectExecutionSnapshot: cache.getProjectExecutionSnapshot,
+    getProjectStatsSnapshot: cache.getProjectStatsSnapshot,
     setPreferredWorker: (projectId, input) => {
       requireProject(deps, projectId);
       const assignments = deps.projectWorkerAssignmentService.setProjectPreferredWorker(projectId, input);
-      projectExecutionSnapshotCache.delete(projectId);
+      cache.invalidateProjectExecution(projectId);
+      cache.invalidateOverview();
       deps.dashboardRealtimeService.scheduleProjectExecutionRefresh(projectId, {
         includeOverview: false,
         includeProjects: false,
@@ -472,6 +321,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
       });
       deps.setLogger(newLogger);
       deps.activityCacheService.invalidateGitStatusCache();
+      cache.invalidateAll();
       return saved;
     },
     resetDatabase: () => {
@@ -489,6 +339,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
       deps.activityCacheService.invalidateGitStatusCache();
       deps.projectManagementRepository.notifyProjectsUpdated();
       deps.dashboardRealtimeService.scheduleOverviewRefresh();
+      cache.invalidateAll();
     },
     getProjectSettings: (projectId) => deps.settingsRepository.getProjectSettings(projectId),
     saveProjectSettings: (projectId, settings) => {
@@ -496,7 +347,10 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
       if (!project) {
         throw new Error(`Project not found: ${projectId}`);
       }
-      return deps.settingsRepository.saveProjectSettings(projectId, settings);
+      const saved = deps.settingsRepository.saveProjectSettings(projectId, settings);
+      cache.invalidateProjectExecution(projectId);
+      cache.invalidateProjects();
+      return saved;
     },
     resetProjectSettings: (projectId) => {
       const project = deps.projectManagementRepository.getProject(projectId);
@@ -541,11 +395,16 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
     deleteProject: (projectId) => deps.projectManagementRepository.deleteProject(projectId),
     selectProject: (projectId) => {
       const selectedProjectId = deps.projectManagementRepository.setSelectedProjectId(projectId);
+      cache.invalidateProjects();
+      if (projectId) {
+        cache.invalidateProjectExecution(projectId);
+      }
       deps.projectManagementRepository.notifyProjectsUpdated();
       return selectedProjectId;
     },
     selectSprint: (projectId, sprintId) => {
       const selectedSprintId = deps.projectManagementRepository.setSelectedSprintId(projectId, sprintId);
+      cache.invalidateProjectExecution(projectId);
       deps.dashboardRealtimeService.scheduleProjectExecutionRefresh(projectId, {
         includeOverview: false,
         includeProjects: false,
