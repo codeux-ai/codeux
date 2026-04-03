@@ -52,6 +52,8 @@ import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-re
 import { queryExecutionSprintRuns } from "./execution/execution-sprint-runs-query.js";
 import { queryExecutionTaskDispatches } from "./execution/execution-task-dispatches-query.js";
 import { queryExecutionRuntimeEvents } from "./execution/execution-runtime-events-query.js";
+import { normalizeProjectStatsQuery } from "./execution/project-stats-query.js";
+import { createUsageBuckets, createEmptyUsageTotals } from "./execution/stats-buckets.js";
 
 interface SprintRunRow {
   id: string;
@@ -279,12 +281,6 @@ interface ProjectAttentionSummaryRow {
   updated_at: string;
 }
 
-interface NormalizedProjectStatsQuery {
-  query: ProjectStatsQuery;
-  range: ProjectExecutionStatsSnapshot["range"];
-  bucketSizeMs: number;
-}
-
 interface StatsEntityMetadata {
   label: string;
   secondaryLabel: string | null;
@@ -329,23 +325,6 @@ function stripMarkdown(value: string): string {
     .replace(/[*_>#~-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function createEmptyUsageTotals(): ExecutionUsageTotals {
-  return {
-    invocationCount: 0,
-    activeTimeMs: 0,
-    wallTimeMs: 0,
-    inputTokens: 0,
-    cachedInputTokens: 0,
-    outputTokens: 0,
-    reasoningOutputTokens: 0,
-    totalTokens: 0,
-    reportedInvocationCount: 0,
-    estimatedInvocationCount: 0,
-    unavailableInvocationCount: 0,
-    unsupportedInvocationCount: 0,
-  };
 }
 
 function cloneUsageTotals(input?: ExecutionUsageTotals | null): ExecutionUsageTotals {
@@ -1259,7 +1238,7 @@ export class ExecutionRepository {
       WHERE id = ?
     `).get(projectId) as { id: string; name: string } | undefined;
     const now = new Date();
-    const normalized = this.normalizeProjectStatsQuery(projectId, input, now);
+    const normalized = normalizeProjectStatsQuery(this.db, projectId, input, now);
     const rangeStartIso = normalized.range.from;
     const rangeEndIso = normalized.range.to;
     const invocations = this.db.prepare(`
@@ -1270,11 +1249,10 @@ export class ExecutionRepository {
         AND started_at < ?
       ORDER BY started_at ASC, id ASC
     `).all(projectId, rangeStartIso, rangeEndIso) as unknown as ProviderInvocationUsageRow[];
-    const mappedInvocations = invocations.map((row) => this.mapProviderInvocationUsageRow(row));
     const nowIso = now.toISOString();
     const wallTimeByTaskId = this.getWallTimeTotalsByTaskIdsForRange(projectId, rangeStartIso, rangeEndIso, nowIso);
     const wallTimeBySprintRunId = this.getWallTimeTotalsBySprintRunIdsForRange(projectId, rangeStartIso, rangeEndIso, nowIso);
-    const buckets = this.createUsageBuckets(normalized.range, normalized.bucketSizeMs);
+    const buckets = createUsageBuckets(normalized.range, normalized.bucketSizeMs);
     const taskMeta = this.getTaskMetadata(projectId);
     const sprintMeta = this.getSprintMetadata(projectId);
     const usage = createEmptyUsageTotals();
@@ -1288,7 +1266,10 @@ export class ExecutionRepository {
     const providerLastActivity = new Map<string, string>();
     const purposeLastActivity = new Map<string, string>();
 
-    for (const invocation of mappedInvocations) {
+    const firstBucketStartMs = buckets.length > 0 ? buckets[0].bucketStartMs : 0;
+
+    for (const row of invocations) {
+      const invocation = this.mapProviderInvocationUsageRow(row);
       this.mergeUsageTotals(usage, invocation);
       this.mergeUsageMap(taskUsage, invocation.taskId, invocation);
       this.mergeUsageMap(sprintUsage, invocation.sprintRunId || invocation.sprintId, invocation);
@@ -1300,9 +1281,16 @@ export class ExecutionRepository {
       this.updateLastActivity(providerLastActivity, invocation.provider, activityAt);
       this.updateLastActivity(purposeLastActivity, invocation.purpose, activityAt);
       tokenSourceCounts.set(invocation.usageSource, (tokenSourceCounts.get(invocation.usageSource) || 0) + 1);
-      const bucketIndex = Math.floor((new Date(invocation.startedAt).getTime() - buckets[0].bucketStartMs) / normalized.bucketSizeMs);
-      if (bucketIndex >= 0 && bucketIndex < buckets.length) {
-        this.mergeUsageTotals(buckets[bucketIndex]!.usage, invocation);
+
+      if (buckets.length > 0) {
+        const bucketIndex = Math.floor((new Date(invocation.startedAt).getTime() - firstBucketStartMs) / normalized.bucketSizeMs);
+        if (bucketIndex >= 0 && bucketIndex < buckets.length) {
+          const bucket = buckets[bucketIndex]!;
+          this.mergeUsageTotals(bucket.usage, invocation);
+          bucket.providerTokens.set(invocation.provider, (bucket.providerTokens.get(invocation.provider) || 0) + invocation.totalTokens);
+          bucket.purposeTime.set(invocation.purpose, (bucket.purposeTime.get(invocation.purpose) || 0) + (invocation.durationMs || 0));
+          bucket.purposeInvocations.set(invocation.purpose, (bucket.purposeInvocations.get(invocation.purpose) || 0) + 1);
+        }
       }
     }
 
@@ -1341,35 +1329,18 @@ export class ExecutionRepository {
       { id: "reliability_unsupported", label: "Unsupported Usage", grouping: "reliability", defaultEnabled: false, data: buckets.map((b) => b.usage.unsupportedInvocationCount) },
       { id: "reliability_unavailable", label: "Unavailable Usage", grouping: "reliability", defaultEnabled: false, data: buckets.map((b) => b.usage.unavailableInvocationCount) },
       ...Array.from(providerUsage.keys()).map((providerId) => ({
-        id: `provider_${providerId}`, label: `${providerId} Tokens`, grouping: "providers", defaultEnabled: false, data: buckets.map(() => 0)
+        id: `provider_${providerId}`, label: `${providerId} Tokens`, grouping: "providers", defaultEnabled: false,
+        data: buckets.map((b) => b.providerTokens.get(providerId) || 0)
       })),
       ...Array.from(purposeUsage.keys()).map((purposeId) => ({
-        id: `purpose_time_${purposeId}`, label: `${purposeId.replace(/_/g, " ")} Time`, grouping: "purposes_time", defaultEnabled: false, data: buckets.map(() => 0)
+        id: `purpose_time_${purposeId}`, label: `${purposeId.replace(/_/g, " ")} Time`, grouping: "purposes_time", defaultEnabled: false,
+        data: buckets.map((b) => b.purposeTime.get(purposeId) || 0)
       })),
       ...Array.from(purposeUsage.keys()).map((purposeId) => ({
-        id: `purpose_invocations_${purposeId}`, label: `${purposeId.replace(/_/g, " ")} Invocations`, grouping: "purposes_invocations", defaultEnabled: false, data: buckets.map(() => 0)
+        id: `purpose_invocations_${purposeId}`, label: `${purposeId.replace(/_/g, " ")} Invocations`, grouping: "purposes_invocations", defaultEnabled: false,
+        data: buckets.map((b) => b.purposeInvocations.get(purposeId) || 0)
       }))
     ];
-
-    const firstBucketStartMs = buckets.length > 0 ? new Date(buckets[0].bucketStart).getTime() : 0;
-    if (buckets.length > 0) {
-      const chartSeriesMap = new Map<string, ProjectExecutionStatsChartSeries>(
-        chartSeries.map(s => [s.id, s])
-      );
-      for (const invocation of mappedInvocations) {
-        const bucketIndex = Math.floor((new Date(invocation.startedAt).getTime() - firstBucketStartMs) / normalized.bucketSizeMs);
-        if (bucketIndex >= 0 && bucketIndex < buckets.length) {
-            const providerSeries = chartSeriesMap.get(`provider_${invocation.provider}`);
-            if (providerSeries) providerSeries.data[bucketIndex] += invocation.totalTokens;
-
-            const purposeTimeSeries = chartSeriesMap.get(`purpose_time_${invocation.purpose}`);
-            if (purposeTimeSeries) purposeTimeSeries.data[bucketIndex] += invocation.durationMs || 0;
-
-            const purposeInvocationsSeries = chartSeriesMap.get(`purpose_invocations_${invocation.purpose}`);
-            if (purposeInvocationsSeries) purposeInvocationsSeries.data[bucketIndex] += 1;
-        }
-      }
-    }
 
     return {
       projectId,
@@ -2180,28 +2151,6 @@ export class ExecutionRepository {
     return map;
   }
 
-  private createUsageBuckets(
-    range: ProjectExecutionStatsSnapshot["range"],
-    bucketSizeMs: number,
-  ): Array<ExecutionUsageBucketSummary & { bucketStartMs: number }> {
-    const buckets: Array<ExecutionUsageBucketSummary & { bucketStartMs: number }> = [];
-    const startMs = new Date(range.from).getTime();
-    for (let index = 0; index < range.bucketCount; index += 1) {
-      const bucketStartMs = startMs + index * bucketSizeMs;
-      const bucketEndMs = bucketStartMs + bucketSizeMs;
-      const bucketStart = new Date(bucketStartMs);
-      const label = this.formatBucketLabel(bucketStart, range.resolution);
-      buckets.push({
-        bucketStart: bucketStart.toISOString(),
-        bucketEnd: new Date(bucketEndMs).toISOString(),
-        bucketStartMs,
-        label,
-        usage: createEmptyUsageTotals(),
-      });
-    }
-    return buckets;
-  }
-
   private toStatsEntitySummaries(args: {
     entries: Map<string, ExecutionUsageTotals>;
     metadata: Map<string, StatsEntityMetadata>;
@@ -2231,220 +2180,6 @@ export class ExecutionRepository {
       || right.usage.activeTimeMs - left.usage.activeTimeMs
       || left.label.localeCompare(right.label)
     ));
-  }
-
-  private normalizeProjectStatsQuery(
-    projectId: string,
-    input: ProjectStatsQuery | ProjectStatsWindow,
-    now: Date,
-  ): NormalizedProjectStatsQuery {
-    const query = typeof input === "string"
-      ? { window: input }
-      : {
-        window: input.window,
-        from: input.from ?? undefined,
-        to: input.to ?? undefined,
-      };
-
-    if (query.window === "custom") {
-      const fromDate = this.parseStatsDateInput(query.from, "start");
-      const toDate = this.parseStatsDateInput(query.to, "end");
-      if (!fromDate || !toDate) {
-        throw new Error("Custom stats windows require valid from and to values.");
-      }
-      if (fromDate.getTime() > toDate.getTime()) {
-        throw new Error("Custom stats window start must be earlier than end.");
-      }
-      return this.buildStatsRangeFromBounds(query, fromDate, toDate);
-    }
-
-    if (query.window === "24h") {
-      const alignedEnd = new Date(now);
-      alignedEnd.setMinutes(0, 0, 0);
-      const bucketSizeMs = 60 * 60 * 1000;
-      const bucketCount = 24;
-      const start = new Date(alignedEnd.getTime() - (bucketCount - 1) * bucketSizeMs);
-      return this.buildStatsRange({
-        query,
-        window: "24h",
-        from: start,
-        bucketSizeMs,
-        bucketCount,
-        resolution: "hour",
-        label: "Last 24 hours",
-        resolutionLabel: "Hourly telemetry buckets",
-      });
-    }
-
-    if (query.window === "7d" || query.window === "30d") {
-      const alignedEnd = this.startOfUtcDay(now);
-      const bucketSizeMs = 24 * 60 * 60 * 1000;
-      const bucketCount = query.window === "7d" ? 7 : 30;
-      const start = new Date(alignedEnd.getTime() - (bucketCount - 1) * bucketSizeMs);
-      return this.buildStatsRange({
-        query,
-        window: query.window,
-        from: start,
-        bucketSizeMs,
-        bucketCount,
-        resolution: "day",
-        label: query.window === "7d" ? "Last 7 days" : "Last 30 days",
-        resolutionLabel: "Daily telemetry buckets",
-      });
-    }
-
-    const firstInvocationRow = this.db.prepare(`
-      SELECT MIN(started_at) AS first_started_at
-      FROM provider_invocations
-      WHERE project_id = ?
-    `).get(projectId) as { first_started_at: string | null } | undefined;
-    const firstInvocation = this.parseStatsDateInput(firstInvocationRow?.first_started_at || undefined, "start") || now;
-    const allTimeStart = this.startOfUtcDay(firstInvocation);
-    const allTimeEnd = this.startOfUtcDay(now);
-    return this.buildStatsRangeFromBounds(query, allTimeStart, new Date(allTimeEnd.getTime() + (24 * 60 * 60 * 1000) - 1));
-  }
-
-  private buildStatsRangeFromBounds(
-    query: ProjectStatsQuery,
-    fromDate: Date,
-    toDate: Date,
-  ): NormalizedProjectStatsQuery {
-    const spanMs = Math.max(1, toDate.getTime() - fromDate.getTime());
-    const spanHours = Math.ceil(spanMs / (60 * 60 * 1000));
-    const spanDays = Math.ceil(spanMs / (24 * 60 * 60 * 1000));
-
-    if (spanHours <= 48) {
-      const bucketSizeMs = 60 * 60 * 1000;
-      const start = this.startOfHour(fromDate);
-      const end = this.startOfHour(new Date(toDate.getTime() + bucketSizeMs));
-      const bucketCount = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / bucketSizeMs));
-      return this.buildStatsRange({
-        query,
-        window: query.window,
-        from: start,
-        bucketSizeMs,
-        bucketCount,
-        resolution: "hour",
-        label: query.window === "custom" ? "Custom range" : "All time",
-        resolutionLabel: "Hourly telemetry buckets",
-      });
-    }
-
-    if (spanDays <= 90) {
-      const bucketSizeMs = 24 * 60 * 60 * 1000;
-      const start = this.startOfUtcDay(fromDate);
-      const end = this.startOfUtcDay(new Date(toDate.getTime() + bucketSizeMs));
-      const bucketCount = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / bucketSizeMs));
-      return this.buildStatsRange({
-        query,
-        window: query.window,
-        from: start,
-        bucketSizeMs,
-        bucketCount,
-        resolution: "day",
-        label: query.window === "custom" ? "Custom range" : "All time",
-        resolutionLabel: "Daily telemetry buckets",
-      });
-    }
-
-    const bucketSizeMs = 7 * 24 * 60 * 60 * 1000;
-    const start = this.startOfUtcWeek(fromDate);
-    const end = this.startOfUtcWeek(new Date(toDate.getTime() + (24 * 60 * 60 * 1000)));
-    const bucketCount = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / bucketSizeMs));
-    return this.buildStatsRange({
-      query,
-      window: query.window,
-      from: start,
-      bucketSizeMs,
-      bucketCount,
-      resolution: "week",
-      label: query.window === "custom" ? "Custom range" : "All time",
-      resolutionLabel: "Weekly telemetry buckets",
-    });
-  }
-
-  private buildStatsRange(input: {
-    query: ProjectStatsQuery;
-    window: ProjectStatsWindow;
-    from: Date;
-    bucketSizeMs: number;
-    bucketCount: number;
-    resolution: ProjectStatsResolution;
-    label: string;
-    resolutionLabel: string;
-  }): NormalizedProjectStatsQuery {
-    const rangeStart = new Date(input.from);
-    const rangeEnd = new Date(rangeStart.getTime() + input.bucketSizeMs * input.bucketCount);
-    return {
-      query: {
-        window: input.query.window,
-        from: input.query.from ?? undefined,
-        to: input.query.to ?? undefined,
-      },
-      range: {
-        window: input.window,
-        label: input.label,
-        resolution: input.resolution,
-        resolutionLabel: input.resolutionLabel,
-        from: rangeStart.toISOString(),
-        to: rangeEnd.toISOString(),
-        bucketCount: input.bucketCount,
-        isCustom: input.query.window === "custom",
-      },
-      bucketSizeMs: input.bucketSizeMs,
-    };
-  }
-
-  private parseStatsDateInput(value: string | undefined, edge: "start" | "end"): Date | null {
-    if (!value) {
-      return null;
-    }
-    const trimmed = value.trim();
-    if (trimmed.length === 0) {
-      return null;
-    }
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-      return new Date(`${trimmed}T${edge === "start" ? "00:00:00.000" : "23:59:59.999"}Z`);
-    }
-    const parsed = new Date(trimmed);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  private startOfUtcDay(date: Date): Date {
-    const next = new Date(date);
-    next.setUTCHours(0, 0, 0, 0);
-    return next;
-  }
-
-  private startOfHour(date: Date): Date {
-    const next = new Date(date);
-    next.setMinutes(0, 0, 0);
-    return next;
-  }
-
-  private startOfUtcWeek(date: Date): Date {
-    const next = this.startOfUtcDay(date);
-    const day = next.getUTCDay();
-    const offset = day === 0 ? 6 : day - 1;
-    next.setUTCDate(next.getUTCDate() - offset);
-    return next;
-  }
-
-  private formatBucketLabel(date: Date, resolution: ProjectStatsResolution): string {
-    if (resolution === "hour") {
-      return date.toISOString().slice(11, 16);
-    }
-    if (resolution === "week") {
-      return `W${this.getIsoWeekNumber(date)}`;
-    }
-    return date.toISOString().slice(5, 10);
-  }
-
-  private getIsoWeekNumber(date: Date): number {
-    const utcDate = this.startOfUtcDay(date);
-    utcDate.setUTCDate(utcDate.getUTCDate() + 4 - (utcDate.getUTCDay() || 7));
-    const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
-    return Math.ceil((((utcDate.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
   }
 
   private withLastActivityMetadata(
