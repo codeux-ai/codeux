@@ -49,6 +49,7 @@ import type {
   ExecutionTaskDispatchSummary,
 } from "../contracts/app-types.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
+import type { ProviderId } from "../contracts/app-types.js";
 
 interface SprintRunRow {
   id: string;
@@ -1876,6 +1877,24 @@ export class ExecutionRepository {
       recentEvents: recentEvents.map((row) => this.mapExecutionRuntimeEventSummaryRow(row)),
       updatedAt: new Date().toISOString(),
     };
+  }
+
+  countRunningTasksPerProvider(projectId: string): Map<ProviderId, number> {
+    this.requireProject(projectId);
+    const rows = this.db.prepare(`
+      SELECT provider, COUNT(*) as count
+      FROM task_runs
+      WHERE project_id = ? AND state = 'RUNNING' AND provider IS NOT NULL
+      GROUP BY provider
+    `).all(projectId) as Array<{ provider: string; count: number | string }>;
+
+    const map = new Map<ProviderId, number>();
+    for (const row of rows) {
+      if (row.provider) {
+        map.set(row.provider as ProviderId, toNumber(row.count));
+      }
+    }
+    return map;
   }
 
   updateTaskRun(taskRunId: string, input: UpdateTaskRunInput): TaskRunRecord {

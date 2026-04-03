@@ -1475,6 +1475,83 @@ describe("ExecutionRepository", () => {
   });
   });
 
+  it("counts running tasks per provider", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Concurrency Project",
+      sourceType: "local",
+      sourceRef: "/workspace/concurrency",
+    });
+    const project2 = projectRepository.createProject({
+      name: "Another Project",
+      sourceType: "local",
+      sourceRef: "/workspace/another",
+    });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
+    const sprint2 = projectRepository.createSprint(project2.id, { name: "Sprint 2", number: 1 });
+    const task1 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 1", promptMarkdown: "Prompt 1" });
+    const task2 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 2", promptMarkdown: "Prompt 2" });
+    const task3 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 3", promptMarkdown: "Prompt 3" });
+    const task4 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 4", promptMarkdown: "Prompt 4" });
+    const task5 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 5", promptMarkdown: "Prompt 5" });
+
+    const task6_p2 = projectRepository.createTask(project2.id, { sprintId: sprint2.id, title: "Task 6", promptMarkdown: "Prompt 6" });
+
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task1.id,
+      provider: "gemini",
+      state: "RUNNING"
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task2.id,
+      provider: "gemini",
+      state: "RUNNING"
+    });
+
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task3.id,
+      provider: "codex",
+      state: "RUNNING"
+    });
+
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task4.id,
+      provider: "gemini",
+      state: "COMPLETED"
+    });
+
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task5.id,
+      provider: null,
+      state: "RUNNING"
+    });
+
+    // Create a running task in another project to verify it is NOT counted for 'project'
+    executionRepository.createTaskRun({
+      projectId: project2.id,
+      sprintId: sprint2.id,
+      taskId: task6_p2.id,
+      provider: "codex",
+      state: "RUNNING"
+    });
+
+    const counts = executionRepository.countRunningTasksPerProvider(project.id);
+    expect(counts.get("gemini")).toBe(2);
+    expect(counts.get("codex")).toBe(1);
+    expect(counts.has(null as any)).toBe(false);
+    expect(counts.size).toBe(2);
+  });
+
   describe("ExecutionInvocationMessageRecord Metadata", () => {
     it("persists and retrieves metadata for execution messages", async () => {
       const { projectRepository, executionRepository } = await createRepositories();
