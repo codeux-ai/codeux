@@ -65,7 +65,10 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
 }) => {
   const pendingActionId = activeRun ? `sprint-stop:${activeRun.id}` : `sprint-start:${sprint.id}`;
   const pinActionId = `sprint-showcase:${sprint.id}`;
+  const deleteActionId = `sprint-delete:${sprint.id}`;
   const isCompleted = sprint.status === "completed";
+
+  const isRowPending = pendingActionIds.has(pendingActionId) || pendingActionIds.has(pinActionId) || pendingActionIds.has(deleteActionId);
 
   // Polished stripe depth
   const rowBg = isSelected
@@ -76,13 +79,14 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
 
   return (
     <tr
-      className={`group border-b border-black/[0.06] transition-colors hover:bg-gradient-to-r hover:from-transparent hover:via-signal-500/[0.04] hover:to-transparent dark:border-white/[0.06] dark:hover:via-signal-500/[0.06] ${rowBg} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""}`}
+      className={`group border-b border-black/[0.06] transition-colors hover:bg-gradient-to-r hover:from-transparent hover:via-signal-500/[0.04] hover:to-transparent focus-within:bg-signal-500/[0.02] dark:border-white/[0.06] dark:hover:via-signal-500/[0.06] ${rowBg} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""}`}
     >
       <td className="px-4 py-3 pl-6 align-middle">
         <button
           type="button"
           onClick={() => onToggleRow(sprint.id)}
-          className="inline-flex items-center justify-center text-slate-400 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 transition-colors hover:text-signal-500"
+          disabled={isRowPending}
+          className="inline-flex items-center justify-center text-slate-400 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 transition-colors hover:text-signal-500 rounded disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isSelected
             ? <CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} />
@@ -148,7 +152,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
         <div className="flex items-center gap-3">
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-black/10 dark:bg-white/[0.08]">
             <div
-              className="h-full rounded-full bg-signal-500 transition-[width]"
+              className="h-full rounded-full bg-signal-500 transition-[width] duration-500 ease-out"
               style={{ width: `${sprint.completion}%` }}
             />
           </div>
@@ -184,7 +188,8 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
           <button
             type="button"
             onClick={(event) => onOpenRowMenu(event, sprint.id)}
-            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
+            disabled={isRowPending}
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/80 text-slate-600 transition-colors hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:text-white focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <MoreVertical className="h-3.5 w-3.5" />
           </button>
