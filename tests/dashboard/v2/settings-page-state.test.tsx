@@ -32,7 +32,11 @@ beforeEach(() => {
   mockFetchProject = vi.spyOn(settingsApi, 'fetchProjectEffectiveSettings').mockResolvedValue({ settings: {}, sources: {} } as any);
   mockResetProject = vi.spyOn(settingsApi, 'resetProjectSettings').mockResolvedValue();
   mockResetDatabase = vi.spyOn(settingsApi, 'resetSystemDatabase').mockResolvedValue();
-  mockFetchAgentPresets = vi.spyOn(agentPresetApi, 'fetchAgentPresets').mockResolvedValue([]);
+  mockFetchAgentPresets = vi.spyOn(agentPresetApi, 'fetchAgentPresets').mockResolvedValue([
+    { id: "worker-1", name: "Delivery Agent", labels: ["worker"] },
+    { id: "qa-2", name: "QA Agent Beta", labels: ["qa"] },
+    { id: "qa-1", name: "Risk Reviewer", labels: ["quality-assurance"] },
+  ] as any);
   mockFetchExternal = vi.spyOn(dashboardApi, 'fetchExternalSettingsHints').mockResolvedValue({
     env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
     settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
@@ -63,6 +67,72 @@ describe("useSettingsPageState", () => {
   it("handles null selectedProject properly", async () => {
     const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
     act(() => { result.current.setActiveScope("project"); });
+  });
+
+  it("sorts QA-tagged agent presets ahead of other presets", async () => {
+    const routing = {
+      task_coding: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
+      planning: { provider: "gemini", allowedProviders: ["jules", "gemini"], providers: {} },
+      dashboard_reply: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
+      clarification_reply: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
+      qa_review: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
+      ci_fix: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
+      merge_conflict: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
+    };
+    const dashboardSettings = {
+      automationLevel: "high",
+      automationInterventions: {},
+      aiProvider: {
+        providers: {
+          gemini: { enabled: true, model: "pro", weight: 1, thinkingMode: "MEDIUM" },
+          jules: { enabled: true, model: "auto", weight: 1, thinkingMode: "SMALL" },
+          codex: { enabled: false, model: "gpt-4", weight: 1, thinkingMode: "SMALL" },
+          "claude-code": { enabled: false, model: "claude-3-5", weight: 1, thinkingMode: "SMALL" },
+        },
+        provider: "gemini",
+        strategy: "single",
+        invocationRouting: routing,
+      },
+      git: { githubMode: "oauth", defaultBranch: "main", autoCreatePr: true, featureBranchPrefix: "feat", sprintBranchScheme: "short" },
+      ciIntelligence: {},
+      sprintLoopSteps: {},
+      cliWorkflow: {},
+      sprintPreview: {},
+      workers: {},
+      agents: {
+        saveToProjectDirectory: true,
+        instructionTemplates: {},
+        qualityAssurance: {
+          enabled: false,
+          maxTaskReviewRuns: 1,
+          taskCompletion: { enabled: true, agentPresetId: null },
+          sprintCompletion: { enabled: true, agentPresetId: null },
+          completedTaskWithoutPr: { enabled: true, agentPresetId: null },
+        },
+      },
+      skills: [],
+      memory: {},
+    };
+
+    mockFetchSystem.mockResolvedValue({
+      runtime: { nodeEnvironment: "development" },
+      defaults: dashboardSettings,
+      mcpTools: [],
+    } as any);
+    mockFetchProject.mockResolvedValue({
+      settings: dashboardSettings,
+      sources: {},
+    } as any);
+
+    const { result } = renderHook(() => useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS));
+
+    await waitFor(() => expect(result.current.projectAgentPresetOptions.length).toBe(3));
+
+    expect(result.current.projectAgentPresetOptions.map((option) => option.label)).toEqual([
+      "QA Agent Beta",
+      "Risk Reviewer",
+      "Delivery Agent",
+    ]);
   });
 
   it("initializes with general category and system scope", async () => {

@@ -43,8 +43,10 @@ Dashboard surface:
 The `Settings -> Agents` panel includes a dedicated `Quality Assurance` section that:
 
 - stays compact when QA is disabled
+- appears above instruction templates in the Agents settings stack
 - exposes the three QA triggers when enabled
-- allows per-trigger agent preset selection
+- allows per-trigger agent preset selection across all project agent presets
+- sorts presets labeled for QA ahead of other agent presets
 - allows controlling how many times task QA can re-run after QA-driven fixes
 
 ## Default Agent Preset

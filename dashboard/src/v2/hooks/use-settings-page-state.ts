@@ -115,6 +115,26 @@ const AGENT_INSTRUCTION_TEMPLATE_OPTIONS: Array<{
   { value: "cleanupEmpty", label: "Cleanup Empty", description: "Shown when the sprint is still empty." },
 ];
 
+const QA_PRESET_LABEL_PATTERN = /(?:^|[\s_-])qa(?:$|[\s_-])|quality[\s_-]*assurance/i;
+
+const sortAgentPresetOptions = (
+  presets: Array<{ id: string; name: string; labels?: string[] }>,
+): Array<{ value: string; label: string }> => (
+  [...presets]
+    .sort((left, right) => {
+      const leftIsQa = (left.labels || []).some((label) => QA_PRESET_LABEL_PATTERN.test(label));
+      const rightIsQa = (right.labels || []).some((label) => QA_PRESET_LABEL_PATTERN.test(label));
+      if (leftIsQa !== rightIsQa) {
+        return leftIsQa ? -1 : 1;
+      }
+      return left.name.localeCompare(right.name, undefined, { sensitivity: "base" });
+    })
+    .map((preset) => ({
+      value: preset.id,
+      label: preset.name,
+    }))
+);
+
 
 export const useSettingsPageState = (
   categories: Category[],
@@ -194,10 +214,7 @@ export const useSettingsPageState = (
         setProjectSettings(cloneProjectSettings(nextProject));
         setSavedProjectSettings(cloneProjectSettings(nextProject));
         setProjectSources(effectiveProject.sources);
-        setProjectAgentPresetOptions(projectAgentPresets.map((preset) => ({
-          value: preset.id,
-          label: preset.name,
-        })));
+        setProjectAgentPresetOptions(sortAgentPresetOptions(projectAgentPresets));
       } else {
         setProjectSettings(null);
         setSavedProjectSettings(null);

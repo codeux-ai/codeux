@@ -255,7 +255,7 @@ Legacy runtime:
 - Project-local markdown mirroring is enabled by default through project settings, so dashboard edits create/update `.sprint-os/agents/*.md` in the selected repo without touching shipped defaults
 - Markdown-backed agents now show sync state and support both manual single-agent re-import and bulk `Sync All`
 - The first built-in role is `Planning agent`, which is editable under Agents like any other DB-backed agent
-- `Settings -> Agents` now includes the QA controls for enabling completion-time QA, selecting per-trigger agent presets, and setting task QA max reruns after QA-requested fixes
+- `Settings -> Agents` now includes the QA controls above instruction templates, with per-trigger agent selection across all project agents and QA-labeled presets floated to the top
 - Chat page is DB-backed and stores project conversation threads/messages in sqlite
 - Chat page now provides a `Threads / Invocations` toggle to switch between human conversation threads and read-only execution invocations.
 - Chat page UI is redesigned with animated identities, structured widgets for rich messages, and automatic worker pickup derived from active project routing.

@@ -73,8 +73,9 @@ describe("SettingsPage data interactions", () => {
     vi.resetAllMocks();
     mockFetchProjectSettings = vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue(mockEffectiveSettingsData);
     vi.mocked(fetchAgentPresets).mockResolvedValue([
-      { id: "qa-agent-1", name: "QA Agent Alpha" },
-      { id: "qa-agent-2", name: "QA Agent Beta" },
+      { id: "worker-1", name: "Delivery Agent", labels: ["worker"] },
+      { id: "qa-agent-2", name: "QA Agent Beta", labels: ["qa"] },
+      { id: "qa-agent-1", name: "Risk Reviewer", labels: ["quality-assurance"] },
     ] as any);
     vi.mocked(fetchExternalSettingsHints).mockResolvedValue({
       env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
@@ -175,8 +176,6 @@ describe("SettingsPage data interactions", () => {
     await waitFor(() => {
       expect(fetchSystemSettings).toHaveBeenCalledTimes(1);
     });
-
-    fireEvent.click(screen.getAllByRole("button", { name: "Project" })[0]);
 
     await waitFor(() => {
       expect(fetchProjectEffectiveSettings).toHaveBeenCalledWith("proj-1");
