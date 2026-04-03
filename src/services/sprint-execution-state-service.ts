@@ -6,6 +6,7 @@ import type { ProjectSummary, SprintRecord, TaskRecord } from "../contracts/proj
 import type { TaskRunRecord } from "../contracts/execution-types.js";
 import { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { ExecutionRepository } from "../repositories/execution-repository.js";
+import { resolveSubtaskStatus, toMergeIndicator } from "./subtask-state-mapper.js";
 
 export interface SprintExecutionContext {
   project: ProjectSummary;
@@ -15,37 +16,6 @@ export interface SprintExecutionContext {
   featureBranch: string;
   defaultBranch: string;
   sourceId?: string;
-}
-
-function mapTaskStatusToSubtaskStatus(task: TaskRecord, latestRun?: TaskRunRecord): Subtask["status"] {
-  if (latestRun?.state && latestRun.state !== "COMPLETED") {
-    return latestRun.state;
-  }
-
-  switch (task.status) {
-    case "coding_completed":
-      return "CODING_COMPLETED";
-    case "completed":
-      return "COMPLETED";
-    case "in_progress":
-      return "RUNNING";
-    case "pending":
-    default:
-      return "PENDING";
-  }
-}
-
-function toMergeIndicator(value: string | null): SubtaskMergeIndicator | undefined {
-  switch (value) {
-    case "CI":
-    case "AUTOMERGE":
-    case "MERGED":
-    case "MERGE_BLOCKED":
-    case "MERGE_CONFLICT":
-      return value;
-    default:
-      return undefined;
-  }
 }
 
 export class SprintExecutionStateService {
@@ -97,7 +67,7 @@ export class SprintExecutionStateService {
         depends_on: task.dependsOnTaskIds
           .map((dependencyId) => taskKeyById.get(dependencyId))
           .filter((dependencyKey): dependencyKey is string => typeof dependencyKey === "string"),
-        status: mapTaskStatusToSubtaskStatus(task, latestRun),
+        status: resolveSubtaskStatus(task.status, latestRun?.state),
         session_id: latestRun?.sessionId || undefined,
         session_name: latestRun?.sessionName || undefined,
         session_state: latestRun?.state || undefined,
