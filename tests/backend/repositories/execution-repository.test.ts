@@ -1473,6 +1473,124 @@ describe("ExecutionRepository", () => {
       expect(td.provider).toBe("target-provider");
     }
   });
+
+  it("asserts refactor preserves ordering, inclusion rules for expanded sprint runs, and attached task-run/runtime-event metadata", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Refactor Verification Project",
+      sourceType: "local",
+      sourceRef: "/workspace/refactor",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Refactor Sprint",
+      number: 1,
+      status: "running",
+    });
+
+    // Create an active sprint run
+    const sprintRun1 = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "running",
+    });
+
+    // Create a paused sprint run
+    const sprintRun2 = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "paused",
+    });
+
+    // Create an old completed sprint run
+    const sprintRun3 = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "completed",
+    });
+
+    const task1 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 1", executorType: "mcp_worker" });
+    const task2 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 2", executorType: "docker_cli" });
+
+    // Dispatches linked to the running sprint run
+    const dispatch1 = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task1.id,
+      sprintRunId: sprintRun1.id,
+      executorType: "mcp_worker",
+      status: "running",
+      priority: 10,
+    });
+    const dispatch2 = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task2.id,
+      sprintRunId: sprintRun1.id,
+      executorType: "docker_cli",
+      status: "queued",
+      priority: 5,
+    });
+
+    // Task runs
+    const taskRun1 = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task1.id,
+      sprintRunId: sprintRun1.id,
+      dispatchId: dispatch1.id,
+      state: "RUNNING",
+      provider: "claude-code",
+    });
+
+    // Runtime event
+    executionRepository.appendTaskRunEvent(
+      taskRun1.id,
+      "worker_dispatch_started",
+      "system",
+      {}
+    );
+    executionRepository.appendSprintRunEvent(
+      sprintRun1.id,
+      "sprint_started",
+      "system",
+      {}
+    );
+
+    const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
+
+    // Verify sprint runs ordering and inclusion
+    expect(snapshot.sprintRuns.map(sr => sr.status)).toEqual([
+      "running",
+      "paused",
+      "completed",
+    ]);
+
+    // Verify task dispatches ordering based on rank and priority
+    expect(snapshot.taskDispatches.map(td => td.id)).toEqual([
+      dispatch1.id, // Running (rank 0)
+      dispatch2.id, // Queued (rank 3)
+    ]);
+
+    // Verify task run attached metadata to dispatch
+    const snapshotDispatch1 = snapshot.taskDispatches.find(td => td.id === dispatch1.id);
+    expect(snapshotDispatch1).toBeDefined();
+    expect(snapshotDispatch1!.taskRunState).toBe("RUNNING");
+    expect(snapshotDispatch1!.provider).toBe("claude-code");
+
+    // Verify runtime events inclusion and formatting
+    expect(snapshot.recentEvents).toHaveLength(2);
+    const eventTypes = snapshot.recentEvents.map(e => e.eventType);
+    expect(eventTypes).toContain("worker_dispatch_started");
+    expect(eventTypes).toContain("sprint_started");
+
+    const taskRunEvent = snapshot.recentEvents.find(e => e.eventType === "worker_dispatch_started");
+    expect(taskRunEvent!.taskRunState).toBe("RUNNING");
+    expect(taskRunEvent!.provider).toBe("claude-code");
+    expect(taskRunEvent!.sprintRunStatus).toBe("running");
+  });
   });
 
   describe("ExecutionInvocationMessageRecord Metadata", () => {

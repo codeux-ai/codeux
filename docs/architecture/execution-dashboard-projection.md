@@ -100,7 +100,10 @@ Current event coverage includes:
 
 Projection is built in:
 
-- `src/repositories/execution-repository.ts`
+- `src/repositories/execution-repository.ts` (public API boundary and snapshot orchestrator)
+- `src/repositories/execution/execution-sprint-runs-query.ts` (sprint runs slice query)
+- `src/repositories/execution/execution-task-dispatches-query.ts` (dispatches slice query)
+- `src/repositories/execution/execution-runtime-events-query.ts` (events slice query)
 
 It joins:
 
