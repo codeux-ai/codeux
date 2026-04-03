@@ -1,6 +1,7 @@
 import type { ProviderId, Subtask } from "../contracts/app-types.js";
 import type { StartSprintDispatchResult } from "./sprint-task-dispatch-service.js";
 import type { Logger } from "../shared/logging/logger.js";
+import { createPendingTaskRuntimeReset } from "../domain/sprint/task-reset-state.js";
 
 export interface TaskRerunContext {
   task: Subtask;
@@ -15,10 +16,12 @@ export interface TaskRerunContext {
 export interface TaskRerunOptions {
   provider?: ProviderId;
   clearWorktree?: boolean;
+  resetDependents?: boolean;
 }
 
 export interface TaskRerunServiceDependencies {
   resolveTaskContext: (taskId: string) => TaskRerunContext | null;
+  listSprintTaskDependencies?: (projectId: string, sprintId: string) => Array<{ taskId: string; dependsOnTaskIds: string[] }>;
   updateTaskPlanningStatus: (taskId: string, status: "pending" | "in_progress" | "coding_completed" | "completed") => void;
   resolveSprintRunId: (args: {
     projectId: string;
@@ -40,26 +43,18 @@ export interface TaskRerunServiceDependencies {
   extractSessionId: (session: { id?: string; name?: string }) => string | undefined;
   persistMergedFlag: (args: { taskId: string; merged: boolean }) => Promise<void>;
   clearTaskWorktree?: (args: { taskId: string; repoPath: string }) => Promise<void>;
+  createResetTaskRun?: (args: {
+    taskId: string;
+    projectId: string;
+    sprintId: string;
+    sprintRunId: string;
+    reason: "task_rerun_reset" | "dependent_task_reset";
+  }) => Promise<void>;
+  resolveTaskAttention?: (args: { taskId: string; projectId: string }) => Promise<void>;
   updateTaskExecutorOverride?: (taskId: string, provider: ProviderId) => void;
   cancelActiveDispatch?: (taskId: string, projectId: string) => Promise<void>;
   logger?: Logger;
 }
-
-const resetTaskState = (task: Subtask): Subtask => ({
-  ...task,
-  status: "PENDING",
-  session_id: undefined,
-  session_name: undefined,
-  session_state: undefined,
-  provider: undefined,
-  worker_branch: undefined,
-  pr_url: undefined,
-  activities: [],
-  is_merged: false,
-  merge_indicator: undefined,
-  intervention_owner: undefined,
-  intervention_hint: undefined,
-});
 
 export class TaskRerunService {
   constructor(private readonly deps: TaskRerunServiceDependencies) {}
@@ -70,84 +65,186 @@ export class TaskRerunService {
       throw new Error("Cannot rerun task: sprint context is incomplete. Run orchestration/status first.");
     }
 
-    // Cancel any active dispatch for this task before rerunning
-    if (this.deps.cancelActiveDispatch) {
-      try {
-        await this.deps.cancelActiveDispatch(context.task.record_id || taskId, context.projectId);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        this.deps.logger?.warn("Failed to cancel active dispatch during rerun", { taskId, message });
+    const sprintRunId = await this.deps.resolveSprintRunId({
+      projectId: context.projectId,
+      sprintId: context.sprintId,
+      sprintNumber: context.sprintNumber,
+      featureBranch: context.featureBranch,
+    });
+
+    const rootTaskId = context.task.record_id || taskId;
+    const downstreamContexts = options?.resetDependents
+      ? this.collectDependentContexts(context, rootTaskId)
+      : [];
+
+    for (const dependentContext of downstreamContexts) {
+      await this.resetTaskForFreshRun(dependentContext, {
+        clearWorktree: options?.clearWorktree,
+        sprintRunId,
+        startTask: false,
+        reason: "dependent_task_reset",
+      });
+    }
+
+    return await this.resetTaskForFreshRun(context, {
+      provider: options?.provider,
+      clearWorktree: options?.clearWorktree,
+      sprintRunId,
+      startTask: true,
+      reason: "task_rerun_reset",
+    });
+  }
+
+  private collectDependentContexts(
+    context: TaskRerunContext,
+    rootTaskId: string,
+  ): TaskRerunContext[] {
+    if (!this.deps.listSprintTaskDependencies) {
+      return [];
+    }
+
+    const dependencies = this.deps.listSprintTaskDependencies(context.projectId, context.sprintId);
+    const dependentsByTaskId = new Map<string, string[]>();
+    for (const entry of dependencies) {
+      for (const dependencyId of entry.dependsOnTaskIds) {
+        const next = dependentsByTaskId.get(dependencyId) || [];
+        next.push(entry.taskId);
+        dependentsByTaskId.set(dependencyId, next);
       }
     }
 
-    // Apply provider override if requested
-    if (options?.provider && this.deps.updateTaskExecutorOverride) {
-      this.deps.updateTaskExecutorOverride(context.task.record_id || taskId, options.provider);
+    const visited = new Set<string>();
+    const queue = [...(dependentsByTaskId.get(rootTaskId) || [])];
+    const contexts: TaskRerunContext[] = [];
+
+    while (queue.length > 0) {
+      const currentTaskId = queue.shift();
+      if (!currentTaskId || visited.has(currentTaskId)) {
+        continue;
+      }
+      visited.add(currentTaskId);
+
+      const currentContext = this.deps.resolveTaskContext(currentTaskId);
+      if (currentContext) {
+        contexts.push(currentContext);
+      }
+
+      for (const dependentId of dependentsByTaskId.get(currentTaskId) || []) {
+        if (!visited.has(dependentId)) {
+          queue.push(dependentId);
+        }
+      }
     }
 
-    // Clear worktree if requested
-    if (options?.clearWorktree && this.deps.clearTaskWorktree) {
+    return contexts;
+  }
+
+  private async resetTaskForFreshRun(
+    context: TaskRerunContext,
+    options: {
+      provider?: ProviderId;
+      clearWorktree?: boolean;
+      sprintRunId: string;
+      startTask: boolean;
+      reason: "task_rerun_reset" | "dependent_task_reset";
+    },
+  ): Promise<Subtask> {
+    const taskId = context.task.record_id || context.task.id;
+
+    if (this.deps.cancelActiveDispatch) {
+      try {
+        await this.deps.cancelActiveDispatch(taskId, context.projectId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.deps.logger?.warn("Failed to cancel active dispatch during task reset", { taskId, message });
+      }
+    }
+
+    if (options.provider && options.startTask && this.deps.updateTaskExecutorOverride) {
+      this.deps.updateTaskExecutorOverride(taskId, options.provider);
+    }
+
+    if (options.clearWorktree && this.deps.clearTaskWorktree) {
       try {
         await this.deps.clearTaskWorktree({
-          taskId: context.task.record_id || taskId,
+          taskId,
           repoPath: context.repoPath,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        this.deps.logger?.warn("Failed to clear worktree during rerun", { taskId, message });
+        this.deps.logger?.warn("Failed to clear worktree during task reset", { taskId, message });
       }
     }
 
-    const resetTask = resetTaskState(context.task);
-    // Apply provider override to the reset task so dispatch picks it up
-    if (options?.provider) {
+    const resetTask = createPendingTaskRuntimeReset(context.task);
+    if (options.provider && options.startTask) {
       resetTask.provider = options.provider;
     }
-    this.deps.updateTaskPlanningStatus(resetTask.record_id || taskId, "pending");
+    this.deps.updateTaskPlanningStatus(taskId, "pending");
 
     try {
       await this.deps.persistMergedFlag({
-        taskId: resetTask.record_id || resetTask.id,
+        taskId,
         merged: false,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.deps.logger?.warn("Failed to persist merged=false while rerunning task", {
+      this.deps.logger?.warn("Failed to persist merged=false while resetting task", {
         taskId,
         message,
       });
     }
 
-    try {
-      const sprintRunId = await this.deps.resolveSprintRunId({
-        projectId: context.projectId,
-        sprintId: context.sprintId,
-        sprintNumber: context.sprintNumber,
-        featureBranch: context.featureBranch,
-      });
-      const session = await this.deps.startTask({
-        task: resetTask,
-        projectId: context.projectId,
-        sprintId: context.sprintId,
-        sprintRunId,
-        sourceId: context.sourceId,
-        featureBranch: context.featureBranch,
-        repoPath: context.repoPath,
-        sprintNumber: context.sprintNumber,
-      });
-      const restartedTask: Subtask = {
-        ...resetTask,
-        status: "RUNNING",
-        session_name: this.deps.resolveSessionName(session),
-        session_id: this.deps.extractSessionId(session),
-        provider:
-          session.provider === "jules" || session.provider === "gemini" || session.provider === "codex" || session.provider === "claude-code"
-            ? session.provider
-            : undefined,
-      };
-      return restartedTask;
-    } catch (error) {
-      throw error;
+    if (this.deps.resolveTaskAttention) {
+      try {
+        await this.deps.resolveTaskAttention({
+          taskId,
+          projectId: context.projectId,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.deps.logger?.warn("Failed to resolve task attention during reset", { taskId, message });
+      }
     }
+
+    if (!options.startTask) {
+      if (this.deps.createResetTaskRun) {
+        try {
+          await this.deps.createResetTaskRun({
+            taskId,
+            projectId: context.projectId,
+            sprintId: context.sprintId,
+            sprintRunId: options.sprintRunId,
+            reason: options.reason,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.deps.logger?.warn("Failed to create reset task run snapshot", { taskId, message });
+        }
+      }
+      return resetTask;
+    }
+
+    const session = await this.deps.startTask({
+      task: resetTask,
+      projectId: context.projectId,
+      sprintId: context.sprintId,
+      sprintRunId: options.sprintRunId,
+      sourceId: context.sourceId,
+      featureBranch: context.featureBranch,
+      repoPath: context.repoPath,
+      sprintNumber: context.sprintNumber,
+    });
+    const restartedTask: Subtask = {
+      ...resetTask,
+      status: "RUNNING",
+      session_name: this.deps.resolveSessionName(session),
+      session_id: this.deps.extractSessionId(session),
+      provider:
+        session.provider === "jules" || session.provider === "gemini" || session.provider === "codex" || session.provider === "claude-code"
+          ? session.provider
+          : undefined,
+    };
+    return restartedTask;
   }
 }

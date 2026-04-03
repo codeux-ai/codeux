@@ -119,10 +119,12 @@ export const TaskDuration: FunctionComponent<{
 export interface RerunOptions {
     provider?: string;
     clearWorktree?: boolean;
+    resetDependents?: boolean;
 }
 
 export interface LiveTaskCardProps {
     task: Subtask;
+    allTasks: Subtask[];
     taskTiming?: LiveTaskTimingSummary | null;
     events?: ExecutionRuntimeEventSummary[];
     onRerun: (id: string, options?: RerunOptions) => void;
@@ -137,6 +139,7 @@ export interface LiveTaskCardProps {
 
 const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     task,
+    allTasks,
     taskTiming,
     events,
     onRerun,
@@ -158,11 +161,12 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
         setShowRerunModal(true);
     }, []);
 
-    const handleRerunConfirm = useCallback((options: { provider?: string; clearWorktree: boolean }) => {
+    const handleRerunConfirm = useCallback((options: { provider?: string; clearWorktree: boolean; resetDependents: boolean }) => {
         setShowRerunModal(false);
         onRerun(task.record_id || task.id, {
             provider: options.provider,
             clearWorktree: options.clearWorktree,
+            resetDependents: options.resetDependents,
         });
     }, [task.id, task.record_id, onRerun]);
 
@@ -378,8 +382,8 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
 
             {showRerunModal && createPortal(
                 <RerunTaskModal
-                    taskId={task.id}
-                    taskTitle={task.title}
+                    task={task}
+                    allTasks={allTasks}
                     currentProvider={task.provider}
                     onClose={() => setShowRerunModal(false)}
                     onConfirm={handleRerunConfirm}

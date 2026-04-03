@@ -276,6 +276,7 @@ describe("dashboard-lifecycle-service", () => {
       expect(mockDeps.taskRerunService.rerunTask).toHaveBeenCalledWith("task-1", {
         provider: undefined,
         clearWorktree: undefined,
+        resetDependents: undefined,
       });
       expect(mockDeps.activityCacheService.invalidateGitStatusCache).toHaveBeenCalled();
       expect(result).toEqual({ id: "123" });

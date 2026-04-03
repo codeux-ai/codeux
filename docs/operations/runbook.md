@@ -132,6 +132,7 @@ Checks:
 - Does the DB task record still show `coding_completed` because a feature PR or worker branch is still unresolved?
 - Did the merge settle on the feature branch, or was this a no-output task that should auto-promote to final `completed`?
 - Are CI / review gates still intentionally holding the task before final completion?
+- If the provider session actually ended `FAILED`, Sprint OS should now clear the stale session/PR runtime state and requeue the task instead of treating the task as completed just because a PR artifact exists.
 
 ### 8. Tasks show RUNNING after MCP was interrupted
 Symptoms:
@@ -154,6 +155,10 @@ Checks:
 - On startup, active `queued` and `running` sprint runs are resumed automatically in place; Sprint OS now restores the watch loop instead of requiring a manual sprint restart.
 - Local `docker_cli` task dispatches are rewritten to retryable failed state during that recovery, while durable Jules sessions and connected-worker dispatches remain attached to the resumed sprint run.
 - Failed CLI sessions can preserve their worktree for manual follow-up or assisted retry, based on CLI Workflow settings.
+- Dashboard task reruns now support a full clean reset:
+  - the selected task always clears session, PR, merge, and intervention state before restart
+  - optional downstream reset rewrites dependent tasks to fresh pending execution snapshots so old completed/running descendants do not keep stale runtime metadata
+  - if a task already merged code, operators must undo those landed changes before rerunning that task chain
 
 ## Useful Commands
 

@@ -2,6 +2,7 @@ import type { JulesActivity, JulesSession, Subtask } from "../../contracts/app-t
 import type { TaskRunRecord, TaskDispatchStatus, TaskRunState } from "../../contracts/execution-types.js";
 import type { SessionSyncDependencies } from "../sprint-types.js";
 import { buildTaskRunKey, extractTaskRunKeyFromTitle } from "../../services/task-run-key.js";
+import { applyPendingTaskRuntimeReset } from "../../domain/sprint/task-reset-state.js";
 import {
   extractProviderErrorCategory,
   isQuotaCooldownActive,
@@ -361,7 +362,9 @@ export const runSessionSyncStep = async (
 
     if (match.state === "FAILED") {
       if (retryFailed) {
-        task.status = "PENDING";
+        applyPendingTaskRuntimeReset(task, {
+          preserveProvider: true,
+        });
       } else {
         task.status = "FAILED";
       }
