@@ -21,10 +21,9 @@ import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workfl
 import { buildReadFileRetryPrompt, isReadFileNotFoundToolError } from "./cli-workflow-text-utils.js";
 import { ProviderRunner, type IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
-import { classifyProviderError, ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
-import { resolveProviderRetryDecision, sleepWithSignal } from "../shared/providers/provider-retry-policy.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
 import { extractJsonLikeBlock } from "./planning-json-extractor.js";
+import { ProviderExecutionService } from "./provider-execution-service.js";
 
 interface PlanningAgentServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -79,9 +78,15 @@ interface VirtualPlanningResult {
 
 export class PlanningAgentService {
   private readonly providerRunner: IProviderRunner;
+  private readonly providerExecutionService: ProviderExecutionService;
 
   constructor(private readonly deps: PlanningAgentServiceDeps) {
     this.providerRunner = deps.providerRunner || new ProviderRunner(new DockerRunner());
+    this.providerExecutionService = new ProviderExecutionService({
+      executionRepository: deps.executionRepository,
+      providerRunner: this.providerRunner,
+      logger: deps.logger,
+    });
   }
 
   async improveSprintPrompt(projectId: string, input: ImprovePromptInput, signal?: AbortSignal): Promise<ImprovePromptResult> {
@@ -496,187 +501,47 @@ export class PlanningAgentService {
       });
     }
 
-    const runProvider = async (
-      prompt: string,
-      currentSessionId: string,
-      retry: boolean,
-      continueNativeSessionId?: string | null,
-    ) => {
-      args.signal?.throwIfAborted();
-      const startedAt = new Date().toISOString();
-      const invocation = this.deps.executionRepository?.createProviderInvocationUsage({
-        projectId: args.projectId,
-        sprintId: args.sprintId,
-        sessionId: currentSessionId,
-        provider,
-        purpose: "planning",
-        model: providerSettings.model,
-        startedAt,
-        promptChars: prompt.length,
-      }) || null;
-      const startedMs = Date.now();
-      const result = await this.providerRunner.runProviderForText({
-        provider,
-        prompt,
-        cwd: args.repoPath,
-        model: providerSettings.model,
-        apiKey: providerSettings.apiKey,
-        sessionId: currentSessionId,
-        workflowSettings,
-        repoPath: args.repoPath,
-        githubToken: args.settings.git.githubToken,
-        signal: args.signal,
-        continueSessionId: continueNativeSessionId,
-        onActivity: (description, originator) => {
-          this.deps.logger?.debug(retry ? "Virtual planning worker retry activity" : "Virtual planning worker activity", {
-            projectId: args.projectId,
-            invocationId: args.invocationId,
-            provider,
-            originator: originator || "system",
-            description,
-          });
-        },
-      });
-
-      if (invocation && this.deps.executionRepository) {
-        this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
-          status: result.ok ? "completed" : "failed",
-          model: providerSettings.model,
-          nativeSessionId: result.nativeSessionId,
-          finishedAt: new Date().toISOString(),
-          durationMs: Date.now() - startedMs,
-          transcriptChars: result.usageTelemetry.transcriptText.length,
-          inputTokens: result.usageTelemetry.inputTokens,
-          cachedInputTokens: result.usageTelemetry.cachedInputTokens,
-          outputTokens: result.usageTelemetry.outputTokens,
-          reasoningOutputTokens: result.usageTelemetry.reasoningOutputTokens,
-          totalTokens: result.usageTelemetry.totalTokens,
-          usageSource: result.usageTelemetry.usageSource,
-          rawUsageJson: result.usageTelemetry.rawUsageJson,
-        });
-      }
-
-      return result;
-    };
-
-    let currentPrompt = providerPrompt;
-    let result: Awaited<ReturnType<typeof runProvider>>;
-    let usedReadFileRetry = false;
-    let continueSessionId: string | null = null;
-    let rateLimitRetryCount = 0;
-    while (true) {
-      result = await runProvider(currentPrompt, sessionId, usedReadFileRetry, continueSessionId);
-
-      if (!result.ok && workflowSettings.retryOnReadFileNotFound && !usedReadFileRetry && isReadFileNotFoundToolError(result)) {
-        this.deps.logger?.info("Retrying virtual planning request with file-discovery guidance", {
+    const result = await this.providerExecutionService.executeProvider({
+      projectId: args.projectId,
+      sprintId: args.sprintId,
+      purpose: "planning",
+      type: "planning",
+      provider,
+      prompt: providerPrompt,
+      model: providerSettings.model,
+      apiKey: providerSettings.apiKey,
+      sessionId,
+      workflowSettings,
+      repoPath: args.repoPath,
+      githubToken: args.settings.git.githubToken,
+      signal: args.signal,
+      expectTextOutput: true,
+      invocationId: args.invocationId,
+      onActivity: (description, originator) => {
+        this.deps.logger?.debug("Virtual planning worker activity", {
           projectId: args.projectId,
           invocationId: args.invocationId,
           provider,
+          originator: originator || "system",
+          description,
         });
-        currentPrompt = buildReadFileRetryPrompt(providerPrompt);
-        usedReadFileRetry = true;
-        continue;
-      }
+      },
+    });
 
-      if (result.ok) {
-        break;
-      }
-
-      const classification = classifyProviderError(provider, result);
+    if (!result.ok) {
       this.deps.logger?.error("Virtual planning provider failed", {
         projectId: args.projectId,
         provider,
         exitCode: result.code,
-        errorCategory: classification.category,
-        resetAfter: classification.resetAfter,
         stderr: result.stderr?.slice(0, 500),
         stdout: result.stdout?.slice(0, 500),
       });
-
-      if (args.invocationId) {
-        this.deps.executionRepository?.updateExecutionInvocation(args.invocationId, {
-          lastErrorCategory: classification.category,
-          lastErrorMessage: classification.userMessage,
-          lastRetryAfterIso: classification.resetAtIso,
-        });
-        this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
-          role: "system",
-          contentMarkdown: `Provider error (${classification.category}): ${classification.userMessage}`,
-          metadata: {
-            provider,
-            model: providerSettings.model,
-            errorCategory: classification.category,
-            retryAfterIso: classification.resetAtIso,
-            routeKind: "virtual",
-          },
-        });
-      }
-
-      const retryDecision = resolveProviderRetryDecision(classification, workflowSettings);
-      if (retryDecision) {
-        if (retryDecision.kind === "rate_limit" && rateLimitRetryCount >= workflowSettings.maxRateLimitRetries) {
-          this.deps.logger?.warn("Stopping virtual planning retries after hitting max rate-limit retries", {
-            projectId: args.projectId,
-            invocationId: args.invocationId,
-            provider,
-            model: providerSettings.model,
-            maxRateLimitRetries: workflowSettings.maxRateLimitRetries,
-          });
-        } else {
-          if (retryDecision.kind === "rate_limit") {
-            rateLimitRetryCount += 1;
-          }
-          this.deps.logger?.warn("Retrying virtual planning request after classified provider error", {
-            projectId: args.projectId,
-            invocationId: args.invocationId,
-            provider,
-            model: providerSettings.model,
-            errorCategory: classification.category,
-            retryAtIso: retryDecision.retryAtIso,
-            delayMs: retryDecision.delayMs,
-          });
-          if (args.invocationId) {
-            this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
-              role: "system",
-              contentMarkdown: retryDecision.kind === "quota_reset"
-                ? `Waiting for provider quota reset. Retrying at ${retryDecision.retryAtIso}.`
-                : `Provider rate-limited. Retrying at ${retryDecision.retryAtIso}.`,
-              metadata: {
-                provider,
-                model: providerSettings.model,
-                errorCategory: classification.category,
-                retryAfterIso: retryDecision.retryAtIso,
-                routeKind: "virtual",
-              },
-            });
-          }
-          continueSessionId = result.nativeSessionId || (provider === "claude-code" ? null : sessionId);
-          await sleepWithSignal(retryDecision.delayMs, args.signal);
-          continue;
-        }
-      }
-
-      if (classification.category !== "UNKNOWN") {
-        throw new ProviderQuotaError(classification);
-      }
-      throw new Error(classification.userMessage);
+      throw new Error(`Virtual ${this.getProviderLabel(provider)} worker failed: ${result.stderr || result.stdout}`);
     }
 
-    const bodyMarkdown = result.text.trim();
+    const bodyMarkdown = (result as any).text.trim();
     if (!bodyMarkdown) {
       throw new Error(`Virtual ${this.getProviderLabel(provider)} worker returned an empty Planning agent reply.`);
-    }
-
-    if (args.invocationId) {
-      this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
-        role: "assistant",
-        contentMarkdown: bodyMarkdown,
-        metadata: {
-          provider,
-          model: providerSettings.model,
-          routeKind: "virtual",
-        },
-      });
     }
 
     return {
@@ -716,35 +581,15 @@ export class PlanningAgentService {
           routeKind: "virtual",
         },
       });
-      this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
-        role: "user",
-        contentMarkdown: args.followUpPrompt,
-        metadata: {
-          provider,
-          model: providerSettings.model,
-          routeKind: "virtual",
-        },
-      });
     }
 
-    args.signal?.throwIfAborted();
-    const startedAt = new Date().toISOString();
-    const invocation = this.deps.executionRepository?.createProviderInvocationUsage({
+    const result = await this.providerExecutionService.executeProvider({
       projectId: args.projectId,
       sprintId: args.sprintId,
-      sessionId,
-      provider,
       purpose: "planning",
-      model: providerSettings.model,
-      startedAt,
-      promptChars: args.followUpPrompt.length,
-    }) || null;
-    const startedMs = Date.now();
-
-    const result = await this.providerRunner.runProviderForText({
+      type: "planning",
       provider,
       prompt: args.followUpPrompt,
-      cwd: args.repoPath,
       model: providerSettings.model,
       apiKey: providerSettings.apiKey,
       sessionId,
@@ -752,6 +597,8 @@ export class PlanningAgentService {
       repoPath: args.repoPath,
       githubToken: args.settings.git.githubToken,
       signal: args.signal,
+      expectTextOutput: true,
+      invocationId: args.invocationId,
       continueSessionId: previousResult.nativeSessionId || previousResult.sessionId,
       onActivity: (description, originator) => {
         this.deps.logger?.debug("Virtual planning JSON retry activity", {
@@ -764,39 +611,9 @@ export class PlanningAgentService {
       },
     });
 
-    if (invocation && this.deps.executionRepository) {
-      this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
-        status: result.ok ? "completed" : "failed",
-        model: providerSettings.model,
-        nativeSessionId: result.nativeSessionId,
-        finishedAt: new Date().toISOString(),
-        durationMs: Date.now() - startedMs,
-        transcriptChars: result.usageTelemetry.transcriptText.length,
-        inputTokens: result.usageTelemetry.inputTokens,
-        cachedInputTokens: result.usageTelemetry.cachedInputTokens,
-        outputTokens: result.usageTelemetry.outputTokens,
-        reasoningOutputTokens: result.usageTelemetry.reasoningOutputTokens,
-        totalTokens: result.usageTelemetry.totalTokens,
-        usageSource: result.usageTelemetry.usageSource,
-        rawUsageJson: result.usageTelemetry.rawUsageJson,
-      });
-    }
-
-    const bodyMarkdown = result.text.trim();
+    const bodyMarkdown = (result as any).text?.trim();
     if (!result.ok || !bodyMarkdown) {
       throw new Error(`Virtual ${this.getProviderLabel(provider)} worker JSON retry returned no usable output.`);
-    }
-
-    if (args.invocationId) {
-      this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
-        role: "assistant",
-        contentMarkdown: bodyMarkdown,
-        metadata: {
-          provider,
-          model: providerSettings.model,
-          routeKind: "virtual",
-        },
-      });
     }
 
     return {
