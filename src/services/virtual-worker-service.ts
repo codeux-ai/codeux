@@ -98,6 +98,12 @@ export class VirtualWorkerService {
 
   constructor(private readonly deps: VirtualWorkerServiceDependencies) {}
 
+  private isOrchestratorHandledClarificationItem(item: ProjectAttentionItemRecord): boolean {
+    return item.summaryMarkdown.includes("Clarification cooldown active")
+      || item.summaryMarkdown.includes("already answered automatically")
+      || item.summaryMarkdown.includes("Resume instruction already sent");
+  }
+
   start(): void {
     if (this.reconcileTimer) {
       return;
@@ -246,8 +252,8 @@ export class VirtualWorkerService {
           return false;
         }
 
-        // Avoid items that are in cooldown handled by orchestrator
-        if (item.summaryMarkdown.includes("Clarification cooldown active")) {
+        // Avoid clarification/recovery items already being held in orchestrator-managed automated recovery.
+        if (this.isOrchestratorHandledClarificationItem(item)) {
           return false;
         }
 
@@ -393,8 +399,8 @@ export class VirtualWorkerService {
   }
 
   private async handleAttentionItem(workerEndpointId: string, item: ProjectAttentionItemRecord, reason: string): Promise<void> {
-    // Check if it's a cooldown item that we somehow claimed anyway
-    if (item.summaryMarkdown.includes("Clarification cooldown active")) {
+    // Check if it's an orchestrator-managed clarification recovery item we somehow claimed anyway.
+    if (this.isOrchestratorHandledClarificationItem(item)) {
       // Just release it, don't escalate. The orchestrator will handle it.
       return;
     }

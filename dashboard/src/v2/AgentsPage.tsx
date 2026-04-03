@@ -240,7 +240,10 @@ export const AgentsPage: FunctionComponent = () => {
   const [projectFileSavingEnabled, setProjectFileSavingEnabled] = useState(true);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
+  const {
+    data: effectiveSettings,
+    error: effectiveSettingsError,
+  } = useProjectEffectiveSettings(selectedProject?.id || null);
 
   useEffect(() => {
     if (effectiveSettings) {
@@ -397,9 +400,9 @@ export const AgentsPage: FunctionComponent = () => {
         onCreate={() => void handleCreate()}
       />
 
-      {error && (
+      {(error || effectiveSettingsError) && (
         <div className="rounded-[1.5rem] border border-status-red/20 bg-status-red/10 px-5 py-4 text-sm text-status-red">
-          {error}
+          {error || effectiveSettingsError}
         </div>
       )}
 

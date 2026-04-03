@@ -14,6 +14,7 @@ import { AgentPresetRepository } from "../../repositories/agent-preset-repositor
 import { DashboardRealtimeEventRepository } from "../../repositories/dashboard-realtime-event-repository.js";
 import { WorkerEndpointRepository } from "../../repositories/worker-endpoint-repository.js";
 import { ProjectWorkerAssignmentRepository } from "../../repositories/project-worker-assignment-repository.js";
+import { QaReviewRepository } from "../../repositories/qa-review-repository.js";
 import { ProjectWorkerAssignmentService } from "../../domain/workers/project-worker-assignment-service.js";
 import { ProjectAttentionRepository } from "../../repositories/project-attention-repository.js";
 import { ProjectAttentionService } from "../../domain/workers/project-attention-service.js";
@@ -58,6 +59,7 @@ export interface CoreDependencies {
   connectionChatRepository: ConnectionChatRepository;
   workerEndpointRepository: WorkerEndpointRepository;
   projectWorkerAssignmentRepository: ProjectWorkerAssignmentRepository;
+  qaReviewRepository: QaReviewRepository;
   projectWorkerAssignmentService: ProjectWorkerAssignmentService;
   projectAttentionRepository: ProjectAttentionRepository;
   projectAttentionService: ProjectAttentionService;
@@ -133,6 +135,7 @@ export function createCoreDependencies(
   const projectRuntimeRepository = new ProjectRuntimeRepository(appDbStorage, dashboardRealtimeService);
   const workerEndpointRepository = new WorkerEndpointRepository(appDbStorage);
   const projectWorkerAssignmentRepository = new ProjectWorkerAssignmentRepository(appDbStorage);
+  const qaReviewRepository = new QaReviewRepository(appDbStorage);
   const projectWorkerAssignmentService = new ProjectWorkerAssignmentService(
     projectWorkerAssignmentRepository,
     workerEndpointRepository,
@@ -218,6 +221,7 @@ export function createCoreDependencies(
     connectionChatRepository,
     workerEndpointRepository,
     projectWorkerAssignmentRepository,
+    qaReviewRepository,
     projectWorkerAssignmentService,
     projectAttentionRepository,
     projectAttentionService,

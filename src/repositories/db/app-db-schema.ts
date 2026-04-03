@@ -246,6 +246,37 @@ CREATE TABLE IF NOT EXISTS provider_invocations (
         FOREIGN KEY (attention_item_id) REFERENCES project_attention_items(id) ON DELETE CASCADE
       );
 
+CREATE TABLE IF NOT EXISTS qa_review_runs (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        sprint_id TEXT NOT NULL,
+        sprint_run_id TEXT,
+        task_id TEXT,
+        task_run_id TEXT,
+        trigger_type TEXT NOT NULL,
+        status TEXT NOT NULL,
+        outcome TEXT,
+        run_index INTEGER NOT NULL DEFAULT 1,
+        agent_preset_id TEXT,
+        agent_name TEXT,
+        target_task_key TEXT,
+        target_session_id TEXT,
+        target_provider TEXT,
+        summary_markdown TEXT,
+        fix_instructions TEXT,
+        payload_json TEXT,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_id) REFERENCES sprints(id) ON DELETE CASCADE,
+        FOREIGN KEY (sprint_run_id) REFERENCES sprint_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+        FOREIGN KEY (task_run_id) REFERENCES task_runs(id) ON DELETE CASCADE,
+        FOREIGN KEY (agent_preset_id) REFERENCES agent_presets(id) ON DELETE SET NULL
+      );
+
 CREATE TABLE IF NOT EXISTS sprint_run_events (
         id TEXT PRIMARY KEY,
         sprint_run_id TEXT NOT NULL,

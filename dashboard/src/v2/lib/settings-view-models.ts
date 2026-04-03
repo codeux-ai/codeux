@@ -90,6 +90,13 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
   agents: {
     saveToProjectDirectory: settings.agents.saveToProjectDirectory,
     instructionTemplates: { ...settings.agents.instructionTemplates },
+    qualityAssurance: {
+      enabled: settings.agents.qualityAssurance.enabled,
+      maxTaskReviewRuns: settings.agents.qualityAssurance.maxTaskReviewRuns,
+      taskCompletion: { ...settings.agents.qualityAssurance.taskCompletion },
+      sprintCompletion: { ...settings.agents.qualityAssurance.sprintCompletion },
+      completedTaskWithoutPr: { ...settings.agents.qualityAssurance.completedTaskWithoutPr },
+    },
   },
   skills: cloneSkills(settings.skills),
   memory: { ...settings.memory },
@@ -132,6 +139,13 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
   agents: {
     saveToProjectDirectory: settings.agents.saveToProjectDirectory,
     instructionTemplates: { ...settings.agents.instructionTemplates },
+    qualityAssurance: {
+      enabled: settings.agents.qualityAssurance.enabled,
+      maxTaskReviewRuns: settings.agents.qualityAssurance.maxTaskReviewRuns,
+      taskCompletion: { ...settings.agents.qualityAssurance.taskCompletion },
+      sprintCompletion: { ...settings.agents.qualityAssurance.sprintCompletion },
+      completedTaskWithoutPr: { ...settings.agents.qualityAssurance.completedTaskWithoutPr },
+    },
   },
   skills: cloneSkills(settings.skills),
   memory: { ...settings.memory },

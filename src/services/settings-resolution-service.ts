@@ -38,6 +38,18 @@ function cloneInstructionTemplates(
   return { ...templates };
 }
 
+function cloneQualityAssuranceSettings(
+  settings: ProjectSettings["agents"]["qualityAssurance"],
+): ProjectSettings["agents"]["qualityAssurance"] {
+  return {
+    enabled: settings.enabled,
+    maxTaskReviewRuns: settings.maxTaskReviewRuns,
+    taskCompletion: { ...settings.taskCompletion },
+    sprintCompletion: { ...settings.sprintCompletion },
+    completedTaskWithoutPr: { ...settings.completedTaskWithoutPr },
+  };
+}
+
 function cloneInvocationRouting(
   routing: ProjectSettings["aiProvider"]["invocationRouting"],
 ): ProjectSettings["aiProvider"]["invocationRouting"] {
@@ -198,6 +210,41 @@ function sanitizeInstructionTemplates(value: unknown): Record<InstructionTemplat
   return nextTemplates;
 }
 
+function sanitizeQualityAssuranceTriggerSettings(
+  value: unknown,
+  defaults: ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"],
+): ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"] {
+  const input = toRecord(value);
+
+  return {
+    enabled: typeof input.enabled === "boolean"
+      ? input.enabled
+      : defaults.enabled,
+    agentPresetId: typeof input.agentPresetId === "string" && input.agentPresetId.trim().length > 0
+      ? input.agentPresetId.trim()
+      : null,
+  };
+}
+
+function sanitizeQualityAssuranceSettings(
+  value: unknown,
+): ProjectSettings["agents"]["qualityAssurance"] {
+  const input = toRecord(value);
+  const defaults = DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance;
+
+  return {
+    enabled: typeof input.enabled === "boolean"
+      ? input.enabled
+      : defaults.enabled,
+    maxTaskReviewRuns: typeof input.maxTaskReviewRuns === "number" && Number.isFinite(input.maxTaskReviewRuns)
+      ? Math.max(1, Math.min(10, Math.round(input.maxTaskReviewRuns)))
+      : defaults.maxTaskReviewRuns,
+    taskCompletion: sanitizeQualityAssuranceTriggerSettings(input.taskCompletion, defaults.taskCompletion),
+    sprintCompletion: sanitizeQualityAssuranceTriggerSettings(input.sprintCompletion, defaults.sprintCompletion),
+    completedTaskWithoutPr: sanitizeQualityAssuranceTriggerSettings(input.completedTaskWithoutPr, defaults.completedTaskWithoutPr),
+  };
+}
+
 function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintPreview"] {
   const input = toRecord(value);
   const defaults = DEFAULT_DASHBOARD_SETTINGS.sprintPreview;
@@ -299,6 +346,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     agents: {
       saveToProjectDirectory: DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
       instructionTemplates: cloneInstructionTemplates(DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates),
+      qualityAssurance: cloneQualityAssuranceSettings(DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance),
     },
     skills: cloneSkills(DEFAULT_SKILLS),
     memory: { ...DEFAULT_DASHBOARD_SETTINGS.memory },
@@ -404,6 +452,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
         ? Boolean(toRecord(input.agents).saveToProjectDirectory)
         : DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
       instructionTemplates: sanitizeInstructionTemplates(toRecord(input.agents).instructionTemplates),
+      qualityAssurance: sanitizeQualityAssuranceSettings(toRecord(input.agents).qualityAssurance),
     },
     skills: sanitizeSkills(input.skills, git.githubMode),
     memory: sanitizeMemory(input as Partial<DashboardSettings>),
@@ -510,7 +559,11 @@ export function resolveDashboardSettings(args: {
     cliWorkflow: { ...sprintSettings.cliWorkflow },
     sprintPreview: { ...sprintSettings.sprintPreview },
     workers: { ...sprintSettings.workers },
-    agents: { ...sprintSettings.agents },
+    agents: {
+      saveToProjectDirectory: sprintSettings.agents.saveToProjectDirectory,
+      instructionTemplates: cloneInstructionTemplates(sprintSettings.agents.instructionTemplates),
+      qualityAssurance: cloneQualityAssuranceSettings(sprintSettings.agents.qualityAssurance),
+    },
     skills: cloneSkills(sprintSettings.skills),
     mcpTools: cloneMcpTools(args.systemSettings.mcpTools),
     memory: { ...sprintSettings.memory },

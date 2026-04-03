@@ -84,6 +84,22 @@ const getLatestAgentPrompt = (task: Subtask): string => {
   return "";
 };
 
+const normalizeAutomationMessage = (value: string): string => value.replace(/\s+/g, " ").trim();
+
+const buildClarificationDedupKey = (task: Subtask): string => {
+  const latestPrompt = normalizeAutomationMessage(getLatestAgentPrompt(task));
+  const fallback = normalizeAutomationMessage(task.prompt || task.title || "clarification");
+  return (latestPrompt || fallback).slice(0, 1000);
+};
+
+const buildPausedDedupKey = (task: Subtask): string => {
+  const latestPrompt = normalizeAutomationMessage(getLatestAgentPrompt(task));
+  const fallback = normalizeAutomationMessage(task.prompt || task.title || "resume");
+  return (latestPrompt || fallback).slice(0, 1000);
+};
+
+const getInterventionStateKey = (sessionId: string, state: "clarification" | "paused"): string => `${state}:${sessionId}`;
+
 const buildClarificationAutoReply = (task: Subtask, template: string): string => {
   const latestPrompt = getLatestAgentPrompt(task);
   const contextBlock = latestPrompt.length > 0
@@ -113,7 +129,7 @@ export interface ApplyActionRequiredAutomationArgs {
     sourceEventKey?: string;
     payload: Record<string, unknown>;
   }) => void;
-  lastAutoReplyTimestamps?: Map<string, number>;
+  lastAutomatedInterventionKeys?: Map<string, string>;
 }
 
 export const applyActionRequiredAutomation = async (
@@ -198,24 +214,21 @@ export const applyActionRequiredAutomation = async (
         continue;
       }
 
-      if (task.session_state === "AWAITING_USER_FEEDBACK" || task.session_state === "PAUSED") {
-        const cooldownMs = (args.settings.clarificationCooldownSeconds ?? 300) * 1000;
-        const lastReplyAt = args.lastAutoReplyTimestamps?.get(sessionId);
-        if (lastReplyAt !== undefined && cooldownMs > 0 && (Date.now() - lastReplyAt) < cooldownMs) {
-          const remainingSec = Math.ceil((cooldownMs - (Date.now() - lastReplyAt)) / 1000);
+      if (task.session_state === "AWAITING_USER_FEEDBACK") {
+        const clarificationKey = buildClarificationDedupKey(task);
+        const storedClarificationKey = args.lastAutomatedInterventionKeys?.get(getInterventionStateKey(sessionId, "clarification"));
+        if (storedClarificationKey === clarificationKey) {
           task.status = "RUNNING";
           task.intervention_owner = "AGENT";
-          task.intervention_hint = `Clarification cooldown active; next auto-reply in ${remainingSec}s.`;
-          emitTaskEvent(task, "action_required_cooldown", {
+          task.intervention_hint = "Latest clarification request was already answered automatically; waiting for Jules to resume.";
+          emitTaskEvent(task, "action_required_auto_reply_skipped_duplicate", {
             sessionId,
             sessionState: task.session_state || null,
-            cooldownRemainingSeconds: remainingSec,
-          }, `cooldown:${sessionId}`);
+            clarificationKeyPreview: clarificationKey.slice(0, 200),
+          }, `duplicate-clarification:${sessionId}`);
           continue;
         }
-      }
 
-      if (task.session_state === "AWAITING_USER_FEEDBACK") {
         let reply: string;
         if (args.settings.autoAnswerClarificationMode === "WORKER" && args.generateWorkerClarificationReply) {
           reply = await args.generateWorkerClarificationReply({
@@ -229,7 +242,7 @@ export const applyActionRequiredAutomation = async (
         }
 
         await args.sendSessionMessage(sessionId, reply);
-        args.lastAutoReplyTimestamps?.set(sessionId, Date.now());
+        args.lastAutomatedInterventionKeys?.set(getInterventionStateKey(sessionId, "clarification"), clarificationKey);
         task.status = "RUNNING";
         emitTaskEvent(task, "action_required_auto_replied", {
           sessionId,
@@ -241,11 +254,25 @@ export const applyActionRequiredAutomation = async (
       }
 
       if (task.session_state === "PAUSED") {
+        const pausedKey = buildPausedDedupKey(task);
+        const storedPausedKey = args.lastAutomatedInterventionKeys?.get(getInterventionStateKey(sessionId, "paused"));
+        if (storedPausedKey === pausedKey) {
+          task.status = "RUNNING";
+          task.intervention_owner = "AGENT";
+          task.intervention_hint = "Resume instruction already sent for the current paused state; waiting for Jules to continue.";
+          emitTaskEvent(task, "action_required_auto_resume_skipped_duplicate", {
+            sessionId,
+            sessionState: task.session_state || null,
+            pausedKeyPreview: pausedKey.slice(0, 200),
+          }, `duplicate-paused:${sessionId}`);
+          continue;
+        }
+
         await args.sendSessionMessage(
           sessionId,
           "Continue execution using the current plan and repository conventions. Resume work and report progress."
         );
-        args.lastAutoReplyTimestamps?.set(sessionId, Date.now());
+        args.lastAutomatedInterventionKeys?.set(getInterventionStateKey(sessionId, "paused"), pausedKey);
         task.status = "RUNNING";
         emitTaskEvent(task, "action_required_auto_resumed", {
           sessionId,

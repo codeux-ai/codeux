@@ -19,6 +19,7 @@ import * as agentPresetApi from "../../../dashboard/src/v2/lib/agent-preset-api.
 import * as settingsApi from "../../../dashboard/src/v2/lib/settings-api.js";
 import { ProjectDataProvider } from "../../../dashboard/src/v2/context/project-data.js";
 import { AgentsPage } from "../../../dashboard/src/v2/AgentsPage.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 vi.mock("../../../dashboard/src/v2/lib/agent-preset-api.js");
 vi.mock("../../../dashboard/src/v2/lib/settings-api.js");
@@ -152,6 +153,11 @@ if (typeof window !== 'undefined') {
   window.SVGElement.prototype.getTotalLength = () => 100;
 }
 
+const createEffectiveSettings = () => ({
+  settings: JSON.parse(JSON.stringify(DEFAULT_DASHBOARD_SETTINGS)),
+  sources: {},
+});
+
 describe("AgentsPage", () => {
   let mockPresets: any[];
 
@@ -211,9 +217,7 @@ describe("AgentsPage", () => {
     };
 
     vi.mocked(agentPresetApi.fetchAgentPresets).mockResolvedValue(mockPresets as any);
-    vi.mocked(settingsApi.fetchProjectEffectiveSettings).mockResolvedValue({
-      settings: { agents: { saveToProjectDirectory: true } },
-    } as any);
+    vi.mocked(settingsApi.fetchProjectEffectiveSettings).mockResolvedValue(createEffectiveSettings() as any);
 
     mockProjectData.projects = [{ id: "project-1", name: "Test Project", status: "ready" }];
     mockProjectData.selectedProject = { id: "project-1", name: "Test Project", status: "ready" };

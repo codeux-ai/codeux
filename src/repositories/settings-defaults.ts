@@ -40,6 +40,7 @@ export const INVOCATION_ROUTING_IDS: InvocationRoutingId[] = [
   "planning",
   "dashboard_reply",
   "clarification_reply",
+  "qa_review",
   "ci_fix",
   "merge_conflict",
 ];
@@ -168,6 +169,13 @@ export const DEFAULT_INVOCATION_ROUTING: Record<InvocationRoutingId, InvocationR
     allowedProviders: [],
     providers: {},
   },
+  qa_review: {
+    profile: "WORKER",
+    strategy: "MANUAL",
+    provider: null,
+    allowedProviders: [],
+    providers: {},
+  },
   ci_fix: {
     profile: "WORKER",
     strategy: "MANUAL",
@@ -210,6 +218,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       planning: { ...DEFAULT_INVOCATION_ROUTING.planning, allowedProviders: [], providers: {} },
       dashboard_reply: { ...DEFAULT_INVOCATION_ROUTING.dashboard_reply, allowedProviders: [], providers: {} },
       clarification_reply: { ...DEFAULT_INVOCATION_ROUTING.clarification_reply, allowedProviders: [], providers: {} },
+      qa_review: { ...DEFAULT_INVOCATION_ROUTING.qa_review, allowedProviders: [], providers: {} },
       ci_fix: { ...DEFAULT_INVOCATION_ROUTING.ci_fix, allowedProviders: [], providers: {} },
       merge_conflict: { ...DEFAULT_INVOCATION_ROUTING.merge_conflict, allowedProviders: [], providers: {} },
     },
@@ -300,6 +309,22 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   agents: {
     saveToProjectDirectory: true,
     instructionTemplates: { ...DEFAULT_INSTRUCTION_TEMPLATES },
+    qualityAssurance: {
+      enabled: false,
+      maxTaskReviewRuns: 1,
+      taskCompletion: {
+        enabled: true,
+        agentPresetId: null,
+      },
+      sprintCompletion: {
+        enabled: true,
+        agentPresetId: null,
+      },
+      completedTaskWithoutPr: {
+        enabled: true,
+        agentPresetId: null,
+      },
+    },
   },
   skills: DEFAULT_SKILLS,
   mcpTools: DEFAULT_MCP_TOOL_TOGGLES.map((tool) => ({ ...tool })),

@@ -54,7 +54,7 @@ interface TaskStateSnapshot {
 export class CycleRunner {
   private readonly ciAutofixRetryCounts = new Map<string, number>();
   private readonly featurePrGate = new FeaturePrGateService();
-  private readonly lastAutoReplyTimestamps = new Map<string, number>();
+  private readonly lastAutomatedInterventionKeys = new Map<string, string>();
 
   constructor(private readonly deps: SprintOrchestratorDependencies) {}
 
@@ -130,6 +130,7 @@ export class CycleRunner {
         isActionRequiredState: this.deps.isActionRequiredState,
       });
       await this.captureTaskCompletionMemories(subtasks, preDerivationStates, args, dashboardSettings);
+      await this.reviewCompletedTasks(subtasks, preDerivationStates, args, dashboardSettings);
     }
 
     let reportText = "";
@@ -150,7 +151,7 @@ export class CycleRunner {
         approveSessionPlan: this.deps.approveSessionPlan,
         sendSessionMessage: this.deps.sendSessionMessage,
         generateWorkerClarificationReply: this.deps.generateWorkerClarificationReply,
-        lastAutoReplyTimestamps: this.lastAutoReplyTimestamps,
+        lastAutomatedInterventionKeys: this.lastAutomatedInterventionKeys,
         onTaskEvent: ({ task, eventType, payload, sourceEventKey }) => {
           appendTaskEvent(task, eventType, payload, sourceEventKey);
         },
@@ -408,6 +409,42 @@ export class CycleRunner {
     }
 
     await this.captureMemoriesForTasks(pendingCaptures, args);
+  }
+
+  private async reviewCompletedTasks(
+    subtasks: Subtask[],
+    preDerivationStates: Map<string, Subtask["status"]>,
+    args: CycleRunnerArgs,
+    settings: ReturnType<SprintOrchestratorDependencies["getDashboardSettings"]>,
+  ): Promise<void> {
+    if (!this.deps.qualityAssuranceService || !settings.agents.qualityAssurance.enabled) {
+      return;
+    }
+
+    for (const task of subtasks) {
+      const prev = preDerivationStates.get(task.id);
+      if (task.status !== "COMPLETED" || prev === "COMPLETED") {
+        continue;
+      }
+
+      const outcome = await this.deps.qualityAssuranceService.reviewCompletedTask({
+        projectId: args.executionContext.project.id,
+        sprintId: args.executionContext.sprint.id,
+        sprintRunId: args.sprintRunId,
+        repoPath: args.repoPath,
+        task,
+        subtasks,
+      });
+
+      if (outcome.reopenedTask) {
+        this.deps.logger.info("QA reopened completed task for follow-up fixes", {
+          projectId: args.executionContext.project.id,
+          sprintId: args.executionContext.sprint.id,
+          taskId: task.record_id || task.id,
+          taskKey: task.id,
+        });
+      }
+    }
   }
 
   private async captureMemoriesForTasks(

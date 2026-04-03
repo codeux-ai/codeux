@@ -350,6 +350,31 @@ const validateAgents = (
       issues.push({ path: `${path}.instructionTemplates.${templateId}`, message: "Expected a string" });
     }
   }
+  const qa = value.qualityAssurance;
+  if (!isRecord(qa)) {
+    issues.push({ path: `${path}.qualityAssurance`, message: "Expected an object" });
+    return;
+  }
+  if (typeof qa.enabled !== "boolean") {
+    issues.push({ path: `${path}.qualityAssurance.enabled`, message: "Expected a boolean" });
+  }
+  if (typeof qa.maxTaskReviewRuns !== "number" || qa.maxTaskReviewRuns < 1) {
+    issues.push({ path: `${path}.qualityAssurance.maxTaskReviewRuns`, message: "Expected a positive number" });
+  }
+  const triggerIds = ["taskCompletion", "sprintCompletion", "completedTaskWithoutPr"] as const;
+  for (const triggerId of triggerIds) {
+    const trigger = qa[triggerId];
+    if (!isRecord(trigger)) {
+      issues.push({ path: `${path}.qualityAssurance.${triggerId}`, message: "Expected an object" });
+      continue;
+    }
+    if (typeof trigger.enabled !== "boolean") {
+      issues.push({ path: `${path}.qualityAssurance.${triggerId}.enabled`, message: "Expected a boolean" });
+    }
+    if (trigger.agentPresetId !== null && trigger.agentPresetId !== undefined && typeof trigger.agentPresetId !== "string") {
+      issues.push({ path: `${path}.qualityAssurance.${triggerId}.agentPresetId`, message: "Expected null or a string" });
+    }
+  }
 };
 
 const validateSkills = (
