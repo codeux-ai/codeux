@@ -1252,8 +1252,11 @@ describe("ExecutionRepository", () => {
       expect.objectContaining({ id: "core_total_tokens", grouping: "totals" }),
       expect.objectContaining({ id: "core_active_time", grouping: "totals" }),
       expect.objectContaining({ id: "core_invocations", grouping: "totals" }),
-      expect.objectContaining({ id: "provider_codex", grouping: "providers" }),
-      expect.objectContaining({ id: "purpose_time_task_coding", grouping: "purposes_time" }),
+      expect.objectContaining({ id: "provider_codex", grouping: "providers", data: expect.arrayContaining([810]) }),
+      expect.objectContaining({ id: "provider_claude-code", grouping: "providers", data: expect.arrayContaining([400]) }),
+      expect.objectContaining({ id: "purpose_time_task_coding", grouping: "purposes_time", data: expect.arrayContaining([180_000]) }),
+      expect.objectContaining({ id: "purpose_time_merge_conflict", grouping: "purposes_time", data: expect.arrayContaining([240_000]) }),
+      expect.objectContaining({ id: "purpose_invocations_task_coding", grouping: "purposes_invocations", data: expect.arrayContaining([1]) }),
     ]));
   });
 

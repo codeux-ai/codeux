@@ -30,15 +30,21 @@ describe("UsageSeriesSidebar", () => {
     const series = [
       { id: "tokens", label: "Tokens", grouping: "Usage", defaultEnabled: true, data: [100] },
       { id: "active", label: "Active Time", grouping: "Usage", defaultEnabled: true, data: [200] },
-      { id: "foo", label: "Foo", grouping: "Details", defaultEnabled: false, data: [300] }
+      { id: "foo", label: "Foo", grouping: "Details", defaultEnabled: false, data: [300] },
+      { id: "provider_codex", label: "codex Tokens", grouping: "providers", defaultEnabled: false, data: [400] },
+      { id: "purpose_time_task_coding", label: "task coding Time", grouping: "purposes_time", defaultEnabled: false, data: [500] }
     ];
 
-    render(<UsageSeriesSidebar series={series as any} enabledSeries={{ tokens: true, active: false, foo: false }} onToggle={vi.fn()} activeIndex={0} />);
+    render(<UsageSeriesSidebar series={series as any} enabledSeries={{ tokens: true, active: false, foo: false, provider_codex: false, purpose_time_task_coding: false }} onToggle={vi.fn()} activeIndex={0} />);
 
     expect(screen.getAllByText("Usage").length).toBeGreaterThan(0);
     expect(screen.getByText("Details")).toBeInTheDocument();
     expect(screen.getAllByText("Tokens").length).toBeGreaterThan(0);
     expect(screen.getByText("Active Time")).toBeInTheDocument();
+    expect(screen.getAllByText("providers").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("codex Tokens").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("purposes_time").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("task coding Time").length).toBeGreaterThan(0);
   });
 });
 
@@ -57,7 +63,9 @@ describe("InteractiveUsageChart", () => {
       },
       chartSeries: [
         { id: "tokens", label: "Tokens", grouping: "Usage", defaultEnabled: true, data: [100] },
-        { id: "active", label: "Active Time", grouping: "Usage", defaultEnabled: true, data: [200] }
+        { id: "active", label: "Active Time", grouping: "Usage", defaultEnabled: true, data: [200] },
+        { id: "provider_codex", label: "codex Tokens", grouping: "providers", defaultEnabled: false, data: [400] },
+        { id: "purpose_time_task_coding", label: "task coding Time", grouping: "purposes_time", defaultEnabled: false, data: [500] }
       ]
     } as any;
 
@@ -65,5 +73,7 @@ describe("InteractiveUsageChart", () => {
 
     expect(screen.getAllByText("Usage").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Tokens").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("codex Tokens").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("task coding Time").length).toBeGreaterThan(0);
   });
 });
