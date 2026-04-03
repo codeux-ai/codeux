@@ -1,30 +1,20 @@
-1. **Extract `useSettingsPageState` Hook**:
-    - Create `dashboard/src/v2/hooks/use-settings-page-state.ts`.
-    - Move types `SettingsScope`, `CategoryId`, `AgentInstructionTemplateId`, `IntegrationId`, `Category`, `IntegrationDefinition`, `CATEGORIES`, `CATEGORY_SEARCH_HINTS`, `providerLabels`, `thinkingModeOptions`, `invocationRouteDefinitions`, `routingProfileOptions`, `INTEGRATIONS`, `AGENT_INSTRUCTION_TEMPLATE_OPTIONS` from `SettingsPage.tsx` or expose them so they can be imported.
-    - Extract state management (useState calls, useEffect hooks for fetching/saving/resetting settings, and calculated values like `filteredCategories`) into `useSettingsPageState` hook.
-    - Return a comprehensive object exposing the state, computed values, and action handlers.
+1. **Create `chat-cache-updates.ts`**:
+   - Extract cache update logic like `upsertMessage` into this file.
+   - Also add update functions for threads and connections as needed by realtime events.
 
-2. **Extract `SettingsCategoryRail` Component**:
-    - Create `dashboard/src/v2/components/settings/SettingsCategoryRail.tsx`.
-    - Accept props for `categories`, `filteredCategories`, `activeCategory`, `settingsSearch`, `onSearchChange`, `onCategoryChange`.
-    - Move the sticky sidebar rendering code from `SettingsPage.tsx` into this component.
+2. **Create `use-chat-page-controller.ts`**:
+   - Move state management (threads, invocations, messages, selected items, loading states) out of `ChatPage.tsx` into this hook.
+   - Move data fetching (`fetchConversationThreads`, `ensureMessagesLoaded`, `refreshThreads`, etc.) into this hook.
+   - Move actions (`createThreadForCompose`, `handleSend`, `handleDeleteThread`, `handleAssignRoute`, `handleCompactThread`) into this hook.
+   - Move realtime subscription setup (`subscribeToDashboardRealtime` and its handlers) into this hook, using `chat-cache-updates.ts` helpers.
 
-3. **Extract `SettingsContentPanels` Component**:
-    - Create `dashboard/src/v2/components/settings/SettingsContentPanels.tsx`.
-    - Accept props for all necessary state and handlers to render the active category's content panel.
-    - Move the `renderContent`, `renderGeneralSection`, etc., and `IntegrationConfigRow`, `SectionCard` from `SettingsPage.tsx` or keep `SectionCard` in `SettingsSurface.tsx` if it's there. Actually, `SectionCard` and `IntegrationConfigRow` are defined in `SettingsPage.tsx` and should be moved or exported. We'll likely move them to `SettingsContentPanels.tsx` or export them. The requirement mentions `SettingsSurface.tsx`, maybe `SectionCard` belongs there? Let's check `SettingsSurface.tsx`.
+3. **Refactor `ChatPage.tsx`**:
+   - Remove the extracted state and logic.
+   - Consume `useChatPageController`.
+   - Keep manual UI states like `chatMode`, `input`, `composerRef`, `messagesRef`, and the UI rendering structure.
 
-4. **Update `SettingsSurface.tsx`**:
-    - Move `SectionCard` and `IntegrationConfigRow` to `SettingsSurface.tsx` if they fit as generic layout surfaces for settings, or keep them local to panels if they are highly specific. The prompt mentions `- dashboard/src/v2/components/settings/SettingsSurface.tsx`.
+4. **Verify Tests**:
+   - Ensure `tests/dashboard/v2/chat-page.test.tsx` and `tests/dashboard/v2/chat-page-shell.test.tsx` pass. Check if they need any adjustments.
 
-5. **Refactor `SettingsPage.tsx`**:
-    - Import the new hook `useSettingsPageState`.
-    - Import `SettingsCategoryRail` and `SettingsContentPanels`.
-    - Re-wire the component to be a thin wrapper around these extracted parts.
+5. **Pre-commit checks**: Ensure all standard pre-commit gates pass (linting, typecheck, tests).
 
-6. **Add Tests**:
-    - Update/Create `tests/dashboard/v2/settings-page-state.test.tsx` to verify the state transitions, filtering, and hook behavior.
-    - Run `npm run lint`, `npm run typecheck:dashboard`, `npm run test`, `npm run build`.
-
-7. **Submit**:
-    - Commit pre-commit steps and submit.

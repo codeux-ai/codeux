@@ -1,4 +1,9 @@
-import type { FunctionComponent } from "preact";
+const fs = require('fs');
+
+let chatPage = fs.readFileSync('dashboard/src/v2/ChatPage.tsx', 'utf8');
+
+if (!chatPage.includes('useChatPageController')) {
+  chatPage = `import type { FunctionComponent } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 import {
   ArrowUp,
@@ -164,7 +169,7 @@ export const ChatPage: FunctionComponent = () => {
                 onInput={(event) => {
                   const element = event.currentTarget;
                   element.style.height = "auto";
-                  element.style.height = `${element.scrollHeight}px`;
+                  element.style.height = \`\${element.scrollHeight}px\`;
                   setInput(element.value);
                 }}
                 onKeyDown={(event) => {
@@ -185,7 +190,7 @@ export const ChatPage: FunctionComponent = () => {
               <div className="mt-3 flex items-center justify-between">
                 <div className="text-[10px] font-mono text-slate-400">
                   {activeConnection
-                    ? `${activeConnection.displayName} · ${activeConnection.status} · Enter sends`
+                    ? \`\${activeConnection.displayName} · \${activeConnection.status} · Enter sends\`
                     : "Messages will stay queued until a listener claims or is assigned to this thread · Enter sends · Shift+Enter newline"}
                 </div>
                 <button
@@ -236,13 +241,13 @@ export const ChatPage: FunctionComponent = () => {
                       {controller.selectedInvocation.model}
                     </span>
                   )}
-                  <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
+                  <span className={\`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] \${
                     controller.selectedInvocation.status === "failed"
                       ? "border-status-red/25 bg-status-red/10 text-status-red"
                       : controller.selectedInvocation.status === "completed"
                         ? "border-signal-500/25 bg-signal-500/10 text-signal-500"
                         : "border-black/25 bg-black/10 text-slate-500 dark:border-white/25 dark:bg-white/10 dark:text-slate-400"
-                  }`}>
+                  }\`}>
                     {controller.selectedInvocation.status}
                   </span>
                 </div>
@@ -250,12 +255,12 @@ export const ChatPage: FunctionComponent = () => {
               {controller.selectedInvocation?.lastErrorMessage && (
                 <div className="mt-3 max-w-2xl text-sm leading-relaxed text-status-amber">
                   {controller.selectedInvocation.lastErrorMessage}
-                  {controller.selectedInvocation.lastRetryAfterIso && ` Retry at ${controller.selectedInvocation.lastRetryAfterIso}.`}
+                  {controller.selectedInvocation.lastRetryAfterIso && \` Retry at \${controller.selectedInvocation.lastRetryAfterIso}.\`}
                 </div>
               )}
             </div>
             <div className="text-right text-[10px] font-mono text-slate-400">
-              <div className="mb-2">{controller.selectedInvocation ? `${controller.selectedInvocation.messageCount} messages` : "0 messages"}</div>
+              <div className="mb-2">{controller.selectedInvocation ? \`\${controller.selectedInvocation.messageCount} messages\` : "0 messages"}</div>
             </div>
           </div>
         </div>
@@ -297,7 +302,7 @@ export const ChatPage: FunctionComponent = () => {
         manualRefreshing={controller.manualRefreshing}
         onCreateThread={() => void controller.createThreadForCompose()}
         pendingDashboardMessages={pendingDashboardMessages}
-        activeConnectionLabel={activeConnection ? `${activeConnection.displayName} · ${activeConnection.status}` : undefined}
+        activeConnectionLabel={activeConnection ? \`\${activeConnection.displayName} · \${activeConnection.status}\` : undefined}
         error={controller.error}
         railSlot={<div />}
         detailSlot={<EmptyChat message="Choose a project from the top navigation to load its stored chat threads and messages." />}
@@ -314,10 +319,13 @@ export const ChatPage: FunctionComponent = () => {
       manualRefreshing={controller.manualRefreshing}
       onCreateThread={() => void controller.createThreadForCompose()}
       pendingDashboardMessages={pendingDashboardMessages}
-      activeConnectionLabel={activeConnection ? `${activeConnection.displayName} · ${activeConnection.status}` : undefined}
+      activeConnectionLabel={activeConnection ? \`\${activeConnection.displayName} · \${activeConnection.status}\` : undefined}
       error={controller.error}
       railSlot={renderRail()}
       detailSlot={renderDetail()}
     />
   );
 };
+`;
+  fs.writeFileSync('dashboard/src/v2/ChatPage.tsx', chatPage);
+}
