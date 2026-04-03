@@ -147,10 +147,12 @@ When `action=orchestrate`, `wait` is true, and `watchLoop` is enabled:
   - no runnable tasks remain, or
   - merge-required tasks are detected.
 
-On completion it may:
-- clean up subtask directory,
-- append completion steps,
-- preserve files when failures remain.
+On completion, `SprintFinalizationService` handles:
+- merge gating and main-merge blocker evaluations,
+- final completion transition rules and QA checks,
+- cleaning up the subtask directory,
+- appending completion steps,
+- preserving files when failures remain.
 
 ## Single-Cycle Fallback
 

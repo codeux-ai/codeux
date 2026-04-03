@@ -1257,7 +1257,7 @@ describe("WatchLoopRunner", () => {
       }),
     );
 
-    const result = await (runner as any).finalizeSprintRun({
+    const result = await (runner as any).finalizationService.finalizeSprintRun({
       scopedExecutionContext: {
         project: { id: "project-1", name: "Project 1" },
         sprint: { id: "sprint-1", name: "Sprint 1", goal: "Ship safely" },
