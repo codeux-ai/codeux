@@ -87,11 +87,15 @@ Reconnect behavior:
 
 ### Websocket-first dashboard consumers
 
-The first dashboard consumers now use websocket-first updates:
+The first dashboard consumers now use websocket-first updates, driven centrally by the `useRealtimeResource` foundation hook (`dashboard/src/hooks/use-realtime-resource.ts`), which handles snapshot stabilization, REST hydration, and connection degradation natively.
+
+Active integrations include:
 
 - `dashboard/src/hooks/use-dashboard-runtime-data.ts`
 - `dashboard/src/hooks/use-overview-telemetry.ts`
-- `dashboard/src/v2/hooks/use-project-execution.ts`
+- `dashboard/src/hooks/useExecutions.ts`
+- `dashboard/src/hooks/useSprints.ts`
+- `dashboard/src/v2/context/project-data.tsx`
 - `dashboard/src/v2/ChatPage.tsx`
 - Chat subscriptions now also react to `conversation.thread.deleted`, so thread removal propagates across open dashboard tabs without a manual refresh.
 

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
-import type { OverviewTelemetrySnapshot, DashboardRealtimeServerMessage } from "../types.js";
+import { useCallback, useMemo } from "preact/hooks";
+import type { OverviewTelemetrySnapshot } from "../types.js";
 import { fetchOverviewTelemetry } from "../lib/api/dashboard-api.js";
-import { subscribeToDashboardRealtime } from "../lib/realtime/dashboard-realtime-client.js";
+import { useRealtimeResource } from "./use-realtime-resource.js";
 
 const EMPTY_TELEMETRY: OverviewTelemetrySnapshot = {
   activeProjects: [],
@@ -16,49 +16,31 @@ export function useOverviewTelemetry(pollIntervalMs: number = 30000): {
   error: string | null;
   refresh: () => Promise<void>;
 } {
-  const [telemetry, setTelemetry] = useState<OverviewTelemetrySnapshot>(EMPTY_TELEMETRY);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async (): Promise<void> => {
-    try {
-      setTelemetry(await fetchOverviewTelemetry());
-      setError(null);
-    } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
-    } finally {
-      setLoading(false);
-    }
+  const fetchResource = useCallback(async (signal?: AbortSignal) => {
+    // API client doesn't explicitly support signal, but could be added later
+    return fetchOverviewTelemetry();
   }, []);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  // Use reference equality for simplicity, assuming API updates provide new objects
+  const isEqual = useCallback((_prev: OverviewTelemetrySnapshot, _next: OverviewTelemetrySnapshot) => false, []);
 
-  useEffect(() => {
-    return subscribeToDashboardRealtime(["overview"], (message: DashboardRealtimeServerMessage) => {
-      if (message.type === "event" && message.event.eventType === "overview.telemetry.updated") {
-        setTelemetry(message.event.payload as OverviewTelemetrySnapshot);
-        setError(null);
-        setLoading(false);
-        return;
-      }
+  const { data: telemetry, loading, error, refetch } = useRealtimeResource<OverviewTelemetrySnapshot>({
+    initialData: EMPTY_TELEMETRY,
+    fetchResource,
+    isEqual,
+    realtime: {
+      scopes: ["overview"],
+      eventType: "overview.telemetry.updated",
+      updateDirectlyFromEvent: true,
+    },
+    pollIntervalMs,
+    isAlreadyLoaded: false,
+  });
 
-      if (message.type === "snapshot_required") {
-        void refresh();
-      }
-    });
-  }, [refresh]);
-
-  useEffect(() => {
-    if (pollIntervalMs <= 0) {
-      return;
-    }
-    const intervalId = window.setInterval(() => {
-      void refresh();
-    }, pollIntervalMs);
-    return () => window.clearInterval(intervalId);
-  }, [pollIntervalMs, refresh]);
-
-  return useMemo(() => ({ telemetry, loading, error, refresh }), [error, refresh, telemetry, loading]);
+  return useMemo(() => ({
+    telemetry,
+    loading,
+    error,
+    refresh: () => refetch({ silent: true }),
+  }), [telemetry, loading, error, refetch]);
 }
