@@ -63,19 +63,19 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
           <div className="flex items-center gap-2">
             <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">Active Thread</div>
             {isReplayRequired && (
-              <span className="inline-flex items-center gap-1 rounded-sm border border-status-amber/30 bg-status-amber/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-status-amber">
+              <span className="inline-flex items-center gap-1 rounded-sm border border-status-amber/30 bg-status-amber/20 shadow-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-status-amber">
                 <AlertCircle className="h-3 w-3" />
                 Replay Required
               </span>
             )}
             {!isReplayRequired && hasActiveSession && (
-              <span className="inline-flex items-center gap-1 rounded-sm border border-signal-500/30 bg-signal-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-signal-500">
+              <span className="inline-flex items-center gap-1 rounded-sm border border-signal-500/30 bg-signal-500/20 shadow-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-signal-500">
                 <Activity className="h-3 w-3" />
                 Active Session
               </span>
             )}
             {isNewOrCompacted && !isReplayRequired && (
-              <span className="inline-flex items-center gap-1 rounded-sm border border-slate-500/30 bg-slate-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-500 dark:border-slate-400/30 dark:text-slate-400">
+              <span className="inline-flex items-center gap-1 rounded-sm border border-slate-500/30 bg-slate-500/20 shadow-sm px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-600 dark:border-slate-400/30 dark:text-slate-300">
                 New/Compacted
               </span>
             )}
@@ -97,8 +97,8 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
                 className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] bg-white/70 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-black/[0.03] hover:text-slate-900 disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
                 title="Compact Conversation"
               >
-                <Zap className={`h-3.5 w-3.5 ${isCompacting ? "animate-pulse" : ""}`} />
-                {isCompacting ? "Compacting..." : "Compact"}
+                <Zap className={`h-3.5 w-3.5 ${isCompacting ? "animate-pulse text-signal-500" : ""}`} />
+                {isCompacting ? "Compacting session..." : "Compact"}
               </button>
             )}
             <label className="inline-flex items-center gap-2">
