@@ -40,7 +40,10 @@ import { GitCIStatusPanel } from "./components/GitCIStatusPanel.js";
 import { deriveLiveDurationDisplay } from "./lib/live-duration-display.js";
 import { useProjectData } from "./context/project-data.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
-
+import { useConfirmDialog } from "./hooks/use-confirm-dialog.js";
+import { ConfirmDialog } from "./components/ui/ConfirmDialog.js";
+import { useActionFeedback } from "./hooks/use-action-feedback.js";
+import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 
 const SprintBoatRace = lazy(() => import("./components/SprintBoatRace.js").then(m => ({ default: m.SprintBoatRace })));
 const SprintDag = lazy(() => import("./components/SprintDag.js").then(m => ({ default: m.SprintDag })));
@@ -117,6 +120,9 @@ export const LiveSessionPage: FunctionComponent = () => {
     });
     const sprintScopeReady = Boolean(selectedSprintId || sprintScopeId || initialLoadComplete);
 
+    const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
+    const { feedback, setError, clearFeedback } = useActionFeedback();
+
     const {
         rerunningIds,
         pendingActionIds,
@@ -131,7 +137,7 @@ export const LiveSessionPage: FunctionComponent = () => {
         handleClaimAttentionItem,
         handleResolveAttentionItem,
         handleDismissAttentionItem,
-    } = useLiveSessionActions(refreshRuntimeStatus, refreshGitStatus);
+    } = useLiveSessionActions(refreshRuntimeStatus, refreshGitStatus, requestConfirm, setError);
 
     const [activeFilter, setFilter] = useState<TaskFilter>("All");
     const [headerView, setHeaderView] = useState<HeaderView>("dag");
@@ -346,12 +352,15 @@ export const LiveSessionPage: FunctionComponent = () => {
 
     return (
         <div className="max-w-[2400px] mx-auto px-8 md:px-20 py-24 flex flex-col gap-16 relative z-10">
+            <ConfirmDialog isOpen={isConfirmOpen} options={confirmOptions} onConfirm={handleConfirm} onCancel={handleCancel} />
             <LiveTransportBanner
                 transportState={transportState}
                 isRecovering={isRecovering}
                 snapshotUpdatedAt={snapshotUpdatedAt}
                 error={error}
             />
+
+            <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} />
 
             <StatsHeader
                 headerView={headerView}
