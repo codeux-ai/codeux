@@ -6,6 +6,7 @@ import type { ProjectSummary, SprintRecord, TaskRecord } from "../contracts/proj
 import type { TaskRunRecord } from "../contracts/execution-types.js";
 import { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import { ExecutionRepository } from "../repositories/execution-repository.js";
+import { mapPlanningStatusToRuntimeStatus, toMergeIndicator } from "../shared/project/task-subtask-projection.js";
 
 export interface SprintExecutionContext {
   project: ProjectSummary;
@@ -22,30 +23,7 @@ function mapTaskStatusToSubtaskStatus(task: TaskRecord, latestRun?: TaskRunRecor
     return latestRun.state;
   }
 
-  switch (task.status) {
-    case "coding_completed":
-      return "CODING_COMPLETED";
-    case "completed":
-      return "COMPLETED";
-    case "in_progress":
-      return "RUNNING";
-    case "pending":
-    default:
-      return "PENDING";
-  }
-}
-
-function toMergeIndicator(value: string | null): SubtaskMergeIndicator | undefined {
-  switch (value) {
-    case "CI":
-    case "AUTOMERGE":
-    case "MERGED":
-    case "MERGE_BLOCKED":
-    case "MERGE_CONFLICT":
-      return value;
-    default:
-      return undefined;
-  }
+  return mapPlanningStatusToRuntimeStatus(task.status);
 }
 
 export class SprintExecutionStateService {

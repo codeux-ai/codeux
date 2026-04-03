@@ -164,6 +164,28 @@ describe("ProjectManagementRepository", () => {
     });
   });
 
+  it("inflates deep task dependencies efficiently", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Dependency Test",
+      sourceType: "local",
+      sourceRef: "/workspace/dependency-test",
+    });
+    const sprint = repository.createSprint(project.id, { name: "Dependency Sprint" });
+
+    const task1 = repository.createTask(project.id, { sprintId: sprint.id, title: "Task 1" });
+    const task2 = repository.createTask(project.id, { sprintId: sprint.id, title: "Task 2", dependsOnTaskIds: [task1.id] });
+    const task3 = repository.createTask(project.id, { sprintId: sprint.id, title: "Task 3", dependsOnTaskIds: [task1.id, task2.id] });
+
+    const tasks = repository.listTasks(project.id, sprint.id);
+
+    expect(tasks).toHaveLength(3);
+    const mapped = new Map(tasks.map((t) => [t.id, t.dependsOnTaskIds]));
+    expect(mapped.get(task1.id)).toEqual([]);
+    expect(mapped.get(task2.id)).toEqual([task1.id]);
+    expect(mapped.get(task3.id)?.sort()).toEqual([task1.id, task2.id].sort());
+  });
+
   it("handles originalPrompt in sprints and supports clearing tasks", async () => {
     const { repository } = await createRepository();
 
