@@ -26,6 +26,8 @@ import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { PreviewSessionSlider } from "./components/browser/PreviewSessionSlider.js";
 import { PreviewWindowChrome } from "./components/browser/PreviewWindowChrome.js";
+import { useActionFeedback } from "./hooks/use-action-feedback.js";
+import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 
 const PREVIEW_MESSAGE_TYPE = "sprint-preview:state";
 const PREVIEW_NAVIGATION_TYPE = "sprint-preview:navigate";
@@ -67,7 +69,9 @@ export const BrowserPage: FunctionComponent = () => {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [launchSprintId, setLaunchSprintId] = useState("");
   const [frameSrc, setFrameSrc] = useState("");
-  const [frameKey, setFrameKey] = useState(0);
+  const [actionFeedback, setActionFeedback] = useState<{status: 'idle' | 'pending' | 'success' | 'error', message: string | null}>({status: 'idle', message: null});
+
+  const browserFeedback = useActionFeedback();
 
   const { sessions, selectedSession, loading, error: fetchError, refresh: refreshSessions } = usePreviewSessions({
     projectId: selectedProject?.id || null,
@@ -117,7 +121,7 @@ export const BrowserPage: FunctionComponent = () => {
       setCurrentPath(nextPath);
       setAddressValue(nextPath);
       setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${nextPath}`);
-      setFrameKey((current) => current + 1);
+
       return;
     }
     setFrameSrc("");
@@ -132,7 +136,7 @@ export const BrowserPage: FunctionComponent = () => {
       return;
     }
     setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(currentPathRef.current)}`);
-    setFrameKey((current) => current + 1);
+
   }, [visibleSelectedSession?.status, visibleSelectedSession?.hostPort]);
 
   useEffect(() => {
@@ -151,6 +155,7 @@ export const BrowserPage: FunctionComponent = () => {
       return;
     }
     let cancelled = false;
+    browserFeedback.setPending("Loading script...");
     void fetchPreviewScript(selectedProject.id, scriptTargetSprint.id)
       .then((data) => {
         if (cancelled) {
@@ -158,12 +163,13 @@ export const BrowserPage: FunctionComponent = () => {
         }
         setScript(data);
         setScriptDraft(data.content);
+        browserFeedback.setSuccess("Script loaded successfully");
       })
       .catch((fetchError) => {
         if (cancelled) {
           return;
         }
-        setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
+        browserFeedback.setError(`Failed to load script: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`);
       });
     return () => {
       cancelled = true;
@@ -244,7 +250,7 @@ export const BrowserPage: FunctionComponent = () => {
       return;
     }
     setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(path)}`);
-    setFrameKey((current) => current + 1);
+
   };
 
   const handleStart = async (sprintId = launchSprintId) => {
@@ -254,14 +260,16 @@ export const BrowserPage: FunctionComponent = () => {
       return;
     }
     setLaunching(true);
+    browserFeedback.setPending("Launching container...");
     try {
       const session = await startPreviewSession(selectedProject.id, sprintId);
       setActiveSessionId(session.id);
       await refreshSessions(true);
       setFrameSrc(`${buildPreviewOrigin(session.id)}${normalizePath(currentPathRef.current)}`);
-      setFrameKey((current) => current + 1);
+
+      browserFeedback.setSuccess("Container launched successfully");
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : String(actionError));
+      browserFeedback.setError(`Failed to launch container: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
       setLaunching(false);
     }
@@ -274,12 +282,14 @@ export const BrowserPage: FunctionComponent = () => {
       return;
     }
     setSessionActionPending(true);
+    browserFeedback.setPending("Rebuilding container...");
     try {
       await rebuildPreviewSession(visibleSelectedSession.id);
       await refreshSessions(true);
       reloadFrame();
+      browserFeedback.setSuccess("Container rebuilt successfully");
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : String(actionError));
+      browserFeedback.setError(`Failed to rebuild container: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
       setSessionActionPending(false);
     }
@@ -288,11 +298,13 @@ export const BrowserPage: FunctionComponent = () => {
   const handleStop = async () => {
     if (!visibleSelectedSession) return;
     setSessionActionPending(true);
+    browserFeedback.setPending("Stopping container...");
     try {
       await stopPreviewSession(visibleSelectedSession.id);
       await refreshSessions(true);
+      browserFeedback.setSuccess("Container stopped successfully");
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : String(actionError));
+      browserFeedback.setError(`Failed to stop container: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
       setSessionActionPending(false);
     }
@@ -313,7 +325,7 @@ export const BrowserPage: FunctionComponent = () => {
       await removePreviewSession(sessionId);
       await refreshSessions(true);
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : String(actionError));
+      browserFeedback.setError(`Failed to save script: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
       setRemovingSessionIds((current) => current.filter((id) => id !== sessionId));
     }
@@ -322,12 +334,14 @@ export const BrowserPage: FunctionComponent = () => {
   const handleSaveScript = async () => {
     if (!selectedProject || !scriptTargetSprint) return;
     setSavingScript(true);
+    browserFeedback.setPending("Saving script...");
     try {
       const nextScript = await savePreviewScript(selectedProject.id, scriptTargetSprint.id, scriptDraft);
       setScript(nextScript);
       setShowScriptEditor(false);
+      browserFeedback.setSuccess("Script saved successfully");
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : String(actionError));
+      setActionFeedback({status: 'error', message: `Failed to launch container: ${actionError instanceof Error ? actionError.message : String(actionError)}`});
     } finally {
       setSavingScript(false);
     }
@@ -341,7 +355,7 @@ export const BrowserPage: FunctionComponent = () => {
       postNavigationCommand("push", nextPath);
     } else if (visibleSelectedSession) {
       setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${nextPath}`);
-      setFrameKey((current) => current + 1);
+
     }
   };
 
@@ -389,6 +403,34 @@ export const BrowserPage: FunctionComponent = () => {
       {error && (
         <div className="mb-5 rounded-2xl border border-status-red/20 bg-status-red/10 px-4 py-3 text-sm text-status-red">
           {error}
+        </div>
+      )}
+
+      {actionFeedback.status !== "idle" && actionFeedback.message && (
+        <div className="mb-5 flex items-start gap-3 p-3 rounded-xl border bg-black/[0.02] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06]">
+          <div className={`flex-1 text-sm font-medium mt-0.5 ${actionFeedback.status === 'error' ? 'text-status-red' : actionFeedback.status === 'success' ? 'text-status-green' : 'text-signal-700 dark:text-signal-400'}`}>
+            {actionFeedback.status === 'pending' && <span className="mr-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+            {actionFeedback.message}
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionFeedback({status: 'idle', message: null})}
+            className="shrink-0 p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+          >
+            <span className="sr-only">Dismiss</span>
+            ✕
+          </button>
+        </div>
+      )}
+
+
+      {browserFeedback.feedback.status !== "idle" && (
+        <div className="mb-5">
+          <ActionFeedbackRegion
+            status={browserFeedback.feedback.status}
+            message={browserFeedback.feedback.message}
+            onDismiss={() => browserFeedback.clearFeedback()}
+          />
         </div>
       )}
 
@@ -442,7 +484,7 @@ export const BrowserPage: FunctionComponent = () => {
         >
           {visibleSelectedSession && frameSrc && (
             <iframe
-              key={`${visibleSelectedSession.id}:${frameKey}`}
+              key={visibleSelectedSession.id}
               ref={frameRef}
               title={`Sprint preview ${visibleSelectedSession.sprintName}`}
               src={frameSrc}
@@ -489,8 +531,8 @@ export const BrowserPage: FunctionComponent = () => {
                   disabled={!visibleSelectedSession || sessionActionPending}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
                 >
-                  <RotateCcw className="h-4 w-4" strokeWidth={2} />
-                  Rebuild
+                  <RotateCcw className={`h-4 w-4 ${sessionActionPending ? 'animate-spin' : ''}`} strokeWidth={2} />
+                  {sessionActionPending ? "Rebuilding..." : "Rebuild"}
                 </button>
                 <button
                   type="button"
@@ -499,7 +541,7 @@ export const BrowserPage: FunctionComponent = () => {
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
                 >
                   <Square className="h-4 w-4" strokeWidth={2} />
-                  Stop
+                  {sessionActionPending ? "Stopping..." : "Stop"}
                 </button>
                 <a
                   href={visibleSelectedSession ? `${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(currentPath)}` : undefined}
@@ -538,7 +580,7 @@ export const BrowserPage: FunctionComponent = () => {
                   className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                 >
                   <Save className="h-4 w-4" strokeWidth={2} />
-                  Save
+                  {savingScript ? "Saving..." : "Save"}
                 </button>
               </div>
               <textarea
