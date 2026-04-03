@@ -5,6 +5,7 @@ import type {
 } from "../contracts/project-management-types.js";
 import { SubtaskParser } from "../infrastructure/repositories/subtask-parser.js";
 import { ProjectManagementRepository } from "../repositories/project-management-repository.js";
+import { normalizeImportedTaskStatus, toMergeIndicator } from "./subtask-state-mapper.js";
 
 export class SprintMarkdownService {
   constructor(private readonly projectRepository: ProjectManagementRepository) {}
@@ -164,19 +165,6 @@ function serializeSprintMarkdown(sprint: SprintRecord): string {
   return lines.join("\n");
 }
 
-function normalizeImportedTaskStatus(status: string | undefined): "pending" | "in_progress" | "coding_completed" | "completed" {
-  if (status === "CODING_COMPLETED") {
-    return "coding_completed";
-  }
-  if (status === "COMPLETED") {
-    return "completed";
-  }
-  if (status === "RUNNING") {
-    return "in_progress";
-  }
-  return "pending";
-}
-
 function normalizeSprintStatus(value: string | undefined): SprintRecord["status"] | undefined {
   if (
     value === "running"
@@ -186,13 +174,6 @@ function normalizeSprintStatus(value: string | undefined): SprintRecord["status"
     || value === "cancelled"
     || value === "idle"
   ) {
-    return value;
-  }
-  return undefined;
-}
-
-function toMergeIndicator(value: string | null): "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCKED" | "MERGE_CONFLICT" | undefined {
-  if (value === "CI" || value === "AUTOMERGE" || value === "MERGED" || value === "MERGE_BLOCKED" || value === "MERGE_CONFLICT") {
     return value;
   }
   return undefined;
