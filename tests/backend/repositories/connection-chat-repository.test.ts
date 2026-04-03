@@ -740,6 +740,78 @@ describe("ConnectionChatRepository", () => {
   });
   });
 
+  describe("Aggregate Query Validation", () => {
+    it("computes correct thread counts, visible messages, and pending inbox via listConnections and listThreads", async () => {
+      const { projectRepository, connectionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Aggregate Metrics Project",
+        sourceType: "local",
+        sourceRef: "/workspace/aggregate",
+      });
+
+      const { connection } = connectionRepository.startListen({
+        connectionKey: "agg-conn",
+        displayName: "Aggregated Connection",
+        role: "worker",
+        projectId: project.id,
+      });
+
+      // Thread 1: 2 visible messages (1 pending), 1 hidden control message
+      const thread1 = connectionRepository.createThread(project.id, {
+        connectionId: connection.id,
+        title: "Thread 1",
+      });
+      connectionRepository.postDashboardMessage(project.id, {
+        threadId: thread1.id,
+        bodyMarkdown: "Visible T1",
+      });
+      connectionRepository.postDashboardMessage(project.id, {
+        threadId: thread1.id,
+        bodyMarkdown: "Hidden T1",
+        metadata: { internalVisibility: "hidden" },
+      });
+
+      // Thread 2: 1 visible delivered message
+      const thread2 = connectionRepository.createThread(project.id, {
+        connectionId: connection.id,
+        title: "Thread 2",
+      });
+      const msg2 = connectionRepository.postDashboardMessage(project.id, {
+        threadId: thread2.id,
+        bodyMarkdown: "Delivered T2",
+      });
+
+      // Since it's a dashboard message, mark it processed instead of pending by replying
+      connectionRepository.postListenReply({
+        connectionKey: "agg-conn",
+        threadId: thread2.id,
+        bodyMarkdown: "Delivered T2",
+        replyToMessageId: msg2.id,
+      });
+
+      const connections = connectionRepository.listConnections(project.id);
+      expect(connections).toHaveLength(1);
+      const conn = connections[0];
+
+      expect(conn.threadCount).toBe(2);
+      expect(conn.messageCount).toBe(3); // 3 visible messages overall (1 pending, 1 dashboard delivered, 1 connection reply)
+      expect(conn.pendingInboxCount).toBe(1); // Only 1 pending visible message
+
+      const threads = connectionRepository.listThreads(project.id);
+      expect(threads).toHaveLength(2);
+
+      const t1 = threads.find(t => t.id === thread1.id)!;
+      expect(t1.messageCount).toBe(1); // 1 visible message in thread 1
+      expect(t1.pendingMessageCount).toBe(1); // 1 pending visible message
+      expect(t1.lastMessagePreview).toBe("Visible T1");
+
+      const t2 = threads.find(t => t.id === thread2.id)!;
+      expect(t2.messageCount).toBe(2); // 2 visible messages in thread 2 (1 dashboard, 1 reply)
+      expect(t2.pendingMessageCount).toBe(0); // 0 pending visible messages (it was processed)
+      expect(t2.lastMessagePreview).toBe("Delivered T2");
+    });
+  });
+
   describe("ConversationRuntimeState and Metadata", () => {
     it("creates, retrieves, and updates thread with runtimeState and persists message metadata", async () => {
       const { projectRepository, connectionRepository } = await createRepositories();
