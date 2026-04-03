@@ -13,6 +13,8 @@ Sprint OS now treats dashboard agents as database-backed records that can be see
 The built-in roles are now:
 
 - `Planning agent`
+- `Project manager`
+- `Quality assurance agent`
 - `Worker`
 
 These agents are used as follows:
@@ -24,6 +26,11 @@ These agents are used as follows:
 - `Worker`
   - provide the editable execution prompt for background CLI task runs
   - provide the editable reply prompt for connected worker/listener inbox responses
+- `Project manager`
+  - provide the editable instruction source for worker-routed clarification auto-answer
+- `Quality assurance agent`
+  - review completed tasks and sprint completion with full sprint context
+  - continue existing Jules or CLI task sessions with concrete fix instructions when QA requests changes
 
 ## Source Of Truth
 
@@ -219,6 +226,7 @@ The Agents page now shows:
 - out-of-sync state for changed markdown
 - `Import` action for linked markdown agents
 - `Sync All` action for pulling all out-of-sync local markdown back into sqlite
+- a dedicated `Senior QA Agent` settings card for project-scoped QA triggers, max review runs, and per-trigger preset selection
 
 ### Sprints page
 
@@ -236,8 +244,11 @@ Both `Improve with AI` and planning actions are worker-backed via the Planning a
 This repository now includes the default built-in agent file:
 
 - `.sprint-os/agents/planning_agent.md`
+- `.sprint-os/agents/project_manager.md`
+- `.sprint-os/agents/quality_assurance_agent.md`
+- `.sprint-os/agents/worker.md`
 
-That file is auto-imported when this repository is used as the selected project and no DB record exists yet.
+These files are auto-imported when this repository is used as the selected project and no DB record exists yet.
 
 The repository also now includes:
 

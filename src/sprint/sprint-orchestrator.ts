@@ -32,6 +32,7 @@ import { MainMergeGateService, type MergeFeedbackResult } from "../domain/sprint
 import type { ResolvePullRequestResult } from "../services/git-status-service.js";
 import type { MemoryService } from "../services/memory-service.js";
 import type { MemoryPromotionService } from "../services/memory-promotion-service.js";
+import type { QualityAssuranceService } from "../services/quality-assurance-service.js";
 
 const SPRINT_ORCHESTRATOR_OWNER_KEY = "sprint_orchestrator";
 
@@ -94,6 +95,7 @@ export interface SprintOrchestratorDependencies {
   logger: Logger;
   memoryService?: MemoryService;
   memoryPromotionService?: MemoryPromotionService;
+  qualityAssuranceService?: QualityAssuranceService;
   /** Resolve the planning agent preset ID for a project (used for per-agent memory tagging). */
   resolvePlanningAgentPresetId?: (projectId: string) => Promise<string | undefined>;
 }

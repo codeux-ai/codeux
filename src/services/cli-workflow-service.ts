@@ -160,6 +160,9 @@ export class CliWorkflowService {
     const workflowSettings = this.resolveWorkflowSettings(settings);
     
     const worktreePath = args.resumeWorktreePath || this.workspaceManager.buildWorktreePath(args.repoPath, workspaceSessionId, workflowSettings.executionMode);
+    const qaSettings = settings.agents?.qualityAssurance;
+    const preserveSuccessfulWorktree = qaSettings?.enabled === true
+      && (qaSettings.taskCompletion.enabled || qaSettings.completedTaskWithoutPr.enabled);
 
     // Resolve worker agent preset for per-agent memory tagging
     const workerAgent = await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath).catch(() => null);
@@ -172,6 +175,7 @@ export class CliWorkflowService {
       abortSignal: abortController.signal,
       initialHead: "",
       workflowSucceeded: false,
+      preserveSuccessfulWorktree,
       agentPresetId: workerAgent?.id,
       memoryTemplateOverrideEnabled: workerAgent?.memoryTemplateOverrideEnabled,
       memoryTemplateMarkdown: workerAgent?.memoryTemplateMarkdown,

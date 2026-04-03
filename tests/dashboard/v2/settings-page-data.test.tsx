@@ -34,6 +34,7 @@ const mockRouting = {
   planning: { provider: "gemini", allowedProviders: ["jules", "gemini"], providers: {} },
   dashboard_reply: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
   clarification_reply: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
+  qa_review: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
   ci_fix: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
   merge_conflict: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} }
 };
@@ -45,7 +46,7 @@ const mockSystemSettings = {
     automationLevel: "high",
     aiProvider: { providers: { gemini: { enabled: true, model: "pro", weight: 1, thinkingMode: "MEDIUM" }, jules: { enabled: true, model: "auto", weight: 1, thinkingMode: "SMALL" }, codex: { enabled: false, model: "gpt-4", weight: 1, thinkingMode: "SMALL" }, "claude-code": { enabled: false, model: "claude-3-5", weight: 1, thinkingMode: "SMALL" } }, provider: "gemini", strategy: "single", invocationRouting: mockRouting },
     git: { githubMode: "oauth", defaultBranch: "main", autoCreatePr: true, featureBranchPrefix: "feat", sprintBranchScheme: "short" },
-    ciIntelligence: {}, sprintLoopSteps: {}, cliWorkflow: {}, sprintPreview: {}, workers: {}, agents: { instructionTemplates: {} }, skills: [], memory: {}
+    ciIntelligence: {}, sprintLoopSteps: {}, cliWorkflow: {}, sprintPreview: {}, workers: {}, agents: { saveToProjectDirectory: true, instructionTemplates: {}, qualityAssurance: { enabled: false, maxTaskReviewRuns: 1, taskCompletion: { enabled: true, agentPresetId: null }, sprintCompletion: { enabled: true, agentPresetId: null }, completedTaskWithoutPr: { enabled: true, agentPresetId: null } } }, skills: [], memory: {}
   },
   mcpTools: [],
 };
@@ -55,7 +56,7 @@ const mockEffectiveSettingsData = {
     automationLevel: "high",
     aiProvider: { providers: { gemini: { enabled: true, model: "pro", weight: 1, thinkingMode: "MEDIUM" }, jules: { enabled: true, model: "auto", weight: 1, thinkingMode: "SMALL" }, codex: { enabled: false, model: "gpt-4", weight: 1, thinkingMode: "SMALL" }, "claude-code": { enabled: false, model: "claude-3-5", weight: 1, thinkingMode: "SMALL" } }, provider: "gemini", strategy: "single", invocationRouting: mockRouting },
     git: { githubMode: "oauth", defaultBranch: "main", autoCreatePr: true, featureBranchPrefix: "feat", sprintBranchScheme: "short" },
-    ciIntelligence: {}, sprintLoopSteps: {}, cliWorkflow: {}, sprintPreview: {}, workers: {}, agents: { instructionTemplates: {} }, skills: [], memory: {}
+    ciIntelligence: {}, sprintLoopSteps: {}, cliWorkflow: {}, sprintPreview: {}, workers: {}, agents: { saveToProjectDirectory: true, instructionTemplates: {}, qualityAssurance: { enabled: false, maxTaskReviewRuns: 1, taskCompletion: { enabled: true, agentPresetId: null }, sprintCompletion: { enabled: true, agentPresetId: null }, completedTaskWithoutPr: { enabled: true, agentPresetId: null } } }, skills: [], memory: {}
   },
   sources: { "automationLevel": "project" }
 };
@@ -131,9 +132,17 @@ describe("SettingsPage data interactions", () => {
 
   it("should call refresh pipeline correctly", async () => {
     render(<SettingsPage />);
+
+    await waitFor(() => {
+      expect(fetchSystemSettings).toHaveBeenCalledTimes(1);
+      expect(fetchExternalSettingsHints).toHaveBeenCalledTimes(1);
+    });
+
+    const projectScopeBtn = screen.getAllByRole("button", { name: "Project" })[0];
+    fireEvent.click(projectScopeBtn);
+
     await waitFor(() => {
       expect(fetchProjectEffectiveSettings).toHaveBeenCalledWith("proj-1");
-      expect(fetchExternalSettingsHints).toHaveBeenCalledTimes(1);
     });
   });
 

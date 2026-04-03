@@ -1115,6 +1115,35 @@ export class ExecutionRepository {
     return row ? this.mapProviderInvocationUsageRow(row) : null;
   }
 
+  getLatestProviderInvocationUsageBySession(
+    sessionId: string,
+    purpose?: ProviderInvocationUsageRecord["purpose"],
+  ): ProviderInvocationUsageRecord | null {
+    const trimmedSessionId = sessionId.trim();
+    if (!trimmedSessionId) {
+      return null;
+    }
+
+    const row = purpose
+      ? this.db.prepare(`
+        SELECT *
+        FROM provider_invocations
+        WHERE session_id = ?
+          AND purpose = ?
+        ORDER BY started_at DESC, rowid DESC
+        LIMIT 1
+      `).get(trimmedSessionId, purpose) as ProviderInvocationUsageRow | undefined
+      : this.db.prepare(`
+        SELECT *
+        FROM provider_invocations
+        WHERE session_id = ?
+        ORDER BY started_at DESC, rowid DESC
+        LIMIT 1
+      `).get(trimmedSessionId) as ProviderInvocationUsageRow | undefined;
+
+    return row ? this.mapProviderInvocationUsageRow(row) : null;
+  }
+
   getLatestTaskRunBySessionId(sessionId: string): TaskRunRecord | null {
     const normalizedSessionId = sessionId.trim();
     if (!normalizedSessionId) {

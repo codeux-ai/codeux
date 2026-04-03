@@ -57,6 +57,7 @@ export type InvocationRoutingId =
   | "planning"
   | "dashboard_reply"
   | "clarification_reply"
+  | "qa_review"
   | "ci_fix"
   | "merge_conflict";
 export type CliExecutionMode = "HOST" | "DOCKER";
@@ -617,9 +618,23 @@ export interface WorkerSettings {
   timeoutSeconds: number;
 }
 
+export interface QualityAssuranceTriggerSettings {
+  enabled: boolean;
+  agentPresetId: string | null;
+}
+
+export interface QualityAssuranceSettings {
+  enabled: boolean;
+  maxTaskReviewRuns: number;
+  taskCompletion: QualityAssuranceTriggerSettings;
+  sprintCompletion: QualityAssuranceTriggerSettings;
+  completedTaskWithoutPr: QualityAssuranceTriggerSettings;
+}
+
 export interface AgentSettings {
   saveToProjectDirectory: boolean;
   instructionTemplates: Record<InstructionTemplateId, string>;
+  qualityAssurance: QualityAssuranceSettings;
 }
 
 export interface SkillToggle {

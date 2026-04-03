@@ -152,12 +152,13 @@ Dashboard behavior:
   - Sprint OS performs startup availability checks for Gemini, Codex, and Claude Code, looking for API-key hints and stable local auth artifacts to prepare future onboarding decisions.
   - Enabling a provider auth mount in Integrations also marks that provider active in the dashboard so mount-based Docker setups show the expected connected state even without an API key.
   - Note: `available` means detected credentials/auth presence or an enabled auth mount, whereas `enabled` means user-approved routing participation. CLI providers are opt-in on fresh installs and disabled by default.
-- `invocationRouting` map
+  - `invocationRouting` map
   - route ids:
     - `task_coding`
     - `planning`
     - `dashboard_reply`
     - `clarification_reply`
+    - `qa_review`
     - `ci_fix`
     - `merge_conflict`
   - each route contains:
@@ -176,9 +177,10 @@ Dashboard behavior:
     - `planning`: `WORKER`
     - `dashboard_reply`: `WORKER`
     - `clarification_reply`: `WORKER`
+    - `qa_review`: `WORKER`
     - `ci_fix`: `WORKER`
     - `merge_conflict`: `WORKER`
-  - dashboard replies and clarification auto-answer in `WORKER` mode now follow the preferred worker CLI provider/model by default instead of accidentally inheriting whichever global provider happened to match.
+  - dashboard replies, clarification auto-answer, and QA review runs in `WORKER` mode now follow the preferred worker CLI provider/model by default instead of accidentally inheriting whichever global provider happened to match.
 
 `automationInterventions` contains:
 - `autoApprovePlan` (default `true`): auto-approve `AWAITING_PLAN_APPROVAL` sessions in `SEMI_AUTO`
@@ -188,6 +190,25 @@ Dashboard behavior:
 - `clarificationCooldownSeconds` (default `300`): wait time after an auto-reply/resume before Sprint OS sends another clarification nudge; during this cooldown the task stays in automated recovery and does not open a fresh `action_required` human-escalation path
 - when `autoAnswerClarificationMode = WORKER`, Sprint OS now composes the clarification-answer prompt from the editable `Project manager` agent preset instead of prepending worker instructions
 - worker-routed clarification prompts now include a dedicated Jules clarification section so the latest explicit `agentMessaged.agentMessage` is passed through when available instead of only broad sprint context
+
+`agents` contains:
+
+- `saveToProjectDirectory`
+- `instructionTemplates`
+- `qualityAssurance`
+  - `enabled` (default `false`)
+  - `maxTaskReviewRuns` (default `1`)
+  - `taskCompletion`
+    - `enabled`
+    - `agentPresetId`
+  - `sprintCompletion`
+    - `enabled`
+    - `agentPresetId`
+  - `completedTaskWithoutPr`
+    - `enabled`
+    - `agentPresetId`
+
+Quality assurance settings are project-scoped today and drive the dedicated QA card on the Agents page. When task-level QA is enabled, successful CLI task runs preserve their worktree long enough for a QA follow-up pass to resume the same session/worktree if fixes are required.
 
 `cliWorkflow` contains:
 - Retry/cleanup toggles:

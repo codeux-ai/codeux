@@ -525,6 +525,19 @@ export class WatchLoopRunner {
           report += "\n⏳ **Sprint Still Active:** Waiting for the final main-branch merge to finish before completing the sprint.\n";
           return { status: "wait", report };
         }
+        if (this.deps.qualityAssuranceService) {
+          const qaOutcome = await this.deps.qualityAssuranceService.reviewSprintCompletion({
+            projectId: scopedExecutionContext.project.id,
+            sprintId: scopedExecutionContext.sprint.id,
+            sprintRunId,
+            repoPath,
+            subtasks,
+          });
+          report += qaOutcome.reportText;
+          if (qaOutcome.blockedCompletion) {
+            return { status: "wait", report };
+          }
+        }
         this.deps.completedSprints.add(`${scopedExecutionContext.project.id}:${scopedExecutionContext.sprint.id}`);
         transitionSprintRun(
           this.deps.executionRepository,

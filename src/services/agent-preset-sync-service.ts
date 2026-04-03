@@ -260,6 +260,23 @@ export class AgentPresetSyncService {
     return await this.getRequiredAgent(projectId, "Project manager", "project_manager.md");
   }
 
+  async getQualityAssuranceAgent(projectId: string): Promise<AgentPresetRecord> {
+    return await this.getRequiredAgent(projectId, "Quality assurance agent", "quality_assurance_agent.md");
+  }
+
+  async resolveTargetedQualityAssuranceAgent(projectId: string, agentPresetId?: string | null): Promise<AgentPresetRecord> {
+    await this.syncProjectAgents(projectId);
+
+    if (agentPresetId) {
+      const targeted = this.deps.agentPresetRepository.getAgentPreset(agentPresetId);
+      if (targeted && targeted.projectId === projectId) {
+        return await this.decorateAgentPreset(targeted);
+      }
+    }
+
+    return await this.getQualityAssuranceAgent(projectId);
+  }
+
   async getOptionalWorkerAgentForRepoPath(repoPath: string): Promise<AgentPresetRecord | null> {
     return await this.getOptionalAgentForRepoPath(repoPath, "Worker");
   }
@@ -377,6 +394,9 @@ export class AgentPresetSyncService {
     if (normalizedName === "worker") {
       return ["worker"];
     }
+    if (normalizedName === "quality assurance agent") {
+      return ["qa", "review"];
+    }
     return [];
   }
 
@@ -473,6 +493,10 @@ export class AgentPresetSyncService {
 
     if (this.normalizeName(normalized) === "project manager") {
       return "Project manager";
+    }
+
+    if (this.normalizeName(normalized) === "quality assurance agent") {
+      return "Quality assurance agent";
     }
 
     return normalized.length > 0 ? normalized : "Unnamed agent";

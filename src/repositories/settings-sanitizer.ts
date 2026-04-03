@@ -69,6 +69,18 @@ const sanitizeMcpTools = (value: unknown): McpToolToggle[] => {
   return sanitizeMcpToolToggles(value).map((tool) => ({ ...tool }));
 };
 
+const sanitizeQualityAssuranceTrigger = (
+  value: unknown,
+  defaults: DashboardSettings["agents"]["qualityAssurance"]["taskCompletion"],
+): DashboardSettings["agents"]["qualityAssurance"]["taskCompletion"] => {
+  const input = value && typeof value === "object" ? value as Partial<DashboardSettings["agents"]["qualityAssurance"]["taskCompletion"]> : {};
+
+  return {
+    enabled: readBoolean(input.enabled, defaults.enabled),
+    agentPresetId: readString(input.agentPresetId, "").trim() || null,
+  };
+};
+
 export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardSettings => ({
   dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
   enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
@@ -120,6 +132,13 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   agents: {
     saveToProjectDirectory: DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
     instructionTemplates: { ...DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates },
+    qualityAssurance: {
+      enabled: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.enabled,
+      maxTaskReviewRuns: DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.maxTaskReviewRuns,
+      taskCompletion: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.taskCompletion },
+      sprintCompletion: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.sprintCompletion },
+      completedTaskWithoutPr: { ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr },
+    },
   },
   skills: DEFAULT_DASHBOARD_SETTINGS.skills.map((skill) => ({ ...skill })),
   mcpTools: DEFAULT_DASHBOARD_SETTINGS.mcpTools.map((tool) => ({ ...tool })),
@@ -243,6 +262,30 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
             Object.entries(agentsInput.instructionTemplates).filter(([, value]) => typeof value === "string"),
           )
         : {}),
+    },
+    qualityAssurance: {
+      enabled: readBoolean(
+        (agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.enabled,
+        DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.enabled,
+      ),
+      maxTaskReviewRuns: Math.max(1, Math.min(10,
+        typeof (agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.maxTaskReviewRuns === "number"
+          && Number.isFinite((agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.maxTaskReviewRuns)
+            ? Math.round((agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)!.maxTaskReviewRuns!)
+            : DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.maxTaskReviewRuns
+      )),
+      taskCompletion: sanitizeQualityAssuranceTrigger(
+        (agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.taskCompletion,
+        DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.taskCompletion,
+      ),
+      sprintCompletion: sanitizeQualityAssuranceTrigger(
+        (agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.sprintCompletion,
+        DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.sprintCompletion,
+      ),
+      completedTaskWithoutPr: sanitizeQualityAssuranceTrigger(
+        (agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.completedTaskWithoutPr,
+        DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr,
+      ),
     },
   };
 

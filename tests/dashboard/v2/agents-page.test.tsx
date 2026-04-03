@@ -19,6 +19,7 @@ import * as agentPresetApi from "../../../dashboard/src/v2/lib/agent-preset-api.
 import * as settingsApi from "../../../dashboard/src/v2/lib/settings-api.js";
 import { ProjectDataProvider } from "../../../dashboard/src/v2/context/project-data.js";
 import { AgentsPage } from "../../../dashboard/src/v2/AgentsPage.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 vi.mock("../../../dashboard/src/v2/lib/agent-preset-api.js");
 vi.mock("../../../dashboard/src/v2/lib/settings-api.js");
@@ -152,6 +153,11 @@ if (typeof window !== 'undefined') {
   window.SVGElement.prototype.getTotalLength = () => 100;
 }
 
+const createEffectiveSettings = () => ({
+  settings: JSON.parse(JSON.stringify(DEFAULT_DASHBOARD_SETTINGS)),
+  sources: {},
+});
+
 describe("AgentsPage", () => {
   let mockPresets: any[];
 
@@ -211,9 +217,8 @@ describe("AgentsPage", () => {
     };
 
     vi.mocked(agentPresetApi.fetchAgentPresets).mockResolvedValue(mockPresets as any);
-    vi.mocked(settingsApi.fetchProjectEffectiveSettings).mockResolvedValue({
-      settings: { agents: { saveToProjectDirectory: true } },
-    } as any);
+    vi.mocked(settingsApi.fetchProjectEffectiveSettings).mockResolvedValue(createEffectiveSettings() as any);
+    vi.mocked(settingsApi.saveProjectSettings).mockResolvedValue(undefined);
 
     mockProjectData.projects = [{ id: "project-1", name: "Test Project", status: "ready" }];
     mockProjectData.selectedProject = { id: "project-1", name: "Test Project", status: "ready" };
@@ -370,5 +375,49 @@ describe("AgentsPage", () => {
     // Textarea should now be visible
     const textarea = screen.getByPlaceholderText("Override the default memory prompt template for this agent.");
     expect(textarea).toBeInTheDocument();
+  });
+
+  it("saves quality assurance settings from the dedicated card", async () => {
+    const effective = createEffectiveSettings();
+    effective.settings.agents.qualityAssurance.enabled = false;
+    vi.mocked(settingsApi.fetchProjectEffectiveSettings).mockResolvedValue(effective as any);
+
+    await renderPage();
+
+    expect(screen.getByTestId("quality-assurance-card")).toBeInTheDocument();
+    expect(screen.getByText(/QA automation is currently disabled/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /Enable Quality Assurance Agent/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Task QA Max Runs")).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText("Review every completed task agent preset"), {
+      target: { value: "agent-1" },
+    });
+    fireEvent.change(screen.getByLabelText("Review completed tasks without a PR agent preset"), {
+      target: { value: "agent-2" },
+    });
+    fireEvent.input(screen.getByLabelText("QA max runs per task"), {
+      target: { value: "3" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Save QA Settings/i }));
+
+    await waitFor(() => {
+      expect(settingsApi.saveProjectSettings).toHaveBeenCalledWith(
+        "project-1",
+        expect.objectContaining({
+          agents: expect.objectContaining({
+            qualityAssurance: expect.objectContaining({
+              enabled: true,
+              maxTaskReviewRuns: 3,
+              taskCompletion: expect.objectContaining({ agentPresetId: "agent-1" }),
+              completedTaskWithoutPr: expect.objectContaining({ agentPresetId: "agent-2" }),
+            }),
+          }),
+        }),
+      );
+    });
   });
 });

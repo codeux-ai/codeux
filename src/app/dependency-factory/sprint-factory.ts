@@ -9,6 +9,7 @@ import { WorkerTaskDispatchService } from "../../services/worker-task-dispatch-s
 import { VirtualWorkerService } from "../../services/virtual-worker-service.js";
 import { SprintOrchestrator } from "../../sprint/sprint-orchestrator.js";
 import { WorkerInboxReplyService } from "../../services/worker-inbox-reply-service.js";
+import { QualityAssuranceService } from "../../services/quality-assurance-service.js";
 import type { DashboardSettings, DashboardSettingsScope } from "../../contracts/app-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 
@@ -19,6 +20,7 @@ export interface SprintDependencies {
   sprintTaskDispatchService: SprintTaskDispatchService;
   virtualWorkerService: VirtualWorkerService;
   workerInboxReplyService: WorkerInboxReplyService;
+  qualityAssuranceService: QualityAssuranceService;
   sprintOrchestrator: SprintOrchestrator;
 }
 
@@ -114,6 +116,20 @@ export function createSprintDependencies(
     logger: logger.child({ component: "worker-inbox-reply-service" }),
   });
 
+  const qualityAssuranceService = new QualityAssuranceService({
+    projectManagementRepository,
+    executionRepository,
+    sessionTracking,
+    qaReviewRepository: coreDeps.qaReviewRepository,
+    taskService,
+    agentPresetSyncService,
+    providerRunner: coreDeps.providerRunner,
+    getDashboardSettings: resolveDashboardSettings,
+    getGithubToken: () => context.getEffectiveGithubToken(),
+    sendSessionMessage: (sessionId, prompt) => julesApi.sendSessionMessage(sessionId, prompt),
+    logger: logger.child({ component: "quality-assurance-service" }),
+  });
+
   const virtualWorkerService = new VirtualWorkerService({
     settingsRepository: coreDeps.settingsRepository,
     sessionTracking,
@@ -206,6 +222,7 @@ export function createSprintDependencies(
     logger: logger.child({ component: "sprint-orchestrator" }),
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
+    qualityAssuranceService,
     resolvePlanningAgentPresetId: async (projectId: string) => {
       try {
         const agent = await agentPresetSyncService.resolveTargetedPlanningAgent(projectId);
@@ -223,6 +240,7 @@ export function createSprintDependencies(
     sprintTaskDispatchService,
     virtualWorkerService,
     workerInboxReplyService,
+    qualityAssuranceService,
     sprintOrchestrator,
   };
 }

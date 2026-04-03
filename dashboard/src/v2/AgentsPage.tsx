@@ -1,8 +1,9 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { Bot, Plus, Brain, AlertTriangle, RefreshCw, FileUp, Trash2, Tags, Save } from "lucide-preact";
+import { Bot, Plus, Brain, AlertTriangle, RefreshCw, FileUp, Trash2, Tags, Save, ShieldCheck, GitPullRequest, CheckCircle2, Sparkles } from "lucide-preact";
 import type { AgentPreset } from "./types.js";
+import type { DashboardSettings } from "../types.js";
 import { useProjectData } from "./context/project-data.js";
 import {
   createAgentPreset,
@@ -13,6 +14,8 @@ import {
   updateAgentPreset,
 } from "./lib/agent-preset-api.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
+import { saveProjectSettings } from "./lib/settings-api.js";
+import { dashboardSettingsToProjectSettings } from "./lib/settings-view-models.js";
 import { generateRandomAgentAvatar } from "./lib/agent-avatar.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
@@ -20,6 +23,49 @@ import { AgentsHero } from "./components/agents/AgentsHero.js";
 import { AgentPresetShowcaseCard } from "./components/agents/AgentPresetShowcaseCard.js";
 import { AgentPresetDetailPanel } from "./components/agents/AgentPresetDetailPanel.js";
 import { AgentPresetEditorPanel } from "./components/agents/AgentPresetEditorPanel.js";
+
+type QaSettings = DashboardSettings["agents"]["qualityAssurance"];
+type QaTriggerKey = "taskCompletion" | "sprintCompletion" | "completedTaskWithoutPr";
+
+const DEFAULT_QA_SETTINGS: QaSettings = {
+  enabled: false,
+  maxTaskReviewRuns: 1,
+  taskCompletion: {
+    enabled: true,
+    agentPresetId: null,
+  },
+  sprintCompletion: {
+    enabled: true,
+    agentPresetId: null,
+  },
+  completedTaskWithoutPr: {
+    enabled: true,
+    agentPresetId: null,
+  },
+};
+
+const cloneQaSettings = (value?: Partial<QaSettings> | null): QaSettings => ({
+  enabled: value?.enabled === true,
+  maxTaskReviewRuns: typeof value?.maxTaskReviewRuns === "number" && Number.isFinite(value.maxTaskReviewRuns)
+    ? Math.max(1, Math.floor(value.maxTaskReviewRuns))
+    : DEFAULT_QA_SETTINGS.maxTaskReviewRuns,
+  taskCompletion: {
+    enabled: value?.taskCompletion?.enabled ?? DEFAULT_QA_SETTINGS.taskCompletion.enabled,
+    agentPresetId: value?.taskCompletion?.agentPresetId ?? DEFAULT_QA_SETTINGS.taskCompletion.agentPresetId,
+  },
+  sprintCompletion: {
+    enabled: value?.sprintCompletion?.enabled ?? DEFAULT_QA_SETTINGS.sprintCompletion.enabled,
+    agentPresetId: value?.sprintCompletion?.agentPresetId ?? DEFAULT_QA_SETTINGS.sprintCompletion.agentPresetId,
+  },
+  completedTaskWithoutPr: {
+    enabled: value?.completedTaskWithoutPr?.enabled ?? DEFAULT_QA_SETTINGS.completedTaskWithoutPr.enabled,
+    agentPresetId: value?.completedTaskWithoutPr?.agentPresetId ?? DEFAULT_QA_SETTINGS.completedTaskWithoutPr.agentPresetId,
+  },
+});
+
+const qaSettingsEqual = (left: QaSettings | null, right: QaSettings | null): boolean => (
+  JSON.stringify(left) === JSON.stringify(right)
+);
 
 const EmptyState: FunctionComponent<{ hasProject: boolean; onCreate?: () => void }> = ({ hasProject, onCreate }) => (
   <div className="relative overflow-hidden rounded-[1.75rem] border border-dashed border-signal-500/25 bg-white/70 p-8 text-center shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:bg-void-800/60 dark:border-signal-500/20 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
@@ -240,15 +286,34 @@ export const AgentsPage: FunctionComponent = () => {
   const [projectFileSavingEnabled, setProjectFileSavingEnabled] = useState(true);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
+  const [qaDraft, setQaDraft] = useState<QaSettings>(cloneQaSettings(DEFAULT_QA_SETTINGS));
+  const [qaSaving, setQaSaving] = useState(false);
+  const [qaMessage, setQaMessage] = useState<string | null>(null);
+  const [qaError, setQaError] = useState<string | null>(null);
+  const {
+    data: effectiveSettings,
+    loading: effectiveSettingsLoading,
+    error: effectiveSettingsError,
+    refresh: refreshEffectiveSettings,
+  } = useProjectEffectiveSettings(selectedProject?.id || null);
 
   useEffect(() => {
     if (effectiveSettings) {
       setProjectFileSavingEnabled(effectiveSettings.settings.agents.saveToProjectDirectory);
+      setQaDraft(cloneQaSettings(effectiveSettings.settings.agents.qualityAssurance));
     } else if (!selectedProject) {
       setProjectFileSavingEnabled(true);
+      setQaDraft(cloneQaSettings(DEFAULT_QA_SETTINGS));
     }
   }, [effectiveSettings, selectedProject]);
+
+  useEffect(() => {
+    if (!qaMessage) {
+      return;
+    }
+    const timeoutId = window.setTimeout(() => setQaMessage(null), 2200);
+    return () => window.clearTimeout(timeoutId);
+  }, [qaMessage]);
 
   const refreshPresets = async (): Promise<void> => {
     if (!selectedProject) {
@@ -384,6 +449,72 @@ export const AgentsPage: FunctionComponent = () => {
   };
 
   const selectedPreset = presets.find((p) => p.id === selectedPresetId);
+  const savedQaSettings = effectiveSettings
+    ? cloneQaSettings(effectiveSettings.settings.agents.qualityAssurance)
+    : cloneQaSettings(DEFAULT_QA_SETTINGS);
+  const qaDirty = !qaSettingsEqual(qaDraft, savedQaSettings);
+  const presetSelectOptions = [
+    { value: "", label: "Default QA agent" },
+    ...presets.map((preset) => ({ value: preset.id, label: preset.name })),
+  ];
+  const qaTriggerCards: Array<{
+    key: QaTriggerKey;
+    title: string;
+    description: string;
+    icon: typeof CheckCircle2;
+  }> = [
+    {
+      key: "taskCompletion",
+      title: "Review every completed task",
+      description: "Runs once after a task finishes, then only re-runs on QA-driven fixes when max runs is above 1.",
+      icon: CheckCircle2,
+    },
+    {
+      key: "sprintCompletion",
+      title: "Review before sprint completion",
+      description: "Gives QA full sprint context before the sprint is marked complete and can redirect fixes to the right task.",
+      icon: Sparkles,
+    },
+    {
+      key: "completedTaskWithoutPr",
+      title: "Review completed tasks without a PR",
+      description: "Investigates whether a missing PR is acceptable or whether the task should open one before it is treated as done.",
+      icon: GitPullRequest,
+    },
+  ];
+
+  const updateQaTrigger = (key: QaTriggerKey, update: Partial<QaSettings[QaTriggerKey]>) => {
+    setQaDraft((current) => ({
+      ...current,
+      [key]: {
+        ...current[key],
+        ...update,
+      },
+    }));
+    setQaError(null);
+    setQaMessage(null);
+  };
+
+  const handleSaveQaSettings = async (): Promise<void> => {
+    if (!selectedProject || !effectiveSettings) {
+      return;
+    }
+
+    setQaSaving(true);
+    try {
+      const nextProjectSettings = dashboardSettingsToProjectSettings(effectiveSettings.settings);
+      nextProjectSettings.agents.qualityAssurance = cloneQaSettings(qaDraft);
+      await saveProjectSettings(selectedProject.id, nextProjectSettings);
+      await refreshEffectiveSettings();
+      setQaMessage("Quality Assurance settings saved.");
+      setQaError(null);
+    } catch (saveError) {
+      setQaError(saveError instanceof Error ? saveError.message : String(saveError));
+      setQaMessage(null);
+    } finally {
+      setQaSaving(false);
+    }
+  };
 
   return (
     <div className="relative z-10 mx-auto flex max-w-[1880px] flex-col gap-12 px-8 py-20 md:px-20">
@@ -397,9 +528,9 @@ export const AgentsPage: FunctionComponent = () => {
         onCreate={() => void handleCreate()}
       />
 
-      {error && (
+      {(error || effectiveSettingsError) && (
         <div className="rounded-[1.5rem] border border-status-red/20 bg-status-red/10 px-5 py-4 text-sm text-status-red">
-          {error}
+          {error || effectiveSettingsError}
         </div>
       )}
 
@@ -409,6 +540,176 @@ export const AgentsPage: FunctionComponent = () => {
             ? "Project markdown mirroring is enabled. Saving an agent from the dashboard writes its markdown companion under `.sprint-os/agents` for this project."
             : "Project markdown mirroring is disabled for this project. Dashboard edits stay in the database, but local `.sprint-os/agents` markdown is still discovered and can be imported."}
         </div>
+      )}
+
+      {selectedProject && (
+        <section
+          data-testid="quality-assurance-card"
+          className="relative overflow-hidden rounded-[2rem] border border-black/[0.06] bg-[radial-gradient(circle_at_top_left,rgba(0,224,160,0.18),transparent_32%),linear-gradient(135deg,rgba(255,255,255,0.92),rgba(242,248,246,0.92))] p-6 shadow-[0_24px_70px_rgba(15,23,42,0.08)] dark:border-white/[0.07] dark:bg-[radial-gradient(circle_at_top_left,rgba(0,224,160,0.18),transparent_28%),linear-gradient(135deg,rgba(12,18,23,0.95),rgba(17,26,32,0.94))] dark:shadow-[0_24px_70px_rgba(0,0,0,0.35)]"
+        >
+          <WaveFluid accentHex="#00E0A0" />
+          <BorderTrace accentHex="#00E0A0" />
+
+          <div className="relative z-10 flex flex-col gap-6">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-[1.2rem] bg-signal-500/12 text-signal-600 dark:text-signal-400">
+                  <ShieldCheck className="h-6 w-6" strokeWidth={1.8} />
+                </div>
+                <div className="space-y-2">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:text-signal-400">Quality Assurance</div>
+                  <h2 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                    Senior QA Agent
+                  </h2>
+                  <p className="max-w-3xl text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+                    The QA agent receives full sprint context, validates completion quality, catches weak integrations and missing features, and can continue the active task session with direct fix instructions.
+                  </p>
+                </div>
+              </div>
+
+              <label className="inline-flex items-center gap-3 self-start rounded-full border border-black/[0.08] bg-white/70 px-4 py-3 text-sm font-semibold text-slate-700 shadow-[0_8px_24px_rgba(15,23,42,0.06)] backdrop-blur-md dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-100">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300 text-signal-500 focus:ring-signal-500"
+                  checked={qaDraft.enabled}
+                  onChange={(event) => {
+                    setQaDraft((current) => ({ ...current, enabled: (event.target as HTMLInputElement).checked }));
+                    setQaError(null);
+                    setQaMessage(null);
+                  }}
+                  aria-label="Enable Quality Assurance Agent"
+                />
+                Enable QA Agent
+              </label>
+            </div>
+
+            {!qaDraft.enabled ? (
+              <div className="rounded-[1.5rem] border border-dashed border-black/[0.08] bg-white/55 px-5 py-4 text-sm leading-relaxed text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-400">
+                QA automation is currently disabled. This card stays compact until you need completion reviews, no-PR checks, or sprint-level release gating.
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(280px,0.8fr)]">
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {qaTriggerCards.map((trigger) => {
+                      const Icon = trigger.icon;
+                      const triggerState = qaDraft[trigger.key];
+                      return (
+                        <div
+                          key={trigger.key}
+                          className="rounded-[1.5rem] border border-black/[0.06] bg-white/72 p-4 shadow-[0_10px_32px_rgba(15,23,42,0.05)] dark:border-white/[0.06] dark:bg-white/[0.04]"
+                        >
+                          <div className="mb-4 flex items-start justify-between gap-3">
+                            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-signal-500/10 text-signal-600 dark:text-signal-400">
+                              <Icon className="h-4.5 w-4.5" strokeWidth={2} />
+                            </div>
+                            <label className="inline-flex items-center gap-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-slate-300 text-signal-500 focus:ring-signal-500"
+                                checked={triggerState.enabled}
+                                onChange={(event) => updateQaTrigger(trigger.key, {
+                                  enabled: (event.target as HTMLInputElement).checked,
+                                })}
+                                aria-label={trigger.title}
+                              />
+                              Active
+                            </label>
+                          </div>
+                          <div className="space-y-2">
+                            <h3 className="text-base font-semibold text-slate-900 dark:text-white">{trigger.title}</h3>
+                            <p className="min-h-[4.5rem] text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                              {trigger.description}
+                            </p>
+                          </div>
+                          <label className="mt-4 flex flex-col gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">
+                              Agent preset
+                            </span>
+                            <select
+                              value={triggerState.agentPresetId || ""}
+                              onChange={(event) => updateQaTrigger(trigger.key, {
+                                agentPresetId: (event.target as HTMLSelectElement).value || null,
+                              })}
+                              className="w-full rounded-[1rem] border border-black/[0.08] bg-black/[0.03] px-3 py-2.5 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200"
+                              aria-label={`${trigger.title} agent preset`}
+                            >
+                              {presetSelectOptions.map((option) => (
+                                <option key={`${trigger.key}-${option.value || "default"}`} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex flex-col gap-4 rounded-[1.5rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_10px_32px_rgba(15,23,42,0.05)] dark:border-white/[0.06] dark:bg-white/[0.04]">
+                    <div className="space-y-2">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:text-signal-400">
+                        Review loop control
+                      </div>
+                      <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Task QA Max Runs</h3>
+                      <p className="text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                        Default is 1, which means QA runs after the first completion only. Increase this when you want QA to review the fixes it requested until the cap is reached.
+                      </p>
+                    </div>
+
+                    <label className="flex flex-col gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Max runs per task</span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={10}
+                        value={qaDraft.maxTaskReviewRuns}
+                        onInput={(event) => {
+                          const rawValue = Number.parseInt((event.target as HTMLInputElement).value, 10);
+                          setQaDraft((current) => ({
+                            ...current,
+                            maxTaskReviewRuns: Number.isFinite(rawValue) ? Math.min(10, Math.max(1, rawValue)) : 1,
+                          }));
+                          setQaError(null);
+                          setQaMessage(null);
+                        }}
+                        className="w-full rounded-[1rem] border border-black/[0.08] bg-black/[0.03] px-3 py-3 text-sm text-slate-700 outline-none transition-colors focus:border-signal-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200"
+                        aria-label="QA max runs per task"
+                      />
+                    </label>
+
+                    <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.025] px-4 py-3 text-sm leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300">
+                      Sprint QA can reopen a task before sprint completion. Task QA can continue an existing Jules or CLI session with a focused fix brief instead of creating a disconnected review thread.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 border-t border-black/[0.06] pt-5 dark:border-white/[0.06] md:flex-row md:items-center md:justify-between">
+                  <div className="text-sm text-slate-500 dark:text-slate-400">
+                    {effectiveSettingsLoading && !effectiveSettings ? "Loading project settings…" : qaDirty ? "Unsaved QA changes." : "QA settings are in sync with this project."}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {qaError && (
+                      <div className="text-sm text-status-red">{qaError}</div>
+                    )}
+                    {qaMessage && !qaError && (
+                      <div className="text-sm text-status-green">{qaMessage}</div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => { void handleSaveQaSettings(); }}
+                      disabled={!qaDirty || qaSaving || !effectiveSettings}
+                      className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-white transition-all hover:-translate-y-px hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100"
+                    >
+                      {qaSaving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" strokeWidth={2.1} /> : <Save className="h-3.5 w-3.5" strokeWidth={2.1} />}
+                      Save QA Settings
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </section>
       )}
 
       {!selectedProject ? (

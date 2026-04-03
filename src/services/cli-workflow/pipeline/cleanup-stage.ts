@@ -2,7 +2,7 @@ import type { PipelineContext } from "./pipeline-context.js";
 
 export async function executeCleanupStage(ctx: PipelineContext): Promise<{ cleanedUp: boolean }> {
   const shouldCleanup = ctx.workflowSucceeded
-    ? ctx.workflowSettings.cleanupWorktreeOnSuccess
+    ? (ctx.preserveSuccessfulWorktree ? false : ctx.workflowSettings.cleanupWorktreeOnSuccess)
     : ctx.workflowSettings.cleanupWorktreeOnFailure;
 
   if (shouldCleanup) {

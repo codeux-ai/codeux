@@ -34,6 +34,11 @@ describe("SettingsRepository", () => {
     expect(system.defaults.cliWorkflow.containerMountCodexAuth).toBe(false);
     expect(system.defaults.cliWorkflow.containerMountClaudeCodeAuth).toBe(false);
     expect(system.defaults.agents.saveToProjectDirectory).toBe(true);
+    expect(system.defaults.agents.qualityAssurance.enabled).toBe(false);
+    expect(system.defaults.agents.qualityAssurance.maxTaskReviewRuns).toBe(1);
+    expect(system.defaults.agents.qualityAssurance.taskCompletion.enabled).toBe(true);
+    expect(system.defaults.agents.qualityAssurance.sprintCompletion.enabled).toBe(true);
+    expect(system.defaults.agents.qualityAssurance.completedTaskWithoutPr.enabled).toBe(true);
     expect(system.defaults.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
     expect(system.mcpTools.length).toBeGreaterThan(0);
 
@@ -141,6 +146,22 @@ describe("SettingsRepository", () => {
           instructionTemplates: {
             ...repo.getSystemSettings().defaults.agents.instructionTemplates,
           },
+          qualityAssurance: {
+            enabled: true,
+            maxTaskReviewRuns: 3,
+            taskCompletion: {
+              enabled: true,
+              agentPresetId: "qa-task",
+            },
+            sprintCompletion: {
+              enabled: true,
+              agentPresetId: "qa-sprint",
+            },
+            completedTaskWithoutPr: {
+              enabled: false,
+              agentPresetId: null,
+            },
+          },
         },
         skills: [
           { name: "worker", enabled: true, isInternal: true },
@@ -182,6 +203,11 @@ describe("SettingsRepository", () => {
     expect(effectiveProject.settings.git.githubToken).toBe("sys-gh");
     expect(effectiveProject.settings.automationLevel).toBe("ALWAYS_ASK");
     expect(effectiveProject.settings.git.defaultBranch).toBe("develop");
+    expect(effectiveProject.settings.agents.qualityAssurance.enabled).toBe(true);
+    expect(effectiveProject.settings.agents.qualityAssurance.maxTaskReviewRuns).toBe(3);
+    expect(effectiveProject.settings.agents.qualityAssurance.taskCompletion.agentPresetId).toBe("qa-task");
+    expect(effectiveProject.settings.agents.qualityAssurance.sprintCompletion.agentPresetId).toBe("qa-sprint");
+    expect(effectiveProject.settings.agents.qualityAssurance.completedTaskWithoutPr.enabled).toBe(false);
     expect(effectiveProject.sources["automationLevel"]).toBe("project");
     expect(effectiveProject.sources["git.defaultBranch"]).toBe("project");
 

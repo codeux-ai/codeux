@@ -187,6 +187,20 @@ describe("validateSettingsPayload", () => {
       },
       agents: {
         saveToProjectDirectory: "bad",
+        instructionTemplates: {},
+        qualityAssurance: {
+          enabled: "bad",
+          maxTaskReviewRuns: "bad",
+          taskCompletion: {
+            enabled: "bad",
+            agentPresetId: 1,
+          },
+          sprintCompletion: "bad",
+          completedTaskWithoutPr: {
+            enabled: "bad",
+            agentPresetId: 2,
+          },
+        },
       },
       skills: [
         "bad",
@@ -219,7 +233,14 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("workers.executionMode");
     expect(paths).toContain("workers.virtualWorkerProvider");
     expect(paths).toContain("agents.saveToProjectDirectory");
-    expect(paths).toContain("agents.instructionTemplates");
+    expect(paths).toContain("agents.instructionTemplates.planningMissing");
+    expect(paths).toContain("agents.qualityAssurance.enabled");
+    expect(paths).toContain("agents.qualityAssurance.maxTaskReviewRuns");
+    expect(paths).toContain("agents.qualityAssurance.taskCompletion.enabled");
+    expect(paths).toContain("agents.qualityAssurance.taskCompletion.agentPresetId");
+    expect(paths).toContain("agents.qualityAssurance.sprintCompletion");
+    expect(paths).toContain("agents.qualityAssurance.completedTaskWithoutPr.enabled");
+    expect(paths).toContain("agents.qualityAssurance.completedTaskWithoutPr.agentPresetId");
     expect(paths).toContain("skills[0]");
     expect(paths).toContain("skills[1].isInternal");
     expect(paths).toContain("mcpTools[0]");
