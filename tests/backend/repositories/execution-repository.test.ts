@@ -1406,6 +1406,55 @@ describe("ExecutionRepository", () => {
     ]);
   });
 
+  it("tracks clarification_reply provider usage in purposes", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Clarification Stats Project",
+      sourceType: "local",
+      sourceRef: "/workspace/clarification-stats-project",
+    });
+
+    const usage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sessionId: "session-clarification-1",
+      provider: "gemini",
+      purpose: "clarification_reply",
+      status: "running",
+      startedAt: new Date(Date.now() - 60_000).toISOString(),
+      promptChars: 1500,
+    });
+
+    executionRepository.updateProviderInvocationUsage(usage.id, {
+      status: "completed",
+      finishedAt: new Date().toISOString(),
+      durationMs: 60_000,
+      transcriptChars: 500,
+      inputTokens: 300,
+      cachedInputTokens: 0,
+      outputTokens: 100,
+      reasoningOutputTokens: 0,
+      totalTokens: 400,
+      usageSource: "reported",
+      rawUsageJson: null,
+    });
+
+    const statsSnapshot = executionRepository.getProjectStatsSnapshot(project.id, "24h");
+
+    expect(statsSnapshot.purposes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "clarification_reply",
+        usage: expect.objectContaining({ totalTokens: 400 }),
+      }),
+    ]));
+
+    expect(statsSnapshot.providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "gemini",
+        usage: expect.objectContaining({ totalTokens: 400 }),
+      }),
+    ]));
+  });
+
   it("hydrates multiple dispatches dynamically without N+1 regression", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({
