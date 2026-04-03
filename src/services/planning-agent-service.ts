@@ -24,6 +24,7 @@ import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
 import { extractJsonLikeBlock } from "./planning-json-extractor.js";
 import { ProviderExecutionService } from "./provider-execution-service.js";
+import { waitUntil } from "../shared/polling/wait-until.js";
 
 interface PlanningAgentServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -377,23 +378,35 @@ export class PlanningAgentService {
       connectionId,
       bodyMarkdown,
     });
-    const timeoutAt = Date.now() + 60_000;
 
-    while (Date.now() < timeoutAt) {
-      signal?.throwIfAborted();
-      const reply = this.deps.connectionChatRepository
-        .listMessages(threadId)
-        .find((message) => (
-          message.direction === "connection_to_dashboard"
-          && new Date(message.createdAt).getTime() >= new Date(sentMessage.createdAt).getTime()
-        ));
-      if (reply) {
-        return reply;
+    try {
+      const reply = await waitUntil<{ bodyMarkdown: string } | undefined>({
+        action: async () => {
+          return this.deps.connectionChatRepository
+            .listMessages(threadId)
+            .find((message) => (
+              message.direction === "connection_to_dashboard"
+              && new Date(message.createdAt).getTime() >= new Date(sentMessage.createdAt).getTime()
+            ));
+        },
+        predicate: (result) => result !== undefined,
+        intervalMs: 1000,
+        timeoutMs: 60_000,
+        signal,
+        description: `worker reply in thread ${threadId}`,
+      });
+
+      if (!reply) {
+         // Should not be reachable since predicate guarantees definition, but satisfies TS.
+         throw new Error(`Planning agent request timed out while waiting for worker reply in thread ${threadId}.`);
       }
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      return reply;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.startsWith("Timeout waiting for")) {
+        throw new Error(`Planning agent request timed out while waiting for worker reply in thread ${threadId}.`);
+      }
+      throw err;
     }
-
-    throw new Error(`Planning agent request timed out while waiting for worker reply in thread ${threadId}.`);
   }
 
   private resolvePlanningRuntime(projectId: string, overrides?: PlanningOverrides): {
