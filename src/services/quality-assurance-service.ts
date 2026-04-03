@@ -4,6 +4,7 @@ import { extractJsonLikeBlock } from "./planning-json-extractor.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
 import { PrService } from "../infrastructure/providers/cli/pr-service.js";
 import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
+import { ProviderExecutionService } from "./provider-execution-service.js";
 import type { DashboardSettings, DashboardSettingsScope, ProviderId, Subtask } from "../contracts/app-types.js";
 import type { TaskRunRecord } from "../contracts/execution-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
@@ -67,7 +68,17 @@ export class QualityAssuranceService {
 
   private readonly prService = new PrService();
 
-  constructor(private readonly deps: QualityAssuranceServiceDependencies) {}
+  private readonly providerExecutionService: ProviderExecutionService;
+
+  constructor(private readonly deps: QualityAssuranceServiceDependencies) {
+    this.providerExecutionService = new ProviderExecutionService({
+      executionRepository: deps.executionRepository,
+      providerRunner: deps.providerRunner,
+      logger: deps.logger,
+      sessionTracking: deps.sessionTracking,
+      getGithubToken: deps.getGithubToken,
+    });
+  }
 
   async reviewCompletedTask(args: {
     projectId: string;
@@ -407,6 +418,8 @@ export class QualityAssuranceService {
 
     const prompt = this.buildReviewPrompt(args);
     const providerPrompt = buildProviderPrompt(prompt, route.providers[provider].thinkingMode);
+    const sessionId = `qa-review-${Date.now()}`;
+
     const invocation = this.deps.executionRepository.createExecutionInvocation({
       projectId: args.scope.projectId!,
       sprintId: args.scope.sprintId || null,
@@ -423,81 +436,36 @@ export class QualityAssuranceService {
       role: "system",
       contentMarkdown: args.agentInstructions.trim(),
     });
-    this.deps.executionRepository.appendExecutionInvocationMessage(invocation.id, {
-      role: "user",
-      contentMarkdown: prompt,
-    });
 
-    const usage = this.deps.executionRepository.createProviderInvocationUsage({
+    const result = await this.providerExecutionService.executeProvider({
       projectId: args.scope.projectId!,
-      sprintId: args.scope.sprintId || null,
-      taskId: args.taskRun?.taskId || null,
+      sprintId: args.scope.sprintId,
+      taskId: args.taskRun?.taskId,
       sprintRunId: args.sprintRunId,
-      taskRunId: args.taskRun?.id || null,
-      sessionId: invocation.id,
-      provider,
+      taskRunId: args.taskRun?.id,
       purpose: "qa_review",
+      type: "qa_review",
+      provider,
+      prompt: providerPrompt,
       model: route.providers[provider].model,
-      startedAt: invocation.startedAt,
-      promptChars: prompt.length,
+      apiKey: route.providers[provider].apiKey,
+      sessionId,
+      workflowSettings: {
+        ...DEFAULT_CLI_WORKFLOW_SETTINGS,
+        ...this.deps.getDashboardSettings(args.scope).cliWorkflow,
+      },
+      repoPath: args.repoPath,
+      expectTextOutput: true,
+      invocationId: invocation.id,
+      onActivity: () => undefined,
     });
 
-    try {
-      const result = await this.deps.providerRunner.runProviderForText({
-        provider,
-        prompt: providerPrompt,
-        cwd: args.repoPath,
-        model: route.providers[provider].model,
-        apiKey: route.providers[provider].apiKey,
-        sessionId: invocation.id,
-        workflowSettings: {
-          ...DEFAULT_CLI_WORKFLOW_SETTINGS,
-          ...this.deps.getDashboardSettings(args.scope).cliWorkflow,
-        },
-        repoPath: args.repoPath,
-        githubToken: this.deps.getGithubToken(),
-        onActivity: () => undefined,
-      });
-
-      this.deps.executionRepository.updateProviderInvocationUsage(usage.id, {
-        status: result.ok ? "completed" : "failed",
-        model: route.providers[provider].model,
-        nativeSessionId: result.nativeSessionId,
-        finishedAt: new Date().toISOString(),
-        transcriptChars: result.usageTelemetry.transcriptText.length,
-        inputTokens: result.usageTelemetry.inputTokens,
-        cachedInputTokens: result.usageTelemetry.cachedInputTokens,
-        outputTokens: result.usageTelemetry.outputTokens,
-        reasoningOutputTokens: result.usageTelemetry.reasoningOutputTokens,
-        totalTokens: result.usageTelemetry.totalTokens,
-        usageSource: result.usageTelemetry.usageSource,
-        rawUsageJson: result.usageTelemetry.rawUsageJson,
-      });
-
-      if (!result.ok) {
-        throw new Error(result.stderr || result.stdout || "QA provider failed without output.");
-      }
-
-      const text = result.text.trim();
-      this.deps.executionRepository.appendExecutionInvocationMessage(invocation.id, {
-        role: "assistant",
-        contentMarkdown: text,
-      });
-      this.deps.executionRepository.updateExecutionInvocation(invocation.id, {
-        status: "completed",
-        providerInvocationId: usage.id,
-        finishedAt: new Date().toISOString(),
-      });
-      return normalizeQaReviewResult(text);
-    } catch (error) {
-      this.deps.executionRepository.updateExecutionInvocation(invocation.id, {
-        status: "failed",
-        providerInvocationId: usage.id,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        finishedAt: new Date().toISOString(),
-      });
-      throw error;
+    if (!result.ok) {
+      throw new Error(result.stderr || result.stdout || "QA provider failed without output.");
     }
+
+    const text = (result as any).text.trim();
+    return normalizeQaReviewResult(text);
   }
 
   private buildReviewPrompt(args: {
@@ -688,45 +656,21 @@ export class QualityAssuranceService {
     const providerPrompt = buildProviderPrompt(`${promptBody}\n\n${workspaceGuidance}`, settings.aiProvider.providers[args.provider].thinkingMode);
     const previousInvocation = this.deps.executionRepository.getLatestProviderInvocationUsageBySession(args.sessionId, "task_coding");
     const initialHead = (await runCommandStrict("git", ["rev-parse", "HEAD"], worktreePath)).stdout.trim();
-    const invocation = this.deps.executionRepository.createExecutionInvocation({
-      projectId: args.scope.projectId!,
-      sprintId: args.scope.sprintId || null,
-      taskId: args.taskRun?.taskId || null,
-      taskRunId: args.taskRun?.id || null,
-      sprintRunId: args.taskRun?.sprintRunId || null,
-      dispatchId: args.taskRun?.dispatchId || null,
-      type: "cli_task_followup",
-      provider: args.provider,
-      model: settings.aiProvider.providers[args.provider].model,
-      startedAt: new Date().toISOString(),
-    });
-    this.deps.executionRepository.appendExecutionInvocationMessage(invocation.id, {
-      role: "user",
-      contentMarkdown: promptBody,
-    });
-
-    const usage = this.deps.executionRepository.createProviderInvocationUsage({
-      projectId: args.scope.projectId!,
-      sprintId: args.scope.sprintId || null,
-      taskId: args.taskRun?.taskId || null,
-      sprintRunId: args.taskRun?.sprintRunId || null,
-      dispatchId: args.taskRun?.dispatchId || null,
-      taskRunId: args.taskRun?.id || null,
-      sessionId: args.sessionId,
-      provider: args.provider,
-      purpose: "task_coding",
-      model: settings.aiProvider.providers[args.provider].model,
-      startedAt: invocation.startedAt,
-      promptChars: promptBody.length,
-    });
-
     this.deps.sessionTracking.updateSession(args.sessionId, { state: "RUNNING" });
     this.deps.sessionTracking.appendActivity(args.sessionId, {
       originator: "system",
       description: "Quality assurance requested a follow-up implementation pass.",
     });
 
-    const result = await this.deps.providerRunner.runProvider({
+    const result = await this.providerExecutionService.executeProvider({
+      projectId: args.scope.projectId!,
+      sprintId: args.scope.sprintId,
+      taskId: args.taskRun?.taskId,
+      taskRunId: args.taskRun?.id,
+      sprintRunId: args.taskRun?.sprintRunId,
+      dispatchId: args.taskRun?.dispatchId,
+      purpose: "task_coding",
+      type: "cli_task_followup",
       provider: args.provider,
       prompt: providerPrompt,
       cwd: worktreePath,
@@ -735,54 +679,16 @@ export class QualityAssuranceService {
       sessionId: args.sessionId,
       workflowSettings,
       repoPath: args.repoPath,
-      githubToken: this.deps.getGithubToken(),
       continueSessionId: previousInvocation?.nativeSessionId || (args.provider === "claude-code" ? null : args.sessionId),
-      onActivity: (description, originator) => {
-        this.deps.sessionTracking.appendActivity(args.sessionId, {
-          originator: originator || "system",
-          description,
-        });
-      },
-    });
-
-    this.deps.executionRepository.updateProviderInvocationUsage(usage.id, {
-      status: result.ok ? "completed" : "failed",
-      model: settings.aiProvider.providers[args.provider].model,
-      nativeSessionId: result.nativeSessionId,
-      finishedAt: new Date().toISOString(),
-      transcriptChars: result.usageTelemetry.transcriptText.length,
-      inputTokens: result.usageTelemetry.inputTokens,
-      cachedInputTokens: result.usageTelemetry.cachedInputTokens,
-      outputTokens: result.usageTelemetry.outputTokens,
-      reasoningOutputTokens: result.usageTelemetry.reasoningOutputTokens,
-      totalTokens: result.usageTelemetry.totalTokens,
-      usageSource: result.usageTelemetry.usageSource,
-      rawUsageJson: result.usageTelemetry.rawUsageJson,
     });
 
     if (!result.ok) {
-      this.deps.executionRepository.updateExecutionInvocation(invocation.id, {
-        status: "failed",
-        providerInvocationId: usage.id,
-        finishedAt: new Date().toISOString(),
-        errorMessage: result.stderr || result.stdout || "CLI QA follow-up failed.",
-      });
       this.deps.projectManagementRepository.updateTask(args.task.record_id!, {
         status: "pending",
       });
       this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
       throw new Error(result.stderr || result.stdout || "CLI QA follow-up failed.");
     }
-
-    this.deps.executionRepository.appendExecutionInvocationMessage(invocation.id, {
-      role: "assistant",
-      contentMarkdown: result.usageTelemetry.transcriptText,
-    });
-    this.deps.executionRepository.updateExecutionInvocation(invocation.id, {
-      status: "completed",
-      providerInvocationId: usage.id,
-      finishedAt: new Date().toISOString(),
-    });
 
     const currentBranch = (await runCommandStrict("git", ["rev-parse", "--abbrev-ref", "HEAD"], worktreePath)).stdout.trim();
     if (currentBranch !== workerBranch) {

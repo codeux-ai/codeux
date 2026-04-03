@@ -12,10 +12,10 @@ import type { Logger } from "../shared/logging/logger.js";
 import { buildTaskRunKey } from "./task-run-key.js";
 import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS, sanitizeToken } from "./cli-workflow-utils.js";
 import { isReadFileNotFoundToolError, buildReadFileRetryPrompt } from "./cli-workflow-text-utils.js";
-import { classifyProviderError, ProviderQuotaError } from "../shared/providers/provider-error-classifier.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
 import { ProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
+import { ProviderExecutionService } from "./provider-execution-service.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import { ProjectAttentionService } from "../domain/workers/project-attention-service.js";
 import { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
@@ -96,7 +96,16 @@ export class VirtualWorkerService {
   private readonly ciAutofixRetryCounts = new Map<string, number>();
   private readonly clarificationRetryCounts = new Map<string, number>();
 
-  constructor(private readonly deps: VirtualWorkerServiceDependencies) {}
+  private readonly providerExecutionService: ProviderExecutionService;
+
+  constructor(private readonly deps: VirtualWorkerServiceDependencies) {
+    this.providerExecutionService = new ProviderExecutionService({
+      executionRepository: deps.executionRepository,
+      providerRunner: this.providerRunner,
+      logger: deps.logger,
+      sessionTracking: deps.sessionTracking,
+    });
+  }
 
   private isOrchestratorHandledClarificationItem(item: ProjectAttentionItemRecord): boolean {
     return item.summaryMarkdown.includes("Clarification cooldown active")
@@ -852,128 +861,28 @@ export class VirtualWorkerService {
     apiKey: string;
     githubToken: string;
   }): Promise<void> {
-    let execInvocation: { id: string } | undefined = undefined;
+    const result = await this.providerExecutionService.executeProvider({
+      projectId: args.attentionItem.projectId,
+      sprintId: args.attentionItem.sprintId,
+      taskId: args.attentionItem.taskId,
+      sprintRunId: args.attentionItem.sprintRunId,
+      dispatchId: args.attentionItem.dispatchId,
+      attentionItemId: args.attentionItem.id,
+      purpose: args.purpose,
+      type: args.purpose,
+      provider: args.provider,
+      prompt: args.providerPrompt,
+      cwd: args.worktreePath,
+      model: args.model,
+      apiKey: args.apiKey,
+      sessionId: args.sessionId,
+      workflowSettings: args.workflowSettings,
+      repoPath: args.repoPath,
+      githubToken: args.githubToken,
+    });
 
-    const runProvider = async (prompt: string, retrySystemMessage?: string) => {
-      const startedAt = new Date().toISOString();
-
-      if (!execInvocation) {
-        execInvocation = this.deps.executionRepository.createExecutionInvocation({
-          projectId: args.attentionItem.projectId,
-          sprintId: args.attentionItem.sprintId,
-          taskId: args.attentionItem.taskId,
-          sprintRunId: args.attentionItem.sprintRunId,
-          dispatchId: args.attentionItem.dispatchId,
-          attentionItemId: args.attentionItem.id,
-          type: args.purpose,
-          provider: args.provider,
-          model: args.model,
-          startedAt,
-        });
-      }
-
-      if (execInvocation && retrySystemMessage) {
-        this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-          role: "system",
-          contentMarkdown: retrySystemMessage,
-        });
-      }
-
-      if (execInvocation) {
-        this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-          role: "user",
-          contentMarkdown: prompt,
-        });
-      }
-
-      const invocation = this.deps.executionRepository.createProviderInvocationUsage({
-        projectId: args.attentionItem.projectId,
-        sprintId: args.attentionItem.sprintId,
-        taskId: args.attentionItem.taskId,
-        sprintRunId: args.attentionItem.sprintRunId,
-        dispatchId: args.attentionItem.dispatchId,
-        attentionItemId: args.attentionItem.id,
-        sessionId: args.sessionId,
-        provider: args.provider,
-        purpose: args.purpose,
-        model: args.model,
-        startedAt,
-        promptChars: prompt.length,
-      });
-
-      this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
-        providerInvocationId: invocation.id,
-      });
-
-      const startedMs = Date.now();
-      const result = await this.providerRunner.runProvider({
-        provider: args.provider,
-        prompt,
-        cwd: args.worktreePath,
-        model: args.model,
-        apiKey: args.apiKey,
-        sessionId: args.sessionId,
-        workflowSettings: args.workflowSettings,
-        repoPath: args.repoPath,
-        githubToken: args.githubToken,
-        onActivity: (description, originator) => {
-          this.deps.sessionTracking.appendActivity(args.sessionId, {
-            originator: originator || "system",
-            description,
-          });
-        },
-      });
-      this.deps.executionRepository.updateProviderInvocationUsage(invocation.id, {
-        status: result.ok ? "completed" : "failed",
-        model: args.model,
-        nativeSessionId: result.nativeSessionId,
-        finishedAt: new Date().toISOString(),
-        durationMs: Date.now() - startedMs,
-        transcriptChars: result.usageTelemetry.transcriptText.length,
-        inputTokens: result.usageTelemetry.inputTokens,
-        cachedInputTokens: result.usageTelemetry.cachedInputTokens,
-        outputTokens: result.usageTelemetry.outputTokens,
-        reasoningOutputTokens: result.usageTelemetry.reasoningOutputTokens,
-        totalTokens: result.usageTelemetry.totalTokens,
-        usageSource: result.usageTelemetry.usageSource,
-        rawUsageJson: result.usageTelemetry.rawUsageJson,
-      });
-
-      if (execInvocation) {
-        this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
-          status: result.ok ? "completed" : "failed",
-          finishedAt: new Date().toISOString(),
-        });
-        if (!result.ok) {
-          this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-            role: "tool",
-            contentMarkdown: result.stderr || result.stdout || "Provider failed without output.",
-          });
-        } else {
-          this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-            role: "assistant",
-            contentMarkdown: result.usageTelemetry.transcriptText,
-          });
-        }
-      }
-
-      return result;
-    };
-
-    let result = await runProvider(args.providerPrompt);
-    if (!result.ok && args.workflowSettings.retryOnReadFileNotFound && isReadFileNotFoundToolError(result)) {
-      this.deps.sessionTracking.appendActivity(args.sessionId, {
-        originator: "system",
-        description: "Retrying merge-conflict resolution with file-discovery guidance.",
-      });
-      result = await runProvider(buildReadFileRetryPrompt(args.providerPrompt), "Retrying merge-conflict resolution with file-discovery guidance.");
-    }
     if (!result.ok) {
-      const classification = classifyProviderError(args.provider, result);
-      if (classification.category !== "UNKNOWN") {
-        throw new ProviderQuotaError(classification);
-      }
-      throw new Error(classification.userMessage);
+      throw new Error(result.stderr || result.stdout || "Provider failed without output.");
     }
   }
 
