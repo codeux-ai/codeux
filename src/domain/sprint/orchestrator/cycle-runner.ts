@@ -51,6 +51,11 @@ interface TaskStateSnapshot {
   mergeIndicator: Subtask["merge_indicator"];
 }
 
+interface TaskActionRequiredSnapshot {
+  status: Subtask["status"];
+  sessionState: string | undefined;
+}
+
 export class CycleRunner {
   private readonly ciAutofixRetryCounts = new Map<string, number>();
   private readonly featurePrGate = new FeaturePrGateService();
@@ -141,6 +146,15 @@ export class CycleRunner {
     }
 
     if (subtasks.length > 0) {
+      const preAutomationTasks = new Map<string, TaskActionRequiredSnapshot>(
+        subtasks.map((task) => [
+          task.id,
+          {
+            status: task.status,
+            sessionState: task.session_state,
+          },
+        ]),
+      );
       const interventionResult = await applyActionRequiredAutomation(subtasks, {
         projectId: args.executionContext.project.id,
         sprintGoal: args.executionContext.sprint.goal || "",
@@ -157,6 +171,7 @@ export class CycleRunner {
         },
       });
       subtasks = interventionResult.subtasks;
+      this.syncAutoInterventionExecutionState(subtasks, preAutomationTasks, args.sprintRunId);
       reportText += interventionResult.reportText;
     }
 
@@ -346,6 +361,58 @@ export class CycleRunner {
       logger: this.deps.logger.child({ component: "start-ready-tasks-step" }),
       shouldSkipTask: (task) => task.status === "QUOTA",
     });
+  }
+
+  private syncAutoInterventionExecutionState(
+    subtasks: Subtask[],
+    previousTasks: Map<string, TaskActionRequiredSnapshot>,
+    sprintRunId?: string,
+  ): void {
+    if (!sprintRunId) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    for (const task of subtasks) {
+      const previous = previousTasks.get(task.id);
+      if (!previous || !task.record_id) {
+        continue;
+      }
+      if (previous.status !== "BLOCKED" || task.status !== "RUNNING") {
+        continue;
+      }
+      if (!this.deps.isActionRequiredState(previous.sessionState)) {
+        continue;
+      }
+
+      const taskRun = this.deps.executionRepository.getLatestTaskRun(task.record_id, sprintRunId);
+      if (!taskRun) {
+        continue;
+      }
+
+      this.deps.executionRepository.updateTaskRun(taskRun.id, {
+        state: "RUNNING",
+        finishedAt: null,
+        durationMs: null,
+      });
+
+      if (!taskRun.dispatchId) {
+        continue;
+      }
+
+      const dispatch = this.deps.executionRepository.getTaskDispatch(taskRun.dispatchId);
+      if (!dispatch) {
+        continue;
+      }
+
+      this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+        status: "running",
+        startedAt: dispatch.startedAt || taskRun.startedAt || now,
+        finishedAt: null,
+        lastHeartbeatAt: now,
+        errorMessage: null,
+      });
+    }
   }
 
   private async captureTaskCompletionMemories(

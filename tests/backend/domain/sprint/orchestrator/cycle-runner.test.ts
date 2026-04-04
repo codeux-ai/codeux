@@ -23,7 +23,14 @@ function buildDeps(): SprintOrchestratorDependencies {
       resolveTaskProvider: vi.fn().mockReturnValue("codex"),
     } as any,
     executionRepository: {
-      getLatestTaskRun: vi.fn().mockReturnValue({ id: "task-run-1" }),
+      getLatestTaskRun: vi.fn().mockReturnValue({ id: "task-run-1", dispatchId: "dispatch-1" }),
+      getTaskDispatch: vi.fn().mockReturnValue({
+        id: "dispatch-1",
+        status: "blocked",
+        startedAt: "2026-03-20T10:00:00.000Z",
+      }),
+      updateTaskRun: vi.fn(),
+      updateTaskDispatch: vi.fn(),
       appendTaskRunEvent: vi.fn(),
     } as any,
     projectAttentionService: {
@@ -657,6 +664,16 @@ describe("CycleRunner attention sync", () => {
     const firstResult = await runner.run(baseArgs);
     expect(firstResult.subtasks[0]).toMatchObject({ status: "RUNNING" });
     expect(deps.sendSessionMessage).toHaveBeenCalledTimes(1);
+    expect(deps.executionRepository.updateTaskRun).toHaveBeenCalledWith("task-run-1", {
+      state: "RUNNING",
+      finishedAt: null,
+      durationMs: null,
+    });
+    expect(deps.executionRepository.updateTaskDispatch).toHaveBeenCalledWith("dispatch-1", expect.objectContaining({
+      status: "running",
+      finishedAt: null,
+      errorMessage: null,
+    }));
 
     vi.mocked(deps.projectAttentionService.openItem).mockClear();
 

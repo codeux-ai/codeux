@@ -20,6 +20,7 @@ import { renderMarkdown } from "../lib/markdown.js";
 import type { Subtask, ExecutionRuntimeEventSummary } from "../types.js";
 import { deriveLiveSessionRuntimeState } from "./lib/live-session-runtime.js";
 import { getTaskProgressPhase } from "../lib/task-progress.js";
+import { pickLatestTaskDispatch, projectLiveTask } from "./lib/live-task-runtime.js";
 
 import { IntelPanel } from "./components/ui/IntelPanel.js";
 import { CollapsiblePanel } from "./components/ui/CollapsiblePanel.js";
@@ -199,7 +200,9 @@ export const LiveSessionPage: FunctionComponent = () => {
             : execution.sprintRuns;
     }, [execution.sprintRuns, sprintScopeId, sprintScopeReady]);
 
-    const visibleTasksWithLiveActivities = tasksWithLiveActivities;
+    const visibleTasksWithLiveActivities = useMemo(() => (
+        tasksWithLiveActivities.map((task) => projectLiveTask(task, sprintDispatches, sprintEvents))
+    ), [sprintDispatches, sprintEvents, tasksWithLiveActivities]);
 
     const hasSprintContext = rawHasSprintContext || visibleTasksWithLiveActivities.length > 0;
 
@@ -273,29 +276,6 @@ export const LiveSessionPage: FunctionComponent = () => {
         return { byRecordId, byTaskKey };
     }, [sprintEvents]);
 
-    const dispatchInfoByTaskId = useMemo(() => {
-        const map = new Map<string, {
-            errorMessage: string | null;
-            startedAt: string | null;
-            finishedAt: string | null;
-            status: string | null;
-        }>();
-        for (const dispatch of sprintDispatches) {
-            if (!dispatch.taskId) continue;
-            const existing = map.get(dispatch.taskId);
-            // Keep the most recent dispatch (last in list), but prefer one with error if present
-            if (!existing || dispatch.errorMessage || (!existing.errorMessage && dispatch.startedAt)) {
-                map.set(dispatch.taskId, {
-                    errorMessage: dispatch.errorMessage,
-                    startedAt: dispatch.startedAt,
-                    finishedAt: dispatch.finishedAt,
-                    status: dispatch.status,
-                });
-            }
-        }
-        return map;
-    }, [sprintDispatches]);
-
     const { filteredTasks, taskCounts } = useMemo(() => {
         const filteredTasks: Subtask[] = [];
         const targetStatus = FILTER_STATUS_MAP[activeFilter];
@@ -333,7 +313,12 @@ export const LiveSessionPage: FunctionComponent = () => {
     const taskCardItems = useMemo(() => (
         filteredTasks.map((task) => {
             const taskRuntimeId = task.record_id || task.id;
-            const dispatchInfo = task.record_id ? dispatchInfoByTaskId.get(task.record_id) : undefined;
+            const latestDispatch = pickLatestTaskDispatch(task, sprintDispatches);
+            const taskPhase = getTaskProgressPhase(task);
+            const showDispatchError = latestDispatch
+                && ["FAILED", "BLOCKED", "QUOTA"].includes(taskPhase)
+                ? latestDispatch.errorMessage
+                : null;
 
             return {
                 key: taskRuntimeId,
@@ -343,10 +328,15 @@ export const LiveSessionPage: FunctionComponent = () => {
                     || taskEventsByRecordId.byTaskKey.get(task.id)
                     || EMPTY_RUNTIME_EVENTS,
                 isRerunning: rerunningIds.has(taskRuntimeId),
-                dispatchInfo: dispatchInfo ?? null,
+                dispatchInfo: latestDispatch ? {
+                    errorMessage: showDispatchError,
+                    startedAt: latestDispatch.startedAt,
+                    finishedAt: latestDispatch.finishedAt,
+                    status: latestDispatch.status,
+                } : null,
             };
         })
-    ), [dispatchInfoByTaskId, filteredTasks, rerunningIds, taskEventsByRecordId, taskTimingMap]);
+    ), [filteredTasks, rerunningIds, sprintDispatches, taskEventsByRecordId, taskTimingMap]);
 
 
 

@@ -15,6 +15,7 @@ The Live snapshot (`ProjectLiveDashboardSnapshot`) serves as the authoritative b
 
 4. **The Browser Renders (No Reconciling):**
    The browser UI renders the exact snapshot it receives over HTTP `/api/live` or websockets. It does not attempt to reconcile competing sources, merge partial updates manually, or maintain local hidden state that contradicts the snapshot.
+   Live task cards may still derive display-only task runtime fields such as the latest session id, PR URL, worker branch, and display phase from the current sprint-scoped dispatch/event history that already exists inside the same snapshot. This is a projection step inside the snapshot boundary, not a second source of truth.
 
 ## Field Ownership & Mutation Triggers
 
@@ -52,3 +53,6 @@ The top-level fields within `ProjectLiveDashboardSnapshot` are explicitly owned 
 
 8. **Reconnect and Restart Recovery Rules:**
    When a client reconnects, it receives only replayable events for its subscribed scopes. If a client misses a non-replayable snapshot, the transport natively handles gap detection by forcing a complete snapshot reload rather than replaying outdated or heavy payloads from the SQLite event log.
+
+9. **Automation Handoff Consistency:**
+   When orchestration automatically approves a plan, answers a clarification, or resumes a paused task, the execution tables are updated immediately to clear the prior blocked/error dispatch state for that task run. This prevents stale "action required" warnings from surviving on Live task cards after automation has already taken ownership of the handoff.
