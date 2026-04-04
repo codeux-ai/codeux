@@ -316,16 +316,16 @@ export const RangeToggle: FunctionComponent<{
   onApplyCustom,
 }) => (
   <div className="flex flex-col gap-4">
-    <div className={`inline-flex flex-wrap p-1 ${CHIP_CLASS}`}>
+    <div className="flex flex-wrap gap-2">
       {(["24h", "7d", "30d", "all"] as const).map((value) => (
         <button
           key={value}
           type="button"
           onClick={() => onSelectPreset(value)}
-          className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all ${
+          className={`min-h-[44px] rounded-full border border-black/[0.06] shadow-[0_1px_3px_rgba(0,0,0,0.04)] backdrop-blur-xl dark:border-white/[0.06] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all ${
             activeWindow === value
               ? "bg-void-900 text-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] dark:bg-white dark:text-void-900"
-              : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+              : "bg-white/70 dark:bg-void-900/55 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
           }`}
         >
           {value === "all" ? "All time" : value}
@@ -334,16 +334,16 @@ export const RangeToggle: FunctionComponent<{
       <button
         type="button"
         onClick={onApplyCustom}
-        className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all ${
+        className={`min-h-[44px] rounded-full border border-black/[0.06] shadow-[0_1px_3px_rgba(0,0,0,0.04)] backdrop-blur-xl dark:border-white/[0.06] px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all ${
           activeWindow === "custom"
             ? "bg-void-900 text-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] dark:bg-white dark:text-void-900"
-            : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+            : "bg-white/70 dark:bg-void-900/55 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
         }`}
       >
         Custom
       </button>
     </div>
-    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
       <input
         type="date"
         value={customFrom}
@@ -378,7 +378,7 @@ export const ViewToggle: FunctionComponent<{
   ];
 
   return (
-    <div className={`inline-flex p-1 ${CHIP_CLASS}`}>
+    <div className="flex flex-wrap gap-2">
       {modes.map((mode) => {
         const Icon = mode.icon;
         return (
@@ -386,10 +386,10 @@ export const ViewToggle: FunctionComponent<{
             key={mode.id}
             type="button"
             onClick={() => onChange(mode.id)}
-            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] transition-all ${
+            className={`min-h-[44px] inline-flex items-center gap-2 rounded-full border border-black/[0.06] shadow-[0_1px_3px_rgba(0,0,0,0.04)] backdrop-blur-xl dark:border-white/[0.06] dark:shadow-[0_1px_3px_rgba(0,0,0,0.18)] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] transition-all ${
               value === mode.id
                 ? "bg-slate-900 text-white shadow-[0_14px_32px_rgba(15,23,42,0.16)] dark:bg-white dark:text-slate-900"
-                : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                : "bg-white/70 dark:bg-void-900/55 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
             }`}
           >
             <Icon className="h-3.5 w-3.5" strokeWidth={2} />

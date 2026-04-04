@@ -18,7 +18,7 @@ export const AnalysisStudioSection: FunctionComponent<any> = ({
   return (
     <>
       {stats ? (
-        <div className="flex justify-end mb-4">
+        <div className="flex justify-start sm:justify-end mb-4">
           <ViewToggle value={visualMode} onChange={setVisualMode} />
         </div>
       ) : null}

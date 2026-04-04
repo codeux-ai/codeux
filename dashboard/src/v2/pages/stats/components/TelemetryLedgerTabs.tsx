@@ -8,7 +8,7 @@ export const TelemetryLedgerTabs: FunctionComponent<any> = ({ stats }) => {
 
   return (
     <div className={`${PANEL_CLASS} flex flex-col`}>
-      <div className="flex items-center gap-4 border-b border-black/[0.08] px-6 py-4 dark:border-white/[0.08]">
+      <div className="flex items-center gap-4 overflow-x-auto whitespace-nowrap border-b border-black/[0.08] px-6 py-4 dashboard-scrollbar dark:border-white/[0.08]">
         <button
           type="button"
           onClick={() => setActiveTab("tasks")}

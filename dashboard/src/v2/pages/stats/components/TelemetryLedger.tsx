@@ -85,7 +85,7 @@ export const TelemetryLedger: FunctionComponent<{
           </div>
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
           <input
             type="text"
             value={query}
@@ -123,7 +123,7 @@ export const TelemetryLedger: FunctionComponent<{
 
                 return (
                   <div key={item.id} className={LEDGER_ROW_CLASS}>
-                    <div className="flex items-start gap-4">
+                    <div className="flex flex-col md:flex-row items-start gap-4">
                       <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-black/[0.06] bg-white/75 text-sm font-black text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.07)] backdrop-blur-xl dark:border-white/[0.06] dark:bg-void-900/55 dark:text-white dark:shadow-[0_12px_28px_rgba(0,0,0,0.22)]">
                         {index + 1}
                       </div>
@@ -150,7 +150,7 @@ export const TelemetryLedger: FunctionComponent<{
                           </div>
                         </div>
 
-                        <div className="mt-4 flex flex-wrap gap-3">
+                        <div className="mt-4 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
                             <div className={`${SUBPANEL_CLASS} flex-1 min-w-[120px]`}>
                               <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Total</div>
                               <div className="mt-2 text-sm font-black text-slate-900 dark:text-white">{formatTokens(item.usage.totalTokens)}</div>

@@ -21,7 +21,7 @@ export const StatsPageHero: FunctionComponent<any> = ({
   return (
     <section className={`${PANEL_CLASS} rounded-[2.5rem] p-8 md:p-10`}>
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.14]" />
-      <div className="relative flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
+      <div className="relative flex flex-col gap-8 md:flex-row md:items-end md:justify-between">
         <div className="max-w-4xl">
           <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">
             <BarChart3 className="h-3.5 w-3.5" strokeWidth={2.2} />
@@ -34,23 +34,23 @@ export const StatsPageHero: FunctionComponent<any> = ({
             A high-signal telemetry workspace for planning, coding, CI recovery, and merge automation with deeper analysis, stronger interaction, and better operational usability.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+            <div className={`min-h-[44px] flex items-center px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
               {selectedProject?.name || "No project selected"}
             </div>
-            <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+            <div className={`min-h-[44px] flex items-center px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
               {stats?.activeSprint ? `Live sprint ${stats.activeSprint.sprintNumber ?? "?"}` : "Historical lens"}
             </div>
-            <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+            <div className={`min-h-[44px] flex items-center px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
               Generated {stats ? formatDateTime(stats.generatedAt) : "--"}
             </div>
             {stats ? (
-              <div className={`px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
+              <div className={`min-h-[44px] flex items-center px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
                 {stats.range.resolutionLabel}
               </div>
             ) : null}
           </div>
         </div>
-        <div className="flex flex-col items-start gap-4 xl:items-end">
+        <div className="flex flex-col items-start gap-4 md:items-end">
           <RangeToggle
             activeWindow={activeQuery.window}
             customFrom={customFrom}

@@ -176,7 +176,7 @@ export const InteractiveUsageChart: FunctionComponent<{
               Normalized telemetry lines reveal shape instead of forcing tokens, duration, and invocation counts into one scale. Drag across the plot to zoom a timeframe, keep hourly hover precision, and use the legend to focus the graph.
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 xl:w-[27rem]">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:w-[27rem]">
             <div data-chart-card className={SUBPANEL_CLASS}>
               <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Peak Tokens</div>
               <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{formatTokens(peakTokens)}</div>
@@ -200,7 +200,7 @@ export const InteractiveUsageChart: FunctionComponent<{
           </div>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_16rem] 2xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_16rem] 2xl:grid-cols-[minmax(0,1fr)_20rem]">
           <div className={`${SUBPANEL_CLASS} p-4 md:p-5`}>
             <div className="mb-5 flex flex-wrap items-center gap-3">
               <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Interactive Legend</div>
@@ -223,8 +223,8 @@ export const InteractiveUsageChart: FunctionComponent<{
             <div className="relative">
               {activeBucket ? (
                 <div
-                  className="pointer-events-none absolute top-3 z-10 w-56 -translate-x-1/2 rounded-[1.25rem] border border-black/[0.06] bg-white/88 px-4 py-3 shadow-[0_18px_38px_rgba(15,23,42,0.12)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-900/88 dark:shadow-[0_20px_40px_rgba(0,0,0,0.32)]"
-                  style={{ left: `${Math.min(92, Math.max(8, tooltipLeft))}%` }}
+                  className="pointer-events-none absolute top-3 z-10 w-56 rounded-[1.25rem] border border-black/[0.06] bg-white/88 px-4 py-3 shadow-[0_18px_38px_rgba(15,23,42,0.12)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-900/88 dark:shadow-[0_20px_40px_rgba(0,0,0,0.32)]"
+                  style={{ left: `${tooltipLeft}%`, transform: `translateX(-${Math.min(100, Math.max(0, tooltipLeft))}%)` }}
                 >
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">{activeBucket.label}</div>
                   <div className="mt-2 text-sm font-black text-slate-900 dark:text-white">{formatDateTime(activeBucket.bucketStart)}</div>
@@ -241,7 +241,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                   </div>
                 </div>
               ) : null}
-              <svg viewBox={`0 0 ${width} ${height + 40}`} className="h-[24rem] w-full overflow-visible">
+              <svg viewBox={`0 0 ${width} ${height + 40}`} className="h-[18rem] md:h-[24rem] w-full overflow-visible">
                 <defs>
                   {chartData.map((series) => (
                     <linearGradient key={`fill-${series.id}`} id={`stats-area-${series.id}`} x1="0" x2="0" y1="0" y2="1">
