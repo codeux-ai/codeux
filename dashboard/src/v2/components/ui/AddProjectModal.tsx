@@ -90,15 +90,15 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
             role="dialog"
             aria-modal="true"
             aria-labelledby="add-project-modal-title"
-            className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-black/50 dark:bg-black/70 backdrop-blur-xl"
+            className="fixed inset-0 z-[200] flex items-center justify-center px-4 sm:px-6 bg-black/50 dark:bg-black/70 backdrop-blur-xl"
         >
             <div
                 ref={cardRef}
-                className="relative w-full max-w-2xl overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)] flex"
+                className="relative w-full max-w-2xl max-h-[90vh] md:max-h-[85vh] overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)] flex flex-col md:flex-row"
                 style={{ minHeight: '520px' }}
             >
                 {/* ── Left decorative panel ── */}
-                <div className="relative w-52 shrink-0 bg-void-900 dark:bg-void-950 flex flex-col justify-between p-8 overflow-hidden">
+                <div className="relative w-52 shrink-0 bg-void-900 dark:bg-void-950 hidden md:flex flex-col justify-between p-8 overflow-hidden">
                     <span className="absolute -top-2 -left-4 text-[7.5rem] font-black text-white/[0.035] font-display leading-none pointer-events-none select-none tracking-tighter">
                         ADD
                     </span>
@@ -121,9 +121,9 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                 </div>
 
                 {/* ── Right form panel ── */}
-                <div className="flex-1 bg-white/98 dark:bg-void-800/98 p-8 flex flex-col">
+                <div className="flex-1 bg-white/98 dark:bg-void-800/98 p-6 md:p-8 flex flex-col overflow-y-auto">
                     {/* Header */}
-                    <div className="flex items-start justify-between mb-8">
+                    <div className="flex items-start justify-between mb-6 md:mb-8 shrink-0">
                         <div>
                             <h2 id="add-project-modal-title" className="text-[2rem] font-black text-slate-900 dark:text-white tracking-tight font-display leading-none">
                                 Add Project.
@@ -264,7 +264,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                             <div className="flex-1" />
 
                             {/* Actions */}
-                            <div className="flex items-center justify-between pt-1">
+                            <div className="flex items-center justify-between pt-4 flex-wrap gap-4 shrink-0">
                                 <button
                                     type="button"
                                     onClick={handleClose}

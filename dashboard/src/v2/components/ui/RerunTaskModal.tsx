@@ -105,17 +105,17 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
         <div
             ref={backdropRef}
             onClick={(e) => { if (e.target === backdropRef.current) handleClose(); }}
-            className="fixed inset-0 z-[250] flex items-center justify-center bg-black/50 px-6 py-8 backdrop-blur-md dark:bg-black/70"
+            className="fixed inset-0 z-[250] flex items-center justify-center bg-black/50 px-4 sm:px-6 py-8 backdrop-blur-md dark:bg-black/70"
         >
             <div
                 ref={cardRef}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="rerun-modal-title"
-                className="w-full max-w-md rounded-[2rem] bg-white shadow-[0_32px_80px_rgba(0,0,0,0.18)] dark:bg-void-900 dark:shadow-[0_32px_80px_rgba(0,0,0,0.6)] overflow-hidden"
+                className="w-full max-w-md max-h-[90vh] md:max-h-[85vh] flex flex-col rounded-[2rem] bg-white shadow-[0_32px_80px_rgba(0,0,0,0.18)] dark:bg-void-900 dark:shadow-[0_32px_80px_rgba(0,0,0,0.6)] overflow-hidden"
             >
                 {/* Header */}
-                <div className="flex items-center justify-between px-7 pt-6 pb-4">
+                <div className="flex items-center justify-between px-6 sm:px-7 pt-6 pb-4 shrink-0">
                     <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-status-amber/10">
                             <RotateCcw className="w-4 h-4 text-status-amber" strokeWidth={2} />
@@ -137,7 +137,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                 </div>
 
                 {/* Body */}
-                <div className="px-7 pb-6 space-y-5">
+                <div className="px-6 sm:px-7 pb-6 space-y-5 overflow-y-auto">
                     <p className="text-[13px] text-slate-500 dark:text-slate-400 leading-relaxed">
                         This will reset <span className="font-semibold text-slate-700 dark:text-slate-200">{task.title}</span> and start a fresh execution.
                     </p>
@@ -235,7 +235,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-end gap-3 px-7 py-4 border-t border-black/[0.05] dark:border-white/[0.05] bg-black/[0.01] dark:bg-white/[0.01]">
+                <div className="flex items-center justify-end gap-3 px-6 sm:px-7 py-4 border-t border-black/[0.05] dark:border-white/[0.05] bg-black/[0.01] dark:bg-white/[0.01] flex-wrap shrink-0">
                     <button
                         type="button"
                         onClick={handleClose}

@@ -58,7 +58,7 @@ export const SettingsHeader: FunctionComponent<{
   description: string;
   actions?: ComponentChildren;
 }> = ({ icon: Icon, eyebrow, title, description, actions }) => (
-  <div className="flex flex-wrap items-start justify-between gap-5 border-b border-black/[0.05] px-7 py-6 dark:border-white/[0.04]">
+  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 border-b border-black/[0.05] px-5 py-5 sm:px-7 sm:py-6 dark:border-white/[0.04]">
     <div>
       <div className="flex items-center gap-2.5 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
         <Icon className="h-3.5 w-3.5" strokeWidth={2.3} />
@@ -82,7 +82,7 @@ export const SettingsBody: FunctionComponent<{
   loadingLabel?: string;
   children: ComponentChildren;
 }> = ({ error, message, loading, loadingLabel = "Loading\u2026", children }) => (
-  <div className="px-7 py-6">
+  <div className="px-5 py-5 sm:px-7 sm:py-6">
     {error ? (
       <div className="mb-5">
         <NoticePanel title="Error" tone="warning">{error}</NoticePanel>

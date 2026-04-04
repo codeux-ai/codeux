@@ -82,13 +82,13 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
     <div
       ref={backdropRef}
       onClick={handleBackdropClick}
-      className="fixed inset-0 z-[220] flex items-center justify-center px-6 bg-black/55 dark:bg-black/75 backdrop-blur-xl"
+      className="fixed inset-0 z-[220] flex items-center justify-center px-4 sm:px-6 bg-black/55 dark:bg-black/75 backdrop-blur-xl"
     >
       <div
         ref={cardRef}
-        className="relative w-full max-w-5xl overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)] flex"
+        className="relative w-full max-w-5xl max-h-[90vh] md:max-h-[85vh] overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)] flex flex-col md:flex-row"
       >
-        <div className="relative w-56 shrink-0 bg-void-900 dark:bg-void-950 flex flex-col justify-between p-8 overflow-hidden">
+        <div className="relative w-56 shrink-0 bg-void-900 dark:bg-void-950 hidden md:flex flex-col justify-between p-8 overflow-hidden">
           <span className="absolute -top-2 -left-4 text-[7.5rem] font-black text-white/[0.035] font-display leading-none pointer-events-none select-none tracking-tighter">
             {mode === "import" ? "LOAD" : "SAVE"}
           </span>
@@ -109,8 +109,8 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
           </div>
         </div>
 
-        <div className="flex-1 bg-white/98 dark:bg-void-800/98 p-8 flex flex-col">
-          <div className="flex items-start justify-between mb-8">
+        <div className="flex-1 bg-white/98 dark:bg-void-800/98 p-6 md:p-8 flex flex-col overflow-y-auto">
+          <div className="flex items-start justify-between mb-6 md:mb-8 shrink-0">
             <div>
               <h2 className="text-[2rem] font-black text-slate-900 dark:text-white tracking-tight font-display leading-none">
                 {title}
@@ -196,11 +196,11 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-2">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-2 gap-4 shrink-0">
               <div className="text-xs text-slate-400">
                 {mode === "import" ? "Task bundle markers are optional. If omitted, the full textarea is treated as one task." : "Export reflects current DB state, not repo-local markdown files."}
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
                 <button
                   type="button"
                   onClick={onClose}

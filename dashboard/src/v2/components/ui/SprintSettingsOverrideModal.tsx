@@ -129,11 +129,11 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
           onClose();
         }
       }}
-      className="fixed inset-0 z-[240] flex items-center justify-center bg-black/55 px-6 py-8 backdrop-blur-xl dark:bg-black/75"
+      className="fixed inset-0 z-[240] flex items-center justify-center bg-black/55 px-4 py-6 md:px-6 md:py-8 backdrop-blur-xl dark:bg-black/75"
     >
       <div
         ref={cardRef}
-        className="flex max-h-[92vh] w-full max-w-7xl flex-col overflow-hidden rounded-[2.5rem] bg-[#f9f8f4] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:bg-void-900 dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)]"
+        className="flex max-h-[90vh] w-full max-w-7xl flex-col overflow-hidden rounded-[2.5rem] bg-[#f9f8f4] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:bg-void-900 dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)]"
       >
         <SettingsHeader
           icon={SlidersHorizontal}
