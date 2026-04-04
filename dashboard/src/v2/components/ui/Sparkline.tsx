@@ -29,7 +29,7 @@ export const Sparkline: FunctionComponent<{ points: number[]; color: string }> =
     const gradId = `sg-${color.replace('#', '')}`;
 
     const applyDrawState = (animate: boolean) => {
-        if (!pathRef.current) return;
+        if (!pathRef.current || !pathRef.current.getTotalLength) return;
         const len = pathRef.current.getTotalLength();
         gsap.killTweensOf(pathRef.current);
         gsap.set(pathRef.current, { strokeDasharray: `${len} ${len}`, strokeDashoffset: len });
