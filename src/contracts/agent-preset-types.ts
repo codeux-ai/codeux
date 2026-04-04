@@ -13,6 +13,7 @@ export interface AgentAvatarConfig {
   antenna?: string;
   wings?: string;
   accent?: string;
+  baseColor?: string;
 }
 
 export interface AgentPresetRecord {

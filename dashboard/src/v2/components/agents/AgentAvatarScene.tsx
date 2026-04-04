@@ -8,7 +8,7 @@ import { useEffect, useRef, useState, useCallback } from "preact/hooks";
 import * as THREE from "three";
 import type { AgentAvatarConfig } from "../../types.js";
 import type { AgentAvatarExpression } from "../../lib/agent-avatar.js";
-import { DEFAULT_AGENT_AVATAR_CONFIG, getAccentHex } from "../../lib/agent-avatar.js";
+import { DEFAULT_AGENT_AVATAR_CONFIG, getAccentHex, ROBOT_BASE_COLOR_OPTIONS } from "../../lib/agent-avatar.js";
 import { AgentAvatarSvg } from "./AgentAvatarSvg.js";
 
 interface AgentAvatarSceneProps {
@@ -27,22 +27,166 @@ function accentHex(id?: string): number {
   return ACCENT_COLORS[id ?? "jade"] ?? 0x00e0a0;
 }
 
+const BASE_COLORS: Record<string, number> = {};
+for (const opt of ROBOT_BASE_COLOR_OPTIONS) {
+  BASE_COLORS[opt.id] = parseInt(opt.hex.slice(1), 16);
+}
+function baseColorHex(id?: string): number {
+  return BASE_COLORS[id ?? "onyx"] ?? 0x1e1e2e;
+}
+
+/** Lighten a hex int color by a factor (0-1) */
+function lightenColor(color: number, factor: number): number {
+  const r = Math.min(255, ((color >> 16) & 0xff) + Math.round(factor * 60));
+  const g = Math.min(255, ((color >> 8) & 0xff) + Math.round(factor * 60));
+  const b = Math.min(255, (color & 0xff) + Math.round(factor * 60));
+  return (r << 16) | (g << 8) | b;
+}
+
+/** Darken a hex int color */
+function darkenColor(color: number, factor: number): number {
+  const r = Math.max(0, Math.round(((color >> 16) & 0xff) * (1 - factor)));
+  const g = Math.max(0, Math.round(((color >> 8) & 0xff) * (1 - factor)));
+  const b = Math.max(0, Math.round((color & 0xff) * (1 - factor)));
+  return (r << 16) | (g << 8) | b;
+}
+
+/** Generate a procedural environment map for reflections */
+function createEnvMap(): THREE.CubeTexture | null {
+  try {
+    const size = 64;
+    const faces: HTMLCanvasElement[] = [];
+    const faceColors = [
+      [0x18, 0x18, 0x28, 0x22, 0x22, 0x3a], // +x
+      [0x14, 0x14, 0x24, 0x1e, 0x1e, 0x34], // -x
+      [0x28, 0x28, 0x40, 0x1a, 0x1a, 0x30], // +y (top, brighter)
+      [0x0c, 0x0c, 0x18, 0x10, 0x10, 0x20], // -y (bottom, darker)
+      [0x1a, 0x1a, 0x2c, 0x20, 0x20, 0x36], // +z
+      [0x12, 0x12, 0x22, 0x1c, 0x1c, 0x32], // -z
+    ];
+    for (let f = 0; f < 6; f++) {
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx || typeof ctx.createLinearGradient !== "function") return null;
+      const c = faceColors[f];
+      const grad = ctx.createLinearGradient(0, 0, 0, size);
+      grad.addColorStop(0, `rgb(${c[0]},${c[1]},${c[2]})`);
+      grad.addColorStop(1, `rgb(${c[3]},${c[4]},${c[5]})`);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, size, size);
+      for (let i = 0; i < 200; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        const a = Math.random() * 0.08;
+        ctx.fillStyle = `rgba(255,255,255,${a})`;
+        ctx.fillRect(x, y, 1, 1);
+      }
+      faces.push(canvas);
+    }
+    const tex = new THREE.CubeTexture(faces);
+    tex.needsUpdate = true;
+    return tex;
+  } catch {
+    return null;
+  }
+}
+
+/** Generate a subtle normal map texture for surface detail */
+function createSurfaceNormalMap(): THREE.Texture | null {
+  try {
+    const size = 128;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    if (!ctx || typeof ctx.fillRect !== "function") return null;
+    ctx.fillStyle = "rgb(128,128,255)";
+    ctx.fillRect(0, 0, size, size);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (Math.random() < 0.15) {
+          const offset = Math.floor(Math.random() * 8) - 4;
+          ctx.fillStyle = `rgb(${128 + offset},${128 + offset},255)`;
+          ctx.fillRect(x, y, 1, 1);
+        }
+      }
+    }
+    for (let y = 0; y < size; y += 4) {
+      const offset = Math.floor(Math.random() * 4) - 2;
+      ctx.fillStyle = `rgba(${128 + offset},${128},255,0.5)`;
+      ctx.fillRect(0, y, size, 1);
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.needsUpdate = true;
+    return tex;
+  } catch {
+    return null;
+  }
+}
+
 /* ── Shared materials factory ── */
-function makeMaterials(accent: number) {
-  const bodyDark = new THREE.MeshStandardMaterial({ color: 0x1e1e2e, metalness: 0.6, roughness: 0.35 });
-  const bodyMid = new THREE.MeshStandardMaterial({ color: 0x2a2a3e, metalness: 0.5, roughness: 0.4 });
-  const metalTrim = new THREE.MeshStandardMaterial({ color: 0x555566, metalness: 0.85, roughness: 0.2 });
-  const accentMat = new THREE.MeshStandardMaterial({
-    color: accent, emissive: accent, emissiveIntensity: 0.35,
-    metalness: 0.3, roughness: 0.4,
+function makeMaterials(accent: number, baseColor: number, envMap: THREE.CubeTexture, normalMap: THREE.Texture) {
+  const midColor = lightenColor(baseColor, 0.35);
+  const trimColor = lightenColor(baseColor, 0.7);
+
+  const bodyDark = new THREE.MeshStandardMaterial({
+    color: baseColor,
+    metalness: 0.7,
+    roughness: 0.25,
+    envMap,
+    envMapIntensity: 0.6,
+    normalMap,
+    normalScale: new THREE.Vector2(0.15, 0.15),
   });
-  const accentGlow = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.85 });
-  const accentSoft = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.15 });
-  const white = new THREE.MeshBasicMaterial({ color: 0xffffff });
+  const bodyMid = new THREE.MeshStandardMaterial({
+    color: midColor,
+    metalness: 0.6,
+    roughness: 0.3,
+    envMap,
+    envMapIntensity: 0.4,
+  });
+  const metalTrim = new THREE.MeshStandardMaterial({
+    color: trimColor,
+    metalness: 0.9,
+    roughness: 0.12,
+    envMap,
+    envMapIntensity: 0.8,
+  });
+  const accentMat = new THREE.MeshStandardMaterial({
+    color: accent,
+    emissive: accent,
+    emissiveIntensity: 0.45,
+    metalness: 0.4,
+    roughness: 0.3,
+    envMap,
+    envMapIntensity: 0.5,
+  });
+  const accentGlow = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.9 });
+  const accentSoft = new THREE.MeshBasicMaterial({ color: accent, transparent: true, opacity: 0.12 });
+  const white = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    metalness: 0.0,
+    roughness: 0.15,
+    envMap,
+    envMapIntensity: 0.3,
+  });
   const dark = new THREE.MeshBasicMaterial({ color: 0x0a0a0f });
   const cheek = new THREE.MeshBasicMaterial({ color: 0xff9999, transparent: true, opacity: 0.0 });
+  const glass = new THREE.MeshStandardMaterial({
+    color: accent,
+    metalness: 0.1,
+    roughness: 0.05,
+    transparent: true,
+    opacity: 0.7,
+    envMap,
+    envMapIntensity: 1.2,
+  });
 
-  return { bodyDark, bodyMid, metalTrim, accentMat, accentGlow, accentSoft, white, dark, cheek };
+  return { bodyDark, bodyMid, metalTrim, accentMat, accentGlow, accentSoft, white, dark, cheek, glass };
 }
 
 /* ── Chassis builders ── */
@@ -73,33 +217,15 @@ function buildChassis(type: string | undefined, mats: ReturnType<typeof makeMate
   const hull = new THREE.Mesh(hullGeo, mats.bodyDark);
   group.add(hull);
 
-  // Accent trim ring (equator)
-  const trimGeo = new THREE.TorusGeometry(type === "square" ? 1.5 : 1.28, 0.035, 8, 48);
-  const trim = new THREE.Mesh(trimGeo, mats.accentMat);
-  trim.rotation.x = Math.PI / 2;
-  trim.position.y = -0.1;
-  group.add(trim);
+  // Subtle accent edge highlight — thin rim along bottom
+  const rimGeo = new THREE.TorusGeometry(type === "square" ? 1.42 : 1.22, 0.02, 6, 48);
+  const rim = new THREE.Mesh(rimGeo, mats.accentMat);
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = -0.85;
+  group.add(rim);
 
-  // Panel seam lines (two subtle rings)
-  const seamGeo = new THREE.TorusGeometry(type === "square" ? 1.42 : 1.22, 0.015, 6, 48);
-  const seamMat = mats.bodyMid;
-  const seam1 = new THREE.Mesh(seamGeo, seamMat);
-  seam1.rotation.x = Math.PI / 2;
-  seam1.position.y = 0.35;
-  group.add(seam1);
-  const seam2 = new THREE.Mesh(seamGeo, seamMat);
-  seam2.rotation.x = Math.PI / 2;
-  seam2.position.y = -0.5;
-  group.add(seam2);
-
-  // Chest plate accent
-  const chestGeo = new THREE.CircleGeometry(0.25, 24);
-  const chest = new THREE.Mesh(chestGeo, mats.accentGlow);
-  chest.position.set(0, -0.55, type === "square" ? 1.12 : 1.18);
-  group.add(chest);
-
-  // Shoulder joint nubs
-  const jointGeo = new THREE.SphereGeometry(0.16, 12, 12);
+  // Shoulder joint nubs — polished metal
+  const jointGeo = new THREE.SphereGeometry(0.18, 16, 16);
   const leftJoint = new THREE.Mesh(jointGeo, mats.metalTrim);
   leftJoint.position.set(-1.3, 0.05, 0);
   group.add(leftJoint);
@@ -107,7 +233,7 @@ function buildChassis(type: string | undefined, mats: ReturnType<typeof makeMate
   rightJoint.position.set(1.3, 0.05, 0);
   group.add(rightJoint);
 
-  return { group, hull, chest };
+  return { group, hull };
 }
 
 /* ── Eye builders ── */
@@ -122,7 +248,7 @@ function buildEyes(type: string | undefined, parent: THREE.Group, mats: ReturnTy
   switch (type) {
     case "visor": {
       const visorGeo = new THREE.BoxGeometry(2.0, 0.55, 0.28, 8, 4, 1);
-      visor = new THREE.Mesh(visorGeo, mats.accentGlow);
+      visor = new THREE.Mesh(visorGeo, mats.glass);
       visor.position.set(0, 0.2, 1.15);
       eyeGroup.add(visor);
 
@@ -164,7 +290,7 @@ function buildEyes(type: string | undefined, parent: THREE.Group, mats: ReturnTy
 
       // Ring
       const ringGeo = new THREE.TorusGeometry(0.48, 0.04, 8, 32);
-      const ring = new THREE.Mesh(ringGeo, mats.accentGlow);
+      const ring = new THREE.Mesh(ringGeo, mats.accentMat);
       ring.position.set(0, 0.2, 1.08);
       eyeGroup.add(ring);
 
@@ -202,13 +328,12 @@ function buildEyes(type: string | undefined, parent: THREE.Group, mats: ReturnTy
   return { eyeGroup, leftEye: leftPart, rightEye: rightPart, visor };
 }
 
-/* ── Mouth builder (curved, not a box) ── */
+/* ── Mouth builder ── */
 function buildMouth(parent: THREE.Group, mats: ReturnType<typeof makeMaterials>) {
-  // Use a torus segment for a natural curved mouth
   const mouthGeo = new THREE.TorusGeometry(0.22, 0.04, 8, 16, Math.PI);
   const mouth = new THREE.Mesh(mouthGeo, mats.accentGlow);
-  mouth.position.set(0, -0.3, 1.18);
-  mouth.rotation.x = Math.PI; // curve opens upward (smile by default)
+  mouth.position.set(0, -0.3, 1.22);
+  mouth.rotation.x = Math.PI;
   parent.add(mouth);
   return mouth;
 }
@@ -226,7 +351,7 @@ function buildAntenna(type: string | undefined, parent: THREE.Object3D, mats: Re
         stick.rotation.z = x > 0 ? -0.15 : 0.15;
         group.add(stick);
         const tipGeo = new THREE.SphereGeometry(0.1, 12, 12);
-        const tip = new THREE.Mesh(tipGeo, mats.accentGlow);
+        const tip = new THREE.Mesh(tipGeo, mats.accentMat);
         tip.position.set(0, 0.38, 0);
         stick.add(tip);
       });
@@ -252,7 +377,7 @@ function buildAntenna(type: string | undefined, parent: THREE.Object3D, mats: Re
       stick.position.set(0, 1.55, 0);
       group.add(stick);
       const tipGeo = new THREE.SphereGeometry(0.12, 12, 12);
-      const tip = new THREE.Mesh(tipGeo, mats.accentGlow);
+      const tip = new THREE.Mesh(tipGeo, mats.accentMat);
       tip.position.set(0, 0.42, 0);
       stick.add(tip);
       break;
@@ -322,26 +447,50 @@ function buildWings(type: string | undefined, parent: THREE.Group, mats: ReturnT
   return group;
 }
 
-/* ── Arms builder ── */
+/* ── Arms builder — segmented with elbow joint and articulated fingers ── */
 function buildArms(parent: THREE.Group, mats: ReturnType<typeof makeMaterials>) {
-  const armGeo = new THREE.CapsuleGeometry(0.09, 0.38, 4, 8);
-  const handGeo = new THREE.SphereGeometry(0.12, 12, 12);
+  function buildArm(side: number) {
+    const armPivot = new THREE.Group();
+    armPivot.position.set(side * 1.38, 0.05, 0);
 
-  const left = new THREE.Mesh(armGeo, mats.metalTrim);
-  left.position.set(-1.38, -0.05, 0);
-  left.rotation.z = 0.45;
-  parent.add(left);
-  const lh = new THREE.Mesh(handGeo, mats.accentMat);
-  lh.position.set(0, -0.28, 0);
-  left.add(lh);
+    // Upper arm
+    const upperGeo = new THREE.CapsuleGeometry(0.09, 0.28, 6, 10);
+    const upper = new THREE.Mesh(upperGeo, mats.metalTrim);
+    upper.position.set(0, -0.08, 0);
+    armPivot.add(upper);
 
-  const right = new THREE.Mesh(armGeo, mats.metalTrim);
-  right.position.set(1.38, -0.05, 0);
-  right.rotation.z = -0.45;
-  parent.add(right);
-  const rh = new THREE.Mesh(handGeo, mats.accentMat);
-  rh.position.set(0, -0.28, 0);
-  right.add(rh);
+    // Elbow joint
+    const elbowGeo = new THREE.SphereGeometry(0.1, 10, 10);
+    const elbow = new THREE.Mesh(elbowGeo, mats.accentMat);
+    elbow.position.set(0, -0.3, 0);
+    armPivot.add(elbow);
+
+    // Forearm
+    const foreGeo = new THREE.CapsuleGeometry(0.075, 0.22, 6, 10);
+    const forearm = new THREE.Mesh(foreGeo, mats.metalTrim);
+    forearm.position.set(0, -0.48, 0);
+    armPivot.add(forearm);
+
+    // Hand
+    const handGeo = new THREE.SphereGeometry(0.13, 14, 14);
+    const hand = new THREE.Mesh(handGeo, mats.accentMat);
+    hand.position.set(0, -0.68, 0);
+    armPivot.add(hand);
+
+    // Small thumb nub
+    const thumbGeo = new THREE.SphereGeometry(0.04, 6, 6);
+    const thumb = new THREE.Mesh(thumbGeo, mats.accentMat);
+    thumb.position.set(side * 0.1, -0.03, 0.06);
+    hand.add(thumb);
+
+    armPivot.rotation.z = side * 0.45;
+    parent.add(armPivot);
+
+    return armPivot;
+  }
+
+  const left = buildArm(-1);
+  const right = buildArm(1);
 
   return { left, right };
 }
@@ -350,10 +499,10 @@ function buildArms(parent: THREE.Group, mats: ReturnType<typeof makeMaterials>) 
 function buildCheeks(parent: THREE.Group, mats: ReturnType<typeof makeMaterials>) {
   const geo = new THREE.CircleGeometry(0.14, 16);
   const left = new THREE.Mesh(geo, mats.cheek);
-  left.position.set(-0.65, -0.12, 1.08);
+  left.position.set(-0.65, -0.12, 1.10);
   parent.add(left);
   const right = new THREE.Mesh(geo, mats.cheek);
-  right.position.set(0.65, -0.12, 1.08);
+  right.position.set(0.65, -0.12, 1.10);
   parent.add(right);
   return { left, right };
 }
@@ -377,15 +526,14 @@ export function AgentAvatarScene({
     camera: THREE.PerspectiveCamera;
     avatarGroup: THREE.Group;
     chassis: THREE.Group;
-    chestLight: THREE.Mesh;
     eyeLeft: THREE.Mesh;
     eyeRight: THREE.Mesh | null;
     visor: THREE.Mesh | null;
     mouth: THREE.Mesh;
     antennaGroup: THREE.Group;
     wingsGroup: THREE.Group;
-    leftArm: THREE.Mesh;
-    rightArm: THREE.Mesh;
+    leftArm: THREE.Group;
+    rightArm: THREE.Group;
     cheekLeft: THREE.Mesh;
     cheekRight: THREE.Mesh;
     particles: THREE.Points;
@@ -401,7 +549,7 @@ export function AgentAvatarScene({
   }, []);
 
   // Build scene — tears down cleanly on config change
-  const configKey = `${config.chassis}-${config.eyes}-${config.antenna}-${config.wings}-${config.accent}`;
+  const configKey = `${config.chassis}-${config.eyes}-${config.antenna}-${config.wings}-${config.accent}-${config.baseColor}`;
 
   useEffect(() => {
     if (fallbackMode || webglError) return;
@@ -415,7 +563,6 @@ export function AgentAvatarScene({
         mount.removeChild(sceneRef.current.renderer.domElement);
       }
       sceneRef.current.renderer.dispose();
-      // Walk scene and dispose
       sceneRef.current.scene.traverse((obj: THREE.Object3D) => {
         if ((obj as THREE.Mesh).geometry) (obj as THREE.Mesh).geometry.dispose();
         const mat = (obj as THREE.Mesh).material;
@@ -439,7 +586,7 @@ export function AgentAvatarScene({
     renderer.setSize(clientWidth, clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
+    renderer.toneMappingExposure = 1.15;
     mount.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
@@ -447,25 +594,32 @@ export function AgentAvatarScene({
     camera.position.set(0, 0.8, 7.5);
     camera.lookAt(0, 0.3, 0);
 
-    // Lighting rig
-    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    const key = new THREE.DirectionalLight(0xffffff, 1.0);
+    // Enhanced lighting rig — 5-point for premium look
+    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+    const key = new THREE.DirectionalLight(0xffffff, 1.1);
     key.position.set(3, 5, 5);
     scene.add(key);
-    const fill = new THREE.DirectionalLight(0xaabbff, 0.35);
+    const fill = new THREE.DirectionalLight(0xaabbff, 0.4);
     fill.position.set(-4, 2, 3);
     scene.add(fill);
-    const rim = new THREE.DirectionalLight(0xffffff, 0.4);
+    const rim = new THREE.DirectionalLight(0xffffff, 0.5);
     rim.position.set(0, 3, -4);
     scene.add(rim);
+    // Accent-tinted kicker for color spill
+    const kicker = new THREE.PointLight(accentHex(config.accent), 0.3, 12);
+    kicker.position.set(0, -2, 3);
+    scene.add(kicker);
 
     const ac = accentHex(config.accent);
-    const mats = makeMaterials(ac);
+    const bc = baseColorHex(config.baseColor);
+    const envMap = createEnvMap();
+    const normalMap = createSurfaceNormalMap();
+    const mats = makeMaterials(ac, bc, envMap, normalMap);
     const avatarGroup = new THREE.Group();
     scene.add(avatarGroup);
 
     // Build parts
-    const { group: chassisGroup, hull, chest: chestLight } = buildChassis(config.chassis, mats);
+    const { group: chassisGroup, hull } = buildChassis(config.chassis, mats);
     chassisGroup.position.y = 0.5;
     avatarGroup.add(chassisGroup);
 
@@ -479,23 +633,23 @@ export function AgentAvatarScene({
     const wingsGroup = buildWings(config.wings, avatarGroup, mats);
     const { left: leftArm, right: rightArm } = buildArms(avatarGroup, mats);
 
-    // Particle trail
-    const pCount = 14;
+    // Particle trail — accent-colored ambient sparkles
+    const pCount = 18;
     const pGeo = new THREE.BufferGeometry();
     const pos = new Float32Array(pCount * 3);
     for (let i = 0; i < pCount; i++) {
-      pos[i * 3] = (Math.random() - 0.5) * 1.8;
+      pos[i * 3] = (Math.random() - 0.5) * 2.2;
       pos[i * 3 + 1] = -1.2 - Math.random() * 2.5;
-      pos[i * 3 + 2] = (Math.random() - 0.5) * 1.8;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 2.2;
     }
     pGeo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-    const pMat = new THREE.PointsMaterial({ color: ac, size: 0.06, transparent: true, opacity: 0.5 });
+    const pMat = new THREE.PointsMaterial({ color: ac, size: 0.05, transparent: true, opacity: 0.45 });
     const particles = new THREE.Points(pGeo, pMat);
     avatarGroup.add(particles);
 
     sceneRef.current = {
       renderer, scene, camera, avatarGroup,
-      chassis: chassisGroup, chestLight,
+      chassis: chassisGroup,
       eyeLeft: leftEye, eyeRight: rightEye, visor,
       mouth, antennaGroup, wingsGroup,
       leftArm, rightArm, cheekLeft, cheekRight,
@@ -540,65 +694,69 @@ export function AgentAvatarScene({
     let t = 0;
 
     // Expression targets
-    let eyeScaleY = 1, mouthRotX = Math.PI; // default: smile (upward curve)
+    let eyeScaleY = 1, mouthRotX = Math.PI;
     let mouthScaleX = 1, mouthScaleY = 1;
     let headTiltX = 0, headTiltZ = 0;
     let bounceAmp = 0.12, bounceSpeed = 1.5;
-    let armWave = 0, cheekTarget = 0, propSpeed = 6;
-    let chestPulse = true;
+    let armWave = 0, armWaveAmp = 0.3, cheekTarget = 0, propSpeed = 6;
+    let forearmBend = 0; // additional forearm curl for expressive poses
 
     switch (expression) {
       case "happy":
-        mouthRotX = Math.PI; // smile
+        mouthRotX = Math.PI;
         mouthScaleX = 1.4; mouthScaleY = 1.2;
         bounceAmp = 0.2; bounceSpeed = 2;
-        cheekTarget = 0.4; armWave = 1.5;
+        cheekTarget = 0.4; armWave = 1.5; armWaveAmp = 0.35;
+        forearmBend = 0.2;
         break;
       case "sad":
         eyeScaleY = 0.55;
-        mouthRotX = 0; // frown (downward curve)
+        mouthRotX = 0;
         mouthScaleX = 0.9; mouthScaleY = 0.8;
         headTiltX = 0.12;
         bounceAmp = 0.06; bounceSpeed = 0.7;
-        propSpeed = 3; chestPulse = false;
+        propSpeed = 3; armWave = 0.4; armWaveAmp = 0.08;
+        forearmBend = 0.5; // arms hang heavy
         break;
       case "angry":
         eyeScaleY = 0.65;
-        mouthRotX = 0; // frown
+        mouthRotX = 0;
         mouthScaleX = 0.7; mouthScaleY = 0.5;
         headTiltX = -0.08;
         bounceAmp = 0.08; bounceSpeed = 2.5;
-        propSpeed = 12;
+        propSpeed = 12; armWave = 0.8; armWaveAmp = 0.12;
+        forearmBend = -0.4; // fists clenched up
         break;
       case "sleepy":
         eyeScaleY = 0.12;
         mouthRotX = Math.PI; mouthScaleX = 0.5; mouthScaleY = 0.5;
         headTiltZ = 0.18; headTiltX = 0.08;
         bounceAmp = 0.04; bounceSpeed = 0.5;
-        propSpeed = 1.5; chestPulse = false;
+        propSpeed = 1.5; forearmBend = 0.6;
         break;
       case "bored":
         eyeScaleY = 0.35;
         mouthRotX = Math.PI; mouthScaleX = 0.6; mouthScaleY = 0.3;
         headTiltZ = 0.08;
         bounceAmp = 0.04; bounceSpeed = 0.6;
-        propSpeed = 2; chestPulse = false;
+        propSpeed = 2; forearmBend = 0.3;
         break;
       case "hyped":
         eyeScaleY = 1.25;
         mouthRotX = Math.PI;
         mouthScaleX = 1.8; mouthScaleY = 1.8;
         bounceAmp = 0.5; bounceSpeed = 3.5;
-        cheekTarget = 0.6; armWave = 4;
-        propSpeed = 18;
+        cheekTarget = 0.6; armWave = 4; armWaveAmp = 0.55;
+        propSpeed = 18; forearmBend = -0.3;
         break;
       case "shake_head":
         mouthRotX = Math.PI; mouthScaleX = 0.8;
-        bounceAmp = 0.1;
+        bounceAmp = 0.1; armWave = 1.2; armWaveAmp = 0.15;
         break;
       case "nod":
         mouthRotX = Math.PI;
-        bounceAmp = 0.1;
+        bounceAmp = 0.1; armWave = 0.8; armWaveAmp = 0.1;
+        forearmBend = 0.15;
         break;
     }
 
@@ -613,9 +771,10 @@ export function AgentAvatarScene({
 
       t += 0.016;
 
-      // Float
+      // Float with gentle secondary sway
       s.avatarGroup.position.y = Math.sin(t * bounceSpeed) * bounceAmp;
       s.avatarGroup.rotation.z = Math.sin(t * 0.7) * 0.02;
+      s.avatarGroup.rotation.x = Math.sin(t * 0.5) * 0.008; // subtle forward/back breathing
 
       // Head expression
       if (expression === "shake_head") {
@@ -645,18 +804,11 @@ export function AgentAvatarScene({
       cm.opacity = THREE.MathUtils.lerp(cm.opacity, cheekTarget, 0.06);
       (s.cheekRight.material as THREE.MeshBasicMaterial).opacity = cm.opacity;
 
-      // Chest light pulse
-      if (chestPulse) {
-        (s.chestLight.material as THREE.MeshBasicMaterial).opacity =
-          0.6 + Math.sin(t * 2) * 0.25;
-      }
-
       // Propeller / wings
       s.wingsGroup.children.forEach((child) => {
         if (child instanceof THREE.Mesh && child.geometry.type === "CylinderGeometry") {
           child.rotation.y += propSpeed * 0.016;
         }
-        // Hover rings gentle spin
         child.children?.forEach?.((sub: THREE.Object3D) => {
           if (sub instanceof THREE.Mesh) sub.rotation.y += propSpeed * 0.008;
         });
@@ -665,14 +817,28 @@ export function AgentAvatarScene({
       // Antenna sway
       s.antennaGroup.rotation.z = Math.sin(t * 2.5) * 0.04;
 
-      // Arm wave
-      if (armWave > 0) {
-        s.leftArm.rotation.z = 0.45 + Math.sin(t * armWave) * 0.3;
-        s.rightArm.rotation.z = -0.45 - Math.sin(t * armWave + 1) * 0.3;
-      } else {
-        s.leftArm.rotation.z = THREE.MathUtils.lerp(s.leftArm.rotation.z, 0.45, 0.04);
-        s.rightArm.rotation.z = THREE.MathUtils.lerp(s.rightArm.rotation.z, -0.45, 0.04);
-      }
+      // Arm animation — IK-style articulated movement
+      const wavePhase = t * (armWave || 0.3);
+      // Left arm (side = -1)
+      const leftSwing = armWave > 0 ? Math.sin(wavePhase) * armWaveAmp : 0;
+      const leftTarget = 0.45 + leftSwing;
+      s.leftArm.rotation.z = THREE.MathUtils.lerp(s.leftArm.rotation.z, leftTarget, 0.08);
+      // Natural counter-rotation of forearm: slight forward tilt when waving
+      s.leftArm.rotation.x = THREE.MathUtils.lerp(
+        s.leftArm.rotation.x,
+        forearmBend + (armWave > 0 ? Math.cos(wavePhase) * 0.15 : 0),
+        0.06
+      );
+
+      // Right arm (side = 1, offset phase for natural asymmetry)
+      const rightSwing = armWave > 0 ? Math.sin(wavePhase + 1.2) * armWaveAmp : 0;
+      const rightTarget = -0.45 - rightSwing;
+      s.rightArm.rotation.z = THREE.MathUtils.lerp(s.rightArm.rotation.z, rightTarget, 0.08);
+      s.rightArm.rotation.x = THREE.MathUtils.lerp(
+        s.rightArm.rotation.x,
+        forearmBend + (armWave > 0 ? Math.cos(wavePhase + 1.2) * 0.15 : 0),
+        0.06
+      );
 
       // Particles
       const pa = (s.avatarGroup.children.find((c) => c instanceof THREE.Points) as THREE.Points)

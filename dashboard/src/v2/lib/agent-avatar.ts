@@ -75,11 +75,21 @@ export const ROBOT_ACCENT_OPTIONS = [
   { id: "pink", label: "Bubblegum", hex: "#F472B6" },
 ] as const;
 
+export const ROBOT_BASE_COLOR_OPTIONS = [
+  { id: "onyx", label: "Onyx", hex: "#1e1e2e" },
+  { id: "graphite", label: "Graphite", hex: "#2d2d3d" },
+  { id: "midnight", label: "Midnight", hex: "#141432" },
+  { id: "steel", label: "Steel", hex: "#3a3a4a" },
+  { id: "ivory", label: "Ivory", hex: "#e8e4dc" },
+  { id: "arctic", label: "Arctic", hex: "#d0dce8" },
+] as const;
+
 export type RobotChassis = typeof ROBOT_CHASSIS_OPTIONS[number]["id"];
 export type RobotEyes = typeof ROBOT_EYE_OPTIONS[number]["id"];
 export type RobotAntenna = typeof ROBOT_ANTENNA_OPTIONS[number]["id"];
 export type RobotWings = typeof ROBOT_WING_OPTIONS[number]["id"];
 export type RobotAccent = typeof ROBOT_ACCENT_OPTIONS[number]["id"];
+export type RobotBaseColor = typeof ROBOT_BASE_COLOR_OPTIONS[number]["id"];
 
 export const DEFAULT_AGENT_AVATAR_CONFIG: AgentAvatarConfig = {
   body: "male",
@@ -92,12 +102,19 @@ export const DEFAULT_AGENT_AVATAR_CONFIG: AgentAvatarConfig = {
   antenna: "single",
   wings: "propeller",
   accent: "jade",
+  baseColor: "onyx",
 };
 
 /** Get accent hex color from accent id */
 export function getAccentHex(accentId?: string): string {
   const found = ROBOT_ACCENT_OPTIONS.find((o) => o.id === accentId);
   return found?.hex ?? "#00E0A0";
+}
+
+/** Get base color hex from base color id */
+export function getBaseColorHex(baseColorId?: string): string {
+  const found = ROBOT_BASE_COLOR_OPTIONS.find((o) => o.id === baseColorId);
+  return found?.hex ?? "#1e1e2e";
 }
 
 /**
@@ -139,6 +156,7 @@ export function generateRandomAgentAvatar(seed: string): AgentAvatarConfig {
     antenna: pickRandomId(seed, ROBOT_ANTENNA_OPTIONS, "antenna"),
     wings: pickRandomId(seed, ROBOT_WING_OPTIONS, "wings"),
     accent: pickRandomId(seed, ROBOT_ACCENT_OPTIONS, "accent"),
+    baseColor: pickRandomId(seed, ROBOT_BASE_COLOR_OPTIONS, "baseColor"),
   };
 }
 
@@ -187,6 +205,11 @@ export function normalizeAgentAvatarConfig(
   }
   if (config.accent && accentIds.includes(config.accent)) {
     normalized.accent = config.accent;
+  }
+
+  const baseColorIds = ROBOT_BASE_COLOR_OPTIONS.map((o) => o.id as string);
+  if (config.baseColor && baseColorIds.includes(config.baseColor)) {
+    normalized.baseColor = config.baseColor;
   }
 
   return normalized;

@@ -12,6 +12,7 @@ import {
   ROBOT_ANTENNA_OPTIONS,
   ROBOT_WING_OPTIONS,
   ROBOT_ACCENT_OPTIONS,
+  ROBOT_BASE_COLOR_OPTIONS,
   SHOWCASE_EXPRESSIONS,
   generateRandomAgentAvatar,
 } from "../../lib/agent-avatar.js";
@@ -79,10 +80,14 @@ function PartPicker<T extends { id: string; label: string }>({
 
 /* ── Color swatch picker ── */
 function ColorSwatchPicker({
+  label,
+  options,
   value,
   onChange,
   disabled,
 }: {
+  label: string;
+  options: readonly { id: string; label: string; hex: string }[];
   value: string | undefined;
   onChange: (id: string) => void;
   disabled?: boolean;
@@ -90,10 +95,10 @@ function ColorSwatchPicker({
   return (
     <div className="flex flex-col gap-2">
       <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-        Accent Color
+        {label}
       </span>
       <div className="flex flex-wrap gap-2.5">
-        {ROBOT_ACCENT_OPTIONS.map((opt) => {
+        {options.map((opt) => {
           const selected = value === opt.id;
           return (
             <button
@@ -206,7 +211,8 @@ export function AgentAvatarCustomizer({
         <PartPicker label="Eyes" options={ROBOT_EYE_OPTIONS} value={config.eyes} onChange={(id) => handleField("eyes", id)} disabled={disabled} />
         <PartPicker label="Antenna" options={ROBOT_ANTENNA_OPTIONS} value={config.antenna} onChange={(id) => handleField("antenna", id)} disabled={disabled} />
         <PartPicker label="Propulsion" options={ROBOT_WING_OPTIONS} value={config.wings} onChange={(id) => handleField("wings", id)} disabled={disabled} />
-        <ColorSwatchPicker value={config.accent} onChange={(id) => handleField("accent", id)} disabled={disabled} />
+        <ColorSwatchPicker label="Base Color" options={ROBOT_BASE_COLOR_OPTIONS} value={config.baseColor} onChange={(id) => handleField("baseColor", id)} disabled={disabled} />
+        <ColorSwatchPicker label="Accent Color" options={ROBOT_ACCENT_OPTIONS} value={config.accent} onChange={(id) => handleField("accent", id)} disabled={disabled} />
       </div>
     </div>
   );

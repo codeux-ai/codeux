@@ -48,6 +48,7 @@ vi.mock("three", () => {
     },
     AmbientLight: class extends Base {},
     DirectionalLight: class extends Base {},
+    PointLight: class extends Base {},
     Group: class extends Base { isGroup = true; },
     Mesh: class extends Base {},
     Points: class extends Base {},
@@ -68,7 +69,11 @@ vi.mock("three", () => {
       dispose() {}
     },
     BufferAttribute: class {},
+    Vector2: class { x = 0; y = 0; constructor(x?: number, y?: number) { this.x = x ?? 0; this.y = y ?? 0; } },
     Vector3: class { x = 0; y = 0; z = 0; set() { return this; } copy() { return this; } },
+    CubeTexture: class { needsUpdate = false; },
+    CanvasTexture: class { wrapS = 0; wrapT = 0; needsUpdate = false; },
+    RepeatWrapping: 1000,
     MathUtils: { lerp: (s: number, e: number, a: number) => s + (e - s) * a },
     ACESFilmicToneMapping: 0,
     WebGLRenderer: class {
