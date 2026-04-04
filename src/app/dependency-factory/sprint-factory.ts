@@ -223,6 +223,7 @@ export function createSprintDependencies(
     memoryService: coreDeps.memoryService,
     memoryPromotionService: coreDeps.memoryPromotionService,
     qualityAssuranceService,
+    taskService,
     resolvePlanningAgentPresetId: async (projectId: string) => {
       try {
         const agent = await agentPresetSyncService.resolveTargetedPlanningAgent(projectId);

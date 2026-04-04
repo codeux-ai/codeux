@@ -33,6 +33,9 @@ describe("start-ready-tasks-step", () => {
       resolveSessionName: (s: any) => `sessions/${s.id}`,
       extractSessionId: (s: any) => s.id,
       logger: { error: vi.fn() } as any,
+      getProviderForTask: () => null,
+      getProviderSettings: () => ({}),
+      getRunningCounts: () => ({}),
     });
 
     expect(startTask).toHaveBeenCalled();
@@ -57,6 +60,9 @@ describe("start-ready-tasks-step", () => {
       resolveSessionName: (s: any) => `sessions/${s.id}`,
       extractSessionId: (s: any) => s.id,
       logger: { error: vi.fn() } as any,
+      getProviderForTask: () => null,
+      getProviderSettings: () => ({}),
+      getRunningCounts: () => ({}),
     });
 
     expect(res.reportText).toContain("Started JULES Session");
@@ -78,6 +84,9 @@ describe("start-ready-tasks-step", () => {
       resolveSessionName: (s: any) => `sessions/${s.id}`,
       extractSessionId: (s: any) => s.id,
       logger: { error: errorSpy } as any,
+      getProviderForTask: () => null,
+      getProviderSettings: () => ({}),
+      getRunningCounts: () => ({}),
     })).rejects.toThrow("CRITICAL: Emergency stop triggered after 3 consecutive task creation failures.");
 
     expect(errorSpy).toHaveBeenCalled();
@@ -100,6 +109,9 @@ describe("start-ready-tasks-step", () => {
       resolveSessionName: (s: any) => `sessions/${s.id}`,
       extractSessionId: (s: any) => s.id,
       logger: { error: errorSpy } as any,
+      getProviderForTask: () => null,
+      getProviderSettings: () => ({}),
+      getRunningCounts: () => ({}),
     });
 
     expect(errorSpy).toHaveBeenCalledWith("Error starting task", expect.objectContaining({ error: "string fail" }));

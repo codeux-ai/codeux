@@ -17,10 +17,15 @@ function buildDeps(): SprintOrchestratorDependencies {
     listSessions: vi.fn().mockResolvedValue({ sessions: [] }),
     projectManagementRepository: {
       updateTask: vi.fn(),
+      getTask: vi.fn().mockReturnValue({ executorType: "codex" }),
+    } as any,
+    taskService: {
+      resolveTaskProvider: vi.fn().mockReturnValue("codex"),
     } as any,
     executionRepository: {
       getLatestTaskRun: vi.fn().mockReturnValue({ id: "task-run-1" }),
       appendTaskRunEvent: vi.fn(),
+      countRunningTasksPerProvider: vi.fn().mockReturnValue(new Map()),
     } as any,
     projectAttentionService: {
       openItem: vi.fn(),

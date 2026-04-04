@@ -135,7 +135,7 @@ export class CycleRunner {
 
     let reportText = "";
     if (args.loopSteps.startReadyTasks && subtasks.length > 0) {
-      const startResult = await this.runStartReadyTasks(subtasks, args);
+      const startResult = await this.runStartReadyTasks(subtasks, args, dashboardSettings);
       subtasks = startResult.subtasks;
       reportText += startResult.reportText;
     }
@@ -251,7 +251,7 @@ export class CycleRunner {
       }
 
       if (ciGateRefreshNeeded && args.loopSteps.startReadyTasks) {
-        const startResult = await this.runStartReadyTasks(subtasks, args);
+        const startResult = await this.runStartReadyTasks(subtasks, args, dashboardSettings);
         subtasks = startResult.subtasks;
         reportText += startResult.reportText;
       }
@@ -295,12 +295,30 @@ export class CycleRunner {
   private runStartReadyTasks(
     subtasks: Subtask[],
     args: CycleRunnerArgs,
+    dashboardSettings: ReturnType<SprintOrchestratorDependencies["getDashboardSettings"]>,
   ): Promise<{ subtasks: Subtask[]; reportText: string }> {
     return runStartReadyTasksStep(subtasks, {
       action: args.action,
       maxFailures: this.deps.settings.maxFailures || 5,
       getConsecutiveFailures: this.deps.getConsecutiveFailures,
       setConsecutiveFailures: this.deps.setConsecutiveFailures,
+      getProviderForTask: (task) => {
+        const taskRecord = task.record_id ? this.deps.projectManagementRepository.getTask(task.record_id) : undefined;
+        return this.deps.taskService?.resolveTaskProvider(
+          task,
+          { projectId: args.executionContext.project.id, sprintId: args.executionContext.sprint.id },
+          taskRecord?.executorType
+        ) || null;
+      },
+      getProviderSettings: (provider) => (dashboardSettings.aiProvider.providers as any)[provider] || {},
+      getRunningCounts: () => {
+        const counts: Record<string, number> = {};
+        const map = this.deps.executionRepository.countRunningTasksPerProvider(args.executionContext.project.id);
+        for (const [provider, count] of map.entries()) {
+          counts[provider] = count;
+        }
+        return counts;
+      },
       startTask: (task) => {
         if (!args.sprintRunId) {
           throw new Error("Missing sprint run id for orchestrate action.");

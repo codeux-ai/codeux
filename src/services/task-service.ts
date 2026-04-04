@@ -74,6 +74,22 @@ export class TaskService {
     return resolved;
   }
 
+  resolveTaskProvider(task: Subtask, scope?: DashboardSettingsScope, executorType?: string): ProviderId | null {
+    if (task.provider) {
+      return task.provider;
+    }
+    if (executorType === "mcp_worker") {
+      return null;
+    }
+    if (executorType === "jules") {
+      return "jules";
+    }
+    if (executorType === "docker_cli") {
+      return this.selectCliProviderForTask(task, scope);
+    }
+    return this.selectProviderForTask(task, scope);
+  }
+
   selectProviderForTask(task: Subtask, scope?: DashboardSettingsScope): ProviderId {
     return this.resolveInvocationProvider("task_coding", task, { scope }).provider;
   }
