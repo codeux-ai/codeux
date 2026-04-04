@@ -57,8 +57,16 @@ const openAttentionEvent: ListenAttentionItemEvent = {
 };
 
 describe("SprintOsWorker", () => {
+  const mockLogger = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    child: vi.fn(),
+  };
+
   it("claims open worker-owned attention items and tracks the project as active", async () => {
-    const worker = new SprintOsWorker(baseConfig);
+    const worker = new SprintOsWorker(baseConfig, mockLogger as any);
     const callJsonTool = vi.fn()
       .mockResolvedValueOnce({
         itemId: "attention-1",
@@ -94,7 +102,7 @@ describe("SprintOsWorker", () => {
   });
 
   it("does not try to re-claim already claimed attention items", async () => {
-    const worker = new SprintOsWorker(baseConfig);
+    const worker = new SprintOsWorker(baseConfig, mockLogger as any);
     const callJsonTool = vi.fn().mockResolvedValue({
       itemId: "attention-1",
       status: "resolved",
@@ -124,7 +132,7 @@ describe("SprintOsWorker", () => {
   });
 
   it("holds merge_conflict attention items for worker-side handling after claim", async () => {
-    const worker = new SprintOsWorker(baseConfig);
+    const worker = new SprintOsWorker(baseConfig, mockLogger as any);
     const callJsonTool = vi.fn().mockResolvedValue({
       itemId: "attention-1",
       status: "claimed",
@@ -151,7 +159,7 @@ describe("SprintOsWorker", () => {
   });
 
   it("resolves terminal task state properly respecting failure precedence", () => {
-    const worker = new SprintOsWorker(baseConfig);
+    const worker = new SprintOsWorker(baseConfig, mockLogger as any);
 
     // Simulate FAILED state but with a PR URL present.
     const failedSession = {
@@ -167,7 +175,7 @@ describe("SprintOsWorker", () => {
   });
 
   it("resolves terminal task state as COMPLETED when no failure state is present but a PR exists", () => {
-    const worker = new SprintOsWorker(baseConfig);
+    const worker = new SprintOsWorker(baseConfig, mockLogger as any);
 
     // Simulate PR URL present with no failure state.
     const completedSession = {
@@ -183,7 +191,7 @@ describe("SprintOsWorker", () => {
   });
 
   it("resolves terminal task state as BLOCKED when state is action required", () => {
-    const worker = new SprintOsWorker(baseConfig);
+    const worker = new SprintOsWorker(baseConfig, mockLogger as any);
 
     const blockedSession = {
       id: "session-1",

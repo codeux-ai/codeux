@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { loadWorkerConfig } from "./worker-config.js";
 import { SprintOsWorker } from "./sprint-os-worker.js";
+import { createLogger } from "../shared/logging/logger.js";
 
 function installSignalHandlers(controller: AbortController): void {
   const handleSignal = (signalName: NodeJS.Signals) => {
@@ -38,7 +39,11 @@ export async function main(args: string[] = process.argv): Promise<void> {
   const controller = new AbortController();
   installSignalHandlers(controller);
 
-  const worker = new SprintOsWorker(config);
+  const logger = createLogger({
+    bindings: { service: "sprint-os-worker", component: "worker" },
+  });
+
+  const worker = new SprintOsWorker(config, logger);
   await worker.run(controller.signal);
 }
 

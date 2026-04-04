@@ -13,6 +13,7 @@ import type {
 } from "../contracts/connection-chat-types.js";
 import type { WorkerConfig } from "./worker-config.js";
 import { WorkerSupervisionState } from "./worker-supervision-state.js";
+import type { Logger } from "../shared/logging/logger.js";
 
 interface ExecuteWorkerDispatchResponse {
   dispatchId: string;
@@ -93,7 +94,10 @@ const delay = async (ms: number, signal?: AbortSignal): Promise<void> => {
 export class SprintOsWorker {
   private readonly supervisionState: WorkerSupervisionState;
 
-  constructor(private readonly config: WorkerConfig) {
+  constructor(
+    private readonly config: WorkerConfig,
+    private readonly logger: Logger,
+  ) {
     this.supervisionState = new WorkerSupervisionState(config.activeProjectIds || []);
   }
 
@@ -108,7 +112,7 @@ export class SprintOsWorker {
         if (signal?.aborted) {
           break;
         }
-        console.error("[sprint-os-worker] Worker loop error", error);
+        this.logger.error("Worker loop error", { error });
         await delay(3_000, signal).catch(() => undefined);
       } finally {
         if (closeClients) {
@@ -176,7 +180,7 @@ export class SprintOsWorker {
       version: "1.2.0",
     });
     client.onerror = (error) => {
-      console.error("[sprint-os-worker] MCP client error", error);
+      this.logger.error("MCP client error", { error });
     };
     return client;
   }
@@ -274,7 +278,7 @@ export class SprintOsWorker {
             dispatch_id: claim.dispatch.id,
             reason: "Dashboard requested cancellation for the active worker dispatch.",
           }).catch((error) => {
-            console.error("[sprint-os-worker] Failed to cancel local dispatch", error);
+            this.logger.error("Failed to cancel local dispatch", { error });
           });
         }
 
@@ -309,7 +313,7 @@ export class SprintOsWorker {
       error_message: message,
       summary_markdown: `Worker dispatch failed before execution completed.\n\n${message}`,
     }).catch((updateError) => {
-      console.error("[sprint-os-worker] Failed to persist dispatch failure", updateError);
+      this.logger.error("Failed to persist dispatch failure", { error: updateError });
     });
   }
 
@@ -345,7 +349,7 @@ export class SprintOsWorker {
         } : undefined,
       });
     } catch (error) {
-      console.error("[sprint-os-worker] Failed to process inbox message", {
+      this.logger.error("Failed to process inbox message", {
         threadId: event.message.threadId,
         messageId: event.message.id,
         error,
@@ -355,7 +359,7 @@ export class SprintOsWorker {
 
   private processAssignmentChanged(event: ListenAssignmentChangedEvent): void {
     this.supervisionState.noteAssignmentChanged(event);
-    console.info("[sprint-os-worker] Assignment changed", {
+    this.logger.info("Assignment changed", {
       projectId: event.project.id,
       projectName: event.project.name,
       repoPath: event.project.repoPath,
@@ -386,7 +390,7 @@ export class SprintOsWorker {
     };
 
     if (event.item.ownerType !== "worker") {
-      console.warn("[sprint-os-worker] Attention item requires non-worker handling", logPayload);
+      this.logger.warn("Attention item requires non-worker handling", logPayload);
       return;
     }
 
@@ -398,7 +402,7 @@ export class SprintOsWorker {
           claim_reason: "worker_listen_claimed",
         });
         this.supervisionState.markAttentionItemClaimed(event.project.id, event.item.id);
-        console.warn("[sprint-os-worker] Claimed attention item", {
+        this.logger.warn("Claimed attention item", {
           ...logPayload,
           assignedWorkerEndpointId: claimed.assignedWorkerEndpointId,
           claimedAt: claimed.claimedAt,
@@ -406,10 +410,10 @@ export class SprintOsWorker {
         if (this.shouldAutoReportAttentionOutcome(event)) {
           await this.reportAttentionOutcome(controlPlaneClient, event);
         } else {
-          console.info("[sprint-os-worker] Holding claimed attention item for worker-side handling", logPayload);
+          this.logger.info("Holding claimed attention item for worker-side handling", logPayload);
         }
       } catch (error) {
-        console.error("[sprint-os-worker] Failed to claim attention item", {
+        this.logger.error("Failed to claim attention item", {
           ...logPayload,
           error,
         });
@@ -422,11 +426,11 @@ export class SprintOsWorker {
       if (this.shouldAutoReportAttentionOutcome(event)) {
         await this.reportAttentionOutcome(controlPlaneClient, event);
       } else {
-        console.info("[sprint-os-worker] Attention item remains claimed for worker-side handling", logPayload);
+        this.logger.info("Attention item remains claimed for worker-side handling", logPayload);
       }
     }
 
-    console.warn("[sprint-os-worker] Attention item requires worker supervision", logPayload);
+    this.logger.warn("Attention item requires worker supervision", logPayload);
   }
 
   private async reportAttentionOutcome(
@@ -448,7 +452,7 @@ export class SprintOsWorker {
         this.supervisionState.markAttentionItemResolved(event.project.id, event.item.id);
       }
 
-      console.info("[sprint-os-worker] Reported attention outcome", {
+      this.logger.info("Reported attention outcome", {
         projectId: event.project.id,
         repoPath: event.project.repoPath,
         attentionItemId: event.item.id,
@@ -458,7 +462,7 @@ export class SprintOsWorker {
         threadId: reported.threadId,
       });
     } catch (error) {
-      console.error("[sprint-os-worker] Failed to report attention outcome", {
+      this.logger.error("Failed to report attention outcome", {
         projectId: event.project.id,
         repoPath: event.project.repoPath,
         attentionItemId: event.item.id,
