@@ -12,6 +12,8 @@ import type { CreateSprintInput, PlanSprintOptions, SprintRecord } from "../cont
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 
 export class QuicksprintService {
+  private templateCache: Map<string, { mtimeMs: number; templates: QuicksprintTemplateRecord[] }> = new Map();
+
   constructor(
     private readonly projectBaseDirResolver: (projectId: string) => string,
     private readonly createSprint: (projectId: string, input: CreateSprintInput) => SprintRecord,
@@ -29,9 +31,17 @@ export class QuicksprintService {
   }
 
   listTemplates(projectId: string): QuicksprintTemplateRecord[] {
-    const customTemplates: QuicksprintTemplateRecord[] = [];
     try {
       const dir = this.getQuicksprintsDir(projectId);
+      const stat = fs.statSync(dir);
+      const mtimeMs = stat.mtimeMs;
+
+      const cached = this.templateCache.get(projectId);
+      if (cached && cached.mtimeMs === mtimeMs) {
+        return [...BUILTIN_QUICKSPRINT_TEMPLATES, ...cached.templates];
+      }
+
+      const customTemplates: QuicksprintTemplateRecord[] = [];
       const files = fs.readdirSync(dir);
       for (const file of files) {
         if (file.endsWith(".json")) {
@@ -39,11 +49,12 @@ export class QuicksprintService {
           customTemplates.push(JSON.parse(content));
         }
       }
-    } catch (e) {
-      // ignore
-    }
 
-    return [...BUILTIN_QUICKSPRINT_TEMPLATES, ...customTemplates];
+      this.templateCache.set(projectId, { mtimeMs, templates: customTemplates });
+      return [...BUILTIN_QUICKSPRINT_TEMPLATES, ...customTemplates];
+    } catch (e) {
+      return [...BUILTIN_QUICKSPRINT_TEMPLATES];
+    }
   }
 
   getTemplate(projectId: string, templateId: string): QuicksprintTemplateRecord | null {
@@ -76,6 +87,7 @@ export class QuicksprintService {
     };
 
     fs.writeFileSync(path.join(dir, `${template.id}.json`), JSON.stringify(template, null, 2));
+    this.templateCache.delete(projectId);
     return template;
   }
 
@@ -98,6 +110,7 @@ export class QuicksprintService {
     };
 
     fs.writeFileSync(filePath, JSON.stringify(updated, null, 2));
+    this.templateCache.delete(projectId);
     return updated;
   }
 
@@ -113,6 +126,7 @@ export class QuicksprintService {
     }
 
     fs.unlinkSync(filePath);
+    this.templateCache.delete(projectId);
   }
 
   async executeQuicksprint(projectId: string, input: QuicksprintExecutionInput): Promise<SprintRecord> {
