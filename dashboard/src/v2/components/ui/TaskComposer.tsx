@@ -4,6 +4,7 @@ import gsap from "gsap";
 import { Bot, Plus, Target, X, Save, AlertCircle } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
 import { useTaskComposerState, type TaskDraft } from "../../lib/task-composer-state.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface TaskComposerProps {
   sprints: Sprint[];
@@ -35,27 +36,35 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
   const fieldsRef = useRef<HTMLFormElement>(null);
 
   const state = useTaskComposerState(sprints, availableTasks, initialTask, initialSprintId);
+  const reducedMotion = useReducedMotion();
 
   useLayoutEffect(() => {
-    const timeline = gsap.timeline();
+    const ctx = gsap.context(() => {
+      const timeline = gsap.timeline();
+      const d_card = reducedMotion ? 0 : 0.72;
+      const d_fields = reducedMotion ? 0 : 0.5;
+      const d_stagger = reducedMotion ? 0 : 0.055;
 
-    if (cardRef.current) {
-      timeline.fromTo(
-        cardRef.current,
-        { y: 28, opacity: 0, scale: 0.985, filter: "blur(14px)" },
-        { y: 0, opacity: 1, scale: 1, filter: "blur(0px)", duration: 0.72, ease: "power4.out" },
-      );
-    }
+      if (cardRef.current) {
+        timeline.fromTo(
+          cardRef.current,
+          { y: reducedMotion ? 0 : 28, opacity: 0, scale: reducedMotion ? 1 : 0.985, filter: reducedMotion ? "blur(0px)" : "blur(14px)" },
+          { y: 0, opacity: 1, scale: 1, filter: "blur(0px)", duration: d_card, ease: "power4.out" },
+        );
+      }
 
-    if (fieldsRef.current) {
-      timeline.fromTo(
-        Array.from(fieldsRef.current.querySelectorAll("[data-composer-stagger]")),
-        { y: 18, opacity: 0 },
-        { y: 0, opacity: 1, stagger: 0.055, duration: 0.5, ease: "power3.out" },
-        "-=0.45",
-      );
-    }
-  }, [initialTask?.recordId]);
+      if (fieldsRef.current) {
+        timeline.fromTo(
+          Array.from(fieldsRef.current.querySelectorAll("[data-composer-stagger]")),
+          { y: reducedMotion ? 0 : 18, opacity: 0 },
+          { y: 0, opacity: 1, stagger: d_stagger, duration: d_fields, ease: "power3.out" },
+          reducedMotion ? "+=0" : "-=0.45",
+        );
+      }
+    });
+
+    return () => ctx.revert();
+  }, [initialTask?.recordId, reducedMotion]);
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
