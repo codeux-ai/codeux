@@ -419,8 +419,8 @@ export const AgentsPage: FunctionComponent = () => {
       ) : presets.length === 0 && !loading ? (
         <EmptyState hasProject onCreate={() => void handleCreate()} />
       ) : presets.length > 0 ? (
-        <div className="flex flex-col gap-8 xl:flex-row xl:items-start">
-          <div className="flex w-full flex-col gap-4 xl:w-1/3 xl:shrink-0">
+        <div className="flex flex-col gap-8 lg:flex-row lg:items-start">
+          <div className="flex w-full flex-col gap-4 lg:w-1/3 lg:shrink-0">
             {presets.map((preset) => (
               <AgentPresetShowcaseCard
                 key={preset.id}

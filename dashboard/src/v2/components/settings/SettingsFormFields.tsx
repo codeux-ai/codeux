@@ -42,7 +42,7 @@ export const SelectInput: FunctionComponent<{
   "aria-label"?: string;
   "aria-labelledby"?: string;
 }> = ({ value, onChange, options, disabled, "aria-label": ariaLabel, "aria-labelledby": ariaLabelledby }) => (
-  <div className="min-w-[220px]">
+  <div className="w-full md:w-auto md:min-w-[220px]">
     <AvantgardeSelect value={value} onChange={onChange} options={options} disabled={disabled} aria-label={ariaLabel} aria-labelledby={ariaLabelledby} />
   </div>
 );
@@ -109,7 +109,7 @@ export const TextInput: FunctionComponent<{
     placeholder={placeholder}
     disabled={disabled}
     onInput={(event) => onChange((event.currentTarget as HTMLInputElement).value)}
-    className={`min-w-[220px] rounded-[1rem] border border-black/[0.06] bg-white/80 px-3.5 py-2.5 text-sm text-slate-700 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-[border-color,box-shadow,background-color] duration-200 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:bg-white/[0.05] dark:text-slate-200 ${
+    className={`w-full md:w-auto md:min-w-[220px] rounded-[1rem] border border-black/[0.06] bg-white/80 px-3.5 py-2.5 text-sm text-slate-700 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-[border-color,box-shadow,background-color] duration-200 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/20 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:bg-white/[0.05] dark:text-slate-200 ${
       mono ? "font-mono" : "font-sans"
     }`}
   />
@@ -197,7 +197,7 @@ export const Row: FunctionComponent<{
         <div className="mt-0.5 text-xs font-medium leading-relaxed text-slate-400">{description}</div>
       ) : null}
     </div>
-    <div className="shrink-0 rounded-[1.15rem] border border-black/[0.05] bg-white/75 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] dark:border-white/[0.05] dark:bg-white/[0.04]">
+    <div className="w-full md:w-auto overflow-x-auto md:overflow-visible rounded-[1.15rem] border border-black/[0.05] bg-white/75 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] dark:border-white/[0.05] dark:bg-white/[0.04]">
       {children}
     </div>
   </div>

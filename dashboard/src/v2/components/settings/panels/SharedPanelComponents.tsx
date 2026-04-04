@@ -48,7 +48,7 @@ export const IntegrationConfigRow: FunctionComponent<{
   last?: boolean;
 }> = ({ label, description, connected, active, onConfigure, last }) => (
   <div
-    className={`flex items-center justify-between gap-6 py-4.5 ${!last ? "border-b border-black/[0.05] dark:border-white/[0.04]" : ""}`}
+    className={`flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between py-4.5 ${!last ? "border-b border-black/[0.05] dark:border-white/[0.04]" : ""}`}
     style={{ paddingTop: "1.125rem", paddingBottom: "1.125rem" }}
   >
     <div>

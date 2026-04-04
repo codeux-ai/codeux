@@ -235,7 +235,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         description="Select the provider strategy, model mix, and worker runtime settings this scope should use."
         badge={providerSource || workerSource ? sourceLabel(providerSource === workerSource ? (providerSource || "system") : "mixed") : undefined}
       >
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2">
           <Row label="Worker mode" description="Connected workers stay in listen mode. Virtual workers wake only when worker work exists, run one unit of work, then shut down." badge={getBadge("workers.executionMode")}>
             <SelectInput
               value={settings.workers.executionMode}
@@ -514,7 +514,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         description="Branching and PR behavior for orchestrated work."
         badge={gitSource ? sourceLabel(gitSource) : undefined}
       >
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2">
           <Row label="GitHub mode" description="Local disables PR intelligence, remote enables PR and CI awareness." badge={getBadge("git.githubMode")}>
             <SelectInput
               value={settings.git.githubMode}
@@ -608,7 +608,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             />
           </Row>
         ))}
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2">
           <Row label="Autofix max retries" description="Maximum retries before CI autofix escalates to supervision." badge={getBadge("ciIntelligence.julesCiAutofixMaxRetries")}>
             <NumberInput
               value={settings.ciIntelligence.julesCiAutofixMaxRetries}
@@ -664,7 +664,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         description="Enable or disable orchestration phases and tune watch-loop timing."
         badge={loopSource ? sourceLabel(loopSource) : undefined}
       >
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="flex flex-col gap-3 xl:grid xl:grid-cols-2">
           {[
             ["branchPreflight", "Branch preflight"],
             ["planningPreflight", "Planning preflight"],
@@ -690,7 +690,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             </Row>
           ))}
         </div>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2">
           <Row label="Watch loop interval" description="Polling interval in seconds for the orchestration watch loop." badge={getBadge("sprintLoopSteps.watchLoopIntervalSeconds")}>
             <NumberInput
               value={settings.sprintLoopSteps.watchLoopIntervalSeconds}
@@ -725,7 +725,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         description="Execution environment, cleanup rules, and container credential mount behavior."
         badge={cliSource ? sourceLabel(cliSource) : undefined}
       >
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2">
           <Row label="Execution mode" description="Run provider CLIs on the host or inside a containerized runtime." badge={getBadge("cliWorkflow.executionMode")}>
             <SelectInput
               value={settings.cliWorkflow.executionMode}
@@ -777,7 +777,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             />
           </Row>
         </div>
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="flex flex-col gap-3 xl:grid xl:grid-cols-2">
           {[
             ["cleanupWorktreeOnSuccess", "Cleanup worktree on success"],
             ["cleanupWorktreeOnFailure", "Cleanup worktree on failure"],
@@ -804,7 +804,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             </Row>
           ))}
         </div>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2">
           <Row label="Rate limit retry delay" description="Seconds to wait before retrying a rate-limited provider call." badge={getBadge("cliWorkflow.rateLimitRetryDelaySeconds")}>
             <NumberInput
               value={settings.cliWorkflow.rateLimitRetryDelaySeconds}
@@ -858,7 +858,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         description="Preview runtime controls, browser visibility, rebuild policy, and container limits for the in-app browser."
         badge={sprintPreviewSource ? sourceLabel(sprintPreviewSource) : undefined}
       >
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="flex flex-col gap-3 xl:grid xl:grid-cols-2">
           {[
             ["enabled", "Preview runtime enabled"],
             ["showInAppBrowser", "Show in-app browser workspace"],
@@ -881,7 +881,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             </Row>
           ))}
         </div>
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2">
           <Row label="Maximum active preview containers" description="Stop the oldest active previews before launching another one when this limit is exceeded." badge={getBadge("sprintPreview.maxConcurrentContainers")}>
             <NumberInput
               value={settings.sprintPreview.maxConcurrentContainers}
@@ -954,7 +954,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         description="Enable or disable installed skills available to the orchestration layer."
         badge={skillsSource ? sourceLabel(skillsSource) : undefined}
       >
-        <div className="grid gap-3 xl:grid-cols-2">
+        <div className="flex flex-col gap-3 xl:grid xl:grid-cols-2">
           {settings.skills.map((skill, index) => (
             <Row
               key={skill.name}

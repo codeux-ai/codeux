@@ -72,7 +72,7 @@ export const SettingsPage: FunctionComponent = () => {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_50%_40%_at_110%_110%,rgba(255,184,0,0.025)_0%,transparent_60%)] dark:bg-[radial-gradient(ellipse_50%_40%_at_110%_110%,rgba(255,184,0,0.04)_0%,transparent_60%)]" />
       </div>
 
-      <div ref={headerRef} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-end">
+      <div ref={headerRef} className="flex flex-col gap-6 xl:grid xl:grid-cols-[minmax(0,1fr)_360px] xl:items-end">
         <div className="flex flex-col gap-5">
           <div className="flex items-center gap-2.5 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 font-mono">
             <Settings className="h-3.5 w-3.5" strokeWidth={2.5} />
@@ -179,9 +179,10 @@ export const SettingsPage: FunctionComponent = () => {
               </button>
             ))}
           </div>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="mt-4 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 fixed bottom-[5.5rem] left-0 right-0 z-50 bg-white/90 dark:bg-void-900/90 p-4 border-t border-black/10 dark:border-white/10 md:static md:bg-transparent md:dark:bg-transparent md:border-none md:p-0">
             {activeScope === "project" ? (
               <ActionButton
+
                 label="Reset Project"
                 onClick={() => void handleResetProject()}
                 tone="danger"
@@ -193,7 +194,7 @@ export const SettingsPage: FunctionComponent = () => {
               type="button"
               onClick={() => void handleSave()}
               disabled={!activeDirty || activeSaving || loading || (activeScope === "project" && !selectedProject)}
-              className={`group inline-flex items-center gap-2.5 rounded-2xl px-5 py-3 text-sm font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`group w-full sm:w-auto justify-center inline-flex items-center gap-2.5 rounded-2xl px-5 py-3 text-sm font-bold transition-[background-color,box-shadow,transform] duration-300 hover:-translate-y-px disabled:cursor-not-allowed disabled:opacity-50 ${
                 saveMessage && !error
                   ? "bg-status-green text-white shadow-[0_4px_20px_rgba(0,171,132,0.3)]"
                   : "bg-slate-900 text-white shadow-[0_4px_12px_rgba(0,0,0,0.15)] hover:bg-slate-700 dark:bg-white dark:text-void-900 dark:hover:bg-slate-100"
@@ -220,7 +221,7 @@ export const SettingsPage: FunctionComponent = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[300px_1fr]">
+      <div className="flex flex-col items-start gap-8 lg:grid lg:grid-cols-[300px_1fr]">
         <SettingsCategoryRail
           activeCategory={activeCategory}
           filteredCategories={filteredCategories}
@@ -228,7 +229,7 @@ export const SettingsPage: FunctionComponent = () => {
           onSwitchCategory={switchCategory}
         />
 
-        <div ref={contentRef} className="flex min-w-0 flex-col gap-5">
+        <div ref={contentRef} className="flex min-w-0 flex-col gap-5 pb-24 md:pb-0">
           <div className="mb-1 flex flex-wrap items-center gap-3">
             <activeCategoryConfig.icon
               className={`h-4 w-4 ${activeCategoryConfig.danger ? "text-status-red" : "text-signal-500"}`}

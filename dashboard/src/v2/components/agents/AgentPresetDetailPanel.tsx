@@ -18,7 +18,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
     </div>
 
     <div className="relative z-10 -mt-10 flex flex-col gap-6 p-8">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
           <h2 className="font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
             {preset.name}
@@ -39,7 +39,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
         <button
           type="button"
           onClick={onEdit}
-          className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/20 transition-all hover:scale-105 hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
+          className="inline-flex w-full md:w-auto justify-center items-center gap-2 rounded-full bg-signal-500 px-5 py-2.5 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/20 transition-all hover:scale-105 hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
         >
           <Edit2 className="h-4 w-4" strokeWidth={2.5} />
           Edit Agent
@@ -66,13 +66,13 @@ export const AgentPresetDetailPanel: FunctionComponent<{
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-black/5 pt-6 dark:border-white/5">
+      <div className="mt-4 flex flex-col md:flex-row md:flex-wrap items-stretch md:items-center gap-3 border-t border-black/5 pt-6 dark:border-white/5">
         {preset.sourcePath && (
           <button
             type="button"
             onClick={() => onImport(preset.id)}
             disabled={importing || preset.syncStatus === "manual"}
-            className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-signal-600 transition-colors hover:bg-signal-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
+            className="inline-flex justify-center items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-signal-600 transition-colors hover:bg-signal-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
           >
             {importing ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2} /> : <FileUp className="h-4 w-4" strokeWidth={2} />}
             Import Markdown
@@ -82,7 +82,7 @@ export const AgentPresetDetailPanel: FunctionComponent<{
           type="button"
           onClick={() => onDelete(preset.id)}
           disabled={deleting}
-          className="inline-flex items-center gap-2 rounded-full border border-status-red/20 bg-status-red/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-status-red transition-colors hover:bg-status-red/20 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
+          className="inline-flex justify-center items-center gap-2 rounded-full border border-status-red/20 bg-status-red/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-status-red transition-colors hover:bg-status-red/20 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
         >
           {deleting ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2} /> : <Trash2 className="h-4 w-4" strokeWidth={2} />}
           Delete Agent

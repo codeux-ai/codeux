@@ -29,12 +29,12 @@ export const AgentsHero: FunctionComponent<{
         Manage the AI agents available to this project. Each agent brings unique
         system instructions and memory configurations.
       </p>
-      <div className="mt-4 flex flex-wrap gap-4">
+      <div className="mt-4 flex flex-col md:flex-row flex-wrap items-stretch md:items-center gap-4">
         <button
           type="button"
           onClick={onCreate}
           disabled={!selectedProject}
-          className="group inline-flex items-center gap-2 rounded-full bg-signal-500 px-6 py-3 font-bold text-slate-900 shadow-[0_0_20px_rgba(0,224,160,0.3)] transition-all hover:scale-105 hover:bg-signal-400 hover:shadow-[0_0_30px_rgba(0,224,160,0.5)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+          className="group inline-flex justify-center md:justify-start items-center gap-2 rounded-full bg-signal-500 px-6 py-3 font-bold text-slate-900 shadow-[0_0_20px_rgba(0,224,160,0.3)] transition-all hover:scale-105 hover:bg-signal-400 hover:shadow-[0_0_30px_rgba(0,224,160,0.5)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
         >
           <Plus className="h-5 w-5 transition-transform group-hover:rotate-90" strokeWidth={2.5} />
           <span>New Agent</span>
@@ -43,7 +43,7 @@ export const AgentsHero: FunctionComponent<{
           type="button"
           onClick={onSyncAll}
           disabled={!selectedProject || syncingAll}
-          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-6 py-3 font-bold text-white backdrop-blur-sm transition-all hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex justify-center md:justify-start items-center gap-2 rounded-full border border-white/10 bg-white/5 px-6 py-3 font-bold text-white backdrop-blur-sm transition-all hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw
             className={`h-5 w-5 ${syncingAll ? "animate-spin" : ""}`}

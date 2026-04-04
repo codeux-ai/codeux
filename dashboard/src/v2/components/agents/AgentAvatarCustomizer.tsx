@@ -42,7 +42,7 @@ export function AgentAvatarCustomizer({
   return (
     <div className={`flex flex-col md:flex-row gap-6 ${className}`}>
       {/* Avatar Preview */}
-      <div className="flex-1 min-w-[300px] h-[400px] bg-gray-50 rounded-xl overflow-hidden border border-gray-200 relative">
+      <div className="w-full md:flex-1 md:min-w-[300px] h-[300px] md:h-[400px] bg-gray-50 rounded-xl overflow-hidden border border-gray-200 relative">
         <AgentAvatarScene
           config={config}
           expression={expression}
@@ -60,7 +60,7 @@ export function AgentAvatarCustomizer({
       </div>
 
       {/* Controls */}
-      <div className="w-full md:w-64 space-y-4">
+      <div className="w-full md:w-64 shrink-0 space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Body

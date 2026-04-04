@@ -43,8 +43,8 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
   const normalizedSearch = settingsSearch.trim().toLowerCase();
 
   return (
-    <div className="sticky top-16 flex flex-col gap-3 rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-3 backdrop-blur-2xl shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
-      <div className="rounded-[1.25rem] border border-black/[0.06] bg-black/[0.03] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+    <div className="lg:sticky lg:top-16 flex flex-row overflow-x-auto lg:flex-col lg:overflow-visible gap-3 rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-3 backdrop-blur-2xl shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+      <div className="shrink-0 lg:shrink rounded-[1.25rem] border border-black/[0.06] bg-black/[0.03] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
         <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 dark:text-slate-600">
           <Layers3 className="h-3.5 w-3.5" strokeWidth={2} />
           Categories
@@ -65,7 +65,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
             key={category.id}
             type="button"
             onClick={() => onSwitchCategory(category.id)}
-            className={`group relative flex w-full items-center gap-3.5 rounded-[1.1rem] px-4 py-3.5 text-left transition-colors duration-200 ${
+            className={`group relative shrink-0 lg:shrink flex lg:w-full items-center gap-3.5 rounded-[1.1rem] px-4 py-3.5 text-left transition-colors duration-200 ${
               isActive
                 ? isDanger
                   ? "bg-status-red/[0.07] dark:bg-status-red/[0.08]"

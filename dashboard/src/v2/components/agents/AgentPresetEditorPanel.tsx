@@ -41,18 +41,18 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col gap-8 rounded-[1.75rem] border border-black/[0.08] bg-white p-8 shadow-2xl dark:border-white/[0.08] dark:bg-void-900"
+      className="flex flex-col gap-8 rounded-[1.75rem] border border-black/[0.08] bg-white p-8 shadow-2xl dark:border-white/[0.08] dark:bg-void-900 pb-24 md:pb-8"
     >
-      <div className="flex items-center justify-between border-b border-black/5 pb-4 dark:border-white/5">
+      <div className="flex flex-col items-start gap-4 md:flex-row md:items-center justify-between border-b border-black/5 pb-4 dark:border-white/5">
         <h2 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
           Edit Agent
         </h2>
-        <div className="flex items-center gap-3">
+        <div className="fixed bottom-[5.5rem] left-0 right-0 z-50 flex flex-col md:flex-row items-stretch md:items-center justify-end gap-3 border-t border-black/5 bg-white p-4 shadow-[0_-10px_20px_rgba(0,0,0,0.05)] dark:border-white/5 dark:bg-void-900 md:static md:border-none md:bg-transparent md:p-0 md:shadow-none">
           <button
             type="button"
             onClick={onCancel}
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-transparent px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-black/5 disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
+            className="inline-flex w-full justify-center md:w-auto items-center gap-2 rounded-full border border-black/10 bg-transparent px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-black/5 disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
           >
             <X className="h-4 w-4" strokeWidth={2.5} />
             Cancel
@@ -60,7 +60,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
           <button
             type="submit"
             disabled={saving || !name.trim()}
-            className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/20 transition-all hover:scale-105 hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+            className="inline-flex w-full justify-center md:w-auto items-center gap-2 rounded-full bg-signal-500 px-5 py-2 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/20 transition-all hover:scale-105 hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
           >
             {saving ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.5} /> : <Save className="h-4 w-4" strokeWidth={2.5} />}
             Save Agent
@@ -68,8 +68,8 @@ export const AgentPresetEditorPanel: FunctionComponent<{
         </div>
       </div>
 
-      <div className="flex flex-col gap-8 xl:flex-row">
-        <div className="flex w-full flex-col gap-6 xl:w-1/2">
+      <div className="flex flex-col gap-8 lg:flex-row">
+        <div className="flex w-full flex-col gap-6 lg:w-1/2">
           <div className="flex flex-col gap-2">
             <label className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
               Agent Name
@@ -139,7 +139,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
           </div>
         </div>
 
-        <div className="w-full xl:w-1/2">
+        <div className="w-full lg:w-1/2">
           <AgentAvatarCustomizer
             config={avatarConfig || {}}
             onChange={setAvatarConfig}
