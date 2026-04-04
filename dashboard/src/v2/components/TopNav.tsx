@@ -10,6 +10,7 @@ import { useExecutions } from "../../hooks/useExecutions.js";
 import { useSprints } from "../../hooks/useSprints.js";
 import { DockerStatusMenu } from "./DockerStatusMenu.js";
 import { BrowserSessionsMenu } from "./browser/BrowserSessionsMenu.js";
+import { NotificationPanel } from "./NotificationPanel.js";
 import { dashboardSettingsToProjectSettings } from "../lib/settings-view-models.js";
 import {
     getProjectWorkerOptions,
@@ -113,6 +114,65 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
     const [projectSwitchBusy, setProjectSwitchBusy] = useState(false);
     const [sprintSwitchBusy, setSprintSwitchBusy] = useState(false);
     const [projectFilter, setProjectFilter] = useState('');
+
+    // Notification Panel State
+    const [notificationInteractionState, setNotificationInteractionState] = useState<'closed' | 'hover' | 'open'>('closed');
+    const isNotificationMenuVisible = notificationInteractionState !== 'closed';
+    const notificationHoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const notificationContainerRef = useRef<HTMLDivElement>(null);
+
+    const handleNotificationMouseEnter = () => {
+        if (notificationHoverTimeout.current) clearTimeout(notificationHoverTimeout.current);
+        if (notificationInteractionState === 'closed') {
+            setNotificationInteractionState('hover');
+        }
+    };
+
+    const handleNotificationMouseLeave = () => {
+        if (notificationInteractionState === 'hover') {
+            notificationHoverTimeout.current = setTimeout(() => {
+                setNotificationInteractionState((prev) => (prev === 'hover' ? 'closed' : prev));
+            }, 150);
+        }
+    };
+
+    const handleNotificationFocus = () => {
+        if (notificationHoverTimeout.current) clearTimeout(notificationHoverTimeout.current);
+        setNotificationInteractionState('open');
+    };
+
+    const handleNotificationBlur = (e: FocusEvent) => {
+        if (!notificationContainerRef.current?.contains(e.relatedTarget as Node)) {
+            setNotificationInteractionState('closed');
+        }
+    };
+
+    const toggleNotificationMenu = () => {
+        if (notificationHoverTimeout.current) clearTimeout(notificationHoverTimeout.current);
+        setNotificationInteractionState((prev) => (prev === 'closed' || prev === 'hover' ? 'open' : 'closed'));
+    };
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && isNotificationMenuVisible) {
+                setNotificationInteractionState('closed');
+                const triggerBtn = notificationContainerRef.current?.querySelector('button');
+                triggerBtn?.focus();
+            }
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isNotificationMenuVisible]);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (isNotificationMenuVisible && notificationContainerRef.current && !notificationContainerRef.current.contains(e.target as Node)) {
+                setNotificationInteractionState('closed');
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isNotificationMenuVisible]);
     const [sprintFilter, setSprintFilter] = useState('');
     const [workerFilter, setWorkerFilter] = useState('');
     const [sprintDropdownOpen, setSprintDropdownOpen] = useState(false);
@@ -548,13 +608,27 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 <BrowserSessionsMenu enabled={browserVisible} />
 
                 {/* Notifications */}
-                <button
-                    aria-label="Notifications"
-                    className="relative w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group focus-visible:ring-2 focus-visible:ring-signal-500/30"
+                <div
+                    className="relative hidden md:inline-block"
+                    ref={notificationContainerRef}
+                    onMouseEnter={handleNotificationMouseEnter}
+                    onMouseLeave={handleNotificationMouseLeave}
                 >
-                    <Bell aria-hidden="true" className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" strokeWidth={1.5} />
-                    <span className="absolute top-3 right-3 w-1.5 h-1.5 rounded-full bg-signal-500 shadow-[0_0_6px_rgba(0,224,160,0.8)] ring-1 ring-[#F9F8F4] dark:ring-void-900" />
-                </button>
+                    <button
+                        type="button"
+                        onClick={toggleNotificationMenu}
+                        onFocus={handleNotificationFocus}
+                        onBlur={handleNotificationBlur}
+                        aria-haspopup="menu"
+                        aria-expanded={isNotificationMenuVisible}
+                        aria-label="Notifications"
+                        className="relative w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group focus-visible:ring-2 focus-visible:ring-signal-500/30"
+                    >
+                        <Bell aria-hidden="true" className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" strokeWidth={1.5} />
+                        <span className="absolute top-3 right-3 w-1.5 h-1.5 rounded-full bg-signal-500 shadow-[0_0_6px_rgba(0,224,160,0.8)] ring-1 ring-[#F9F8F4] dark:ring-void-900" />
+                    </button>
+                    {isNotificationMenuVisible && <NotificationPanel />}
+                </div>
 
                 {/* Theme Toggle */}
                 <button
