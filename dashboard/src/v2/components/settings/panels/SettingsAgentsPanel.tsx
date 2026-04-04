@@ -3,6 +3,7 @@ import type { SettingsPageState, AgentInstructionTemplateId } from "../../../hoo
 import { NoticePanel } from "../SettingsSurface.js";
 import { Row, Toggle, TextAreaInput, SelectInput, NumberInput } from "../SettingsFormFields.js";
 import { SectionCard, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
+import { QAPanel } from "./QAPanel.js";
 
 export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }> = ({ state }) => {
   const {
@@ -92,154 +93,16 @@ export const SettingsAgentsPanel: FunctionComponent<{ state: SettingsPageState }
         </Row>
       </SectionCard>
 
-      <SectionCard title="Quality Assurance" watermark="QA" badge={qaSectionBadge}>
-        <Row
-          label="Enable QA agent"
-          description="Runs a senior QA pass after completion events, using full sprint context and continuing the current task session when fixes are required."
-          badge={qaFieldBadge("agents.qualityAssurance.enabled")}
-        >
-          <Toggle
-            value={qaSettings.enabled}
-            onChange={(value) => updateQaSettings((current) => ({
-              ...current,
-              enabled: value,
-            }))}
-          />
-        </Row>
-
-        {qaSettings.enabled ? (
-          <>
-            <Row
-              label="Task QA max runs"
-              description="Default is 1. Increase this only when you want QA to review fixes made after the first QA pass."
-              badge={qaFieldBadge("agents.qualityAssurance.maxTaskReviewRuns")}
-            >
-              <NumberInput
-                value={qaSettings.maxTaskReviewRuns}
-                min={1}
-                max={10}
-                onChange={(value) => updateQaSettings((current) => ({
-                  ...current,
-                  maxTaskReviewRuns: Number.isFinite(value) ? Math.min(10, Math.max(1, Math.floor(value))) : 1,
-                }))}
-              />
-            </Row>
-
-            {selectedProject && activeScope !== "project" ? (
-              <div className="rounded-[1.15rem] border border-signal-500/18 bg-signal-500/[0.08] px-4 py-3 text-xs leading-relaxed text-signal-700 dark:border-signal-400/18 dark:bg-signal-400/[0.08] dark:text-signal-200">
-                QA settings are project-local. Changing any QA control here switches the panel to Project scope for {selectedProject.name}.
-              </div>
-            ) : null}
-
-            <Row
-              label="Review every completed task"
-              description="Runs once after a task completes, then only repeats for QA-driven follow-up loops until the max run count is reached."
-              badge={qaFieldBadge("agents.qualityAssurance.taskCompletion.enabled")}
-            >
-              <div className="flex flex-wrap items-center gap-3">
-                <Toggle
-                  value={qaSettings.taskCompletion.enabled}
-                  onChange={(value) => updateQaSettings((current) => ({
-                    ...current,
-                    taskCompletion: {
-                      ...current.taskCompletion,
-                      enabled: value,
-                    },
-                  }))}
-                />
-                <SelectInput
-                  value={qaSettings.taskCompletion.agentPresetId || ""}
-                  onChange={(value) => updateQaSettings((current) => ({
-                    ...current,
-                    taskCompletion: {
-                      ...current.taskCompletion,
-                      agentPresetId: value || null,
-                    },
-                  }))}
-                  options={qaPresetOptions}
-                  disabled={qaPresetSelectorsDisabled}
-                  aria-label="Task completion QA agent preset"
-                />
-              </div>
-            </Row>
-
-            <Row
-              label="Review before sprint completion"
-              description="Blocks final sprint completion when QA finds integration problems and can route the fix back into the most relevant task."
-              badge={qaFieldBadge("agents.qualityAssurance.sprintCompletion.enabled")}
-            >
-              <div className="flex flex-wrap items-center gap-3">
-                <Toggle
-                  value={qaSettings.sprintCompletion.enabled}
-                  onChange={(value) => updateQaSettings((current) => ({
-                    ...current,
-                    sprintCompletion: {
-                      ...current.sprintCompletion,
-                      enabled: value,
-                    },
-                  }))}
-                />
-                <SelectInput
-                  value={qaSettings.sprintCompletion.agentPresetId || ""}
-                  onChange={(value) => updateQaSettings((current) => ({
-                    ...current,
-                    sprintCompletion: {
-                      ...current.sprintCompletion,
-                      agentPresetId: value || null,
-                    },
-                  }))}
-                  options={qaPresetOptions}
-                  disabled={qaPresetSelectorsDisabled}
-                  aria-label="Sprint completion QA agent preset"
-                />
-              </div>
-            </Row>
-
-            <Row
-              label="Review completed tasks without a PR"
-              description="Lets QA investigate whether a missing PR is valid or whether the task still needs branch and PR hygiene before it can stay complete."
-              badge={qaFieldBadge("agents.qualityAssurance.completedTaskWithoutPr.enabled")}
-              last
-            >
-              <div className="flex flex-wrap items-center gap-3">
-                <Toggle
-                  value={qaSettings.completedTaskWithoutPr.enabled}
-                  onChange={(value) => updateQaSettings((current) => ({
-                    ...current,
-                    completedTaskWithoutPr: {
-                      ...current.completedTaskWithoutPr,
-                      enabled: value,
-                    },
-                  }))}
-                />
-                <SelectInput
-                  value={qaSettings.completedTaskWithoutPr.agentPresetId || ""}
-                  onChange={(value) => updateQaSettings((current) => ({
-                    ...current,
-                    completedTaskWithoutPr: {
-                      ...current.completedTaskWithoutPr,
-                      agentPresetId: value || null,
-                    },
-                  }))}
-                  options={qaPresetOptions}
-                  disabled={qaPresetSelectorsDisabled}
-                  aria-label="No PR QA agent preset"
-                />
-              </div>
-            </Row>
-
-            {qaPresetSelectorsDisabled ? (
-              <div className="rounded-[1.15rem] border border-black/[0.05] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.05] dark:bg-white/[0.02] dark:text-slate-400">
-                Select a project to choose a custom QA agent. Built-in QA routing remains available without a project-specific preset.
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <div className="rounded-[1.15rem] border border-dashed border-black/[0.06] bg-black/[0.02] px-4 py-3 text-xs leading-relaxed text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
-            QA is disabled. Enable it to review completed tasks, gate sprint completion, and inspect completed tasks that do not yet have a PR.
-          </div>
-        )}
-      </SectionCard>
+      <QAPanel
+        settings={qaSettings}
+        update={(patch) => updateQaSettings((current) => ({ ...current, ...patch }))}
+        getBadge={qaFieldBadge}
+        sectionBadge={qaSectionBadge}
+        presetOptions={qaPresetOptions}
+        selectorsDisabled={qaPresetSelectorsDisabled}
+        selectedProjectName={selectedProject?.name}
+        activeScope={activeScope}
+      />
 
       <SectionCard title="Instruction Templates" watermark="TXT" badge={getBadge("agents")}>
         <Row label="Template" description="Pick the orchestration instruction block you want to edit in the database-backed settings store.">

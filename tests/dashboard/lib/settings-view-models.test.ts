@@ -8,6 +8,9 @@ import {
   isProviderAvailable,
   getProviderAuthLabel,
   getEligibleProviders,
+  sourceLabel,
+  thinkingModeOptions,
+  providerLabels,
 } from "../../../dashboard/src/v2/lib/settings-view-models.js";
 import type { SystemSettings, ProjectSettings, ExternalSettingsHints } from "../../../dashboard/src/types.js";
 
@@ -35,6 +38,23 @@ describe("settings view model source helpers", () => {
     expect(getFieldSourceLabel("sprint", "sprint")).toBe("Sprint override");
     expect(getFieldSourceLabel("project", "sprint")).toBeNull();
     expect(getFieldSourceLabel("system", "sprint")).toBeNull();
+  });
+
+  it("formats basic source labels", () => {
+    expect(sourceLabel("project")).toBe("Project override");
+    expect(sourceLabel("sprint")).toBe("Sprint override");
+    expect(sourceLabel("mixed")).toBe("Mixed sources");
+    expect(sourceLabel("system")).toBe("Inherited");
+  });
+
+  it("provides thinking mode options", () => {
+    expect(thinkingModeOptions).toHaveLength(3);
+    expect(thinkingModeOptions[0]).toEqual({ value: "SMALL", label: "Small" });
+  });
+
+  it("provides provider labels", () => {
+    expect(providerLabels.jules).toBe("Jules");
+    expect(providerLabels.gemini).toBe("Gemini");
   });
 
   it("marks Jules model and thinking controls as unsupported", () => {

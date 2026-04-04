@@ -138,6 +138,8 @@ Dashboard behavior:
 - project settings now render a per-setting override badge only when a control is actually overridden at project scope
 - sprint override dialogs use the same field-level source metadata and show override badges only for sprint-local overrides
 - the v2 settings page includes a quick-find field (keyboard shortcut `/`) that filters categories without changing the scoped settings model
+- the main settings editor is composed of smaller panel modules for better maintainability (e.g., automation, provider, worker, QA controls) instead of one monolithic component.
+- AI provider configuration and catalog metadata are centralized in `settings-view-models.ts` instead of directly within the editor.
 - AI provider configuration now uses compact focused workspaces instead of only long card grids:
   - one provider is edited at a time in the provider deck detail panel
   - invocation routing is edited in a split-pane route workspace with resolved default, provider-pool, and override summaries
