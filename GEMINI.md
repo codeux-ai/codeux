@@ -1,72 +1,143 @@
-# GEMINI Context: Jules Subagents MCP Server
+# GEMINI Context: Jules Agent OS / MCP Server
 
-This project is a production-grade **Model Context Protocol (MCP)** server for the **Jules Agent API**. It enables LLMs to interact with Jules for codebase management, agent session creation, and intelligent sprint orchestration.
+This project is a production-grade **Model Context Protocol (MCP)** server and orchestration engine for the **Jules Agent API**. It enables autonomous sprint management, codebase intelligence, and on-demand virtual worker provisioning.
 
-## 🚀 Project Overview
+---
 
-- **Core Purpose**: Bridging LLMs (Gemini, Claude, Codex) with the Jules Agent API via the MCP standard.
-- **Main Technologies**:
-  - **Runtime**: Node.js (ESM), TypeScript 5.x.
-  - **Protocols**: MCP (Model Context Protocol).
-  - **Key Libraries**: `@modelcontextprotocol/sdk`, `axios`, `vitest`, `preact`, `tailwind`.
-- **Architecture**: Domain-driven design with a clean separation between MCP tools, business logic, and infrastructure.
+## 🚀 1. Project Mission & Identity
+To bridge high-level LLM orchestration with low-level codebase execution. The system transforms natural language sprint goals into atomic, test-validated PRs through a network of specialized agents and isolated Docker environments.
 
-## 🏗️ Architecture & Structure
+---
 
-- `src/`: Core logic for the MCP server.
-  - `src/mcp/`: Tool registration and MCP protocol handling.
-  - `src/domain/`: Core business logic (sprints, workers, orchestration).
-  - `src/contracts/`: Shared types and interfaces.
-  - `src/repositories/`: File-based data access (sprints, tasks, settings).
-  - `src/integrations/`: Jules API client and external services.
-- `dashboard/`: Preact-based live monitoring dashboard.
-  - `dashboard/src/v2/`: Modernized dashboard components and state management.
-- `.jules-subagents/`: Agent guidance and local sprint data.
-  - `agents/`: Markdown guides defining the technical baseline for Jules agents.
-  - `sprints/`: Sprint definitions and subtask management.
+## 🛠️ 2. Core Technology Stack
 
-## 🛠️ Development & Validation
+### Backend (Node.js/ESM)
+- **Runtime**: Node.js 22.x (Strict ESM mode).
+- **Language**: TypeScript 5.6+ (Strict compiler settings).
+- **Protocol**: Model Context Protocol (MCP) via `@modelcontextprotocol/sdk`.
+- **API**: Axios for Jules REST API integration.
+- **Logging**: Structured JSON logging with request correlation IDs.
 
-### Key Commands
-- `npm run dev`: Start the server in development mode using `ts-node-esm`.
-- `npm run build`: Full build (TSC + Vite for dashboard).
-- `npm run typecheck`: Strict TypeScript validation.
-- `npm run lint`: ESLint and Prettier check.
-- `npm run test`: Run the Vitest test suite.
-- `npm run ci`: Full local validation (lint + typecheck + test + build).
+### Frontend (Preact/Vite)
+- **Framework**: Preact (Lean React-alternative).
+- **Styling**: Tailwind CSS v4 (Zero-runtime, high-performance).
+- **State**: Signals-based reactivity (via Preact Signals).
+- **Animation**: GSAP (GreenSock) for high-fidelity interactive feedback.
+- **Icons**: Lucide Icons.
 
-### Standards & Constraints
-- **ESM Strictness**: All imports in `.ts` files MUST include the `.js` extension.
-- **Strict Typing**: No `any` without strong justification. Use explicit return types for public APIs.
-- **Testing**: 80% line coverage target for core logic. Every feature must have a corresponding test.
-- **Design Quality**: Dashboard UI must target award-winning standards—polished, interactive, and responsive.
+### Infrastructure & Isolation
+- **Containerization**: Docker (used for provisioning isolated "Virtual Workers").
+- **Git**: Local worktree management for parallel task execution.
+- **Process Management**: Custom CLI process runners with strict output sanitization.
 
-## 🏗️ Agent Orchestration Strategy
+---
 
-The system employs a **Tri-Agent Skill Architecture**:
-1.  **The Orchestrator** (`orchestrator.md`): Manages high-level sprint lifecycle via MCP.
-2.  **The Planning Specialist** (`sprint_agent_guide.md`): Decomposes sprints into atomic, "Jules-Ready" subtasks.
-3.  **The Jules Technical Worker** (`worker.md`): The engineering baseline for every execution session, focusing on research-led implementation.
+## 🏗️ 3. Architectural Deep Dive
 
-## 🛡️ Repository Safety & Cleanliness (MANDATORY)
+### A. The MCP Layer (`src/mcp/`)
+Exposes 12+ tools including `sprint_agent`, `task_agent`, and `list_all_sources`. It acts as the primary interface for external LLMs to interact with the internal domain logic.
 
-To maintain a production-grade codebase, the following rules are **ABSOLUTE**:
+### B. Sprint Orchestration (`src/domain/sprint/`)
+- **Cycle Runner**: Manages task dependency resolution (DAG) and scheduling.
+- **Watch Loop**: Continuous background process that monitors PR status, CI results, and task completion.
+- **PR Gating**: Automated merge policies that ensure PRs only merge if all CI checks pass.
 
-1.  **Clear Temporary Files**: ALWAYS clear any temporary or local utility files before completing a task.
-    - Specifically: `*.cjs` and `*.log` files are considered temporary unless explicitly tracked in `.gitignore`.
-2.  **Commit Lock**: **COMMITS ARE NOT ALLOWED** as long as temporary files (`.cjs`, `.log`) are present in the workspace.
-    - You must delete these files before staging or committing changes.
-3.  **Credential Protection**: Never commit `.env` files or hardcode API keys. Use `.env.example` for templates.
+### C. Virtual Workers (`src/services/virtual-worker-service.ts`)
+On-demand agent provisioning.
+- Uses **Docker** to spin up isolated environments for code modification.
+- Handles automated **CI Autofixing** and **Merge Conflict Resolution**.
+- Integrates multiple LLM providers (Gemini, Claude, Codex) as execution backends.
 
-## 🛠️ Tool-to-Phase Mapping Reference
+### D. Repository Pattern (`src/repositories/`)
+Strict separation between data storage and business logic.
+- Subtasks and Sprints are stored as **Markdown files with YAML frontmatter**.
+- Settings and Session Tracking use file-based JSON repositories.
 
-| Phase | Primary Tool | Description |
-|---|---|---|
-| **Discovery** | `list_all_sources` | Identify project structure and files. |
-| **Planning** | `sprint_agent(action: "plan")` | Generate atomic subtasks for the sprint. |
-| **Execution** | `sprint_agent(action: "orchestrate")` | Launch and monitor agent sessions. |
-| **Monitoring** | `sprint_agent(action: "status")` | Real-time status of the sprint and tasks. |
-| **Verification** | `list_all_activities` | Audit the actual changes made by agents. |
+---
+
+## 📏 4. Detailed Coding Standards
+
+### ESM & Import Rules (CRITICAL)
+- **Mandatory Extensions**: All imports MUST include the `.js` extension, even if the source file is `.ts`.
+  - ✅ `import { Task } from "./task-types.js";`
+  - ❌ `import { Task } from "./task-types";`
+- **Native ESM**: No `require()` or CommonJS modules in the `src/` directory.
+
+### TypeScript Strictness
+- **No `any`**: The use of `any` is strictly prohibited unless documented as an unavoidable external boundary. Use `unknown` or specific interfaces.
+- **Explicit Returns**: All exported functions and public class methods MUST have explicit return types.
+- **Constructor DI**: Use constructor-based dependency injection for testability.
+
+### Naming Conventions
+- **Classes/Types**: `PascalCase`.
+- **Variables/Functions**: `camelCase`.
+- **Constants**: `SCREAMING_SNAKE_CASE` (only for true global constants).
+- **Files**: `kebab-case` for all source files.
+
+### Frontend (Preact/Tailwind)
+- **Component Design**: Atomic, reusable components in `dashboard/src/v2/components/`.
+- **Signals**: Prefer `@preact/signals` for global state (Dashboard settings, live logs).
+- **No Heavy Libraries**: Avoid large UI frameworks. Use Tailwind v4 for all styling.
+
+---
+
+## 🎨 5. Frontend Design: "Warm Void" Philosophy
+
+All UI work must meet the "Award-Winning" quality gate defined in `STYLEGUIDE.md`:
+- **Color Palette**: 
+  - Background: `#0E0C0A` (Void-900).
+  - Accent: `#00E0A0` (Signal Jade) for all interactive signals.
+  - Secondary: `#FFB800` (Ember) for metrics.
+- **Spacing**: Generous whitespace. Space is considered content.
+- **Motion**: Every animation must serve meaning (e.g., transition between task states).
+
+---
+
+## 🧪 6. Quality Assurance & Validation
+
+### Testing Strategy
+- **Framework**: Vitest.
+- **Thresholds**: 
+  - **80% Line Coverage** for core logic.
+  - **69% Function Coverage**.
+- **Mocking**: Use `vi.mock()` for external boundaries (Jules API, Docker, File System).
+
+### Validation Workflow (`npm run ci`)
+Before any task is considered complete, the following MUST pass:
+1. `npm run lint`: ESLint + Prettier.
+2. `npm run typecheck`: Strict `tsc` validation.
+3. `npm run test`: Unit and integration suite.
+4. `npm run build`: Production build (TSC + Vite).
+
+---
+
+## 🛡️ 7. Mandatory Repository Hygiene (ABSOLUTE)
+
+To maintain a production-grade workspace, these rules are **NON-NEGOTIABLE**:
+
+### A. Temporary File Management
+- **Identify**: `*.cjs` and `*.log` files are considered temporary "leakage" unless explicitly tracked in `.gitignore`.
+- **Action**: You MUST delete all such files before concluding a task.
+- **Cleanup Locations**: Check project root, `dashboard/`, and `.sprint-os/` directories.
+
+### B. Commit Lock
+- **RULE**: **COMMITS ARE NOT ALLOWED** as long as temporary files (`.cjs`, `.log`) are present in the workspace.
+- **Validation**: Run `find . -name "*.cjs" -o -name "*.log"` to verify cleanliness before staging.
+
+### C. Credential Security
+- Never hardcode `JULES_API_KEY`.
+- Never commit `.env` files.
+- Use `.env.example` as the single source of truth for required environment variables.
+
+---
+
+## 🏗️ 8. Agent Orchestration strategy
+
+The project uses a **Tri-Agent Skill Architecture** for sprint execution:
+1. **The Orchestrator** (`orchestrator.md`): The high-level manager. Uses MCP tools to plan and track.
+2. **The Planning Specialist** (`sprint_agent_guide.md`): Decomposes goals into "Jules-Ready" (atomic, testable) subtasks.
+3. **The Jules Technical Worker** (`worker.md`): The implementation expert. Focuses on research-led, surgical code changes.
 
 ---
 *Last Updated: Saturday, April 4, 2026*
+*Status: Production Baseline V2.1*
