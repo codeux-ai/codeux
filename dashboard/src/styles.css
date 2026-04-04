@@ -84,6 +84,24 @@
     background: linear-gradient(180deg, rgba(0, 224, 160, 0.8), rgba(0, 184, 130, 0.7));
   }
 
+  .dropdown-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 224, 160, 0.35) transparent;
+  }
+  .dropdown-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .dropdown-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .dropdown-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgba(0, 224, 160, 0.5), rgba(0, 184, 130, 0.4));
+    border-radius: 9999px;
+  }
+  .dropdown-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgba(0, 224, 160, 0.8), rgba(0, 184, 130, 0.7));
+  }
+
   @keyframes qs-picker-in {
     from {
       opacity: 0;

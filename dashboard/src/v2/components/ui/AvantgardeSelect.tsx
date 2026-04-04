@@ -240,7 +240,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
           <div
             ref={listboxRef}
             tabIndex={-1}
-            className="max-h-[17rem] overflow-y-auto overscroll-contain py-1.5 outline-none"
+            className="max-h-[17rem] overflow-y-auto overscroll-contain py-1.5 outline-none dropdown-scrollbar"
             role="listbox"
             onKeyDown={onKeyDown}
             aria-label={ariaLabel}

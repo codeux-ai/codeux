@@ -104,6 +104,21 @@ interface TopNavProps {
 }
 
 export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) => {
+    const formatSprintDisplay = (sprint: any) => {
+        if (!sprint) return "All Sprints";
+        let num = sprint.sprintNumber;
+        if (!num && sprint.name) {
+            const match = sprint.name.match(/^SPR-(\d+)/i);
+            if (match) {
+                num = match[1];
+            }
+        }
+        if (num) {
+            return `SPR-${num} : ${sprint.name}`;
+        }
+        return sprint.name;
+    };
+
     const navRef = useRef<HTMLElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const workerDropdownRef = useRef<HTMLDivElement>(null);
@@ -177,6 +192,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
     const [workerFilter, setWorkerFilter] = useState('');
     const [sprintDropdownOpen, setSprintDropdownOpen] = useState(false);
     const sprintDropdownRef = useRef<HTMLDivElement>(null);
+    const [sprintDropdownWidth, setSprintDropdownWidth] = useState<number>(0);
 
     const {
         projects,
@@ -210,6 +226,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
     const filteredSprints = sprints.filter(s => s.name.toLowerCase().includes(sprintFilter.toLowerCase()));
     const filteredWorkers = workerOptions.filter(w => w.label.toLowerCase().includes(workerFilter.toLowerCase()) || (w.subLabel && w.subLabel.toLowerCase().includes(workerFilter.toLowerCase())));
 
+    useLayoutEffect(() => {
+        if (sprintDropdownOpen && sprintDropdownRef.current) {
+            setSprintDropdownWidth(sprintDropdownRef.current.offsetWidth);
+        }
+    }, [sprintDropdownOpen]);
 
     useLayoutEffect(() => {
         if (navRef.current) {
@@ -359,7 +380,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                     className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30"
                                 />
                             </div>
-                            <div className="max-h-64 overflow-y-auto">
+                            <div className="max-h-64 overflow-y-auto dropdown-scrollbar">
                             {filteredProjects.map((source) => (
                                 <button
                                     key={source.id}
@@ -428,8 +449,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                     : 'opacity-50 cursor-not-allowed'
                             }`}
                         >
-                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">
-                                {sprintSwitchBusy ? "Switching..." : (sprintsLoading ? "Loading..." : (selectedSprint ? selectedSprint.name : "All Sprints"))}
+                            {selectedSprint && (
+                                <StatusDot status={selectedSprint.status as any} />
+                            )}
+                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono truncate max-w-[180px]">
+                                {sprintSwitchBusy ? "Switching..." : (sprintsLoading ? "Loading..." : formatSprintDisplay(selectedSprint))}
                             </span>
                             {sprints.length > 0 && (
                                 <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${sprintDropdownOpen ? 'rotate-180' : ''}`} />
@@ -438,7 +462,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
 
                         {/* Sprint Dropdown */}
                         {sprintDropdownOpen && sprints.length > 0 && (
-                            <div role="listbox" aria-label="Sprint list" className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
+                            <div role="listbox" aria-label="Sprint list" className="absolute right-0 top-full mt-2 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50" style={{ minWidth: Math.max(sprintDropdownWidth, 224) + 'px' }}>
                                 <div className="px-3 pt-3 pb-1.5">
                                     <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Sprint Scope</span>
                                 </div>
@@ -451,7 +475,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                         className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30"
                                     />
                                 </div>
-                                <div className="max-h-64 overflow-y-auto">
+                                <div className="max-h-64 overflow-y-auto dropdown-scrollbar">
                                 <button
                                     role="option"
                                     aria-selected={selectedSprintId === null}
@@ -491,7 +515,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                     >
                                         <StatusDot status={sprint.status as any} />
                                         <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedSprintId === sprint.id ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
-                                            {sprint.name}
+                                            {formatSprintDisplay(sprint)}
                                         </span>
                                         {selectedSprintId === sprint.id && (
                                             <span className="ml-auto w-1.5 h-1.5 rounded-full bg-signal-500" />
@@ -539,7 +563,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                         className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30"
                                     />
                                 </div>
-                                <div className="max-h-64 overflow-y-auto">
+                                <div className="max-h-64 overflow-y-auto dropdown-scrollbar">
                                     {filteredWorkers.map((option) => (
                                         <button
                                             key={option.id}
