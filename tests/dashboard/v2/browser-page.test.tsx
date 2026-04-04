@@ -253,8 +253,8 @@ describe("PreviewSessionSlider", () => {
       />
     );
 
-    expect(screen.getByRole("button", { name: "Remove" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Launch Container" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Remove" })).toHaveAttribute("aria-disabled", "false");
+    expect(screen.getByRole("button", { name: "Starting..." })).toHaveAttribute("aria-disabled", "true");
   });
 });
 

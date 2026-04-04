@@ -1,6 +1,6 @@
 import type { FunctionComponent } from "preact";
 import { useRef } from "preact/hooks";
-import { ChevronLeft, ChevronRight, ExternalLink, Globe, Play, Trash2 } from "lucide-preact";
+import { ChevronLeft, ChevronRight, ExternalLink, Globe, Play, Trash2, Loader2, CheckCircle2 } from "lucide-preact";
 import type { SprintPreviewSession } from "../../../types.js";
 import type { Sprint } from "../../types.js";
 import { buildPreviewOrigin } from "../../lib/preview-origin.js";
@@ -111,26 +111,32 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
           return (
             <div
               key={session.id}
-              className={`flex-none w-[280px] lg:w-[calc(20%-0.6rem)] snap-center rounded-[1.5rem] border p-4 transition-all ${
+              className={`flex-none w-[280px] lg:w-[calc(20%-0.6rem)] snap-center rounded-[1.5rem] border p-4 transition-all relative ${
                 active
-                  ? "border-signal-500/30 bg-white/90 shadow-[0_10px_40px_rgba(15,23,42,0.1)] dark:bg-[#05080d]/90 dark:shadow-[0_10px_40px_rgba(0,0,0,0.4)]"
-                  : "border-black/[0.08] bg-white/60 hover:border-black/[0.16] dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:border-white/[0.16]"
+                  ? "border-signal-500/60 bg-white/95 shadow-[0_10px_40px_rgba(15,23,42,0.1)] ring-1 ring-signal-500/20 dark:bg-[#05080d]/95 dark:shadow-[0_10px_40px_rgba(0,0,0,0.4)]"
+                  : "border-black/[0.08] bg-white/60 hover:border-black/[0.16] hover:bg-white/80 dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:border-white/[0.16] dark:hover:bg-white/[0.04]"
               }`}
             >
+              {active && (
+                <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-signal-500 rounded-full border-2 border-white dark:border-[#05080d] flex items-center justify-center shadow-sm">
+                  <CheckCircle2 className="w-2.5 h-2.5 text-void-900" strokeWidth={3} />
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => onSelectSession(session.id)}
-                className="w-full text-left"
+                className="w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-lg"
               >
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <span className="truncate text-sm font-semibold text-slate-900 dark:text-white">
                     {session.sprintName}
                   </span>
                   <span
-                    className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
+                    className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] flex items-center gap-1.5 ${
                       statusTone[session.status]
                     }`}
                   >
+                    {session.status === 'starting' && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
                     {session.status}
                   </span>
                 </div>
@@ -153,22 +159,29 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    onRemoveSession(session.id);
+                    if (!removing) {
+                      onRemoveSession(session.id);
+                    }
                   }}
-                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-status-red/15 px-3 text-[11px] font-semibold text-status-red transition hover:border-status-red/30 hover:bg-status-red/8 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border px-3 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/50 ${
+                    removing
+                    ? "border-status-red/15 bg-status-red/5 text-status-red/50 cursor-not-allowed"
+                    : "border-status-red/15 text-status-red hover:border-status-red/30 hover:bg-status-red/8"
+                  }`}
                   title="Remove preview container"
-                  disabled={removing}
+                  aria-disabled={removing}
                 >
-                  <Trash2 className="h-3 w-3" strokeWidth={2.5} />
+                  {removing ? <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} /> : <Trash2 className="h-3 w-3" strokeWidth={2.5} />}
                   {removing ? "Removing..." : "Remove"}
                 </button>
                 <a
                   href={canOpen ? origin : undefined}
                   target="_blank"
                   rel="noreferrer"
-                  className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-black/[0.08] px-3 text-[11px] font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white ${!canOpen ? "pointer-events-none opacity-50" : ""}`}
+                  className={`inline-flex h-8 items-center justify-center gap-1.5 rounded-xl border border-black/[0.08] px-3 text-[11px] font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500/50 ${!canOpen ? "pointer-events-none opacity-50" : ""}`}
                   title="Open isolated preview in a new tab"
                   onClick={(e) => e.stopPropagation()}
+                  aria-disabled={!canOpen}
                 >
                   <ExternalLink className="h-3 w-3" strokeWidth={2.5} />
                   Open Link
@@ -199,8 +212,10 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
             <select
               value={launchSprintId}
               onChange={(event) => onLaunchSprintChange((event.currentTarget as HTMLSelectElement).value)}
-              disabled={!launchEnabled || launchBusy || sprints.length === 0}
-              className="w-full rounded-[1rem] border border-black/[0.08] bg-white/85 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+              aria-disabled={!launchEnabled || launchBusy || sprints.length === 0}
+              className={`w-full rounded-[1rem] border border-black/[0.08] bg-white/85 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200 ${
+                (!launchEnabled || launchBusy || sprints.length === 0) ? "cursor-not-allowed opacity-60 pointer-events-none" : ""
+              }`}
             >
               {sprints.length === 0 && <option value="">No sprints available</option>}
               {sprints.map((sprint) => (
@@ -212,12 +227,24 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
 
             <button
               type="button"
-              onClick={onLaunchContainer}
-              disabled={!launchEnabled || launchBusy || sprints.length === 0 || !launchSprintId}
-              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-[1rem] bg-signal-500 px-4 text-sm font-semibold text-void-900 transition hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => {
+                if (launchEnabled && !launchBusy && sprints.length > 0 && launchSprintId) {
+                  onLaunchContainer();
+                }
+              }}
+              aria-disabled={!launchEnabled || launchBusy || sprints.length === 0 || !launchSprintId}
+              className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-[1rem] px-4 text-sm font-semibold text-void-900 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
+                (!launchEnabled || launchBusy || sprints.length === 0 || !launchSprintId)
+                  ? "bg-signal-500/50 cursor-not-allowed opacity-80"
+                  : "bg-signal-500 hover:bg-signal-400"
+              }`}
             >
-              <Play className="h-4 w-4" strokeWidth={2.2} />
-              Launch Container
+              {launchBusy ? (
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
+              ) : (
+                <Play className="h-4 w-4" strokeWidth={2.2} />
+              )}
+              {launchBusy ? "Starting..." : sprints.length === 0 ? "No Sprints" : !launchEnabled ? "Unavailable" : "Launch Container"}
             </button>
           </div>
         </div>
