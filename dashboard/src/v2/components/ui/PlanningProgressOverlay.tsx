@@ -1,5 +1,8 @@
 import type { FunctionComponent } from "preact";
 import { X } from "lucide-preact";
+import { useRef, useLayoutEffect } from "preact/hooks";
+import gsap from "gsap";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { ContainerShip, WoodenShip } from "./PlanningShip.js";
 import { type PlanningActionType, PLANNING_ACTION_LABELS } from "../../lib/sprint-planning-feedback.js";
 
@@ -26,6 +29,24 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
   onCancel,
   onDismiss,
 }) => {
+  const textContainerRef = useRef<HTMLDivElement>(null);
+  const prevTextRef = useRef(feedback?.text);
+  const reducedMotion = useReducedMotion();
+
+  useLayoutEffect(() => {
+    if (!feedback || !textContainerRef.current) return;
+    if (prevTextRef.current !== feedback.text) {
+      const ctx = gsap.context(() => {
+        gsap.fromTo(
+          textContainerRef.current,
+          { opacity: 0, y: reducedMotion ? 0 : 10 },
+          { opacity: 1, y: 0, duration: reducedMotion ? 0 : 0.4, ease: "power2.out" }
+        );
+      });
+      prevTextRef.current = feedback.text;
+      return () => ctx.revert();
+    }
+  }, [feedback?.text, reducedMotion]);
   if (!isBusy || !feedback) return null;
 
   const accentColors = {
@@ -134,12 +155,20 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
             </div>
           </div>
         </div>
-        <h3
-          className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white"
-          aria-live="polite"
-        >
-          {feedback.text}
-        </h3>
+        <div className="flex flex-col items-center overflow-hidden h-10 w-full">
+          <div className="flex items-center gap-3" ref={textContainerRef}>
+            <span className="relative flex h-3 w-3">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${theme.pingBg1}`}></span>
+              <span className={`relative inline-flex rounded-full h-3 w-3 ${theme.pingBg2}`}></span>
+            </span>
+            <h3
+              className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white"
+              aria-live="polite"
+            >
+              {feedback.text}
+            </h3>
+          </div>
+        </div>
         <p className="mx-auto max-w-xs text-sm leading-relaxed text-slate-500 dark:text-slate-400">
           {getDescriptionText()}
         </p>

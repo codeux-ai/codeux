@@ -107,6 +107,7 @@ export interface Task {
   isIndependent: boolean;
   isMerged: boolean;
   mergeIndicator: string | null;
+  isOptimistic?: boolean;
 }
 
 export type {

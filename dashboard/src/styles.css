@@ -32,6 +32,14 @@
     outline: 2px solid var(--signal-600);
     outline-offset: 2px;
   }
+
+  button {
+    @apply transition-all duration-200;
+  }
+
+  button:hover:not(:disabled) {
+    @apply brightness-110;
+  }
 }
 
 @layer utilities {
@@ -483,6 +491,18 @@
   0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.6; }
   33% { transform: translate(12px, -8px) scale(1.1); opacity: 0.8; }
   66% { transform: translate(-8px, 6px) scale(0.95); opacity: 0.5; }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
 }
 
 .agent-float {

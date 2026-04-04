@@ -4,6 +4,7 @@ import gsap from "gsap";
 import { X, Plus, FolderOpen, GitBranch, FolderInput, Link2 } from "lucide-preact";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 interface AddProjectModalProps {
     onClose: () => void;
@@ -27,14 +28,14 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const isSubmitting = useRef(false);
 
     useLayoutEffect(() => {
-        const d_backdrop = reducedMotion ? 0 : 0.35;
-        const d_card = reducedMotion ? 0 : 0.6;
+        const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.backdrop.duration;
+        const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
         const d_fields = reducedMotion ? 0 : 0.45;
 
-        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: "power2.out" });
+        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
         gsap.fromTo(cardRef.current,
-            { y: reducedMotion ? 0 : 48, opacity: 0, scale: reducedMotion ? 1 : 0.94 },
-            { y: 0, opacity: 1, scale: 1, duration: d_card, ease: "power4.out", delay: reducedMotion ? 0 : 0.05 }
+            { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
+            { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: MODAL_MOTION.entry.ease, delay: reducedMotion ? 0 : 0.05 }
         );
         if (fieldsRef.current) {
             gsap.fromTo(Array.from(fieldsRef.current.children),
@@ -47,8 +48,8 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const handleClose = () => {
         if (isSubmitting.current) return;
 
-        const duration = reducedMotion ? 0 : 0.28;
-        gsap.to(cardRef.current, { y: 24, opacity: 0, scale: 0.96, duration, ease: "power3.in" });
+        const duration = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
+        gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration, ease: MODAL_MOTION.exit.ease });
         gsap.to(backdropRef.current, { opacity: 0, duration, delay: reducedMotion ? 0 : 0.05, onComplete: onClose });
     };
 
@@ -149,7 +150,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                         <button
                             onClick={handleClose}
                             aria-label="Close"
-                            className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
+                            className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all active:scale-95 shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
                         >
                             <X className="w-4 h-4" />
                         </button>
@@ -199,7 +200,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                             key={type}
                                             type="button"
                                             onClick={() => handleSourceTypeChange(type)}
-                                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-[0.14em] transition-all duration-250 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
+                                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-[0.14em] transition-all active:scale-95 duration-250 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
                                                 sourceType === type
                                                     ? 'bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]'
                                                     : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
@@ -282,13 +283,13 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
                                 <button
                                     type="button"
                                     onClick={handleClose}
-                                    className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 rounded"
+                                    className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 rounded"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
-                                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800"
+                                    className="group/btn flex items-center gap-2.5 px-6 py-3 bg-ember-500 hover:bg-ember-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(255,184,0,0.25)] hover:shadow-[0_8px_32px_rgba(255,184,0,0.4)] active:scale-95 hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500"
                                 >
                                     <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
                                     Add Project

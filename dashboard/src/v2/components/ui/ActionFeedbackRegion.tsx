@@ -1,22 +1,58 @@
 import { h, type FunctionComponent } from "preact";
+import { useRef, useLayoutEffect, useEffect } from "preact/hooks";
 import { X, CheckCircle, AlertTriangle, XCircle, Loader2 } from "lucide-preact";
+import gsap from "gsap";
 import type { ActionFeedbackStatus } from "../../hooks/use-action-feedback.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface ActionFeedbackRegionProps {
   status: ActionFeedbackStatus;
   message: string | null;
   onDismiss?: () => void;
   className?: string;
+  autoDismissMs?: number;
 }
 
-const statusConfig: Record<Exclude<ActionFeedbackStatus, "idle">, { icon: FunctionComponent<any>, colors: string }> = {
-  pending: { icon: Loader2, colors: "bg-signal-500/10 text-signal-700 border-signal-500/20 dark:text-signal-400" },
-  success: { icon: CheckCircle, colors: "bg-status-green/10 text-status-green border-status-green/20" },
-  warning: { icon: AlertTriangle, colors: "bg-status-amber/10 text-status-amber border-status-amber/20" },
-  error: { icon: XCircle, colors: "bg-status-red/10 text-status-red border-status-red/20" },
+const statusConfig: Record<Exclude<ActionFeedbackStatus, "idle">, { icon: FunctionComponent<any>, colors: string, progressColors: string }> = {
+  pending: { icon: Loader2, colors: "bg-signal-500/10 text-signal-700 border-signal-500/20 dark:text-signal-400", progressColors: "bg-signal-500" },
+  success: { icon: CheckCircle, colors: "bg-status-green/10 text-status-green border-status-green/20", progressColors: "bg-status-green" },
+  warning: { icon: AlertTriangle, colors: "bg-status-amber/10 text-status-amber border-status-amber/20", progressColors: "bg-status-amber" },
+  error: { icon: XCircle, colors: "bg-status-red/10 text-status-red border-status-red/20", progressColors: "bg-status-red" },
 };
 
-export function ActionFeedbackRegion({ status, message, onDismiss, className = "" }: ActionFeedbackRegionProps) {
+export function ActionFeedbackRegion({ status, message, onDismiss, className = "", autoDismissMs = 5000 }: ActionFeedbackRegionProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const progressRef = useRef<HTMLDivElement>(null);
+  const reducedMotion = useReducedMotion();
+
+  useLayoutEffect(() => {
+    if (status === "idle" || !message || !containerRef.current) return;
+
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        containerRef.current,
+        { y: reducedMotion ? 0 : -10, opacity: 0, scale: reducedMotion ? 1 : 0.98 },
+        { y: 0, opacity: 1, scale: 1, duration: 0.4, ease: "power3.out" }
+      );
+    });
+
+    return () => ctx.revert();
+  }, [status, message, reducedMotion]);
+
+  useEffect(() => {
+    if (status === "idle" || !message || status === "error" || status === "pending" || !progressRef.current) return;
+
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        progressRef.current,
+        { width: "100%" },
+        { width: "0%", duration: autoDismissMs / 1000, ease: "linear" }
+      );
+    });
+
+    return () => ctx.revert();
+  }, [status, message, autoDismissMs]);
+
   if (status === "idle" || !message) return null;
 
   const config = statusConfig[status];
@@ -26,9 +62,10 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
 
   return (
     <div
+      ref={containerRef}
       role="status"
       aria-live={ariaLive}
-      className={`flex items-start gap-3 p-3 rounded-xl border ${config.colors} ${className}`}
+      className={`relative overflow-hidden flex items-start gap-3 p-3 rounded-xl border ${config.colors} ${className}`}
     >
       <Icon className={`w-5 h-5 shrink-0 ${status === "pending" ? "animate-spin" : ""}`} />
       <div className="flex-1 text-sm font-medium mt-0.5">
@@ -43,6 +80,12 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
         >
           <X className="w-4 h-4" />
         </button>
+      )}
+      {(status === "success" || status === "warning") && (
+        <div
+          ref={progressRef}
+          className={`absolute bottom-0 left-0 h-1 opacity-20 ${config.progressColors}`}
+        />
       )}
     </div>
   );

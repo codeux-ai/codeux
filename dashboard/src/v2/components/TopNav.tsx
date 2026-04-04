@@ -11,6 +11,7 @@ import { useSprints } from "../../hooks/useSprints.js";
 import { DockerStatusMenu } from "./DockerStatusMenu.js";
 import { BrowserSessionsMenu } from "./browser/BrowserSessionsMenu.js";
 import { NotificationPanel } from "./NotificationPanel.js";
+import { Tooltip } from "./ui/Tooltip.js";
 import { dashboardSettingsToProjectSettings } from "../lib/settings-view-models.js";
 import {
     getProjectWorkerOptions,
@@ -423,7 +424,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                 <Link
                                     to="/projects"
                                     onClick={() => setDropdownOpen(false)}
-                                    className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center justify-between gap-2 px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-xl transition-colors"
+                                    className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center justify-between gap-2 px-3 py-2 min-h-[44px] text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-xl transition-colors"
                                 >
                                     <span>Manage Projects</span>
                                     <ArrowRight aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
@@ -613,7 +614,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                     <Link
                                         to="/agents"
                                         onClick={() => setWorkerDropdownOpen(false)}
-                                        className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center justify-between gap-2 px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-xl transition-colors"
+                                        className="focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center justify-between gap-2 px-3 py-2 min-h-[44px] text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-black/[0.04] dark:hover:bg-white/[0.04] rounded-xl transition-colors"
                                     >
                                         <span>Worker Management</span>
                                         <ArrowRight aria-hidden="true" className="w-3 h-3" strokeWidth={2} />
@@ -638,48 +639,54 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                     onMouseEnter={handleNotificationMouseEnter}
                     onMouseLeave={handleNotificationMouseLeave}
                 >
-                    <button
-                        type="button"
-                        onClick={toggleNotificationMenu}
-                        onFocus={handleNotificationFocus}
-                        onBlur={handleNotificationBlur}
-                        aria-haspopup="menu"
-                        aria-expanded={isNotificationMenuVisible}
-                        aria-label="Notifications"
-                        className="relative w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group focus-visible:ring-2 focus-visible:ring-signal-500/30"
-                    >
-                        <Bell aria-hidden="true" className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" strokeWidth={1.5} />
-                        <span className="absolute top-3 right-3 w-1.5 h-1.5 rounded-full bg-signal-500 shadow-[0_0_6px_rgba(0,224,160,0.8)] ring-1 ring-[#F9F8F4] dark:ring-void-900" />
-                    </button>
+                    <Tooltip content="Notifications">
+                        <button
+                            type="button"
+                            onClick={toggleNotificationMenu}
+                            onFocus={handleNotificationFocus}
+                            onBlur={handleNotificationBlur}
+                            aria-haspopup="menu"
+                            aria-expanded={isNotificationMenuVisible}
+                            aria-label="Notifications"
+                            className="relative w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group focus-visible:ring-2 focus-visible:ring-signal-500/30"
+                        >
+                            <Bell aria-hidden="true" className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" strokeWidth={1.5} />
+                            <span className="absolute top-3 right-3 w-1.5 h-1.5 rounded-full bg-signal-500 shadow-[0_0_6px_rgba(0,224,160,0.8)] ring-1 ring-[#F9F8F4] dark:ring-void-900" />
+                        </button>
+                    </Tooltip>
                     {isNotificationMenuVisible && <NotificationPanel />}
                 </div>
 
                 {/* Theme Toggle */}
-                <button
-                    onClick={toggleTheme}
-                    aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-                    className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30"
-                >
-                    {isDark
-                        ? <Sun aria-hidden="true" className="w-4 h-4 text-slate-400 hover:text-white transition-colors" strokeWidth={1.5} />
-                        : <Moon aria-hidden="true" className="w-4 h-4 text-slate-500 hover:text-slate-900 transition-colors" strokeWidth={1.5} />
-                    }
-                </button>
+                <Tooltip content={isDark ? "Switch to light mode" : "Switch to dark mode"}>
+                    <button
+                        onClick={toggleTheme}
+                        aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                        className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30"
+                    >
+                        {isDark
+                            ? <Sun aria-hidden="true" className="w-4 h-4 text-slate-400 hover:text-white transition-colors" strokeWidth={1.5} />
+                            : <Moon aria-hidden="true" className="w-4 h-4 text-slate-500 hover:text-slate-900 transition-colors" strokeWidth={1.5} />
+                        }
+                    </button>
+                </Tooltip>
 
                 <div className="w-px h-5 bg-black/10 dark:bg-white/10" />
 
                 {/* Avatar */}
-                <button aria-label="User Profile" className="flex items-center gap-2.5 cursor-pointer group focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-full">
-                    <div className="w-8 h-8 rounded-full bg-signal-500/20 dark:bg-signal-500/15 p-[1.5px] shadow-[0_0_12px_rgba(0,224,160,0.15)] group-hover:shadow-[0_0_16px_rgba(0,224,160,0.25)] transition-shadow">
-                        <div className="w-full h-full rounded-full bg-white dark:bg-void-800 flex items-center justify-center overflow-hidden">
-                            <img
-                                src="https://api.dicebear.com/7.x/notionists/svg?seed=Felix&backgroundColor=transparent"
-                                alt="Avatar"
-                                className="w-full h-full object-cover opacity-90 group-hover:scale-110 transition-transform duration-500"
-                            />
+                <Tooltip content="User Profile">
+                    <button aria-label="User Profile" className="flex items-center gap-2.5 cursor-pointer group focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-full">
+                        <div className="w-8 h-8 rounded-full bg-signal-500/20 dark:bg-signal-500/15 p-[1.5px] shadow-[0_0_12px_rgba(0,224,160,0.15)] group-hover:shadow-[0_0_16px_rgba(0,224,160,0.25)] transition-shadow">
+                            <div className="w-full h-full rounded-full bg-white dark:bg-void-800 flex items-center justify-center overflow-hidden">
+                                <img
+                                    src="https://api.dicebear.com/7.x/notionists/svg?seed=Felix&backgroundColor=transparent"
+                                    alt="Avatar"
+                                    className="w-full h-full object-cover opacity-90 group-hover:scale-110 transition-transform duration-500"
+                                />
+                            </div>
                         </div>
-                    </div>
-                </button>
+                    </button>
+                </Tooltip>
             </div>
             </nav>
         </header>

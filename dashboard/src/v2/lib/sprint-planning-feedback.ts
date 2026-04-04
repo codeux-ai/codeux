@@ -10,29 +10,31 @@ export interface PlanningFeedback {
 
 const STAGES: Record<PlanningActionType, Array<{ text: string; threshold: number }>> = {
   improve: [
-    { text: "Researching codebase context...", threshold: 0.15 },
-    { text: "Refining technical requirements...", threshold: 0.40 },
-    { text: "Optimizing prompt structure...", threshold: 0.70 },
-    { text: "Synthesizing improved plan...", threshold: 0.95 },
+    { text: "Researching codebase context...", threshold: 0.10 },
+    { text: "Analyzing codebase...", threshold: 0.30 },
+    { text: "Refining technical requirements...", threshold: 0.60 },
+    { text: "Synthesizing improved plan...", threshold: 0.90 },
   ],
   plan_only: [
-    { text: "Registering sprint definition...", threshold: 0.15 },
-    { text: "Researching codebase for planning context...", threshold: 0.40 },
+    { text: "Registering sprint definition...", threshold: 0.10 },
+    { text: "Analyzing codebase...", threshold: 0.30 },
+    { text: "Resolving dependencies...", threshold: 0.50 },
     { text: "Orchestrating subtask generation...", threshold: 0.70 },
-    { text: "Finalizing sprint structure...", threshold: 0.95 },
+    { text: "Finalizing sprint structure...", threshold: 0.90 },
   ],
   plan_and_start: [
-    { text: "Registering sprint definition...", threshold: 0.15 },
-    { text: "Researching codebase for planning context...", threshold: 0.35 },
-    { text: "Orchestrating subtask generation...", threshold: 0.65 },
+    { text: "Registering sprint definition...", threshold: 0.10 },
+    { text: "Analyzing codebase...", threshold: 0.30 },
+    { text: "Resolving dependencies...", threshold: 0.50 },
+    { text: "Orchestrating subtask generation...", threshold: 0.70 },
     { text: "Preparing launch sequence...", threshold: 0.90 },
   ],
   replan: [
-    { text: "Analyzing existing tasks...", threshold: 0.15 },
-    { text: "Discarding outdated plan...", threshold: 0.35 },
-    { text: "Researching codebase for replanning...", threshold: 0.60 },
-    { text: "Generating new subtasks...", threshold: 0.85 },
-    { text: "Finalizing new structure...", threshold: 0.98 },
+    { text: "Analyzing existing tasks...", threshold: 0.10 },
+    { text: "Discarding outdated plan...", threshold: 0.30 },
+    { text: "Analyzing codebase...", threshold: 0.50 },
+    { text: "Generating new subtasks...", threshold: 0.75 },
+    { text: "Finalizing new structure...", threshold: 0.95 },
   ],
 };
 

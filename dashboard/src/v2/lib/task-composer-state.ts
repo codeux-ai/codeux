@@ -40,6 +40,14 @@ export interface TaskComposerState {
   setSubmitError: (val: string | null) => void;
   validationErrors: Record<string, string>;
   isValid: boolean;
+  touchedFields: Record<string, boolean>;
+  setFieldTouched: (field: string) => void;
+  hasAttemptedSubmit: boolean;
+  setHasAttemptedSubmit: (val: boolean) => void;
+  isTitleValid: boolean;
+  titleError: string | undefined;
+  isSprintIdValid: boolean;
+  sprintIdError: string | undefined;
   getPayload: () => TaskDraft;
 }
 
@@ -66,10 +74,21 @@ export const useTaskComposerState = (
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
+  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
+
+  const setFieldTouched = (field: string) => {
+    setTouchedFields((prev) => ({ ...prev, [field]: true }));
+  };
+
   const validationErrors = useMemo(() => {
     const errors: Record<string, string> = {};
     if (!sprintId) errors.sprintId = "Sprint selection is required.";
-    if (!title.trim()) errors.title = "Task title is required.";
+    if (!title.trim()) {
+      errors.title = "Task title is required.";
+    } else if (title.trim().length < 3) {
+      errors.title = "Task title must be at least 3 characters long.";
+    }
     return errors;
   }, [sprintId, title]);
 
@@ -159,6 +178,12 @@ export const useTaskComposerState = (
     isSubmitting, setIsSubmitting,
     submitError, setSubmitError,
     validationErrors,
+    touchedFields, setFieldTouched,
+    hasAttemptedSubmit, setHasAttemptedSubmit,
+    isTitleValid: !validationErrors.title,
+    titleError: validationErrors.title,
+    isSprintIdValid: !validationErrors.sprintId,
+    sprintIdError: validationErrors.sprintId,
     getPayload,
   };
 };

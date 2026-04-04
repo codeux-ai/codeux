@@ -114,7 +114,7 @@ const TaskCard: FunctionComponent<{
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       tabIndex={0}
-      className="group relative flex flex-col bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
+      className={`group relative flex flex-col bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${task.isOptimistic ? "border-dashed border-2 border-slate-300 dark:border-slate-600 opacity-60 pointer-events-none" : "border border-black/[0.06] dark:border-white/[0.06]"}`}
       style={{ transformStyle: "preserve-3d", willChange: "transform" }}
     >
       <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-signal-500/[0.03] dark:group-hover:bg-signal-500/[0.05]" />
@@ -415,6 +415,7 @@ export const TasksPage: FunctionComponent = () => {
   const [listWindow, setListWindow] = useState<ListWindowOption>(DEFAULT_LIST_WINDOW);
   const [showComposer, setShowComposer] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [optimisticTasks, setOptimisticTasks] = useState<Task[]>([]);
   const composerRef = useRef<HTMLDivElement>(null);
 
   const { tasks, loading, error, refresh: refreshTasks } = useProjectTasks(
@@ -424,6 +425,41 @@ export const TasksPage: FunctionComponent = () => {
     taskScopeSprintId
   );
 
+  const [showSkeletons, setShowSkeletons] = useState(false);
+  const [isFadingOut, setIsFadingOut] = useState(false);
+
+  useEffect(() => {
+    let timeoutId: number;
+    if (loading) {
+      setIsFadingOut(false);
+      timeoutId = window.setTimeout(() => setShowSkeletons(true), 200);
+    } else {
+      if (showSkeletons && boardRef.current) {
+        setIsFadingOut(true);
+        const skeletonCards = Array.from(boardRef.current.querySelectorAll(".skeleton-card-entry"));
+        if (skeletonCards.length > 0) {
+          gsap.to(skeletonCards, {
+            opacity: 0,
+            y: -10,
+            duration: 0.3,
+            stagger: 0.05,
+            ease: "power2.in",
+            onComplete: () => {
+              setShowSkeletons(false);
+              setIsFadingOut(false);
+            }
+          });
+        } else {
+          setShowSkeletons(false);
+          setIsFadingOut(false);
+        }
+      } else {
+        setShowSkeletons(false);
+      }
+    }
+    return () => window.clearTimeout(timeoutId);
+  }, [loading, showSkeletons]);
+
   useLayoutEffect(() => {
     if (headerRef.current) {
       gsap.fromTo(Array.from(headerRef.current.children), { opacity: 0, y: 40 }, { opacity: 1, y: 0, stagger: 0.1, duration: 0.9, ease: "power4.out", delay: 0.05 });
@@ -431,24 +467,28 @@ export const TasksPage: FunctionComponent = () => {
   }, []);
 
   useLayoutEffect(() => {
-    if (boardRef.current) {
-      gsap.fromTo(Array.from(boardRef.current.children), { opacity: 0, y: 15, scale: 0.98 }, {
-        opacity: 1,
-        y: 0,
-        scale: 1,
-        stagger: { amount: 0.2, from: "start" },
-        duration: 0.6,
-        ease: "power2.out",
-        delay: 0.1,
-      });
+    if (boardRef.current && !loading && !showSkeletons && !isFadingOut) {
+      const taskCards = Array.from(boardRef.current.querySelectorAll(".task-card-entry"));
+      if (taskCards.length > 0) {
+        gsap.fromTo(taskCards, { opacity: 0, y: 15, scale: 0.98 }, {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          stagger: { amount: 0.2, from: "start" },
+          duration: 0.6,
+          ease: "power2.out",
+          delay: 0.05,
+        });
+      }
     }
-  }, [selectedProject?.id, statusFilter, priorityFilter, taskScopeSprintId]);
+  }, [selectedProject?.id, statusFilter, priorityFilter, taskScopeSprintId, loading, showSkeletons, isFadingOut]);
 
-  const dependenciesMap = useMemo(() => buildDependentTasksMap(tasks), [tasks]);
+  const allTasks = useMemo(() => [...optimisticTasks, ...tasks], [optimisticTasks, tasks]);
+  const dependenciesMap = useMemo(() => buildDependentTasksMap(allTasks), [allTasks]);
 
   const { filteredTasks, visibleTasks, stats, columns } = useMemo(() => {
-    return deriveTaskBoardState(tasks, statusFilter, priorityFilter, listWindow);
-  }, [tasks, statusFilter, priorityFilter, listWindow]);
+    return deriveTaskBoardState(allTasks, statusFilter, priorityFilter, listWindow);
+  }, [allTasks, statusFilter, priorityFilter, listWindow]);
 
   const selectedSprintModel = taskScopeSprintId ? sprints.find((sprint: Sprint) => sprint.id === taskScopeSprintId) || null : null;
 
@@ -479,16 +519,50 @@ export const TasksPage: FunctionComponent = () => {
   }) => {
     if (!selectedProject) return;
 
-    if (editingTask) {
-      await updateTask(editingTask.recordId, draft);
-    } else {
-      await createTask(selectedProject.id, draft);
+    const isEditing = !!editingTask;
+    const optId = `opt-${Date.now()}`;
+
+    if (!isEditing) {
+      const optimisticTask: Task = {
+        recordId: optId,
+        id: "OPT-...",
+        source: "dash",
+        sprint: sprints.find((s: Sprint) => s.id === draft.sprintId)?.name || "...",
+        sprintId: draft.sprintId,
+        title: draft.title,
+        status: draft.status,
+        priority: draft.priority,
+        executorType: draft.executorType,
+        assignee: "Pending",
+        time: "...",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        promptMarkdown: draft.promptMarkdown,
+        description: draft.description,
+        dependsOnTaskIds: draft.dependsOnTaskIds,
+        isIndependent: false,
+        isMerged: false,
+        mergeIndicator: null,
+        isOptimistic: true,
+      };
+      setOptimisticTasks((prev) => [optimisticTask, ...prev]);
     }
 
-    await Promise.all([refreshTasks(), refreshSprints()]);
-    setEditingTask(null);
-    setShowComposer(false);
-  }, [selectedProject, editingTask, refreshTasks, refreshSprints]);
+    try {
+      if (isEditing) {
+        await updateTask(editingTask.recordId, draft);
+      } else {
+        await createTask(selectedProject.id, draft);
+      }
+      await Promise.all([refreshTasks(), refreshSprints()]);
+      setEditingTask(null);
+      setShowComposer(false);
+    } finally {
+      if (!isEditing) {
+        setOptimisticTasks((prev) => prev.filter((t) => t.recordId !== optId));
+      }
+    }
+  }, [selectedProject, editingTask, refreshTasks, refreshSprints, sprints]);
 
   const handleDeleteTask = useCallback(async (task: Task) => {
     await deleteTask(task.recordId);
@@ -651,29 +725,30 @@ export const TasksPage: FunctionComponent = () => {
           <div key={status} className="flex flex-col">
             <ColumnHeader status={status} count={count} />
             <div className="flex-1 flex flex-col gap-4 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border border-black/[0.03] dark:border-white/[0.03]">
-              {loading ? (
+              {showSkeletons ? (
                 <>
                   <SkeletonCard />
                   <SkeletonCard />
                   <SkeletonCard />
                 </>
-              ) : columnTasks.length === 0 ? (
+              ) : !loading && !isFadingOut && columnTasks.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center text-center p-6 text-xs font-medium text-slate-400 dark:text-slate-500 border-2 border-dashed border-black/[0.04] dark:border-white/[0.04] rounded-[1rem]">
                   No {status.replace("_", " ")} tasks
                   <br />
                   {statusFilter !== "all" || priorityFilter !== "all" ? "matching current filters" : taskScopeSprintId ? "in this sprint" : "in this project"}.
                 </div>
-              ) : (
+              ) : !loading && !isFadingOut ? (
                 columnTasks.map((task) => (
-                  <TaskCard
-                    key={task.recordId}
-                    task={task}
-                    dependents={dependenciesMap[task.recordId] ?? EMPTY_DEPENDENTS}
-                    onEdit={handleEditClick}
-                    onDelete={handleDeleteTask}
-                  />
+                  <div key={task.recordId} className="task-card-entry">
+                    <TaskCard
+                      task={task}
+                      dependents={dependenciesMap[task.recordId] ?? EMPTY_DEPENDENTS}
+                      onEdit={handleEditClick}
+                      onDelete={handleDeleteTask}
+                    />
+                  </div>
                 ))
-              )}
+              ) : null}
             </div>
           </div>
         ))}
