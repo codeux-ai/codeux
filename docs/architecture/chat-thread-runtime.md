@@ -55,6 +55,15 @@ The compact action then:
 
 The original visible `ConversationMessageRecord` history remains intact in the dashboard, but the next fresh session, whether virtual or connected, replays from the compacted summary plus only the messages created after that summary was generated.
 
+
+### Repository Read Optimizations
+
+To prevent scanning entire thread collections or loading full message arrays into memory during isolated runtime actions, `ConnectionChatRepository` exposes targeted read operations:
+- `getThread` accesses a single thread state immediately (e.g. for single-thread reload scenarios).
+- `getFirstReplyAfterMessage` queries exactly one row representing the chronologically first reply after a specific message.
+
+These precise reads are separated into read-query helper modules (`conversation-thread-query.ts`, `conversation-message-query.ts`, `conversation-query-utils.ts`), which keeps repository files clean and side-effect free.
+
 ### Performance and Metrics Aggregation
 
 To ensure real-time responsiveness on the chat dashboard and maintain thread/connection lists optimally under high scale, we perform aggregation directly inside single query payloads using Common Table Expressions (CTEs).
