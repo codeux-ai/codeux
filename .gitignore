@@ -7,6 +7,7 @@ dist
 server.log
 .pnpm-store
 coverage/
+.cache/
 .jules-subagents/debug.log
 .sprint-os/debug.log
 .sprint-os/runtime/

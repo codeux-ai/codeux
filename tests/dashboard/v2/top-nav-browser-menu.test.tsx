@@ -43,10 +43,10 @@ describe("BrowserSessionsMenu", () => {
         } as any);
 
         render(<BrowserSessionsMenu />);
-        const link = screen.getByTestId("router-link");
-        expect(link).toBeInTheDocument();
-        expect(link).toHaveAttribute("href", "/browser");
-        expect(link).toHaveTextContent("Browser");
+
+        const button = screen.getByRole("button", { name: "Toggle active browser sessions" });
+        expect(button).toBeInTheDocument();
+        expect(screen.getByText("Browser")).toBeInTheDocument();
     });
 
     it("shows polite empty state when no project is selected", async () => {
@@ -56,13 +56,14 @@ describe("BrowserSessionsMenu", () => {
 
         render(<BrowserSessionsMenu />);
 
-        // Trigger hover
-        const container = screen.getByTestId("router-link").parentElement!;
-        fireEvent.mouseEnter(container);
+        // Trigger click
+        const button = screen.getByRole("button", { name: "Toggle active browser sessions" });
+        fireEvent.click(button);
 
         await waitFor(() => {
-            expect(screen.getByText("Select a project to view sessions.")).toBeInTheDocument();
+            expect(screen.getByText("No project selected")).toBeInTheDocument();
         });
+        expect(screen.getByText("Select a project to view its active sessions")).toBeInTheDocument();
     });
 
     it("shows empty state when project is selected but no sessions exist", async () => {
@@ -73,13 +74,14 @@ describe("BrowserSessionsMenu", () => {
 
         render(<BrowserSessionsMenu />);
 
-        // Trigger hover
-        const container = screen.getByTestId("router-link").parentElement!;
-        fireEvent.mouseEnter(container);
+        // Trigger click
+        const button = screen.getByRole("button", { name: "Toggle active browser sessions" });
+        fireEvent.click(button);
 
         await waitFor(() => {
-            expect(screen.getByText("No active browser sessions.")).toBeInTheDocument();
+            expect(screen.getByText("No active sessions")).toBeInTheDocument();
         });
+        expect(screen.getByText("Launch a session from the browser or sprint page")).toBeInTheDocument();
     });
 
     it("fetches and lists sessions correctly for the selected project", async () => {
@@ -115,17 +117,18 @@ describe("BrowserSessionsMenu", () => {
 
         render(<BrowserSessionsMenu />);
 
-        const container = screen.getByTestId("router-link").parentElement!;
-        fireEvent.mouseEnter(container);
+        const button = screen.getByRole("button", { name: "Toggle active browser sessions" });
+        fireEvent.click(button);
 
         await waitFor(() => {
             expect(screen.getByText("Add auth")).toBeInTheDocument();
             expect(screen.getByText("Update dashboard")).toBeInTheDocument();
         });
 
-        // Check ports
-        expect(screen.getByText(/:8080 ➔ 3000/)).toBeInTheDocument();
-        expect(screen.getByText(/:5173\s*\(stopped\)/)).toBeInTheDocument();
+        // Check ports based on new format: `:${session.containerAppPort} ➔ :${session.hostPort}`
+        expect(screen.getByText(/:3000 ➔ :8080/)).toBeInTheDocument();
+        // Since session-2 doesn't have hostPort it shows pending port format
+        expect(screen.getByText(/:5173 ➔ pending/)).toBeInTheDocument();
 
         // Check link generation
         const links = screen.getAllByRole("menuitem");

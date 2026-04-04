@@ -108,6 +108,16 @@ describe("Sprint Factory", () => {
           settings: { workers: { executionMode: "VIRTUAL" } },
           sources: {},
         }),
+        createScopedResolver: vi.fn().mockReturnValue({
+          resolveProjectDashboardSettings: vi.fn().mockReturnValue({
+            settings: { workers: { executionMode: "VIRTUAL" } },
+            sources: {},
+          }),
+          resolveSprintDashboardSettings: vi.fn().mockReturnValue({
+            settings: { workers: { executionMode: "VIRTUAL" } },
+            sources: {},
+          }),
+        }),
       },
       workerEndpointRepository: {},
       projectWorkerAssignmentRepository: {},

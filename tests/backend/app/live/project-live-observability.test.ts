@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { getProjectLiveSnapshot, type ProjectLiveSnapshotDeps } from "../../../../src/app/live/project-live-snapshot.js";
 
 describe("getProjectLiveSnapshot observability", () => {
-  it("emits project_live_snapshot_assembled info log with payload size", async () => {
+  it("emits project_live_snapshot_assembled info log with execution item count", async () => {
     const loggerMock = {
       warn: vi.fn(),
       info: vi.fn(),
@@ -50,7 +50,7 @@ describe("getProjectLiveSnapshot observability", () => {
       expect.objectContaining({
         projectId: "proj-1",
         buildTimeMs: expect.any(Number),
-        payloadSizeBytes: expect.any(Number),
+        executionItemCount: expect.any(Number), statusSubtaskCount: expect.any(Number), hasGitStatus: expect.any(Boolean),
       })
     );
   });

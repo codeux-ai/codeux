@@ -147,7 +147,7 @@ When the sprint protocol detects a blocked task that still requires intervention
   - `worker` for agent-managed recovery
   - `human` for operator-only decisions
 - the payload includes `repoPath`, session state, provider, and intervention owner
-- clarification auto-reply cooldown is not treated as a new `action_required` attention state; once Sprint OS has sent the reply, the task remains in automated recovery until the cooldown expires or a later retry budget/escalation rule decides otherwise
+- clarification auto-reply dedupe is not treated as a new `action_required` attention state; once Sprint OS has answered the latest clarification prompt, the task remains in automated recovery and repeated cycles skip the same clarification until Jules emits a different request
 
 ### Watch-loop manual attention pause
 

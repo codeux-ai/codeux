@@ -11,6 +11,9 @@ interface StartReadyTasksOptions {
   extractSessionId: (session: { id?: string; name?: string }) => string | undefined;
   logger: Logger;
   shouldSkipTask?: (task: Subtask) => boolean;
+  getProviderForTask: (task: Subtask) => string | null;
+  getProviderSettings: (provider: string) => { maxConcurrentTasks?: number };
+  getRunningCounts: () => Record<string, number>;
 }
 
 export const runStartReadyTasksStep = async (
@@ -29,14 +32,32 @@ export const runStartReadyTasksStep = async (
     );
   }
 
+  const currentRunningCounts = options.getRunningCounts();
   const readyTasks = subtasks.filter((task) => task.status === "PENDING");
+
   for (const task of readyTasks) {
     if (options.shouldSkipTask?.(task)) {
       options.logger.info("Skipping task due to active quota cooldown", { taskId: task.id });
       continue;
     }
+
+    const provider = options.getProviderForTask(task);
+    if (provider) {
+      const providerSettings = options.getProviderSettings(provider);
+      const limit = providerSettings.maxConcurrentTasks ?? 0;
+      if (limit > 0) {
+        const currentCount = currentRunningCounts[provider] || 0;
+        if (currentCount >= limit) {
+          continue;
+        }
+      }
+    }
+
     try {
       const session = await options.startTask(task);
+      if (provider) {
+        currentRunningCounts[provider] = (currentRunningCounts[provider] || 0) + 1;
+      }
       task.status = "RUNNING";
       task.session_name = options.resolveSessionName(session);
       task.session_id = options.extractSessionId(session);

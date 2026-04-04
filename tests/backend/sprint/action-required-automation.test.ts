@@ -373,10 +373,13 @@ describe("action-required-automation", () => {
     expect(result.subtasks[0].status).toBe("RUNNING");
   });
 
-  it("skips auto-reply when clarification cooldown is active", async () => {
+  it("skips auto-reply when the latest clarification request was already answered", async () => {
     const sendMessage = vi.fn().mockResolvedValue({});
-    const lastAutoReplyTimestamps = new Map<string, number>();
-    const task = createTask({ session_state: "AWAITING_USER_FEEDBACK" });
+    const lastAutomatedInterventionKeys = new Map<string, string>();
+    const task = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+      activities: [{ agentMessaged: { agentMessage: "Should I use Prisma or raw SQL?" } }],
+    });
 
     const commonArgs = {
       projectId: "p1",
@@ -394,30 +397,33 @@ describe("action-required-automation", () => {
       isJulesApiConfigured: () => true,
       approveSessionPlan: vi.fn(),
       sendSessionMessage: sendMessage,
-      lastAutoReplyTimestamps,
+      lastAutomatedInterventionKeys,
     };
 
-    // First call — should send the message
     const result1 = await applyActionRequiredAutomation([{ ...task }], commonArgs);
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(result1.subtasks[0].status).toBe("RUNNING");
 
-    // Second call (still within cooldown) — should NOT send
     const result2 = await applyActionRequiredAutomation([{ ...task }], commonArgs);
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(result2.subtasks[0].status).toBe("RUNNING");
     expect(result2.subtasks[0].intervention_owner).toBe("AGENT");
-    expect(result2.subtasks[0].intervention_hint).toContain("Clarification cooldown active");
+    expect(result2.subtasks[0].intervention_hint).toContain("already answered automatically");
   });
 
-  it("sends auto-reply again after cooldown expires", async () => {
+  it("sends auto-reply again when the latest clarification request changes", async () => {
     const sendMessage = vi.fn().mockResolvedValue({});
-    const lastAutoReplyTimestamps = new Map<string, number>();
-    // Simulate a reply sent 301 seconds ago
-    lastAutoReplyTimestamps.set("abc123", Date.now() - 301_000);
+    const lastAutomatedInterventionKeys = new Map<string, string>();
+    const firstTask = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+      activities: [{ agentMessaged: { agentMessage: "Should I use Prisma or raw SQL?" } }],
+    });
+    const secondTask = createTask({
+      session_state: "AWAITING_USER_FEEDBACK",
+      activities: [{ agentMessaged: { agentMessage: "Which schema file should I update?" } }],
+    });
 
-    const task = createTask({ session_state: "AWAITING_USER_FEEDBACK" });
-    const result = await applyActionRequiredAutomation([task], {
+    await applyActionRequiredAutomation([firstTask], {
       projectId: "p1",
       sprintGoal: "test goal",
       automationLevel: "FULL",
@@ -433,16 +439,35 @@ describe("action-required-automation", () => {
       isJulesApiConfigured: () => true,
       approveSessionPlan: vi.fn(),
       sendSessionMessage: sendMessage,
-      lastAutoReplyTimestamps,
+      lastAutomatedInterventionKeys,
     });
 
-    expect(sendMessage).toHaveBeenCalledTimes(1);
+    const result = await applyActionRequiredAutomation([secondTask], {
+      projectId: "p1",
+      sprintGoal: "test goal",
+      automationLevel: "FULL",
+      settings: {
+        autoApprovePlan: true,
+        autoAnswerClarification: true,
+        autoAnswerClarificationMode: "TEMPLATE",
+        autoResumePaused: true,
+        clarificationAnswerTemplate: "template",
+        clarificationCooldownSeconds: 300,
+      },
+      isActionRequiredState: () => true,
+      isJulesApiConfigured: () => true,
+      approveSessionPlan: vi.fn(),
+      sendSessionMessage: sendMessage,
+      lastAutomatedInterventionKeys,
+    });
+
+    expect(sendMessage).toHaveBeenCalledTimes(2);
     expect(result.subtasks[0].status).toBe("RUNNING");
   });
 
-  it("applies cooldown to paused session auto-resume too", async () => {
+  it("skips duplicate paused-session resume nudges for the same paused state", async () => {
     const sendMessage = vi.fn().mockResolvedValue({});
-    const lastAutoReplyTimestamps = new Map<string, number>();
+    const lastAutomatedInterventionKeys = new Map<string, string>();
     const task = createTask({ session_state: "PAUSED" });
 
     const commonArgs = {
@@ -461,17 +486,15 @@ describe("action-required-automation", () => {
       isJulesApiConfigured: () => true,
       approveSessionPlan: vi.fn(),
       sendSessionMessage: sendMessage,
-      lastAutoReplyTimestamps,
+      lastAutomatedInterventionKeys,
     };
 
-    // First call — sends resume
     await applyActionRequiredAutomation([{ ...task }], commonArgs);
     expect(sendMessage).toHaveBeenCalledTimes(1);
 
-    // Second call within cooldown — skips
     const result2 = await applyActionRequiredAutomation([{ ...task }], commonArgs);
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(result2.subtasks[0].status).toBe("RUNNING");
-    expect(result2.subtasks[0].intervention_hint).toContain("Clarification cooldown active");
+    expect(result2.subtasks[0].intervention_hint).toContain("Resume instruction already sent");
   });
 });

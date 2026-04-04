@@ -250,6 +250,13 @@ export class SprintPreviewRepository {
     return updated;
   }
 
+  deleteSession(id: string): void {
+    this.storage.getDatabase().prepare(`
+      DELETE FROM sprint_preview_sessions
+      WHERE id = ?
+    `).run(id);
+  }
+
   private mapRow(row: SprintPreviewSessionRow): SprintPreviewSession {
     return {
       id: row.id,

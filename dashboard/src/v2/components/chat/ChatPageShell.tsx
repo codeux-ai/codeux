@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { MessageCircle, RefreshCw, Plus } from "lucide-preact";
 import type { Source } from "../../types.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 export const ChatPageShell: FunctionComponent<{
   selectedProject: Source | null;
@@ -30,15 +31,23 @@ export const ChatPageShell: FunctionComponent<{
   detailSlot,
 }) => {
   const headerRef = useRef<HTMLDivElement>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   useLayoutEffect(() => {
-    if (!headerRef.current) return;
-    gsap.fromTo(
-      Array.from(headerRef.current.children),
-      { opacity: 0, y: 28 },
-      { opacity: 1, y: 0, duration: 0.8, stagger: 0.08, ease: "power4.out" }
-    );
-  }, []);
+    const ctx = gsap.context(() => {
+      if (!headerRef.current) return;
+      if (prefersReducedMotion) {
+        gsap.set(Array.from(headerRef.current.children), { opacity: 1, y: 0 });
+      } else {
+        gsap.fromTo(
+          Array.from(headerRef.current.children),
+          { opacity: 0, y: 28 },
+          { opacity: 1, y: 0, duration: 0.8, stagger: 0.08, ease: "power4.out" }
+        );
+      }
+    });
+    return () => ctx.revert();
+  }, [prefersReducedMotion]);
 
   return (
     <div className="relative z-10 mx-auto flex h-[calc(100vh-48px)] max-w-[1900px] flex-col gap-8 px-8 py-12 md:px-20">
@@ -68,7 +77,7 @@ export const ChatPageShell: FunctionComponent<{
             <button
               type="button"
               onClick={() => onSetChatMode("threads")}
-              className={`rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${
+              className={`rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
                 chatMode === "threads"
                   ? "bg-slate-900 text-white dark:bg-white dark:text-void-900"
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -79,7 +88,7 @@ export const ChatPageShell: FunctionComponent<{
             <button
               type="button"
               onClick={() => onSetChatMode("invocations")}
-              className={`rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${
+              className={`rounded-full px-4 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
                 chatMode === "invocations"
                   ? "bg-slate-900 text-white dark:bg-white dark:text-void-900"
                   : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -90,10 +99,10 @@ export const ChatPageShell: FunctionComponent<{
           </div>
           {chatMode === "threads" && (
             <>
-              <span className="rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
+              <span className="rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400">
                 {activeConnectionLabel || "Unassigned"}
               </span>
-              <span className={`rounded-full border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] ${
+              <span className={`rounded-full border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] ${
                 pendingDashboardMessages > 0
                   ? "border-status-amber/30 bg-status-amber/10 text-status-amber"
                   : "border-signal-500/20 bg-signal-500/10 text-signal-500"
@@ -106,7 +115,7 @@ export const ChatPageShell: FunctionComponent<{
             type="button"
             onClick={onRefresh}
             disabled={manualRefreshing}
-            className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
+            className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:text-white"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${manualRefreshing ? "animate-spin" : ""}`} strokeWidth={2.1} />
             Refresh
@@ -116,7 +125,7 @@ export const ChatPageShell: FunctionComponent<{
               type="button"
               onClick={onCreateThread}
               disabled={!selectedProject}
-              className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-void-900 transition-colors hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-void-900 transition-colors hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2.3} />
               New Thread

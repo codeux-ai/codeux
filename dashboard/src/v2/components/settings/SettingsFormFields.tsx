@@ -13,12 +13,12 @@ export const Toggle: FunctionComponent<{
     type="button"
     onClick={() => onChange(!value)}
     disabled={disabled}
-    className={`group relative h-7 w-12 shrink-0 overflow-hidden rounded-full border transition-[background-color,box-shadow,border-color] duration-300 focus:outline-none focus:ring-2 focus:ring-signal-500/20 disabled:cursor-not-allowed disabled:opacity-60 ${
+    className={`group relative h-7 w-12 shrink-0 overflow-hidden rounded-full border transition-[background-color,box-shadow,border-color,transform] duration-300 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${danger ? "focus-visible:outline-status-red" : "focus-visible:outline-signal-500"} disabled:cursor-not-allowed disabled:opacity-60 active:scale-95 ${
       value
         ? danger
-          ? "border-status-red/40 bg-status-red shadow-[0_0_16px_rgba(227,0,15,0.24)]"
-          : "border-signal-500/40 bg-signal-500 shadow-[0_0_16px_rgba(0,224,160,0.22)]"
-        : "border-black/[0.08] bg-black/[0.08] dark:border-white/[0.08] dark:bg-white/[0.08]"
+          ? "border-status-red/40 bg-status-red shadow-[0_0_16px_rgba(227,0,15,0.24)] hover:bg-status-red/90"
+          : "border-signal-500/40 bg-signal-500 shadow-[0_0_16px_rgba(0,224,160,0.22)] hover:bg-signal-500/90"
+        : "border-black/[0.12] bg-black/[0.08] hover:bg-black/[0.12] hover:border-black/[0.16] dark:border-white/[0.12] dark:bg-white/[0.08] dark:hover:bg-white/[0.12] dark:hover:border-white/[0.16]"
     }`}
     aria-pressed={value}
   >
@@ -27,10 +27,26 @@ export const Toggle: FunctionComponent<{
       className={`absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.28),rgba(255,255,255,0))] transition-opacity ${value ? "opacity-100" : "opacity-40"}`}
     />
     <span
-      className={`absolute left-0.5 top-0.5 h-6 w-6 rounded-full bg-white shadow-[0_2px_7px_rgba(0,0,0,0.18)] transition-transform duration-300 ease-out ${
+      className={`absolute left-0.5 top-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-[0_2px_7px_rgba(0,0,0,0.18)] transition-transform duration-300 ease-out ${
         value ? "translate-x-5" : "translate-x-0"
       }`}
-    />
+    >
+      <svg
+        className={`h-3.5 w-3.5 transition-all duration-300 ${value ? (danger ? "text-status-red" : "text-signal-500") : "text-slate-400 dark:text-slate-500"}`}
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {value ? (
+          <path d="M5 13l4 4L19 7" />
+        ) : (
+          <path d="M18 6L6 18M6 6l12 12" />
+        )}
+      </svg>
+    </span>
   </button>
 );
 
@@ -39,9 +55,11 @@ export const SelectInput: FunctionComponent<{
   onChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
   disabled?: boolean;
-}> = ({ value, onChange, options, disabled }) => (
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+}> = ({ value, onChange, options, disabled, "aria-label": ariaLabel, "aria-labelledby": ariaLabelledby }) => (
   <div className="min-w-[220px]">
-    <AvantgardeSelect value={value} onChange={onChange} options={options} disabled={disabled} />
+    <AvantgardeSelect value={value} onChange={onChange} options={options} disabled={disabled} aria-label={ariaLabel} aria-labelledby={ariaLabelledby} />
   </div>
 );
 
@@ -60,15 +78,18 @@ export const PillChoiceGroup: FunctionComponent<{
           type="button"
           disabled={disabled}
           onClick={() => onChange(option.value)}
-          className={`min-w-[104px] rounded-[1rem] border px-3.5 py-2 text-left transition-[border-color,background-color,color,transform,box-shadow] duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${
+          className={`group relative min-w-[104px] overflow-hidden rounded-[1rem] border px-4 py-2 text-left transition-[border-color,background-color,color,transform,box-shadow] duration-200 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 disabled:cursor-not-allowed disabled:opacity-50 active:scale-95 ${
             active
-              ? "border-signal-500/30 bg-signal-500/[0.11] text-signal-700 shadow-[0_10px_20px_rgba(0,224,160,0.08)] dark:border-signal-400/30 dark:bg-signal-400/[0.12] dark:text-signal-200"
-              : "border-black/[0.07] bg-white/78 text-slate-600 hover:-translate-y-px hover:border-black/[0.12] hover:text-slate-800 dark:border-white/[0.07] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/[0.12] dark:hover:text-white"
+              ? "border-signal-500/30 bg-signal-500/[0.11] text-signal-700 shadow-[0_10px_20px_rgba(0,224,160,0.08)] hover:bg-signal-500/[0.15] dark:border-signal-400/30 dark:bg-signal-400/[0.12] dark:text-signal-200 dark:hover:bg-signal-400/[0.16]"
+              : "border-black/[0.06] bg-white/70 text-slate-600 hover:-translate-y-px hover:border-black/[0.12] hover:bg-black/[0.02] hover:text-slate-800 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:border-white/[0.12] dark:hover:bg-white/[0.08] dark:hover:text-white"
           }`}
         >
+          {active ? (
+            <div className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-signal-500 dark:bg-signal-400" />
+          ) : null}
           <div className="text-[11px] font-bold uppercase tracking-[0.14em]">{option.label}</div>
           {option.hint ? (
-            <div className="mt-1 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
+            <div className={`mt-1 text-[11px] leading-relaxed transition-colors duration-200 ${active ? "text-signal-600/80 dark:text-signal-300/80" : "text-slate-400 dark:text-slate-500"}`}>
               {option.hint}
             </div>
           ) : null}
@@ -107,7 +128,7 @@ export const TextInput: FunctionComponent<{
     placeholder={placeholder}
     disabled={disabled}
     onInput={(event) => onChange((event.currentTarget as HTMLInputElement).value)}
-    className={`min-w-[220px] rounded-[1rem] border border-black/[0.07] bg-white/88 px-3.5 py-2.5 text-sm text-slate-700 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-[border-color,box-shadow,background-color] duration-200 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.07] dark:bg-white/[0.05] dark:text-slate-200 ${
+    className={`min-w-[220px] rounded-[1rem] border border-black/[0.06] hover:border-black/[0.12] bg-white/80 px-3.5 py-2.5 text-sm text-slate-700 placeholder-slate-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-[border-color,box-shadow,background-color] duration-200 focus:border-signal-500/40 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.05] dark:text-slate-200 ${
       mono ? "font-mono" : "font-sans"
     }`}
   />
@@ -124,7 +145,7 @@ export const TextAreaInput: FunctionComponent<{
     rows={rows}
     placeholder={placeholder}
     onInput={(event) => onChange((event.currentTarget as HTMLTextAreaElement).value)}
-    className="min-h-[320px] w-full rounded-[1.3rem] border border-black/[0.06] bg-black/[0.04] px-4 py-3 text-sm leading-relaxed text-slate-700 placeholder-slate-400 transition-colors duration-200 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/10 dark:border-white/[0.06] dark:bg-white/[0.04] dark:text-slate-200"
+    className="min-h-[320px] w-full rounded-[1rem] border border-black/[0.06] hover:border-black/[0.12] bg-black/[0.04] px-4 py-3 text-sm leading-relaxed text-slate-700 placeholder-slate-400 transition-colors duration-200 focus:border-signal-500/40 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 focus:ring-0 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.04] dark:text-slate-200"
   />
 );
 
@@ -144,7 +165,7 @@ export const NumberInput: FunctionComponent<{
     step={step}
     disabled={disabled}
     onInput={(event) => onChange(Number((event.currentTarget as HTMLInputElement).value))}
-    className="w-32 rounded-[1rem] border border-black/[0.07] bg-white/88 px-3.5 py-2.5 text-sm font-mono text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-[border-color,box-shadow,background-color] duration-200 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.07] dark:bg-white/[0.05] dark:text-slate-200"
+    className="w-32 rounded-[1rem] border border-black/[0.06] hover:border-black/[0.12] bg-white/80 px-3.5 py-2.5 text-sm font-mono text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-[border-color,box-shadow,background-color] duration-200 focus:border-signal-500/40 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal-500 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/[0.06] dark:hover:border-white/[0.12] dark:bg-white/[0.05] dark:text-slate-200"
   />
 );
 
@@ -159,7 +180,7 @@ export const MetricPill: FunctionComponent<{
       : "border-black/[0.06] bg-black/[0.03] dark:border-white/[0.06] dark:bg-white/[0.03]"
   }`}
   >
-    <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">{label}</div>
+    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{label}</div>
     <div className={`mt-1 text-sm font-semibold ${
       tone === "signal" ? "text-signal-700 dark:text-signal-200" : "text-slate-800 dark:text-slate-100"
     }`}
@@ -177,25 +198,23 @@ export const Row: FunctionComponent<{
   badge?: ComponentChildren;
 }> = ({ label, description, children, last, badge }) => (
   <div
-    className={`flex flex-col gap-4 rounded-[1.35rem] border border-black/[0.05] bg-black/[0.02] px-4 py-4 md:flex-row md:items-start md:justify-between ${!last ? "" : ""} dark:border-white/[0.05] dark:bg-white/[0.02]`}
+    className={`group flex flex-col gap-4 rounded-[1.35rem] border border-black/[0.05] hover:border-black/[0.1] bg-black/[0.02] hover:bg-black/[0.03] px-4 py-4 md:flex-row md:items-start md:justify-between transition-colors duration-200 ${!last ? "" : ""} dark:border-white/[0.05] dark:hover:border-white/[0.1] dark:bg-white/[0.02] dark:hover:bg-white/[0.03]`}
   >
     <div className="min-w-0 flex-1">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">{label}</div>
+        <div className="text-sm font-semibold leading-snug text-slate-800 group-hover:text-slate-900 dark:text-slate-100 dark:group-hover:text-white transition-colors duration-200">{label}</div>
         {badge && typeof badge === "string" ? (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
-            <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black leading-none text-white dark:bg-amber-300 dark:text-void-900">
-              !
-            </span>
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-300" />
             {badge}
           </span>
         ) : badge}
       </div>
       {description ? (
-        <div className="mt-0.5 text-xs font-medium leading-relaxed text-slate-400">{description}</div>
+        <div className="mt-0.5 text-xs font-medium leading-relaxed text-slate-400 group-hover:text-slate-500 dark:text-slate-500 dark:group-hover:text-slate-400 transition-colors duration-200">{description}</div>
       ) : null}
     </div>
-    <div className="shrink-0 rounded-[1.15rem] border border-black/[0.05] bg-white/75 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] dark:border-white/[0.05] dark:bg-white/[0.04]">
+    <div className="shrink-0 rounded-[1.15rem] border border-black/[0.05] group-hover:border-black/[0.1] bg-white/75 p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition-colors duration-200 dark:border-white/[0.05] dark:group-hover:border-white/[0.1] dark:bg-white/[0.04]">
       {children}
     </div>
   </div>

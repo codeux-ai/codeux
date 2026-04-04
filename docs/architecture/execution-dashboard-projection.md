@@ -100,7 +100,10 @@ Current event coverage includes:
 
 Projection is built in:
 
-- `src/repositories/execution-repository.ts`
+- `src/repositories/execution-repository.ts` (public API boundary and snapshot orchestrator)
+- `src/repositories/execution/execution-sprint-runs-query.ts` (sprint runs slice query)
+- `src/repositories/execution/execution-task-dispatches-query.ts` (dispatches slice query)
+- `src/repositories/execution/execution-runtime-events-query.ts` (events slice query)
 
 It joins:
 
@@ -173,6 +176,17 @@ That combined event folds together:
 - selected sprint identity from the header-scoped project selection
 
 This keeps the execution read model authoritative for dispatches, runs, connections, and runtime events, while preventing the browser from trying to reconcile separate status and execution payloads into one visual state.
+
+## Subtask State Mapping
+
+To ensure the live projection, project management read-models, and markdown imports all produce a consistent view of a subtask, execution status mapping is centralized in `src/services/subtask-state-mapper.ts`.
+
+This shared module resolves:
+- Translation between DB planning statuses (`pending`, `in_progress`, `coding_completed`, `completed`) and orchestrator runtime states (`PENDING`, `RUNNING`, `CODING_COMPLETED`, `COMPLETED`).
+- "Latest run" execution state overrides, ensuring that active failures or blocks supersede the persisted planning state.
+- Merge-indicator normalization (`CI`, `AUTOMERGE`, `MERGED`, `MERGE_BLOCKED`, `MERGE_CONFLICT`).
+
+By preventing logic drift across repositories and services, the subtask view model remains stable regardless of the data origin.
 
 Related realtime scopes now also exist for the surrounding v2 project-management surfaces:
 

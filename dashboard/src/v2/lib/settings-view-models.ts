@@ -1,5 +1,6 @@
 import type {
   DashboardSettings,
+  EffectiveSettingsResponse,
   ExternalSettingsHints,
   McpToolToggle,
   ProviderId,
@@ -42,24 +43,28 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
         model: settings.aiProvider.providers.jules.model,
         weight: settings.aiProvider.providers.jules.weight,
         thinkingMode: settings.aiProvider.providers.jules.thinkingMode,
+        maxConcurrentTasks: settings.aiProvider.providers.jules.maxConcurrentTasks,
       },
       gemini: {
         enabled: settings.aiProvider.providers.gemini.enabled,
         model: settings.aiProvider.providers.gemini.model,
         weight: settings.aiProvider.providers.gemini.weight,
         thinkingMode: settings.aiProvider.providers.gemini.thinkingMode,
+        maxConcurrentTasks: settings.aiProvider.providers.gemini.maxConcurrentTasks,
       },
       codex: {
         enabled: settings.aiProvider.providers.codex.enabled,
         model: settings.aiProvider.providers.codex.model,
         weight: settings.aiProvider.providers.codex.weight,
         thinkingMode: settings.aiProvider.providers.codex.thinkingMode,
+        maxConcurrentTasks: settings.aiProvider.providers.codex.maxConcurrentTasks,
       },
       "claude-code": {
         enabled: settings.aiProvider.providers["claude-code"].enabled,
         model: settings.aiProvider.providers["claude-code"].model,
         weight: settings.aiProvider.providers["claude-code"].weight,
         thinkingMode: settings.aiProvider.providers["claude-code"].thinkingMode,
+        maxConcurrentTasks: settings.aiProvider.providers["claude-code"].maxConcurrentTasks,
       },
     },
     invocationRouting: cloneInvocationRouting(settings.aiProvider.invocationRouting),
@@ -89,6 +94,13 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
   agents: {
     saveToProjectDirectory: settings.agents.saveToProjectDirectory,
     instructionTemplates: { ...settings.agents.instructionTemplates },
+    qualityAssurance: {
+      enabled: settings.agents.qualityAssurance.enabled,
+      maxTaskReviewRuns: settings.agents.qualityAssurance.maxTaskReviewRuns,
+      taskCompletion: { ...settings.agents.qualityAssurance.taskCompletion },
+      sprintCompletion: { ...settings.agents.qualityAssurance.sprintCompletion },
+      completedTaskWithoutPr: { ...settings.agents.qualityAssurance.completedTaskWithoutPr },
+    },
   },
   skills: cloneSkills(settings.skills),
   memory: { ...settings.memory },
@@ -131,6 +143,13 @@ export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings
   agents: {
     saveToProjectDirectory: settings.agents.saveToProjectDirectory,
     instructionTemplates: { ...settings.agents.instructionTemplates },
+    qualityAssurance: {
+      enabled: settings.agents.qualityAssurance.enabled,
+      maxTaskReviewRuns: settings.agents.qualityAssurance.maxTaskReviewRuns,
+      taskCompletion: { ...settings.agents.qualityAssurance.taskCompletion },
+      sprintCompletion: { ...settings.agents.qualityAssurance.sprintCompletion },
+      completedTaskWithoutPr: { ...settings.agents.qualityAssurance.completedTaskWithoutPr },
+    },
   },
   skills: cloneSkills(settings.skills),
   memory: { ...settings.memory },
@@ -146,6 +165,14 @@ export const cloneSystemSettings = (settings: SystemSettings): SystemSettings =>
   defaults: cloneProjectSettings(settings.defaults),
   mcpTools: cloneMcpTools(settings.mcpTools),
 });
+
+export const applyEffectiveProjectSettings = (effectiveProject: EffectiveSettingsResponse): { settings: ProjectSettings, sources: Record<string, SettingsValueSource> } => {
+  const nextProject = dashboardSettingsToProjectSettings(effectiveProject.settings);
+  return {
+    settings: cloneProjectSettings(nextProject),
+    sources: effectiveProject.sources,
+  };
+};
 
 export const applyExternalHintsToSystemSettings = (
   settings: SystemSettings,
@@ -252,9 +279,110 @@ const PROVIDER_MODEL_LABEL_OVERRIDES: Partial<Record<ProviderId, Record<string, 
   },
 };
 
+const hasProviderApiKey = (
+  providerId: ProviderId,
+  systemSettings: SystemSettings | null,
+  hints: ExternalSettingsHints | null,
+): boolean => {
+  if (providerId === "jules") {
+    return Boolean(systemSettings?.integrations.julesApiKey?.trim() || hints?.resolved.julesApiKey?.trim());
+  }
+  if (providerId === "gemini") {
+    return Boolean(systemSettings?.integrations.geminiApiKey?.trim() || hints?.resolved.geminiApiKey?.trim());
+  }
+  if (providerId === "codex") {
+    return Boolean(systemSettings?.integrations.codexApiKey?.trim() || hints?.resolved.codexApiKey?.trim());
+  }
+  if (providerId === "claude-code") {
+    return Boolean(systemSettings?.integrations.claudeCodeApiKey?.trim() || hints?.resolved.claudeCodeApiKey?.trim());
+  }
+  return false;
+};
+
+const hasProviderLocalAuth = (
+  providerId: ProviderId,
+  hints: ExternalSettingsHints | null,
+): boolean => {
+  if (providerId === "gemini") {
+    return Boolean(hints?.providerAvailability.gemini?.hasLocalAuth);
+  }
+  if (providerId === "codex") {
+    return Boolean(hints?.providerAvailability.codex?.hasLocalAuth);
+  }
+  if (providerId === "claude-code") {
+    return Boolean(hints?.providerAvailability.claudeCode?.hasLocalAuth);
+  }
+  return false;
+};
+
 export const providerSupportsModelSelection = (providerId: ProviderId): boolean => providerId !== "jules";
 
 export const providerSupportsThinkingMode = (providerId: ProviderId): boolean => providerId !== "jules";
+
+export const isProviderAvailable = (
+  providerId: ProviderId,
+  systemSettings: SystemSettings | null,
+  hints: ExternalSettingsHints | null,
+  mountAuthEnabled = false,
+): boolean => (
+  hasProviderApiKey(providerId, systemSettings, hints)
+  || hasProviderLocalAuth(providerId, hints)
+  || (providerId !== "jules" && mountAuthEnabled)
+);
+
+export const getProviderAuthLabel = (
+  providerId: ProviderId,
+  systemSettings: SystemSettings | null,
+  hints: ExternalSettingsHints | null,
+  dockerExecutionEnabled: boolean,
+  mountAuthEnabled: boolean,
+): string | null => {
+  const hasApiKey = hasProviderApiKey(providerId, systemSettings, hints);
+  const hasLocalAuth = hasProviderLocalAuth(providerId, hints);
+  const hasMountedAuth = providerId !== "jules" && mountAuthEnabled && dockerExecutionEnabled;
+
+  if (providerId === "jules") {
+    return hasApiKey ? "API key" : null;
+  }
+
+  if (hasMountedAuth && hasApiKey) {
+    return "Auth mount + API key";
+  }
+  if (hasMountedAuth && hasLocalAuth) {
+    return "Auth mount + local auth";
+  }
+  if (hasMountedAuth) {
+    return "Auth mount enabled";
+  }
+  if (hasLocalAuth && hasApiKey) {
+    return "Local auth + API key";
+  }
+  if (hasLocalAuth) {
+    return "Local auth";
+  }
+  return hasApiKey ? "API key" : null;
+};
+
+export const getEligibleProviders = (
+  systemSettings: SystemSettings | null,
+  editableSettings: ProjectSettings,
+  hints: ExternalSettingsHints | null,
+): ProviderId[] => {
+  const visibleProviders = Object.entries(editableSettings.aiProvider.providers).filter(([providerId]) => {
+    const mountAuthEnabled = providerId === "gemini"
+      ? editableSettings.cliWorkflow.containerMountGeminiAuth
+      : providerId === "codex"
+        ? editableSettings.cliWorkflow.containerMountCodexAuth
+        : providerId === "claude-code"
+          ? editableSettings.cliWorkflow.containerMountClaudeCodeAuth
+          : false;
+    return isProviderAvailable(providerId as ProviderId, systemSettings, hints, mountAuthEnabled);
+  });
+
+  return visibleProviders
+    .filter(([providerId, provider]) => provider.enabled)
+    .map(([providerId]) => providerId as ProviderId);
+};
 
 export const getProviderModelOptions = (
   providerId: ProviderId,

@@ -5,18 +5,28 @@
 import { h } from "preact";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/preact";
+import { renderHook, act } from "@testing-library/preact";
 import * as matchers from "@testing-library/jest-dom/matchers";
 
 import { OverviewTelemetry } from "../../../dashboard/src/v2/components/OverviewTelemetry.js";
 import { useOverviewTelemetry } from "../../../dashboard/src/hooks/use-overview-telemetry.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
 import type { OverviewTelemetrySnapshot } from "../../../dashboard/src/types.js";
+import * as api from "../../../dashboard/src/lib/api/dashboard-api.js";
+import * as realtime from "../../../dashboard/src/lib/realtime/dashboard-realtime-client.js";
 
 expect.extend(matchers);
 
-vi.mock("../../../dashboard/src/hooks/use-overview-telemetry.js", () => ({
-  useOverviewTelemetry: vi.fn(),
-}));
+vi.mock("../../../dashboard/src/lib/api/dashboard-api.js");
+vi.mock("../../../dashboard/src/lib/realtime/dashboard-realtime-client.js");
+
+vi.mock("../../../dashboard/src/hooks/use-overview-telemetry.js", async (importOriginal) => {
+  const actual = await importOriginal<any>();
+  return {
+    ...actual,
+    useOverviewTelemetry: vi.fn(actual.useOverviewTelemetry),
+  };
+});
 
 vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
   useProjectData: vi.fn(),
@@ -192,5 +202,54 @@ describe("OverviewTelemetry Component", () => {
     // Event style maps and formatted label
     expect(screen.getByText("run completed")).toHaveClass("text-status-green");
     expect(screen.getByText("dispatch failed")).toHaveClass("text-status-red");
+  });
+});
+
+describe("useOverviewTelemetry Hook", () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("handles websocket event updates directly", async () => {
+    let realtimeCallback: (message: any) => void;
+
+    vi.mocked(realtime.subscribeToDashboardRealtime).mockImplementation((scopes, rc, tc) => {
+      realtimeCallback = rc;
+      return () => {};
+    });
+
+    const mockPayload: OverviewTelemetrySnapshot = {
+      activeProjects: [],
+      attentionProjects: [],
+      recentEvents: [],
+      updatedAt: "initial",
+    };
+
+    vi.mocked(api.fetchOverviewTelemetry).mockResolvedValue(mockPayload);
+
+    // Reset the mocked implementation to use actual for testing the hook behavior directly
+    vi.mocked(useOverviewTelemetry).mockRestore();
+
+    const { result } = renderHook(() => useOverviewTelemetry());
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(result.current.telemetry.updatedAt).toBe("initial");
+
+    // Send a direct websocket event
+    act(() => {
+      realtimeCallback({
+        type: "event",
+        event: {
+          eventType: "overview.telemetry.updated",
+          payload: { ...mockPayload, updatedAt: "websocket-update" },
+        },
+      });
+    });
+
+    expect(result.current.telemetry.updatedAt).toBe("websocket-update");
   });
 });

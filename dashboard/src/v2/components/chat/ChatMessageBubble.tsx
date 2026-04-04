@@ -1,4 +1,5 @@
 import { type FunctionComponent } from "preact";
+import { Check, CheckCheck, XCircle, Loader2 } from "lucide-preact";
 import type { ChatMessageRecord } from "../../types.js";
 import { renderMarkdown } from "../../../lib/markdown.js";
 import { getChatWidgetData } from "../../lib/chat-widget-view-models.js";
@@ -27,8 +28,12 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({ m
   const providerLabel = message.metadata?.provider as string | undefined;
   const createdAtLabel = formatChatTime(message.createdAt);
 
+  const opacityClass = (fromDashboard && (message.deliveryStatus === "pending" || message.deliveryStatus === "failed"))
+    ? "opacity-60"
+    : "opacity-100";
+
   return (
-    <div className={`flex ${fromDashboard ? "justify-end" : "justify-start"}`}>
+    <div className={`flex ${fromDashboard ? "justify-end" : "justify-start"} ${opacityClass}`}>
       <div className={`flex max-w-[760px] items-start gap-3 w-full ${fromDashboard ? "flex-row-reverse" : "flex-row"}`}>
         <div className="mt-1 shrink-0 w-8 h-8 flex items-center justify-center">
           <ChatAvatar role={role} provider={providerLabel} agentName={senderName} />
@@ -63,8 +68,31 @@ export const ChatMessageBubble: FunctionComponent<ChatMessageBubbleProps> = ({ m
           )}
 
           {fromDashboard && (
-             <div className="mt-2 text-[10px] font-mono text-slate-500 text-right">
-               {message.deliveryStatus}
+             <div className="mt-2 flex items-center justify-end gap-1.5 text-[10px] font-mono">
+               {message.deliveryStatus === "pending" && (
+                 <>
+                   <Loader2 className="h-3 w-3 animate-spin text-slate-400" />
+                   <span className="text-slate-400">Queued</span>
+                 </>
+               )}
+               {message.deliveryStatus === "delivered" && (
+                 <>
+                   <Check className="h-3 w-3 text-slate-400" />
+                   <span className="text-slate-400">Delivered</span>
+                 </>
+               )}
+               {message.deliveryStatus === "processed" && (
+                 <>
+                   <CheckCheck className="h-3 w-3 text-signal-500" />
+                   <span className="text-signal-500">Processed</span>
+                 </>
+               )}
+               {message.deliveryStatus === "failed" && (
+                 <>
+                   <XCircle className="h-3 w-3 text-status-red" />
+                   <span className="text-status-red">Failed</span>
+                 </>
+               )}
              </div>
           )}
         </div>

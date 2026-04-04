@@ -32,6 +32,17 @@ export const stopPreviewSession = async (sessionId: string): Promise<SprintPrevi
   });
 };
 
+export const removePreviewSession = async (sessionId: string): Promise<void> => {
+  const response = await fetch(`/api/browser/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    const errorMessage = typeof errorBody?.error === "string" ? errorBody.error : "Failed to remove preview session";
+    throw new Error(errorMessage);
+  }
+};
+
 export const fetchPreviewScript = async (projectId: string, sprintId: string): Promise<SprintPreviewScript> => {
   return fetchJson(`/api/projects/${encodeURIComponent(projectId)}/sprints/${encodeURIComponent(sprintId)}/preview/script`);
 };

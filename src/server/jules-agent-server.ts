@@ -102,6 +102,7 @@ export class JulesAgentServer {
   private static readonly GIT_STATUS_CACHE_MS = 10_000;
   private static readonly RUNTIME_CLEANUP_INTERVAL_MS = 15_000;
   private static readonly LIVE_SNAPSHOT_REFRESH_INTERVAL_MS = 30_000;
+  private static activeSigintHandler: (() => void) | null = null;
   private readonly projectRoot: string;
   private readonly appConfig: AppConfig;
   private server: Server;
@@ -155,6 +156,7 @@ export class JulesAgentServer {
   private liveSnapshotInterval: ReturnType<typeof setInterval> | null = null;
   private mcpHttpHandle: McpHttpTransportHandle | null = null;
   private mcpServiceBound = false;
+  private readonly sigintHandler: () => void;
 
   constructor(options: JulesAgentServerOptions) {
     this.projectRoot = options.projectRoot;
@@ -220,27 +222,37 @@ export class JulesAgentServer {
 
     this.configureMcpServer(this.server, this.appConfig.runtimeRole);
 
-    process.on("SIGINT", async () => {
-      if (this.runtimeCleanupInterval) {
-        clearInterval(this.runtimeCleanupInterval);
-        this.runtimeCleanupInterval = null;
-      }
-      if (this.sprintPreviewInterval) {
-        clearInterval(this.sprintPreviewInterval);
-        this.sprintPreviewInterval = null;
-      }
-      if (this.liveSnapshotInterval) {
-        clearInterval(this.liveSnapshotInterval);
-        this.liveSnapshotInterval = null;
-      }
-      if (this.mcpHttpHandle) {
-        await this.mcpHttpHandle.close().catch(() => undefined);
-        this.mcpHttpHandle = null;
-      }
-      this.virtualWorkerService.stop();
-      await this.server.close();
-      process.exit(0);
-    });
+    this.sigintHandler = () => {
+      void this.handleSigint();
+    };
+
+    if (JulesAgentServer.activeSigintHandler) {
+      process.off("SIGINT", JulesAgentServer.activeSigintHandler);
+    }
+    process.on("SIGINT", this.sigintHandler);
+    JulesAgentServer.activeSigintHandler = this.sigintHandler;
+  }
+
+  private async handleSigint(): Promise<void> {
+    if (this.runtimeCleanupInterval) {
+      clearInterval(this.runtimeCleanupInterval);
+      this.runtimeCleanupInterval = null;
+    }
+    if (this.sprintPreviewInterval) {
+      clearInterval(this.sprintPreviewInterval);
+      this.sprintPreviewInterval = null;
+    }
+    if (this.liveSnapshotInterval) {
+      clearInterval(this.liveSnapshotInterval);
+      this.liveSnapshotInterval = null;
+    }
+    if (this.mcpHttpHandle) {
+      await this.mcpHttpHandle.close().catch(() => undefined);
+      this.mcpHttpHandle = null;
+    }
+    this.virtualWorkerService.stop();
+    await this.server.close();
+    process.exit(0);
   }
 
   private configureMcpServer(server: Server, runtimeRole: "project_manager" | "worker_host" | "worker_gateway"): void {
@@ -886,6 +898,7 @@ export class JulesAgentServer {
         startSprintPreviewSession: (projectId, sprintId) => this.sprintPreviewService.startSession(projectId, sprintId),
         rebuildSprintPreviewSession: (sessionId) => this.sprintPreviewService.rebuildSession(sessionId),
         stopSprintPreviewSession: (sessionId) => this.sprintPreviewService.stopSession(sessionId),
+        removeSprintPreviewSession: (sessionId) => this.sprintPreviewService.removeSession(sessionId),
         getSprintPreviewScript: (projectId, sprintId) => this.sprintPreviewService.getScript(projectId, sprintId),
         saveSprintPreviewScript: (projectId, sprintId, content) => this.sprintPreviewService.saveScript(projectId, sprintId, content),
         getSprintPreviewLogs: (sessionId, tail) => this.sprintPreviewService.getLogs(sessionId, tail),

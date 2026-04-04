@@ -6,9 +6,16 @@ on:
   pull_request:
     branches: ["**"]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test-and-build:
+  typecheck-and-lint:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout
@@ -21,16 +28,145 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --prefer-offline --no-audit --ignore-scripts
 
-      - name: Run tests
-        run: npm test
+      - name: Restore Vite and Vitest caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/vite
+            .cache/vitest
+          key: ${{ runner.os }}-node-22-tooling-${{ hashFiles('package-lock.json', 'vite.config.ts', 'vitest.config.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-node-22-tooling-
 
-      - name: Run coverage
-        run: npm run test:coverage
+      - name: Run lint and typecheck
+        run: npm run lint
+
+  test-and-coverage:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --ignore-scripts
+
+      - name: Restore Vite and Vitest caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/vite
+            .cache/vitest
+          key: ${{ runner.os }}-node-22-tooling-${{ hashFiles('package-lock.json', 'vite.config.ts', 'vitest.config.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-node-22-tooling-
+
+      - name: Run backend tests with coverage
+        run: npm run test:backend:coverage
+
+  dashboard-tests:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --ignore-scripts
+
+      - name: Restore Vite and Vitest caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/vite
+            .cache/vitest
+          key: ${{ runner.os }}-node-22-tooling-${{ hashFiles('package-lock.json', 'vite.config.ts', 'vitest.config.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-node-22-tooling-
+
+      - name: Run dashboard tests
+        run: npm run test:dashboard
+
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --ignore-scripts
+
+      - name: Restore Vite and Vitest caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/vite
+            .cache/vitest
+          key: ${{ runner.os }}-node-22-tooling-${{ hashFiles('package-lock.json', 'vite.config.ts', 'vitest.config.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-node-22-tooling-
 
       - name: Build
         run: npm run build
 
+  audit:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --ignore-scripts
+
+      - name: Restore Vite and Vitest caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/vite
+            .cache/vitest
+          key: ${{ runner.os }}-node-22-tooling-${{ hashFiles('package-lock.json', 'vite.config.ts', 'vitest.config.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-node-22-tooling-
+
       - name: Audit dependencies
-        run: npm audit
+        run: npm audit --audit-level=high

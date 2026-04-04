@@ -1,6 +1,31 @@
-import type { Subtask } from "../../types.js";
+import type { Subtask, ExecutionTaskDispatchSummary } from "../../types.js";
 
 const BOAT_RACE_HEIGHT_PX = 800;
+
+export function buildBoatRaceDispatchIndex(
+  dispatches: ExecutionTaskDispatchSummary[]
+): Map<string, ExecutionTaskDispatchSummary> {
+  const index = new Map<string, ExecutionTaskDispatchSummary>();
+  for (const dispatch of dispatches) {
+    if (dispatch.taskId) index.set(dispatch.taskId, dispatch);
+    if (dispatch.taskKey) index.set(dispatch.taskKey, dispatch);
+  }
+  return index;
+}
+
+export function getShipType(
+  task: Pick<Subtask, "id" | "record_id" | "provider">,
+  dispatchIndex: Map<string, ExecutionTaskDispatchSummary>
+): "container" | "wooden" {
+  const d =
+    (task.record_id ? dispatchIndex.get(task.record_id) : undefined) ||
+    (task.id ? dispatchIndex.get(task.id) : undefined);
+
+  if (d?.executorType === "docker_cli") return "container";
+  if (d?.executorType === "mcp_worker") return "wooden";
+  if (task.provider === "jules") return "wooden";
+  return "container";
+}
 
 export function getBoatRaceTaskKey(task: Pick<Subtask, "id" | "record_id" | "project_id" | "sprint_id">): string {
   const recordId = typeof task.record_id === "string" ? task.record_id.trim() : "";

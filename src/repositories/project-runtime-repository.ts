@@ -4,6 +4,7 @@ import { DatabaseAdapter } from "./db/database-adapter.js";
 import type { DashboardStatus, JulesActivity, Subtask, SubtaskMergeIndicator, SubtaskStatus } from "../contracts/app-types.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
+import { mapPlanningStatusToRuntimeStatus, mapRuntimeStatusToPlanningStatus, toMergeIndicator } from "../services/subtask-state-mapper.js";
 
 const RUNTIME_CONTEXT_PREFIX = "runtime_context:";
 
@@ -109,35 +110,6 @@ function runtimeContextKey(projectId: string, sprintId?: string | null): string 
   return `${RUNTIME_CONTEXT_PREFIX}${projectId}`;
 }
 
-function mapPlanningStatusToRuntimeStatus(status: PlanningTaskStatus): TaskRunState {
-  switch (status) {
-    case "coding_completed":
-      return "CODING_COMPLETED";
-    case "completed":
-      return "COMPLETED";
-    case "in_progress":
-      return "RUNNING";
-    case "pending":
-    default:
-      return "PENDING";
-  }
-}
-
-function mapRuntimeStatusToPlanningStatus(status: TaskRunState): PlanningTaskStatus | null {
-  switch (status) {
-    case "CODING_COMPLETED":
-      return "coding_completed";
-    case "RUNNING":
-      return "in_progress";
-    case "COMPLETED":
-      return "completed";
-    case "PENDING":
-      return "pending";
-    default:
-      return null;
-  }
-}
-
 function normalizePath(value: string | null | undefined): string | null {
   if (typeof value !== "string") {
     return null;
@@ -164,19 +136,6 @@ function subtaskSignature(subtask: Subtask): string {
 
 function toPersistedTaskRunState(status: TaskRunState): Exclude<TaskRunState, "CODING_COMPLETED"> {
   return status === "CODING_COMPLETED" ? "COMPLETED" : status;
-}
-
-function toMergeIndicator(value: string | null | undefined): SubtaskMergeIndicator | undefined {
-  switch (value) {
-    case "CI":
-    case "AUTOMERGE":
-    case "MERGED":
-    case "MERGE_BLOCKED":
-    case "MERGE_CONFLICT":
-      return value;
-    default:
-      return undefined;
-  }
 }
 
 function parsePayloadJson(value: string | null | undefined): Record<string, unknown> | null {

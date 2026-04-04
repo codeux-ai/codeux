@@ -98,3 +98,14 @@ Remaining work after that slice:
 - worker claims from `task_dispatches`
 - rerun dispatches
 - richer `task_run_events` and activity history
+
+## Indexes
+
+To optimize for the real query shapes used by the DB-native orchestrator and live views, the foundation includes targeted indexes:
+
+- **`idx_conversation_threads_project_updated`**: Sorts threads by project and recent activity (`updated_at DESC`).
+- **`idx_conversation_messages_thread_created`**: Speeds up fetching messages within a thread in chronological order (`created_at ASC`).
+- **`idx_connection_project_bindings_connection_active`**: Optimizes looking up project binding states for active connections (`is_active DESC, project_id ASC`).
+- **`idx_task_dispatches_connection_executor`**: Speeds up worker-affinity and next-task lookups per executor.
+- **`idx_project_attention_items_project_status_updated`**: Sorts project-level active attention items by most recently updated (`updated_at DESC`).
+- **`idx_project_attention_items_sprint_run_status_updated`**: Speeds up finding attention items blocking specific sprint runs (`updated_at DESC`).

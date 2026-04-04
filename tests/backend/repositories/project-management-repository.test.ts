@@ -29,6 +29,36 @@ afterEach(async () => {
 
 describe("ProjectManagementRepository", () => {
 
+  it("updates a project and sprint gracefully with empty or partial inputs", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Update Project",
+      sourceType: "local",
+      sourceRef: "/workspace/update-project",
+    });
+
+    const sprint = repository.createSprint(project.id, {
+      name: "Sprint 1",
+      number: 1,
+    });
+
+    // Empty project update
+    const updatedProject = repository.updateProject(project.id, {});
+    expect(updatedProject.name).toBe("Update Project");
+    expect(updatedProject.slug).toBe(project.slug);
+    expect(updatedProject.baseDir).toBe(project.baseDir);
+    expect(updatedProject.defaultBranch).toBe("main");
+    expect(updatedProject.featureBranchPrefix).toBe("feature/");
+    expect(updatedProject.status).toBe("idle");
+
+    // Empty sprint update
+    const updatedSprint = repository.updateSprint(sprint.id, {});
+    expect(updatedSprint.name).toBe("Sprint 1");
+    expect(updatedSprint.slug).toBe(sprint.slug);
+    expect(updatedSprint.number).toBe(1);
+    expect(updatedSprint.status).toBe("idle");
+  });
+
   it("preserves active sprint selection on creation and deletion", async () => {
     const { repository } = await createRepository();
     const project = repository.createProject({

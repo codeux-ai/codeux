@@ -25,6 +25,7 @@ export interface MergeFeedbackResult {
   state:
     | "disabled"
     | "unavailable"
+    | "merged"
     | "missing_pr"
     | "merge_conflict"
     | "failed_checks"
@@ -82,6 +83,24 @@ export class MainMergeGateService {
         state: "unavailable",
         prNumber: null,
         prUrl: null,
+        hasMergeConflict: false,
+        mergeStateStatus: null,
+        hasFailedChecks: false,
+        hasPendingChecks: false,
+        hasReviewBlockers: false,
+        failedChecks: [],
+      };
+    }
+
+    const mergedMainPr = (Array.isArray(gitStatus.mergedPullRequests) ? gitStatus.mergedPullRequests : []).find(
+      (pr) => pr.baseRefName === defaultBranch && pr.headRefName === featureBranch
+    );
+    if (mergedMainPr) {
+      return {
+        text: `\n### Main Merge CI Gate\n- ✅ Main branch PR #${mergedMainPr.number} already merged into \`${defaultBranch}\`.\n- PR: ${mergedMainPr.url}\n`,
+        state: "merged",
+        prNumber: mergedMainPr.number,
+        prUrl: mergedMainPr.url,
         hasMergeConflict: false,
         mergeStateStatus: null,
         hasFailedChecks: false,
@@ -179,7 +198,7 @@ export class MainMergeGateService {
     context: MergeFeedbackContext,
   ): Promise<MergeFeedbackResult> {
     const mode: FeaturePrAutoMergeMode = context.ciIntelligence.mainBranchAutoMergeMode;
-    if (mode === "OFF" || !feedback.prNumber || !context.autoMergeMainBranchPr) {
+    if (mode === "OFF" || mode === "CREATE_PR" || feedback.state === "merged" || !feedback.prNumber || !context.autoMergeMainBranchPr) {
       return feedback;
     }
 

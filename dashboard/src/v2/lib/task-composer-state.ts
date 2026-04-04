@@ -32,6 +32,13 @@ export interface TaskComposerState {
   toggleDependency: (taskId: string) => void;
   dependencyOptions: Task[];
   isEditing: boolean;
+  dependencySearchQuery: string;
+  setDependencySearchQuery: (val: string) => void;
+  isSubmitting: boolean;
+  setIsSubmitting: (val: boolean) => void;
+  submitError: string | null;
+  setSubmitError: (val: string | null) => void;
+  validationErrors: Record<string, string>;
   isValid: boolean;
   getPayload: () => TaskDraft;
 }
@@ -54,6 +61,17 @@ export const useTaskComposerState = (
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(initialTask?.dependsOnTaskIds || []);
 
   const isEditing = Boolean(initialTask);
+
+  const [dependencySearchQuery, setDependencySearchQuery] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const validationErrors = useMemo(() => {
+    const errors: Record<string, string> = {};
+    if (!sprintId) errors.sprintId = "Sprint selection is required.";
+    if (!title.trim()) errors.title = "Task title is required.";
+    return errors;
+  }, [sprintId, title]);
 
   useEffect(() => {
     if (initialTask) {
@@ -87,8 +105,21 @@ export const useTaskComposerState = (
   }, [sprintId]);
 
   const dependencyOptions = useMemo(() => {
-    return availableTasks.filter((task) => task.sprintId === sprintId && task.recordId !== initialTask?.recordId);
-  }, [availableTasks, sprintId, initialTask?.recordId]);
+    return availableTasks.filter((task) => {
+      if (task.sprintId !== sprintId) return false;
+      if (task.recordId === initialTask?.recordId) return false;
+
+      if (dependencySearchQuery) {
+        const query = dependencySearchQuery.toLowerCase();
+        const matchesId = task.id ? task.id.toLowerCase().includes(query) : false;
+        const matchesRecordId = task.recordId.toLowerCase().includes(query);
+        const matchesTitle = task.title.toLowerCase().includes(query);
+        return matchesId || matchesRecordId || matchesTitle;
+      }
+
+      return true;
+    });
+  }, [availableTasks, sprintId, initialTask?.recordId, dependencySearchQuery]);
 
   const toggleDependency = (taskId: string) => {
     setDependsOnTaskIds((current) => (
@@ -98,7 +129,7 @@ export const useTaskComposerState = (
     ));
   };
 
-  const isValid = Boolean(title.trim() && sprintId);
+  const isValid = Object.keys(validationErrors).length === 0;
 
   const getPayload = (): TaskDraft => ({
     sprintId,
@@ -124,6 +155,10 @@ export const useTaskComposerState = (
     dependencyOptions,
     isEditing,
     isValid,
+    dependencySearchQuery, setDependencySearchQuery,
+    isSubmitting, setIsSubmitting,
+    submitError, setSubmitError,
+    validationErrors,
     getPayload,
   };
 };

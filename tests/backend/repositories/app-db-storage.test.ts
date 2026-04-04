@@ -43,6 +43,23 @@ describe("AppDbStorage", () => {
     expect(storage.hasTable("conversation_threads")).toBe(true);
     expect(storage.hasTable("conversation_messages")).toBe(true);
     expect(storage.hasTable("agent_presets")).toBe(true);
+
+    const db = storage.getDatabase();
+    const taskDispatchesIndexes = db.prepare("PRAGMA index_list('task_dispatches')").all() as Array<{ name: string }>;
+    expect(taskDispatchesIndexes.some((idx) => idx.name === "idx_task_dispatches_connection_executor")).toBe(true);
+
+    const conversationThreadsIndexes = db.prepare("PRAGMA index_list('conversation_threads')").all() as Array<{ name: string }>;
+    expect(conversationThreadsIndexes.some((idx) => idx.name === "idx_conversation_threads_project_updated")).toBe(true);
+
+    const conversationMessagesIndexes = db.prepare("PRAGMA index_list('conversation_messages')").all() as Array<{ name: string }>;
+    expect(conversationMessagesIndexes.some((idx) => idx.name === "idx_conversation_messages_thread_created")).toBe(true);
+
+    const connectionBindingsIndexes = db.prepare("PRAGMA index_list('connection_project_bindings')").all() as Array<{ name: string }>;
+    expect(connectionBindingsIndexes.some((idx) => idx.name === "idx_connection_project_bindings_connection_active")).toBe(true);
+
+    const attentionItemsIndexes = db.prepare("PRAGMA index_list('project_attention_items')").all() as Array<{ name: string }>;
+    expect(attentionItemsIndexes.some((idx) => idx.name === "idx_project_attention_items_project_status_updated")).toBe(true);
+    expect(attentionItemsIndexes.some((idx) => idx.name === "idx_project_attention_items_sprint_run_status_updated")).toBe(true);
   });
 
   it("uses the explicit dbPath when provided", async () => {

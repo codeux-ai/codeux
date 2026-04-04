@@ -26,6 +26,7 @@ export interface ProjectProviderSettings {
   model: string;
   weight: number;
   thinkingMode: ThinkingMode;
+  maxConcurrentTasks: number;
 }
 
 export interface ProjectAiProviderSettings {

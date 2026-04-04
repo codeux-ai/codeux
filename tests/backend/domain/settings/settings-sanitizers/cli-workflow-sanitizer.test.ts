@@ -32,6 +32,10 @@ describe("sanitizeCliWorkflow", () => {
     expect(defaults.retryOnRateLimit).toBe(true);
     expect(defaults.rateLimitRetryDelaySeconds).toBe(10);
     expect(defaults.maxRateLimitRetries).toBe(5);
+    expect(defaults.containerMountGithubAuth).toBe(false);
+    expect(defaults.containerMountGeminiAuth).toBe(false);
+    expect(defaults.containerMountCodexAuth).toBe(false);
+    expect(defaults.containerMountClaudeCodeAuth).toBe(false);
 
     const clamped = sanitizeCliWorkflow({
       cliWorkflow: {

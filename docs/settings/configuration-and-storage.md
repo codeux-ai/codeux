@@ -149,12 +149,16 @@ Dashboard behavior:
   - Jules remains routable with `enabled` and `weight`, but the current Jules REST API does not expose model-selection or thinking controls.
   - Dashboard settings editors therefore hide `model` and `thinkingMode` for Jules and show an informational note instead.
   - Gemini alias entries `pro`, `flash`, and `flash-lite` are labeled as recent aliases in selects so it is clear they track the latest model target.
-- `invocationRouting` map
+  - Sprint OS performs startup availability checks for Gemini, Codex, and Claude Code, looking for API-key hints and stable local auth artifacts to prepare future onboarding decisions.
+  - Enabling a provider auth mount in Integrations also marks that provider active in the dashboard so mount-based Docker setups show the expected connected state even without an API key.
+  - Note: `available` means detected credentials/auth presence or an enabled auth mount, whereas `enabled` means user-approved routing participation. CLI providers are opt-in on fresh installs and disabled by default.
+  - `invocationRouting` map
   - route ids:
     - `task_coding`
     - `planning`
     - `dashboard_reply`
     - `clarification_reply`
+    - `qa_review`
     - `ci_fix`
     - `merge_conflict`
   - each route contains:
@@ -173,18 +177,38 @@ Dashboard behavior:
     - `planning`: `WORKER`
     - `dashboard_reply`: `WORKER`
     - `clarification_reply`: `WORKER`
+    - `qa_review`: `WORKER`
     - `ci_fix`: `WORKER`
     - `merge_conflict`: `WORKER`
-  - dashboard replies and clarification auto-answer in `WORKER` mode now follow the preferred worker CLI provider/model by default instead of accidentally inheriting whichever global provider happened to match.
+  - dashboard replies, clarification auto-answer, and QA review runs in `WORKER` mode now follow the preferred worker CLI provider/model by default instead of accidentally inheriting whichever global provider happened to match.
 
 `automationInterventions` contains:
 - `autoApprovePlan` (default `true`): auto-approve `AWAITING_PLAN_APPROVAL` sessions in `SEMI_AUTO`
 - `autoAnswerClarification` (default `false`): auto-answer `AWAITING_USER_FEEDBACK` sessions in `SEMI_AUTO`
 - `autoResumePaused` (default `false`): auto-send resume nudge for `PAUSED` sessions in `SEMI_AUTO`
 - `clarificationAnswerTemplate`: default response body used for clarification auto-replies
-- `clarificationCooldownSeconds` (default `300`): wait time after an auto-reply/resume before Sprint OS sends another clarification nudge; during this cooldown the task stays in automated recovery and does not open a fresh `action_required` human-escalation path
+- `clarificationCooldownSeconds` (default `300`): retained for compatibility, but clarification dedupe now keys off the latest clarification content instead of elapsed time; once Sprint OS answers a specific clarification request, repeated cycles skip re-sending the same answer until Jules emits a different clarification prompt
 - when `autoAnswerClarificationMode = WORKER`, Sprint OS now composes the clarification-answer prompt from the editable `Project manager` agent preset instead of prepending worker instructions
 - worker-routed clarification prompts now include a dedicated Jules clarification section so the latest explicit `agentMessaged.agentMessage` is passed through when available instead of only broad sprint context
+
+`agents` contains:
+
+- `saveToProjectDirectory`
+- `instructionTemplates`
+- `qualityAssurance`
+  - `enabled` (default `false`)
+  - `maxTaskReviewRuns` (default `1`)
+  - `taskCompletion`
+    - `enabled`
+    - `agentPresetId`
+  - `sprintCompletion`
+    - `enabled`
+    - `agentPresetId`
+  - `completedTaskWithoutPr`
+    - `enabled`
+    - `agentPresetId`
+
+Quality assurance settings are project-scoped today and are edited from `Settings -> Agents`. When task-level QA is enabled, successful CLI task runs preserve their worktree long enough for a QA follow-up pass to resume the same session/worktree if fixes are required.
 
 `cliWorkflow` contains:
 - Retry/cleanup toggles:
@@ -202,14 +226,25 @@ Dashboard behavior:
   - `containerCacheSetupScriptImage` (default `false`)
     - when enabled, Docker runtime builds and reuses a derived image keyed by the base image plus setup script contents
     - cache misses fall back to the current per-run setup script path if the image build fails
-  - `containerMountGitConfig`
-  - `containerMountGithubAuth`
+  - `containerMountGitConfig` (default `true`)
+  - `containerMountGithubAuth` (default `false`)
+  - `containerMountGeminiAuth` (default `false`)
+  - `containerMountCodexAuth` (default `false`)
+  - `containerMountClaudeCodeAuth` (default `false`)
+  - `containerGithubAuthPath` (default `~/.config/gh`)
+  - `containerGeminiAuthPath` (default `~/.gemini`)
+  - `containerCodexAuthPath` (default `~/.codex`)
+  - `containerClaudeCodeAuthPath` (default `~/.claude`)
 
 `sprintPreview` contains:
+- `enabled`
+- `showInAppBrowser`
 - `autoStartOnRunningSprint`
 - `rebuildOnTaskCompletion`
 - `rebuildOnSprintCompletion`
+- `pullLatestOnRebuild`
 - `autoStopOnTerminalSprint`
+- `maxConcurrentContainers`
 - `hostPortRangeStart`
 - `hostPortRangeEnd`
 - `containerAppPort`
@@ -220,6 +255,10 @@ Preview runtime notes:
 - preview session runtime state is stored in the app DB table `sprint_preview_sessions`, not the settings DB
 - `startupScriptPath` points to the editable preview startup script and is separate from `cliWorkflow.containerSetupScriptPath`
 - preview host ports are allocated from the configured range and bound to `127.0.0.1`
+- `showInAppBrowser` controls whether Browser entry points stay visible in the dashboard shell for the selected project scope
+- `enabled` disables new preview launches and causes reconciliation to stop active previews for that scope
+- `pullLatestOnRebuild` controls whether rebuilds sync the latest remote branch state before the preview export is regenerated
+- `maxConcurrentContainers` caps active preview containers per project by stopping the oldest previews before starting another
 
 `agents` contains:
 - `saveToProjectDirectory` (default `true`)
@@ -227,13 +266,6 @@ Preview runtime notes:
   - mirrored filenames use lowercase underscore-safe slugs such as `planning_agent.md`
   - clarification auto-answer can read project-local `project_manager.md` as the editable instruction source for worker-routed Jules clarification replies
   - default/home markdown sources are never modified by dashboard edits; Sprint OS creates a project-level override file instead
-  - `containerMountGeminiAuth`
-  - `containerMountCodexAuth`
-  - `containerMountClaudeCodeAuth`
-  - `containerGithubAuthPath` (default `~/.config/gh`)
-  - `containerGeminiAuthPath` (default `~/.gemini`)
-  - `containerCodexAuthPath` (default `~/.codex`)
-  - `containerClaudeCodeAuthPath` (default `~/.claude`)
 
 `workers` contains:
 - `executionMode` (default `CONNECTED_MCP`)
@@ -263,10 +295,12 @@ Preview runtime notes:
 - `julesCiAutofixMaxRetries` (default `3`, clamped to `0..20`): max Jules CI autofix notify attempts before escalation to intervention (`FULL -> AGENT`, `SEMI_AUTO/ALWAYS_ASK -> HUMAN`) with explicit task IDs, PR links, and failed check names.
 - `featurePrAutoMergeMode` (default `"OFF"`):
   - `"OFF"`: no feature PR auto-merge
+  - `"CREATE_PR"`: open or reuse the feature PR, then stop before auto-merge and mark the task settled with `PR_ONLY`
   - `"WHEN_GREEN"`: auto-merge when merge gates are clear. If `waitForCiBeforeFeatureMerge` is enabled, this requires green checks; if disabled, CI status is not waited on.
   - `"ALWAYS"`: bypass CI waiting only when `waitForCiBeforeFeatureMerge` is disabled. If CI waiting is enabled, Sprint OS still waits for green checks before attempting auto-merge.
 - `mainBranchAutoMergeMode` (default `"OFF"`):
   - `"OFF"`: Sprint OS does not automatically open or merge the final `feature -> default` PR
+  - `"CREATE_PR"`: when sprint work is complete, Sprint OS opens or resolves the main PR but does not auto-merge it
   - `"WHEN_GREEN"`: when sprint work is complete, Sprint OS opens or resolves the main PR if needed, then auto-merges after the main merge gate is green
   - `"ALWAYS"`: when sprint work is complete, Sprint OS opens or resolves the main PR if needed and can merge without CI waiting when `waitForCiBeforeMainMerge` is disabled
 

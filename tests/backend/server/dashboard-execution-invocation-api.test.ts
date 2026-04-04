@@ -104,7 +104,7 @@ describe("Dashboard Execution Invocation API", () => {
       const response = await request(app).get("/api/projects/proj-1/execution/invocations");
 
       expect(response.status).toBe(400);
-      expect(response.body).toEqual({ error: "Failed to list project invocations: DB Error" });
+      expect(response.body).toEqual({ error: "DB Error" });
     });
   });
 
@@ -131,7 +131,7 @@ describe("Dashboard Execution Invocation API", () => {
       const response = await request(app).get("/api/execution/invocations/inv-1/messages");
 
       expect(response.status).toBe(400);
-      expect(response.body).toEqual({ error: "Failed to list invocation messages: DB Error" });
+      expect(response.body).toEqual({ error: "DB Error" });
     });
   });
 });

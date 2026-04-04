@@ -9,6 +9,13 @@ The `ExecutionRepository` manages `execution_invocations` and `execution_invocat
 ### `execution_invocations`
 This table represents the high-level LLM request or agent session. It holds metadata such as provider, model, status, and associated task context (if any). It can also point back to native token reporting in `provider_invocations` via `provider_invocation_id`. It keeps a rolled up `message_count` and `last_message_at` for sorting dashboard displays.
 
+Execution invocations span various purposes:
+- **Coding & Virtual Planning**: Core orchestration loops.
+- **Clarification**: Prompt rewrites or operator clarification flows.
+- **QA Coverage**: Automated verification and quality assurance sweeps.
+
+For supported models, tracking relies on provider-reported usage. For Jules integrations, we compute **estimated** tokens by accumulating input and output characters divided by 4 (the characters-per-token heuristic), keeping it accounted for without inventing authoritative native counts.
+
 ### `execution_invocation_messages`
 This table records each granular interaction loop in an invocation, preserving the exact sequence of \`system\`, \`user\`, \`assistant\`, and \`tool\` messages. It persists markdown content and parsed JSON arguments for tool calls, serving as a replayable log of an agent's reasoning process.
 
@@ -27,3 +34,5 @@ When an invocation or its messages are created/updated, the server emits a proje
 ## Relationships
 
 Execution invocations cascade when their parent \`project_id\`, \`sprint_id\`, or \`task_id\` are deleted. They optionally reference \`task_run_id\` or \`dispatch_id\` but function independently to track planning sweeps, conflict resolution, or ad-hoc agent activity.
+
+Additionally, every execution invocation explicitly links to a `provider_invocations` usage row. The execution transcripts stored in `execution_invocation_messages` serve as the replayable prompt history corresponding to the exact token and time consumption recorded in the usage row, allowing the dashboard Stats page to drill down into the exact sequence that generated specific costs.

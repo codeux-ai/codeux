@@ -1,0 +1,17 @@
+--- dashboard/src/v2/components/ui/AddTaskModal.tsx
++++ dashboard/src/v2/components/ui/AddTaskModal.tsx
+@@ -160,6 +160,7 @@
+           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+             {error && (
++              // aria-live="assertive" is used here because form validation errors demand immediate user attention to proceed.
+               <div role="alert" aria-live="assertive" id="task-form-error" className="flex items-center gap-2 text-status-red text-sm font-bold bg-status-red/5 dark:bg-status-red/10 px-4 py-2.5 rounded-xl border border-status-red/20 animate-in fade-in slide-in-from-top-1">
+                 <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={2.5} />
+                 <span>Error: {error}</span>
+--- dashboard/src/v2/components/ui/AddProjectModal.tsx
++++ dashboard/src/v2/components/ui/AddProjectModal.tsx
+@@ -147,6 +147,7 @@
+                             {error && (
++                                // aria-live="assertive" is used here because form validation errors demand immediate user attention to proceed.
+                                 <div role="alert" aria-live="assertive" id="project-form-error" className="text-status-red text-sm font-medium">
+                                     {error}
+                                 </div>

@@ -49,6 +49,8 @@ JULES_API_KEY=YOUR_KEY
 npm run dev
 ```
 
+This starts the server directly from TypeScript source through Node's `ts-node` ESM register hook, so local development uses the same `.js` import specifiers as the production build without requiring a precompile step.
+
 ## Run Compiled Server
 
 ```bash

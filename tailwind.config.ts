@@ -21,20 +21,20 @@ export default {
           300: "#80FFD6",
           400: "#33FFB8",
           500: "#00E0A0",
-          600: "#00B882",
+          600: "var(--signal-600)", // Theme-specific for contrast
           700: "#008F65",
         },
         // Warm Amber — secondary signal, replaces generic indigo as secondary accent
         ember: {
           400: "#FFD080",
           500: "#FFB800",
-          600: "#E0A000",
+          600: "var(--ember-600)", // Theme-specific for contrast
         },
         // Semantic status colors
         status: {
-          green: "#008667",
-          red: "#E42A2B",
-          amber: "#AD6500",
+          green: "var(--status-green)",
+          red: "var(--status-red)",
+          amber: "var(--status-amber)",
           violet: "#8A00B5", // Legacy
         },
         // Backwards compat alias for any remaining obsidian refs

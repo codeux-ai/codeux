@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import type { FunctionComponent, ComponentType } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import {
@@ -322,7 +322,7 @@ export const RangeToggle: FunctionComponent<{
           key={value}
           type="button"
           onClick={() => onSelectPreset(value)}
-          className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.22em] transition-all ${
+          className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all ${
             activeWindow === value
               ? "bg-void-900 text-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] dark:bg-white dark:text-void-900"
               : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -334,7 +334,7 @@ export const RangeToggle: FunctionComponent<{
       <button
         type="button"
         onClick={onApplyCustom}
-        className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.22em] transition-all ${
+        className={`rounded-full px-4 py-2 text-[11px] font-bold uppercase tracking-[0.2em] transition-all ${
           activeWindow === "custom"
             ? "bg-void-900 text-white shadow-[0_12px_30px_rgba(15,23,42,0.18)] dark:bg-white dark:text-void-900"
             : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -359,7 +359,7 @@ export const RangeToggle: FunctionComponent<{
       <button
         type="button"
         onClick={onApplyCustom}
-        className="inline-flex h-11 items-center justify-center rounded-2xl bg-white/78 px-4 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900"
+        className="inline-flex h-11 items-center justify-center rounded-2xl bg-white/78 px-4 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-700 shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition-transform hover:-translate-y-0.5 dark:bg-white dark:text-void-900"
       >
         Apply
       </button>
@@ -386,7 +386,7 @@ export const ViewToggle: FunctionComponent<{
             key={mode.id}
             type="button"
             onClick={() => onChange(mode.id)}
-            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] transition-all ${
+            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] transition-all ${
               value === mode.id
                 ? "bg-slate-900 text-white shadow-[0_14px_32px_rgba(15,23,42,0.16)] dark:bg-white dark:text-slate-900"
                 : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
@@ -413,7 +413,7 @@ export const SignalMetricCard: FunctionComponent<{
   <MetricCard hoverTint={hoverTint} accentHex={accentHex}>
     <Sparkline points={sparkline} color={accentHex} />
     <div className="relative z-10 flex items-center justify-between gap-4">
-      <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">{label}</div>
+      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{label}</div>
       <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400 ${CHIP_CLASS}`}>
         {signalLabel}
       </div>
@@ -428,14 +428,14 @@ export const SignalMetricCard: FunctionComponent<{
 );
 
 export const TokenChip: FunctionComponent<{
-  icon: typeof ArrowDownRight | typeof Database | typeof ArrowUpRight | typeof Brain;
+  icon: ComponentType<any>;
   label: string;
-  value: number;
+  value: number | string;
   tone: string;
 }> = ({ icon: Icon, label, value, tone }) => (
   <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${tone}`}>
     <Icon className="h-3.5 w-3.5" strokeWidth={2.1} />
-    {label} {formatTokens(value)}
+    {label} {typeof value === "number" ? formatTokens(value) : value}
   </div>
 );
 
@@ -458,7 +458,7 @@ export const SeriesLegendButton: FunctionComponent<{
   >
     <div className="flex items-center gap-3">
       <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: series.accentHex }} />
-      <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">{series.label}</span>
+      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{series.label}</span>
     </div>
     <div className="mt-3 flex items-end justify-between gap-4">
       <div className="text-lg font-black text-slate-900 dark:text-white">{series.formatter(currentValue)}</div>
@@ -504,7 +504,7 @@ export const DonutCard: FunctionComponent<{
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.14]" />
       <div className="relative flex h-full flex-col gap-6">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate-400">{eyebrow}</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{eyebrow}</div>
           <div className="mt-2 text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</div>
           <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{description}</div>
         </div>
@@ -554,7 +554,7 @@ export const DonutCard: FunctionComponent<{
                 <div className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">
                   {activeSegment ? formatTokens(activeSegment.value) : centerValue}
                 </div>
-                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+                <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
                   {activeSegment ? activeSegment.label : centerLabel}
                 </div>
                 <div className="mt-2 text-[11px] font-mono text-slate-500 dark:text-slate-400">
@@ -626,7 +626,7 @@ export const PurposeRibbon: FunctionComponent<{
       return (
         <div key={purpose.id} className={`${SUBPANEL_CLASS} p-5`}>
           <div className="flex items-center justify-between gap-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
               {purpose.label.replace(/_/g, " ")}
             </div>
             <div className={`inline-flex h-8 w-8 items-center justify-center rounded-2xl ${tones[index % tones.length]!}`}>
@@ -656,7 +656,7 @@ export const StudioHeader: FunctionComponent<{
   description: string;
 }> = ({ icon: Icon, eyebrow, title, description }) => (
   <div className="max-w-3xl">
-    <div className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300">
+    <div className="inline-flex items-center gap-2 rounded-full border border-black/[0.06] bg-white/72 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300">
       <Icon className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
       {eyebrow}
     </div>
@@ -686,7 +686,7 @@ export const TrendStudio: FunctionComponent<{
       <div className={`${PANEL_CLASS} p-6`}>
         <div className="flex items-center gap-3">
           <Workflow className="h-4 w-4 text-signal-500" strokeWidth={2} />
-          <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Execution Lanes</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Execution Lanes</div>
         </div>
         <div className="mt-4 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Purpose mix</div>
         <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
@@ -700,7 +700,7 @@ export const TrendStudio: FunctionComponent<{
         <div className={`${PANEL_CLASS} p-6`}>
           <div className="flex items-center gap-3">
             <Layers3 className="h-4 w-4 text-amber-500" strokeWidth={2} />
-            <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Sprint Focus</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Focus</div>
           </div>
           <div className="mt-4 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
             {stats.activeSprint ? stats.activeSprint.sprintName : "Historical view"}
@@ -726,7 +726,7 @@ export const TrendStudio: FunctionComponent<{
         <div className={`${PANEL_CLASS} p-6`}>
           <div className="flex items-center gap-3">
             <Clock3 className="h-4 w-4 text-cyan-500" strokeWidth={2} />
-            <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Window Discipline</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Window Discipline</div>
           </div>
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className={SUBPANEL_CLASS}>
@@ -786,7 +786,7 @@ export const CompositionStudio: FunctionComponent<{
       <div className={`${PANEL_CLASS} p-6`}>
         <div className="flex items-center gap-3">
           <Workflow className="h-4 w-4 text-signal-500" strokeWidth={2} />
-          <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Purpose Architecture</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Purpose Architecture</div>
         </div>
         <div className="mt-4 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Execution purposes</div>
         <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
@@ -799,7 +799,7 @@ export const CompositionStudio: FunctionComponent<{
       <div className={`${PANEL_CLASS} p-6`}>
         <div className="flex items-center gap-3">
           <TimerReset className="h-4 w-4 text-amber-500" strokeWidth={2} />
-          <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Token Flight</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Token Flight</div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-4">
           <div className="rounded-2xl border border-signal-500/16 bg-signal-500/10 p-4">
@@ -874,7 +874,7 @@ export const ReliabilityStudio: FunctionComponent<{
       <div className={`${PANEL_CLASS} p-6`}>
         <div className="flex items-center gap-3">
           <ShieldCheck className="h-4 w-4 text-status-green" strokeWidth={2} />
-          <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Confidence Board</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Confidence Board</div>
         </div>
         <div className="mt-4 grid grid-cols-2 gap-4">
           <div className="rounded-2xl border border-status-green/16 bg-status-green/10 p-4">
@@ -898,7 +898,7 @@ export const ReliabilityStudio: FunctionComponent<{
       <div className={`${PANEL_CLASS} p-6`}>
         <div className="flex items-center gap-3">
           <Sparkles className="h-4 w-4 text-amber-500" strokeWidth={2} />
-          <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate-400">Audit Notes</div>
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Audit Notes</div>
         </div>
         <div className="mt-4 space-y-4">
           <div className={SUBPANEL_CLASS}>

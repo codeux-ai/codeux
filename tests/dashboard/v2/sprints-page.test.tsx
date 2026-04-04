@@ -11,6 +11,10 @@ import { useSprintsPageData } from "../../../dashboard/src/v2/pages/sprints/use-
 
 expect.extend(matchers);
 
+vi.mock("../../../dashboard/src/v2/hooks/use-project-effective-settings.js", () => ({
+  useProjectEffectiveSettings: vi.fn().mockReturnValue({ data: null, loading: false, error: null, refresh: vi.fn() }),
+}));
+
 vi.mock("../../../dashboard/src/v2/pages/sprints/use-sprints-page-data");
 vi.mock("../../../dashboard/src/v2/components/ui/SprintMarkdownModal", () => ({
   SprintMarkdownModal: ({ onClose }: { onClose: () => void }) => (
@@ -41,6 +45,8 @@ describe("SprintsPage", () => {
       quicksprintTemplates: [],
       showImportModal: false,
       setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
     } as any);
 
     const { rerender } = render(<SprintsPage />);
@@ -75,6 +81,8 @@ describe("SprintsPage", () => {
       quicksprintTemplates: [],
       showImportModal: true,
       setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
     } as any);
     rerender(<SprintsPage />);
 
@@ -96,6 +104,8 @@ describe("SprintsPage", () => {
       quicksprintTemplates: [],
       showImportModal: false,
       setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
     } as any);
 
     render(<SprintsPage />);
@@ -125,6 +135,8 @@ describe("SprintsPage", () => {
       quicksprintTemplates: [],
       showImportModal: false,
       setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
     } as any);
 
     render(<SprintsPage />);
@@ -174,6 +186,8 @@ describe("SprintsPage", () => {
       setEditingSprint,
       showImportModal: false,
       setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
     } as any);
 
     render(<SprintsPage />);
@@ -212,6 +226,8 @@ describe("SprintsPage", () => {
       editingSprint: null,
       setEditingSprint: vi.fn(),
       handleImprovePrompt,
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
     } as any);
 
     render(<SprintsPage />);
@@ -240,6 +256,8 @@ describe("SprintsPage", () => {
       setEditingSprint: vi.fn(),
       showImportModal: false,
       setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
     } as any);
 
     render(<SprintsPage />);

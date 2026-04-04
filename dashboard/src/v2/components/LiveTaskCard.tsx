@@ -119,10 +119,12 @@ export const TaskDuration: FunctionComponent<{
 export interface RerunOptions {
     provider?: string;
     clearWorktree?: boolean;
+    resetDependents?: boolean;
 }
 
 export interface LiveTaskCardProps {
     task: Subtask;
+    allTasks: Subtask[];
     taskTiming?: LiveTaskTimingSummary | null;
     events?: ExecutionRuntimeEventSummary[];
     onRerun: (id: string, options?: RerunOptions) => void;
@@ -137,6 +139,7 @@ export interface LiveTaskCardProps {
 
 const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     task,
+    allTasks,
     taskTiming,
     events,
     onRerun,
@@ -158,11 +161,12 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
         setShowRerunModal(true);
     }, []);
 
-    const handleRerunConfirm = useCallback((options: { provider?: string; clearWorktree: boolean }) => {
+    const handleRerunConfirm = useCallback((options: { provider?: string; clearWorktree: boolean; resetDependents: boolean }) => {
         setShowRerunModal(false);
         onRerun(task.record_id || task.id, {
             provider: options.provider,
             clearWorktree: options.clearWorktree,
+            resetDependents: options.resetDependents,
         });
     }, [task.id, task.record_id, onRerun]);
 
@@ -232,12 +236,12 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                     #{task.id}
                                 </span>
                                 {/* Status badge */}
-                                <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest ${cfg.bg} ${cfg.text} border ${cfg.border}`}>
+                                <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.14em] ${cfg.bg} ${cfg.text} border ${cfg.border}`}>
                                     <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${cfg.dot}`} />
                                     {cfg.label}
                                 </span>
                                 {mergeCfg && (
-                                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-widest ${mergeCfg.bg} ${mergeCfg.text} border ${mergeCfg.border}`}>
+                                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-[0.14em] ${mergeCfg.bg} ${mergeCfg.text} border ${mergeCfg.border}`}>
                                         {mergeCfg.label}
                                     </span>
                                 )}
@@ -285,7 +289,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                     <div className="mb-5 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
                         <div className="flex items-center gap-2 mb-3">
                             <FileText className="w-3 h-3 text-slate-400" strokeWidth={2} />
-                            <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Task Prompt</span>
+                            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Task Prompt</span>
                         </div>
                         <div
                             className="prose prose-sm max-w-none text-slate-600 dark:text-slate-400
@@ -305,7 +309,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                     <div className="mb-5 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
                         <div className="flex items-center gap-2 mb-3">
                             <span className="w-1.5 h-1.5 rounded-full bg-signal-500 animate-pulse" />
-                            <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400">Runtime Feed</span>
+                            <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Runtime Feed</span>
                         </div>
                         <RuntimeEventFeed events={events} />
                     </div>
@@ -313,19 +317,19 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
 
                 {/* Dispatch error / quota countdown */}
                 {dispatchInfo?.errorMessage && (
-                    <div className="mb-4 rounded-xl border border-status-amber/15 bg-status-amber/[0.04] px-4 py-2.5">
+                    <div role="alert" className="mb-4 rounded-xl border border-status-amber/15 bg-status-amber/[0.04] px-4 py-2.5">
                         <QuotaCountdown errorMessage={dispatchInfo.errorMessage} />
                     </div>
                 )}
 
                 {/* Action bar */}
-                <div className={`flex items-center justify-between pt-4 border-t border-black/[0.04] dark:border-white/[0.04] transition-opacity duration-200 ${expanded || showFeed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100 group-focus-within:opacity-100'}`}>
-                    <div className="flex items-center gap-2">
+                <div className={`flex flex-wrap items-center justify-between gap-2 pt-4 border-t border-black/[0.04] dark:border-white/[0.04] transition-opacity duration-200 ${expanded || showFeed ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100 group-focus-within:opacity-100'}`}>
+                    <div className="flex flex-wrap items-center gap-2">
                         {hasEventFeed && (
                             <button
                                 type="button"
                                 onClick={handleToggleFeed}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
+                                className={`flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
                                            transition-all duration-200 border
                                            ${showFeed
                                                ? 'bg-signal-500/10 text-signal-500 border-signal-500/20 shadow-[0_0_12px_rgba(0,224,160,0.08)]'
@@ -339,7 +343,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         <button
                             type="button"
                             onClick={handleToggleExpand}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
+                            className={`flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800
                                        transition-all duration-200 border
                                        ${expanded
                                            ? 'bg-ember-500/10 text-ember-500 border-ember-500/20'
@@ -353,7 +357,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             type="button"
                             onClick={handleRerunClick}
                             disabled={isRerunning}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] bg-black/[0.03] dark:bg-white/[0.03] text-slate-400 border border-transparent hover:text-status-amber hover:border-status-amber/15 disabled:opacity-40 disabled:pointer-events-none transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
+                            className="flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] bg-black/[0.03] dark:bg-white/[0.03] text-slate-400 border border-transparent hover:text-status-amber hover:border-status-amber/15 disabled:opacity-40 disabled:pointer-events-none transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
                         >
                             <RotateCcw className={`w-3 h-3 ${isRerunning ? 'animate-spin' : ''}`} strokeWidth={2} />
                             {isRerunning ? "Rerunning" : "Rerun"}
@@ -364,11 +368,13 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             href={task.pr_url}
                             target="_blank"
                             rel="noreferrer"
-                            className="flex items-center gap-1.5 text-[10px] font-mono text-signal-500 hover:text-signal-400 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800 focus-visible:rounded"
+                            className="text-[10px] font-mono text-signal-500 hover:text-signal-400 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800 focus-visible:rounded"
                         >
-                            <GitPullRequest className="w-3 h-3" strokeWidth={2} />
-                            PR
-                            <ExternalLink className="w-2.5 h-2.5 opacity-50" strokeWidth={2} />
+                            <span className="py-2.5 min-h-[44px] inline-flex items-center gap-1.5">
+                                <GitPullRequest className="w-3 h-3" strokeWidth={2} />
+                                PR
+                                <ExternalLink className="w-2.5 h-2.5 opacity-50" strokeWidth={2} />
+                            </span>
                         </a>
                     )}
                 </div>
@@ -376,8 +382,8 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
 
             {showRerunModal && createPortal(
                 <RerunTaskModal
-                    taskId={task.id}
-                    taskTitle={task.title}
+                    task={task}
+                    allTasks={allTasks}
                     currentProvider={task.provider}
                     onClose={() => setShowRerunModal(false)}
                     onConfirm={handleRerunConfirm}

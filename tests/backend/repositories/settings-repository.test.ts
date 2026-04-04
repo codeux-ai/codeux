@@ -29,7 +29,16 @@ describe("SettingsRepository", () => {
     expect(system.defaults.aiProvider.provider).toBe("jules");
     expect(system.defaults.aiProvider.providers.codex.model).toBe("gpt-5.3-codex");
     expect(system.defaults.git.defaultBranch).toBe("main");
+    expect(system.defaults.cliWorkflow.containerMountGithubAuth).toBe(false);
+    expect(system.defaults.cliWorkflow.containerMountGeminiAuth).toBe(false);
+    expect(system.defaults.cliWorkflow.containerMountCodexAuth).toBe(false);
+    expect(system.defaults.cliWorkflow.containerMountClaudeCodeAuth).toBe(false);
     expect(system.defaults.agents.saveToProjectDirectory).toBe(true);
+    expect(system.defaults.agents.qualityAssurance.enabled).toBe(false);
+    expect(system.defaults.agents.qualityAssurance.maxTaskReviewRuns).toBe(1);
+    expect(system.defaults.agents.qualityAssurance.taskCompletion.enabled).toBe(true);
+    expect(system.defaults.agents.qualityAssurance.sprintCompletion.enabled).toBe(true);
+    expect(system.defaults.agents.qualityAssurance.completedTaskWithoutPr.enabled).toBe(true);
     expect(system.defaults.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
     expect(system.mcpTools.length).toBeGreaterThan(0);
 
@@ -137,6 +146,22 @@ describe("SettingsRepository", () => {
           instructionTemplates: {
             ...repo.getSystemSettings().defaults.agents.instructionTemplates,
           },
+          qualityAssurance: {
+            enabled: true,
+            maxTaskReviewRuns: 3,
+            taskCompletion: {
+              enabled: true,
+              agentPresetId: "qa-task",
+            },
+            sprintCompletion: {
+              enabled: true,
+              agentPresetId: "qa-sprint",
+            },
+            completedTaskWithoutPr: {
+              enabled: false,
+              agentPresetId: null,
+            },
+          },
         },
         skills: [
           { name: "worker", enabled: true, isInternal: true },
@@ -178,6 +203,11 @@ describe("SettingsRepository", () => {
     expect(effectiveProject.settings.git.githubToken).toBe("sys-gh");
     expect(effectiveProject.settings.automationLevel).toBe("ALWAYS_ASK");
     expect(effectiveProject.settings.git.defaultBranch).toBe("develop");
+    expect(effectiveProject.settings.agents.qualityAssurance.enabled).toBe(true);
+    expect(effectiveProject.settings.agents.qualityAssurance.maxTaskReviewRuns).toBe(3);
+    expect(effectiveProject.settings.agents.qualityAssurance.taskCompletion.agentPresetId).toBe("qa-task");
+    expect(effectiveProject.settings.agents.qualityAssurance.sprintCompletion.agentPresetId).toBe("qa-sprint");
+    expect(effectiveProject.settings.agents.qualityAssurance.completedTaskWithoutPr.enabled).toBe(false);
     expect(effectiveProject.sources["automationLevel"]).toBe("project");
     expect(effectiveProject.sources["git.defaultBranch"]).toBe("project");
 
@@ -354,5 +384,60 @@ describe("SettingsRepository", () => {
     expect(migrated.defaults.git.defaultBranch).toBe("develop");
     expect(repo.getDefaultDashboardSettings().git.githubToken).toBe("legacy-gh");
     expect(db.prepare("SELECT payload FROM app_settings WHERE id = 1").get()).toBeUndefined();
+  });
+
+  it("resolves effective settings through a scoped resolver, caching lookups", async () => {
+    const { repo } = await createRepo();
+
+    repo.saveSystemSettings({
+      ...repo.getSystemSettings(),
+      defaults: {
+        ...repo.getSystemSettings().defaults,
+        automationLevel: "FULL",
+      },
+    });
+
+    repo.saveProjectSettings("project-1", {
+      git: {
+        defaultBranch: "develop",
+      },
+    });
+    repo.saveProjectSettings("project-2", {
+      git: {
+        defaultBranch: "test-branch",
+      },
+    });
+
+    const baseProject1Settings = repo.getProjectResolvedSettings("project-1");
+    repo.saveSprintSettings("sprint-1", baseProject1Settings, {
+      sprintLoopSteps: {
+        watchLoop: false,
+      },
+    });
+
+    const resolver = repo.createScopedResolver();
+
+    // First resolution
+    const p1 = resolver.resolveProjectDashboardSettings("project-1");
+    expect(p1.settings.automationLevel).toBe("FULL");
+    expect(p1.settings.git.defaultBranch).toBe("develop");
+
+    const p1s1 = resolver.resolveSprintDashboardSettings("project-1", "sprint-1");
+    expect(p1s1.settings.automationLevel).toBe("FULL");
+    expect(p1s1.settings.git.defaultBranch).toBe("develop");
+    expect(p1s1.settings.sprintLoopSteps.watchLoop).toBe(false);
+
+    // Second resolution should return strictly identical objects via cache
+    const p1Cached = resolver.resolveProjectDashboardSettings("project-1");
+    const p1s1Cached = resolver.resolveSprintDashboardSettings("project-1", "sprint-1");
+
+    expect(p1Cached).toBe(p1);
+    expect(p1s1Cached).toBe(p1s1);
+
+    // Different project resolution
+    const p2 = resolver.resolveProjectDashboardSettings("project-2");
+    expect(p2.settings.git.defaultBranch).toBe("test-branch");
+    const p2Cached = resolver.resolveProjectDashboardSettings("project-2");
+    expect(p2Cached).toBe(p2);
   });
 });

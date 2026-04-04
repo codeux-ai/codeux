@@ -54,3 +54,14 @@ The compact action then:
 - sets `replayRequired` to `true`
 
 The original visible `ConversationMessageRecord` history remains intact in the dashboard, but the next fresh session, whether virtual or connected, replays from the compacted summary plus only the messages created after that summary was generated.
+
+### Performance and Metrics Aggregation
+
+To ensure real-time responsiveness on the chat dashboard and maintain thread/connection lists optimally under high scale, we perform aggregation directly inside single query payloads using Common Table Expressions (CTEs).
+
+When querying threads (`listThreads`) or connections (`listConnections`), instead of executing per-row correlated subqueries (like running independent count queries for `message_count` or `pending_message_count` for every single thread returned), the system:
+- calculates summary metrics in a `GROUP BY` scope bounded to the active `project_id`.
+- joins those aggregate results back to the primary row selection.
+- utilizes `ROW_NUMBER() OVER (PARTITION BY thread_id ...)` to effortlessly pull the most recent visible preview text and timestamp alongside these stats.
+
+This keeps index alignments strict, avoids full table scans on global message tables, and ensures O(1) query complexity scaling relative to the number of returned threads or connections in the current project context.

@@ -1,5 +1,6 @@
 import type { Subtask } from "../../contracts/app-types.js";
 import { isCompletedTaskSettled } from "../../domain/sprint/task-merge-state.js";
+import { applyPendingTaskRuntimeReset } from "../../domain/sprint/task-reset-state.js";
 
 interface DeriveStatusOptions {
   retryFailed: boolean;
@@ -21,6 +22,9 @@ export const runStatusDerivationStep = (subtasks: Subtask[], options: DeriveStat
     }
 
     if (task.session_state === "FAILED" && options.retryFailed) {
+      applyPendingTaskRuntimeReset(task, {
+        preserveProvider: true,
+      });
       task.status = areDependenciesMet(subtasks, task) ? "PENDING" : "BLOCKED";
       continue;
     }

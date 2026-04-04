@@ -112,6 +112,110 @@ describe("ExecutionRepository", () => {
     expect(list[1]!.id).toBe(invocation1.id);
   });
 
+  it("filters task dispatches by complex options combinations", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Complex Options Project",
+      sourceType: "local",
+      sourceRef: "/workspace/complex-options-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      number: 1,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Task 1",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      executorMode: "mixed",
+    });
+
+    // Create a matching dispatch
+    const matchingDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "mcp_worker",
+      status: "queued",
+    });
+
+    // Create a non-matching dispatch (different executorType)
+    const nonMatchingDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "queued",
+    });
+
+    const results = executionRepository.listTaskDispatchesByStatus(["queued"], {
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      executorType: "mcp_worker",
+    });
+
+    expect(results).toHaveLength(1);
+    expect(results[0].id).toBe(matchingDispatch.id);
+
+    // Test empty status filter returns empty array
+    const emptyResults = executionRepository.listTaskDispatchesByStatus([]);
+    expect(emptyResults).toHaveLength(0);
+  });
+
+  it("lists stale cancel requested dispatches", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Stale Dispatch Project",
+      sourceType: "local",
+      sourceRef: "/workspace/stale-dispatch",
+    });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
+    const task = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 1", status: "pending" });
+    const sprintRun = executionRepository.createSprintRun({ projectId: project.id, sprintId: sprint.id, status: "running", executorMode: "mixed" });
+
+    const oldDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "mcp_worker",
+      status: "cancel_requested",
+    });
+
+    const freshDispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "mcp_worker",
+      status: "cancel_requested",
+    });
+
+    // Backdate oldDispatch updated_at using raw SQL to make it stale
+    const oldDate = new Date(Date.now() - 1000 * 60 * 60).toISOString(); // 1 hour ago
+    (executionRepository as any).db.prepare(`UPDATE task_dispatches SET queued_at = ?, updated_at = ? WHERE id = ?`).run(oldDate, oldDate, oldDispatch.id);
+
+    const cutoffIso = new Date(Date.now() - 1000 * 60 * 30).toISOString(); // 30 mins ago
+    const staleResults = executionRepository.listStaleCancelRequestedDispatches(cutoffIso);
+
+    expect(staleResults).toHaveLength(1);
+    expect(staleResults[0].id).toBe(oldDispatch.id);
+  });
+
+  it("handles null summary from buildHumanInterventionSummaryFromAttentionRows", async () => {
+    const { executionRepository } = await createRepositories();
+    const result = (executionRepository as any).buildHumanInterventionSummaryFromAttentionRows([]);
+    expect(result).toBeNull();
+  });
+
   it("creates sprint runs and queues task dispatches against project/sprint tasks", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({
@@ -1148,8 +1252,11 @@ describe("ExecutionRepository", () => {
       expect.objectContaining({ id: "core_total_tokens", grouping: "totals" }),
       expect.objectContaining({ id: "core_active_time", grouping: "totals" }),
       expect.objectContaining({ id: "core_invocations", grouping: "totals" }),
-      expect.objectContaining({ id: "provider_codex", grouping: "providers" }),
-      expect.objectContaining({ id: "purpose_time_task_coding", grouping: "purposes_time" }),
+      expect.objectContaining({ id: "provider_codex", grouping: "providers", data: expect.arrayContaining([810]) }),
+      expect.objectContaining({ id: "provider_claude-code", grouping: "providers", data: expect.arrayContaining([400]) }),
+      expect.objectContaining({ id: "purpose_time_task_coding", grouping: "purposes_time", data: expect.arrayContaining([180_000]) }),
+      expect.objectContaining({ id: "purpose_time_merge_conflict", grouping: "purposes_time", data: expect.arrayContaining([240_000]) }),
+      expect.objectContaining({ id: "purpose_invocations_task_coding", grouping: "purposes_invocations", data: expect.arrayContaining([1]) }),
     ]));
   });
 
@@ -1190,7 +1297,7 @@ describe("ExecutionRepository", () => {
     const recentStartedAt = new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString();
     const recentFinishedAt = new Date(now - 2 * 24 * 60 * 60 * 1000 + 240_000).toISOString();
 
-    executionRepository.createTaskRun({
+    const run = executionRepository.createTaskRun({
       projectId: project.id,
       sprintId: sprint.id,
       taskId: task.id,
@@ -1212,9 +1319,18 @@ describe("ExecutionRepository", () => {
       provider: "claude-code",
       state: "completed",
       sessionId: "windowed-task-run-2",
+      prUrl: "https://github.com/org/repo/pull/1",
       startedAt: recentStartedAt,
       finishedAt: recentFinishedAt,
       durationMs: 240_000,
+    });
+
+    executionRepository.appendTaskRunEvent(run.id, "cli_git_pushed", "system", {
+      insertions: 42,
+      deletions: 12,
+      filesChanged: 3
+    }, {
+      createdAt: recentFinishedAt,
     });
 
     const olderInvocation = executionRepository.createProviderInvocationUsage({
@@ -1302,6 +1418,55 @@ describe("ExecutionRepository", () => {
     ]);
   });
 
+  it("tracks clarification_reply provider usage in purposes", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Clarification Stats Project",
+      sourceType: "local",
+      sourceRef: "/workspace/clarification-stats-project",
+    });
+
+    const usage = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sessionId: "session-clarification-1",
+      provider: "gemini",
+      purpose: "clarification_reply",
+      status: "running",
+      startedAt: new Date(Date.now() - 60_000).toISOString(),
+      promptChars: 1500,
+    });
+
+    executionRepository.updateProviderInvocationUsage(usage.id, {
+      status: "completed",
+      finishedAt: new Date().toISOString(),
+      durationMs: 60_000,
+      transcriptChars: 500,
+      inputTokens: 300,
+      cachedInputTokens: 0,
+      outputTokens: 100,
+      reasoningOutputTokens: 0,
+      totalTokens: 400,
+      usageSource: "reported",
+      rawUsageJson: null,
+    });
+
+    const statsSnapshot = executionRepository.getProjectStatsSnapshot(project.id, "24h");
+
+    expect(statsSnapshot.purposes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "clarification_reply",
+        usage: expect.objectContaining({ totalTokens: 400 }),
+      }),
+    ]));
+
+    expect(statsSnapshot.providers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "gemini",
+        usage: expect.objectContaining({ totalTokens: 400 }),
+      }),
+    ]));
+  });
+
   it("hydrates multiple dispatches dynamically without N+1 regression", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({
@@ -1369,6 +1534,201 @@ describe("ExecutionRepository", () => {
       expect(td.provider).toBe("target-provider");
     }
   });
+
+  it("asserts refactor preserves ordering, inclusion rules for expanded sprint runs, and attached task-run/runtime-event metadata", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Refactor Verification Project",
+      sourceType: "local",
+      sourceRef: "/workspace/refactor",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Refactor Sprint",
+      number: 1,
+      status: "running",
+    });
+
+    // Create an active sprint run
+    const sprintRun1 = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "running",
+    });
+
+    // Create a paused sprint run
+    const sprintRun2 = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "paused",
+    });
+
+    // Create an old completed sprint run
+    const sprintRun3 = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "mixed",
+      status: "completed",
+    });
+
+    const task1 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 1", executorType: "mcp_worker" });
+    const task2 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 2", executorType: "docker_cli" });
+
+    // Dispatches linked to the running sprint run
+    const dispatch1 = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task1.id,
+      sprintRunId: sprintRun1.id,
+      executorType: "mcp_worker",
+      status: "running",
+      priority: 10,
+    });
+    const dispatch2 = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task2.id,
+      sprintRunId: sprintRun1.id,
+      executorType: "docker_cli",
+      status: "queued",
+      priority: 5,
+    });
+
+    // Task runs
+    const taskRun1 = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task1.id,
+      sprintRunId: sprintRun1.id,
+      dispatchId: dispatch1.id,
+      state: "RUNNING",
+      provider: "claude-code",
+    });
+
+    // Runtime event
+    executionRepository.appendTaskRunEvent(
+      taskRun1.id,
+      "worker_dispatch_started",
+      "system",
+      {}
+    );
+    executionRepository.appendSprintRunEvent(
+      sprintRun1.id,
+      "sprint_started",
+      "system",
+      {}
+    );
+
+    const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
+
+    // Verify sprint runs ordering and inclusion
+    expect(snapshot.sprintRuns.map(sr => sr.status)).toEqual([
+      "running",
+      "paused",
+      "completed",
+    ]);
+
+    // Verify task dispatches ordering based on rank and priority
+    expect(snapshot.taskDispatches.map(td => td.id)).toEqual([
+      dispatch1.id, // Running (rank 0)
+      dispatch2.id, // Queued (rank 3)
+    ]);
+
+    // Verify task run attached metadata to dispatch
+    const snapshotDispatch1 = snapshot.taskDispatches.find(td => td.id === dispatch1.id);
+    expect(snapshotDispatch1).toBeDefined();
+    expect(snapshotDispatch1!.taskRunState).toBe("RUNNING");
+    expect(snapshotDispatch1!.provider).toBe("claude-code");
+
+    // Verify runtime events inclusion and formatting
+    expect(snapshot.recentEvents).toHaveLength(2);
+    const eventTypes = snapshot.recentEvents.map(e => e.eventType);
+    expect(eventTypes).toContain("worker_dispatch_started");
+    expect(eventTypes).toContain("sprint_started");
+
+    const taskRunEvent = snapshot.recentEvents.find(e => e.eventType === "worker_dispatch_started");
+    expect(taskRunEvent!.taskRunState).toBe("RUNNING");
+    expect(taskRunEvent!.provider).toBe("claude-code");
+    expect(taskRunEvent!.sprintRunStatus).toBe("running");
+  });
+  });
+
+  it("counts running tasks per provider", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Concurrency Project",
+      sourceType: "local",
+      sourceRef: "/workspace/concurrency",
+    });
+    const project2 = projectRepository.createProject({
+      name: "Another Project",
+      sourceType: "local",
+      sourceRef: "/workspace/another",
+    });
+    const sprint = projectRepository.createSprint(project.id, { name: "Sprint 1", number: 1 });
+    const sprint2 = projectRepository.createSprint(project2.id, { name: "Sprint 2", number: 1 });
+    const task1 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 1", promptMarkdown: "Prompt 1" });
+    const task2 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 2", promptMarkdown: "Prompt 2" });
+    const task3 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 3", promptMarkdown: "Prompt 3" });
+    const task4 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 4", promptMarkdown: "Prompt 4" });
+    const task5 = projectRepository.createTask(project.id, { sprintId: sprint.id, title: "Task 5", promptMarkdown: "Prompt 5" });
+
+    const task6_p2 = projectRepository.createTask(project2.id, { sprintId: sprint2.id, title: "Task 6", promptMarkdown: "Prompt 6" });
+
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task1.id,
+      provider: "gemini",
+      state: "RUNNING"
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task2.id,
+      provider: "gemini",
+      state: "RUNNING"
+    });
+
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task3.id,
+      provider: "codex",
+      state: "RUNNING"
+    });
+
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task4.id,
+      provider: "gemini",
+      state: "COMPLETED"
+    });
+
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task5.id,
+      provider: null,
+      state: "RUNNING"
+    });
+
+    // Create a running task in another project to verify it is NOT counted for 'project'
+    executionRepository.createTaskRun({
+      projectId: project2.id,
+      sprintId: sprint2.id,
+      taskId: task6_p2.id,
+      provider: "codex",
+      state: "RUNNING"
+    });
+
+    const counts = executionRepository.countRunningTasksPerProvider(project.id);
+    expect(counts.get("gemini")).toBe(2);
+    expect(counts.get("codex")).toBe(1);
+    expect(counts.has(null as any)).toBe(false);
+    expect(counts.size).toBe(2);
   });
 
   describe("ExecutionInvocationMessageRecord Metadata", () => {

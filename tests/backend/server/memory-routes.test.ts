@@ -95,6 +95,14 @@ describe("memory-routes", () => {
   });
 
   describe("GET /api/projects/:projectId/memories", () => {
+    it("returns 400 JSON when projectId is missing or empty", () => {
+      const handler = routes["GET:/api/projects/:projectId/memories"].handler;
+      const res = createMockRes();
+      handler({ params: { projectId: "   " }, query: {} }, res);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: "Failed to list memories: Missing or empty required field: projectId" });
+    });
+
     it("calls listByProject when no sprintId/agentPresetId", () => {
       const handler = routes["GET:/api/projects/:projectId/memories"].handler;
       const res = createMockRes();
@@ -153,6 +161,14 @@ describe("memory-routes", () => {
   });
 
   describe("PATCH /api/memories/:memoryId", () => {
+    it("returns 400 JSON when memoryId is missing or empty", () => {
+      const handler = routes["PATCH:/api/memories/:memoryId"].handler;
+      const res = createMockRes();
+      handler({ params: { memoryId: "   " }, body: { content: "new" } }, res);
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith({ error: "Failed to update memory: Missing or empty required field: memoryId" });
+    });
+
     it("updates a memory", () => {
       const handler = routes["PATCH:/api/memories/:memoryId"].handler;
       const res = createMockRes();

@@ -41,7 +41,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col gap-8 rounded-[2rem] border border-black/[0.08] bg-white p-8 shadow-2xl dark:border-white/[0.08] dark:bg-void-900"
+      className="flex flex-col gap-8 rounded-[1.75rem] border border-black/[0.08] bg-white p-8 shadow-2xl dark:border-white/[0.08] dark:bg-void-900"
     >
       <div className="flex items-center justify-between border-b border-black/5 pb-4 dark:border-white/5">
         <h2 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
@@ -52,7 +52,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
             type="button"
             onClick={onCancel}
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-transparent px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-black/5 disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"
+            className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-transparent px-4 py-2 text-sm font-bold text-slate-600 transition-colors hover:bg-black/5 disabled:opacity-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
           >
             <X className="h-4 w-4" strokeWidth={2.5} />
             Cancel
@@ -60,7 +60,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
           <button
             type="submit"
             disabled={saving || !name.trim()}
-            className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/20 transition-all hover:scale-105 hover:bg-signal-400 focus:outline-none focus:ring-4 focus:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+            className="inline-flex items-center gap-2 rounded-full bg-signal-500 px-5 py-2 text-sm font-bold text-slate-900 shadow-lg shadow-signal-500/20 transition-all hover:scale-105 hover:bg-signal-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
           >
             {saving ? <RefreshCw className="h-4 w-4 animate-spin" strokeWidth={2.5} /> : <Save className="h-4 w-4" strokeWidth={2.5} />}
             Save Agent
@@ -71,7 +71,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
       <div className="flex flex-col gap-8 xl:flex-row">
         <div className="flex w-full flex-col gap-6 xl:w-1/2">
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
               Agent Name
             </label>
             <input
@@ -85,7 +85,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
               Labels (comma separated)
             </label>
             <input
@@ -98,7 +98,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
           </div>
 
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+            <label className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
               System Instructions
             </label>
             <textarea
@@ -124,7 +124,7 @@ export const AgentPresetEditorPanel: FunctionComponent<{
             </label>
             {memoryOverrideEnabled && (
               <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2">
-                <label className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                <label className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
                   Memory Template Markdown
                 </label>
                 <textarea

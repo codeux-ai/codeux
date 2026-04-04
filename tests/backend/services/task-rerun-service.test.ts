@@ -4,21 +4,17 @@ import { TaskRerunService } from "../../../src/services/task-rerun-service.js";
 
 describe("TaskRerunService", () => {
   const resolveTaskContext = vi.fn();
+  const listSprintTaskDependencies = vi.fn();
   const updateTaskPlanningStatus = vi.fn();
   const resolveSprintRunId = vi.fn();
   const startTask = vi.fn();
   const persistMergedFlag = vi.fn();
+  const createResetTaskRun = vi.fn();
+  const resolveTaskAttention = vi.fn();
+  const cancelActiveDispatch = vi.fn();
+  const clearTaskWorktree = vi.fn();
+  let service: TaskRerunService;
   let context: any;
-
-  const service = new TaskRerunService({
-    resolveTaskContext,
-    updateTaskPlanningStatus,
-    resolveSprintRunId,
-    startTask,
-    resolveSessionName: (session) => session.name,
-    extractSessionId: (session) => session.id,
-    persistMergedFlag,
-  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -52,6 +48,22 @@ describe("TaskRerunService", () => {
     resolveTaskContext.mockImplementation((taskId: string) => (
       taskId === "task-record-1" || taskId === "01-task" ? context : null
     ));
+    listSprintTaskDependencies.mockReturnValue([]);
+
+    service = new TaskRerunService({
+      resolveTaskContext,
+      listSprintTaskDependencies,
+      updateTaskPlanningStatus,
+      resolveSprintRunId,
+      startTask,
+      resolveSessionName: (session) => session.name,
+      extractSessionId: (session) => session.id,
+      persistMergedFlag,
+      createResetTaskRun,
+      resolveTaskAttention,
+      cancelActiveDispatch,
+      clearTaskWorktree,
+    });
   });
 
   it("resets task state and starts a fresh session", async () => {
@@ -99,6 +111,12 @@ describe("TaskRerunService", () => {
     expect(rerunTask.session_id).toBe("new-session");
     expect(rerunTask.session_name).toBe("sessions/new-session");
     expect(rerunTask.provider).toBe("claude-code");
+    expect(cancelActiveDispatch).toHaveBeenCalledWith("task-record-1", "project-1");
+    expect(resolveTaskAttention).toHaveBeenCalledWith({
+      taskId: "task-record-1",
+      projectId: "project-1",
+    });
+    expect(createResetTaskRun).not.toHaveBeenCalled();
   });
 
   it("marks the task failed when fresh session start fails", async () => {
@@ -126,6 +144,86 @@ describe("TaskRerunService", () => {
       })
     );
     expect(startTask).toHaveBeenCalledTimes(1);
+  });
+
+  it("resets downstream tasks into clean pending snapshots before rerunning the selected task", async () => {
+    const dependentTask: Subtask = {
+      record_id: "task-record-2",
+      id: "02-task",
+      title: "Dependent task",
+      prompt: "Follow up",
+      depends_on: ["01-task"],
+      is_independent: false,
+      status: "COMPLETED",
+      session_id: "dep-session",
+      session_name: "sessions/dep-session",
+      session_state: "COMPLETED",
+      pr_url: "https://example.com/pr/13",
+      worker_branch: "worker/task-2",
+      is_merged: true,
+      merge_indicator: "MERGED",
+    };
+
+    resolveTaskContext.mockImplementation((taskId: string) => {
+      if (taskId === "task-record-1" || taskId === "01-task") {
+        return context;
+      }
+      if (taskId === "task-record-2") {
+        return {
+          ...context,
+          task: dependentTask,
+        };
+      }
+      return null;
+    });
+    listSprintTaskDependencies.mockReturnValue([
+      { taskId: "task-record-1", dependsOnTaskIds: [] },
+      { taskId: "task-record-2", dependsOnTaskIds: ["task-record-1"] },
+    ]);
+    resolveSprintRunId.mockResolvedValue("run-1");
+    startTask.mockResolvedValue({
+      id: "new-session",
+      name: "sessions/new-session",
+      prompt: "",
+      provider: "jules",
+    });
+
+    await service.rerunTask("task-record-1", {
+      resetDependents: true,
+      clearWorktree: true,
+    });
+
+    expect(cancelActiveDispatch).toHaveBeenNthCalledWith(1, "task-record-2", "project-1");
+    expect(cancelActiveDispatch).toHaveBeenNthCalledWith(2, "task-record-1", "project-1");
+    expect(clearTaskWorktree).toHaveBeenNthCalledWith(1, {
+      taskId: "task-record-2",
+      repoPath: "/tmp/repo",
+    });
+    expect(clearTaskWorktree).toHaveBeenNthCalledWith(2, {
+      taskId: "task-record-1",
+      repoPath: "/tmp/repo",
+    });
+    expect(updateTaskPlanningStatus).toHaveBeenNthCalledWith(1, "task-record-2", "pending");
+    expect(updateTaskPlanningStatus).toHaveBeenNthCalledWith(2, "task-record-1", "pending");
+    expect(createResetTaskRun).toHaveBeenCalledWith({
+      taskId: "task-record-2",
+      projectId: "project-1",
+      sprintId: "sprint-1",
+      sprintRunId: "run-1",
+      reason: "dependent_task_reset",
+    });
+    expect(persistMergedFlag).toHaveBeenNthCalledWith(1, {
+      taskId: "task-record-2",
+      merged: false,
+    });
+    expect(startTask).toHaveBeenCalledWith(expect.objectContaining({
+      task: expect.objectContaining({
+        id: "01-task",
+        session_id: undefined,
+        pr_url: undefined,
+        is_merged: false,
+      }),
+    }));
   });
 
   it("rejects rerun when sprint context is incomplete", async () => {

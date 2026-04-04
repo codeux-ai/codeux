@@ -14,6 +14,7 @@ vi.mock("../../../src/app/lifecycle/mcp-lifecycle-service.js", () => ({
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { JulesAgentServer } from "../../../src/server/jules-agent-server.js";
 import { loadAppConfig } from "../../../src/config/app-config.js";
+import axios from "axios";
 import path from "path";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
@@ -245,18 +246,8 @@ describe("JulesAgentServer", () => {
         message: "axios fail",
         response: { data: { error: { message: "api error" } } }
       } as any;
-      // We need to mock axios.isAxiosError
-      vi.mock("axios", async () => {
-        const actual = await vi.importActual("axios") as any;
-        return {
-          ...actual,
-          default: {
-            ...actual.default,
-            isAxiosError: (e: any) => e?.isAxiosError === true
-          },
-          isAxiosError: (e: any) => e?.isAxiosError === true
-        };
-      });
+
+      vi.spyOn(axios, "isAxiosError").mockImplementation((error): error is any => error?.isAxiosError === true);
 
       const formatted = (server as any).formatError(axiosError);
       expect(formatted.content[0].text).toBe("Error: api error");

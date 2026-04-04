@@ -11,6 +11,11 @@ expect.extend(matchers);
 vi.mock("gsap", () => ({
   default: {
     fromTo: vi.fn(),
+    set: vi.fn(),
+    context: (fn: () => void) => {
+      fn();
+      return { revert: vi.fn() };
+    },
   },
 }));
 
@@ -37,6 +42,24 @@ describe("QuicksprintPanel", () => {
       defaultTaskCount: 5,
       isBuiltIn: true,
       agentPresetId: undefined,
+      purpose: "fullstack-js-app",
+      purposeLabel: "Fullstack JS App",
+      purposeDescription: "Default Quicksprint templates for JavaScript and TypeScript products spanning frontend, backend, data, and UX surfaces.",
+    },
+    {
+      id: "tpl-2",
+      name: "Python Service Audit",
+      description: "Audit a Python service",
+      icon: "Sparkles",
+      category: "engineering",
+      categoryColor: "#22c55e",
+      agentInstructionMarkdown: "Inspect a Python codebase",
+      defaultTaskCount: 4,
+      isBuiltIn: true,
+      agentPresetId: undefined,
+      purpose: "python-service",
+      purposeLabel: "Python Service",
+      purposeDescription: "Purpose set for backend-heavy Python services.",
     },
   ];
 
@@ -51,9 +74,10 @@ describe("QuicksprintPanel", () => {
   };
 
   it("renders browse phase initially", () => {
-    const { getByText } = render(<QuicksprintPanel {...defaultProps} />);
+    const { getByText, queryByText } = render(<QuicksprintPanel {...defaultProps} />);
     expect(getByText("Launch A Quicksprint.")).toBeInTheDocument();
     expect(getByText("API Tests")).toBeInTheDocument();
+    expect(queryByText("Python Service Audit")).not.toBeInTheDocument();
   });
 
   it("navigates to configure phase when template is selected", () => {
@@ -64,6 +88,21 @@ describe("QuicksprintPanel", () => {
     expect(queryByText("Launch A Quicksprint.")).not.toBeInTheDocument();
     expect(getByText("Configure Quicksprint")).toBeInTheDocument();
     expect(getByText("Plan & Start")).toBeInTheDocument();
+  });
+
+  it("filters default templates by purpose", async () => {
+    const { getByRole, getByText, queryByText } = render(<QuicksprintPanel {...defaultProps} />);
+
+    expect(getByText("API Tests")).toBeInTheDocument();
+    expect(queryByText("Python Service Audit")).not.toBeInTheDocument();
+
+    fireEvent.click(getByRole("button", { name: "Default template purpose" }));
+    fireEvent.click(getByText("Python Service"));
+
+    await waitFor(() => {
+      expect(getByText("Python Service Audit")).toBeInTheDocument();
+    });
+    expect(queryByText("API Tests")).not.toBeInTheDocument();
   });
 
   it("shows planning overlay on execute and allows dismiss", async () => {
@@ -91,7 +130,7 @@ describe("QuicksprintPanel", () => {
     expect(mockOnExecute).toHaveBeenCalled();
 
     // Dismiss overlay
-    const closeBtn = getByText("Close");
+    const closeBtn = getByText("Minimize");
     fireEvent.click(closeBtn);
 
     // Overlay should disappear

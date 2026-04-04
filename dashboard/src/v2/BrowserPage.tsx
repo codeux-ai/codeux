@@ -1,10 +1,8 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
-import gsap from "gsap";
 import {
   Compass,
   ExternalLink,
-  Play,
   RefreshCw,
   RotateCcw,
   Save,
@@ -17,6 +15,7 @@ import type { SprintPreviewScript, SprintPreviewSession } from "../types.js";
 import {
   fetchPreviewLogs,
   fetchPreviewScript,
+  removePreviewSession,
   rebuildPreviewSession,
   savePreviewScript,
   startPreviewSession,
@@ -24,8 +23,11 @@ import {
 } from "./lib/browser-api.js";
 import { normalizePath, buildPreviewOrigin } from "./lib/preview-origin.js";
 import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
+import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { PreviewSessionSlider } from "./components/browser/PreviewSessionSlider.js";
 import { PreviewWindowChrome } from "./components/browser/PreviewWindowChrome.js";
+import { useActionFeedback } from "./hooks/use-action-feedback.js";
+import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 
 const PREVIEW_MESSAGE_TYPE = "sprint-preview:state";
 const PREVIEW_NAVIGATION_TYPE = "sprint-preview:navigate";
@@ -45,30 +47,31 @@ const formatPortMapping = (session: SprintPreviewSession): string => {
   return "port pending";
 };
 
-
-
 export const BrowserPage: FunctionComponent = () => {
-  const shellRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const currentPathRef = useRef("/");
   const { selectedProject } = useProjectData();
   const { data: sprints, selectedSprint, selectedSprintId } = useSprints(selectedProject?.id || null);
+  const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
 
   const [script, setScript] = useState<SprintPreviewScript | null>(null);
   const [scriptDraft, setScriptDraft] = useState("");
   const [logs, setLogs] = useState("");
 
-  const [mutating, setMutating] = useState(false);
+  const [launching, setLaunching] = useState(false);
+  const [sessionActionPending, setSessionActionPending] = useState(false);
+  const [savingScript, setSavingScript] = useState(false);
+  const [removingSessionIds, setRemovingSessionIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [addressValue, setAddressValue] = useState("/");
   const [currentPath, setCurrentPath] = useState("/");
   const [showScriptEditor, setShowScriptEditor] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [launchSprintId, setLaunchSprintId] = useState("");
+  const [frameSrc, setFrameSrc] = useState("");
+  const [actionFeedback, setActionFeedback] = useState<{status: 'idle' | 'pending' | 'success' | 'error', message: string | null}>({status: 'idle', message: null});
 
-  useEffect(() => {
-    if (shellRef.current) {
-      gsap.fromTo(shellRef.current, { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: "power3.out" });
-    }
-  }, []);
+  const browserFeedback = useActionFeedback();
 
   const { sessions, selectedSession, loading, error: fetchError, refresh: refreshSessions } = usePreviewSessions({
     projectId: selectedProject?.id || null,
@@ -84,21 +87,57 @@ export const BrowserPage: FunctionComponent = () => {
     }
   }, [fetchError]);
 
+  useEffect(() => {
+    const fallbackSprintId = selectedSprint?.id || sprints[0]?.id || "";
+    setLaunchSprintId((current) => {
+      if (current && sprints.some((sprint) => sprint.id === current)) {
+        return current;
+      }
+      return fallbackSprintId;
+    });
+  }, [selectedSprint?.id, sprints]);
+
+  const removingSessionIdSet = useMemo(() => new Set(removingSessionIds), [removingSessionIds]);
+  const previewEnabled = effectiveSettings?.settings.sprintPreview.enabled ?? true;
+  const showInAppBrowser = effectiveSettings?.settings.sprintPreview.showInAppBrowser ?? true;
+  const launchEnabled = previewEnabled && showInAppBrowser;
+  const visibleSelectedSession = selectedSession && !removingSessionIdSet.has(selectedSession.id)
+    ? selectedSession
+    : null;
+  const navigationEnabled = Boolean(visibleSelectedSession && visibleSelectedSession.status === "running" && visibleSelectedSession.hostPort);
+
   const scriptTargetSprint = useMemo(() => {
-    if (selectedSession) {
-      return sprints.find((sprint) => sprint.id === selectedSession.sprintId) || null;
+    if (visibleSelectedSession) {
+      return sprints.find((sprint) => sprint.id === visibleSelectedSession.sprintId) || null;
     }
     return selectedSprint || null;
-  }, [selectedSession, selectedSprint, sprints]);
+  }, [visibleSelectedSession, selectedSprint, sprints]);
 
   useEffect(() => {
-    if (selectedSession) {
-      setActiveSessionId(selectedSession.id);
-      const nextPath = normalizePath(selectedSession.lastKnownPath || "/");
+    if (visibleSelectedSession) {
+      setActiveSessionId(visibleSelectedSession.id);
+      const nextPath = normalizePath(visibleSelectedSession.lastKnownPath || "/");
+      currentPathRef.current = nextPath;
       setCurrentPath(nextPath);
       setAddressValue(nextPath);
+      setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${nextPath}`);
+
+      return;
     }
-  }, [selectedSession?.id]);
+    setFrameSrc("");
+  }, [visibleSelectedSession?.id]);
+
+  useEffect(() => {
+    currentPathRef.current = currentPath;
+  }, [currentPath]);
+
+  useEffect(() => {
+    if (!visibleSelectedSession || !frameSrc) {
+      return;
+    }
+    setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(currentPathRef.current)}`);
+
+  }, [visibleSelectedSession?.status, visibleSelectedSession?.hostPort]);
 
   useEffect(() => {
     if (!selectedProject || !scriptTargetSprint) {
@@ -106,44 +145,80 @@ export const BrowserPage: FunctionComponent = () => {
       setScriptDraft("");
       return;
     }
+    if (!showScriptEditor) {
+      return;
+    }
+    if (script?.projectId === selectedProject.id && script.sprintId === scriptTargetSprint.id) {
+      if (!scriptDraft) {
+        setScriptDraft(script.content);
+      }
+      return;
+    }
+    let cancelled = false;
+    browserFeedback.setPending("Loading script...");
     void fetchPreviewScript(selectedProject.id, scriptTargetSprint.id)
       .then((data) => {
+        if (cancelled) {
+          return;
+        }
         setScript(data);
         setScriptDraft(data.content);
+        browserFeedback.setSuccess("Script loaded successfully");
       })
       .catch((fetchError) => {
-        setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
+        if (cancelled) {
+          return;
+        }
+        browserFeedback.setError(`Failed to load script: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`);
       });
-  }, [selectedProject?.id, scriptTargetSprint?.id]);
+    return () => {
+      cancelled = true;
+    };
+  }, [script?.content, script?.projectId, script?.sprintId, scriptDraft, selectedProject?.id, scriptTargetSprint?.id, showScriptEditor]);
 
   useEffect(() => {
-    if (!selectedSession) {
+    if (!visibleSelectedSession) {
       setLogs("");
       return;
     }
-    void fetchPreviewLogs(selectedSession.id, 160)
-      .then((result) => setLogs(result.logs))
-      .catch(() => setLogs(""));
-  }, [selectedSession?.id]);
+    let cancelled = false;
+    const deferredFetch = window.setTimeout(() => {
+      void fetchPreviewLogs(visibleSelectedSession.id, 160)
+        .then((result) => {
+          if (!cancelled) {
+            setLogs(result.logs);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setLogs("");
+          }
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(deferredFetch);
+    };
+  }, [visibleSelectedSession?.id]);
 
   useEffect(() => {
-    if (!selectedSession) {
+    if (!visibleSelectedSession) {
       return;
     }
     const timer = window.setInterval(() => {
-      void fetchPreviewLogs(selectedSession.id, 160)
+      void fetchPreviewLogs(visibleSelectedSession.id, 160)
         .then((result) => setLogs(result.logs))
         .catch(() => undefined);
     }, 8000);
     return () => window.clearInterval(timer);
-  }, [selectedSession?.id]);
+  }, [visibleSelectedSession?.id]);
 
   useEffect(() => {
     const handlePreviewMessage = (event: MessageEvent) => {
-      if (!selectedSession) {
+      if (!visibleSelectedSession) {
         return;
       }
-      if (event.origin !== buildPreviewOrigin(selectedSession.id)) {
+      if (event.origin !== buildPreviewOrigin(visibleSelectedSession.id)) {
         return;
       }
       const payload = event.data as { type?: string; path?: string } | null;
@@ -157,74 +232,118 @@ export const BrowserPage: FunctionComponent = () => {
 
     window.addEventListener("message", handlePreviewMessage);
     return () => window.removeEventListener("message", handlePreviewMessage);
-  }, [selectedSession?.id]);
-
-  const currentFrameSrc = selectedSession
-    ? `${buildPreviewOrigin(selectedSession.id)}${normalizePath(currentPath)}`
-    : "";
+  }, [visibleSelectedSession?.id]);
 
   const postNavigationCommand = (action: "back" | "forward" | "reload" | "push", path?: string) => {
-    if (!selectedSession || !frameRef.current?.contentWindow) {
+    if (!visibleSelectedSession || !frameRef.current?.contentWindow) {
       return;
     }
     frameRef.current.contentWindow.postMessage({
       type: PREVIEW_NAVIGATION_TYPE,
       action,
       path,
-    }, buildPreviewOrigin(selectedSession.id));
+    }, buildPreviewOrigin(visibleSelectedSession.id));
   };
 
-  const handleStart = async () => {
-    if (!selectedProject || !selectedSprint) return;
-    setMutating(true);
+  const reloadFrame = (path = currentPathRef.current) => {
+    if (!visibleSelectedSession) {
+      return;
+    }
+    setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(path)}`);
+
+  };
+
+  const handleStart = async (sprintId = launchSprintId) => {
+    if (!selectedProject || !sprintId) return;
+    if (!previewEnabled) {
+      setError("Browser Preview is disabled for this project.");
+      return;
+    }
+    setLaunching(true);
+    browserFeedback.setPending("Launching container...");
     try {
-      const session = await startPreviewSession(selectedProject.id, selectedSprint.id);
+      const session = await startPreviewSession(selectedProject.id, sprintId);
       setActiveSessionId(session.id);
       await refreshSessions(true);
+      setFrameSrc(`${buildPreviewOrigin(session.id)}${normalizePath(currentPathRef.current)}`);
+
+      browserFeedback.setSuccess("Container launched successfully");
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : String(actionError));
+      browserFeedback.setError(`Failed to launch container: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
-      setMutating(false);
+      setLaunching(false);
     }
   };
 
   const handleRebuild = async () => {
-    if (!selectedSession) return;
-    setMutating(true);
+    if (!visibleSelectedSession) return;
+    if (!previewEnabled) {
+      setError("Browser Preview is disabled for this project.");
+      return;
+    }
+    setSessionActionPending(true);
+    browserFeedback.setPending("Rebuilding container...");
     try {
-      await rebuildPreviewSession(selectedSession.id);
+      await rebuildPreviewSession(visibleSelectedSession.id);
       await refreshSessions(true);
+      reloadFrame();
+      browserFeedback.setSuccess("Container rebuilt successfully");
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : String(actionError));
+      browserFeedback.setError(`Failed to rebuild container: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
-      setMutating(false);
+      setSessionActionPending(false);
     }
   };
 
   const handleStop = async () => {
-    if (!selectedSession) return;
-    setMutating(true);
+    if (!visibleSelectedSession) return;
+    setSessionActionPending(true);
+    browserFeedback.setPending("Stopping container...");
     try {
-      await stopPreviewSession(selectedSession.id);
+      await stopPreviewSession(visibleSelectedSession.id);
+      await refreshSessions(true);
+      browserFeedback.setSuccess("Container stopped successfully");
+    } catch (actionError) {
+      browserFeedback.setError(`Failed to stop container: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
+    } finally {
+      setSessionActionPending(false);
+    }
+  };
+
+  const handleRemove = async (sessionId: string) => {
+    if (removingSessionIdSet.has(sessionId)) {
+      return;
+    }
+    setRemovingSessionIds((current) => [...current, sessionId]);
+    if (activeSessionId === sessionId) {
+      setActiveSessionId(null);
+      setLogs("");
+      setCurrentPath("/");
+      setAddressValue("/");
+    }
+    try {
+      await removePreviewSession(sessionId);
       await refreshSessions(true);
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : String(actionError));
+      browserFeedback.setError(`Failed to save script: ${actionError instanceof Error ? actionError.message : String(actionError)}`);
     } finally {
-      setMutating(false);
+      setRemovingSessionIds((current) => current.filter((id) => id !== sessionId));
     }
   };
 
   const handleSaveScript = async () => {
     if (!selectedProject || !scriptTargetSprint) return;
-    setMutating(true);
+    setSavingScript(true);
+    browserFeedback.setPending("Saving script...");
     try {
       const nextScript = await savePreviewScript(selectedProject.id, scriptTargetSprint.id, scriptDraft);
       setScript(nextScript);
       setShowScriptEditor(false);
+      browserFeedback.setSuccess("Script saved successfully");
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : String(actionError));
+      setActionFeedback({status: 'error', message: `Failed to launch container: ${actionError instanceof Error ? actionError.message : String(actionError)}`});
     } finally {
-      setMutating(false);
+      setSavingScript(false);
     }
   };
 
@@ -232,10 +351,17 @@ export const BrowserPage: FunctionComponent = () => {
     const nextPath = normalizePath(addressValue);
     setCurrentPath(nextPath);
     setAddressValue(nextPath);
-    postNavigationCommand("push", nextPath);
+    if (navigationEnabled) {
+      postNavigationCommand("push", nextPath);
+    } else if (visibleSelectedSession) {
+      setFrameSrc(`${buildPreviewOrigin(visibleSelectedSession.id)}${nextPath}`);
+
+    }
   };
 
-  const sessionCards = sessions.filter((session) => !selectedProject || session.projectId === selectedProject.id);
+  const sessionCards = sessions.filter((session) =>
+    (!selectedProject || session.projectId === selectedProject.id) && !removingSessionIdSet.has(session.id)
+  );
 
   if (!selectedProject) {
     return (
@@ -248,10 +374,10 @@ export const BrowserPage: FunctionComponent = () => {
   }
 
   return (
-    <div ref={shellRef} className="min-h-full px-6 py-6 md:px-8">
+    <div className="min-h-full px-6 py-6 md:px-8">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-signal-500">
+          <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
             <Compass className="h-3.5 w-3.5" strokeWidth={2} />
             Sprint Browser
           </div>
@@ -271,15 +397,6 @@ export const BrowserPage: FunctionComponent = () => {
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} strokeWidth={2} />
             Refresh
           </button>
-          <button
-            type="button"
-            onClick={handleStart}
-            disabled={!selectedSprint || mutating}
-            className="inline-flex h-11 items-center gap-2 rounded-2xl bg-signal-500 px-4 text-sm font-semibold text-void-900 transition hover:bg-signal-400 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Play className="h-4 w-4" strokeWidth={2.2} />
-            Start Preview
-          </button>
         </div>
       </div>
 
@@ -289,94 +406,88 @@ export const BrowserPage: FunctionComponent = () => {
         </div>
       )}
 
-      <div className="mb-5 grid gap-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+      {actionFeedback.status !== "idle" && actionFeedback.message && (
+        <div className="mb-5 flex items-start gap-3 p-3 rounded-xl border bg-black/[0.02] dark:bg-white/[0.03] border-black/[0.06] dark:border-white/[0.06]">
+          <div className={`flex-1 text-sm font-medium mt-0.5 ${actionFeedback.status === 'error' ? 'text-status-red' : actionFeedback.status === 'success' ? 'text-status-green' : 'text-signal-700 dark:text-signal-400'}`}>
+            {actionFeedback.status === 'pending' && <span className="mr-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+            {actionFeedback.message}
+          </div>
+          <button
+            type="button"
+            onClick={() => setActionFeedback({status: 'idle', message: null})}
+            className="shrink-0 p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+          >
+            <span className="sr-only">Dismiss</span>
+            ✕
+          </button>
+        </div>
+      )}
+
+
+      {browserFeedback.feedback.status !== "idle" && (
+        <div className="mb-5">
+          <ActionFeedbackRegion
+            status={browserFeedback.feedback.status}
+            message={browserFeedback.feedback.message}
+            onDismiss={() => browserFeedback.clearFeedback()}
+          />
+        </div>
+      )}
+
+      <div className="mb-5">
         <PreviewSessionSlider
           sessions={sessionCards}
+          sprints={sprints}
           selectedSessionId={activeSessionId}
+          launchSprintId={launchSprintId}
           onSelectSession={setActiveSessionId}
+          onLaunchSprintChange={setLaunchSprintId}
+          onLaunchContainer={() => void handleStart()}
+          onRemoveSession={(sessionId) => void handleRemove(sessionId)}
+          launchEnabled={launchEnabled}
+          launchBusy={launching}
+          removingSessionIds={removingSessionIds}
         />
-
-        <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Selected Sprint</div>
-              <div className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">
-                {scriptTargetSprint?.name || "All sprints"}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowScriptEditor((value) => !value)}
-              className="inline-flex h-10 items-center gap-2 rounded-2xl border border-black/[0.08] px-3 text-xs font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
-            >
-              <FileCode2 className="h-4 w-4" strokeWidth={2} />
-              Script
-            </button>
-          </div>
-            <div className="mt-4 space-y-3 text-sm">
-            {selectedSession && (
-              <div className="rounded-2xl border border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Port routing</div>
-                <div className="mt-1 font-mono text-[12px] text-slate-700 dark:text-slate-300">{formatPortMapping(selectedSession)}</div>
-              </div>
-            )}
-            <div className="rounded-2xl border border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
-              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Script path</div>
-              <div className="mt-1 break-all font-mono text-[12px] text-slate-700 dark:text-slate-300">{script?.path || "Loading..."}</div>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={handleRebuild}
-                disabled={!selectedSession || mutating}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
-              >
-                <RotateCcw className="h-4 w-4" strokeWidth={2} />
-                Rebuild
-              </button>
-              <button
-                type="button"
-                onClick={handleStop}
-                disabled={!selectedSession || mutating}
-                className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
-              >
-                <Square className="h-4 w-4" strokeWidth={2} />
-                Stop
-              </button>
-              <a
-                href={currentFrameSrc || undefined}
-                target="_blank"
-                rel="noreferrer"
-                className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white ${!currentFrameSrc ? "pointer-events-none opacity-50" : ""}`}
-              >
-                <ExternalLink className="h-4 w-4" strokeWidth={2} />
-                Open
-              </a>
-            </div>
-          </div>
-        </div>
       </div>
 
+      {(!showInAppBrowser || !previewEnabled) && (
+        <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-8 text-sm text-slate-500 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Browser Preview</div>
+          <div className="mt-3 text-lg font-semibold text-slate-900 dark:text-white">
+            {!previewEnabled ? "Preview runtime is disabled." : "In-app browser workspace is hidden."}
+          </div>
+          <p className="mt-2 max-w-2xl leading-6">
+            {!previewEnabled
+              ? "Enable `Preview runtime enabled` in Browser Preview settings to launch and rebuild preview containers again."
+              : "Enable `Show in-app browser workspace` in Browser Preview settings to restore the embedded browser surface in the dashboard."}
+          </p>
+        </div>
+      )}
+
+      {showInAppBrowser && previewEnabled && (
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <PreviewWindowChrome
-          session={selectedSession}
+          session={visibleSelectedSession}
           onNavigateBack={() => postNavigationCommand("back")}
           onNavigateForward={() => postNavigationCommand("forward")}
-          onReload={() => postNavigationCommand("reload")}
+          onReload={() => {
+            if (navigationEnabled) {
+              postNavigationCommand("reload");
+            } else {
+              reloadFrame();
+            }
+          }}
           addressValue={addressValue}
           onAddressChange={setAddressValue}
-          onAddressSubmit={(value) => {
-            const nextPath = normalizePath(value);
-            setCurrentPath(nextPath);
-            setAddressValue(nextPath);
-            postNavigationCommand("push", nextPath);
-          }}
+          onAddressSubmit={(_value) => navigate()}
+          navigationEnabled={navigationEnabled}
         >
-          {selectedSession && (
+          {visibleSelectedSession && frameSrc && (
             <iframe
+              key={visibleSelectedSession.id}
               ref={frameRef}
-              title={`Sprint preview ${selectedSession.sprintName}`}
-              src={currentFrameSrc}
+              title={`Sprint preview ${visibleSelectedSession.sprintName}`}
+              src={frameSrc}
               className="h-full w-full border-0 bg-white"
             />
           )}
@@ -384,7 +495,69 @@ export const BrowserPage: FunctionComponent = () => {
 
         <div className="space-y-5">
           <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Runtime notes</div>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Selected Sprint</div>
+                <div className="mt-2 text-lg font-semibold text-slate-900 dark:text-white">
+                  {scriptTargetSprint?.name || "All sprints"}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowScriptEditor((value) => !value)}
+                className="inline-flex h-10 items-center gap-2 rounded-2xl border border-black/[0.08] px-3 text-xs font-semibold text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+              >
+                <FileCode2 className="h-4 w-4" strokeWidth={2} />
+                Script
+              </button>
+            </div>
+            <div className="mt-4 space-y-3 text-sm">
+              {visibleSelectedSession && (
+                <div className="rounded-2xl border border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Port routing</div>
+                  <div className="mt-1 font-mono text-[12px] text-slate-700 dark:text-slate-300">{formatPortMapping(visibleSelectedSession)}</div>
+                </div>
+              )}
+              <div className="rounded-2xl border border-black/[0.06] bg-black/[0.02] px-4 py-3 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Script path</div>
+                <div className="mt-1 break-all font-mono text-[12px] text-slate-700 dark:text-slate-300">
+                  {script?.path || visibleSelectedSession?.startupScriptPath || "Open editor to load script"}
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={handleRebuild}
+                  disabled={!visibleSelectedSession || sessionActionPending}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
+                >
+                  <RotateCcw className={`h-4 w-4 ${sessionActionPending ? 'animate-spin' : ''}`} strokeWidth={2} />
+                  {sessionActionPending ? "Rebuilding..." : "Rebuild"}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStop}
+                  disabled={!visibleSelectedSession || sessionActionPending}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white"
+                >
+                  <Square className="h-4 w-4" strokeWidth={2} />
+                  {sessionActionPending ? "Stopping..." : "Stop"}
+                </button>
+                <a
+                  href={visibleSelectedSession ? `${buildPreviewOrigin(visibleSelectedSession.id)}${normalizePath(currentPath)}` : undefined}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`inline-flex h-10 items-center justify-center gap-2 rounded-2xl border border-black/[0.08] text-xs font-semibold text-slate-700 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-200 dark:hover:border-white/[0.16] dark:hover:text-white ${!visibleSelectedSession ? "pointer-events-none opacity-50" : ""}`}
+                >
+                  <ExternalLink className="h-4 w-4" strokeWidth={2} />
+                  Open
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Runtime notes</div>
             <div className="mt-4 space-y-3 text-sm text-slate-600 dark:text-slate-300">
               <p>Ports are assigned from the sprint preview range and bound to `127.0.0.1` to avoid conflicts with the main dashboard.</p>
               <p>Each preview container runs from a dedicated sprint snapshot directory, so multiple active sprints from the same project stay isolated without registering git worktrees.</p>
@@ -395,7 +568,7 @@ export const BrowserPage: FunctionComponent = () => {
             <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Startup script</div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Startup script</div>
                   <div className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">
                     {script?.mode === "script" ? "Custom file" : "Auto-generated fallback"}
                   </div>
@@ -403,11 +576,11 @@ export const BrowserPage: FunctionComponent = () => {
                 <button
                   type="button"
                   onClick={handleSaveScript}
-                  disabled={mutating || !scriptTargetSprint}
+                  disabled={savingScript || !scriptTargetSprint}
                   className="inline-flex h-10 items-center gap-2 rounded-2xl bg-slate-900 px-4 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                 >
                   <Save className="h-4 w-4" strokeWidth={2} />
-                  Save
+                  {savingScript ? "Saving..." : "Save"}
                 </button>
               </div>
               <textarea
@@ -419,13 +592,14 @@ export const BrowserPage: FunctionComponent = () => {
           )}
 
           <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
-            <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Container logs</div>
+            <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Container logs</div>
             <pre className="max-h-[360px] overflow-auto rounded-[1.5rem] bg-[#f7f3ea] p-4 font-mono text-[11px] leading-6 text-slate-700 dark:bg-[#05080d] dark:text-slate-300">
               {logs || "No logs yet."}
             </pre>
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 };

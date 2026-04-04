@@ -1,40 +1,41 @@
 const fs = require('fs');
 
-const content = `import { defineConfig } from "vitest/config";
+let code = fs.readFileSync('tests/backend/app/live/project-live-snapshot.test.ts', 'utf8');
 
-export default defineConfig({
-  test: {
-    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
-    exclude: ["dist/**", "dashboard/dist/**", "node_modules/**"],
-    // Default environment is node, specific UI tests handle this via @vitest-environment jsdom pragmas
-    environment: "node",
-    coverage: {
-        provider: "v8",
-        reporter: ["text", "json", "html"],
-        thresholds: {
-            lines: 75.05,
-            functions: 69,
-            branches: 64,
-            statements: 74.75,
-            // Specifically enforce 80% on activity-cache-service.ts as per task requirement
-            "src/server/activity-cache-service.ts": {
-                lines: 80,
-            }
-        },
-        include: ["src/**/*.ts"],
-        exclude: [
-          "src/services/embedding-service.ts",
-          "src/services/embedding-tokenizer.ts"
-        ],
-    }
-  },
-  resolve: {
-    alias: {
-      "react": "preact/compat",
-      "react-dom/test-utils": "preact/test-utils",
-      "react-dom": "preact/compat",
-      "react/jsx-runtime": "preact/jsx-runtime",
-    }
-  },
-});`;
-fs.writeFileSync('vitest.config.ts', content);
+code += `
+  it("uses generic error message if gitStatus promise rejection is not an Error instance", async () => {
+    deps.getGitStatus = vi.fn().mockRejectedValue("Not an error object");
+
+    const snapshot = await getProjectLiveSnapshot(deps);
+
+    expect(snapshot.gitStatus).toBeNull();
+    expect(snapshot.gitStatusError).toBe("Unable to load git/ci/pr tracking.");
+  });
+
+  it("handles missing project array edge cases for execution item count", async () => {
+    deps.getProjectExecutionSnapshot = vi.fn().mockReturnValue({
+      sprintRuns: undefined,
+      taskDispatches: undefined,
+      connections: undefined,
+      attentionItems: undefined,
+      recentEvents: undefined,
+      projectId: "proj-1"
+    } as any);
+
+    deps.projectRuntimeRepository.getProjectStatus = vi.fn().mockReturnValue({
+      subtasks: undefined
+    } as any);
+
+    const snapshot = await getProjectLiveSnapshot(deps);
+
+    expect(deps.logger.info).toHaveBeenCalledWith(
+      "project_live_snapshot_assembled",
+      expect.objectContaining({
+        executionItemCount: 0,
+        statusSubtaskCount: 0,
+      })
+    );
+  });
+`;
+
+fs.writeFileSync('tests/backend/app/live/project-live-snapshot.test.ts', code);

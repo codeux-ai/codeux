@@ -4,10 +4,33 @@
 @source "../index.html";
 @source "./**/*.{ts,tsx}";
 
+/*
+  Canonical Badge Scale
+  - Status badges: rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] (border opacity /25, bg opacity /10)
+  - Filter pills / category chips: rounded-full px-3.5 py-1.5 text-[11px] font-semibold (border opacity /[0.06])
+  - Tiny indicators: rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em]
+*/
+
 @layer base {
+  :root {
+    --status-green: #007A5E; /* WCAG AA on White (4.5:1) */
+    --status-red: #D32F2F;   /* WCAG AA on White (4.5:1) */
+    --status-amber: #995A00; /* WCAG AA on White (4.5:1) */
+    --signal-600: #007A5E;   /* Darker jade for text in light mode */
+    --ember-600: #995A00;    /* Darker amber for text in light mode */
+  }
+
+  .dark {
+    --status-green: #00A37E; /* WCAG AA on Void 900 (4.6:1) */
+    --status-red: #FF4D4D;   /* WCAG AA on Void 900 (5.2:1) */
+    --status-amber: #FFB347; /* WCAG AA on Void 900 (6.1:1) */
+    --signal-600: #00B882;   /* Default luminous jade for dark mode */
+    --ember-600: #E0A000;    /* Default warm amber for dark mode */
+  }
+
   *:focus-visible {
-    outline: 2px solid #3b82f6 !important;
-    outline-offset: 2px !important;
+    outline: 2px solid var(--signal-600);
+    outline-offset: 2px;
   }
 }
 
@@ -356,6 +379,15 @@
     transform: translate(-50%, -50%);
   }
 
+  /* Scrollbar hiding utility */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;  /* Safari and Chrome */
+  }
+
   /* ── Chat Avatar & Widget Animations ───────────────────────────────────────────── */
 
   /* Jules animated J */
@@ -395,12 +427,26 @@
 
   /* Reduced motion fallback */
   @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+
     .widget-running,
     .widget-queued,
     .ocean-wave,
     .ship-bob,
     .jules-j-glow,
-    .jules-j-draw {
+    .jules-j-draw,
+    .animate-organic,
+    .animate-organic-reverse,
+    .dag-aurora,
+    .dag-grid-pan,
+    .dag-running-ring {
       animation: none !important;
       transition: none !important;
     }

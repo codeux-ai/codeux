@@ -25,6 +25,12 @@ describe("settings-sanitizer", () => {
         claudeCodeApiKey: "resolved-claude",
         githubToken: "resolved-github",
       },
+      providerAvailability: {
+        jules: { hasApiKey: true, hasLocalAuth: false },
+        gemini: { hasApiKey: true, hasLocalAuth: false },
+        codex: { hasApiKey: true, hasLocalAuth: false },
+        claudeCode: { hasApiKey: true, hasLocalAuth: false },
+      },
     });
 
     expect(settings.aiProvider.julesApiKey).toBe("resolved-jules");
@@ -75,6 +81,22 @@ describe("settings-sanitizer", () => {
       },
       agents: {
         saveToProjectDirectory: "bad",
+        qualityAssurance: {
+          enabled: "bad",
+          maxTaskReviewRuns: "bad",
+          taskCompletion: {
+            enabled: "bad",
+            agentPresetId: 7,
+          },
+          sprintCompletion: {
+            enabled: "bad",
+            agentPresetId: 8,
+          },
+          completedTaskWithoutPr: {
+            enabled: "bad",
+            agentPresetId: 9,
+          },
+        },
       },
       skills: [
         { name: "git_manager_remote", enabled: false },
@@ -98,9 +120,17 @@ describe("settings-sanitizer", () => {
     expect(settings.cliWorkflow.executionMode).toBe("HOST");
     expect(settings.cliWorkflow.containerImage).toBe("node:24-bookworm");
     expect(settings.cliWorkflow.containerCacheSetupScriptImage).toBe(false);
-    expect(settings.cliWorkflow.containerMountGeminiAuth).toBe(true);
+    expect(settings.cliWorkflow.containerMountGeminiAuth).toBe(false);
     expect(settings.agents.saveToProjectDirectory).toBe(true);
     expect(settings.agents.instructionTemplates.planningMissing).toContain("Sprint Planning Missing");
+    expect(settings.agents.qualityAssurance.enabled).toBe(false);
+    expect(settings.agents.qualityAssurance.maxTaskReviewRuns).toBe(1);
+    expect(settings.agents.qualityAssurance.taskCompletion.enabled).toBe(true);
+    expect(settings.agents.qualityAssurance.taskCompletion.agentPresetId).toBe(null);
+    expect(settings.agents.qualityAssurance.sprintCompletion.enabled).toBe(true);
+    expect(settings.agents.qualityAssurance.sprintCompletion.agentPresetId).toBe(null);
+    expect(settings.agents.qualityAssurance.completedTaskWithoutPr.enabled).toBe(true);
+    expect(settings.agents.qualityAssurance.completedTaskWithoutPr.agentPresetId).toBe(null);
     expect(settings.skills.find((skill) => skill.name === "git_manager_remote")?.enabled).toBe(true);
     expect(settings.skills.find((skill) => skill.name === "git_manager_local")?.enabled).toBe(false);
     expect(settings.skills.find((skill) => skill.name === "custom-skill")?.isInternal).toBe(false);

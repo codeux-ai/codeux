@@ -821,6 +821,25 @@ describe("dashboard project management API", () => {
       rawUsageJson: { provider: "codex" },
     });
 
+    executionRepository.updateTaskRun(taskRun.id, {
+      prUrl: "https://github.com/test/repo/pull/5",
+    });
+    repository.updateTask(firstTask.id, {
+      isMerged: true,
+      mergeIndicator: "AUTOMERGE",
+    });
+    executionRepository.appendTaskRunEvent(taskRun.id, "cli_git_pushed", "system", {
+      insertions: 140,
+      deletions: 22,
+      filesChanged: 4,
+    });
+
+    executionRepository.appendTaskRunEvent(taskRun.id, "jules_git_pushed", "system", {
+      insertions: 5,
+      deletions: 1,
+      filesChanged: 1,
+    });
+
     const statsSnapshot = await fetch(`${baseUrl}/api/projects/${project.id}/stats?window=24h`)
       .then(async (response) => response.json()) as {
         projectId: string;
@@ -838,6 +857,15 @@ describe("dashboard project management API", () => {
         activeTimeMs: 90_000,
         wallTimeMs: expect.any(Number),
       },
+      git: {
+        totals: {
+          insertions: 145,
+          deletions: 23,
+          filesChanged: 5,
+          prCount: 1,
+          mergedCount: 2,
+        }
+      }
     });
     expect(statsSnapshot.usage.wallTimeMs).toBeGreaterThanOrEqual(90_000);
     expect(statsSnapshot.tasks[0]).toMatchObject({
@@ -1332,7 +1360,7 @@ describe("dashboard project management API", () => {
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({
-      error: `Failed to update preferred worker: Preferred worker target not found: ${listener.connection.id}`,
+      error: `Preferred worker target not found: ${listener.connection.id}`,
     });
   });
 });

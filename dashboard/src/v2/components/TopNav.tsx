@@ -17,18 +17,19 @@ import {
     type WorkerRoutingPreference,
 } from "../lib/project-worker-options.js";
 import { setProjectPreferredWorker } from "../lib/project-api.js";
-import { fetchProjectEffectiveSettings, saveProjectSettings } from "../lib/settings-api.js";
-
+import { saveProjectSettings } from "../lib/settings-api.js";
+import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
 
 export function useDropdownKeyboard(
     isOpen: boolean,
     setIsOpen: (open: boolean) => void,
-    containerRef: RefObject<HTMLElement>
+    containerRef: RefObject<HTMLElement>,
+    onFilterChange?: (val: string) => void
 ) {
     const toggleRef = useRef<HTMLButtonElement>(null);
 
     const onToggleKeyDown = useCallback((e: KeyboardEvent) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") {
             e.preventDefault();
             setIsOpen(!isOpen);
         }
@@ -49,7 +50,7 @@ export function useDropdownKeyboard(
 
             const focusableElements = Array.from(
                 containerRef.current.querySelectorAll<HTMLElement>(
-                    'button:not([disabled]), a[href]'
+                    'button:not([disabled]), a[href], input:not([disabled])'
                 )
             ).filter(el => el !== toggleRef.current);
 
@@ -75,7 +76,7 @@ export function useDropdownKeyboard(
                 if (!containerRef.current) return;
                 const focusableElements = Array.from(
                     containerRef.current.querySelectorAll<HTMLElement>(
-                        'button:not([disabled]), a[href]'
+                        'button:not([disabled]), a[href], input:not([disabled])'
                     )
                 ).filter(el => el !== toggleRef.current);
 
@@ -83,10 +84,13 @@ export function useDropdownKeyboard(
                     focusableElements[0]?.focus();
                 }
             }, 0);
-        } else if (!isOpen && toggleRef.current && document.activeElement && containerRef.current?.contains(document.activeElement)) {
-            toggleRef.current.focus();
+        } else if (!isOpen) {
+            onFilterChange?.("");
+            if (toggleRef.current && document.activeElement && containerRef.current?.contains(document.activeElement)) {
+                toggleRef.current.focus();
+            }
         }
-    }, [isOpen, containerRef]);
+    }, [isOpen, containerRef, onFilterChange]);
 
     return { toggleRef, onToggleKeyDown, onContainerKeyDown };
 }
@@ -105,8 +109,12 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [workerDropdownOpen, setWorkerDropdownOpen] = useState(false);
     const [showAddProject, setShowAddProject] = useState(false);
-    const [workerRouting, setWorkerRouting] = useState<WorkerRoutingPreference | null>(null);
     const [workerSwitchBusy, setWorkerSwitchBusy] = useState(false);
+    const [projectSwitchBusy, setProjectSwitchBusy] = useState(false);
+    const [sprintSwitchBusy, setSprintSwitchBusy] = useState(false);
+    const [projectFilter, setProjectFilter] = useState('');
+    const [sprintFilter, setSprintFilter] = useState('');
+    const [workerFilter, setWorkerFilter] = useState('');
     const [sprintDropdownOpen, setSprintDropdownOpen] = useState(false);
     const sprintDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -120,36 +128,34 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
 
     const { data: execution, loading: executionLoading, refetch: refreshExecution } = useExecutions(selectedProject?.id || null);
     const { data: sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
+
+    const { data: effectiveSettings, refresh: refreshEffectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
+    const browserVisible = !selectedProject || (
+        (effectiveSettings?.settings.sprintPreview.enabled ?? true)
+        && (effectiveSettings?.settings.sprintPreview.showInAppBrowser ?? true)
+    );
+
+    const workerRouting: WorkerRoutingPreference | null = effectiveSettings ? {
+        executionMode: effectiveSettings.settings.workers.executionMode,
+        virtualWorkerProvider: effectiveSettings.settings.workers.virtualWorkerProvider,
+    } : null;
+
     const { options: workerOptions, selectedOption: selectedWorker } = getProjectWorkerOptions(execution, workerRouting, executionLoading);
 
-    const projectKb = useDropdownKeyboard(dropdownOpen, setDropdownOpen, dropdownRef);
-    const sprintKb = useDropdownKeyboard(sprintDropdownOpen, setSprintDropdownOpen, sprintDropdownRef);
-    const workerKb = useDropdownKeyboard(workerDropdownOpen, setWorkerDropdownOpen, workerDropdownRef);
+    const projectKb = useDropdownKeyboard(dropdownOpen, setDropdownOpen, dropdownRef, setProjectFilter);
+    const sprintKb = useDropdownKeyboard(sprintDropdownOpen, setSprintDropdownOpen, sprintDropdownRef, setSprintFilter);
+    const workerKb = useDropdownKeyboard(workerDropdownOpen, setWorkerDropdownOpen, workerDropdownRef, setWorkerFilter);
+
+    const filteredProjects = projects.filter(p => p.name.toLowerCase().includes(projectFilter.toLowerCase()));
+    const filteredSprints = sprints.filter(s => s.name.toLowerCase().includes(sprintFilter.toLowerCase()));
+    const filteredWorkers = workerOptions.filter(w => w.label.toLowerCase().includes(workerFilter.toLowerCase()) || (w.subLabel && w.subLabel.toLowerCase().includes(workerFilter.toLowerCase())));
+
 
     useLayoutEffect(() => {
         if (navRef.current) {
             gsap.fromTo(navRef.current, { y: -20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.9, ease: "power3.out" });
         }
     }, []);
-
-    const refreshWorkerRouting = useCallback(async (): Promise<void> => {
-        if (!selectedProject) {
-            setWorkerRouting(null);
-            return;
-        }
-
-        const response = await fetchProjectEffectiveSettings(selectedProject.id);
-        setWorkerRouting({
-            executionMode: response.settings.workers.executionMode,
-            virtualWorkerProvider: response.settings.workers.virtualWorkerProvider,
-        });
-    }, [selectedProject]);
-
-    useEffect(() => {
-        void refreshWorkerRouting().catch(() => {
-            setWorkerRouting(null);
-        });
-    }, [refreshWorkerRouting]);
 
     // Close dropdowns on outside click
     useEffect(() => {
@@ -178,11 +184,10 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
     };
 
     const handleWorkerSelect = async (option: WorkerOption) => {
-        if (!selectedProject || !option.isSelectable || workerSwitchBusy) return;
+        if (!selectedProject || !option.isSelectable || workerSwitchBusy || !effectiveSettings) return;
         setWorkerDropdownOpen(false);
         setWorkerSwitchBusy(true);
         try {
-            const effectiveSettings = await fetchProjectEffectiveSettings(selectedProject.id);
             const nextSettings = dashboardSettingsToProjectSettings(effectiveSettings.settings);
 
             if (option.type === "virtual" && option.providerId) {
@@ -203,7 +208,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                     workerEndpointKey: option.workerEndpointKey,
                 });
             }
-            await Promise.all([refreshExecution(), refreshWorkerRouting()]);
+            await Promise.all([refreshExecution(), refreshEffectiveSettings()]);
         } catch (err) {
             console.error("Failed to update preferred worker:", err);
         } finally {
@@ -227,30 +232,33 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
             ref={navRef}
             className="sticky top-0 z-50 flex items-center justify-between w-full h-[60px] px-8 md:px-12 bg-[#F9F8F4]/70 dark:bg-void-900/70 backdrop-blur-3xl border-b border-black/[0.05] dark:border-white/[0.04]"
         >
+            <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-white dark:focus:bg-void-800 focus:text-signal-600 dark:focus:text-signal-400 focus:rounded-lg focus:shadow-lg focus:text-sm focus:font-semibold">
+                Skip to main content
+            </a>
             <nav aria-label="Primary navigation" className="contents">
-            <div className="flex items-center gap-10 flex-1">
+            <div className="flex items-center gap-4 md:gap-10 flex-1">
                 {/* Logo */}
-                <div className="flex items-center gap-3 cursor-pointer group shrink-0">
+                <Link to="/" className="flex items-center gap-3 cursor-pointer group shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-xl">
                     <div className="relative w-8 h-8 flex items-center justify-center bg-void-900 dark:bg-white rounded-xl overflow-hidden shadow-[0_0_20px_rgba(0,224,160,0.25)]">
                         <div className="absolute inset-0 bg-signal-500 opacity-0 group-hover:opacity-20 transition-opacity duration-500" />
                         <Activity aria-hidden="true" className="w-4 h-4 text-signal-500 dark:text-void-900 relative z-10 group-hover:scale-110 transition-transform duration-500" strokeWidth={2.5} />
                     </div>
-                    <span className="font-display font-bold text-base tracking-tight text-slate-900 dark:text-white flex items-center gap-0.5">
+                    <span className="font-display font-bold text-base tracking-tight text-slate-900 dark:text-white flex items-center gap-0.5 sm:flex">
                         Sprint<span className="text-signal-500">OS</span>
                     </span>
-                </div>
+                </Link>
 
                 {/* Search Bar */}
-                <div className="relative group w-full max-w-xs">
+                <div className="relative group w-full max-w-[140px] sm:max-w-xs hidden sm:block">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                         <Search aria-hidden="true" className="w-3.5 h-3.5 text-slate-400 group-focus-within:text-signal-500 transition-colors" strokeWidth={2} />
                     </div>
                     <input
                         type="text"
-                        placeholder="Search projects, sprints, tasks..."
-                        className="w-full h-9 pl-10 pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] focus:border-signal-500/40 dark:focus:border-signal-500/40 rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-signal-500/10 transition-all"
+                        placeholder="Search..."
+                        className="w-full h-9 pl-10 pr-4 sm:pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] focus:border-signal-500/40 dark:focus:border-signal-500/40 rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-signal-500/10 transition-all"
                     />
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                    <div className="absolute inset-y-0 right-0 pr-3 hidden sm:flex items-center pointer-events-none">
                         <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-mono font-medium text-slate-400 border border-black/10 dark:border-white/10 rounded-md">
                             <Command aria-hidden="true" className="w-2.5 h-2.5" /> K
                         </kbd>
@@ -258,7 +266,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 sm:gap-3">
                 {/* Project Selector */}
                 <div className="relative hidden md:block" ref={dropdownRef} onKeyDown={projectKb.onContainerKeyDown}>
                     <button
@@ -267,11 +275,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                         onClick={() => setDropdownOpen(!dropdownOpen)}
                         aria-haspopup="listbox"
                         aria-expanded={dropdownOpen}
-                        className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group focus-visible:ring-2 focus-visible:ring-signal-500/50"
+                        className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group focus-visible:ring-2 focus-visible:ring-signal-500/30"
                     >
                         <StatusDot status={selectedProject?.status || "idle"} />
                         <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">
-                            {selectedProject?.name || (loading ? "Loading..." : "Select Project")}
+                            {projectSwitchBusy ? "Switching..." : (selectedProject?.name || (loading ? "Loading..." : "Select Project"))}
                         </span>
                         <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${dropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
@@ -280,18 +288,33 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                     {dropdownOpen && (
                         <div role="listbox" aria-label="Project list" className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
                             <div className="px-3 pt-3 pb-1.5">
-                                <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Projects</span>
+                                <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Projects</span>
                             </div>
-                            {projects.map((source) => (
+                            <div className="px-2 pb-2">
+                                <input
+                                    type="text"
+                                    placeholder="Filter projects..."
+                                    value={projectFilter}
+                                    onInput={(e) => setProjectFilter(e.currentTarget.value)}
+                                    className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30"
+                                />
+                            </div>
+                            <div className="max-h-64 overflow-y-auto">
+                            {filteredProjects.map((source) => (
                                 <button
                                     key={source.id}
                                     role="option"
                                     aria-selected={selectedProject?.id === source.id}
-                                    onClick={() => {
-                                        void selectProject(source.id);
-                                        setDropdownOpen(false);
+                                    onClick={async () => {
+                                        setProjectSwitchBusy(true);
+                                        try {
+                                            await selectProject(source.id);
+                                            setDropdownOpen(false);
+                                        } finally {
+                                            setProjectSwitchBusy(false);
+                                        }
                                     }}
-                                    className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-signal-500/5 transition-colors group ${selectedProject?.id === source.id ? 'bg-signal-500/8' : ''}`}
+                                    className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selectedProject?.id === source.id ? 'bg-signal-500/8' : ''}`}
                                 >
                                     <StatusDot status={source.status} />
                                     <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedProject?.id === source.id ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
@@ -302,6 +325,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                     )}
                                 </button>
                             ))}
+                            </div>
                             {!loading && projects.length === 0 && (
                                 <div className="px-3 py-4 text-xs text-slate-400 font-medium">
                                     No projects connected yet.
@@ -345,7 +369,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                             }`}
                         >
                             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">
-                                {sprintsLoading ? "Loading..." : (selectedSprint ? selectedSprint.name : "All Sprints")}
+                                {sprintSwitchBusy ? "Switching..." : (sprintsLoading ? "Loading..." : (selectedSprint ? selectedSprint.name : "All Sprints"))}
                             </span>
                             {sprints.length > 0 && (
                                 <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${sprintDropdownOpen ? 'rotate-180' : ''}`} />
@@ -356,16 +380,31 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                         {sprintDropdownOpen && sprints.length > 0 && (
                             <div role="listbox" aria-label="Sprint list" className="absolute right-0 top-full mt-2 w-56 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
                                 <div className="px-3 pt-3 pb-1.5">
-                                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Sprint Scope</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Sprint Scope</span>
                                 </div>
+                                <div className="px-2 pb-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Filter sprints..."
+                                        value={sprintFilter}
+                                        onInput={(e) => setSprintFilter(e.currentTarget.value)}
+                                        className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30"
+                                    />
+                                </div>
+                                <div className="max-h-64 overflow-y-auto">
                                 <button
                                     role="option"
                                     aria-selected={selectedSprintId === null}
-                                    onClick={() => {
-                                        void selectSprint(null);
-                                        setSprintDropdownOpen(false);
+                                    onClick={async () => {
+                                        setSprintSwitchBusy(true);
+                                        try {
+                                            await selectSprint(null);
+                                            setSprintDropdownOpen(false);
+                                        } finally {
+                                            setSprintSwitchBusy(false);
+                                        }
                                     }}
-                                    className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-signal-500/5 transition-colors group ${selectedSprintId === null ? 'bg-signal-500/8' : ''}`}
+                                    className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selectedSprintId === null ? 'bg-signal-500/8' : ''}`}
                                 >
                                     <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedSprintId === null ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
                                         All Sprints
@@ -374,16 +413,21 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                         <span className="ml-auto w-1.5 h-1.5 rounded-full bg-signal-500" />
                                     )}
                                 </button>
-                                {sprints.map((sprint) => (
+                                {filteredSprints.map((sprint) => (
                                     <button
                                         key={sprint.id}
                                         role="option"
                                         aria-selected={selectedSprintId === sprint.id}
-                                        onClick={() => {
-                                            void selectSprint(sprint.id);
-                                            setSprintDropdownOpen(false);
+                                        onClick={async () => {
+                                            setSprintSwitchBusy(true);
+                                            try {
+                                                await selectSprint(sprint.id);
+                                                setSprintDropdownOpen(false);
+                                            } finally {
+                                                setSprintSwitchBusy(false);
+                                            }
                                         }}
-                                        className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-2.5 text-left hover:bg-signal-500/5 transition-colors group ${selectedSprintId === sprint.id ? 'bg-signal-500/8' : ''}`}
+                                        className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-2.5 px-3 py-3 min-h-[44px] text-left hover:bg-signal-500/5 transition-colors group ${selectedSprintId === sprint.id ? 'bg-signal-500/8' : ''}`}
                                     >
                                         <StatusDot status={sprint.status as any} />
                                         <span className={`text-sm font-medium font-mono truncate transition-colors ${selectedSprintId === sprint.id ? 'text-signal-600 dark:text-signal-400 font-semibold' : 'text-slate-700 dark:text-slate-300'}`}>
@@ -394,6 +438,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                                         )}
                                     </button>
                                 ))}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -408,13 +453,13 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                             onClick={() => setWorkerDropdownOpen(!workerDropdownOpen)}
                             aria-haspopup="listbox"
                             aria-expanded={workerDropdownOpen}
-                            className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group focus-visible:ring-2 focus-visible:ring-signal-500/50"
+                            className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group focus-visible:ring-2 focus-visible:ring-signal-500/30"
                         >
                             <div className="flex items-center justify-center w-4 h-4 rounded-md bg-signal-500/10 text-signal-500">
                                 <Cpu aria-hidden="true" className="w-3 h-3" strokeWidth={2.5} />
                             </div>
                             <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">
-                                {selectedWorker?.label || (executionLoading ? "Loading..." : "Select Worker")}
+                                {workerSwitchBusy ? "Switching..." : (selectedWorker?.label || (executionLoading ? "Loading..." : "Select Worker"))}
                             </span>
                             <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${workerDropdownOpen ? 'rotate-180' : ''}`} />
                         </button>
@@ -423,17 +468,26 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                         {workerDropdownOpen && (
                             <div role="listbox" aria-label="Worker list" className="absolute right-0 top-full mt-2 w-64 bg-white/95 dark:bg-void-800/95 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.08] rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] overflow-hidden z-50">
                                 <div className="px-3 pt-3 pb-1.5">
-                                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">Available Workers</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Available Workers</span>
+                                </div>
+                                <div className="px-2 pb-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Filter workers..."
+                                        value={workerFilter}
+                                        onInput={(e) => setWorkerFilter(e.currentTarget.value)}
+                                        className="w-full px-3 py-1.5 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-signal-500/30"
+                                    />
                                 </div>
                                 <div className="max-h-64 overflow-y-auto">
-                                    {workerOptions.map((option) => (
+                                    {filteredWorkers.map((option) => (
                                         <button
                                             key={option.id}
                                             role="option"
                                             aria-selected={selectedWorker?.id === option.id}
                                             onClick={() => handleWorkerSelect(option)}
                                             disabled={!option.isSelectable || workerSwitchBusy}
-                                            className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-3 px-3 py-3 text-left transition-colors group ${
+                                            className={`focus-visible:ring-2 focus-visible:ring-signal-500/50 w-full flex items-center gap-3 px-3 py-3 min-h-[44px] text-left transition-colors group ${
                                                 option.isPrimary ? 'bg-signal-500/8' : ''
                                             } ${
                                                 option.isSelectable && !workerSwitchBusy
@@ -491,12 +545,12 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 {/* Docker Status */}
                 <DockerStatusMenu />
 
-                <BrowserSessionsMenu />
+                <BrowserSessionsMenu enabled={browserVisible} />
 
                 {/* Notifications */}
                 <button
                     aria-label="Notifications"
-                    className="relative w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group focus-visible:ring-2 focus-visible:ring-signal-500/50"
+                    className="relative w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors group focus-visible:ring-2 focus-visible:ring-signal-500/30"
                 >
                     <Bell aria-hidden="true" className="w-4 h-4 text-slate-500 dark:text-slate-400 group-hover:text-slate-900 dark:group-hover:text-white transition-colors" strokeWidth={1.5} />
                     <span className="absolute top-3 right-3 w-1.5 h-1.5 rounded-full bg-signal-500 shadow-[0_0_6px_rgba(0,224,160,0.8)] ring-1 ring-[#F9F8F4] dark:ring-void-900" />
@@ -506,7 +560,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 <button
                     onClick={toggleTheme}
                     aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-                    className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/50"
+                    className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.05] transition-colors focus-visible:ring-2 focus-visible:ring-signal-500/30"
                 >
                     {isDark
                         ? <Sun aria-hidden="true" className="w-4 h-4 text-slate-400 hover:text-white transition-colors" strokeWidth={1.5} />
@@ -517,7 +571,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                 <div className="w-px h-5 bg-black/10 dark:bg-white/10" />
 
                 {/* Avatar */}
-                <div className="flex items-center gap-2.5 cursor-pointer group">
+                <button aria-label="User Profile" className="flex items-center gap-2.5 cursor-pointer group focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-full">
                     <div className="w-8 h-8 rounded-full bg-signal-500/20 dark:bg-signal-500/15 p-[1.5px] shadow-[0_0_12px_rgba(0,224,160,0.15)] group-hover:shadow-[0_0_16px_rgba(0,224,160,0.25)] transition-shadow">
                         <div className="w-full h-full rounded-full bg-white dark:bg-void-800 flex items-center justify-center overflow-hidden">
                             <img
@@ -527,7 +581,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
                             />
                         </div>
                     </div>
-                </div>
+                </button>
             </div>
             </nav>
         </header>

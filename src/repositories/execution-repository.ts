@@ -47,8 +47,15 @@ import type {
   ExecutionRuntimeEventSummary,
   ExecutionSprintRunSummary,
   ExecutionTaskDispatchSummary,
+  ExecutionGitMetrics,
 } from "../contracts/app-types.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
+import type { ProviderId } from "../contracts/app-types.js";
+import { queryExecutionSprintRuns } from "./execution/execution-sprint-runs-query.js";
+import { queryExecutionTaskDispatches } from "./execution/execution-task-dispatches-query.js";
+import { queryExecutionRuntimeEvents } from "./execution/execution-runtime-events-query.js";
+import { normalizeProjectStatsQuery } from "./execution/project-stats-query.js";
+import { createUsageBuckets, createEmptyUsageTotals } from "./execution/stats-buckets.js";
 
 interface SprintRunRow {
   id: string;
@@ -276,12 +283,6 @@ interface ProjectAttentionSummaryRow {
   updated_at: string;
 }
 
-interface NormalizedProjectStatsQuery {
-  query: ProjectStatsQuery;
-  range: ProjectExecutionStatsSnapshot["range"];
-  bucketSizeMs: number;
-}
-
 interface StatsEntityMetadata {
   label: string;
   secondaryLabel: string | null;
@@ -326,23 +327,6 @@ function stripMarkdown(value: string): string {
     .replace(/[*_>#~-]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function createEmptyUsageTotals(): ExecutionUsageTotals {
-  return {
-    invocationCount: 0,
-    activeTimeMs: 0,
-    wallTimeMs: 0,
-    inputTokens: 0,
-    cachedInputTokens: 0,
-    outputTokens: 0,
-    reasoningOutputTokens: 0,
-    totalTokens: 0,
-    reportedInvocationCount: 0,
-    estimatedInvocationCount: 0,
-    unavailableInvocationCount: 0,
-    unsupportedInvocationCount: 0,
-  };
 }
 
 function cloneUsageTotals(input?: ExecutionUsageTotals | null): ExecutionUsageTotals {
@@ -1115,6 +1099,35 @@ export class ExecutionRepository {
     return row ? this.mapProviderInvocationUsageRow(row) : null;
   }
 
+  getLatestProviderInvocationUsageBySession(
+    sessionId: string,
+    purpose?: ProviderInvocationUsageRecord["purpose"],
+  ): ProviderInvocationUsageRecord | null {
+    const trimmedSessionId = sessionId.trim();
+    if (!trimmedSessionId) {
+      return null;
+    }
+
+    const row = purpose
+      ? this.db.prepare(`
+        SELECT *
+        FROM provider_invocations
+        WHERE session_id = ?
+          AND purpose = ?
+        ORDER BY started_at DESC, rowid DESC
+        LIMIT 1
+      `).get(trimmedSessionId, purpose) as ProviderInvocationUsageRow | undefined
+      : this.db.prepare(`
+        SELECT *
+        FROM provider_invocations
+        WHERE session_id = ?
+        ORDER BY started_at DESC, rowid DESC
+        LIMIT 1
+      `).get(trimmedSessionId) as ProviderInvocationUsageRow | undefined;
+
+    return row ? this.mapProviderInvocationUsageRow(row) : null;
+  }
+
   getLatestTaskRunBySessionId(sessionId: string): TaskRunRecord | null {
     const normalizedSessionId = sessionId.trim();
     if (!normalizedSessionId) {
@@ -1179,290 +1192,9 @@ export class ExecutionRepository {
       WHERE id = ?
     `).get(projectId) as { id: string; name: string } | undefined;
 
-    const sprintRuns = this.db.prepare(`
-      SELECT
-        sr.id,
-        sr.project_id,
-        sr.sprint_id,
-        s.name AS sprint_name,
-        s.number AS sprint_number,
-        sr.status,
-        sr.trigger_type,
-        sr.triggered_by,
-        sr.executor_mode,
-        sr.started_at,
-        sr.finished_at,
-        sr.last_heartbeat_at,
-        sr.created_at,
-        el.owner_key AS active_lease_owner_key,
-        el.expires_at AS active_lease_expires_at
-      FROM sprint_runs sr
-      INNER JOIN sprints s ON s.id = sr.sprint_id
-      LEFT JOIN execution_leases el
-        ON el.scope_type = 'sprint'
-       AND el.scope_id = sr.sprint_id
-      WHERE sr.project_id = ?
-      ORDER BY
-        CASE sr.status WHEN 'running' THEN 0 WHEN 'cancel_requested' THEN 1 WHEN 'queued' THEN 2 WHEN 'paused' THEN 3 WHEN 'failed' THEN 4 WHEN 'completed' THEN 5 ELSE 6 END,
-        COALESCE(sr.last_heartbeat_at, sr.updated_at, sr.created_at) DESC
-      LIMIT 12
-    `).all(projectId) as unknown as ExecutionSprintRunSummaryRow[];
-    const expandedSprintRunIds = sprintRuns
-      .filter((row) => ["running", "queued", "paused", "cancel_requested"].includes(row.status))
-      .map((row) => row.id);
-    if (expandedSprintRunIds.length === 0 && sprintRuns[0]?.id) {
-      expandedSprintRunIds.push(sprintRuns[0].id);
-    }
-
-    const recentTaskDispatches = this.db.prepare(`
-      SELECT
-        td.id,
-        td.project_id,
-        td.sprint_id,
-        td.sprint_run_id,
-        s.name AS sprint_name,
-        s.number AS sprint_number,
-        td.task_id,
-        t.task_key,
-        t.title AS task_title,
-        td.status,
-        td.executor_type,
-        td.priority,
-        td.connection_id,
-        c.display_name AS connection_display_name,
-        c.role AS connection_role,
-        td.queued_at,
-        td.claimed_at,
-        td.started_at,
-        td.finished_at,
-        td.last_heartbeat_at,
-        td.error_message,
-        el.owner_key AS active_lease_owner_key,
-        el.expires_at AS active_lease_expires_at
-      FROM task_dispatches td
-      INNER JOIN sprints s ON s.id = td.sprint_id
-      INNER JOIN tasks t ON t.id = td.task_id
-      LEFT JOIN mcp_connections c ON c.id = td.connection_id
-      LEFT JOIN execution_leases el
-        ON el.scope_type = 'task_dispatch'
-       AND el.scope_id = td.id
-      WHERE td.project_id = ?
-      ORDER BY
-        CASE td.status WHEN 'running' THEN 0 WHEN 'cancel_requested' THEN 1 WHEN 'claimed' THEN 2 WHEN 'queued' THEN 3 WHEN 'blocked' THEN 4 WHEN 'failed' THEN 5 WHEN 'completed' THEN 6 ELSE 7 END,
-        td.priority DESC,
-        COALESCE(td.last_heartbeat_at, td.started_at, td.claimed_at, td.queued_at) DESC
-      LIMIT 24
-    `).all(projectId) as unknown as ExecutionTaskDispatchSummaryRow[];
-
-    const expandedSprintTaskDispatches = expandedSprintRunIds.length > 0
-      ? this.storage.executeChunkedInQuery<ExecutionTaskDispatchSummaryRow>({
-        sqlPrefix: `
-        SELECT
-          td.id,
-          td.project_id,
-          td.sprint_id,
-          td.sprint_run_id,
-          s.name AS sprint_name,
-          s.number AS sprint_number,
-          td.task_id,
-          t.task_key,
-          t.title AS task_title,
-          td.status,
-          td.executor_type,
-          td.priority,
-          td.connection_id,
-          c.display_name AS connection_display_name,
-          c.role AS connection_role,
-          td.queued_at,
-          td.claimed_at,
-          td.started_at,
-          td.finished_at,
-          td.last_heartbeat_at,
-          td.error_message,
-          el.owner_key AS active_lease_owner_key,
-          el.expires_at AS active_lease_expires_at
-        FROM task_dispatches td
-        INNER JOIN sprints s ON s.id = td.sprint_id
-        INNER JOIN tasks t ON t.id = td.task_id
-        LEFT JOIN mcp_connections c ON c.id = td.connection_id
-        LEFT JOIN execution_leases el
-          ON el.scope_type = 'task_dispatch'
-         AND el.scope_id = td.id
-        WHERE td.project_id = ?
-          AND td.sprint_run_id`,
-        sqlSuffix: "",
-        items: expandedSprintRunIds,
-        bindParamsBefore: [projectId],
-      })
-      : [];
-
-    const taskDispatchById = new Map<string, ExecutionTaskDispatchSummaryRow>();
-    for (const row of [...expandedSprintTaskDispatches, ...recentTaskDispatches]) {
-      taskDispatchById.set(row.id, row);
-    }
-    const taskDispatches = [...taskDispatchById.values()].sort((left, right) => this.compareExecutionTaskDispatchSummaryRows(left, right));
-
-    const dispatchIds = taskDispatches.map((row) => row.id);
-    const taskRunByDispatchId = new Map<string, { id: string; state: string; provider: string | null; session_id: string | null; session_name: string | null; worker_branch: string | null; pr_url: string | null; }>();
-
-    if (dispatchIds.length > 0) {
-      const taskRunRows = this.storage.executeChunkedInQuery<{ dispatch_id: string; id: string; state: string; provider: string | null; session_id: string | null; session_name: string | null; worker_branch: string | null; pr_url: string | null; }>({
-        sqlPrefix: `SELECT tr.dispatch_id, tr.id, tr.state, tr.provider, tr.session_id, tr.session_name, tr.worker_branch, tr.pr_url
-        FROM task_runs tr
-        INNER JOIN (
-          SELECT dispatch_id, MAX(rowid) AS latest_rowid
-          FROM task_runs
-          WHERE dispatch_id`,
-        sqlSuffix: `GROUP BY dispatch_id
-        ) latest ON latest.latest_rowid = tr.rowid`,
-        items: dispatchIds,
-      });
-
-      for (const run of taskRunRows) {
-        taskRunByDispatchId.set(run.dispatch_id, run);
-      }
-    }
-
-    for (const td of taskDispatches) {
-      const taskRun = taskRunByDispatchId.get(td.id);
-      td.task_run_id = taskRun?.id || null;
-      td.task_run_state = taskRun?.state || null;
-      td.provider = taskRun?.provider || null;
-      td.session_id = taskRun?.session_id || null;
-      td.session_name = taskRun?.session_name || null;
-      td.worker_branch = taskRun?.worker_branch || null;
-      td.pr_url = taskRun?.pr_url || null;
-    }
-
-    const recentEvents = this.db.prepare(`
-      SELECT *
-      FROM (
-        SELECT
-          tre.id,
-          'task_run' AS scope_type,
-          tre.task_run_id,
-          tr.sprint_run_id,
-          tr.dispatch_id,
-          tr.project_id,
-          tr.sprint_id,
-          s.name AS sprint_name,
-          s.number AS sprint_number,
-          sr.status AS sprint_run_status,
-          tr.task_id,
-          t.task_key,
-          t.title AS task_title,
-          tr.state AS task_run_state,
-          tre.event_type,
-          tre.originator,
-          tre.source_event_key,
-          tr.provider,
-          tr.session_id,
-          tr.session_name,
-          tr.worker_branch,
-          tr.pr_url,
-          tr.connection_id,
-          c.display_name AS connection_display_name,
-          c.role AS connection_role,
-          tre.created_at,
-          tre.payload_json
-        FROM task_run_events tre
-        INNER JOIN task_runs tr ON tr.id = tre.task_run_id
-        INNER JOIN sprints s ON s.id = tr.sprint_id
-        INNER JOIN tasks t ON t.id = tr.task_id
-        LEFT JOIN sprint_runs sr ON sr.id = tr.sprint_run_id
-        LEFT JOIN mcp_connections c ON c.id = tr.connection_id
-        WHERE tr.project_id = ?
-
-        UNION ALL
-
-        SELECT
-          sre.id,
-          'sprint_run' AS scope_type,
-          NULL AS task_run_id,
-          sre.sprint_run_id,
-          NULL AS dispatch_id,
-          sr.project_id,
-          sr.sprint_id,
-          s.name AS sprint_name,
-          s.number AS sprint_number,
-          sr.status AS sprint_run_status,
-          NULL AS task_id,
-          NULL AS task_key,
-          NULL AS task_title,
-          NULL AS task_run_state,
-          sre.event_type,
-          sre.originator,
-          sre.source_event_key,
-          NULL AS provider,
-          NULL AS session_id,
-          NULL AS session_name,
-          NULL AS worker_branch,
-          NULL AS pr_url,
-          NULL AS connection_id,
-          NULL AS connection_display_name,
-          NULL AS connection_role,
-          sre.created_at,
-          sre.payload_json
-        FROM sprint_run_events sre
-        INNER JOIN sprint_runs sr ON sr.id = sre.sprint_run_id
-        INNER JOIN sprints s ON s.id = sr.sprint_id
-        WHERE sr.project_id = ?
-      )
-      ORDER BY created_at DESC, id DESC
-      LIMIT 240
-    `).all(projectId, projectId) as unknown as ExecutionRuntimeEventSummaryRow[];
-
-    const expandedSprintTaskEvents = expandedSprintRunIds.length > 0
-      ? this.storage.executeChunkedInQuery<ExecutionRuntimeEventSummaryRow>({
-        sqlPrefix: `
-        SELECT
-          tre.id,
-          'task_run' AS scope_type,
-          tre.task_run_id,
-          tr.sprint_run_id,
-          tr.dispatch_id,
-          tr.project_id,
-          tr.sprint_id,
-          s.name AS sprint_name,
-          s.number AS sprint_number,
-          sr.status AS sprint_run_status,
-          tr.task_id,
-          t.task_key,
-          t.title AS task_title,
-          tr.state AS task_run_state,
-          tre.event_type,
-          tre.originator,
-          tre.source_event_key,
-          tr.provider,
-          tr.session_id,
-          tr.session_name,
-          tr.worker_branch,
-          tr.pr_url,
-          tr.connection_id,
-          c.display_name AS connection_display_name,
-          c.role AS connection_role,
-          tre.created_at,
-          tre.payload_json
-        FROM task_run_events tre
-        INNER JOIN task_runs tr ON tr.id = tre.task_run_id
-        INNER JOIN sprints s ON s.id = tr.sprint_id
-        INNER JOIN tasks t ON t.id = tr.task_id
-        LEFT JOIN sprint_runs sr ON sr.id = tr.sprint_run_id
-        LEFT JOIN mcp_connections c ON c.id = tr.connection_id
-        WHERE tr.project_id = ?
-          AND tr.sprint_run_id`,
-        sqlSuffix: `
-        ORDER BY tre.created_at DESC, tre.id DESC`,
-        items: expandedSprintRunIds,
-        bindParamsBefore: [projectId],
-      })
-      : [];
-
-    const recentEventById = new Map<string, ExecutionRuntimeEventSummaryRow>();
-    for (const row of [...expandedSprintTaskEvents, ...recentEvents]) {
-      recentEventById.set(row.id, row);
-    }
-    const runtimeEvents = [...recentEventById.values()].sort((left, right) => this.compareExecutionRuntimeEventSummaryRows(left, right));
+    const { sprintRuns, expandedSprintRunIds } = queryExecutionSprintRuns(this.db, projectId);
+    const taskDispatches = queryExecutionTaskDispatches(this.db, this.storage, projectId, expandedSprintRunIds);
+    const runtimeEvents = queryExecutionRuntimeEvents(this.db, this.storage, projectId, expandedSprintRunIds);
 
     const activeAttentionItems = this.listActiveAttentionRowsForProject(projectId);
     const humanInterventionBySprintRunId = this.buildHumanInterventionSummaryBySprintRun(
@@ -1508,7 +1240,7 @@ export class ExecutionRepository {
       WHERE id = ?
     `).get(projectId) as { id: string; name: string } | undefined;
     const now = new Date();
-    const normalized = this.normalizeProjectStatsQuery(projectId, input, now);
+    const normalized = normalizeProjectStatsQuery(this.db, projectId, input, now);
     const rangeStartIso = normalized.range.from;
     const rangeEndIso = normalized.range.to;
     const invocations = this.db.prepare(`
@@ -1519,11 +1251,10 @@ export class ExecutionRepository {
         AND started_at < ?
       ORDER BY started_at ASC, id ASC
     `).all(projectId, rangeStartIso, rangeEndIso) as unknown as ProviderInvocationUsageRow[];
-    const mappedInvocations = invocations.map((row) => this.mapProviderInvocationUsageRow(row));
     const nowIso = now.toISOString();
     const wallTimeByTaskId = this.getWallTimeTotalsByTaskIdsForRange(projectId, rangeStartIso, rangeEndIso, nowIso);
     const wallTimeBySprintRunId = this.getWallTimeTotalsBySprintRunIdsForRange(projectId, rangeStartIso, rangeEndIso, nowIso);
-    const buckets = this.createUsageBuckets(normalized.range, normalized.bucketSizeMs);
+    const buckets = createUsageBuckets(normalized.range, normalized.bucketSizeMs);
     const taskMeta = this.getTaskMetadata(projectId);
     const sprintMeta = this.getSprintMetadata(projectId);
     const usage = createEmptyUsageTotals();
@@ -1537,6 +1268,103 @@ export class ExecutionRepository {
     const providerLastActivity = new Map<string, string>();
     const purposeLastActivity = new Map<string, string>();
 
+    const mappedInvocations = invocations.map(row => this.mapProviderInvocationUsageRow(row));
+    const firstBucketStartMs = buckets.length > 0 ? buckets[0].bucketStartMs : 0;
+
+    const gitMetricsEvents = this.db.prepare(`
+      SELECT tr.id as task_run_id, tr.task_id, tr.sprint_id, tr.sprint_run_id, tr.pr_url, t.is_merged, tre.payload_json, tre.created_at
+      FROM task_run_events tre
+      INNER JOIN task_runs tr ON tr.id = tre.task_run_id
+      INNER JOIN tasks t ON t.id = tr.task_id
+      WHERE tr.project_id = ?
+        AND tre.event_type IN ('cli_git_pushed', 'jules_git_pushed', 'git_metrics')
+        AND tre.created_at >= ?
+        AND tre.created_at < ?
+      ORDER BY tre.created_at ASC
+    `).all(projectId, rangeStartIso, rangeEndIso) as Array<{
+      task_run_id: string; task_id: string; sprint_id: string; sprint_run_id: string | null; pr_url: string | null; is_merged: string | number; payload_json: string; created_at: string;
+    }>;
+
+    const gitTotals = { insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0 };
+    const gitBuckets = buckets.map(b => ({
+      bucketStart: b.bucketStart,
+      bucketEnd: b.bucketEnd,
+      label: b.label,
+      metrics: { insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0 }
+    }));
+    const gitTaskUsage = new Map<string, ExecutionGitMetrics>();
+    const gitSprintUsage = new Map<string, ExecutionGitMetrics>();
+
+    const getGitMetrics = (map: Map<string, ExecutionGitMetrics>, key: string) => {
+      if (!map.has(key)) map.set(key, { insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0 });
+      return map.get(key)!;
+    };
+
+    const processGitMetric = (metrics: ExecutionGitMetrics, insertions: number, deletions: number, filesChanged: number) => {
+      metrics.insertions += insertions;
+      metrics.deletions += deletions;
+      metrics.filesChanged += filesChanged;
+    };
+
+    for (const event of gitMetricsEvents) {
+      const payload = event.payload_json ? JSON.parse(event.payload_json) : {};
+      const insertions = typeof payload.insertions === "number" ? payload.insertions : 0;
+      const deletions = typeof payload.deletions === "number" ? payload.deletions : 0;
+      const filesChanged = typeof payload.filesChanged === "number" ? payload.filesChanged : 0;
+
+      processGitMetric(gitTotals, insertions, deletions, filesChanged);
+
+      const bucketIndex = Math.floor((new Date(event.created_at).getTime() - firstBucketStartMs) / normalized.bucketSizeMs);
+      if (bucketIndex >= 0 && bucketIndex < gitBuckets.length) {
+        processGitMetric(gitBuckets[bucketIndex]!.metrics, insertions, deletions, filesChanged);
+      }
+
+      const taskMetrics = getGitMetrics(gitTaskUsage, event.task_id);
+      processGitMetric(taskMetrics, insertions, deletions, filesChanged);
+
+      const sprintKey = event.sprint_run_id || event.sprint_id;
+      const sprintMetrics = getGitMetrics(gitSprintUsage, sprintKey);
+      processGitMetric(sprintMetrics, insertions, deletions, filesChanged);
+    }
+
+    const taskRunsInWindow = this.db.prepare(`
+      SELECT tr.id as task_run_id, tr.task_id, tr.sprint_id, tr.sprint_run_id, tr.pr_url, tr.started_at, tr.finished_at, t.is_merged
+      FROM task_runs tr
+      INNER JOIN tasks t ON t.id = tr.task_id
+      WHERE tr.project_id = ?
+        AND COALESCE(tr.finished_at, tr.started_at) >= ?
+        AND COALESCE(tr.finished_at, tr.started_at) < ?
+    `).all(projectId, rangeStartIso, rangeEndIso) as Array<{
+      task_run_id: string; task_id: string; sprint_id: string; sprint_run_id: string | null; pr_url: string | null; is_merged: string | number; started_at: string | null; finished_at: string | null;
+    }>;
+
+    const seenTaskRunPrs = new Set<string>();
+    const seenTaskRunMerged = new Set<string>();
+
+    for (const tr of taskRunsInWindow) {
+      const timestamp = tr.finished_at || tr.started_at || rangeStartIso;
+      const bucketIndex = Math.floor((new Date(timestamp).getTime() - firstBucketStartMs) / normalized.bucketSizeMs);
+
+      const hasPr = tr.pr_url !== null;
+      const isMerged = Boolean(tr.is_merged && tr.is_merged !== 0 && tr.is_merged !== "0");
+
+      if (hasPr && !seenTaskRunPrs.has(tr.task_run_id)) {
+        seenTaskRunPrs.add(tr.task_run_id);
+        gitTotals.prCount += 1;
+        if (bucketIndex >= 0 && bucketIndex < gitBuckets.length) gitBuckets[bucketIndex]!.metrics.prCount += 1;
+        getGitMetrics(gitTaskUsage, tr.task_id).prCount += 1;
+        getGitMetrics(gitSprintUsage, tr.sprint_run_id || tr.sprint_id).prCount += 1;
+      }
+
+      if (isMerged && !seenTaskRunMerged.has(tr.task_run_id)) {
+        seenTaskRunMerged.add(tr.task_run_id);
+        gitTotals.mergedCount += 1;
+        if (bucketIndex >= 0 && bucketIndex < gitBuckets.length) gitBuckets[bucketIndex]!.metrics.mergedCount += 1;
+        getGitMetrics(gitTaskUsage, tr.task_id).mergedCount += 1;
+        getGitMetrics(gitSprintUsage, tr.sprint_run_id || tr.sprint_id).mergedCount += 1;
+      }
+    }
+
     for (const invocation of mappedInvocations) {
       this.mergeUsageTotals(usage, invocation);
       this.mergeUsageMap(taskUsage, invocation.taskId, invocation);
@@ -1549,9 +1377,16 @@ export class ExecutionRepository {
       this.updateLastActivity(providerLastActivity, invocation.provider, activityAt);
       this.updateLastActivity(purposeLastActivity, invocation.purpose, activityAt);
       tokenSourceCounts.set(invocation.usageSource, (tokenSourceCounts.get(invocation.usageSource) || 0) + 1);
-      const bucketIndex = Math.floor((new Date(invocation.startedAt).getTime() - buckets[0].bucketStartMs) / normalized.bucketSizeMs);
-      if (bucketIndex >= 0 && bucketIndex < buckets.length) {
-        this.mergeUsageTotals(buckets[bucketIndex]!.usage, invocation);
+
+      if (buckets.length > 0) {
+        const bucketIndex = Math.floor((new Date(invocation.startedAt).getTime() - firstBucketStartMs) / normalized.bucketSizeMs);
+        if (bucketIndex >= 0 && bucketIndex < buckets.length) {
+          const bucket = buckets[bucketIndex]!;
+          this.mergeUsageTotals(bucket.usage, invocation);
+          bucket.providerTokens.set(invocation.provider, (bucket.providerTokens.get(invocation.provider) || 0) + invocation.totalTokens);
+          bucket.purposeTime.set(invocation.purpose, (bucket.purposeTime.get(invocation.purpose) || 0) + (invocation.durationMs || 0));
+          bucket.purposeInvocations.set(invocation.purpose, (bucket.purposeInvocations.get(invocation.purpose) || 0) + 1);
+        }
       }
     }
 
@@ -1590,35 +1425,18 @@ export class ExecutionRepository {
       { id: "reliability_unsupported", label: "Unsupported Usage", grouping: "reliability", defaultEnabled: false, data: buckets.map((b) => b.usage.unsupportedInvocationCount) },
       { id: "reliability_unavailable", label: "Unavailable Usage", grouping: "reliability", defaultEnabled: false, data: buckets.map((b) => b.usage.unavailableInvocationCount) },
       ...Array.from(providerUsage.keys()).map((providerId) => ({
-        id: `provider_${providerId}`, label: `${providerId} Tokens`, grouping: "providers", defaultEnabled: false, data: buckets.map(() => 0)
+        id: `provider_${providerId}`, label: `${providerId} Tokens`, grouping: "providers", defaultEnabled: false,
+        data: buckets.map((b) => b.providerTokens.get(providerId) || 0)
       })),
       ...Array.from(purposeUsage.keys()).map((purposeId) => ({
-        id: `purpose_time_${purposeId}`, label: `${purposeId.replace(/_/g, " ")} Time`, grouping: "purposes_time", defaultEnabled: false, data: buckets.map(() => 0)
+        id: `purpose_time_${purposeId}`, label: `${purposeId.replace(/_/g, " ")} Time`, grouping: "purposes_time", defaultEnabled: false,
+        data: buckets.map((b) => b.purposeTime.get(purposeId) || 0)
       })),
       ...Array.from(purposeUsage.keys()).map((purposeId) => ({
-        id: `purpose_invocations_${purposeId}`, label: `${purposeId.replace(/_/g, " ")} Invocations`, grouping: "purposes_invocations", defaultEnabled: false, data: buckets.map(() => 0)
+        id: `purpose_invocations_${purposeId}`, label: `${purposeId.replace(/_/g, " ")} Invocations`, grouping: "purposes_invocations", defaultEnabled: false,
+        data: buckets.map((b) => b.purposeInvocations.get(purposeId) || 0)
       }))
     ];
-
-    const firstBucketStartMs = buckets.length > 0 ? new Date(buckets[0].bucketStart).getTime() : 0;
-    if (buckets.length > 0) {
-      const chartSeriesMap = new Map<string, ProjectExecutionStatsChartSeries>(
-        chartSeries.map(s => [s.id, s])
-      );
-      for (const invocation of mappedInvocations) {
-        const bucketIndex = Math.floor((new Date(invocation.startedAt).getTime() - firstBucketStartMs) / normalized.bucketSizeMs);
-        if (bucketIndex >= 0 && bucketIndex < buckets.length) {
-            const providerSeries = chartSeriesMap.get(`provider_${invocation.provider}`);
-            if (providerSeries) providerSeries.data[bucketIndex] += invocation.totalTokens;
-
-            const purposeTimeSeries = chartSeriesMap.get(`purpose_time_${invocation.purpose}`);
-            if (purposeTimeSeries) purposeTimeSeries.data[bucketIndex] += invocation.durationMs || 0;
-
-            const purposeInvocationsSeries = chartSeriesMap.get(`purpose_invocations_${invocation.purpose}`);
-            if (purposeInvocationsSeries) purposeInvocationsSeries.data[bucketIndex] += 1;
-        }
-      }
-    }
 
     return {
       projectId,
@@ -1639,6 +1457,28 @@ export class ExecutionRepository {
         label: bucket.label,
         usage: bucket.usage,
       })),
+      git: {
+        totals: gitTotals,
+        buckets: gitBuckets,
+        tasks: Array.from(gitTaskUsage.entries()).map(([id, metrics]) => {
+          const meta = taskMeta.get(id);
+          return {
+            id,
+            label: meta?.label || id,
+            secondaryLabel: meta?.secondaryLabel || null,
+            metrics,
+          };
+        }),
+        sprints: Array.from(gitSprintUsage.entries()).map(([id, metrics]) => {
+          const meta = sprintMeta.get(id);
+          return {
+            id,
+            label: meta?.label || id,
+            secondaryLabel: meta?.secondaryLabel || null,
+            metrics,
+          };
+        }),
+      },
       sprints: this.toStatsEntitySummaries({
         entries: sprintUsage,
         metadata: this.withLastActivityMetadata(sprintMeta, sprintLastActivity),
@@ -1742,14 +1582,10 @@ export class ExecutionRepository {
     }
     const activeAttentionItems = this.listActiveAttentionRowsForSprintRuns(telemetrySprintRunIds);
 
-    const paddedSprintRunIds = [...telemetrySprintRunIds];
-    while (paddedSprintRunIds.length > 0 && paddedSprintRunIds.length < 48) {
-      paddedSprintRunIds.push(paddedSprintRunIds[paddedSprintRunIds.length - 1]!);
-    }
-    const placeholders = Array(48).fill("?").join(", ");
+    const placeholders = Array(telemetrySprintRunIds.length).fill("?").join(", ");
     const recentEvents = telemetrySprintRunIds.length === 0
       ? []
-      : this.storage.getCachedStatement(`
+      : this.db.prepare(`
         SELECT *
         FROM (
           SELECT
@@ -1825,7 +1661,7 @@ export class ExecutionRepository {
         )
         ORDER BY created_at DESC, id DESC
         LIMIT 80
-      `).all(...paddedSprintRunIds, ...paddedSprintRunIds) as unknown as ExecutionRuntimeEventSummaryRow[];
+      `).all(...telemetrySprintRunIds, ...telemetrySprintRunIds) as unknown as ExecutionRuntimeEventSummaryRow[];
 
     const eventAwareHumanInterventionBySprintRunId = this.buildHumanInterventionSummaryBySprintRun(
       [...activeProjects, ...pausedProjects].map((row) => ({
@@ -1851,6 +1687,24 @@ export class ExecutionRepository {
       recentEvents: recentEvents.map((row) => this.mapExecutionRuntimeEventSummaryRow(row)),
       updatedAt: new Date().toISOString(),
     };
+  }
+
+  countRunningTasksPerProvider(projectId: string): Map<ProviderId, number> {
+    this.requireProject(projectId);
+    const rows = this.db.prepare(`
+      SELECT provider, COUNT(*) as count
+      FROM task_runs
+      WHERE project_id = ? AND state = 'RUNNING' AND provider IS NOT NULL
+      GROUP BY provider
+    `).all(projectId) as Array<{ provider: string; count: number | string }>;
+
+    const map = new Map<ProviderId, number>();
+    for (const row of rows) {
+      if (row.provider) {
+        map.set(row.provider as ProviderId, toNumber(row.count));
+      }
+    }
+    return map;
   }
 
   updateTaskRun(taskRunId: string, input: UpdateTaskRunInput): TaskRunRecord {
@@ -1917,7 +1771,7 @@ export class ExecutionRepository {
     payload: Record<string, unknown>,
     options?: { createdAt?: string; sourceEventKey?: string | null },
   ): boolean {
-    this.requireTaskRun(taskRunId);
+    const taskRun = this.requireTaskRun(taskRunId);
     const result = this.db.prepare(`
       INSERT OR IGNORE INTO task_run_events (id, task_run_id, event_type, originator, payload_json, source_event_key, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -1932,7 +1786,6 @@ export class ExecutionRepository {
     );
     const inserted = Number((result as { changes?: number }).changes || 0) > 0;
     if (inserted) {
-      const taskRun = this.requireTaskRun(taskRunId);
       this.notifyRealtime(taskRun.projectId, false);
     }
     return inserted;
@@ -1945,7 +1798,7 @@ export class ExecutionRepository {
     payload: Record<string, unknown>,
     options?: { createdAt?: string; sourceEventKey?: string | null },
   ): boolean {
-    this.requireSprintRun(sprintRunId);
+    const sprintRun = this.requireSprintRun(sprintRunId);
     const result = this.db.prepare(`
       INSERT OR IGNORE INTO sprint_run_events (id, sprint_run_id, event_type, originator, payload_json, source_event_key, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -1960,7 +1813,6 @@ export class ExecutionRepository {
     );
     const inserted = Number((result as { changes?: number }).changes || 0) > 0;
     if (inserted) {
-      const sprintRun = this.requireSprintRun(sprintRunId);
       this.notifyRealtime(sprintRun.projectId, true);
     }
     return inserted;
@@ -2435,28 +2287,6 @@ export class ExecutionRepository {
     return map;
   }
 
-  private createUsageBuckets(
-    range: ProjectExecutionStatsSnapshot["range"],
-    bucketSizeMs: number,
-  ): Array<ExecutionUsageBucketSummary & { bucketStartMs: number }> {
-    const buckets: Array<ExecutionUsageBucketSummary & { bucketStartMs: number }> = [];
-    const startMs = new Date(range.from).getTime();
-    for (let index = 0; index < range.bucketCount; index += 1) {
-      const bucketStartMs = startMs + index * bucketSizeMs;
-      const bucketEndMs = bucketStartMs + bucketSizeMs;
-      const bucketStart = new Date(bucketStartMs);
-      const label = this.formatBucketLabel(bucketStart, range.resolution);
-      buckets.push({
-        bucketStart: bucketStart.toISOString(),
-        bucketEnd: new Date(bucketEndMs).toISOString(),
-        bucketStartMs,
-        label,
-        usage: createEmptyUsageTotals(),
-      });
-    }
-    return buckets;
-  }
-
   private toStatsEntitySummaries(args: {
     entries: Map<string, ExecutionUsageTotals>;
     metadata: Map<string, StatsEntityMetadata>;
@@ -2486,220 +2316,6 @@ export class ExecutionRepository {
       || right.usage.activeTimeMs - left.usage.activeTimeMs
       || left.label.localeCompare(right.label)
     ));
-  }
-
-  private normalizeProjectStatsQuery(
-    projectId: string,
-    input: ProjectStatsQuery | ProjectStatsWindow,
-    now: Date,
-  ): NormalizedProjectStatsQuery {
-    const query = typeof input === "string"
-      ? { window: input }
-      : {
-        window: input.window,
-        from: input.from ?? undefined,
-        to: input.to ?? undefined,
-      };
-
-    if (query.window === "custom") {
-      const fromDate = this.parseStatsDateInput(query.from, "start");
-      const toDate = this.parseStatsDateInput(query.to, "end");
-      if (!fromDate || !toDate) {
-        throw new Error("Custom stats windows require valid from and to values.");
-      }
-      if (fromDate.getTime() > toDate.getTime()) {
-        throw new Error("Custom stats window start must be earlier than end.");
-      }
-      return this.buildStatsRangeFromBounds(query, fromDate, toDate);
-    }
-
-    if (query.window === "24h") {
-      const alignedEnd = new Date(now);
-      alignedEnd.setMinutes(0, 0, 0);
-      const bucketSizeMs = 60 * 60 * 1000;
-      const bucketCount = 24;
-      const start = new Date(alignedEnd.getTime() - (bucketCount - 1) * bucketSizeMs);
-      return this.buildStatsRange({
-        query,
-        window: "24h",
-        from: start,
-        bucketSizeMs,
-        bucketCount,
-        resolution: "hour",
-        label: "Last 24 hours",
-        resolutionLabel: "Hourly telemetry buckets",
-      });
-    }
-
-    if (query.window === "7d" || query.window === "30d") {
-      const alignedEnd = this.startOfUtcDay(now);
-      const bucketSizeMs = 24 * 60 * 60 * 1000;
-      const bucketCount = query.window === "7d" ? 7 : 30;
-      const start = new Date(alignedEnd.getTime() - (bucketCount - 1) * bucketSizeMs);
-      return this.buildStatsRange({
-        query,
-        window: query.window,
-        from: start,
-        bucketSizeMs,
-        bucketCount,
-        resolution: "day",
-        label: query.window === "7d" ? "Last 7 days" : "Last 30 days",
-        resolutionLabel: "Daily telemetry buckets",
-      });
-    }
-
-    const firstInvocationRow = this.db.prepare(`
-      SELECT MIN(started_at) AS first_started_at
-      FROM provider_invocations
-      WHERE project_id = ?
-    `).get(projectId) as { first_started_at: string | null } | undefined;
-    const firstInvocation = this.parseStatsDateInput(firstInvocationRow?.first_started_at || undefined, "start") || now;
-    const allTimeStart = this.startOfUtcDay(firstInvocation);
-    const allTimeEnd = this.startOfUtcDay(now);
-    return this.buildStatsRangeFromBounds(query, allTimeStart, new Date(allTimeEnd.getTime() + (24 * 60 * 60 * 1000) - 1));
-  }
-
-  private buildStatsRangeFromBounds(
-    query: ProjectStatsQuery,
-    fromDate: Date,
-    toDate: Date,
-  ): NormalizedProjectStatsQuery {
-    const spanMs = Math.max(1, toDate.getTime() - fromDate.getTime());
-    const spanHours = Math.ceil(spanMs / (60 * 60 * 1000));
-    const spanDays = Math.ceil(spanMs / (24 * 60 * 60 * 1000));
-
-    if (spanHours <= 48) {
-      const bucketSizeMs = 60 * 60 * 1000;
-      const start = this.startOfHour(fromDate);
-      const end = this.startOfHour(new Date(toDate.getTime() + bucketSizeMs));
-      const bucketCount = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / bucketSizeMs));
-      return this.buildStatsRange({
-        query,
-        window: query.window,
-        from: start,
-        bucketSizeMs,
-        bucketCount,
-        resolution: "hour",
-        label: query.window === "custom" ? "Custom range" : "All time",
-        resolutionLabel: "Hourly telemetry buckets",
-      });
-    }
-
-    if (spanDays <= 90) {
-      const bucketSizeMs = 24 * 60 * 60 * 1000;
-      const start = this.startOfUtcDay(fromDate);
-      const end = this.startOfUtcDay(new Date(toDate.getTime() + bucketSizeMs));
-      const bucketCount = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / bucketSizeMs));
-      return this.buildStatsRange({
-        query,
-        window: query.window,
-        from: start,
-        bucketSizeMs,
-        bucketCount,
-        resolution: "day",
-        label: query.window === "custom" ? "Custom range" : "All time",
-        resolutionLabel: "Daily telemetry buckets",
-      });
-    }
-
-    const bucketSizeMs = 7 * 24 * 60 * 60 * 1000;
-    const start = this.startOfUtcWeek(fromDate);
-    const end = this.startOfUtcWeek(new Date(toDate.getTime() + (24 * 60 * 60 * 1000)));
-    const bucketCount = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / bucketSizeMs));
-    return this.buildStatsRange({
-      query,
-      window: query.window,
-      from: start,
-      bucketSizeMs,
-      bucketCount,
-      resolution: "week",
-      label: query.window === "custom" ? "Custom range" : "All time",
-      resolutionLabel: "Weekly telemetry buckets",
-    });
-  }
-
-  private buildStatsRange(input: {
-    query: ProjectStatsQuery;
-    window: ProjectStatsWindow;
-    from: Date;
-    bucketSizeMs: number;
-    bucketCount: number;
-    resolution: ProjectStatsResolution;
-    label: string;
-    resolutionLabel: string;
-  }): NormalizedProjectStatsQuery {
-    const rangeStart = new Date(input.from);
-    const rangeEnd = new Date(rangeStart.getTime() + input.bucketSizeMs * input.bucketCount);
-    return {
-      query: {
-        window: input.query.window,
-        from: input.query.from ?? undefined,
-        to: input.query.to ?? undefined,
-      },
-      range: {
-        window: input.window,
-        label: input.label,
-        resolution: input.resolution,
-        resolutionLabel: input.resolutionLabel,
-        from: rangeStart.toISOString(),
-        to: rangeEnd.toISOString(),
-        bucketCount: input.bucketCount,
-        isCustom: input.query.window === "custom",
-      },
-      bucketSizeMs: input.bucketSizeMs,
-    };
-  }
-
-  private parseStatsDateInput(value: string | undefined, edge: "start" | "end"): Date | null {
-    if (!value) {
-      return null;
-    }
-    const trimmed = value.trim();
-    if (trimmed.length === 0) {
-      return null;
-    }
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-      return new Date(`${trimmed}T${edge === "start" ? "00:00:00.000" : "23:59:59.999"}Z`);
-    }
-    const parsed = new Date(trimmed);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  private startOfUtcDay(date: Date): Date {
-    const next = new Date(date);
-    next.setUTCHours(0, 0, 0, 0);
-    return next;
-  }
-
-  private startOfHour(date: Date): Date {
-    const next = new Date(date);
-    next.setMinutes(0, 0, 0);
-    return next;
-  }
-
-  private startOfUtcWeek(date: Date): Date {
-    const next = this.startOfUtcDay(date);
-    const day = next.getUTCDay();
-    const offset = day === 0 ? 6 : day - 1;
-    next.setUTCDate(next.getUTCDate() - offset);
-    return next;
-  }
-
-  private formatBucketLabel(date: Date, resolution: ProjectStatsResolution): string {
-    if (resolution === "hour") {
-      return date.toISOString().slice(11, 16);
-    }
-    if (resolution === "week") {
-      return `W${this.getIsoWeekNumber(date)}`;
-    }
-    return date.toISOString().slice(5, 10);
-  }
-
-  private getIsoWeekNumber(date: Date): number {
-    const utcDate = this.startOfUtcDay(date);
-    utcDate.setUTCDate(utcDate.getUTCDate() + 4 - (utcDate.getUTCDay() || 7));
-    const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
-    return Math.ceil((((utcDate.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
   }
 
   private withLastActivityMetadata(

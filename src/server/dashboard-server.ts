@@ -77,8 +77,22 @@ import type {
 } from "../contracts/project-management-types.js";
 import { correlationIdMiddleware } from "../shared/logging/correlation-id.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
+
+import { registerProjectRoutes } from "./project-routes.js";
+import { registerSprintRoutes } from "./sprint-routes.js";
+import { registerTaskRoutes } from "./task-routes.js";
+
 import { bootDashboardRealtimeWebSocketServer } from "./dashboard-realtime-websocket-server.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
+import { asyncRoute, parseTrimmedString, requireTrimmedString, syncRoute, toErrorResponse } from "./route-utils.js";
+
+export type DashboardDependencies = Omit<
+  DashboardServerOptions,
+  | "app"
+  | "dashboardDir"
+  | "port"
+  | "liveActivityCacheMs"
+>;
 
 export interface DashboardServerOptions {
   app: Express;
@@ -163,7 +177,7 @@ export interface DashboardServerOptions {
   listProjectInvocations: (projectId: string) => ExecutionInvocationRecord[];
   listInvocationMessages: (invocationId: string) => ExecutionInvocationMessageRecord[];
 
-  rerunTask: (taskId: string, options?: { provider?: string; clearWorktree?: boolean }) => Promise<unknown>;
+  rerunTask: (taskId: string, options?: { provider?: string; clearWorktree?: boolean; resetDependents?: boolean }) => Promise<unknown>;
   orchestrateSprint: (projectId: string, sprintId: string) => Promise<unknown>;
 
   improveSprintPrompt?: (projectId: string, input: ImprovePromptInput, signal?: AbortSignal) => Promise<unknown>;
@@ -186,6 +200,7 @@ export interface DashboardServerOptions {
   startSprintPreviewSession?: (projectId: string, sprintId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
   rebuildSprintPreviewSession?: (sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
   stopSprintPreviewSession?: (sessionId: string) => Promise<SprintPreviewSession> | SprintPreviewSession;
+  removeSprintPreviewSession?: (sessionId: string) => Promise<void> | void;
   getSprintPreviewScript?: (projectId: string, sprintId: string) => Promise<SprintPreviewScript> | SprintPreviewScript;
   saveSprintPreviewScript?: (projectId: string, sprintId: string, content: string) => Promise<SprintPreviewScript> | SprintPreviewScript;
   getSprintPreviewLogs?: (sessionId: string, tail?: number) => Promise<{ logs: string }> | { logs: string };
@@ -204,7 +219,19 @@ export interface DashboardServerHandle {
 }
 
 const PREVIEW_BRIDGE_PATH = "/_sprint_os/preview-bridge.js";
+const PREVIEW_STATUS_PATH = "/_sprint_os/preview-status";
+const PREVIEW_START_PATH = "/_sprint_os/preview-start";
+const PREVIEW_REBUILD_PATH = "/_sprint_os/preview-rebuild";
 const PREVIEW_HOST_PREFIX = "preview-";
+
+function escapeHtml(value: string | null | undefined): string {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
+}
 
 function parsePreviewSessionIdFromHost(hostHeader: string | undefined): string | null {
   const rawHost = String(hostHeader || "").trim().toLowerCase();
@@ -245,6 +272,91 @@ function buildDashboardOriginForPreviewHost(req: express.Request): string {
   return `${protocol}://${rawHost}`;
 }
 
+function shouldAttemptPreviewSpaFallback(req: express.Request): boolean {
+  const accept = String(req.headers.accept || "").toLowerCase();
+  return req.method === "GET"
+    && req.path !== "/"
+    && path.extname(req.path) === ""
+    && !req.path.startsWith("/api/")
+    && !req.path.startsWith(PREVIEW_BRIDGE_PATH)
+    && accept.includes("text/html");
+}
+
+function buildPreviewProxyRequestHeaders(
+  req: express.Request,
+  upstreamPort: number,
+): Record<string, string | string[] | undefined> {
+  const headers = { ...req.headers } as Record<string, string | string[] | undefined>;
+  delete headers["accept-encoding"];
+  headers["x-forwarded-host"] = String(req.headers.host || "");
+  headers.host = `127.0.0.1:${upstreamPort}`;
+  headers["x-forwarded-proto"] = req.protocol || "http";
+  if (req.socket.localPort) {
+    headers["x-forwarded-port"] = String(req.socket.localPort);
+  }
+  return headers;
+}
+
+async function requestBufferedPreviewResponse(args: {
+  method: string;
+  upstreamPort: number;
+  targetPath: string;
+  headers: Record<string, string | string[] | undefined>;
+}): Promise<{ statusCode: number; headers: Record<string, string | string[] | undefined>; body: Buffer }> {
+  return await new Promise((resolve, reject) => {
+    const proxyRequest = httpRequest({
+      protocol: "http:",
+      hostname: "127.0.0.1",
+      port: args.upstreamPort,
+      method: args.method,
+      path: args.targetPath,
+      headers: args.headers,
+    }, (proxyResponse) => {
+      const chunks: Buffer[] = [];
+      proxyResponse.on("data", (chunk) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      });
+      proxyResponse.on("end", () => {
+        resolve({
+          statusCode: proxyResponse.statusCode || 502,
+          headers: { ...proxyResponse.headers },
+          body: Buffer.concat(chunks),
+        });
+      });
+    });
+
+    proxyRequest.on("error", reject);
+    proxyRequest.end();
+  });
+}
+
+function sendBufferedPreviewResponse(args: {
+  req: express.Request;
+  res: express.Response;
+  upstreamPort: number;
+  response: { statusCode: number; headers: Record<string, string | string[] | undefined>; body: Buffer };
+}): void {
+  const contentType = String(args.response.headers["content-type"] || "");
+  const isHtml = contentType.toLowerCase().includes("text/html");
+  const responseHeaders = { ...args.response.headers };
+
+  if (typeof responseHeaders.location === "string") {
+    responseHeaders.location = rewritePreviewLocationHeader(responseHeaders.location, args.req, args.upstreamPort);
+  }
+
+  if (!isHtml) {
+    args.res.writeHead(args.response.statusCode, responseHeaders);
+    args.res.end(args.response.body);
+    return;
+  }
+
+  delete responseHeaders["content-length"];
+  delete responseHeaders["content-security-policy"];
+  delete responseHeaders["content-security-policy-report-only"];
+  args.res.writeHead(args.response.statusCode, responseHeaders);
+  args.res.end(injectPreviewBridgeIntoHtml(args.response.body.toString("utf8")));
+}
+
 function buildPreviewBridgeScript(): string {
   return [
     "(() => {",
@@ -282,12 +394,262 @@ function buildPreviewBridgeScript(): string {
     "    if (action === 'reload') { window.location.reload(); return; }",
     "    if (action === 'push' || action === 'replace') {",
     "      const target = typeof message.path === 'string' && message.path.trim() ? message.path.trim() : '/';",
-    "      if (action === 'replace') window.location.replace(target);",
-    "      else window.location.assign(target);",
+    "      try {",
+    "        if (action === 'replace') history.replaceState(history.state, '', target);",
+    "        else history.pushState(history.state, '', target);",
+    "        window.dispatchEvent(new PopStateEvent('popstate', { state: history.state }));",
+    "        queueMicrotask(sendState);",
+    "      } catch {",
+    "        if (action === 'replace') window.location.replace(target);",
+    "        else window.location.assign(target);",
+    "      }",
     "    }",
     "  });",
     "})();",
   ].join("\n");
+}
+
+function buildPreviewStandbyHtml(args: {
+  req: express.Request;
+  session: SprintPreviewSession;
+  reason?: string | null;
+}): string {
+  const requestedPath = args.req.originalUrl || args.req.url || "/";
+  const status = args.session.status;
+  const title = status === "starting"
+    ? "Container is starting"
+    : status === "stopped"
+      ? "Container is stopped"
+      : "Container is unavailable";
+  const description = status === "starting"
+    ? "Sprint OS is building and booting this preview container. The browser will reconnect automatically once the preview responds."
+    : status === "stopped"
+      ? "This preview container is currently offline. Start it again or rebuild it to bring the in-app browser back."
+      : "The preview host is not reachable right now. Rebuild or start the container to restore the browser.";
+  const detail = args.reason?.trim() || args.session.lastError?.trim() || "";
+  const pollOnLoad = status === "starting" || status === "running";
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg-a: #f8f4ea;
+      --bg-b: #eef4ff;
+      --panel: rgba(255,255,255,0.84);
+      --panel-dark: rgba(5,8,13,0.88);
+      --border: rgba(15,23,42,0.10);
+      --text: #0f172a;
+      --muted: #475569;
+      --accent: #25c27a;
+      --accent-text: #032314;
+      --button: #0f172a;
+      --button-text: #ffffff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-a: #071018;
+        --bg-b: #111827;
+        --panel: var(--panel-dark);
+        --border: rgba(255,255,255,0.10);
+        --text: #f8fafc;
+        --muted: #cbd5e1;
+        --button: #e2e8f0;
+        --button-text: #0f172a;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(37,194,122,0.16), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(59,130,246,0.14), transparent 30%),
+        linear-gradient(160deg, var(--bg-a), var(--bg-b));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .panel {
+      width: min(680px, 100%);
+      border-radius: 28px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      box-shadow: 0 24px 80px rgba(15,23,42,0.16);
+      padding: 32px;
+      backdrop-filter: blur(18px);
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(37,194,122,0.24);
+      background: rgba(37,194,122,0.10);
+      color: #15935b;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+    h1 {
+      margin: 18px 0 10px;
+      font-size: clamp(28px, 4vw, 38px);
+      line-height: 1.05;
+    }
+    p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+    .meta {
+      margin-top: 18px;
+      padding: 16px 18px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: rgba(15,23,42,0.04);
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--muted);
+    }
+    .meta code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--text);
+      word-break: break-word;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 22px;
+    }
+    button, a {
+      appearance: none;
+      border: 0;
+      border-radius: 16px;
+      cursor: pointer;
+      text-decoration: none;
+      font: inherit;
+      font-weight: 700;
+      padding: 12px 18px;
+      transition: transform 140ms ease, opacity 140ms ease, background 140ms ease;
+    }
+    button:hover, a:hover { transform: translateY(-1px); }
+    button:disabled { cursor: default; opacity: 0.55; transform: none; }
+    .primary { background: var(--accent); color: var(--accent-text); }
+    .secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .status {
+      margin-top: 16px;
+      min-height: 22px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main class="panel">
+    <div class="eyebrow">Preview Standby</div>
+    <h1>${escapeHtml(title)}</h1>
+    <p>${escapeHtml(description)}</p>
+    <div class="meta">
+      <div><strong>Sprint:</strong> ${escapeHtml(args.session.sprintName)}</div>
+      <div><strong>Container:</strong> ${escapeHtml(args.session.containerName || "Not assigned yet")}</div>
+      <div><strong>Requested path:</strong> <code>${escapeHtml(requestedPath)}</code></div>
+      ${detail ? `<div><strong>Details:</strong> ${escapeHtml(detail)}</div>` : ""}
+    </div>
+    <div class="actions">
+      <button id="start" class="primary" type="button">Start Container</button>
+      <button id="rebuild" class="secondary" type="button">Rebuild Container</button>
+    </div>
+    <div id="status" class="status"></div>
+  </main>
+  <script>
+    (() => {
+      const requestedPath = ${JSON.stringify(requestedPath)};
+      const statusNode = document.getElementById("status");
+      const startButton = document.getElementById("start");
+      const rebuildButton = document.getElementById("rebuild");
+      let pollTimer = null;
+
+      const setBusy = (message, busy) => {
+        if (statusNode) statusNode.textContent = message || "";
+        if (startButton) startButton.disabled = Boolean(busy);
+        if (rebuildButton) rebuildButton.disabled = Boolean(busy);
+      };
+
+	      const pollUntilReady = async () => {
+	        try {
+	          const response = await fetch(${JSON.stringify(PREVIEW_STATUS_PATH)}, {
+	            headers: { Accept: "application/json" },
+	            cache: "no-store",
+	          });
+	          if (!response.ok) {
+	            throw new Error("Failed to refresh preview session state.");
+	          }
+	          const session = await response.json();
+	          if (
+	            session
+	            && session.hostPort
+	            && session.status !== "stopped"
+	            && session.status !== "error"
+	          ) {
+	            window.location.replace(requestedPath);
+	            return;
+	          }
+          if (session && session.lastError && statusNode) {
+            statusNode.textContent = session.lastError;
+          }
+        } catch (error) {
+          if (statusNode) {
+            statusNode.textContent = error instanceof Error ? error.message : String(error);
+          }
+        }
+        pollTimer = window.setTimeout(pollUntilReady, 2000);
+      };
+
+      const triggerAction = async (targetPath, busyMessage) => {
+        window.clearTimeout(pollTimer);
+        setBusy(busyMessage, true);
+        try {
+          const response = await fetch(targetPath, { method: "POST" });
+          if (!response.ok) {
+            const body = await response.text().catch(() => "");
+            throw new Error(body || "Preview action failed.");
+          }
+          pollTimer = window.setTimeout(pollUntilReady, 1200);
+        } catch (error) {
+          setBusy(error instanceof Error ? error.message : String(error), false);
+        }
+      };
+
+      startButton?.addEventListener("click", () => {
+        void triggerAction(${JSON.stringify(PREVIEW_START_PATH)}, "Starting preview container...");
+      });
+      rebuildButton?.addEventListener("click", () => {
+        void triggerAction(${JSON.stringify(PREVIEW_REBUILD_PATH)}, "Rebuilding preview container...");
+      });
+
+      if (${pollOnLoad ? "true" : "false"}) {
+        setBusy("Waiting for the preview container to respond...", true);
+        pollTimer = window.setTimeout(pollUntilReady, 1200);
+      }
+    })();
+  </script>
+</body>
+</html>`;
 }
 
 function injectPreviewBridgeIntoHtml(html: string): string {
@@ -434,6 +796,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     startSprintPreviewSession,
     rebuildSprintPreviewSession,
     stopSprintPreviewSession,
+    removeSprintPreviewSession,
     getSprintPreviewScript,
     saveSprintPreviewScript,
     getSprintPreviewLogs,
@@ -475,21 +838,88 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     try {
       session = await getSprintPreviewSession(sessionId);
     } catch (error) {
-      res.status(502).send(toErrorMessage(error, "Failed to resolve sprint preview session"));
+      res.status(502).send(toErrorResponse(error, "Failed to resolve sprint preview session").error);
       return;
     }
-    if (!session?.hostPort) {
+    if (!session) {
       res.status(404).send("Sprint preview session is unavailable.");
       return;
     }
 
-    const headers = { ...req.headers } as Record<string, string | string[] | undefined>;
-    delete headers["accept-encoding"];
-    headers["x-forwarded-host"] = String(req.headers.host || "");
-    headers.host = `127.0.0.1:${session.hostPort}`;
-    headers["x-forwarded-proto"] = req.protocol || "http";
-    if (req.socket.localPort) {
-      headers["x-forwarded-port"] = String(req.socket.localPort);
+    if (req.path === PREVIEW_STATUS_PATH) {
+      res.json(session);
+      return;
+    }
+
+    if (req.path === PREVIEW_START_PATH) {
+      if (!startSprintPreviewSession) {
+        res.status(503).send("Sprint preview start is unavailable.");
+        return;
+      }
+      try {
+        const started = await startSprintPreviewSession(session.projectId, session.sprintId);
+        res.json(started);
+      } catch (error) {
+        res.status(502).send(toErrorResponse(error, "Failed to start sprint preview session").error);
+      }
+      return;
+    }
+
+    if (req.path === PREVIEW_REBUILD_PATH) {
+      if (!rebuildSprintPreviewSession) {
+        res.status(503).send("Sprint preview rebuild is unavailable.");
+        return;
+      }
+      try {
+        const rebuilt = await rebuildSprintPreviewSession(session.id);
+        res.json(rebuilt);
+      } catch (error) {
+        res.status(502).send(toErrorResponse(error, "Failed to rebuild sprint preview session").error);
+      }
+      return;
+    }
+
+    if (!session.hostPort) {
+      res.status(200).type("html").send(buildPreviewStandbyHtml({
+        req,
+        session,
+        reason: session.lastError || "Preview host port is not assigned yet.",
+      }));
+      return;
+    }
+
+    const upstreamHeaders = buildPreviewProxyRequestHeaders(req, session.hostPort);
+    const targetPath = req.originalUrl || req.url || "/";
+    if (shouldAttemptPreviewSpaFallback(req)) {
+      try {
+        const primaryResponse = await requestBufferedPreviewResponse({
+          method: req.method,
+          upstreamPort: session.hostPort,
+          targetPath,
+          headers: upstreamHeaders,
+        });
+        const response = primaryResponse.statusCode === 404
+          ? await requestBufferedPreviewResponse({
+            method: req.method,
+            upstreamPort: session.hostPort,
+            targetPath: "/",
+            headers: upstreamHeaders,
+          })
+          : primaryResponse;
+        sendBufferedPreviewResponse({
+          req,
+          res,
+          upstreamPort: session.hostPort,
+          response,
+        });
+      } catch (error) {
+        res.status(200).type("html").send(buildPreviewStandbyHtml({
+          req,
+          session,
+          reason: error instanceof Error ? error.message : String(error),
+        }));
+      }
+      return;
     }
 
     const proxyRequest = httpRequest({
@@ -497,8 +927,8 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       hostname: "127.0.0.1",
       port: session.hostPort,
       method: req.method,
-      path: req.originalUrl || req.url,
-      headers,
+      path: targetPath,
+      headers: upstreamHeaders,
     }, (proxyResponse) => {
       const contentType = String(proxyResponse.headers["content-type"] || "");
       const isHtml = contentType.toLowerCase().includes("text/html");
@@ -533,7 +963,16 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
 
     proxyRequest.on("error", (error) => {
       if (!res.headersSent) {
-        res.status(502).send(toErrorMessage(error, "Failed to proxy sprint preview host request"));
+        const accept = String(req.headers.accept || "").toLowerCase();
+        if (req.method === "GET" && accept.includes("text/html")) {
+          res.status(200).type("html").send(buildPreviewStandbyHtml({
+            req,
+            session,
+            reason: error instanceof Error ? error.message : String(error),
+          }));
+          return;
+        }
+        res.status(502).send(toErrorResponse(error, "Failed to proxy sprint preview host request").error);
       } else {
         res.end();
       }
@@ -562,242 +1001,193 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     }
   });
 
-  app.get("/api/status", (req, res) => {
+  app.get("/api/status", syncRoute((req, res) => {
     res.json(getStatus());
-  });
+  }));
 
-  app.get("/api/execution", (req, res) => {
+  app.get("/api/execution", syncRoute((req, res) => {
     res.json(options.getExecutionSnapshot());
-  });
+  }));
 
-  app.get("/api/docker/containers", async (req, res) => {
+  app.get("/api/docker/containers", asyncRoute(async (req, res) => {
     try {
       const containers = await listDockerContainers();
       res.json(containers);
     } catch (error) {
       res.json([]);
     }
-  });
+  }));
 
-  app.get("/api/projects/:projectId/preview/sessions", async (req, res) => {
-    try {
-      if (!listSprintPreviewSessions) {
-        res.json([]);
-        return;
-      }
-      res.json(await listSprintPreviewSessions(String(req.params.projectId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to list sprint preview sessions") });
+  app.get("/api/projects/:projectId/preview/sessions", asyncRoute(async (req, res) => {
+    if (!listSprintPreviewSessions) {
+      res.json([]);
+      return;
     }
-  });
+    res.json(await listSprintPreviewSessions(requireTrimmedString(req.params.projectId, "projectId")));
+  }));
 
-  app.post("/api/projects/:projectId/sprints/:sprintId/preview/start", async (req, res) => {
-    try {
-      if (!startSprintPreviewSession) {
-        throw new Error("Sprint preview runtime is unavailable.");
-      }
-      res.json(await startSprintPreviewSession(
-        String(req.params.projectId || "").trim(),
-        String(req.params.sprintId || "").trim(),
-      ));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to start sprint preview session") });
+  app.post("/api/projects/:projectId/sprints/:sprintId/preview/start", asyncRoute(async (req, res) => {
+    if (!startSprintPreviewSession) {
+      throw new Error("Sprint preview runtime is unavailable.");
     }
-  });
+    res.json(await startSprintPreviewSession(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.sprintId, "sprintId"),
+    ));
+  }));
 
-  app.post("/api/browser/sessions/:sessionId/rebuild", async (req, res) => {
-    try {
-      if (!rebuildSprintPreviewSession) {
-        throw new Error("Sprint preview runtime is unavailable.");
-      }
-      res.json(await rebuildSprintPreviewSession(String(req.params.sessionId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to rebuild sprint preview session") });
+  app.post("/api/browser/sessions/:sessionId/rebuild", asyncRoute(async (req, res) => {
+    if (!rebuildSprintPreviewSession) {
+      throw new Error("Sprint preview runtime is unavailable.");
     }
-  });
+    res.json(await rebuildSprintPreviewSession(requireTrimmedString(req.params.sessionId, "sessionId")));
+  }));
 
-  app.post("/api/browser/sessions/:sessionId/stop", async (req, res) => {
-    try {
-      if (!stopSprintPreviewSession) {
-        throw new Error("Sprint preview runtime is unavailable.");
-      }
-      res.json(await stopSprintPreviewSession(String(req.params.sessionId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to stop sprint preview session") });
+  app.post("/api/browser/sessions/:sessionId/stop", asyncRoute(async (req, res) => {
+    if (!stopSprintPreviewSession) {
+      throw new Error("Sprint preview runtime is unavailable.");
     }
-  });
+    res.json(await stopSprintPreviewSession(requireTrimmedString(req.params.sessionId, "sessionId")));
+  }));
 
-  app.get("/api/projects/:projectId/sprints/:sprintId/preview/script", async (req, res) => {
-    try {
-      if (!getSprintPreviewScript) {
-        throw new Error("Sprint preview runtime is unavailable.");
-      }
-      res.json(await getSprintPreviewScript(
-        String(req.params.projectId || "").trim(),
-        String(req.params.sprintId || "").trim(),
-      ));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to load sprint preview script") });
+  app.delete("/api/browser/sessions/:sessionId", asyncRoute(async (req, res) => {
+    if (!removeSprintPreviewSession) {
+      throw new Error("Sprint preview runtime is unavailable.");
     }
-  });
+    await removeSprintPreviewSession(requireTrimmedString(req.params.sessionId, "sessionId"));
+    res.status(204).end();
+  }));
 
-  app.put("/api/projects/:projectId/sprints/:sprintId/preview/script", async (req, res) => {
-    try {
-      if (!saveSprintPreviewScript) {
-        throw new Error("Sprint preview runtime is unavailable.");
-      }
-      res.json(await saveSprintPreviewScript(
-        String(req.params.projectId || "").trim(),
-        String(req.params.sprintId || "").trim(),
-        typeof req.body?.content === "string" ? req.body.content : "",
-      ));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to save sprint preview script") });
+  app.get("/api/projects/:projectId/sprints/:sprintId/preview/script", asyncRoute(async (req, res) => {
+    if (!getSprintPreviewScript) {
+      throw new Error("Sprint preview runtime is unavailable.");
     }
-  });
+    res.json(await getSprintPreviewScript(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.sprintId, "sprintId"),
+    ));
+  }));
 
-  app.get("/api/browser/sessions/:sessionId/logs", async (req, res) => {
-    try {
-      if (!getSprintPreviewLogs) {
-        throw new Error("Sprint preview runtime is unavailable.");
-      }
-      const tail = typeof req.query.tail === "string" ? Number(req.query.tail) : undefined;
-      res.json(await getSprintPreviewLogs(String(req.params.sessionId || "").trim(), tail));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to load sprint preview logs") });
+  app.put("/api/projects/:projectId/sprints/:sprintId/preview/script", asyncRoute(async (req, res) => {
+    if (!saveSprintPreviewScript) {
+      throw new Error("Sprint preview runtime is unavailable.");
     }
-  });
+    res.json(await saveSprintPreviewScript(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.sprintId, "sprintId"),
+      typeof req.body?.content === "string" ? req.body.content : "",
+    ));
+  }));
 
-  app.all("/api/browser/sessions/:sessionId/proxy{*rest}", async (req, res) => {
-    try {
-      if (!proxySprintPreviewRequest) {
-        throw new Error("Sprint preview runtime is unavailable.");
-      }
-      const sessionId = String(req.params.sessionId || "").trim();
-      const prefix = `/api/browser/sessions/${sessionId}/proxy`;
-      const pathWithQuery = req.originalUrl.startsWith(prefix)
-        ? req.originalUrl.slice(prefix.length) || "/"
-        : "/";
-      const body = req.body
-        ? Buffer.isBuffer(req.body)
-          ? req.body
-          : Buffer.from(JSON.stringify(req.body))
-        : undefined;
-      const proxied = await proxySprintPreviewRequest({
-        sessionId,
-        method: req.method,
-        path: pathWithQuery,
-        headers: Object.fromEntries(
-          Object.entries(req.headers).map(([key, value]) => [key, Array.isArray(value) ? value.join(", ") : value]),
-        ),
-        body,
-      });
-      for (const [key, value] of Object.entries(proxied.headers)) {
-        res.setHeader(key, value);
-      }
-      res.status(proxied.status).send(proxied.body);
-    } catch (error) {
-      res.status(502).json({ error: toErrorMessage(error, "Failed to proxy sprint preview request") });
+  app.get("/api/browser/sessions/:sessionId/logs", asyncRoute(async (req, res) => {
+    if (!getSprintPreviewLogs) {
+      throw new Error("Sprint preview runtime is unavailable.");
     }
-  });
+    const tail = typeof req.query.tail === "string" ? Number(req.query.tail) : undefined;
+    res.json(await getSprintPreviewLogs(requireTrimmedString(req.params.sessionId, "sessionId"), tail));
+  }));
+
+  app.all("/api/browser/sessions/:sessionId/proxy{*rest}", asyncRoute(async (req, res) => {
+    if (!proxySprintPreviewRequest) {
+      throw new Error("Sprint preview runtime is unavailable.");
+    }
+    const sessionId = requireTrimmedString(req.params.sessionId, "sessionId");
+    const prefix = `/api/browser/sessions/${sessionId}/proxy`;
+    const pathWithQuery = req.originalUrl.startsWith(prefix)
+      ? req.originalUrl.slice(prefix.length) || "/"
+      : "/";
+    const body = req.body
+      ? Buffer.isBuffer(req.body)
+        ? req.body
+        : Buffer.from(JSON.stringify(req.body))
+      : undefined;
+    const proxied = await proxySprintPreviewRequest({
+      sessionId,
+      method: req.method,
+      path: pathWithQuery,
+      headers: Object.fromEntries(
+        Object.entries(req.headers).map(([key, value]) => [key, Array.isArray(value) ? value.join(", ") : value]),
+      ),
+      body,
+    });
+    for (const [key, value] of Object.entries(proxied.headers)) {
+      res.setHeader(key, value);
+    }
+    res.status(proxied.status).send(proxied.body);
+  }));
 
   // Combined endpoint — single HTTP call for live page initial load
-  app.get("/api/live", async (req, res) => {
-    try {
-      const requestedProjectId = String(req.query.projectId || "").trim();
-      const projectId = requestedProjectId.length > 0 ? requestedProjectId : null;
-      res.json(await options.getLiveSnapshot(projectId));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to load live snapshot") });
-    }
-  });
+  app.get("/api/live", asyncRoute(async (req, res) => {
+    const requestedProjectId = parseTrimmedString(req.query.projectId);
+    res.json(await options.getLiveSnapshot(requestedProjectId || null));
+  }));
 
-  app.get("/api/telemetry/overview", (req, res) => {
+  app.get("/api/telemetry/overview", syncRoute((req, res) => {
     res.json(options.getOverviewTelemetrySnapshot());
-  });
+  }));
 
-  app.get("/api/projects/:projectId/execution", (req, res) => {
-    try {
-      res.json(options.getProjectExecutionSnapshot(String(req.params.projectId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to load execution snapshot") });
-    }
-  });
+  app.get("/api/projects/:projectId/execution", syncRoute((req, res) => {
+    res.json(options.getProjectExecutionSnapshot(requireTrimmedString(req.params.projectId, "projectId")));
+  }));
 
-  app.get("/api/projects/:projectId/stats", (req, res) => {
-    try {
-      const query = parseProjectStatsQuery(req.query);
-      res.json(options.getProjectStatsSnapshot(String(req.params.projectId || "").trim(), query));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to load project stats snapshot") });
-    }
-  });
+  app.get("/api/projects/:projectId/stats", syncRoute((req, res) => {
+    const query = parseProjectStatsQuery(req.query);
+    res.json(options.getProjectStatsSnapshot(requireTrimmedString(req.params.projectId, "projectId"), query));
+  }));
 
-  app.put("/api/projects/:projectId/preferred-worker", (req, res) => {
+  app.put("/api/projects/:projectId/preferred-worker", syncRoute((req, res) => {
     if (!options.setPreferredWorker) {
       res.status(501).json({ error: "Preferred worker assignment is not enabled." });
       return;
     }
 
-    try {
-      res.json(options.setPreferredWorker(
-        String(req.params.projectId || "").trim(),
-        {
-          workerConnectionId: parseNullableTrimmedString(req.body?.workerConnectionId),
-          workerEndpointId: parseNullableTrimmedString(req.body?.workerEndpointId),
-          workerEndpointKey: parseNullableTrimmedString(req.body?.workerEndpointKey),
-        },
-      ));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to update preferred worker") });
-    }
-  });
+    res.json(options.setPreferredWorker(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      {
+        workerConnectionId: parseNullableTrimmedString(req.body?.workerConnectionId),
+        workerEndpointId: parseNullableTrimmedString(req.body?.workerEndpointId),
+        workerEndpointKey: parseNullableTrimmedString(req.body?.workerEndpointKey),
+      },
+    ));
+  }));
 
-  app.post("/api/projects/:projectId/attention-items/:attentionItemId/claim", (req, res) => {
+  app.post("/api/projects/:projectId/attention-items/:attentionItemId/claim", syncRoute((req, res) => {
     if (!options.claimAttentionItem) {
       res.status(501).json({ error: "Attention item claim is not enabled." });
       return;
     }
 
-    try {
-      res.json(options.claimAttentionItem(
-        String(req.params.projectId || "").trim(),
-        String(req.params.attentionItemId || "").trim(),
-        {
-          workerEndpointId: typeof req.body?.workerEndpointId === "string" ? req.body.workerEndpointId.trim() : undefined,
-          claimReason: typeof req.body?.claimReason === "string" ? req.body.claimReason.trim() : undefined,
-        },
-      ));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to claim attention item") });
-    }
-  });
+    res.json(options.claimAttentionItem(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.attentionItemId, "attentionItemId"),
+      {
+        workerEndpointId: typeof req.body?.workerEndpointId === "string" ? req.body.workerEndpointId.trim() : undefined,
+        claimReason: typeof req.body?.claimReason === "string" ? req.body.claimReason.trim() : undefined,
+      },
+    ));
+  }));
 
-  app.post("/api/projects/:projectId/attention-items/:attentionItemId/resolve", (req, res) => {
+  app.post("/api/projects/:projectId/attention-items/:attentionItemId/resolve", syncRoute((req, res) => {
     if (!options.resolveAttentionItem) {
       res.status(501).json({ error: "Attention item resolution is not enabled." });
       return;
     }
 
-    try {
-      const requestedStatus = typeof req.body?.status === "string" ? req.body.status.trim() : undefined;
-      res.json(options.resolveAttentionItem(
-        String(req.params.projectId || "").trim(),
-        String(req.params.attentionItemId || "").trim(),
-        {
-          status: requestedStatus === "dismissed" ? "dismissed" : "resolved",
-          reason: typeof req.body?.reason === "string" ? req.body.reason.trim() : undefined,
-          resolutionSummaryMarkdown: typeof req.body?.resolutionSummaryMarkdown === "string"
-            ? req.body.resolutionSummaryMarkdown
-            : undefined,
-        },
-      ));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to resolve attention item") });
-    }
-  });
+    const requestedStatus = typeof req.body?.status === "string" ? req.body.status.trim() : undefined;
+    res.json(options.resolveAttentionItem(
+      requireTrimmedString(req.params.projectId, "projectId"),
+      requireTrimmedString(req.params.attentionItemId, "attentionItemId"),
+      {
+        status: requestedStatus === "dismissed" ? "dismissed" : "resolved",
+        reason: typeof req.body?.reason === "string" ? req.body.reason.trim() : undefined,
+        resolutionSummaryMarkdown: typeof req.body?.resolutionSummaryMarkdown === "string"
+          ? req.body.resolutionSummaryMarkdown
+          : undefined,
+      },
+    ));
+  }));
 
-  app.get("/api/live-activities", async (req, res) => {
+  app.get("/api/live-activities", asyncRoute(async (req, res) => {
     try {
       const activitiesBySession = await getLiveActivities();
       res.json({
@@ -809,435 +1199,136 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       const message = error instanceof Error ? error.message : String(error);
       res.status(500).json({ error: `Failed to fetch live activities: ${message}` });
     }
-  });
+  }));
 
-  app.get("/api/system-settings", (req, res) => {
+  app.get("/api/system-settings", syncRoute((req, res) => {
     res.json(getSystemSettings());
-  });
+  }));
 
-  app.put("/api/system-settings", (req, res) => {
-    try {
-      res.json(saveSystemSettings(req.body as SystemSettings));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to save system settings") });
-    }
-  });
+  app.put("/api/system-settings", syncRoute((req, res) => {
+    res.json(saveSystemSettings(req.body as SystemSettings));
+  }));
 
-  app.post("/api/system/reset-database", async (req, res) => {
-    try {
-      await resetDatabase();
-      res.json({ ok: true });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to reset database") });
-    }
-  });
+  app.post("/api/system/reset-database", asyncRoute(async (req, res) => {
+    await resetDatabase();
+    res.json({ ok: true });
+  }));
 
-  app.get("/api/projects", (req, res) => {
-    res.json(options.listProjects());
-  });
 
-  app.post("/api/projects", (req, res) => {
-    try {
-      res.status(201).json(options.createProject(req.body as CreateProjectInput));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to create project") });
-    }
-  });
+  const deps: DashboardDependencies = options;
+  registerProjectRoutes(app, deps);
+  registerSprintRoutes(app, deps);
+  registerTaskRoutes(app, deps);
 
-  app.get("/api/projects/:projectId", (req, res) => {
-    const projectId = String(req.params.projectId || "").trim();
-    const project = options.getProject(projectId);
-    if (!project) {
-      res.status(404).json({ error: `Project not found: ${projectId}` });
-      return;
-    }
-    res.json(project);
-  });
 
-  app.get("/api/projects/:projectId/settings", (req, res) => {
-    try {
-      res.json(getProjectSettings(String(req.params.projectId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to load project settings") });
-    }
-  });
+  app.get("/api/projects/:projectId/connections", syncRoute((req, res) => {
+    res.json(options.listConnections(requireTrimmedString(req.params.projectId, "projectId")));
+  }));
 
-  app.put("/api/projects/:projectId/settings", (req, res) => {
-    try {
-      res.json(saveProjectSettings(String(req.params.projectId || "").trim(), req.body as ProjectSettingsOverride));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to save project settings") });
-    }
-  });
+  app.get("/api/projects/:projectId/agent-presets", asyncRoute(async (req, res) => {
+    res.json(await options.listAgentPresets(requireTrimmedString(req.params.projectId, "projectId")));
+  }));
 
-  app.delete("/api/projects/:projectId/settings", (req, res) => {
-    try {
-      resetProjectSettings(String(req.params.projectId || "").trim());
-      res.json({ ok: true });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to reset project settings") });
-    }
-  });
+  app.post("/api/projects/:projectId/agent-presets", asyncRoute(async (req, res) => {
+    res.status(201).json(await options.createAgentPreset(requireTrimmedString(req.params.projectId, "projectId"), req.body as CreateAgentPresetInput));
+  }));
 
-  app.get("/api/projects/:projectId/settings/effective", (req, res) => {
-    try {
-      res.json(getProjectEffectiveSettings(String(req.params.projectId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to load effective project settings") });
-    }
-  });
+  app.patch("/api/agent-presets/:agentPresetId", asyncRoute(async (req, res) => {
+    res.json(await options.updateAgentPreset(requireTrimmedString(req.params.agentPresetId, "agentPresetId"), req.body as UpdateAgentPresetInput));
+  }));
 
-  app.patch("/api/projects/:projectId", (req, res) => {
-    try {
-      const projectId = String(req.params.projectId || "").trim();
-      res.json(options.updateProject(projectId, req.body as UpdateProjectInput));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to update project") });
-    }
-  });
+  app.delete("/api/agent-presets/:agentPresetId", asyncRoute(async (req, res) => {
+    await options.deleteAgentPreset(requireTrimmedString(req.params.agentPresetId, "agentPresetId"));
+    res.json({ ok: true });
+  }));
 
-  app.delete("/api/projects/:projectId", (req, res) => {
-    try {
-      options.deleteProject(String(req.params.projectId || "").trim());
-      res.json({ ok: true });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to delete project") });
-    }
-  });
-
-  app.put("/api/projects/:projectId/select", (req, res) => {
-    try {
-      const projectId = String(req.params.projectId || "").trim();
-      res.json({ selectedProjectId: options.selectProject(projectId || null) });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to select project") });
-    }
-  });
-
-    app.put("/api/projects/:projectId/selected-sprint", (req, res) => {
-    try {
-      const projectId = String(req.params.projectId || "").trim();
-      const sprintId = typeof req.body?.sprintId === "string" && req.body.sprintId.trim()
-        ? req.body.sprintId.trim()
-        : null;
-      res.json({ selectedSprintId: options.selectSprint(projectId, sprintId) });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to select sprint") });
-    }
-  });
-
-  app.get("/api/projects/:projectId/sprints", (req, res) => {
-    try {
-      res.json(options.listSprints(String(req.params.projectId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to list sprints") });
-    }
-  });
-
-  app.post("/api/projects/:projectId/sprints", (req, res) => {
-    try {
-      res.status(201).json(options.createSprint(String(req.params.projectId || "").trim(), req.body as CreateSprintInput));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to create sprint") });
-    }
-  });
-
-  app.post("/api/projects/:projectId/sprints/import", (req, res) => {
-    try {
-      res.status(201).json(
-        options.importSprintFromMarkdown(String(req.params.projectId || "").trim(), req.body as SprintMarkdownImportInput)
-      );
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to import sprint markdown") });
-    }
-  });
-
-  app.get("/api/projects/:projectId/sprints/:sprintId/export", (req, res) => {
-    try {
-      res.json(options.exportSprintToMarkdown(String(req.params.projectId || "").trim(), String(req.params.sprintId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to export sprint markdown") });
-    }
-  });
-
-  app.patch("/api/sprints/:sprintId", (req, res) => {
-    try {
-      res.json(options.updateSprint(String(req.params.sprintId || "").trim(), req.body as UpdateSprintInput));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to update sprint") });
-    }
-  });
-
-  app.get("/api/sprints/:sprintId/settings", (req, res) => {
-    try {
-      res.json(getSprintSettings(String(req.params.sprintId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to load sprint settings") });
-    }
-  });
-
-  app.put("/api/sprints/:sprintId/settings", (req, res) => {
-    const projectId = typeof req.body?.projectId === "string" ? req.body.projectId.trim() : "";
-    if (!projectId) {
-      res.status(400).json({ error: "projectId is required when saving sprint settings." });
-      return;
-    }
-
-    try {
-      const sprintId = String(req.params.sprintId || "").trim();
-      const payload = { ...(req.body as Record<string, unknown>) };
-      delete payload.projectId;
-      res.json(saveSprintSettings(projectId, sprintId, payload as SprintSettingsOverride));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to save sprint settings") });
-    }
-  });
-
-  app.delete("/api/sprints/:sprintId/settings", (req, res) => {
-    try {
-      resetSprintSettings(String(req.params.sprintId || "").trim());
-      res.json({ ok: true });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to reset sprint settings") });
-    }
-  });
-
-  app.get("/api/projects/:projectId/sprints/:sprintId/settings/effective", (req, res) => {
-    try {
-      res.json(getSprintEffectiveSettings(
-        String(req.params.projectId || "").trim(),
-        String(req.params.sprintId || "").trim(),
-      ));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to load effective sprint settings") });
-    }
-  });
-
-  app.delete("/api/sprints/:sprintId", (req, res) => {
-    try {
-      options.deleteSprint(String(req.params.sprintId || "").trim());
-      res.json({ ok: true });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to delete sprint") });
-    }
-  });
-
-  app.get("/api/projects/:projectId/tasks", (req, res) => {
-    try {
-      const sprintId = typeof req.query.sprintId === "string" && req.query.sprintId.trim()
-        ? req.query.sprintId.trim()
-        : undefined;
-      res.json(options.listTasks(String(req.params.projectId || "").trim(), sprintId));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to list tasks") });
-    }
-  });
-
-  app.post("/api/projects/:projectId/tasks", (req, res) => {
-    try {
-      res.status(201).json(options.createTask(String(req.params.projectId || "").trim(), req.body as CreateTaskInput));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to create task") });
-    }
-  });
-
-  app.patch("/api/tasks/:taskId", (req, res) => {
-    try {
-      res.json(options.updateTask(String(req.params.taskId || "").trim(), req.body as UpdateTaskInput));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to update task") });
-    }
-  });
-
-  app.delete("/api/tasks/:taskId", (req, res) => {
-    try {
-      options.deleteTask(String(req.params.taskId || "").trim());
-      res.json({ ok: true });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to delete task") });
-    }
-  });
-
-  app.get("/api/projects/:projectId/connections", (req, res) => {
-    try {
-      res.json(options.listConnections(String(req.params.projectId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to list connections") });
-    }
-  });
-
-  app.get("/api/projects/:projectId/agent-presets", async (req, res) => {
-    try {
-      res.json(await options.listAgentPresets(String(req.params.projectId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to load agent presets") });
-    }
-  });
-
-  app.post("/api/projects/:projectId/agent-presets", async (req, res) => {
-    try {
-      res.status(201).json(await options.createAgentPreset(String(req.params.projectId || "").trim(), req.body as CreateAgentPresetInput));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to create agent preset") });
-    }
-  });
-
-  app.patch("/api/agent-presets/:agentPresetId", async (req, res) => {
-    try {
-      res.json(await options.updateAgentPreset(String(req.params.agentPresetId || "").trim(), req.body as UpdateAgentPresetInput));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to update agent preset") });
-    }
-  });
-
-  app.delete("/api/agent-presets/:agentPresetId", async (req, res) => {
-    try {
-      await options.deleteAgentPreset(String(req.params.agentPresetId || "").trim());
-      res.json({ ok: true });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to delete agent preset") });
-    }
-  });
-
-  app.post("/api/agent-presets/:agentPresetId/import-markdown", async (req, res) => {
+  app.post("/api/agent-presets/:agentPresetId/import-markdown", asyncRoute(async (req, res) => {
     if (!options.importAgentPresetFromMarkdown) {
       res.status(404).json({ error: "Markdown import is not enabled for agents." });
       return;
     }
-    try {
-      res.json(await options.importAgentPresetFromMarkdown(String(req.params.agentPresetId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to import agent markdown") });
-    }
-  });
+    res.json(await options.importAgentPresetFromMarkdown(requireTrimmedString(req.params.agentPresetId, "agentPresetId")));
+  }));
 
-  app.post("/api/projects/:projectId/agent-presets/sync-markdown", async (req, res) => {
+  app.post("/api/projects/:projectId/agent-presets/sync-markdown", asyncRoute(async (req, res) => {
     if (!options.syncAllAgentPresetsFromMarkdown) {
       res.status(404).json({ error: "Bulk markdown sync is not enabled for agents." });
       return;
     }
-    try {
-      res.json(await options.syncAllAgentPresetsFromMarkdown(String(req.params.projectId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to sync all agent markdown") });
-    }
-  });
+    res.json(await options.syncAllAgentPresetsFromMarkdown(requireTrimmedString(req.params.projectId, "projectId")));
+  }));
 
-  app.patch("/api/connections/:connectionId", (req, res) => {
-    try {
-      res.json(options.updateConnection(String(req.params.connectionId || "").trim(), req.body as UpdateMcpConnectionInput));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to update connection") });
-    }
-  });
+  app.patch("/api/connections/:connectionId", syncRoute((req, res) => {
+    res.json(options.updateConnection(requireTrimmedString(req.params.connectionId, "connectionId"), req.body as UpdateMcpConnectionInput));
+  }));
 
-  app.get("/api/projects/:projectId/execution/invocations", (req, res) => {
-    try {
-      res.json(options.listProjectInvocations(String(req.params.projectId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to list project invocations") });
-    }
-  });
+  app.get("/api/projects/:projectId/execution/invocations", syncRoute((req, res) => {
+    res.json(options.listProjectInvocations(requireTrimmedString(req.params.projectId, "projectId")));
+  }));
 
-  app.get("/api/execution/invocations/:invocationId/messages", (req, res) => {
-    try {
-      res.json(options.listInvocationMessages(String(req.params.invocationId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to list invocation messages") });
-    }
-  });
+  app.get("/api/execution/invocations/:invocationId/messages", syncRoute((req, res) => {
+    res.json(options.listInvocationMessages(requireTrimmedString(req.params.invocationId, "invocationId")));
+  }));
 
-  app.get("/api/projects/:projectId/conversations/threads", (req, res) => {
-    try {
-      res.json(options.listConversationThreads(String(req.params.projectId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to list conversation threads") });
-    }
-  });
+  app.get("/api/projects/:projectId/conversations/threads", syncRoute((req, res) => {
+    res.json(options.listConversationThreads(requireTrimmedString(req.params.projectId, "projectId")));
+  }));
 
-  app.post("/api/projects/:projectId/conversations/threads", (req, res) => {
-    try {
-      res.status(201).json(
-        options.createConversationThread(String(req.params.projectId || "").trim(), req.body as CreateConversationThreadInput)
-      );
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to create conversation thread") });
-    }
-  });
+  app.post("/api/projects/:projectId/conversations/threads", syncRoute((req, res) => {
+    res.status(201).json(
+      options.createConversationThread(requireTrimmedString(req.params.projectId, "projectId"), req.body as CreateConversationThreadInput)
+    );
+  }));
 
-  app.patch("/api/conversations/threads/:threadId", (req, res) => {
-    try {
-      res.json(options.updateConversationThread(String(req.params.threadId || "").trim(), req.body as UpdateConversationThreadInput));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to update conversation thread") });
-    }
-  });
+  app.patch("/api/conversations/threads/:threadId", syncRoute((req, res) => {
+    res.json(options.updateConversationThread(requireTrimmedString(req.params.threadId, "threadId"), req.body as UpdateConversationThreadInput));
+  }));
 
-  app.put("/api/conversations/threads/:threadId/route", (req, res) => {
+  app.put("/api/conversations/threads/:threadId/route", syncRoute((req, res) => {
     if (!options.updateThreadRoute) {
       res.status(404).json({ error: "Thread routing is not enabled." });
       return;
     }
-    try {
-      const input = {
-        routeKind: req.body?.routeKind as "worker" | "virtual",
-        virtualProvider: typeof req.body?.virtualProvider === "string" ? req.body.virtualProvider.trim() : undefined,
-        virtualModel: typeof req.body?.virtualModel === "string" ? req.body.virtualModel.trim() : undefined,
-        workerEndpointId: typeof req.body?.workerEndpointId === "string" ? req.body.workerEndpointId.trim() : undefined,
-      };
-      if (input.routeKind !== "worker" && input.routeKind !== "virtual") {
-        throw new Error("Invalid routeKind. Must be 'worker' or 'virtual'.");
-      }
-      res.json(options.updateThreadRoute(String(req.params.threadId || "").trim(), input));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to update thread route") });
+    const input = {
+      routeKind: req.body?.routeKind as "worker" | "virtual",
+      virtualProvider: typeof req.body?.virtualProvider === "string" ? req.body.virtualProvider.trim() : undefined,
+      virtualModel: typeof req.body?.virtualModel === "string" ? req.body.virtualModel.trim() : undefined,
+      workerEndpointId: typeof req.body?.workerEndpointId === "string" ? req.body.workerEndpointId.trim() : undefined,
+    };
+    if (input.routeKind !== "worker" && input.routeKind !== "virtual") {
+      throw new Error("Invalid routeKind. Must be 'worker' or 'virtual'.");
     }
-  });
+    res.json(options.updateThreadRoute(requireTrimmedString(req.params.threadId, "threadId"), input));
+  }));
 
-  app.post("/api/conversations/threads/:threadId/compact", async (req, res) => {
+  app.post("/api/conversations/threads/:threadId/compact", asyncRoute(async (req, res) => {
     if (!options.compactThreadSession) {
       res.status(404).json({ error: "Thread compaction is not enabled." });
       return;
     }
-    try {
-      res.json(await options.compactThreadSession(String(req.params.threadId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to compact thread session") });
-    }
-  });
+    res.json(await options.compactThreadSession(requireTrimmedString(req.params.threadId, "threadId")));
+  }));
 
-  app.delete("/api/conversations/threads/:threadId", (req, res) => {
-    try {
-      options.deleteConversationThread(String(req.params.threadId || "").trim());
-      res.json({ ok: true });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to delete conversation thread") });
-    }
-  });
+  app.delete("/api/conversations/threads/:threadId", syncRoute((req, res) => {
+    options.deleteConversationThread(requireTrimmedString(req.params.threadId, "threadId"));
+    res.json({ ok: true });
+  }));
 
-  app.get("/api/conversations/threads/:threadId/messages", (req, res) => {
-    try {
-      res.json(options.listConversationMessages(String(req.params.threadId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to list conversation messages") });
-    }
-  });
+  app.get("/api/conversations/threads/:threadId/messages", syncRoute((req, res) => {
+    res.json(options.listConversationMessages(requireTrimmedString(req.params.threadId, "threadId")));
+  }));
 
-  app.post("/api/projects/:projectId/conversations/messages", (req, res) => {
-    try {
-      res.status(201).json(
-        options.postConversationMessage(String(req.params.projectId || "").trim(), req.body as CreateDashboardConversationMessageInput)
-      );
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to post conversation message") });
-    }
-  });
+  app.post("/api/projects/:projectId/conversations/messages", syncRoute((req, res) => {
+    res.status(201).json(
+      options.postConversationMessage(requireTrimmedString(req.params.projectId, "projectId"), req.body as CreateDashboardConversationMessageInput)
+    );
+  }));
 
-  app.get("/api/settings/import-sources", (req, res) => {
+  app.get("/api/settings/import-sources", syncRoute((req, res) => {
     res.json(getExternalSettingsHints());
-  });
+  }));
 
-  app.get("/api/git-status", async (req, res) => {
+  app.get("/api/git-status", asyncRoute(async (req, res) => {
     try {
       const status = await getGitStatus();
       res.json(status);
@@ -1245,222 +1336,150 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       const message = error instanceof Error ? error.message : String(error);
       res.status(500).json({ error: `Failed to fetch git status: ${message}` });
     }
-  });
+  }));
 
-  app.post("/api/tasks/:taskId/rerun", async (req, res) => {
-    try {
-      const taskId = String(req.params.taskId || "").trim();
-      if (!taskId) {
-        res.status(400).json({ error: "Missing task id." });
-        return;
-      }
-      const body = req.body as { provider?: string; clearWorktree?: boolean } | undefined;
-      const task = await rerunTask(taskId, {
-        provider: typeof body?.provider === "string" ? body.provider : undefined,
-        clearWorktree: body?.clearWorktree === true,
-      });
-      res.json({ ok: true, task });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      res.status(400).json({ error: `Failed to rerun task: ${message}` });
+  app.post("/api/tasks/:taskId/rerun", asyncRoute(async (req, res) => {
+    const taskId = requireTrimmedString(req.params.taskId, "taskId");
+    const body = req.body as { provider?: string; clearWorktree?: boolean; resetDependents?: boolean } | undefined;
+    const task = await rerunTask(taskId, {
+      provider: typeof body?.provider === "string" ? body.provider : undefined,
+      clearWorktree: body?.clearWorktree === true,
+      resetDependents: body?.resetDependents === true,
+    });
+    res.json({ ok: true, task });
+  }));
+
+  app.post("/api/projects/:projectId/sprints/:sprintId/orchestrate", asyncRoute(async (req, res) => {
+    const projectId = requireTrimmedString(req.params.projectId, "projectId");
+    const sprintId = requireTrimmedString(req.params.sprintId, "sprintId");
+    const result = await orchestrateSprint(projectId, sprintId);
+    res.status(202).json(result);
+  }));
+
+  app.get("/api/projects/:projectId/quicksprints/templates", syncRoute((req, res) => {
+    const projectId = requireTrimmedString(req.params.projectId, "projectId");
+    if (!options.quicksprintService) {
+      res.status(404).json({ error: "Quicksprint service is not enabled." });
+      return;
     }
-  });
+    res.json(options.quicksprintService.listTemplates(projectId));
+  }));
 
-  app.post("/api/projects/:projectId/sprints/:sprintId/orchestrate", async (req, res) => {
-    try {
-      const projectId = String(req.params.projectId || "").trim();
-      const sprintId = String(req.params.sprintId || "").trim();
-      const result = await orchestrateSprint(projectId, sprintId);
-      res.status(202).json(result);
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to start sprint orchestration") });
+  app.get("/api/projects/:projectId/quicksprints/templates/:templateId", syncRoute((req, res) => {
+    const projectId = requireTrimmedString(req.params.projectId, "projectId");
+    const templateId = requireTrimmedString(req.params.templateId, "templateId");
+    if (!options.quicksprintService) {
+      res.status(404).json({ error: "Quicksprint service is not enabled." });
+      return;
     }
-  });
-
-  app.get("/api/projects/:projectId/quicksprints/templates", (req, res) => {
-    try {
-      const projectId = String(req.params.projectId || "").trim();
-      if (!options.quicksprintService) {
-        res.status(404).json({ error: "Quicksprint service is not enabled." });
-        return;
-      }
-      res.json(options.quicksprintService.listTemplates(projectId));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to list quicksprint templates") });
+    const template = options.quicksprintService.getTemplate(projectId, templateId);
+    if (!template) {
+      res.status(404).json({ error: "Template not found" });
+      return;
     }
-  });
+    res.json(template);
+  }));
 
-  app.get("/api/projects/:projectId/quicksprints/templates/:templateId", (req, res) => {
-    try {
-      const projectId = String(req.params.projectId || "").trim();
-      const templateId = String(req.params.templateId || "").trim();
-      if (!options.quicksprintService) {
-        res.status(404).json({ error: "Quicksprint service is not enabled." });
-        return;
-      }
-      const template = options.quicksprintService.getTemplate(projectId, templateId);
-      if (!template) {
-        res.status(404).json({ error: "Template not found" });
-        return;
-      }
-      res.json(template);
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to get quicksprint template") });
+  app.post("/api/projects/:projectId/quicksprints/templates", syncRoute((req, res) => {
+    const projectId = requireTrimmedString(req.params.projectId, "projectId");
+    if (!options.quicksprintService) {
+      res.status(404).json({ error: "Quicksprint service is not enabled." });
+      return;
     }
-  });
+    const template = options.quicksprintService.createCustomTemplate(projectId, req.body as CreateQuicksprintTemplateInput);
+    res.status(201).json(template);
+  }));
 
-  app.post("/api/projects/:projectId/quicksprints/templates", (req, res) => {
-    try {
-      const projectId = String(req.params.projectId || "").trim();
-      if (!options.quicksprintService) {
-        res.status(404).json({ error: "Quicksprint service is not enabled." });
-        return;
-      }
-      const template = options.quicksprintService.createCustomTemplate(projectId, req.body as CreateQuicksprintTemplateInput);
-      res.status(201).json(template);
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to create custom quicksprint template") });
+  app.patch("/api/projects/:projectId/quicksprints/templates/:templateId", syncRoute((req, res) => {
+    const projectId = requireTrimmedString(req.params.projectId, "projectId");
+    const templateId = requireTrimmedString(req.params.templateId, "templateId");
+    if (!options.quicksprintService) {
+      res.status(404).json({ error: "Quicksprint service is not enabled." });
+      return;
     }
-  });
+    const template = options.quicksprintService.updateCustomTemplate(projectId, templateId, req.body as UpdateQuicksprintTemplateInput);
+    res.json(template);
+  }));
 
-  app.patch("/api/projects/:projectId/quicksprints/templates/:templateId", (req, res) => {
-    try {
-      const projectId = String(req.params.projectId || "").trim();
-      const templateId = String(req.params.templateId || "").trim();
-      if (!options.quicksprintService) {
-        res.status(404).json({ error: "Quicksprint service is not enabled." });
-        return;
-      }
-      const template = options.quicksprintService.updateCustomTemplate(projectId, templateId, req.body as UpdateQuicksprintTemplateInput);
-      res.json(template);
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to update custom quicksprint template") });
+  app.delete("/api/projects/:projectId/quicksprints/templates/:templateId", syncRoute((req, res) => {
+    const projectId = requireTrimmedString(req.params.projectId, "projectId");
+    const templateId = requireTrimmedString(req.params.templateId, "templateId");
+    if (!options.quicksprintService) {
+      res.status(404).json({ error: "Quicksprint service is not enabled." });
+      return;
     }
-  });
+    options.quicksprintService.deleteCustomTemplate(projectId, templateId);
+    res.json({ ok: true });
+  }));
 
-  app.delete("/api/projects/:projectId/quicksprints/templates/:templateId", (req, res) => {
-    try {
-      const projectId = String(req.params.projectId || "").trim();
-      const templateId = String(req.params.templateId || "").trim();
-      if (!options.quicksprintService) {
-        res.status(404).json({ error: "Quicksprint service is not enabled." });
-        return;
-      }
-      options.quicksprintService.deleteCustomTemplate(projectId, templateId);
-      res.json({ ok: true });
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to delete custom quicksprint template") });
+  app.post("/api/projects/:projectId/quicksprints/execute", asyncRoute(async (req, res) => {
+    const projectId = requireTrimmedString(req.params.projectId, "projectId");
+    if (!options.quicksprintService) {
+      res.status(404).json({ error: "Quicksprint service is not enabled." });
+      return;
     }
-  });
+    const sprint = await options.quicksprintService.executeQuicksprint(projectId, req.body as QuicksprintExecutionInput);
+    res.status(201).json(sprint);
+  }));
 
-  app.post("/api/projects/:projectId/quicksprints/execute", async (req, res) => {
-    try {
-      const projectId = String(req.params.projectId || "").trim();
-      if (!options.quicksprintService) {
-        res.status(404).json({ error: "Quicksprint service is not enabled." });
-        return;
-      }
-      const sprint = await options.quicksprintService.executeQuicksprint(projectId, req.body as QuicksprintExecutionInput);
-      res.status(201).json(sprint);
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to execute quicksprint") });
-    }
-  });
-
-  app.post("/api/projects/:projectId/planning/improve-sprint-prompt", async (req, res) => {
+  app.post("/api/projects/:projectId/planning/improve-sprint-prompt", asyncRoute(async (req, res) => {
     if (!improveSprintPrompt) {
       res.status(404).json({ error: "Sprint prompt improvement is not enabled." });
       return;
     }
     const ac = new AbortController();
     res.on("close", () => { if (!res.writableFinished) ac.abort(); });
-    try {
-      const projectId = String(req.params.projectId || "").trim();
-      const input: ImprovePromptInput = {
-        name: typeof req.body?.name === "string" ? req.body.name.trim() : "",
-        goal: typeof req.body?.goal === "string" ? req.body.goal : "",
-        planningAgentPresetId: typeof req.body?.planningAgentPresetId === "string" ? req.body.planningAgentPresetId.trim() : undefined,
-        overrides: req.body?.overrides,
-      };
-      res.status(202).json(await improveSprintPrompt(projectId, input, ac.signal));
-    } catch (error) {
-      if (!res.headersSent) {
-        res.status(400).json({ error: toErrorMessage(error, "Failed to improve sprint prompt") });
-      }
-    }
-  });
+    const projectId = requireTrimmedString(req.params.projectId, "projectId");
+    const input: ImprovePromptInput = {
+      name: typeof req.body?.name === "string" ? req.body.name.trim() : "",
+      goal: typeof req.body?.goal === "string" ? req.body.goal : "",
+      planningAgentPresetId: typeof req.body?.planningAgentPresetId === "string" ? req.body.planningAgentPresetId.trim() : undefined,
+      overrides: req.body?.overrides,
+    };
+    res.status(202).json(await improveSprintPrompt(projectId, input, ac.signal));
+  }));
 
-  app.post("/api/projects/:projectId/sprints/:sprintId/plan", async (req, res) => {
+  app.post("/api/projects/:projectId/sprints/:sprintId/plan", asyncRoute(async (req, res) => {
     if (!planSprint) {
       res.status(404).json({ error: "Sprint planning is not enabled." });
       return;
     }
     const ac = new AbortController();
     res.on("close", () => { if (!res.writableFinished) ac.abort(); });
-    try {
-      const projectId = String(req.params.projectId || "").trim();
-      const sprintId = String(req.params.sprintId || "").trim();
-      const options: PlanSprintOptions = {
-        autoStart: Boolean(req.body?.autoStart),
-        replan: Boolean(req.body?.replan),
-        planningAgentPresetId: typeof req.body?.planningAgentPresetId === "string" ? req.body.planningAgentPresetId.trim() : undefined,
-        overrides: req.body?.overrides,
-      };
-      res.status(202).json(await planSprint(projectId, sprintId, options, ac.signal));
-    } catch (error) {
-      if (!res.headersSent) {
-        res.status(400).json({ error: toErrorMessage(error, "Failed to plan sprint") });
-      }
-    }
-  });
+    const projectId = requireTrimmedString(req.params.projectId, "projectId");
+    const sprintId = requireTrimmedString(req.params.sprintId, "sprintId");
+    const options: PlanSprintOptions = {
+      autoStart: Boolean(req.body?.autoStart),
+      replan: Boolean(req.body?.replan),
+      planningAgentPresetId: typeof req.body?.planningAgentPresetId === "string" ? req.body.planningAgentPresetId.trim() : undefined,
+      overrides: req.body?.overrides,
+    };
+    res.status(202).json(await planSprint(projectId, sprintId, options, ac.signal));
+  }));
 
-  app.post("/api/sprint-runs/:sprintRunId/pause", async (req, res) => {
-    try {
-      res.json(await pauseSprintRun(String(req.params.sprintRunId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to pause sprint run") });
-    }
-  });
+  app.post("/api/sprint-runs/:sprintRunId/pause", asyncRoute(async (req, res) => {
+    res.json(await pauseSprintRun(requireTrimmedString(req.params.sprintRunId, "sprintRunId")));
+  }));
 
-  app.post("/api/sprint-runs/:sprintRunId/cancel", async (req, res) => {
-    try {
-      res.json(await cancelSprintRun(String(req.params.sprintRunId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to cancel sprint run") });
-    }
-  });
+  app.post("/api/sprint-runs/:sprintRunId/cancel", asyncRoute(async (req, res) => {
+    res.json(await cancelSprintRun(requireTrimmedString(req.params.sprintRunId, "sprintRunId")));
+  }));
 
-  app.post("/api/sprint-runs/:sprintRunId/force-cancel", async (req, res) => {
-    try {
-      res.json(await forceCancelSprintRun(String(req.params.sprintRunId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to force-cancel sprint run") });
-    }
-  });
+  app.post("/api/sprint-runs/:sprintRunId/force-cancel", asyncRoute(async (req, res) => {
+    res.json(await forceCancelSprintRun(requireTrimmedString(req.params.sprintRunId, "sprintRunId")));
+  }));
 
-  app.post("/api/task-dispatches/:dispatchId/cancel", async (req, res) => {
-    try {
-      res.json(await cancelTaskDispatch(String(req.params.dispatchId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to cancel task dispatch") });
-    }
-  });
+  app.post("/api/task-dispatches/:dispatchId/cancel", asyncRoute(async (req, res) => {
+    res.json(await cancelTaskDispatch(requireTrimmedString(req.params.dispatchId, "dispatchId")));
+  }));
 
-  app.post("/api/task-dispatches/:dispatchId/force-cancel", async (req, res) => {
-    try {
-      res.json(await forceCancelTaskDispatch(String(req.params.dispatchId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to force-cancel task dispatch") });
-    }
-  });
+  app.post("/api/task-dispatches/:dispatchId/force-cancel", asyncRoute(async (req, res) => {
+    res.json(await forceCancelTaskDispatch(requireTrimmedString(req.params.dispatchId, "dispatchId")));
+  }));
 
-  app.post("/api/task-dispatches/:dispatchId/retry", async (req, res) => {
-    try {
-      res.json(await retryTaskDispatch(String(req.params.dispatchId || "").trim()));
-    } catch (error) {
-      res.status(400).json({ error: toErrorMessage(error, "Failed to retry task dispatch") });
-    }
-  });
+  app.post("/api/task-dispatches/:dispatchId/retry", asyncRoute(async (req, res) => {
+    res.json(await retryTaskDispatch(requireTrimmedString(req.params.dispatchId, "dispatchId")));
+  }));
 
   app.get("/favicon.ico", (req, res) => res.status(204).end());
 
@@ -1539,11 +1558,6 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
 
   return handle;
 };
-
-function toErrorMessage(error: unknown, prefix: string): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return `${prefix}: ${message}`;
-}
 
 function parseProjectStatsQuery(query: Record<string, unknown>): ProjectStatsQuery {
   const requestedWindow = typeof query.window === "string" ? query.window.trim() : "";

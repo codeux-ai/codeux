@@ -68,15 +68,18 @@ async function makeHostRequest(args: {
   port: number;
   host: string;
   path: string;
+  method?: string;
+  headers?: Record<string, string>;
 }): Promise<{ statusCode: number; headers: Record<string, string | string[] | undefined>; body: string }> {
   return await new Promise((resolve, reject) => {
     const request = httpRequest({
       hostname: "127.0.0.1",
       port: args.port,
       path: args.path,
-      method: "GET",
+      method: args.method || "GET",
       headers: {
         Host: args.host,
+        ...(args.headers || {}),
       },
     }, (response) => {
       const chunks: Buffer[] = [];
@@ -500,6 +503,344 @@ describe("setupDashboardServer", () => {
     });
     expect(assetResponse.statusCode).toBe(200);
     expect(assetResponse.body).toContain("console.log('asset');");
+  });
+
+  it("falls back to the preview app shell for extensionless direct loads on preview hosts", async () => {
+    const upstream = express();
+    upstream.get("/", (_req, res) => {
+      res.type("html").send("<!doctype html><html><head><title>Preview App</title></head><body><div id='app'>Preview Shell</div></body></html>");
+    });
+    upstream.get("/sprints", (_req, res) => {
+      res.status(404).type("text/plain").send("Not Found");
+    });
+    upstream.use((_req, res) => {
+      res.status(404).type("text/plain").send("Not Found");
+    });
+    const upstreamServer = await new Promise<Server>((resolve) => {
+      const server = upstream.listen(0, "127.0.0.1", () => resolve(server));
+    });
+    serversToClose.push(upstreamServer);
+    const upstreamPort = (upstreamServer.address() as AddressInfo).port;
+
+    const app = express();
+    const handle = await setupDashboardServer({
+      app,
+      dashboardDir: "dashboard",
+      port: await getAvailablePort(),
+      liveActivityCacheMs: 1000,
+      getStatus: () => ({ ok: true }),
+      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+      getProjectLiveSnapshot: (projectId: string) => ({ projectId, selectedSprintId: null, status: { project_id: projectId, timestamp: null, subtasks: [] }, execution: { projectId, projectName: "Project 1", sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null } as any),
+      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getProjectStatsSnapshot: () => ({
+        projectId: "project-test",
+        projectName: "Project Test",
+        window: "7d",
+        generatedAt: new Date().toISOString(),
+        usage: { invocationCount: 0, activeTimeMs: 0, wallTimeMs: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, reportedInvocationCount: 0, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 },
+        activeSprint: null,
+        buckets: [],
+        sprints: [],
+        tasks: [],
+        providers: [],
+        purposes: [],
+        tokenSources: [],
+      }),
+      getLiveActivities: async () => ({}),
+      getGitStatus: async () => ({
+        mode: "LOCAL",
+        available: true,
+        repositoryRoot: null,
+        branch: null,
+        hasRemote: false,
+        dirty: false,
+        openPullRequests: [],
+        ciRuns: [],
+        mergedPullRequests: [],
+        tracking: { scope: "REPOSITORY", label: "Repository", branch: null },
+        warnings: [],
+        lastUpdated: new Date().toISOString(),
+      }),
+      getExternalSettingsHints: () => ({
+        env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+        settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+        resolved: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+      }),
+      ...buildSettingsServerOptions(),
+      listAgentPresets: () => [],
+      createAgentPreset: () => ({ id: "agent-1" } as any),
+      updateAgentPreset: () => ({ id: "agent-1" } as any),
+      deleteAgentPreset: () => {},
+      rerunTask: async () => ({ ok: true }),
+      orchestrateSprint: async () => ({ ok: true }),
+      pauseSprintRun: async () => ({ ok: true }),
+      cancelSprintRun: async () => ({ ok: true }),
+      cancelTaskDispatch: async () => ({ ok: true }),
+      retryTaskDispatch: async () => ({ ok: true }),
+      getSprintPreviewSession: async (sessionId) => sessionId === "test-session"
+        ? {
+          id: sessionId,
+          projectId: "project-1",
+          sprintId: "sprint-1",
+          projectName: "Project",
+          sprintName: "Sprint",
+          sprintNumber: 1,
+          status: "running",
+          hostPort: upstreamPort,
+          containerAppPort: 4444,
+          containerId: "container-1",
+          containerName: "preview-1",
+          worktreePath: "/tmp/preview",
+          featureBranch: "feature/sprint-1",
+          startupScriptPath: ".sprint-os/browser/start-preview.sh",
+          startupMode: "auto",
+          installCommand: null,
+          buildCommand: null,
+          runCommand: null,
+          lastCompletedTaskCount: 0,
+          lastSeenSprintStatus: "running",
+          lastKnownPath: "/",
+          healthStatus: "healthy",
+          lastError: null,
+          lastBuildAt: null,
+          lastStartedAt: null,
+          lastStoppedAt: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+        : null,
+    });
+    serversToClose.push(handle.server);
+
+    const deepLinkResponse = await makeHostRequest({
+      port: handle.port,
+      host: `preview-test-session.localhost:${handle.port}`,
+      path: "/sprints",
+      headers: {
+        Accept: "text/html",
+      },
+    });
+
+    expect(deepLinkResponse.statusCode).toBe(200);
+    expect(deepLinkResponse.body).toContain("Preview Shell");
+    expect(deepLinkResponse.body).toContain("/_sprint_os/preview-bridge.js");
+  });
+
+  it("renders a standby page for unavailable preview hosts and exposes same-origin preview controls", async () => {
+    let startCalls = 0;
+    let rebuildCalls = 0;
+
+    const app = express();
+    const handle = await setupDashboardServer({
+      app,
+      dashboardDir: "dashboard",
+      port: await getAvailablePort(),
+      liveActivityCacheMs: 1000,
+      getStatus: () => ({ ok: true }),
+      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+      getProjectLiveSnapshot: (projectId: string) => ({ projectId, selectedSprintId: null, status: { project_id: projectId, timestamp: null, subtasks: [] }, execution: { projectId, projectName: "Project 1", sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null } as any),
+      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getProjectStatsSnapshot: () => ({
+        projectId: "project-test",
+        projectName: "Project Test",
+        window: "7d",
+        generatedAt: new Date().toISOString(),
+        usage: { invocationCount: 0, activeTimeMs: 0, wallTimeMs: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, reportedInvocationCount: 0, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 },
+        activeSprint: null,
+        buckets: [],
+        sprints: [],
+        tasks: [],
+        providers: [],
+        purposes: [],
+        tokenSources: [],
+      }),
+      getLiveActivities: async () => ({}),
+      getGitStatus: async () => ({
+        mode: "LOCAL",
+        available: true,
+        repositoryRoot: null,
+        branch: null,
+        hasRemote: false,
+        dirty: false,
+        openPullRequests: [],
+        ciRuns: [],
+        mergedPullRequests: [],
+        tracking: { scope: "REPOSITORY", label: "Repository", branch: null },
+        warnings: [],
+        lastUpdated: new Date().toISOString(),
+      }),
+      getExternalSettingsHints: () => ({
+        env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+        settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+        resolved: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+      }),
+      ...buildSettingsServerOptions(),
+      listAgentPresets: () => [],
+      createAgentPreset: () => ({ id: "agent-1" } as any),
+      updateAgentPreset: () => ({ id: "agent-1" } as any),
+      deleteAgentPreset: () => {},
+      rerunTask: async () => ({ ok: true }),
+      orchestrateSprint: async () => ({ ok: true }),
+      pauseSprintRun: async () => ({ ok: true }),
+      cancelSprintRun: async () => ({ ok: true }),
+      cancelTaskDispatch: async () => ({ ok: true }),
+      retryTaskDispatch: async () => ({ ok: true }),
+      getSprintPreviewSession: async (sessionId) => sessionId === "test-session"
+        ? {
+          id: sessionId,
+          projectId: "project-1",
+          sprintId: "sprint-1",
+          projectName: "Project",
+          sprintName: "Sprint",
+          sprintNumber: 1,
+          status: "stopped",
+          hostPort: null,
+          containerAppPort: 4444,
+          containerId: null,
+          containerName: null,
+          worktreePath: "/tmp/preview",
+          featureBranch: "feature/sprint-1",
+          startupScriptPath: ".sprint-os/browser/start-preview.sh",
+          startupMode: "auto",
+          installCommand: null,
+          buildCommand: null,
+          runCommand: null,
+          lastCompletedTaskCount: 0,
+          lastSeenSprintStatus: "running",
+          lastKnownPath: "/sprints",
+          healthStatus: "unknown",
+          lastError: "Preview host port is not assigned yet.",
+          lastBuildAt: null,
+          lastStartedAt: null,
+          lastStoppedAt: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+        : null,
+      startSprintPreviewSession: async () => {
+        startCalls += 1;
+        return {} as any;
+      },
+      rebuildSprintPreviewSession: async () => {
+        rebuildCalls += 1;
+        return {} as any;
+      },
+    });
+    serversToClose.push(handle.server);
+
+    const previewResponse = await makeHostRequest({
+      port: handle.port,
+      host: `preview-test-session.localhost:${handle.port}`,
+      path: "/sprints",
+      headers: {
+        Accept: "text/html",
+      },
+    });
+    expect(previewResponse.statusCode).toBe(200);
+    expect(previewResponse.body).toContain("Container is stopped");
+    expect(previewResponse.body).toContain("Start Container");
+    expect(previewResponse.body).toContain("/_sprint_os/preview-status");
+
+    const statusResponse = await makeHostRequest({
+      port: handle.port,
+      host: `preview-test-session.localhost:${handle.port}`,
+      path: "/_sprint_os/preview-status",
+    });
+    expect(statusResponse.statusCode).toBe(200);
+    expect(statusResponse.body).toContain("\"status\":\"stopped\"");
+
+    const startResponse = await makeHostRequest({
+      port: handle.port,
+      host: `preview-test-session.localhost:${handle.port}`,
+      path: "/_sprint_os/preview-start",
+      method: "POST",
+    });
+    expect(startResponse.statusCode).toBe(200);
+    expect(startCalls).toBe(1);
+
+    const rebuildResponse = await makeHostRequest({
+      port: handle.port,
+      host: `preview-test-session.localhost:${handle.port}`,
+      path: "/_sprint_os/preview-rebuild",
+      method: "POST",
+    });
+    expect(rebuildResponse.statusCode).toBe(200);
+    expect(rebuildCalls).toBe(1);
+  });
+
+  it("removes preview sessions through the delete endpoint", async () => {
+    let removedSessionId: string | null = null;
+
+    const app = express();
+    const handle = await setupDashboardServer({
+      app,
+      dashboardDir: "dashboard",
+      port: await getAvailablePort(),
+      liveActivityCacheMs: 1000,
+      getStatus: () => ({ ok: true }),
+      getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getOverviewTelemetrySnapshot: () => ({ activeProjects: [], attentionProjects: [], recentEvents: [], updatedAt: null }),
+      getProjectLiveSnapshot: (projectId: string) => ({ projectId, selectedSprintId: null, status: { project_id: projectId, timestamp: null, subtasks: [] }, execution: { projectId, projectName: "Project 1", sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }, gitStatus: null, gitStatusError: null, updatedAt: null } as any),
+      getProjectExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
+      getProjectStatsSnapshot: () => ({
+        projectId: "project-test",
+        projectName: "Project Test",
+        window: "7d",
+        generatedAt: new Date().toISOString(),
+        usage: { invocationCount: 0, activeTimeMs: 0, wallTimeMs: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, reportedInvocationCount: 0, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 },
+        activeSprint: null,
+        buckets: [],
+        sprints: [],
+        tasks: [],
+        providers: [],
+        purposes: [],
+        tokenSources: [],
+      }),
+      getLiveActivities: async () => ({}),
+      getGitStatus: async () => ({
+        mode: "LOCAL",
+        available: true,
+        repositoryRoot: null,
+        branch: null,
+        hasRemote: false,
+        dirty: false,
+        openPullRequests: [],
+        ciRuns: [],
+        mergedPullRequests: [],
+        tracking: { scope: "REPOSITORY", label: "Repository", branch: null },
+        warnings: [],
+        lastUpdated: new Date().toISOString(),
+      }),
+      getExternalSettingsHints: () => ({
+        env: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+        settingsJson: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+        resolved: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+      }),
+      ...buildSettingsServerOptions(),
+      listAgentPresets: () => [],
+      createAgentPreset: () => ({ id: "agent-1" } as any),
+      updateAgentPreset: () => ({ id: "agent-1" } as any),
+      deleteAgentPreset: () => {},
+      rerunTask: async () => ({ ok: true }),
+      orchestrateSprint: async () => ({ ok: true }),
+      pauseSprintRun: async () => ({ ok: true }),
+      cancelSprintRun: async () => ({ ok: true }),
+      cancelTaskDispatch: async () => ({ ok: true }),
+      retryTaskDispatch: async () => ({ ok: true }),
+      removeSprintPreviewSession: async (sessionId: string) => {
+        removedSessionId = sessionId;
+      },
+    });
+    serversToClose.push(handle.server);
+
+    const response = await fetch(`http://127.0.0.1:${handle.port}/api/browser/sessions/test-session`, {
+      method: "DELETE",
+    });
+
+    expect(response.status).toBe(204);
+    expect(removedSessionId).toBe("test-session");
   });
 
   it("serves /health and /ready endpoints with detailed probe payload", async () => {

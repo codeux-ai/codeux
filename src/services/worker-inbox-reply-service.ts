@@ -11,7 +11,11 @@ import type {
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
-import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
+import type { IProviderRunner, ProviderRunResult } from "../infrastructure/providers/cli/provider-runner.js";
+import {
+  buildChatReplayPrompt,
+  normalizeProviderReply,
+} from "./chat-reply-prompt.js";
 
 import { getRepoSprintOsPath } from "../shared/config/sprint-os-paths.js";
 import type { TaskService } from "./task-service.js";
@@ -57,9 +61,11 @@ export class WorkerInboxReplyService {
     const route = this.resolveProviderRoute("dashboard_reply", input.bodyMarkdown);
     const thread = this.deps.connectionChatRepository.getThread(input.threadId);
     const messages = this.deps.connectionChatRepository.listMessages(input.threadId);
-    const rawPrompt = input.mode === "compact_thread"
-      ? input.bodyMarkdown.trim()
-      : await this.buildPrompt({
+    let rawPrompt = input.bodyMarkdown.trim();
+
+    if (input.mode !== "compact_thread") {
+      const workerInstructions = (await this.deps.agentPresetSyncService.getWorkerAgent(input.projectId)).instructionMarkdown.trim();
+      rawPrompt = buildChatReplayPrompt({
         projectId: input.projectId,
         repoPath: project.baseDir,
         projectName: project.name,
@@ -67,7 +73,10 @@ export class WorkerInboxReplyService {
         threadTitle: input.threadTitle || thread.title,
         messages,
         bodyMarkdown: input.bodyMarkdown,
+        workerInstructions,
+        isDashboardReply: true,
       });
+    }
     const prompt = buildProviderPrompt(rawPrompt, route.providers[route.provider].thinkingMode);
 
     const execInvocation = this.deps.executionRepository.createExecutionInvocation({
@@ -92,7 +101,7 @@ export class WorkerInboxReplyService {
 
     let output: string;
     try {
-      output = await this.runProvider({
+      const result = await this.runProvider({
         provider: route.provider,
         prompt,
         repoPath: project.baseDir,
@@ -100,6 +109,7 @@ export class WorkerInboxReplyService {
         apiKey: route.providers[route.provider].apiKey,
         githubToken: this.deps.getGithubToken(),
       });
+      output = result.text;
     } catch (err) {
       this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
         status: "failed",
@@ -108,7 +118,7 @@ export class WorkerInboxReplyService {
       throw err;
     }
 
-    const bodyMarkdown = this.normalizeProviderReply(output);
+    const bodyMarkdown = normalizeProviderReply(output);
 
     this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
       role: "assistant",
@@ -189,15 +199,32 @@ export class WorkerInboxReplyService {
 
     const prompt = buildProviderPrompt(fullContextPrompt, route.providers[route.provider].thinkingMode);
 
+    const startedAt = new Date().toISOString();
+
+    const providerInvocationId = randomUUID();
+    const sessionId = "worker-reply-" + providerInvocationId;
+
+    const usageRecord = this.deps.executionRepository.createProviderInvocationUsage({
+      projectId: args.projectId,
+      taskId: invocationTaskId,
+      sessionId,
+      provider: route.provider,
+      purpose: "clarification_reply",
+      status: "running",
+      model: route.providers[route.provider].model,
+      startedAt,
+      promptChars: fullContextPrompt.length,
+    });
+
     const execInvocation = this.deps.executionRepository.createExecutionInvocation({
       projectId: args.projectId,
       type: "worker_reply",
       provider: route.provider,
       model: route.providers[route.provider].model,
-      startedAt: new Date().toISOString(),
+      startedAt,
       attentionItemId: null,
       dispatchId: null,
-      providerInvocationId: null,
+      providerInvocationId: usageRecord.id,
       sprintId: null,
       sprintRunId: null,
       taskId: invocationTaskId,
@@ -210,8 +237,9 @@ export class WorkerInboxReplyService {
     });
 
     let output: string;
+    let providerResult: ProviderRunResult & { text: string };
     try {
-      output = await this.runProvider({
+      providerResult = await this.runProvider({
         provider: route.provider,
         prompt,
         repoPath: project.baseDir,
@@ -219,23 +247,37 @@ export class WorkerInboxReplyService {
         apiKey: route.providers[route.provider].apiKey,
         githubToken: this.deps.getGithubToken(),
       });
+      output = providerResult.text;
     } catch (err) {
+      const finishedAt = new Date().toISOString();
       this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
         status: "failed",
-        finishedAt: new Date().toISOString(),
+        finishedAt,
+      });
+      this.deps.executionRepository.updateProviderInvocationUsage(usageRecord.id, {
+        status: "failed",
+        finishedAt,
+        durationMs: new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
       });
       throw err;
     }
 
-    const reply = this.normalizeProviderReply(output);
+    const reply = normalizeProviderReply(output);
 
+    const finishedAt = new Date().toISOString();
     this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
       role: "assistant",
       contentMarkdown: reply,
     });
     this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
       status: "completed",
-      finishedAt: new Date().toISOString(),
+      finishedAt,
+    });
+    this.deps.executionRepository.updateProviderInvocationUsage(usageRecord.id, {
+      status: "completed",
+      finishedAt,
+      durationMs: new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
+      ...providerResult.usageTelemetry,
     });
 
     if (!reply) {
@@ -287,60 +329,6 @@ export class WorkerInboxReplyService {
     };
   }
 
-  private async buildPrompt(args: {
-    projectId: string;
-    repoPath: string;
-    projectName: string;
-    thread: ConversationThreadRecord;
-    threadTitle?: string;
-    messages: ConversationMessageRecord[];
-    bodyMarkdown: string;
-  }): Promise<string> {
-    const workerInstructions = (await this.deps.agentPresetSyncService.getWorkerAgent(args.projectId))
-      .instructionMarkdown
-      .trim();
-    const compactionSummary = this.getCompactionSummary(args.thread.runtimeState);
-    const replayMessages = args.messages.length > 0
-      ? (compactionSummary ? this.getMessagesAfterCompaction(args.messages, compactionSummary) : args.messages)
-      : [{ authorType: "dashboard_user", bodyMarkdown: args.bodyMarkdown } as ConversationMessageRecord];
-
-    const instructions = [
-      "You are a Sprint OS connected worker replying to a dashboard chat message.",
-      "Reply in concise markdown.",
-      "Do not claim code changes, PRs, or completed execution unless they actually happened.",
-      "If the message asks for status you do not know, say so plainly and ask for the next action.",
-      "Do not start implementation from this message. This is a reply-only interaction.",
-    ].join("\n");
-
-    return [
-      workerInstructions ? `## WORKER INSTRUCTIONS\n\n${workerInstructions}` : "",
-      "## ROLE",
-      instructions,
-      "",
-      "## CONTEXT",
-      `Project: ${args.projectName}`,
-      `Repo Path: ${args.repoPath}`,
-      `Thread ID: ${args.thread.id}`,
-      args.threadTitle ? `Thread Title: ${args.threadTitle}` : "",
-      "",
-      ...(compactionSummary ? [
-        "## COMPACTED HISTORY",
-        compactionSummary.markdown,
-        "",
-        "## MESSAGES SINCE COMPACTION",
-      ] : [
-        "## CONVERSATION HISTORY",
-      ]),
-      replayMessages.map((message) => {
-        const role = message.authorType === "dashboard_user" ? "User" : "Worker";
-        return `### ${role}\n${message.bodyMarkdown.trim()}`;
-      }).join("\n\n") || args.bodyMarkdown.trim(),
-      "",
-      "## REQUIRED OUTPUT",
-      "Return only the reply body in markdown. No JSON. No code fences unless the reply truly needs them.",
-    ].filter((part) => part.trim().length > 0).join("\n");
-  }
-
   private async runProvider(input: {
     provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
     prompt: string;
@@ -348,10 +336,10 @@ export class WorkerInboxReplyService {
     model: string;
     apiKey: string;
     githubToken?: string;
-  }): Promise<string> {
+  }): Promise<ProviderRunResult & { text: string }> {
     const workflowSettings = this.deps.getDashboardSettings().cliWorkflow;
 
-    const result = await this.deps.providerRunner.runProviderForText({
+    return await this.deps.providerRunner.runProviderForText({
       provider: input.provider,
       prompt: input.prompt,
       cwd: input.repoPath,
@@ -363,47 +351,6 @@ export class WorkerInboxReplyService {
       githubToken: input.githubToken,
       onActivity: () => {},
     });
-    return result.text;
   }
 
-  private normalizeProviderReply(output: string): string {
-    const trimmed = output.trim();
-    if (!trimmed) {
-      return "";
-    }
-
-    try {
-      const parsed = JSON.parse(trimmed) as { response?: unknown };
-      if (typeof parsed?.response === "string") {
-        return parsed.response.trim();
-      }
-    } catch {
-      // Provider returned plain text; keep it as-is.
-    }
-
-    return trimmed;
-  }
-
-  private getCompactionSummary(runtimeState: ConversationRuntimeState | null | undefined): ConversationCompactionSummary | null {
-    const summary = runtimeState?.compactionSummary;
-    if (!summary || typeof summary.markdown !== "string" || !summary.markdown.trim()) {
-      return null;
-    }
-    return summary;
-  }
-
-  private getMessagesAfterCompaction(
-    messages: ConversationMessageRecord[],
-    summary: ConversationCompactionSummary,
-  ): ConversationMessageRecord[] {
-    if (!summary.sourceMessageId) {
-      return messages;
-    }
-    const index = messages.findIndex((message) => message.id === summary.sourceMessageId);
-    if (index === -1) {
-      return messages;
-    }
-    return messages.slice(index + 1);
-  }
-
-  }
+}

@@ -1,9 +1,7 @@
 /**
  * @vitest-environment jsdom
- * @jsx h
- * @jsxFrag Fragment
  */
-import { h, Fragment } from "preact";
+import { h } from "preact";
 import { render, cleanup } from "@testing-library/preact";
 import { useProjectStats } from "../../../dashboard/src/v2/hooks/use-project-stats.js";
 import { describe, expect, it, vi, beforeEach } from "vitest";

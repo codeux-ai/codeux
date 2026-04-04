@@ -11,6 +11,11 @@ expect.extend(matchers);
 vi.mock("gsap", () => ({
   default: {
     fromTo: vi.fn(),
+    set: vi.fn(),
+    context: (fn: () => void) => {
+      fn();
+      return { revert: vi.fn() };
+    },
     timeline: () => ({
       fromTo: vi.fn(),
     }),
@@ -67,13 +72,13 @@ describe("SprintComposer", () => {
 
     // Overlay should appear
     await waitFor(() => {
-      expect(getByText("Planning in motion")).toBeInTheDocument();
+      expect(document.body.textContent).toContain("Generating subtasks");
     });
 
     expect(mockOnSubmit).toHaveBeenCalled();
 
     // Dismiss overlay
-    const closeBtn = getByText("Close");
+    const closeBtn = getByText("Minimize");
     fireEvent.click(closeBtn);
 
     // Overlay should disappear
@@ -115,20 +120,19 @@ describe("SprintComposer", () => {
 
     // Overlay should appear
     await waitFor(() => {
-      expect(getByText("Planning in motion")).toBeInTheDocument();
+      expect(document.body.textContent).toContain("Generating subtasks");
     });
 
     expect(mockOnSubmit).toHaveBeenCalled();
 
-    // Click Cancel
-    // Use the overlay cancel button (first one usually, or use distinct selector if needed, but getByText("Cancel") should work if we click the visible one)
-    const cancelBtns = getAllByText("Cancel");
+    // Click Cancel Request (abort via the overlay specifically)
+    const cancelBtns = getAllByText("Cancel Request");
     // Click the one inside the overlay
     fireEvent.click(cancelBtns[0]!);
 
     // Overlay should disappear because state resets when not busy
     await waitFor(() => {
-      expect(queryByText("Planning in motion")).not.toBeInTheDocument();
+      expect(document.body.textContent).not.toContain("Generating subtasks...");
     });
   });
 });

@@ -25,28 +25,53 @@ const Card: FunctionComponent<{ title: string; description: string; badge?: stri
   description,
   badge,
   children,
-}) => (
-  <section className="rounded-[2rem] border border-black/[0.06] bg-white/72 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_12px_36px_rgba(0,0,0,0.22)]">
-    <div className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-black/[0.06] pb-4 dark:border-white/[0.06]">
-      <div>
-        <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</h3>
-        <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">{description}</p>
+}) => {
+  const isOverridden = badge === "Project override" || badge === "Sprint override";
+  const isMixed = badge === "Mixed sources";
+  const isInherited = badge === "Inherited";
+
+  return (
+    <section className={`rounded-[2rem] border transition-colors duration-300 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.04)] backdrop-blur-2xl dark:shadow-[0_12px_36px_rgba(0,0,0,0.22)] ${
+      isOverridden
+        ? "border-amber-500/20 bg-amber-500/[0.03] dark:border-amber-500/20 dark:bg-amber-500/[0.02]"
+        : isMixed
+          ? "border-sky-500/20 bg-sky-500/[0.02] dark:border-sky-500/20 dark:bg-sky-500/[0.02]"
+          : "border-black/[0.06] bg-white/72 dark:border-white/[0.06] dark:bg-white/[0.03]"
+    }`}>
+      <div className={`mb-5 flex flex-wrap items-start justify-between gap-3 border-b pb-4 transition-colors duration-300 ${
+        isOverridden
+          ? "border-amber-500/10 dark:border-amber-500/10"
+          : isMixed
+            ? "border-sky-500/10 dark:border-sky-500/10"
+            : "border-black/[0.06] dark:border-white/[0.06]"
+      }`}>
+        <div>
+          <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</h3>
+          <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">{description}</p>
+        </div>
+        {badge ? (
+          <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors duration-300 ${
+            isOverridden
+              ? "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-400"
+              : isMixed
+                ? "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:border-sky-400/25 dark:bg-sky-400/10 dark:text-sky-400"
+                : "border-slate-500/20 bg-slate-500/5 text-slate-600 dark:border-slate-400/20 dark:bg-slate-400/10 dark:text-slate-400"
+          }`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${
+              isOverridden ? "bg-amber-500 dark:bg-amber-400" : isMixed ? "bg-sky-500 dark:bg-sky-400" : "bg-slate-400 dark:bg-slate-500"
+            }`} />
+            {badge}
+          </span>
+        ) : null}
       </div>
-      {badge ? (
-        <span className="rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-300">
-          {badge}
-        </span>
-      ) : null}
-    </div>
-    <div className="space-y-4">{children}</div>
-  </section>
-);
+      <div className="space-y-4">{children}</div>
+    </section>
+  );
+};
 
 const OverrideBadge: FunctionComponent<{ label: string }> = ({ label }) => (
   <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
-    <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black leading-none text-white dark:bg-amber-300 dark:text-void-900">
-      !
-    </span>
+    <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-300" />
     {label}
   </span>
 );
@@ -622,7 +647,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
             />
           </Row>
-          <Row label="Feature PR auto-merge" description="Policy for merging feature PRs after checks and comments are satisfied." badge={getBadge("ciIntelligence.featurePrAutoMergeMode")}>
+          <Row label="Feature PR auto-merge" description="Policy for leaving feature work at PR creation or merging after checks and comments are satisfied." badge={getBadge("ciIntelligence.featurePrAutoMergeMode")}>
             <SelectInput
               value={settings.ciIntelligence.featurePrAutoMergeMode}
               onChange={(value) => update({
@@ -633,12 +658,13 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
               options={[
                 { value: "OFF", label: "Off" },
+                { value: "CREATE_PR", label: "Create PR" },
                 { value: "WHEN_GREEN", label: "When green" },
                 { value: "ALWAYS", label: "Always" },
               ]}
             />
           </Row>
-          <Row label="Main branch auto-merge" description="Policy for merging the main branch PR after checks and comments are satisfied." badge={getBadge("ciIntelligence.mainBranchAutoMergeMode")}>
+          <Row label="Main branch auto-merge" description="Policy for leaving the final main PR at creation or merging it after checks and comments are satisfied." badge={getBadge("ciIntelligence.mainBranchAutoMergeMode")}>
             <SelectInput
               value={settings.ciIntelligence.mainBranchAutoMergeMode}
               onChange={(value) => update({
@@ -649,6 +675,7 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               })}
               options={[
                 { value: "OFF", label: "Off" },
+                { value: "CREATE_PR", label: "Create PR" },
                 { value: "WHEN_GREEN", label: "When green" },
                 { value: "ALWAYS", label: "Always" },
               ]}
@@ -852,16 +879,19 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
       </Card>
 
       <Card
-        title="Sprint Browser"
-        description="Preview container behavior, routing range, and startup script overrides for the in-app browser."
+        title="Browser Preview"
+        description="Preview runtime controls, browser visibility, rebuild policy, and container limits for the in-app browser."
         badge={sprintPreviewSource ? sourceLabel(sprintPreviewSource) : undefined}
       >
         <div className="grid gap-3 xl:grid-cols-2">
           {[
-            ["autoStartOnRunningSprint", "Auto-start running sprint previews"],
-            ["rebuildOnTaskCompletion", "Rebuild after task completion"],
-            ["rebuildOnSprintCompletion", "Rebuild after sprint completion"],
-            ["autoStopOnTerminalSprint", "Auto-stop on terminal sprint"],
+            ["enabled", "Preview runtime enabled"],
+            ["showInAppBrowser", "Show in-app browser workspace"],
+            ["autoStartOnRunningSprint", "Launch preview when sprint starts"],
+            ["rebuildOnTaskCompletion", "Rebuild preview on task completion"],
+            ["rebuildOnSprintCompletion", "Rebuild preview on sprint completion"],
+            ["pullLatestOnRebuild", "Pull latest Git changes before rebuild"],
+            ["autoStopOnTerminalSprint", "Stop preview when sprint ends"],
           ].map(([field, label]) => (
             <Row key={field} label={label} description={`Enable ${label.toLowerCase()} for this scope.`} badge={getBadge(`sprintPreview.${field}`)}>
               <Toggle
@@ -877,6 +907,19 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
           ))}
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
+          <Row label="Maximum active preview containers" description="Stop the oldest active previews before launching another one when this limit is exceeded." badge={getBadge("sprintPreview.maxConcurrentContainers")}>
+            <NumberInput
+              value={settings.sprintPreview.maxConcurrentContainers}
+              onChange={(value) => update({
+                sprintPreview: {
+                  ...settings.sprintPreview,
+                  maxConcurrentContainers: value,
+                },
+              })}
+              min={1}
+              max={100}
+            />
+          </Row>
           <Row label="Host port range start" description="Lower bound for localhost preview port allocation." badge={getBadge("sprintPreview.hostPortRangeStart")}>
             <NumberInput
               value={settings.sprintPreview.hostPortRangeStart}

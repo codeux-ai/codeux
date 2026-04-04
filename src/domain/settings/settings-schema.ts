@@ -78,6 +78,9 @@ const validateProviderSettings = (
   if (typeof value.apiKey !== "string") {
     issues.push({ path: `${path}.apiKey`, message: "Expected a string" });
   }
+  if (typeof value.maxConcurrentTasks !== "number") {
+    issues.push({ path: `${path}.maxConcurrentTasks`, message: "Expected a number" });
+  }
 };
 
 const validateAiProvider = (
@@ -292,10 +295,14 @@ const validateSprintPreview = (
     issues.push({ path, message: "Expected an object" });
     return;
   }
+  if (typeof value.enabled !== "boolean") issues.push({ path: `${path}.enabled`, message: "Expected a boolean" });
+  if (typeof value.showInAppBrowser !== "boolean") issues.push({ path: `${path}.showInAppBrowser`, message: "Expected a boolean" });
   if (typeof value.autoStartOnRunningSprint !== "boolean") issues.push({ path: `${path}.autoStartOnRunningSprint`, message: "Expected a boolean" });
   if (typeof value.rebuildOnTaskCompletion !== "boolean") issues.push({ path: `${path}.rebuildOnTaskCompletion`, message: "Expected a boolean" });
   if (typeof value.rebuildOnSprintCompletion !== "boolean") issues.push({ path: `${path}.rebuildOnSprintCompletion`, message: "Expected a boolean" });
+  if (typeof value.pullLatestOnRebuild !== "boolean") issues.push({ path: `${path}.pullLatestOnRebuild`, message: "Expected a boolean" });
   if (typeof value.autoStopOnTerminalSprint !== "boolean") issues.push({ path: `${path}.autoStopOnTerminalSprint`, message: "Expected a boolean" });
+  if (typeof value.maxConcurrentContainers !== "number") issues.push({ path: `${path}.maxConcurrentContainers`, message: "Expected a number" });
   if (typeof value.hostPortRangeStart !== "number") issues.push({ path: `${path}.hostPortRangeStart`, message: "Expected a number" });
   if (typeof value.hostPortRangeEnd !== "number") issues.push({ path: `${path}.hostPortRangeEnd`, message: "Expected a number" });
   if (typeof value.containerAppPort !== "number") issues.push({ path: `${path}.containerAppPort`, message: "Expected a number" });
@@ -344,6 +351,31 @@ const validateAgents = (
   for (const templateId of INSTRUCTION_TEMPLATE_IDS) {
     if (typeof value.instructionTemplates[templateId] !== "string") {
       issues.push({ path: `${path}.instructionTemplates.${templateId}`, message: "Expected a string" });
+    }
+  }
+  const qa = value.qualityAssurance;
+  if (!isRecord(qa)) {
+    issues.push({ path: `${path}.qualityAssurance`, message: "Expected an object" });
+    return;
+  }
+  if (typeof qa.enabled !== "boolean") {
+    issues.push({ path: `${path}.qualityAssurance.enabled`, message: "Expected a boolean" });
+  }
+  if (typeof qa.maxTaskReviewRuns !== "number" || qa.maxTaskReviewRuns < 1) {
+    issues.push({ path: `${path}.qualityAssurance.maxTaskReviewRuns`, message: "Expected a positive number" });
+  }
+  const triggerIds = ["taskCompletion", "sprintCompletion", "completedTaskWithoutPr"] as const;
+  for (const triggerId of triggerIds) {
+    const trigger = qa[triggerId];
+    if (!isRecord(trigger)) {
+      issues.push({ path: `${path}.qualityAssurance.${triggerId}`, message: "Expected an object" });
+      continue;
+    }
+    if (typeof trigger.enabled !== "boolean") {
+      issues.push({ path: `${path}.qualityAssurance.${triggerId}.enabled`, message: "Expected a boolean" });
+    }
+    if (trigger.agentPresetId !== null && trigger.agentPresetId !== undefined && typeof trigger.agentPresetId !== "string") {
+      issues.push({ path: `${path}.qualityAssurance.${triggerId}.agentPresetId`, message: "Expected null or a string" });
     }
   }
 };

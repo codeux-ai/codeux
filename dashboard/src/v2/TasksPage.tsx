@@ -32,6 +32,7 @@ import { deriveTaskBoardState } from "./lib/task-board-state.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "./lib/list-window.js";
 import { ListWindowSelector } from "./components/ui/ListWindowSelector.js";
 import { SkeletonCard } from "./components/ui/ListSkeletons.js";
+import { FilterStrip } from "./components/ui/FilterStrip.js";
 
 const PRIORITY_CFG: Record<TaskPriority, { label: string; color: string; dot: string; bg: string }> = {
   critical: { label: "Critical", color: "text-status-red", dot: "bg-status-red shadow-[0_0_8px_rgba(227,0,15,0.6)]", bg: "bg-status-red/[0.08] border-status-red/20" },
@@ -112,10 +113,11 @@ const TaskCard: FunctionComponent<{
       ref={cardRef}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      className="group relative flex flex-col bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.25rem] p-5 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden cursor-default"
+      tabIndex={0}
+      className="group relative flex flex-col bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
       style={{ transformStyle: "preserve-3d", willChange: "transform" }}
     >
-      <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-signal-500/[0.02]" />
+      <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-signal-500/[0.03] dark:group-hover:bg-signal-500/[0.05]" />
       <WaveFluid accentHex={STATUS_CFG[task.status].hex} />
       <BorderTrace accentHex={STATUS_CFG[task.status].hex} />
 
@@ -123,7 +125,7 @@ const TaskCard: FunctionComponent<{
         <span className="font-mono text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-[0.1em]">
           {task.id.toUpperCase()}
         </span>
-        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-widest ${pri.bg} ${pri.color}`}>
+        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[9px] font-bold uppercase tracking-[0.14em] ${pri.bg} ${pri.color}`}>
           <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${pri.dot}`} />
           {pri.label}
         </div>
@@ -178,7 +180,7 @@ const TaskCard: FunctionComponent<{
           {dependents.map((dep) => (
             <div
               key={dep.recordId}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[9px] font-bold uppercase tracking-widest ${
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[9px] font-bold uppercase tracking-[0.14em] ${
                 dep.status === "completed"
                   ? "bg-status-green/[0.08] border-status-green/20 text-status-green"
                   : dep.status === "coding_completed" || dep.status === "in_progress"
@@ -193,16 +195,18 @@ const TaskCard: FunctionComponent<{
         </div>
       )}
 
-      <div className="absolute top-3 right-3 flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] translate-y-[-8px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] z-20">
+      <div className="absolute top-3 right-3 flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] translate-y-[-8px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 focus-within:opacity-100 focus-within:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0 transition-all duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] z-20">
         <button
-          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 rounded-full transition-colors"
+          type="button"
+          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 rounded-full transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
           title="Edit task"
           onClick={() => onEdit(task)}
         >
           <Settings className="w-3 h-3" />
         </button>
         <button
-          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-status-red rounded-full transition-colors"
+          type="button"
+          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-status-red rounded-full transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30"
           title="Delete task"
           onClick={() => onDelete(task)}
         >
@@ -346,7 +350,14 @@ const SprintProgressCard: FunctionComponent<{
         </div>
       </div>
 
-      <div className="flex gap-1 h-2.5 rounded-full overflow-hidden mb-5">
+      <div 
+        className="flex gap-1 h-2.5 rounded-full overflow-hidden mb-5"
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`Sprint progress: ${pct}%`}
+      >
         {completed > 0 && <div className="bg-status-green rounded-full transition-all duration-700" style={{ width: `${(completed / total) * 100}%` }} />}
         {inProgress > 0 && <div className="bg-signal-500 rounded-full transition-all duration-700" style={{ width: `${(inProgress / total) * 100}%` }} />}
         {pending > 0 && <div className="bg-slate-200 dark:bg-slate-700 rounded-full transition-all duration-700" style={{ width: `${(pending / total) * 100}%` }} />}
@@ -360,14 +371,14 @@ const SprintProgressCard: FunctionComponent<{
         ].map(({ label, value, color }) => (
           <div key={label} className="flex flex-col items-center py-2.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.04] dark:border-white/[0.04]">
             <span className={`text-xl font-black font-mono leading-none ${color}`}>{value}</span>
-            <span className="text-[8px] font-bold uppercase tracking-[0.15em] text-slate-400 mt-1">{label}</span>
+            <span className="text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400 mt-1">{label}</span>
           </div>
         ))}
       </div>
 
       <Link
         to="/sprints"
-        className="flex items-center gap-1.5 mt-5 pt-4 border-t border-black/[0.05] dark:border-white/[0.04] text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400 hover:text-ember-500 transition-colors duration-200 group/link"
+        className="flex items-center gap-1.5 mt-5 pt-4 border-t border-black/[0.05] dark:border-white/[0.04] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 hover:text-ember-500 transition-colors duration-200 group/link"
       >
         <ArrowUpRight className="w-3 h-3 group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform duration-200" strokeWidth={2.5} />
         View Sprint
@@ -421,14 +432,14 @@ export const TasksPage: FunctionComponent = () => {
 
   useLayoutEffect(() => {
     if (boardRef.current) {
-      gsap.fromTo(Array.from(boardRef.current.children), { opacity: 0, y: 50, scale: 0.95 }, {
+      gsap.fromTo(Array.from(boardRef.current.children), { opacity: 0, y: 15, scale: 0.98 }, {
         opacity: 1,
         y: 0,
         scale: 1,
-        stagger: { amount: 0.4, from: "start" },
-        duration: 1,
-        ease: "elastic.out(1, 0.7)",
-        delay: 0.2,
+        stagger: { amount: 0.2, from: "start" },
+        duration: 0.6,
+        ease: "power2.out",
+        delay: 0.1,
       });
     }
   }, [selectedProject?.id, statusFilter, priorityFilter, taskScopeSprintId]);
@@ -512,15 +523,22 @@ export const TasksPage: FunctionComponent = () => {
 
           <p className="text-lg text-slate-500 dark:text-slate-500 font-medium max-w-xl mt-1 leading-relaxed">
             {selectedProject
-              ? `Task execution for ${selectedProject.name}. Manage backlog, live work, and completion state inside the database-backed model.`
+              ? taskScopeSprintId
+                ? `Task execution for ${selectedProject.name}, scoped to Sprint ${sprints.find((s: Sprint) => s.id === taskScopeSprintId)?.number ?? "..."}.`
+                : `Task execution for ${selectedProject.name}. Showing all tasks across the project.`
               : "Select a project to manage sprint tasks."}
+            {selectedProject && (statusFilter !== "all" || priorityFilter !== "all") && (
+              <span className="block text-sm text-signal-600 dark:text-signal-500 mt-1">
+                Filtered to show {statusFilter !== "all" ? statusFilter.replace("_", " ") : "all"} status and {priorityFilter !== "all" ? priorityFilter : "any"} priority.
+              </span>
+            )}
           </p>
         </div>
 
         <div className="flex flex-col items-start lg:items-end gap-4 shrink-0">
           <div className="flex items-center gap-2.5 flex-wrap">
             {stats.inProgress > 0 && (
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-signal-500/[0.08] border border-signal-500/20 text-[10px] font-bold uppercase tracking-widest text-signal-600 dark:text-signal-400">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-signal-500/[0.08] border border-signal-500/20 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-signal-500 relative">
                   <span className="absolute inset-0 rounded-full animate-ping bg-signal-400 opacity-70" />
                 </span>
@@ -528,12 +546,12 @@ export const TasksPage: FunctionComponent = () => {
               </div>
             )}
             {stats.critical > 0 && (
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-status-red/[0.06] border border-status-red/20 text-[10px] font-bold uppercase tracking-widest text-status-red">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-status-red/[0.06] border border-status-red/20 text-[10px] font-bold uppercase tracking-[0.14em] text-status-red">
                 <Flame className="w-3 h-3" strokeWidth={2.5} />
                 {stats.critical} Critical
               </div>
             )}
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-widest text-slate-500">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
               <ListChecks className="w-3 h-3" strokeWidth={2} />
               {stats.total} Total
             </div>
@@ -561,48 +579,28 @@ export const TasksPage: FunctionComponent = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 -mt-4">
         <SprintSelector sprints={sprints} selectedId={taskScopeSprintId} onSelect={handleSprintScopeSelect} />
 
-        <div className="flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl">
-          {[
-            { key: "all" as StatusFilter, label: "All" },
-            { key: "in_progress" as StatusFilter, label: "Running" },
-            { key: "pending" as StatusFilter, label: "Queued" },
-            { key: "completed" as StatusFilter, label: "Done" },
-          ].map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setStatusFilter(key)}
-              className={`text-xs font-semibold tracking-wide px-3 py-1.5 rounded-lg transition-all duration-200 ${
-                statusFilter === key
-                  ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
-                  : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <FilterStrip
+          options={[
+            { value: "all", label: "All" },
+            { value: "in_progress", label: "Running" },
+            { value: "pending", label: "Queued" },
+            { value: "completed", label: "Done" },
+          ]}
+          active={statusFilter}
+          onChange={(val) => setStatusFilter(val as StatusFilter)}
+        />
 
-        <div className="flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl">
-          {[
-            { key: "all" as PriorityFilter, label: "Any Priority" },
-            { key: "critical" as PriorityFilter, label: "Critical" },
-            { key: "high" as PriorityFilter, label: "High" },
-            { key: "medium" as PriorityFilter, label: "Medium" },
-            { key: "low" as PriorityFilter, label: "Low" },
-          ].map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setPriorityFilter(key)}
-              className={`text-xs font-semibold tracking-wide px-3 py-1.5 rounded-lg transition-all duration-200 ${
-                priorityFilter === key
-                  ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
-                  : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <FilterStrip
+          options={[
+            { value: "all", label: "Any Priority" },
+            { value: "critical", label: "Critical" },
+            { value: "high", label: "High" },
+            { value: "medium", label: "Medium" },
+            { value: "low", label: "Low" },
+          ]}
+          active={priorityFilter}
+          onChange={(val) => setPriorityFilter(val as PriorityFilter)}
+        />
 
         <div className="ml-auto">
           <ListWindowSelector value={listWindow} onChange={setListWindow} label="Show" />
@@ -622,7 +620,7 @@ export const TasksPage: FunctionComponent = () => {
       )}
 
       {error && (
-        <div className="px-6 py-4 rounded-2xl border border-status-red/20 bg-status-red/[0.06] text-status-red text-sm">
+        <div role="alert" className="px-6 py-4 rounded-2xl border border-status-red/20 bg-status-red/[0.06] text-status-red text-sm">
           {error}
         </div>
       )}
@@ -660,7 +658,11 @@ export const TasksPage: FunctionComponent = () => {
                   <SkeletonCard />
                 </>
               ) : columnTasks.length === 0 ? (
-                <div className="flex-1 flex items-center justify-center text-xs font-medium text-slate-300 dark:text-slate-700">No tasks</div>
+                <div className="flex-1 flex items-center justify-center text-center p-6 text-xs font-medium text-slate-400 dark:text-slate-500 border-2 border-dashed border-black/[0.04] dark:border-white/[0.04] rounded-[1rem]">
+                  No {status.replace("_", " ")} tasks
+                  <br />
+                  {statusFilter !== "all" || priorityFilter !== "all" ? "matching current filters" : taskScopeSprintId ? "in this sprint" : "in this project"}.
+                </div>
               ) : (
                 columnTasks.map((task) => (
                   <TaskCard

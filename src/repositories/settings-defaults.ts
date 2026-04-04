@@ -40,6 +40,7 @@ export const INVOCATION_ROUTING_IDS: InvocationRoutingId[] = [
   "planning",
   "dashboard_reply",
   "clarification_reply",
+  "qa_review",
   "ci_fix",
   "merge_conflict",
 ];
@@ -115,6 +116,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     weight: 60,
     thinkingMode: "MEDIUM",
     apiKey: "",
+    maxConcurrentTasks: 15,
   },
   gemini: {
     enabled: true,
@@ -122,6 +124,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     weight: 20,
     thinkingMode: "MEDIUM",
     apiKey: "",
+    maxConcurrentTasks: 0,
   },
   codex: {
     enabled: true,
@@ -129,6 +132,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     weight: 20,
     thinkingMode: "HIGH",
     apiKey: "",
+    maxConcurrentTasks: 0,
   },
   "claude-code": {
     enabled: false,
@@ -136,6 +140,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     weight: 0,
     thinkingMode: "HIGH",
     apiKey: "",
+    maxConcurrentTasks: 0,
   },
 };
 
@@ -162,6 +167,13 @@ export const DEFAULT_INVOCATION_ROUTING: Record<InvocationRoutingId, InvocationR
     providers: {},
   },
   clarification_reply: {
+    profile: "WORKER",
+    strategy: "MANUAL",
+    provider: null,
+    allowedProviders: [],
+    providers: {},
+  },
+  qa_review: {
     profile: "WORKER",
     strategy: "MANUAL",
     provider: null,
@@ -210,6 +222,7 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
       planning: { ...DEFAULT_INVOCATION_ROUTING.planning, allowedProviders: [], providers: {} },
       dashboard_reply: { ...DEFAULT_INVOCATION_ROUTING.dashboard_reply, allowedProviders: [], providers: {} },
       clarification_reply: { ...DEFAULT_INVOCATION_ROUTING.clarification_reply, allowedProviders: [], providers: {} },
+      qa_review: { ...DEFAULT_INVOCATION_ROUTING.qa_review, allowedProviders: [], providers: {} },
       ci_fix: { ...DEFAULT_INVOCATION_ROUTING.ci_fix, allowedProviders: [], providers: {} },
       merge_conflict: { ...DEFAULT_INVOCATION_ROUTING.merge_conflict, allowedProviders: [], providers: {} },
     },
@@ -265,10 +278,10 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     containerSetupScriptPath: "",
     containerCacheSetupScriptImage: false,
     containerMountGitConfig: true,
-    containerMountGithubAuth: true,
-    containerMountGeminiAuth: true,
-    containerMountCodexAuth: true,
-    containerMountClaudeCodeAuth: true,
+    containerMountGithubAuth: false,
+    containerMountGeminiAuth: false,
+    containerMountCodexAuth: false,
+    containerMountClaudeCodeAuth: false,
     containerGithubAuthPath: "~/.config/gh",
     containerGeminiAuthPath: "~/.gemini",
     containerCodexAuthPath: "~/.codex",
@@ -277,10 +290,14 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     maxQuotaRetriesWithoutTimer: 5,
   },
   sprintPreview: {
+    enabled: true,
+    showInAppBrowser: true,
     autoStartOnRunningSprint: true,
     rebuildOnTaskCompletion: true,
     rebuildOnSprintCompletion: true,
+    pullLatestOnRebuild: true,
     autoStopOnTerminalSprint: false,
+    maxConcurrentContainers: 5,
     hostPortRangeStart: 5555,
     hostPortRangeEnd: 6666,
     containerAppPort: 3000,
@@ -296,6 +313,22 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   agents: {
     saveToProjectDirectory: true,
     instructionTemplates: { ...DEFAULT_INSTRUCTION_TEMPLATES },
+    qualityAssurance: {
+      enabled: false,
+      maxTaskReviewRuns: 1,
+      taskCompletion: {
+        enabled: true,
+        agentPresetId: null,
+      },
+      sprintCompletion: {
+        enabled: true,
+        agentPresetId: null,
+      },
+      completedTaskWithoutPr: {
+        enabled: true,
+        agentPresetId: null,
+      },
+    },
   },
   skills: DEFAULT_SKILLS,
   mcpTools: DEFAULT_MCP_TOOL_TOGGLES.map((tool) => ({ ...tool })),

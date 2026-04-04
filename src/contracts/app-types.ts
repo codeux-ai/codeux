@@ -57,6 +57,7 @@ export type InvocationRoutingId =
   | "planning"
   | "dashboard_reply"
   | "clarification_reply"
+  | "qa_review"
   | "ci_fix"
   | "merge_conflict";
 export type CliExecutionMode = "HOST" | "DOCKER";
@@ -319,6 +320,35 @@ export interface ExecutionUsageTotals {
   unsupportedInvocationCount: number;
 }
 
+export interface ExecutionGitMetrics {
+  insertions: number;
+  deletions: number;
+  filesChanged: number;
+  prCount: number;
+  mergedCount: number;
+}
+
+export interface ExecutionGitStatsEntitySummary {
+  id: string;
+  label: string;
+  secondaryLabel: string | null;
+  metrics: ExecutionGitMetrics;
+}
+
+export interface ExecutionGitStatsBucketSummary {
+  bucketStart: string;
+  bucketEnd: string;
+  label: string;
+  metrics: ExecutionGitMetrics;
+}
+
+export interface ExecutionGitStatsSummary {
+  totals: ExecutionGitMetrics;
+  buckets: ExecutionGitStatsBucketSummary[];
+  tasks: ExecutionGitStatsEntitySummary[];
+  sprints: ExecutionGitStatsEntitySummary[];
+}
+
 export interface ExecutionUsageBucketSummary {
   bucketStart: string;
   bucketEnd: string;
@@ -373,6 +403,7 @@ export interface ProjectExecutionStatsSnapshot {
   range: ProjectStatsRangeSummary;
   generatedAt: string;
   usage: ExecutionUsageTotals;
+  git: ExecutionGitStatsSummary;
   activeSprint: {
     sprintId: string;
     sprintName: string;
@@ -504,6 +535,7 @@ export interface ProviderSettings {
   weight: number;
   thinkingMode: ThinkingMode;
   apiKey: string;
+  maxConcurrentTasks: number;
 }
 
 export interface InvocationProviderOverrideSettings {
@@ -595,10 +627,14 @@ export interface CliWorkflowSettings {
 }
 
 export interface SprintPreviewSettings {
+  enabled: boolean;
+  showInAppBrowser: boolean;
   autoStartOnRunningSprint: boolean;
   rebuildOnTaskCompletion: boolean;
   rebuildOnSprintCompletion: boolean;
+  pullLatestOnRebuild: boolean;
   autoStopOnTerminalSprint: boolean;
+  maxConcurrentContainers: number;
   hostPortRangeStart: number;
   hostPortRangeEnd: number;
   containerAppPort: number;
@@ -613,9 +649,23 @@ export interface WorkerSettings {
   timeoutSeconds: number;
 }
 
+export interface QualityAssuranceTriggerSettings {
+  enabled: boolean;
+  agentPresetId: string | null;
+}
+
+export interface QualityAssuranceSettings {
+  enabled: boolean;
+  maxTaskReviewRuns: number;
+  taskCompletion: QualityAssuranceTriggerSettings;
+  sprintCompletion: QualityAssuranceTriggerSettings;
+  completedTaskWithoutPr: QualityAssuranceTriggerSettings;
+}
+
 export interface AgentSettings {
   saveToProjectDirectory: boolean;
   instructionTemplates: Record<InstructionTemplateId, string>;
+  qualityAssurance: QualityAssuranceSettings;
 }
 
 export interface SkillToggle {
@@ -750,6 +800,12 @@ export interface ExternalSettingsHints {
     codexApiKey: string;
     claudeCodeApiKey: string;
     githubToken: string;
+  };
+  providerAvailability: {
+    jules: { hasApiKey: boolean; hasLocalAuth: boolean };
+    gemini: { hasApiKey: boolean; hasLocalAuth: boolean };
+    codex: { hasApiKey: boolean; hasLocalAuth: boolean };
+    claudeCode: { hasApiKey: boolean; hasLocalAuth: boolean };
   };
 }
 

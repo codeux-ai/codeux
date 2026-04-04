@@ -40,7 +40,37 @@ const hashString = (value: string): number => {
   return hash;
 };
 
-const resolveWeightedSeed = (task: Subtask): string => `${task.id}:${task.prompt}`;
+const resolveWeightedSeed = (task: Subtask): string => {
+  const prompt = typeof task.prompt === "string" ? task.prompt : "";
+  return `${task.id}:${prompt}`;
+};
+
+const routeInheritsGlobalStrategy = (
+  settings: DashboardSettings,
+  invocation: InvocationRoutingId,
+): boolean => {
+  const route = settings.aiProvider.invocationRouting?.[invocation] || DEFAULT_INVOCATION_ROUTING[invocation];
+  const defaults = DEFAULT_INVOCATION_ROUTING[invocation];
+
+  return route.profile === "GLOBAL"
+    && route.strategy === defaults.strategy
+    && route.provider === defaults.provider
+    && route.allowedProviders.length === 0
+    && Object.keys(route.providers).length === 0;
+};
+
+const resolveInvocationStrategy = (
+  settings: DashboardSettings,
+  invocation: InvocationRoutingId,
+): ProviderStrategy => {
+  const route = settings.aiProvider.invocationRouting?.[invocation] || DEFAULT_INVOCATION_ROUTING[invocation];
+
+  if (routeInheritsGlobalStrategy(settings, invocation)) {
+    return settings.aiProvider.strategy;
+  }
+
+  return route.strategy;
+};
 
 const buildRouteProviders = (
   settings: DashboardSettings,
@@ -155,11 +185,12 @@ export class OrchestratedRoutingStrategy implements ProviderRoutingStrategy {
       return "jules";
     }
 
-    const prompt = task.prompt.toLowerCase();
-    const dependencyCount = task.depends_on.length;
+    const promptText = typeof task.prompt === "string" ? task.prompt : "";
+    const prompt = promptText.toLowerCase();
+    const dependencyCount = Array.isArray(task.depends_on) ? task.depends_on.length : 0;
     const complexKeyword = /(refactor|architecture|migration|orchestrator|integration|performance|atomic|multi-step)/i.test(prompt);
-    const longPrompt = task.prompt.length > 800;
-    const simplePrompt = task.prompt.length < 260;
+    const longPrompt = promptText.length > 800;
+    const simplePrompt = promptText.length < 260;
 
     if ((complexKeyword || longPrompt || dependencyCount > 1) && context.enabledProviders.includes("claude-code")) {
       return "claude-code";
@@ -195,17 +226,18 @@ export const resolveProviderForInvocation = (
   input: ResolveProviderForInvocationInput,
 ): ResolvedProviderRoute => {
   const route = settings.aiProvider.invocationRouting?.[input.invocation] || DEFAULT_INVOCATION_ROUTING[input.invocation];
+  const strategy = resolveInvocationStrategy(settings, input.invocation);
   const base = buildRouteProviders(settings, input.invocation);
   const manualProvider = route.provider ?? base.manualProvider;
   const enabledProviders = getEnabledProviders(settings, input, base.providers);
   const context: RoutingDecisionContext = {
-    strategy: route.strategy,
+    strategy,
     manualProvider,
     providers: base.providers,
     enabledProviders,
   };
 
-  const provider = resolveStrategy(route.strategy).choose(context, input.task);
+  const provider = resolveStrategy(strategy).choose(context, input.task);
 
   return {
     invocation: input.invocation,

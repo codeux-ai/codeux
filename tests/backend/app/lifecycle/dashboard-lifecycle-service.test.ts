@@ -108,6 +108,8 @@ describe("dashboard-lifecycle-service", () => {
       } as any,
       projectManagementRepository: {
         getSelectedProjectId: vi.fn().mockReturnValue("project-1"),
+        setSelectedProjectId: vi.fn(),
+        setSelectedSprintId: vi.fn(),
         getProject: vi.fn().mockReturnValue({
           id: "project-1",
           name: "Project 1",
@@ -169,6 +171,9 @@ describe("dashboard-lifecycle-service", () => {
       } as any,
       dashboardRealtimeService: {
         scheduleProjectLiveRefresh: vi.fn(),
+        scheduleProjectExecutionRefresh: vi.fn(),
+        scheduleProjectStructureRefresh: vi.fn(),
+        scheduleOverviewRefresh: vi.fn(),
         setSnapshotLoaders: vi.fn(),
       } as any,
       logger: {
@@ -276,6 +281,7 @@ describe("dashboard-lifecycle-service", () => {
       expect(mockDeps.taskRerunService.rerunTask).toHaveBeenCalledWith("task-1", {
         provider: undefined,
         clearWorktree: undefined,
+        resetDependents: undefined,
       });
       expect(mockDeps.activityCacheService.invalidateGitStatusCache).toHaveBeenCalled();
       expect(result).toEqual({ id: "123" });
@@ -365,6 +371,45 @@ describe("dashboard-lifecycle-service", () => {
       const messages = setupArgs.listInvocationMessages!("inv-1");
       expect(mockDeps.executionRepository.listExecutionInvocationMessages).toHaveBeenCalledWith("inv-1");
       expect(messages).toEqual([{ id: "msg-1" }]);
+    });
+
+    describe("DashboardSnapshotCache Integration", () => {
+      it("does not throw on explicit invalidation during setPreferredWorker", async () => {
+        await bootDashboard(mockDeps);
+        const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+        setupArgs.setPreferredWorker!("project-1", { workerEndpointId: "w-1" });
+        expect(mockDeps.projectWorkerAssignmentService.setProjectPreferredWorker).toHaveBeenCalledWith("project-1", { workerEndpointId: "w-1" });
+        expect(mockDeps.dashboardRealtimeService.scheduleProjectExecutionRefresh).toHaveBeenCalled();
+      });
+
+      it("does not throw on explicit invalidation during selectProject", async () => {
+        await bootDashboard(mockDeps);
+        const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+        setupArgs.selectProject!("project-2");
+        expect(mockDeps.projectManagementRepository.setSelectedProjectId).toHaveBeenCalledWith("project-2");
+      });
+
+      it("does not throw on explicit invalidation during selectSprint", async () => {
+        await bootDashboard(mockDeps);
+        const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+        setupArgs.selectSprint!("project-1", "sprint-2");
+        expect(mockDeps.projectManagementRepository.setSelectedSprintId).toHaveBeenCalledWith("project-1", "sprint-2");
+      });
+
+      it("does not throw on explicit invalidation during saveProjectSettings", async () => {
+        await bootDashboard(mockDeps);
+        const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+        setupArgs.saveProjectSettings!("project-1", {});
+        expect(mockDeps.settingsRepository.saveProjectSettings).toHaveBeenCalledWith("project-1", {});
+      });
+
+      it("does not throw on explicit invalidation during resetDatabase", async () => {
+        await bootDashboard(mockDeps);
+        const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+        setupArgs.resetDatabase!();
+        expect(mockDeps.appDbStorage.resetAllData).toHaveBeenCalled();
+        expect(mockDeps.settingsRepository.resetAllData).toHaveBeenCalled();
+      });
     });
   });
 });

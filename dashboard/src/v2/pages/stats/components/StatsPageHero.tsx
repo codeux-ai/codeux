@@ -23,7 +23,7 @@ export const StatsPageHero: FunctionComponent<any> = ({
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-black/[0.08] to-transparent dark:via-white/[0.14]" />
       <div className="relative flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between">
         <div className="max-w-4xl">
-          <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.24em] text-signal-600 dark:text-signal-400">
+          <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/10 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-600 dark:text-signal-400">
             <BarChart3 className="h-3.5 w-3.5" strokeWidth={2.2} />
             Telemetry Atlas
           </div>

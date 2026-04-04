@@ -1,8 +1,10 @@
 import type { FunctionComponent } from "preact";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
-import { X, ListChecks, Target, Bot, Plus } from "lucide-preact";
+import { X, ListChecks, Target, Bot, Plus, AlertCircle } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
+import { useFocusTrap } from "../../hooks/use-focus-trap.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface TaskDraft {
   sprintId: string;
@@ -25,8 +27,6 @@ interface AddTaskModalProps {
   onSubmit: (task: TaskDraft) => Promise<void> | void;
 }
 
-const FOCUSABLE_SELECTOR = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-
 const PRIORITY_OPTIONS: TaskPriority[] = ["critical", "high", "medium", "low"];
 const STATUS_OPTIONS: TaskStatus[] = ["pending", "in_progress", "completed"];
 const EXECUTOR_OPTIONS: Array<{ value: TaskExecutorType; label: string; description: string }> = [
@@ -45,7 +45,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   onClose,
   onSubmit,
 }) => {
-  const backdropRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useFocusTrap(true, { onClose: () => handleClose(), restoreFocus: true });
   const cardRef = useRef<HTMLDivElement>(null);
   const [sprintId, setSprintId] = useState(initialTask?.sprintId || defaultSprintId || initialSprintId || sprints[0]?.id || "");
   const [title, setTitle] = useState(initialTask?.title || "");
@@ -55,92 +55,77 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   const [priority, setPriority] = useState<TaskPriority>(initialTask?.priority || "medium");
   const [executorType, setExecutorType] = useState<TaskExecutorType>(initialTask?.executorType || "auto");
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(initialTask?.dependsOnTaskIds || []);
+  const [error, setError] = useState<string | null>(null);
+
+  const reducedMotion = useReducedMotion();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [dependencySearchQuery, setDependencySearchQuery] = useState("");
+
+  const validationErrors = useMemo(() => {
+    const errors: Record<string, string> = {};
+    if (!sprintId) errors.sprintId = "Sprint is required.";
+    if (!title.trim()) errors.title = "Title is required.";
+    return errors;
+  }, [sprintId, title]);
 
   useLayoutEffect(() => {
-    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
-    gsap.fromTo(cardRef.current, { y: 40, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" });
-  }, []);
+    const d_backdrop = reducedMotion ? 0 : 0.3;
+    const d_card = reducedMotion ? 0 : 0.45;
+    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: "power2.out" });
+    gsap.fromTo(cardRef.current, { y: reducedMotion ? 0 : 40, opacity: 0, scale: reducedMotion ? 1 : 0.96 }, { y: 0, opacity: 1, scale: 1, duration: d_card, ease: "power4.out" });
+  }, [reducedMotion]);
 
-  const triggerRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    triggerRef.current = document.activeElement as HTMLElement | null;
-
-    // Initial focus setup
-    if (cardRef.current) {
-      const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
-      if (focusableElements.length > 0) {
-        focusableElements[0].focus();
-      }
-    }
-
-    const handler = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      } else if (event.key === "Tab") {
-        if (!cardRef.current) return;
-
-        const focusableElements = Array.from(cardRef.current.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
-
-        if (focusableElements.length === 0) return;
-
-        const first = focusableElements[0];
-        const last = focusableElements[focusableElements.length - 1];
-
-        // If focus has escaped the modal (e.g. user clicked background), force it back in
-        if (!cardRef.current.contains(document.activeElement)) {
-          event.preventDefault();
-          first.focus();
-          return;
-        }
-
-        if (event.shiftKey && document.activeElement === first) {
-          event.preventDefault();
-          last.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        }
-      }
-    };
-
-    document.addEventListener("keydown", handler);
-    return () => {
-      document.removeEventListener("keydown", handler);
-      if (triggerRef.current) {
-        triggerRef.current.focus();
-      }
-    };
-  }, [onClose]);
+  const handleClose = () => {
+    if (isSubmitting) return;
+    const d = reducedMotion ? 0 : 0.25;
+    gsap.to(cardRef.current, { y: 24, opacity: 0, scale: 0.96, duration: d, ease: "power3.in" });
+    gsap.to(backdropRef.current, { opacity: 0, duration: d, delay: reducedMotion ? 0 : 0.05, onComplete: onClose });
+  };
 
   const dependencyOptions = useMemo(() => {
-    return availableTasks.filter((task) => task.sprintId === sprintId && task.recordId !== initialTask?.recordId);
-  }, [availableTasks, initialTask?.recordId, sprintId]);
+    return availableTasks.filter((task) => {
+      if (task.sprintId !== sprintId) return false;
+      if (task.recordId === initialTask?.recordId) return false;
+      if (dependencySearchQuery) {
+        const query = dependencySearchQuery.toLowerCase();
+        const matchesId = task.id ? task.id.toLowerCase().includes(query) : false;
+        const matchesRecordId = task.recordId.toLowerCase().includes(query);
+        const matchesTitle = task.title.toLowerCase().includes(query);
+        return matchesId || matchesRecordId || matchesTitle;
+      }
+      return true;
+    });
+  }, [availableTasks, initialTask?.recordId, sprintId, dependencySearchQuery]);
 
-  const handleBackdropClick = (event: MouseEvent) => {
+  const handleBackdropClick = (event: PointerEvent) => {
     if (event.target === backdropRef.current) {
-      onClose();
+      handleClose();
     }
   };
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
-    if (!title.trim() || !sprintId) {
-      return;
+    if (Object.keys(validationErrors).length > 0) return;
+
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await onSubmit({
+        sprintId,
+        title: title.trim(),
+        description: description.trim(),
+        promptMarkdown: promptMarkdown.trim(),
+        status,
+        priority,
+        executorType,
+        dependsOnTaskIds,
+      });
+      setIsSubmitting(false);
+      handleClose();
+    } catch (err) {
+      setIsSubmitting(false);
+      setError(err instanceof Error ? err.message : String(err));
     }
-
-    await onSubmit({
-      sprintId,
-      title: title.trim(),
-      description: description.trim(),
-      promptMarkdown: promptMarkdown.trim(),
-      status,
-      priority,
-      executorType,
-      dependsOnTaskIds,
-    });
-
-    onClose();
   };
 
   const toggleDependency = (taskId: string) => {
@@ -154,7 +139,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   return (
     <div
       ref={backdropRef}
-      onClick={handleBackdropClick}
+      onPointerDown={handleBackdropClick}
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-task-modal-title"
@@ -196,22 +181,33 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               </p>
             </div>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               aria-label="Close"
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+            {error && (
+              // form errors demand immediate user attention to proceed.
+              <div role="alert" aria-live="assertive" id="task-form-error" className="flex items-center gap-2 text-status-red text-sm font-bold bg-status-red/5 dark:bg-status-red/10 px-4 py-2.5 rounded-xl border border-status-red/20 animate-in fade-in slide-in-from-top-1">
+                <AlertCircle className="w-4 h-4 shrink-0" strokeWidth={2.5} />
+                <span>Error: {error}</span>
+              </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div className="group/field">
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Sprint</label>
+                <label htmlFor="add-task-sprint" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint</label>
                 <select
+                  id="add-task-sprint"
                   value={sprintId}
-                  onInput={(event) => setSprintId((event.target as HTMLSelectElement).value)}
-                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500"
+                  onInput={(event) => {
+                    setSprintId((event.target as HTMLSelectElement).value);
+                    if (error) setError(null);
+                  }}
+                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500" aria-invalid={!!validationErrors.sprintId}
                   required
                 >
                   <option value="" disabled>Select sprint</option>
@@ -219,31 +215,39 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
                   ))}
                 </select>
+                {validationErrors.sprintId && <div className="text-xs text-red-500 mt-1 font-medium">{validationErrors.sprintId}</div>}
               </div>
 
               <div className="group/field">
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Title</label>
+                <label htmlFor="add-task-title" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Title</label>
                 <input
+                  id="add-task-title"
                   type="text"
                   value={title}
-                  onInput={(event) => setTitle((event.target as HTMLInputElement).value)}
-                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500"
+                  onInput={(event) => {
+                    setTitle((event.target as HTMLInputElement).value);
+                    if (error) setError(null);
+                  }}
+                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500"
                   placeholder="Define the task scope"
                   required
+                  aria-invalid={!!validationErrors.title}
+
                 />
+                {validationErrors.title && <div className="text-xs text-red-500 mt-1 font-medium">{validationErrors.title}</div>}
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div>
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 block mb-2.5">Status</label>
+              <fieldset>
+                <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">Status</legend>
                 <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                   {STATUS_OPTIONS.map((option) => (
                     <button
                       key={option}
                       type="button"
                       onClick={() => setStatus(option)}
-                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition-all ${
+                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.14em] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${
                         status === option
                           ? "bg-signal-500 text-void-900 shadow-[0_2px_12px_rgba(0,224,160,0.3)]"
                           : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
@@ -253,17 +257,17 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     </button>
                   ))}
                 </div>
-              </div>
+              </fieldset>
 
-              <div>
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 block mb-2.5">Priority</label>
+              <fieldset>
+                <legend className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 block mb-2.5">Priority</legend>
                 <div className="inline-flex p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-2xl gap-1 flex-wrap">
                   {PRIORITY_OPTIONS.map((option) => (
                     <button
                       key={option}
                       type="button"
                       onClick={() => setPriority(option)}
-                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.12em] transition-all ${
+                      className={`px-3.5 py-2 rounded-xl text-[10px] font-bold uppercase tracking-[0.14em] transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
                         priority === option
                           ? "bg-ember-500 text-void-900 shadow-[0_2px_12px_rgba(255,184,0,0.3)]"
                           : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
@@ -273,21 +277,21 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     </button>
                   ))}
                 </div>
-              </div>
+              </fieldset>
             </div>
 
-            <div>
-              <div className="flex items-center gap-2 mb-2.5">
+            <fieldset>
+              <legend className="flex items-center gap-2 mb-2.5">
                 <Bot className="w-3.5 h-3.5 text-signal-500" strokeWidth={2.3} />
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Executor</label>
-              </div>
+                <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Executor</span>
+              </legend>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {EXECUTOR_OPTIONS.map((option) => (
                   <button
                     key={option.value}
                     type="button"
                     onClick={() => setExecutorType(option.value)}
-                    className={`rounded-2xl border px-4 py-3 text-left transition-all ${
+                    className={`rounded-2xl border px-4 py-3 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 ${
                       executorType === option.value
                         ? "border-signal-500/45 bg-signal-500/[0.08] text-signal-700 dark:text-signal-300"
                         : "border-black/[0.08] dark:border-white/[0.08] bg-black/[0.03] dark:bg-white/[0.03] text-slate-500 dark:text-slate-400"
@@ -298,32 +302,45 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                   </button>
                 ))}
               </div>
-            </div>
+            </fieldset>
 
             <div className="group/field">
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Description</label>
+              <label htmlFor="add-task-description" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Description</label>
               <textarea
+                id="add-task-description"
                 value={description}
                 onInput={(event) => setDescription((event.target as HTMLTextAreaElement).value)}
-                className="mt-2.5 w-full min-h-[110px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none"
+                className="mt-2.5 w-full min-h-[110px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500 resize-none"
                 placeholder="Summarize the intent and outcome."
               />
             </div>
 
             <div className="group/field">
-              <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Execution Prompt</label>
+              <label htmlFor="add-task-prompt" className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Execution Prompt</label>
               <textarea
+                id="add-task-prompt"
                 value={promptMarkdown}
                 onInput={(event) => setPromptMarkdown((event.target as HTMLTextAreaElement).value)}
-                className="mt-2.5 w-full min-h-[150px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 resize-none font-mono"
+                className="mt-2.5 w-full min-h-[150px] rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500 resize-none font-mono"
                 placeholder="Detailed markdown instructions for the agent."
               />
             </div>
 
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <Target className="w-3.5 h-3.5 text-ember-500" strokeWidth={2.3} />
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Dependencies</label>
+            <fieldset>
+              <div className="flex items-center justify-between mb-3">
+                <legend className="flex items-center gap-2">
+                  <Target className="w-3.5 h-3.5 text-ember-500" strokeWidth={2.3} />
+                  <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Dependencies</span>
+                </legend>
+                {availableTasks.filter(t => t.sprintId === sprintId && t.recordId !== initialTask?.recordId).length > 5 && (
+                  <input
+                    type="search"
+                    placeholder="Filter tasks..."
+                    value={dependencySearchQuery}
+                    onInput={(e) => setDependencySearchQuery((e.target as HTMLInputElement).value)}
+                    className="w-48 bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-3 py-1.5 text-xs rounded-xl focus:outline-none focus:border-ember-500 focus-visible:ring-1 focus-visible:ring-ember-500/50"
+                  />
+                )}
               </div>
               {dependencyOptions.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-black/[0.08] dark:border-white/[0.08] px-4 py-4 text-xs text-slate-400">
@@ -338,15 +355,21 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                         key={task.recordId}
                         type="button"
                         onClick={() => toggleDependency(task.recordId)}
-                        className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-left transition-all ${
+                        aria-pressed={active}
+                        className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
                           active
                             ? "border-ember-500/45 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400"
                             : "border-black/[0.07] dark:border-white/[0.07] bg-black/[0.02] dark:bg-white/[0.02] text-slate-500"
                         }`}
                       >
-                        <div className="min-w-0">
-                          <div className="text-[10px] font-mono uppercase tracking-[0.14em]">{task.id}</div>
-                          <div className="text-sm font-semibold truncate">{task.title}</div>
+                        <div className="min-w-0 flex-1 pr-2">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-slate-400">{task.id}</span>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider ${task.priority === 'critical' ? 'bg-red-500/10 text-red-500' : task.priority === 'high' ? 'bg-orange-500/10 text-orange-500' : 'bg-slate-500/10 text-slate-500'}`}>
+                              {task.priority}
+                            </span>
+                          </div>
+                          <div className="text-sm font-semibold truncate leading-tight">{task.title}</div>
                         </div>
                         <span className={`w-4 h-4 rounded-full border ${active ? "border-ember-500 bg-ember-500" : "border-slate-300 dark:border-slate-600"}`} />
                       </button>
@@ -354,22 +377,27 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                   })}
                 </div>
               )}
-            </div>
+            </fieldset>
 
             <div className="flex items-center justify-between pt-2">
               <button
                 type="button"
-                onClick={onClose}
-                className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                onClick={handleClose}
+                className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 rounded"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="group/btn flex items-center gap-2.5 px-6 py-3 bg-signal-500 hover:bg-signal-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] hover:-translate-y-px"
+                disabled={isSubmitting || Object.keys(validationErrors).length > 0}
+                className="group/btn flex items-center gap-2.5 px-6 py-3 bg-signal-500 hover:bg-signal-400 disabled:bg-slate-300 dark:disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] disabled:shadow-none hover:-translate-y-px disabled:hover:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800"
               >
-                <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
-                {initialTask ? "Save Task" : "Create Task"}
+                {isSubmitting ? (
+                  <div className="w-4 h-4 rounded-full border-2 border-void-900/20 border-t-void-900 animate-spin" />
+                ) : (
+                  <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
+                )}
+                {isSubmitting ? "Saving..." : initialTask ? "Save Task" : "Create Task"}
               </button>
             </div>
           </form>

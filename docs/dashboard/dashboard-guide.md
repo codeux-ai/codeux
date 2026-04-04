@@ -164,6 +164,7 @@ Legacy runtime:
 - Selecting a virtual worker from the top nav switches the selected project into `workers.executionMode = VIRTUAL` with that provider
 - Selecting a live worker from the top nav switches the project back to `workers.executionMode = CONNECTED_MCP` and updates the preferred live worker assignment
 - Projects page is DB-backed and can create/select/delete projects
+- The `Add Project` dialog now keeps keyboard focus inside the active form field while typing, and its initial focus respects the form's `autofocus` input instead of jumping to the header close button
 - Project selector and project cards now refresh over websocket when the project collection or selected project changes
 - Sprints page is project-scoped, creates sprint records in sqlite, and exposes a structured Import flyout with Markdown (and soon Jira) capabilities, plus markdown export controls
 - Sprints page now also refreshes from project-structure realtime invalidation, so sprint CRUD and status-adjacent updates propagate across open dashboard tabs
@@ -201,6 +202,7 @@ Legacy runtime:
 - Sprint cells now use created-date metadata on the accent rail and move the visible sprint key into the card body instead of surfacing the UUID there
 - Sprint markdown export now includes direct download actions and per-section copy-to-clipboard buttons (with brief `Copied` confirmation) in the export modal
 - The in-page sprint composer collapses into a stacked single-column layout on smaller screens, and both create and edit now use that same inline flow. The Quicksprint panel and the Sprint Composer are mutually exclusive; opening one automatically dismisses the other to maintain focus.
+- The Quicksprint panel now separates `Default Templates` from custom templates and includes a purpose selector for built-in template sets. The first shipped built-in purpose is `Fullstack JS App`, which groups six project-agnostic engineering and UI quicksprint templates. See [Quicksprint Templates](./quicksprint-templates.md).
 - The refreshed sprint ledger below the showcase renders contiguous striped rows (alternating light backgrounds) with a real-time search field that filters by sprint key, name, status, or goal text; a live result counter shows filtered vs total counts and a clear button resets the query
 - Ledger search integrates with selection: the header select-all checkbox operates on the currently filtered set only, and the selection is automatically pruned when the filter changes so stale hidden selections cannot accumulate
 - When one or more ledger rows are selected, a bulk action bar appears with `Start` and `Delete` controls that operate on all selected sprints, plus a `Clear` button to deselect
@@ -219,14 +221,22 @@ Legacy runtime:
 - Tasks board is now scoped to the active sprint selection when one is set, filtering the view to only tasks for that sprint
 - Tasks page also stores explicit task executor preference (`auto`, `docker_cli`, `jules`, `mcp_worker`)
 - The Tasks board entrance animation now replays only for project/view/filter changes instead of every background task refresh
-- Stats page is project-scoped and visualizes tracked token/time usage for the selected project with `24h`, `7d`, `30d`, `all time`, and custom date windows
+- Stats page is project-scoped and visualizes tracked token, time, and Git usage (insertions, deletions, PRs) for the selected project with `24h`, `7d`, `30d`, `all time`, and custom date windows
 - Browser page is project-scoped and provides a polished in-app browser surface for sprint preview containers:
-  - floating horizontal slider with large-screen five-card visibility for preview selection
+  - floating horizontal slider in its own top strip, with large-screen five-card visibility for preview selection
+  - the browser window starts directly below the slider instead of sharing a stretched first-row layout with the sprint controls
   - one preview session per sprint
+  - the slider shows preview container cards only, then appends a placeholder `Launch Container` card as the final entry
+  - the launch card includes a sprint selector so any sprint can start a preview container directly from the rail
   - browser window chrome state for fullscreen, minimize, and close
   - same-origin iframe navigation with back, forward, refresh, and editable URL
+  - route changes coming from the Browser chrome use the preview bridge and HTML5 history where possible, so SPA previews stop hard-refreshing on every in-app navigation
+  - when the active preview is stopped, still starting, or otherwise unavailable, the iframe stays on the preview origin and the server returns a same-origin standby page with `Start Container` / `Rebuild Container` controls instead of exposing raw proxy connection errors
+  - non-critical side-panel data such as startup-script contents and container logs now load after the main browser surface, so the page opens faster and the iframe/session rail render first
+  - remove actions on session cards fully delete preview-session entries after stopping any live container
   - rebuild, stop, open-in-tab, startup-script editing, and log viewing
   - sprint previews are proxied through the dashboard instead of embedding raw localhost origins directly
+  - extensionless preview-host deep links such as `/sprints` now recover to the preview app shell when the upstream dev server returns `404`, so direct loads and refreshes stay routable
 - Stats page now matches the high-interaction v2 dashboard card language more closely:
   - animated metric cards
   - a unified glass-panel system that mirrors the premium live card surfaces instead of using a separate visual treatment
@@ -235,6 +245,7 @@ Legacy runtime:
   - hourly views keep one-hour hover targets while reducing visible axis labels to a three-hour rhythm for readability
   - donut-style composition charts for providers, token anatomy, and telemetry-source mix now animate as interactive slices with hover emphasis and center-detail readouts
   - tabbed task and sprint telemetry sections replacing the always-visible ledger layout, complete with search, sort-by-recency/tokens/time/input/output/name, and richer token/time breakdowns
+  - a dedicated Git tab presenting programmatic git stats (Insertions, Deletions, Files Changed) alongside the Tokens and Time tabs
 - The Stats page uses the same project realtime invalidation channels as the rest of the v2 dashboard, then falls back to polling so usage graphs and tables stay current during active sprint execution
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface, and task streams are filtered to the currently selected active sprint only (a frontend-only view change with no API contract change)
 - Agents page features an immersive, showcase-first layout that defaults to presenting the selected agent's 3D animated avatar, details, and labels, rather than a raw edit form.
@@ -245,6 +256,7 @@ Legacy runtime:
 - Project-local markdown mirroring is enabled by default through project settings, so dashboard edits create/update `.sprint-os/agents/*.md` in the selected repo without touching shipped defaults
 - Markdown-backed agents now show sync state and support both manual single-agent re-import and bulk `Sync All`
 - The first built-in role is `Planning agent`, which is editable under Agents like any other DB-backed agent
+- `Settings -> Agents` now includes the QA controls above instruction templates, with per-trigger agent selection across all project agents and QA-labeled presets floated to the top
 - Chat page is DB-backed and stores project conversation threads/messages in sqlite
 - Chat page now provides a `Threads / Invocations` toggle to switch between human conversation threads and read-only execution invocations.
 - Chat page UI is redesigned with animated identities, structured widgets for rich messages, and automatic worker pickup derived from active project routing.
@@ -267,7 +279,7 @@ Legacy runtime:
 - Chat composer now sends on `Enter` and inserts a newline on `Shift+Enter`
 - Thread assignment control is explicitly labeled as `Worker:` in the thread header to make routing intent clearer
 - Worker-routed tasks are created from the same task modal and appear in the same board; the executor badge shows whether work is automatic, CLI-backed, Jules-backed, or queued for a connected worker
-- Settings page `Sprint Engine` now includes sprint-preview controls for auto-start, rebuild cadence, auto-stop, container app port, preview host port range, and the project-relative preview startup script path
+- Settings page now exposes Browser Preview as its own primary left-rail category, covering preview enablement, in-app browser visibility, launch/rebuild automation, Git sync on rebuild, maximum active preview containers, port allocation, and the project-relative preview startup script path
 
 ### Dashboard view
 - Task statistics
@@ -276,6 +288,11 @@ Legacy runtime:
 - When no sprint is running but a paused sprint needs human intervention, the overview telemetry now switches from an empty state to an attention state with the exact reason and operator instructions
 - Task pipeline cards
 - Task cards include a `Rerun` action with confirmation prompt; rerun clears session/PR/merge state for that task and starts it again
+- Rerun now performs a full runtime reset instead of only changing task status:
+  - failed-session retries clear stale session ids, provider activity, worker branch, PR URL, merge flags, and intervention metadata before a new run starts
+  - if the operator chooses `Reset downstream tasks`, Sprint OS writes fresh pending execution snapshots for every dependent task so completed/running descendants no longer keep stale PR or session state during a clean rerun
+  - if `Clear worktree` is enabled, the existing task worktree is removed before the reset so the next run starts from a clean workspace
+- Rerun confirmation now warns when the selected task, or the selected downstream reset chain, already merged code; operators are instructed to undo the landed changes before restarting the task
 - Reruns now reuse the same dispatch model as normal dashboard orchestration instead of bypassing execution state
 - Task cards now open a DB-backed runtime feed sourced from `task_run_events`
 - The runtime feed now includes direct CLI stage events, action-required and protocol events, sprint-run lifecycle events, and CI/merge-gate state changes in addition to provider session activity
@@ -430,6 +447,8 @@ Project management requests are centralized in:
 
 ## Multi-Provider Settings
 
+*(Note: `available` means detected credentials/auth presence, whereas `enabled` means user-approved routing participation.)*
+
 AI Provider settings now support:
 - Providers: `jules`, `gemini`, `codex`
 - Routing strategy:
@@ -458,7 +477,7 @@ Settings group:
 - `resolveAllCommentsBeforeFeatureMerge`
 - `waitForJulesCiAutofix`
 - `julesCiAutofixMaxRetries`
-- `featurePrAutoMergeMode` (`OFF|WHEN_GREEN|ALWAYS`)
+- `featurePrAutoMergeMode` (`OFF|CREATE_PR|WHEN_GREEN|ALWAYS`)
 
 Effect:
 - These settings influence protocol text generated by orchestrator.
@@ -468,6 +487,7 @@ Effect:
   - enabled: explicit autofix-wait guidance for failed checks.
   - disabled: merge-gate guidance without autofix wording.
 - `julesCiAutofixMaxRetries` sets how many Jules autofix notifications are attempted before escalation. Escalation output includes exact task ids, PR links, failed check names, failed run summaries, and failed job names so no manual searching is needed.
+- `featurePrAutoMergeMode = CREATE_PR` opens or reuses the feature PR and then stops before auto-merge, marking the task settled with `PR_ONLY`.
 - `featurePrAutoMergeMode = WHEN_GREEN` executes feature-PR auto-merge once checks are green and review blockers are clear.
 - `featurePrAutoMergeMode = ALWAYS` bypasses CI waiting only when `waitForCiBeforeFeatureMerge` is disabled; if CI waiting is enabled, Sprint OS still waits for green checks before attempting auto-merge.
 - a successful feature-PR automerge now refreshes dependency readiness in the same loop pass, so downstream tasks can continue without forcing a manual resume
@@ -478,7 +498,7 @@ Effect:
 - CI Runs in `Feature PR CI` tracking include recent runs from PR head branches targeting the feature implementation branch (plus feature branch runs), sorted newest-first; the panel shows the latest 5.
 - Failed CI runs in tracking are enriched with failed job details and failed-job log excerpts (bounded) from GitHub Actions `gh run view` data.
 - Main merge stage (`feature -> main`) now emits live CI/review gate feedback with failed check names and ready-to-run `gh` commands.
-- Main merge into default branch still stays manual.
+- Main merge into default branch now stays active until an enabled auto-merge flow actually settles; it no longer marks the sprint complete just because all task PRs are done.
 
 ## Sprint Loop Step Toggles
 
@@ -512,7 +532,7 @@ Use case:
 
 ## No-Key Startup Mode
 
-Server startup no longer exits when Jules API key is missing.
+Server startup no longer exits when Jules API key is missing. Sprint OS also performs startup availability checks for Gemini, Codex, and Claude Code, looking for API-key hints and stable local auth artifacts to prepare future onboarding decisions.
 
 Behavior:
 - MCP server and dashboard still start.

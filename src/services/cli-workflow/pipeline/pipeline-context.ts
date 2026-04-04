@@ -40,6 +40,7 @@ export interface PipelineContext {
   settings: DashboardSettings;
   initialHead: string;
   workflowSucceeded: boolean;
+  preserveSuccessfulWorktree?: boolean;
   /** Worker agent preset ID for per-agent memory tagging. */
   agentPresetId?: string;
   memoryTemplateOverrideEnabled?: boolean;

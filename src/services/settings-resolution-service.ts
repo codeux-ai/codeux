@@ -38,6 +38,18 @@ function cloneInstructionTemplates(
   return { ...templates };
 }
 
+function cloneQualityAssuranceSettings(
+  settings: ProjectSettings["agents"]["qualityAssurance"],
+): ProjectSettings["agents"]["qualityAssurance"] {
+  return {
+    enabled: settings.enabled,
+    maxTaskReviewRuns: settings.maxTaskReviewRuns,
+    taskCompletion: { ...settings.taskCompletion },
+    sprintCompletion: { ...settings.sprintCompletion },
+    completedTaskWithoutPr: { ...settings.completedTaskWithoutPr },
+  };
+}
+
 function cloneInvocationRouting(
   routing: ProjectSettings["aiProvider"]["invocationRouting"],
 ): ProjectSettings["aiProvider"]["invocationRouting"] {
@@ -198,6 +210,41 @@ function sanitizeInstructionTemplates(value: unknown): Record<InstructionTemplat
   return nextTemplates;
 }
 
+function sanitizeQualityAssuranceTriggerSettings(
+  value: unknown,
+  defaults: ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"],
+): ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"] {
+  const input = toRecord(value);
+
+  return {
+    enabled: typeof input.enabled === "boolean"
+      ? input.enabled
+      : defaults.enabled,
+    agentPresetId: typeof input.agentPresetId === "string" && input.agentPresetId.trim().length > 0
+      ? input.agentPresetId.trim()
+      : null,
+  };
+}
+
+function sanitizeQualityAssuranceSettings(
+  value: unknown,
+): ProjectSettings["agents"]["qualityAssurance"] {
+  const input = toRecord(value);
+  const defaults = DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance;
+
+  return {
+    enabled: typeof input.enabled === "boolean"
+      ? input.enabled
+      : defaults.enabled,
+    maxTaskReviewRuns: typeof input.maxTaskReviewRuns === "number" && Number.isFinite(input.maxTaskReviewRuns)
+      ? Math.max(1, Math.min(10, Math.round(input.maxTaskReviewRuns)))
+      : defaults.maxTaskReviewRuns,
+    taskCompletion: sanitizeQualityAssuranceTriggerSettings(input.taskCompletion, defaults.taskCompletion),
+    sprintCompletion: sanitizeQualityAssuranceTriggerSettings(input.sprintCompletion, defaults.sprintCompletion),
+    completedTaskWithoutPr: sanitizeQualityAssuranceTriggerSettings(input.completedTaskWithoutPr, defaults.completedTaskWithoutPr),
+  };
+}
+
 function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintPreview"] {
   const input = toRecord(value);
   const defaults = DEFAULT_DASHBOARD_SETTINGS.sprintPreview;
@@ -209,6 +256,12 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
     : defaults.hostPortRangeEnd;
 
   return {
+    enabled: typeof input.enabled === "boolean"
+      ? input.enabled
+      : defaults.enabled,
+    showInAppBrowser: typeof input.showInAppBrowser === "boolean"
+      ? input.showInAppBrowser
+      : defaults.showInAppBrowser,
     autoStartOnRunningSprint: typeof input.autoStartOnRunningSprint === "boolean"
       ? input.autoStartOnRunningSprint
       : defaults.autoStartOnRunningSprint,
@@ -218,9 +271,15 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
     rebuildOnSprintCompletion: typeof input.rebuildOnSprintCompletion === "boolean"
       ? input.rebuildOnSprintCompletion
       : defaults.rebuildOnSprintCompletion,
+    pullLatestOnRebuild: typeof input.pullLatestOnRebuild === "boolean"
+      ? input.pullLatestOnRebuild
+      : defaults.pullLatestOnRebuild,
     autoStopOnTerminalSprint: typeof input.autoStopOnTerminalSprint === "boolean"
       ? input.autoStopOnTerminalSprint
       : defaults.autoStopOnTerminalSprint,
+    maxConcurrentContainers: typeof input.maxConcurrentContainers === "number" && Number.isFinite(input.maxConcurrentContainers)
+      ? Math.max(1, Math.min(100, Math.round(input.maxConcurrentContainers)))
+      : defaults.maxConcurrentContainers,
     hostPortRangeStart,
     hostPortRangeEnd: Math.max(hostPortRangeStart, hostPortRangeEndCandidate),
     containerAppPort: typeof input.containerAppPort === "number" && Number.isFinite(input.containerAppPort)
@@ -250,24 +309,28 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
           model: aiProvider.providers.jules.model,
           weight: aiProvider.providers.jules.weight,
           thinkingMode: aiProvider.providers.jules.thinkingMode,
+          maxConcurrentTasks: aiProvider.providers.jules.maxConcurrentTasks,
         },
         gemini: {
           enabled: aiProvider.providers.gemini.enabled,
           model: aiProvider.providers.gemini.model,
           weight: aiProvider.providers.gemini.weight,
           thinkingMode: aiProvider.providers.gemini.thinkingMode,
+          maxConcurrentTasks: aiProvider.providers.gemini.maxConcurrentTasks,
         },
         codex: {
           enabled: aiProvider.providers.codex.enabled,
           model: aiProvider.providers.codex.model,
           weight: aiProvider.providers.codex.weight,
           thinkingMode: aiProvider.providers.codex.thinkingMode,
+          maxConcurrentTasks: aiProvider.providers.codex.maxConcurrentTasks,
         },
         "claude-code": {
           enabled: aiProvider.providers["claude-code"].enabled,
           model: aiProvider.providers["claude-code"].model,
           weight: aiProvider.providers["claude-code"].weight,
           thinkingMode: aiProvider.providers["claude-code"].thinkingMode,
+          maxConcurrentTasks: aiProvider.providers["claude-code"].maxConcurrentTasks,
         },
       },
       invocationRouting: cloneInvocationRouting(aiProvider.invocationRouting),
@@ -287,6 +350,7 @@ export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHint
     agents: {
       saveToProjectDirectory: DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
       instructionTemplates: cloneInstructionTemplates(DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates),
+      qualityAssurance: cloneQualityAssuranceSettings(DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance),
     },
     skills: cloneSkills(DEFAULT_SKILLS),
     memory: { ...DEFAULT_DASHBOARD_SETTINGS.memory },
@@ -341,24 +405,28 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
           model: aiProvider.providers.jules.model,
           weight: aiProvider.providers.jules.weight,
           thinkingMode: aiProvider.providers.jules.thinkingMode,
+          maxConcurrentTasks: aiProvider.providers.jules.maxConcurrentTasks,
         },
         gemini: {
           enabled: aiProvider.providers.gemini.enabled,
           model: aiProvider.providers.gemini.model,
           weight: aiProvider.providers.gemini.weight,
           thinkingMode: aiProvider.providers.gemini.thinkingMode,
+          maxConcurrentTasks: aiProvider.providers.gemini.maxConcurrentTasks,
         },
         codex: {
           enabled: aiProvider.providers.codex.enabled,
           model: aiProvider.providers.codex.model,
           weight: aiProvider.providers.codex.weight,
           thinkingMode: aiProvider.providers.codex.thinkingMode,
+          maxConcurrentTasks: aiProvider.providers.codex.maxConcurrentTasks,
         },
         "claude-code": {
           enabled: aiProvider.providers["claude-code"].enabled,
           model: aiProvider.providers["claude-code"].model,
           weight: aiProvider.providers["claude-code"].weight,
           thinkingMode: aiProvider.providers["claude-code"].thinkingMode,
+          maxConcurrentTasks: aiProvider.providers["claude-code"].maxConcurrentTasks,
         },
       },
       invocationRouting: cloneInvocationRouting(aiProvider.invocationRouting),
@@ -392,6 +460,7 @@ export function sanitizeProjectSettings(value: unknown, externalHints?: External
         ? Boolean(toRecord(input.agents).saveToProjectDirectory)
         : DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
       instructionTemplates: sanitizeInstructionTemplates(toRecord(input.agents).instructionTemplates),
+      qualityAssurance: sanitizeQualityAssuranceSettings(toRecord(input.agents).qualityAssurance),
     },
     skills: sanitizeSkills(input.skills, git.githubMode),
     memory: sanitizeMemory(input as Partial<DashboardSettings>),
@@ -498,7 +567,11 @@ export function resolveDashboardSettings(args: {
     cliWorkflow: { ...sprintSettings.cliWorkflow },
     sprintPreview: { ...sprintSettings.sprintPreview },
     workers: { ...sprintSettings.workers },
-    agents: { ...sprintSettings.agents },
+    agents: {
+      saveToProjectDirectory: sprintSettings.agents.saveToProjectDirectory,
+      instructionTemplates: cloneInstructionTemplates(sprintSettings.agents.instructionTemplates),
+      qualityAssurance: cloneQualityAssuranceSettings(sprintSettings.agents.qualityAssurance),
+    },
     skills: cloneSkills(sprintSettings.skills),
     mcpTools: cloneMcpTools(args.systemSettings.mcpTools),
     memory: { ...sprintSettings.memory },

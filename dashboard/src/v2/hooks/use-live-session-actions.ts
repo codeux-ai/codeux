@@ -12,10 +12,13 @@ import {
     retryTaskDispatch,
 } from "../../lib/api/dashboard-api.js";
 import type { RerunTaskOptions } from "../../lib/api/dashboard-api.js";
+import type { ConfirmDialogOptions } from "./use-confirm-dialog.js";
 
 export function useLiveSessionActions(
     refreshRuntimeStatus: () => Promise<void>,
-    refreshGitStatus: () => Promise<void>
+    refreshGitStatus: () => Promise<void>,
+    requestConfirm: (opts: ConfirmDialogOptions) => Promise<boolean>,
+    onError: (msg: string) => void,
 ) {
     const [rerunningIds, setRerunningIds] = useState<Set<string>>(new Set());
     const [pendingActionIds, setPendingActionIds] = useState<Set<string>>(new Set());
@@ -28,11 +31,11 @@ export function useLiveSessionActions(
             await refreshGitStatus();
         } catch (err) {
             const message = err instanceof Error ? err.message : "Failed to rerun task.";
-            window.alert(message);
+            onError(message);
         } finally {
             setRerunningIds(prev => { const next = new Set(prev); next.delete(taskId); return next; });
         }
-    }, [refreshRuntimeStatus, refreshGitStatus]);
+    }, [refreshRuntimeStatus, refreshGitStatus, onError]);
 
     const runControlAction = useCallback(async (actionId: string, operation: () => Promise<void>) => {
         setPendingActionIds(prev => new Set(prev).add(actionId));
@@ -43,11 +46,11 @@ export function useLiveSessionActions(
             await refreshGitStatus();
         } catch (err) {
             const message = err instanceof Error ? err.message : "Failed to execute runtime control.";
-            window.alert(message);
+            onError(message);
         } finally {
             setPendingActionIds(prev => { const next = new Set(prev); next.delete(actionId); return next; });
         }
-    }, [refreshRuntimeStatus, refreshGitStatus]);
+    }, [refreshRuntimeStatus, refreshGitStatus, onError]);
 
     const handleOrchestrateSprint = useCallback(async (projectId: string, sprintId: string) => {
         await runControlAction(`sprint-start:${sprintId}`, async () => {
@@ -92,7 +95,11 @@ export function useLiveSessionActions(
     }, [runControlAction]);
 
     const handleClaimAttentionItem = useCallback(async (projectId: string, attentionItemId: string) => {
-        const confirmed = window.confirm("Claim this attention item for the assigned project worker?");
+        const confirmed = await requestConfirm({
+            title: "Claim Attention Item",
+            body: "Claim this attention item for the assigned project worker?",
+            confirmLabel: "Claim",
+        });
         if (!confirmed) {
             return;
         }
@@ -102,10 +109,14 @@ export function useLiveSessionActions(
                 claimReason: "dashboard_claimed",
             });
         });
-    }, [runControlAction]);
+    }, [runControlAction, requestConfirm]);
 
     const handleResolveAttentionItem = useCallback(async (projectId: string, attentionItemId: string) => {
-        const confirmed = window.confirm("Resolve this attention item and remove it from the active queue?");
+        const confirmed = await requestConfirm({
+            title: "Resolve Attention Item",
+            body: "Resolve this attention item and remove it from the active queue?",
+            confirmLabel: "Resolve",
+        });
         if (!confirmed) {
             return;
         }
@@ -116,10 +127,14 @@ export function useLiveSessionActions(
                 reason: "dashboard_resolved",
             });
         });
-    }, [runControlAction]);
+    }, [runControlAction, requestConfirm]);
 
     const handleDismissAttentionItem = useCallback(async (projectId: string, attentionItemId: string) => {
-        const confirmed = window.confirm("Dismiss this attention item from the active queue?");
+        const confirmed = await requestConfirm({
+            title: "Dismiss Attention Item",
+            body: "Dismiss this attention item from the active queue?",
+            confirmLabel: "Dismiss",
+        });
         if (!confirmed) {
             return;
         }
@@ -130,7 +145,7 @@ export function useLiveSessionActions(
                 reason: "dashboard_dismissed",
             });
         });
-    }, [runControlAction]);
+    }, [runControlAction, requestConfirm]);
 
     return {
         rerunningIds,

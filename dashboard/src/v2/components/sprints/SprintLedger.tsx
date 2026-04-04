@@ -90,6 +90,18 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
     [selectedIds, ledgerSprints],
   );
 
+  const isBulkPending = useMemo(() => {
+    return selectedFiltered.some((sprint) => {
+      const activeRun = activeRunsBySprintId.get(sprint.id);
+      return (
+        pendingActionIds.has(`sprint-start:${sprint.id}`) ||
+        (activeRun && pendingActionIds.has(`sprint-stop:${activeRun.id}`)) ||
+        pendingActionIds.has(`sprint-showcase:${sprint.id}`) ||
+        pendingActionIds.has(`sprint-delete:${sprint.id}`)
+      );
+    });
+  }, [selectedFiltered, activeRunsBySprintId, pendingActionIds]);
+
   const allFilteredSelected = windowedSprints.length > 0 && windowedSprints.every((s) => selectedIds.has(s.id));
 
   const handleSort = (key: SprintTableSortKey) => {
@@ -145,7 +157,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
 
   const renderSortIndicator = (key: SprintTableSortKey) => {
     if (sort.key !== key) {
-      return <ArrowUpDown className="h-3 w-3 text-slate-300 dark:text-slate-600" strokeWidth={2.2} />;
+      return <ArrowUpDown className="h-3 w-3 text-slate-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-slate-600" strokeWidth={2.2} />;
     }
     return sort.direction === "asc"
       ? <ArrowUp className="h-3 w-3 text-signal-500" strokeWidth={2.2} />
@@ -165,21 +177,23 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
 
       <SprintLedgerBulkActions
         selectedCount={selectedFiltered.length}
+        isPending={isBulkPending}
         onBulkStart={handleBulkStart}
         onBulkDelete={handleBulkDelete}
         onClearSelection={handleClearSelection}
       />
 
       {/* Table */}
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto min-h-[20rem]">
         <table className="min-w-full text-left">
           <thead>
             <tr className="border-b border-black/[0.06] text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:border-white/[0.06]">
               <th className="px-4 py-3 pl-6 w-10">
                 <button
                   type="button"
+                  disabled={windowedSprints.length === 0}
                   onClick={handleToggleSelectAll}
-                  className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center justify-center text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 rounded"
                   title={allFilteredSelected ? "Deselect all" : "Select all visible"}
                 >
                   {allFilteredSelected
@@ -187,71 +201,71 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
                     : <Square className="h-4 w-4" strokeWidth={2.2} />}
                 </button>
               </th>
-              <th className="px-4 py-3">
+              <th className="px-4 py-3 group">
                 <button
                   type="button"
                   onClick={() => handleSort("showcasePinned")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 rounded"
                 >
                   Showcase
                   {renderSortIndicator("showcasePinned")}
                 </button>
               </th>
-              <th className="px-4 py-3">
+              <th className="px-4 py-3 group">
                 <button
                   type="button"
                   onClick={() => handleSort("sprintKey")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 rounded"
                 >
                   Sprint ID
                   {renderSortIndicator("sprintKey")}
                 </button>
               </th>
-              <th className="px-4 py-3">
+              <th className="px-4 py-3 group">
                 <button
                   type="button"
                   onClick={() => handleSort("name")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 rounded"
                 >
                   Sprint
                   {renderSortIndicator("name")}
                 </button>
               </th>
-              <th className="px-4 py-3">
+              <th className="px-4 py-3 group">
                 <button
                   type="button"
                   onClick={() => handleSort("status")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 rounded"
                 >
                   Status
                   {renderSortIndicator("status")}
                 </button>
               </th>
-              <th className="px-4 py-3">
+              <th className="px-4 py-3 group">
                 <button
                   type="button"
                   onClick={() => handleSort("tasksCount")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 rounded"
                 >
                   Tasks
                   {renderSortIndicator("tasksCount")}
                 </button>
               </th>
-              <th className="px-4 py-3">
+              <th className="px-4 py-3 group">
                 <button
                   type="button"
                   onClick={() => handleSort("completion")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 rounded"
                 >
                   Completion
                   {renderSortIndicator("completion")}
                 </button>
               </th>
-              <th className="px-4 py-3">
+              <th className="px-4 py-3 group">
                 <button
                   type="button"
                   onClick={() => handleSort("createdAt")}
-                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200"
+                  className="inline-flex items-center gap-2 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 rounded"
                 >
                   Created
                   {renderSortIndicator("createdAt")}

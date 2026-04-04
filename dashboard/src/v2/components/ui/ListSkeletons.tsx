@@ -1,7 +1,11 @@
 import type { FunctionComponent } from "preact";
 
 export const SkeletonRow: FunctionComponent = () => (
-  <div className="flex h-16 w-full animate-pulse items-center gap-4 rounded-2xl border border-black/[0.04] bg-black/[0.02] px-5 dark:border-white/[0.04] dark:bg-white/[0.02]">
+  <div
+    className="flex h-16 w-full animate-pulse items-center gap-4 rounded-2xl border border-black/[0.04] bg-black/[0.02] px-5 dark:border-white/[0.04] dark:bg-white/[0.02]"
+    aria-busy="true"
+  >
+    <span className="sr-only">Loading row...</span>
     <div className="h-4 w-4 rounded bg-slate-200 dark:bg-slate-700/50" />
     <div className="h-4 w-1/4 rounded bg-slate-200 dark:bg-slate-700/50" />
     <div className="ml-auto h-6 w-20 rounded-full bg-slate-200 dark:bg-slate-700/50" />
@@ -10,7 +14,11 @@ export const SkeletonRow: FunctionComponent = () => (
 );
 
 export const SkeletonCard: FunctionComponent = () => (
-  <div className="flex h-40 w-full animate-pulse flex-col gap-4 rounded-[1.25rem] border border-black/[0.04] bg-black/[0.02] p-5 dark:border-white/[0.04] dark:bg-white/[0.02]">
+  <div
+    className="flex h-40 w-full animate-pulse flex-col gap-4 rounded-[1.25rem] border border-black/[0.04] bg-black/[0.02] p-5 dark:border-white/[0.04] dark:bg-white/[0.02]"
+    aria-busy="true"
+  >
+    <span className="sr-only">Loading card...</span>
     <div className="flex items-center justify-between">
       <div className="h-5 w-1/3 rounded bg-slate-200 dark:bg-slate-700/50" />
       <div className="h-6 w-16 rounded-full bg-slate-200 dark:bg-slate-700/50" />
@@ -27,7 +35,11 @@ export const SkeletonCard: FunctionComponent = () => (
 );
 
 export const SkeletonPanel: FunctionComponent = () => (
-  <div className="flex h-64 w-full animate-pulse flex-col gap-6 rounded-[1.75rem] border border-black/[0.04] bg-black/[0.02] p-7 dark:border-white/[0.04] dark:bg-white/[0.02]">
+  <div
+    className="flex h-64 w-full animate-pulse flex-col gap-6 rounded-[1.75rem] border border-black/[0.04] bg-black/[0.02] p-7 dark:border-white/[0.04] dark:bg-white/[0.02]"
+    aria-busy="true"
+  >
+    <span className="sr-only">Loading panel...</span>
     <div className="h-6 w-1/4 rounded bg-slate-200 dark:bg-slate-700/50" />
     <div className="flex flex-col gap-3">
       <div className="h-4 w-full rounded bg-slate-200 dark:bg-slate-700/50" />

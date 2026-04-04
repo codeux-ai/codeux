@@ -203,6 +203,17 @@ export class WatchLoopRunner {
           if (finalizationResult.status === "exit") {
             return fullReport;
           }
+          if (finalizationResult.status === "wait") {
+            this.renewSprintRunHeartbeat({
+              sprintRunId,
+              sprintId: scopedExecutionContext.sprint.id,
+              leaseToken,
+            });
+            checkpointWindowStartedAt = Date.now();
+            allFinished = false;
+            await new Promise((resolve) => setTimeout(resolve, watchLoopIntervalMs));
+            break;
+          }
           fullReport += "\n✅ **Sprint Execution Finished.**\n";
           return fullReport;
         }
@@ -369,7 +380,7 @@ export class WatchLoopRunner {
     allTerminal: boolean;
     noMoreActionPossible: boolean;
     activeMainMergeAttentionItems: Array<{ id: string; sprintRunId: string | null; attentionType: string; ownerType?: string; status?: string; summaryMarkdown: string; payload: Record<string, unknown> | null }>;
-  }): Promise<{ status: "continue" | "exit"; report: string }> {
+  }): Promise<{ status: "continue" | "exit" | "wait"; report: string }> {
     const {
       scopedExecutionContext, sprintRunId, repoPath, defaultFeatureBranch, defaultBranch,
       featureBranchPrefix, githubMode, ciIntelligence, subtasks, runningTasks, readyTasks,
@@ -492,7 +503,10 @@ export class WatchLoopRunner {
           scopedExecutionContext.project.id,
           sprintRunId,
         );
-        if (mergeFeedback.hasMergeConflict || remainingMainMergeAttentionItems.length > 0) {
+        const mainMergeMode = ciIntelligence.mainBranchAutoMergeMode;
+        const shouldWaitForMainMerge = shouldKeepWatchLoopAliveForMainMerge(mainMergeMode, mergeFeedback);
+        const shouldPauseForMainMerge = shouldPauseForMainMergeBlocker(mergeFeedback, remainingMainMergeAttentionItems);
+        if (shouldPauseForMainMerge) {
           report += completionGuidance;
           report += mergeFeedback.text;
           pauseSprintRunForMainMergeBlocker({
@@ -502,8 +516,27 @@ export class WatchLoopRunner {
             mergeFeedback,
             attentionItems: remainingMainMergeAttentionItems,
           });
-          report += "\n⏸️ **Sprint Paused:** Main-branch merge is still blocked. Resolve the active main-merge conflict and resume the sprint.\n";
+          report += "\n⏸️ **Sprint Paused:** Main-branch merge is blocked by a conflict, failed checks, or unresolved review state. Resolve the blocker and resume the sprint.\n";
           return { status: "exit", report };
+        }
+        if (shouldWaitForMainMerge) {
+          report += completionGuidance;
+          report += mergeFeedback.text;
+          report += "\n⏳ **Sprint Still Active:** Waiting for the final main-branch merge to finish before completing the sprint.\n";
+          return { status: "wait", report };
+        }
+        if (this.deps.qualityAssuranceService) {
+          const qaOutcome = await this.deps.qualityAssuranceService.reviewSprintCompletion({
+            projectId: scopedExecutionContext.project.id,
+            sprintId: scopedExecutionContext.sprint.id,
+            sprintRunId,
+            repoPath,
+            subtasks,
+          });
+          report += qaOutcome.reportText;
+          if (qaOutcome.blockedCompletion) {
+            return { status: "wait", report };
+          }
         }
         this.deps.completedSprints.add(`${scopedExecutionContext.project.id}:${scopedExecutionContext.sprint.id}`);
         transitionSprintRun(
@@ -701,6 +734,35 @@ function pauseSprintRunForMainMergeBlocker(args: {
       attentionTypes: args.attentionItems.map((item) => item.attentionType),
     },
     `sprint-paused:${args.sprintRunId}:main-merge-blocked:${args.mergeFeedback.state}:${args.mergeFeedback.prNumber || "none"}`
+  );
+}
+
+function shouldKeepWatchLoopAliveForMainMerge(
+  mode: CiIntelligenceSettings["mainBranchAutoMergeMode"],
+  mergeFeedback: MergeFeedbackResult,
+): boolean {
+  if (mode !== "WHEN_GREEN" && mode !== "ALWAYS") {
+    return false;
+  }
+
+  return (
+    mergeFeedback.state === "missing_pr"
+    || mergeFeedback.state === "pending_checks"
+    || mergeFeedback.state === "ready_for_merge"
+    || mergeFeedback.state === "automerge_scheduled"
+    || mergeFeedback.state === "automerge_failed"
+  );
+}
+
+function shouldPauseForMainMergeBlocker(
+  mergeFeedback: MergeFeedbackResult,
+  attentionItems: Array<{ id: string }>,
+): boolean {
+  return (
+    attentionItems.length > 0
+    || mergeFeedback.state === "merge_conflict"
+    || mergeFeedback.state === "failed_checks"
+    || mergeFeedback.state === "review_blocked"
   );
 }
 

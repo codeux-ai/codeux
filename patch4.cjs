@@ -1,7 +1,17 @@
 const fs = require('fs');
-const path = 'tests/dashboard/v2/sprints-page.test.tsx';
-let content = fs.readFileSync(path, 'utf8');
+let code = fs.readFileSync('src/app/live/project-live-snapshot.ts', 'utf8');
 
-content = content.replace(/const newSprintBtn = screen.getByRole\("button", \{ name: \/new sprint\/i \}\);/g, 'const newSprintBtn = screen.getAllByRole("button").find(b => b.textContent?.toLowerCase().includes("new sprint"));');
+// The replacement escaped the backticks in the jsdoc somehow.
+code = code.replace(/\\\`projectId\\\`/g, '\`projectId\`')
+  .replace(/\\\`ProjectManagementRepository\\\`/g, '\`ProjectManagementRepository\`')
+  .replace(/\\\`selectedSprintId\\\`/g, '\`selectedSprintId\`')
+  .replace(/\\\`status\\\`/g, '\`status\`')
+  .replace(/\\\`ProjectRuntimeRepository\\\`/g, '\`ProjectRuntimeRepository\`')
+  .replace(/\\\`execution\\\`/g, '\`execution\`')
+  .replace(/\\\`ExecutionRepository\\\`/g, '\`ExecutionRepository\`')
+  .replace(/\\\`getProjectExecutionSnapshot\\\`/g, '\`getProjectExecutionSnapshot\`')
+  .replace(/\\\`gitStatus\\\`/g, '\`gitStatus\`')
+  .replace(/\\\`gitStatusError\\\`/g, '\`gitStatusError\`')
+  .replace(/\\\`updatedAt\\\`/g, '\`updatedAt\`');
 
-fs.writeFileSync(path, content);
+fs.writeFileSync('src/app/live/project-live-snapshot.ts', code);

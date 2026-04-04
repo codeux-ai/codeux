@@ -18,6 +18,7 @@ import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { getProviderModelOptions } from "../../lib/settings-view-models.js";
 import { getPlanningFeedback } from "../../lib/sprint-planning-feedback.js";
 import { PlanningProgressOverlay } from "../ui/PlanningProgressOverlay.js";
+import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 
 /* ─── Icon Map ──────────────────────────────────────────────────────── */
 const IconMap: Record<string, FunctionComponent<any>> = {
@@ -29,12 +30,28 @@ const IconMap: Record<string, FunctionComponent<any>> = {
   Shield, Terminal, TestTube2, Wrench,
 };
 
-const TAG_COLOR_PALETTE = [
-  "#22c55e", "#f97316", "#a855f7", "#3b82f6", "#ef4444",
-  "#eab308", "#06b6d4", "#ec4899", "#8b5cf6", "#14b8a6",
-  "#f43f5e", "#84cc16", "#6366f1", "#0ea5e9", "#d946ef",
-  "#fb923c", "#a3e635", "#2dd4bf", "#f472b6", "#818cf8",
+const TAG_STYLES = [
+  { value: "signal", text: "text-signal-500", bg: "bg-signal-500/10", border: "border-signal-500/20", dot: "bg-signal-500" },
+  { value: "ember", text: "text-ember-500", bg: "bg-ember-500/10", border: "border-ember-500/20", dot: "bg-ember-500" },
+  { value: "green", text: "text-status-green", bg: "bg-status-green/10", border: "border-status-green/20", dot: "bg-status-green" },
+  { value: "red", text: "text-status-red", bg: "bg-status-red/10", border: "border-status-red/20", dot: "bg-status-red" },
+  { value: "amber", text: "text-status-amber", bg: "bg-status-amber/10", border: "border-status-amber/20", dot: "bg-status-amber" },
+  { value: "violet", text: "text-violet-500", bg: "bg-violet-500/10", border: "border-violet-500/20", dot: "bg-violet-500" },
+  { value: "cyan", text: "text-cyan-500", bg: "bg-cyan-500/10", border: "border-cyan-500/20", dot: "bg-cyan-500" },
+  { value: "rose", text: "text-rose-500", bg: "bg-rose-500/10", border: "border-rose-500/20", dot: "bg-rose-500" },
+  { value: "blue", text: "text-blue-500", bg: "bg-blue-500/10", border: "border-blue-500/20", dot: "bg-blue-500" },
+  { value: "slate", text: "text-slate-500", bg: "bg-slate-500/10", border: "border-slate-500/20", dot: "bg-slate-500" },
 ];
+
+const getTagStyles = (colorVal: string) => {
+  const found = TAG_STYLES.find(s => s.value === colorVal);
+  if (found) return { ...found, style: {} as React.CSSProperties };
+  // Fallback to CSS variables
+  return {
+    text: "", bg: "", border: "", dot: "", value: colorVal,
+    style: { '--accent': colorVal } as React.CSSProperties
+  };
+};
 
 const ICON_OPTIONS: ReadonlyArray<{ value: string; Icon: FunctionComponent<any> }> = [
   { value: "Sparkles", Icon: Sparkles },
@@ -67,7 +84,11 @@ const ICON_OPTIONS: ReadonlyArray<{ value: string; Icon: FunctionComponent<any> 
 
 /* ─── Types ─────────────────────────────────────────────────────────── */
 type Phase = "browse" | "configure" | "editor";
-import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
+type BuiltinPurposeOption = {
+  value: string;
+  label: string;
+  description?: string;
+};
 
 interface QuicksprintPanelProps {
   projectId: string;
@@ -121,6 +142,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
   /* ── Phase / Navigation ─────────────────────────────────────────── */
   const [phase, setPhase] = useState<Phase>("browse");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [selectedBuiltinPurpose, setSelectedBuiltinPurpose] = useState("");
 
   /* ── Configure state ────────────────────────────────────────────── */
   const [taskCount, setTaskCount] = useState(5);
@@ -155,6 +177,56 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     () => templates.find((t) => t.id === selectedTemplateId) || null,
     [templates, selectedTemplateId],
   );
+
+  const builtinTemplates = useMemo(
+    () => templates.filter((t) => t.isBuiltIn),
+    [templates],
+  );
+
+  const customTemplates = useMemo(
+    () => templates.filter((t) => !t.isBuiltIn),
+    [templates],
+  );
+
+  const builtinPurposeOptions = useMemo<BuiltinPurposeOption[]>(() => {
+    const purposes = new Map<string, BuiltinPurposeOption>();
+    for (const template of builtinTemplates) {
+      const value = template.purpose || "general";
+      if (purposes.has(value)) {
+        continue;
+      }
+      purposes.set(value, {
+        value,
+        label: template.purposeLabel || "General",
+        description: template.purposeDescription,
+      });
+    }
+    return Array.from(purposes.values());
+  }, [builtinTemplates]);
+
+  useEffect(() => {
+    if (builtinPurposeOptions.length === 0) {
+      if (selectedBuiltinPurpose) {
+        setSelectedBuiltinPurpose("");
+      }
+      return;
+    }
+    if (!builtinPurposeOptions.some((option) => option.value === selectedBuiltinPurpose)) {
+      setSelectedBuiltinPurpose(builtinPurposeOptions[0].value);
+    }
+  }, [builtinPurposeOptions, selectedBuiltinPurpose]);
+
+  const activeBuiltinPurpose = useMemo(
+    () => builtinPurposeOptions.find((option) => option.value === selectedBuiltinPurpose) || builtinPurposeOptions[0] || null,
+    [builtinPurposeOptions, selectedBuiltinPurpose],
+  );
+
+  const visibleBuiltinTemplates = useMemo(() => {
+    if (!activeBuiltinPurpose) {
+      return builtinTemplates;
+    }
+    return builtinTemplates.filter((template) => (template.purpose || "general") === activeBuiltinPurpose.value);
+  }, [activeBuiltinPurpose, builtinTemplates]);
 
   /* ── Combined prompt preview (agent + template + additional) ────── */
   const combinedPrompt = useMemo(() => {
@@ -255,7 +327,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     setEdDescription(t?.description || "");
     setEdIcon(t?.icon || "Zap");
     setEdCategory(t?.category || "engineering");
-    setEdCategoryColor(t?.categoryColor || "#22c55e");
+    setEdCategoryColor(t?.categoryColor || "signal");
     setShowColorPicker(false);
     setShowIconPicker(false);
     setEdInstruction(t?.agentInstructionMarkdown || "");
@@ -311,14 +383,11 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
     }
   }, [selectedTemplate, taskCount, additionalPrompt, onExecute, routeOverride, modelOverride]);
 
-  const builtinTemplates = templates.filter((t) => t.isBuiltIn);
-  const customTemplates = templates.filter((t) => !t.isBuiltIn);
-
   /* ─── Render ──────────────────────────────────────────────────── */
   return (
     <section
       ref={cardRef}
-      className={`relative w-full rounded-[2rem] border border-black/[0.06] bg-white/78 shadow-[0_20px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/72 dark:shadow-[0_24px_56px_rgba(0,0,0,0.28)] ${showIconPicker || showColorPicker ? "" : "overflow-hidden"}`}
+      className={`relative w-full rounded-[1.75rem] border border-black/[0.06] bg-white/70 shadow-[0_20px_50px_rgba(15,23,42,0.08)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_24px_56px_rgba(0,0,0,0.28)] ${showIconPicker || showColorPicker ? "" : "overflow-hidden"}`}
     >
       {/* Radial accents */}
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.07),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,224,160,0.06),transparent_34%)] dark:bg-[radial-gradient(circle_at_top_left,rgba(255,107,0,0.09),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(0,224,160,0.07),transparent_34%)]" />
@@ -352,7 +421,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                     Launch A Quicksprint.
                   </h2>
                   <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400 sm:text-[15px]">
-                    Select a template to rapidly bootstrap a new sprint. Built-in audits and your custom flows are ready to go.
+                    Browse purpose-specific default templates or launch your own reusable custom flows to spin up a focused sprint fast.
                   </p>
                 </div>
               </div>
@@ -374,9 +443,37 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               <>
                 {/* Built-in templates */}
                 <div data-qs-stagger className="mt-10">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-5">Built-in Templates</div>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {builtinTemplates.map((t) => (
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="space-y-2">
+                      <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Default Templates</div>
+                      <p className="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                        Built-in templates are organized by purpose so the catalog can expand into additional language and product families over time.
+                      </p>
+                    </div>
+                    <div className="w-full max-w-sm rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+                      <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Purpose</div>
+                      <div className="mt-2">
+                        <AvantgardeSelect
+                          aria-label="Default template purpose"
+                          variant="compact"
+                          value={activeBuiltinPurpose?.value || ""}
+                          onChange={setSelectedBuiltinPurpose}
+                          options={builtinPurposeOptions.map((option) => ({
+                            value: option.value,
+                            label: option.label,
+                          }))}
+                          placeholder="Select Purpose"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  {activeBuiltinPurpose?.description && (
+                    <p className="mt-4 max-w-3xl text-xs leading-relaxed text-slate-400 dark:text-slate-500">
+                      {activeBuiltinPurpose.description}
+                    </p>
+                  )}
+                  <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {visibleBuiltinTemplates.map((t) => (
                       <TemplateCard key={t.id} template={t} onSelect={() => handleSelectTemplate(t)} />
                     ))}
                   </div>
@@ -385,7 +482,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                 {/* Custom templates */}
                 <div data-qs-stagger className="mt-10">
                   <div className="flex items-center justify-between mb-5">
-                    <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Custom Templates</div>
+                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Custom Templates</div>
                     <button
                       onClick={() => openEditor(null)}
                       className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-ember-500/20 bg-ember-500/[0.06] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-ember-600 transition-colors hover:bg-ember-500/[0.12] dark:text-ember-400"
@@ -447,7 +544,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               {/* Planning Route + Model Override */}
               <div data-qs-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
                 <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Planning Route</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Planning Route</div>
                   <div className="mt-2">
                     <AvantgardeSelect
                       variant="compact"
@@ -471,7 +568,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                     ? "border-signal-500/20 bg-signal-500/[0.04] dark:bg-signal-500/[0.08]"
                     : "border-black/[0.06] bg-black/[0.025] opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03]"
                 }`}>
-                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Model Override</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Model Override</div>
                   <div className="mt-2">
                     <AvantgardeSelect
                       variant="compact"
@@ -490,7 +587,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
               {/* Additional prompt for this run */}
               <div data-qs-stagger className="mt-8 space-y-2">
-                <label className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Additional Instructions (optional)</label>
+                <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Additional Instructions (optional)</label>
                 <textarea
                   value={additionalPrompt}
                   onInput={(e) => setAdditionalPrompt((e.target as HTMLTextAreaElement).value)}
@@ -528,7 +625,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             <div className="flex flex-col p-6 sm:p-8">
               {/* Subtask count */}
               <div data-qs-stagger>
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-4">Subtask Count</div>
+                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-4">Subtask Count</div>
                 <SubtaskSlider value={taskCount} onChange={setTaskCount} />
               </div>
 
@@ -576,33 +673,33 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
             {/* Name */}
             <label data-qs-stagger className="mt-8 block space-y-2">
-              <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Template Name</span>
+              <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Template Name</span>
               <input
                 type="text"
                 value={edName}
                 onInput={(e) => setEdName((e.target as HTMLInputElement).value)}
                 placeholder="API Integration Tests"
-                className="w-full border-0 border-b-2 border-black/[0.08] bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-ember-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
+                className="w-full rounded-[1rem] border border-black/[0.06] bg-transparent px-4 py-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
                 autoFocus
               />
             </label>
 
             {/* Description */}
             <label data-qs-stagger className="mt-6 block space-y-2">
-              <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Description</span>
+              <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Description</span>
               <input
                 type="text"
                 value={edDescription}
                 onInput={(e) => setEdDescription((e.target as HTMLInputElement).value)}
                 placeholder="What this template does in one line"
-                className="w-full border-0 border-b-2 border-black/[0.06] bg-transparent pb-2 text-sm leading-relaxed text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:border-ember-500/60 dark:border-white/[0.06] dark:text-slate-300 dark:placeholder:text-slate-600"
+                className="w-full rounded-[1rem] border border-black/[0.06] bg-transparent px-4 py-3 text-sm leading-relaxed text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.06] dark:text-slate-300 dark:placeholder:text-slate-600"
               />
             </label>
 
             {/* Icon + Color + Category Tag + Default Tasks */}
             <div data-qs-stagger className="mt-8 grid gap-4 sm:grid-cols-2">
               <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-3">Category Tag</div>
+                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-3">Category Tag</div>
                 <div className="flex items-center gap-3">
                   {/* Icon picker trigger */}
                   <button
@@ -634,8 +731,8 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                     title="Pick tag color"
                   >
                     <span
-                      className="block h-5 w-5 rounded-full shadow-[inset_0_1px_2px_rgba(255,255,255,0.4),0_0_0_2px_rgba(0,0,0,0.06)] transition-transform duration-200"
-                      style={{ backgroundColor: edCategoryColor }}
+                      className={`block h-5 w-5 rounded-full shadow-[inset_0_1px_2px_rgba(255,255,255,0.4),0_0_0_2px_rgba(0,0,0,0.06)] transition-transform duration-200 ${getTagStyles(edCategoryColor).dot}`}
+                      style={getTagStyles(edCategoryColor).style?.["--accent"] ? { backgroundColor: "var(--accent)", ...getTagStyles(edCategoryColor).style } : undefined}
                     />
                   </button>
 
@@ -645,7 +742,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                     value={edCategory}
                     onInput={(e) => setEdCategory((e.target as HTMLInputElement).value)}
                     placeholder="e.g. engineering..."
-                    className="flex-1 min-w-0 border-0 border-b-2 border-black/[0.06] bg-transparent pb-1 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:border-ember-500/60 dark:border-white/[0.06] dark:text-slate-300 dark:placeholder:text-slate-600"
+                    className="flex-1 min-w-0 rounded-[1rem] border border-black/[0.06] bg-transparent px-3 py-2 text-sm text-slate-700 outline-none transition-colors placeholder:text-slate-300 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.06] dark:text-slate-300 dark:placeholder:text-slate-600"
                   />
                 </div>
 
@@ -653,10 +750,13 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                 {edCategory.trim() && (
                   <div className="mt-3 flex items-center">
                     <span
-                      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em]"
-                      style={{ backgroundColor: `${edCategoryColor}15`, color: edCategoryColor }}
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${getTagStyles(edCategoryColor).bg} ${getTagStyles(edCategoryColor).text}`}
+                      style={getTagStyles(edCategoryColor).style?.["--accent"] ? { backgroundColor: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)", ...getTagStyles(edCategoryColor).style } : undefined}
                     >
-                      <span className="block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: edCategoryColor }} />
+                      <span
+                        className={`block h-1.5 w-1.5 rounded-full ${getTagStyles(edCategoryColor).dot}`}
+                        style={getTagStyles(edCategoryColor).style?.["--accent"] ? { backgroundColor: "var(--accent)", ...getTagStyles(edCategoryColor).style } : undefined}
+                      />
                       {edCategory}
                     </span>
                   </div>
@@ -664,7 +764,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
               </div>
 
               <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-2">Default Tasks</div>
+                <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Default Tasks</div>
                 <div className="font-mono text-2xl font-black tracking-tight text-slate-900 dark:text-white">{edTaskCount}</div>
                 <input
                   type="range" min="1" max="15" value={edTaskCount}
@@ -711,23 +811,22 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                 style={{ top: pickerPos.top, left: pickerPos.left, animation: "qs-picker-in 0.2s cubic-bezier(0.22,1,0.36,1)" }}
               >
                 <div className="grid grid-cols-5 gap-2">
-                  {TAG_COLOR_PALETTE.map((color) => {
-                    const isActive = color === edCategoryColor;
+                  {TAG_STYLES.map(({ value, dot }) => {
+                    const isActive = value === edCategoryColor;
                     return (
                       <button
-                        key={color}
+                        key={value}
                         type="button"
-                        onClick={() => { setEdCategoryColor(color); setShowColorPicker(false); }}
+                        onClick={() => { setEdCategoryColor(value); setShowColorPicker(false); }}
                         className="group flex min-h-[44px] min-w-[44px] h-8 w-8 cursor-pointer items-center justify-center rounded-full transition-all duration-200 hover:scale-125 active:scale-95"
                       >
                         <span
-                          className="block rounded-full transition-all duration-200"
+                          className={`block rounded-full transition-all duration-200 ${dot}`}
                           style={{
-                            backgroundColor: color,
                             width: isActive ? "1.5rem" : "1.25rem",
                             height: isActive ? "1.5rem" : "1.25rem",
                             boxShadow: isActive
-                              ? `inset 0 1px 3px rgba(255,255,255,0.35), 0 0 0 2.5px ${color}44, 0 0 12px ${color}55`
+                              ? `inset 0 1px 3px rgba(255,255,255,0.35), 0 0 0 2.5px rgba(255,255,255,0.2), 0 0 12px rgba(255,255,255,0.15)`
                               : "inset 0 1px 3px rgba(255,255,255,0.35)",
                           }}
                         />
@@ -742,7 +841,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
             {agentPresets.length > 0 && (
               <div data-qs-stagger className="mt-6">
                 <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                  <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400 mb-2">Agent Preset (optional)</div>
+                  <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-2">Agent Preset (optional)</div>
                   <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
                     Attach an agent's instructions to this template. The agent's prompt will be prepended to the template instructions.
                   </p>
@@ -762,13 +861,13 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
 
             {/* Instructions */}
             <div data-qs-stagger className="mt-6 space-y-2">
-              <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-400">Agent Instructions</span>
+              <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Agent Instructions</span>
               <textarea
                 value={edInstruction}
                 onInput={(e) => setEdInstruction((e.target as HTMLTextAreaElement).value)}
                 placeholder="Write detailed instructions for the planning agent. Leave empty to use only the agent preset's instructions..."
                 rows={10}
-                className="w-full rounded-[1.7rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm font-mono leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:border-ember-500/40 focus:shadow-[0_0_0_1px_rgba(255,107,0,0.16),0_0_30px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
+                className="w-full rounded-[1rem] border border-black/[0.06] bg-black/[0.025] p-5 text-sm font-mono leading-relaxed text-slate-700 outline-none transition-all placeholder:text-slate-300 focus:ring-4 focus:ring-signal-500/20 focus:border-signal-500 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-300 dark:placeholder:text-slate-600 resize-y"
               />
             </div>
 
@@ -779,7 +878,7 @@ export const QuicksprintPanel: FunctionComponent<QuicksprintPanelProps> = ({
                   <button
                     type="button"
                     onClick={handleEditorDelete}
-                    className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] transition-colors ${
+                    className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
                       edConfirmDelete
                         ? "bg-red-600 text-white hover:bg-red-500"
                         : "text-red-400 hover:text-red-300 hover:bg-red-500/10"
@@ -814,13 +913,13 @@ const TemplateCard: FunctionComponent<{
   onEdit?: () => void;
 }> = ({ template, onSelect, onEdit }) => {
   const Icon = IconMap[template.icon] || Zap;
-  const tagColor = template.categoryColor || "#94a3b8";
+  const tagColor = template.categoryColor || "slate";
 
   return (
     <button
       type="button"
       onClick={onSelect}
-      className="group relative flex flex-col rounded-[1.4rem] border border-black/[0.06] bg-white/60 p-5 text-left transition-all hover:border-ember-500/30 hover:shadow-[0_0_24px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-white/[0.025] dark:hover:border-ember-500/30"
+      className="group relative flex flex-col rounded-[1.75rem] border border-black/[0.06] bg-white/70 p-5 text-left transition-all hover:border-ember-500/30 hover:shadow-[0_0_24px_rgba(255,107,0,0.08)] dark:border-white/[0.06] dark:bg-void-800/60 dark:hover:border-ember-500/30"
     >
       {!template.isBuiltIn && onEdit && (
         <button
@@ -844,10 +943,13 @@ const TemplateCard: FunctionComponent<{
 
       <div className="flex items-center justify-between">
         <span
-          className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] px-2.5 py-0.5 rounded-full"
-          style={{ backgroundColor: `${tagColor}15`, color: tagColor }}
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold ${getTagStyles(tagColor).bg} ${getTagStyles(tagColor).text}`}
+          style={getTagStyles(tagColor).style?.["--accent"] ? { backgroundColor: "color-mix(in srgb, var(--accent) 15%, transparent)", color: "var(--accent)", ...getTagStyles(tagColor).style } : undefined}
         >
-          <span className="block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tagColor }} />
+          <span
+            className={`block h-1.5 w-1.5 rounded-full ${getTagStyles(tagColor).dot}`}
+            style={getTagStyles(tagColor).style?.["--accent"] ? { backgroundColor: "var(--accent)", ...getTagStyles(tagColor).style } : undefined}
+          />
           {template.category}
         </span>
         <span className="text-[10px] font-medium text-slate-400">

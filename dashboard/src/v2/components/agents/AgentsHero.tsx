@@ -19,7 +19,7 @@ export const AgentsHero: FunctionComponent<{
           <Bot className="h-6 w-6" strokeWidth={1.8} />
         </div>
         <div className="flex flex-col">
-          <span className="text-xs font-bold uppercase tracking-widest text-signal-400">Role</span>
+          <span className="text-xs font-bold uppercase tracking-[0.14em] text-signal-400">Role</span>
           <h1 className="font-display text-3xl font-black tracking-tight text-white md:text-4xl">
             Project Agents
           </h1>
@@ -34,7 +34,7 @@ export const AgentsHero: FunctionComponent<{
           type="button"
           onClick={onCreate}
           disabled={!selectedProject}
-          className="group inline-flex items-center gap-2 rounded-full bg-signal-500 px-6 py-3 font-bold text-slate-900 shadow-[0_0_20px_rgba(0,224,160,0.3)] transition-all hover:scale-105 hover:bg-signal-400 hover:shadow-[0_0_30px_rgba(0,224,160,0.5)] focus:outline-none focus:ring-4 focus:ring-signal-500/30 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+          className="group inline-flex items-center gap-2 rounded-full bg-signal-500 px-6 py-3 font-bold text-slate-900 shadow-[0_0_20px_rgba(0,224,160,0.3)] transition-all hover:scale-105 hover:bg-signal-400 hover:shadow-[0_0_30px_rgba(0,224,160,0.5)] focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
         >
           <Plus className="h-5 w-5 transition-transform group-hover:rotate-90" strokeWidth={2.5} />
           <span>New Agent</span>
@@ -43,7 +43,7 @@ export const AgentsHero: FunctionComponent<{
           type="button"
           onClick={onSyncAll}
           disabled={!selectedProject || syncingAll}
-          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-6 py-3 font-bold text-white backdrop-blur-sm transition-all hover:bg-white/10 focus:outline-none focus:ring-4 focus:ring-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-6 py-3 font-bold text-white backdrop-blur-sm transition-all hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw
             className={`h-5 w-5 ${syncingAll ? "animate-spin" : ""}`}

@@ -43,7 +43,7 @@ export const UsageSeriesSidebar: FunctionComponent<{
     <div className="flex flex-col gap-6">
       {Object.entries(groups).map(([grouping, groupSeries]) => (
         <div key={grouping} className="flex flex-col gap-3">
-          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400 pl-2">
+          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 pl-2">
             {grouping}
           </div>
           <div className="flex flex-col gap-2">
@@ -67,7 +67,7 @@ export const UsageSeriesSidebar: FunctionComponent<{
                 >
                   <div className="flex items-center gap-3">
                     <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: accentHex }} />
-                    <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">{s.label}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{s.label}</span>
                   </div>
                   <div className="mt-3 flex items-end justify-between gap-4">
                     <div className="text-lg font-black text-slate-900 dark:text-white">{formatValue(s.id, currentValue)}</div>

@@ -94,10 +94,13 @@ Benefits:
 - relative `/api/...` and websocket calls stay inside the preview container instead of hitting the main dashboard APIs
 - cookies, local storage, and service workers stay isolated per preview session
 - open-in-new-tab uses the preview origin directly instead of a rewritten proxy path
+- extensionless direct loads such as `/sprints` now retry the preview app shell when a dev server returns `404`, so SPA routes keep working on refresh and on copied deep links
+- when a preview host is not yet reachable, has been stopped, or returns a transient proxy connection failure, the preview origin serves a same-origin standby page with `Start Container` / `Rebuild Container` controls instead of surfacing raw socket errors
 
 The dashboard injects a small preview bridge script into proxied HTML responses. The bridge:
 - reports `location` and `title` changes to the parent browser page via `postMessage`
 - accepts back/forward/reload/navigate commands from the parent browser chrome
+- uses `history.pushState` / `history.replaceState` for parent-driven path changes before falling back to hard navigations, so SPA previews can switch routes without reloading the entire app
 
 Host-based preview routing also proxies websocket upgrades so preview apps that derive websocket URLs from `window.location` continue to work on their own preview origin.
 
@@ -116,6 +119,20 @@ Rebuild behaviors:
 
 These behaviors are controlled through scoped settings under `sprintPreview`.
 
+Current preview controls include:
+- `enabled`
+- `showInAppBrowser`
+- `autoStartOnRunningSprint`
+- `rebuildOnTaskCompletion`
+- `rebuildOnSprintCompletion`
+- `pullLatestOnRebuild`
+- `autoStopOnTerminalSprint`
+- `maxConcurrentContainers`
+- `hostPortRangeStart`
+- `hostPortRangeEnd`
+- `containerAppPort`
+- `startupScriptPath`
+
 Startup hygiene:
 - Sprint OS now removes any existing `sprint-os.preview=true` containers on server startup before the preview reconciliation loop begins
 - Sprint OS also removes orphaned unlabeled setup-helper containers that were created by older inline setup-image preview flows
@@ -127,11 +144,20 @@ Startup hygiene:
 The dashboard now exposes:
 - `/browser` route for the in-app browser workspace
 - dock and top-nav entry points for the browser
-- sprint-preview controls in the `Sprint Engine` settings category
+- a dedicated horizontal session slider strip above the browser surface, so the iframe starts directly below the cards instead of sharing a stretched header row
+- session cards in that rail are limited to persisted preview containers (`running`, `starting`, `stopped`, or `error`) rather than every sprint in the project
+- the rail ends with a placeholder-style `Launch Container` card that lets the operator choose any sprint from a selector and start a preview container without changing the current sprint scope elsewhere in the dashboard
+- in-app navigation no longer rebinds the iframe `src` for every route change; Browser chrome updates use the preview bridge so client-side routers can transition in place
+- when the selected preview session is stopped, still warming up, or unreachable, the embedded browser continues to point at the preview origin and the server returns a same-origin standby page with `Start Container` / `Rebuild Container` actions until the container becomes reachable again
+- Browser page startup now keeps non-critical side-panel requests off the initial critical path by loading preview-script contents only when the editor opens and deferring the first log fetch until after the primary browser surface has rendered
+- a dedicated `Browser Preview` settings category in the left settings rail for preview enablement, visibility, rebuild policy, Git sync, and container-cap controls
 - project-level `Sprint Browser` settings in the project settings editor for port range, startup script path, and automation overrides
 - per-sprint startup script editing in the browser page itself
-- preview logs, rebuild, stop, and open actions
+- preview logs, rebuild, stop, open, and remove actions
 - port routing status on preview cards, including container-port to host-port mappings such as `:4444 -> :5653`
+- when `showInAppBrowser` is disabled, Browser entry points are hidden from the dashboard shell and the `/browser` route shows a configuration notice instead of the embedded workspace
+- when `enabled` is disabled, preview reconciliation stops active preview containers and prevents new launches or rebuilds
+- when `maxConcurrentContainers` would be exceeded, Sprint OS stops the oldest active previews in the same project before starting the next one
 
 ## API Surface
 
@@ -141,6 +167,7 @@ Preview endpoints are implemented in `src/server/dashboard-server.ts`.
 - `POST /api/projects/:projectId/sprints/:sprintId/preview/start`
 - `POST /api/browser/sessions/:sessionId/rebuild`
 - `POST /api/browser/sessions/:sessionId/stop`
+- `DELETE /api/browser/sessions/:sessionId`
 - `GET /api/projects/:projectId/sprints/:sprintId/preview/script`
 - `PUT /api/projects/:projectId/sprints/:sprintId/preview/script`
 - `GET /api/browser/sessions/:sessionId/logs`

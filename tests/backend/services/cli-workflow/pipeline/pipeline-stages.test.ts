@@ -285,9 +285,9 @@ describe("executeProviderStage", () => {
   it("throws an error if provider run fails without retry conditions", async () => {
     const ctx = createMockContext();
     ctx.workflowSettings.retryOnReadFileNotFound = false;
-    vi.mocked(ctx.providerRunner.runProvider).mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "fatal provider error", usageTelemetry: { transcriptText: "error transcript" } as any });
+    vi.mocked(ctx.providerRunner.runProvider).mockResolvedValueOnce({ ok: false, code: 1, stdout: "", stderr: "fatal provider error", usageTelemetry: { transcriptText: "error transcript", inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, usageSource: "estimated", rawUsageJson: "{}" } as any });
 
-    await expect(executeProviderStage(ctx, "prompt")).rejects.toThrow("Gemini failed with an unexpected error.");
+    await expect(executeProviderStage(ctx, "prompt")).rejects.toThrow("fatal provider error");
     expect(ctx.deps.executionRepository?.createExecutionInvocation).toHaveBeenCalled();
     expect(ctx.deps.executionRepository?.appendExecutionInvocationMessage).toHaveBeenCalledWith("exec-1", {
       role: "user",
