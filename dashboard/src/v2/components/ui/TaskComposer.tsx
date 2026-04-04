@@ -2,6 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { Bot, Plus, Target, X, Save, AlertCircle } from "lucide-preact";
+import { Tooltip } from "./Tooltip.js";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
 import { useTaskComposerState, type TaskDraft } from "../../lib/task-composer-state.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -69,7 +70,10 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
-    if (!state.isValid) return;
+    if (!state.isValid) {
+      state.setHasAttemptedSubmit(true);
+      return;
+    }
 
     state.setIsSubmitting(true);
     state.setSubmitError(null);
@@ -129,7 +133,8 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               <select
                 value={state.sprintId}
                 onInput={(event) => state.setSprintId((event.target as HTMLSelectElement).value)}
-                className="w-full bg-transparent text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-lg px-1 py-0.5 -ml-1" aria-invalid={!!state.validationErrors.sprintId}
+                onBlur={() => state.setFieldTouched('sprintId')}
+                className={`w-full bg-transparent text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-lg px-1 py-0.5 -ml-1 border ${(state.hasAttemptedSubmit || state.touchedFields.sprintId) && !state.isSprintIdValid ? 'border-red-500' : 'border-transparent'}`} aria-invalid={!state.isSprintIdValid}
                 required
               >
                 <option value="" disabled>Select sprint</option>
@@ -137,7 +142,14 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                   <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
                 ))}
               </select>
-              {state.validationErrors.sprintId && <div className="text-xs text-red-500 mt-2 font-medium">{state.validationErrors.sprintId}</div>}
+              <div className="min-h-[20px] mt-1">
+                {(state.hasAttemptedSubmit || state.touchedFields.sprintId) && state.sprintIdError && (
+                  <div className="flex items-center gap-1.5 text-xs text-red-500 font-medium">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    {state.sprintIdError}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
@@ -167,12 +179,20 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               type="text"
               value={state.title}
               onInput={(event) => state.setTitle((event.target as HTMLInputElement).value)}
+              onBlur={() => state.setFieldTouched('title')}
               placeholder="Fix navigation layout shift"
-              className="w-full border-0 border-b-2 border-black/[0.08] bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]" aria-invalid={!!state.validationErrors.title}
+              className={`w-full border-0 border-b-2 bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-signal-500 dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem] ${(state.hasAttemptedSubmit || state.touchedFields.title) && !state.isTitleValid ? 'border-red-500' : 'border-black/[0.08] dark:border-white/[0.08]'}`} aria-invalid={!state.isTitleValid}
               required
               autoFocus
             />
-            {state.validationErrors.title && <div className="text-xs text-red-500 mt-2 font-medium">{state.validationErrors.title}</div>}
+            <div className="min-h-[24px] mt-1">
+              {(state.hasAttemptedSubmit || state.touchedFields.title) && state.titleError && (
+                <div className="flex items-center gap-1.5 text-xs text-red-500 font-medium">
+                  <AlertCircle className="w-4 h-4" />
+                  {state.titleError}
+                </div>
+              )}
+            </div>
           </label>
 
           <div data-composer-stagger className="mt-8 space-y-3">
@@ -315,20 +335,26 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                 <div className="leading-relaxed font-medium">{state.submitError}</div>
               </div>
             )}
-            <button
-              type="submit"
-              disabled={!state.isValid || state.isSubmitting}
-              className="inline-flex items-center justify-center gap-2.5 rounded-[1.2rem] bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-px hover:opacity-92 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:bg-white dark:text-void-900"
+            <Tooltip
+              content={!state.isValid ? "Please fix the validation errors before submitting." : null}
+              position="top"
+              className="bg-red-600"
             >
-              {state.isSubmitting ? (
-                <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white dark:border-void-900/20 dark:border-t-void-900 animate-spin" />
-              ) : state.isEditing ? (
-                <Save className="h-4 w-4" strokeWidth={2.3} />
-              ) : (
-                <Plus className="h-4 w-4" strokeWidth={2.3} />
-              )}
-              {state.isSubmitting ? (state.isEditing ? "Saving Task..." : "Creating Task...") : state.isEditing ? "Save Task" : "Create Task"}
-            </button>
+              <button
+                type="submit"
+                disabled={!state.isValid || state.isSubmitting}
+                className="w-full inline-flex items-center justify-center gap-2.5 rounded-[1.2rem] bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-px hover:opacity-92 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 dark:bg-white dark:text-void-900"
+              >
+                {state.isSubmitting ? (
+                  <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white dark:border-void-900/20 dark:border-t-void-900 animate-spin" />
+                ) : state.isEditing ? (
+                  <Save className="h-4 w-4" strokeWidth={2.3} />
+                ) : (
+                  <Plus className="h-4 w-4" strokeWidth={2.3} />
+                )}
+                {state.isSubmitting ? (state.isEditing ? "Saving Task..." : "Creating Task...") : state.isEditing ? "Save Task" : "Create Task"}
+              </button>
+            </Tooltip>
             <button
               type="button"
               onClick={onClose}
