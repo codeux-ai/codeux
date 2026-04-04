@@ -423,7 +423,7 @@ export const BrowserPage: FunctionComponent = () => {
       )}
 
       {showInAppBrowser && previewEnabled && (
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-5 2xl:grid-cols-[minmax(0,1fr)_340px]">
         <PreviewWindowChrome
           session={visibleSelectedSession}
           onNavigateBack={() => postNavigationCommand("back")}

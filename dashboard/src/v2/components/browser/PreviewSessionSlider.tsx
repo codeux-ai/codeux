@@ -111,7 +111,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
           return (
             <div
               key={session.id}
-              className={`flex-none w-[280px] lg:w-[calc(20%-0.6rem)] snap-center rounded-[1.5rem] border p-4 transition-all ${
+              className={`flex-none w-[280px] snap-center rounded-[1.5rem] border p-4 transition-all ${
                 active
                   ? "border-signal-500/30 bg-white/90 shadow-[0_10px_40px_rgba(15,23,42,0.1)] dark:bg-[#05080d]/90 dark:shadow-[0_10px_40px_rgba(0,0,0,0.4)]"
                   : "border-black/[0.08] bg-white/60 hover:border-black/[0.16] dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:border-white/[0.16]"
@@ -178,7 +178,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
           );
         })}
 
-        <div className="flex-none w-[280px] snap-center rounded-[1.5rem] border border-dashed border-signal-500/25 bg-gradient-to-br from-signal-500/[0.08] via-white/70 to-emerald-500/[0.06] p-4 dark:border-signal-500/20 dark:from-signal-500/[0.12] dark:via-[#05080d]/92 dark:to-emerald-500/[0.08] lg:w-[calc(20%-0.6rem)]">
+        <div className="flex-none w-[280px] snap-center rounded-[1.5rem] border border-dashed border-signal-500/25 bg-gradient-to-br from-signal-500/[0.08] via-white/70 to-emerald-500/[0.06] p-4 dark:border-signal-500/20 dark:from-signal-500/[0.12] dark:via-[#05080d]/92 dark:to-emerald-500/[0.08]">
           <div className="mb-3 flex items-center justify-between gap-3">
             <span className="truncate text-sm font-semibold text-slate-900 dark:text-white">
               Launch Container

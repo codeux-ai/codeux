@@ -49,7 +49,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
   if (!session) {
     return (
       <div className="overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/70 shadow-[0_30px_80px_rgba(15,23,42,0.08)] dark:border-white/[0.06] dark:bg-[#05080d]/90 dark:shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
-        <div className="relative h-[calc(100vh-23rem)] min-h-[540px] bg-[#f6f8fb] dark:bg-[#04070b]">
+        <div className="relative h-[calc(100vh-16rem)] min-h-[400px] sm:h-[calc(100vh-23rem)] sm:min-h-[540px] bg-[#f6f8fb] dark:bg-[#04070b]">
           <div className="flex h-full flex-col items-center justify-center px-8 text-center">
             <Compass className="h-12 w-12 text-slate-300 dark:text-slate-600" strokeWidth={1.5} />
             <h2 className="mt-4 text-xl font-semibold text-slate-800 dark:text-slate-100">No preview active</h2>
@@ -98,7 +98,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
       {/* Closed state presentation */}
       {isClosed && !isFullscreen && !isMinimized && (
         <div className="overflow-hidden rounded-[2rem] border border-black/[0.06] bg-white/70 shadow-[0_30px_80px_rgba(15,23,42,0.08)] dark:border-white/[0.06] dark:bg-[#05080d]/90 dark:shadow-[0_30px_80px_rgba(0,0,0,0.35)] mb-5">
-          <div className="relative h-[calc(100vh-23rem)] min-h-[540px] bg-[#f6f8fb] dark:bg-[#04070b] flex flex-col items-center justify-center px-8 text-center">
+          <div className="relative h-[calc(100vh-16rem)] min-h-[400px] sm:h-[calc(100vh-23rem)] sm:min-h-[540px] bg-[#f6f8fb] dark:bg-[#04070b] flex flex-col items-center justify-center px-8 text-center">
             <div className="h-12 w-12 rounded-full border border-black/[0.08] flex items-center justify-center mb-4 dark:border-white/[0.08]">
               <X className="h-5 w-5 text-slate-400" strokeWidth={2} />
             </div>
@@ -160,33 +160,35 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
             {session.status}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={onNavigateBack}
-            disabled={!navigationEnabled}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
-          >
-            <ChevronLeft className="h-4 w-4" strokeWidth={2.2} />
-          </button>
-          <button
-            type="button"
-            onClick={onNavigateForward}
-            disabled={!navigationEnabled}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
-          >
-            <ChevronRight className="h-4 w-4" strokeWidth={2.2} />
-          </button>
-          <button
-            type="button"
-            onClick={onReload}
-            disabled={!navigationEnabled}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
-          >
-            <RefreshCw className="h-4 w-4" strokeWidth={2.2} />
-          </button>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onNavigateBack}
+              disabled={!navigationEnabled}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+            >
+              <ChevronLeft className="h-4 w-4" strokeWidth={2.2} />
+            </button>
+            <button
+              type="button"
+              onClick={onNavigateForward}
+              disabled={!navigationEnabled}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+            >
+              <ChevronRight className="h-4 w-4" strokeWidth={2.2} />
+            </button>
+            <button
+              type="button"
+              onClick={onReload}
+              disabled={!navigationEnabled}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-black/[0.08] text-slate-600 transition hover:border-black/[0.16] hover:text-slate-900 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-white"
+            >
+              <RefreshCw className="h-4 w-4" strokeWidth={2.2} />
+            </button>
+          </div>
           <form
-            className="flex min-w-[240px] flex-1 items-center"
+            className="flex min-w-[140px] sm:min-w-[240px] flex-1 items-center"
             onSubmit={(event) => {
               event.preventDefault();
               onAddressSubmit(addressValue);
@@ -205,7 +207,7 @@ export const PreviewWindowChrome: FunctionComponent<PreviewWindowChromeProps> = 
         className={
           isFullscreen
             ? "flex-1 bg-[#f6f8fb] dark:bg-[#04070b]"
-            : "relative h-[calc(100vh-23rem)] min-h-[540px] bg-[#f6f8fb] dark:bg-[#04070b]"
+            : "relative h-[calc(100vh-16rem)] min-h-[400px] sm:h-[calc(100vh-23rem)] sm:min-h-[540px] bg-[#f6f8fb] dark:bg-[#04070b]"
         }
       >
         {children}
