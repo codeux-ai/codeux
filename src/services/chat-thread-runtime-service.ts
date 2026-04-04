@@ -212,7 +212,7 @@ export class ChatThreadRuntimeService {
 
   async postMessage(projectId: string, input: CreateDashboardConversationMessageInput): Promise<ConversationMessageRecord> {
     const userMessage = this.deps.connectionChatRepository.postDashboardMessage(projectId, input);
-    const thread = this.deps.connectionChatRepository.listThreads(projectId).find(t => t.id === userMessage.threadId);
+    const thread = this.deps.connectionChatRepository.getThread(userMessage.threadId);
     if (!thread) throw new Error("Thread not found");
 
     const project = this.deps.projectManagementRepository.getProject(projectId);

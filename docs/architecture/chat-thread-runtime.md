@@ -62,7 +62,7 @@ To prevent scanning entire thread collections or loading full message arrays int
 - `getThread` accesses a single thread state immediately (e.g. for single-thread reload scenarios).
 - `getFirstReplyAfterMessage` queries exactly one row representing the chronologically first reply after a specific message.
 
-These precise reads are separated into read-query helper modules (`conversation-thread-query.ts`, `conversation-message-query.ts`, `conversation-query-utils.ts`), which keeps repository files clean and side-effect free.
+These precise reads are separated into read-query helper modules (`conversation-thread-query.ts`, `conversation-message-query.ts`, `conversation-query-utils.ts`), which keeps repository files clean and side-effect free. These methods are now actively utilized by the ChatThreadRuntimeService and PlanningAgentService to eliminate full-collection rescans.
 
 ### Performance and Metrics Aggregation
 

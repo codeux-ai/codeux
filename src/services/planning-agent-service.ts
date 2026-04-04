@@ -382,12 +382,11 @@ export class PlanningAgentService {
     try {
       const reply = await waitUntil<{ bodyMarkdown: string } | undefined>({
         action: async () => {
-          return this.deps.connectionChatRepository
-            .listMessages(threadId)
-            .find((message) => (
-              message.direction === "connection_to_dashboard"
-              && new Date(message.createdAt).getTime() >= new Date(sentMessage.createdAt).getTime()
-            ));
+          const message = this.deps.connectionChatRepository.getFirstReplyAfterMessage(threadId, sentMessage.id);
+          if (message && message.direction === "connection_to_dashboard") {
+            return message;
+          }
+          return undefined;
         },
         predicate: (result) => result !== undefined,
         intervalMs: 1000,
