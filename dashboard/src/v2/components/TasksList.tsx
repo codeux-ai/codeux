@@ -5,6 +5,7 @@ import { TaskRow } from "./ui/TaskRow.js";
 import { FilterStrip } from "./ui/FilterStrip.js";
 import { SkeletonRow } from "./ui/ListSkeletons.js";
 import { deriveActiveSprintIds, filterTasksToActiveSprints } from "../lib/overview-streams.js";
+import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 type TaskFilter = "All Tasks" | "Running" | "Queued" | "Completed";
 
 const FILTER_OPTIONS = ["All Tasks", "Running", "Queued", "Completed"] as const;
@@ -12,17 +13,22 @@ const FILTER_OPTIONS = ["All Tasks", "Running", "Queued", "Completed"] as const;
 export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("../hooks/use-overview-page-data.js").useOverviewPageData> }> = ({ pageData }) => {
     const listRef = useRef<HTMLDivElement>(null);
     const [activeFilter, setActiveFilter] = useState<TaskFilter>("All Tasks");
+    const reducedMotion = useReducedMotion();
     const { sprints, tasks, isLoading } = pageData;
 
     useLayoutEffect(() => {
         if (listRef.current) {
-            gsap.fromTo(
-                listRef.current.children,
-                { y: 30, opacity: 0, scale: 0.99 },
-                { y: 0, opacity: 1, scale: 1, duration: 0.7, stagger: 0.04, ease: "power3.out", delay: 0.1 }
-            );
+            if (reducedMotion) {
+                gsap.set(listRef.current.children, { y: 0, opacity: 1, scale: 1 });
+            } else {
+                gsap.fromTo(
+                    listRef.current.children,
+                    { y: 15, opacity: 0, scale: 0.99 },
+                    { y: 0, opacity: 1, scale: 1, duration: 0.25, stagger: 0.04, ease: "power2.out", delay: 0.05 }
+                );
+            }
         }
-    }, [activeFilter]);
+    }, [activeFilter, reducedMotion]);
 
     const activeSprintIds = useMemo(() => deriveActiveSprintIds(sprints), [sprints]);
     const activeTasks = useMemo(() => filterTasksToActiveSprints(tasks, activeSprintIds), [tasks, activeSprintIds]);
@@ -42,7 +48,13 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                 <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
                     <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900 dark:text-white font-display">Active Streams</h2>
                     <div className="w-full sm:w-auto">
-                        <FilterStrip options={FILTER_OPTIONS} active={activeFilter} onChange={setActiveFilter} />
+                        <FilterStrip
+                            options={FILTER_OPTIONS}
+                            active={activeFilter}
+                            onChange={setActiveFilter}
+                            showClear={activeFilter !== "All Tasks"}
+                            onClear={() => setActiveFilter("All Tasks")}
+                        />
                     </div>
                 </div>
                 <div className="text-xs font-semibold text-slate-400 dark:text-slate-600 font-mono hidden sm:block">
@@ -66,7 +78,10 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                     ))
                 ) : (
                     <div className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
-                        <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">No active tasks</div>
+                        <svg className="w-12 h-12 mb-4 text-slate-300 dark:text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                        </svg>
+                        <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">No Results Found</div>
                         <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">There are no tasks currently matching the selected filter in active sprints.</div>
                     </div>
                 )}
