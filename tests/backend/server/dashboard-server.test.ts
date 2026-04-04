@@ -250,6 +250,8 @@ describe("setupDashboardServer", () => {
       cancelSprintRun: async () => ({ ok: true }),
       cancelTaskDispatch: async () => ({ ok: true }),
       retryTaskDispatch: async () => ({ ok: true }),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
     });
     serversToClose.push(handle.server);
 
@@ -350,6 +352,8 @@ describe("setupDashboardServer", () => {
       cancelSprintRun: async () => ({ ok: true }),
       cancelTaskDispatch: async () => ({ ok: true }),
       retryTaskDispatch: async () => ({ ok: true }),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
     });
 
     serversToClose.push(handle.server);
@@ -429,6 +433,8 @@ describe("setupDashboardServer", () => {
       cancelSprintRun: async () => ({ ok: true }),
       cancelTaskDispatch: async () => ({ ok: true }),
       retryTaskDispatch: async () => ({ ok: true }),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
       getSprintPreviewSession: async (sessionId) => sessionId === "test-session" || sessionId === "test-session-hosted"
         ? {
           id: sessionId,
@@ -578,6 +584,8 @@ describe("setupDashboardServer", () => {
       cancelSprintRun: async () => ({ ok: true }),
       cancelTaskDispatch: async () => ({ ok: true }),
       retryTaskDispatch: async () => ({ ok: true }),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
       getSprintPreviewSession: async (sessionId) => sessionId === "test-session"
         ? {
           id: sessionId,
@@ -687,6 +695,8 @@ describe("setupDashboardServer", () => {
       cancelSprintRun: async () => ({ ok: true }),
       cancelTaskDispatch: async () => ({ ok: true }),
       retryTaskDispatch: async () => ({ ok: true }),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
       getSprintPreviewSession: async (sessionId) => sessionId === "test-session"
         ? {
           id: sessionId,
@@ -829,6 +839,8 @@ describe("setupDashboardServer", () => {
       cancelSprintRun: async () => ({ ok: true }),
       cancelTaskDispatch: async () => ({ ok: true }),
       retryTaskDispatch: async () => ({ ok: true }),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
       removeSprintPreviewSession: async (sessionId: string) => {
         removedSessionId = sessionId;
       },
@@ -886,6 +898,8 @@ describe("setupDashboardServer", () => {
       cancelSprintRun: async () => ({ ok: true }),
       cancelTaskDispatch: async () => ({ ok: true }),
       retryTaskDispatch: async () => ({ ok: true }),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
       isReady: () => probeResponse,
       isHealthy: () => healthResponseData,
     });
@@ -975,6 +989,8 @@ describe("setupDashboardServer", () => {
         cancelSprintRun: async () => ({ ok: true }),
         cancelTaskDispatch: async () => ({ ok: true }),
         retryTaskDispatch: async () => ({ ok: true }),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
       });
 
       serversToClose.push(handle.server);
@@ -1020,6 +1036,8 @@ describe("setupDashboardServer", () => {
       cancelSprintRun: async () => ({ ok: true }),
       cancelTaskDispatch: async () => ({ ok: true }),
       retryTaskDispatch: async () => ({ ok: true }),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
       isReady: () => probeResponse,
     });
     serversToClose.push(handle.server);
@@ -1101,6 +1119,8 @@ describe("setupDashboardServer", () => {
       cancelSprintRun: async () => ({ ok: true }),
       cancelTaskDispatch: async () => ({ ok: true }),
       retryTaskDispatch: async () => ({ ok: true }),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
     });
     serversToClose.push(handle.server);
 
@@ -1150,6 +1170,8 @@ describe("setupDashboardServer", () => {
       cancelSprintRun: async () => ({ ok: true }),
       cancelTaskDispatch: async () => ({ ok: true }),
       retryTaskDispatch: async () => ({ ok: true }),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
     });
     serversToClose.push(handle.server);
 
@@ -1224,6 +1246,8 @@ describe("setupDashboardServer", () => {
       cancelSprintRun: async () => ({ ok: true }),
       cancelTaskDispatch: async () => ({ ok: true }),
       retryTaskDispatch: async () => ({ ok: true }),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
     });
     serversToClose.push(handle.server);
 
@@ -1337,6 +1361,8 @@ describe("setupDashboardServer", () => {
       cancelTaskDispatch: async () => ({ ok: true }),
       forceCancelTaskDispatch: async () => ({ ok: true }),
       retryTaskDispatch: async () => ({ ok: true }),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
       realtimeService,
     });
     serversToClose.push(handle.server);
@@ -1453,6 +1479,8 @@ describe("setupDashboardServer", () => {
       cancelTaskDispatch: async () => ({ ok: true }),
       forceCancelTaskDispatch: async () => ({ ok: true }),
       retryTaskDispatch: async () => ({ ok: true }),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
       realtimeService,
     });
     serversToClose.push(handle.server);
@@ -1550,6 +1578,8 @@ describe("setupDashboardServer", () => {
       cancelTaskDispatch: async () => ({ ok: true }),
       forceCancelTaskDispatch: async () => ({ ok: true }),
       retryTaskDispatch: async () => ({ ok: true }),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
       realtimeService,
     });
     serversToClose.push(handle.server);

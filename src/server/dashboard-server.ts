@@ -81,6 +81,8 @@ import { createLogger, type Logger } from "../shared/logging/logger.js";
 import { registerProjectRoutes } from "./project-routes.js";
 import { registerSprintRoutes } from "./sprint-routes.js";
 import { registerTaskRoutes } from "./task-routes.js";
+import { registerConversationRoutes } from "./conversation-routes.js";
+import { registerPlanningRoutes } from "./planning-routes.js";
 
 import { bootDashboardRealtimeWebSocketServer } from "./dashboard-realtime-websocket-server.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
@@ -1219,7 +1221,8 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   registerProjectRoutes(app, deps);
   registerSprintRoutes(app, deps);
   registerTaskRoutes(app, deps);
-
+  registerConversationRoutes(app, deps);
+  registerPlanningRoutes(app, deps);
 
   app.get("/api/projects/:projectId/connections", syncRoute((req, res) => {
     res.json(options.listConnections(requireTrimmedString(req.params.projectId, "projectId")));
@@ -1268,60 +1271,6 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
 
   app.get("/api/execution/invocations/:invocationId/messages", syncRoute((req, res) => {
     res.json(options.listInvocationMessages(requireTrimmedString(req.params.invocationId, "invocationId")));
-  }));
-
-  app.get("/api/projects/:projectId/conversations/threads", syncRoute((req, res) => {
-    res.json(options.listConversationThreads(requireTrimmedString(req.params.projectId, "projectId")));
-  }));
-
-  app.post("/api/projects/:projectId/conversations/threads", syncRoute((req, res) => {
-    res.status(201).json(
-      options.createConversationThread(requireTrimmedString(req.params.projectId, "projectId"), req.body as CreateConversationThreadInput)
-    );
-  }));
-
-  app.patch("/api/conversations/threads/:threadId", syncRoute((req, res) => {
-    res.json(options.updateConversationThread(requireTrimmedString(req.params.threadId, "threadId"), req.body as UpdateConversationThreadInput));
-  }));
-
-  app.put("/api/conversations/threads/:threadId/route", syncRoute((req, res) => {
-    if (!options.updateThreadRoute) {
-      res.status(404).json({ error: "Thread routing is not enabled." });
-      return;
-    }
-    const input = {
-      routeKind: req.body?.routeKind as "worker" | "virtual",
-      virtualProvider: typeof req.body?.virtualProvider === "string" ? req.body.virtualProvider.trim() : undefined,
-      virtualModel: typeof req.body?.virtualModel === "string" ? req.body.virtualModel.trim() : undefined,
-      workerEndpointId: typeof req.body?.workerEndpointId === "string" ? req.body.workerEndpointId.trim() : undefined,
-    };
-    if (input.routeKind !== "worker" && input.routeKind !== "virtual") {
-      throw new Error("Invalid routeKind. Must be 'worker' or 'virtual'.");
-    }
-    res.json(options.updateThreadRoute(requireTrimmedString(req.params.threadId, "threadId"), input));
-  }));
-
-  app.post("/api/conversations/threads/:threadId/compact", asyncRoute(async (req, res) => {
-    if (!options.compactThreadSession) {
-      res.status(404).json({ error: "Thread compaction is not enabled." });
-      return;
-    }
-    res.json(await options.compactThreadSession(requireTrimmedString(req.params.threadId, "threadId")));
-  }));
-
-  app.delete("/api/conversations/threads/:threadId", syncRoute((req, res) => {
-    options.deleteConversationThread(requireTrimmedString(req.params.threadId, "threadId"));
-    res.json({ ok: true });
-  }));
-
-  app.get("/api/conversations/threads/:threadId/messages", syncRoute((req, res) => {
-    res.json(options.listConversationMessages(requireTrimmedString(req.params.threadId, "threadId")));
-  }));
-
-  app.post("/api/projects/:projectId/conversations/messages", syncRoute((req, res) => {
-    res.status(201).json(
-      options.postConversationMessage(requireTrimmedString(req.params.projectId, "projectId"), req.body as CreateDashboardConversationMessageInput)
-    );
   }));
 
   app.get("/api/settings/import-sources", syncRoute((req, res) => {
@@ -1420,41 +1369,6 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     }
     const sprint = await options.quicksprintService.executeQuicksprint(projectId, req.body as QuicksprintExecutionInput);
     res.status(201).json(sprint);
-  }));
-
-  app.post("/api/projects/:projectId/planning/improve-sprint-prompt", asyncRoute(async (req, res) => {
-    if (!improveSprintPrompt) {
-      res.status(404).json({ error: "Sprint prompt improvement is not enabled." });
-      return;
-    }
-    const ac = new AbortController();
-    res.on("close", () => { if (!res.writableFinished) ac.abort(); });
-    const projectId = requireTrimmedString(req.params.projectId, "projectId");
-    const input: ImprovePromptInput = {
-      name: typeof req.body?.name === "string" ? req.body.name.trim() : "",
-      goal: typeof req.body?.goal === "string" ? req.body.goal : "",
-      planningAgentPresetId: typeof req.body?.planningAgentPresetId === "string" ? req.body.planningAgentPresetId.trim() : undefined,
-      overrides: req.body?.overrides,
-    };
-    res.status(202).json(await improveSprintPrompt(projectId, input, ac.signal));
-  }));
-
-  app.post("/api/projects/:projectId/sprints/:sprintId/plan", asyncRoute(async (req, res) => {
-    if (!planSprint) {
-      res.status(404).json({ error: "Sprint planning is not enabled." });
-      return;
-    }
-    const ac = new AbortController();
-    res.on("close", () => { if (!res.writableFinished) ac.abort(); });
-    const projectId = requireTrimmedString(req.params.projectId, "projectId");
-    const sprintId = requireTrimmedString(req.params.sprintId, "sprintId");
-    const options: PlanSprintOptions = {
-      autoStart: Boolean(req.body?.autoStart),
-      replan: Boolean(req.body?.replan),
-      planningAgentPresetId: typeof req.body?.planningAgentPresetId === "string" ? req.body.planningAgentPresetId.trim() : undefined,
-      overrides: req.body?.overrides,
-    };
-    res.status(202).json(await planSprint(projectId, sprintId, options, ac.signal));
   }));
 
   app.post("/api/sprint-runs/:sprintRunId/pause", asyncRoute(async (req, res) => {

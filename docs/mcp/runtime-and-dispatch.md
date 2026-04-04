@@ -11,6 +11,7 @@ Startup sequence:
 3. `src/server/jules-agent-server.ts` constructs repositories/services/handlers/orchestrator.
 4. `src/server/jules-agent-server.ts` registers MCP request handlers.
 5. `src/server/jules-agent-server.ts` starts dashboard server.
+   - Dashboard API routes (such as project, sprint, task, conversation, and planning endpoints) are broken out into modular route files for maintainability.
 6. `src/server/jules-agent-server.ts` connects MCP stdio transport.
 7. `src/server/jules-agent-server.ts` optionally starts the MCP HTTP worker gateway.
 

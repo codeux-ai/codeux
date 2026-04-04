@@ -166,6 +166,8 @@ describe("Dashboard Chat API", () => {
       retryTaskDispatch: async () => ({}),
       updateThreadRoute: (threadId, input) => chatThreadRuntimeService.updateThreadRoute(threadId, input),
       compactThreadSession: (threadId) => chatThreadRuntimeService.compactThreadSession(threadId),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
     });
     serversToClose.push(handle.server);
     const baseUrl = `http://127.0.0.1:${handle.port}`;
@@ -303,6 +305,8 @@ describe("Dashboard Chat API", () => {
       retryTaskDispatch: async () => ({}),
       updateThreadRoute: (threadId, input) => chatThreadRuntimeService.updateThreadRoute(threadId, input),
       compactThreadSession: (threadId) => chatThreadRuntimeService.compactThreadSession(threadId),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
     });
     serversToClose.push(handle.server);
     const baseUrl = `http://127.0.0.1:${handle.port}`;
@@ -403,6 +407,8 @@ describe("Dashboard Chat API", () => {
       retryTaskDispatch: async () => ({}),
       updateThreadRoute: () => { throw new Error("Should not be called"); },
       compactThreadSession: () => ({} as any),
+      improveSprintPrompt: async () => ({ ok: true }),
+      planSprint: async () => ({ ok: true }),
     });
     serversToClose.push(handle.server);
     const baseUrl = `http://127.0.0.1:${handle.port}`;
