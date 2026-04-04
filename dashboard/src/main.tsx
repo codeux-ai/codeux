@@ -31,7 +31,14 @@ const BrowserPage   = lazy(() => import("./v2/BrowserPage.js").then(m => ({ defa
 // 1. Root layout route
 const rootRoute = createRootRoute({
   component: () => {
-    const [isDark, setIsDark] = useState(true);
+    const [isDark, setIsDark] = useState(() => {
+      try {
+        const stored = window.localStorage.getItem('sprintos-theme');
+        return stored !== 'light';
+      } catch (e) {
+        return true;
+      }
+    });
 
     useEffect(() => {
       const root = window.document.documentElement;
@@ -42,7 +49,17 @@ const rootRoute = createRootRoute({
       document.body.style.background = bg;
     }, [isDark]);
 
-    const toggleTheme = () => setIsDark(!isDark);
+    const toggleTheme = () => {
+      setIsDark((prev) => {
+        const newIsDark = !prev;
+        try {
+          window.localStorage.setItem('sprintos-theme', newIsDark ? 'dark' : 'light');
+        } catch (e) {
+          // Ignore
+        }
+        return newIsDark;
+      });
+    };
 
     return (
       <ProjectDataProvider>
