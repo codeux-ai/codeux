@@ -59,25 +59,28 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
       {filteredCategories.map((category) => {
         const isActive = activeCategory === category.id;
         const isDanger = category.danger;
+        const isSearchMatch = Boolean(normalizedSearch && (CATEGORY_SEARCH_HINTS[category.id]?.some(hint => hint.includes(normalizedSearch)) || category.label.toLowerCase().includes(normalizedSearch) || category.description.toLowerCase().includes(normalizedSearch)));
 
         return (
           <button
             key={category.id}
             type="button"
             onClick={() => onSwitchCategory(category.id)}
-            className={`group relative flex w-full items-center gap-3.5 rounded-[1.1rem] px-4 py-3.5 text-left transition-colors duration-200 ${
+            className={`group relative flex w-full items-center gap-3.5 rounded-[1.1rem] px-4 py-3.5 text-left transition-colors duration-200 focus:outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${isDanger ? "focus-visible:outline-status-red" : "focus-visible:outline-signal-500"} ${
               isActive
                 ? isDanger
                   ? "bg-status-red/[0.07] dark:bg-status-red/[0.08]"
                   : "bg-signal-500/[0.08] dark:bg-signal-500/[0.1]"
                 : "hover:bg-black/[0.04] dark:hover:bg-white/[0.04]"
+            } ${
+              isSearchMatch && !isActive ? (isDanger ? "ring-1 ring-status-red/30 bg-status-red/[0.03] dark:ring-status-red/40 dark:bg-status-red/[0.04]" : "ring-1 ring-signal-500/30 bg-signal-500/[0.03] dark:ring-signal-500/40 dark:bg-signal-500/[0.04]") : ""
             }`}
           >
             {isActive ? (
-              <div className={`absolute left-0 top-3 bottom-3 w-[2.5px] rounded-full ${isDanger ? "bg-status-red" : "bg-signal-500"}`} />
+              <div className={`absolute left-0 top-3 bottom-3 w-[3px] rounded-r-full ${isDanger ? "bg-status-red" : "bg-signal-500 dark:bg-signal-400"}`} />
             ) : null}
 
-            <span className="w-5 shrink-0 text-right font-mono text-[9px] font-bold text-slate-300 dark:text-slate-600">
+            <span className={`w-5 shrink-0 text-right font-mono text-[9px] font-bold transition-colors duration-200 ${isActive ? (isDanger ? "text-status-red/60" : "text-signal-600/60 dark:text-signal-400/60") : "text-slate-300 dark:text-slate-600"}`}>
               {category.num}
             </span>
 
@@ -86,7 +89,7 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
                 isActive
                   ? isDanger
                     ? "text-status-red"
-                    : "text-signal-500"
+                    : "text-signal-600 dark:text-signal-400"
                   : "text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300"
               }`}
               strokeWidth={1.75}
@@ -97,13 +100,13 @@ export const SettingsCategoryRail: FunctionComponent<SettingsCategoryRailProps> 
                 isActive
                   ? isDanger
                     ? "text-status-red"
-                    : "text-signal-600 dark:text-signal-400"
-                  : "text-slate-700 dark:text-slate-300"
+                    : "text-signal-700 dark:text-signal-300"
+                  : "text-slate-700 group-hover:text-slate-900 dark:text-slate-300 dark:group-hover:text-slate-100"
               }`}
               >
                 {category.label}
               </div>
-              <div className="mt-0.5 truncate text-[10px] font-medium leading-tight text-slate-400 dark:text-slate-600">
+              <div className={`mt-0.5 truncate text-[10px] font-medium leading-tight transition-colors duration-200 ${isActive ? (isDanger ? "text-status-red/70" : "text-signal-700/70 dark:text-signal-300/70") : "text-slate-400 group-hover:text-slate-500 dark:text-slate-500 dark:group-hover:text-slate-400"}`}>
                 {category.description}
               </div>
             </div>
