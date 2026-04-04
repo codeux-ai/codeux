@@ -19,11 +19,11 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
   }
 
   return (
-    <div className="flex items-center gap-3 border-b border-signal-500/20 bg-signal-500/10 px-6 py-3 dark:bg-signal-500/10">
-      <span className="text-xs font-bold text-signal-600 dark:text-signal-300">
+    <div className="flex flex-wrap items-center gap-3 border-b border-signal-500/20 bg-signal-500/10 px-6 py-3 dark:bg-signal-500/10">
+      <span className="text-xs font-bold text-signal-600 dark:text-signal-300 whitespace-nowrap">
         {selectedCount} selected
       </span>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={onBulkStart}
