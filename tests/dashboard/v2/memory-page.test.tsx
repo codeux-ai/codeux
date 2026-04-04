@@ -1,4 +1,8 @@
+/** @vitest-environment jsdom */
+/** @jsx h */
 import { h } from "preact";
+// @ts-ignore
+globalThis.React = { createElement: h };
 import { h } from "preact";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act, waitFor } from "@testing-library/preact";
