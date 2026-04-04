@@ -5,6 +5,7 @@ import { Bot, Plus, Target, X, Save, AlertCircle } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
 import { useTaskComposerState, type TaskDraft } from "../../lib/task-composer-state.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 interface TaskComposerProps {
   sprints: Sprint[];
@@ -41,15 +42,15 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
   useLayoutEffect(() => {
     const ctx = gsap.context(() => {
       const timeline = gsap.timeline();
-      const d_card = reducedMotion ? 0 : 0.72;
-      const d_fields = reducedMotion ? 0 : 0.5;
+      const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
+      const d_fields = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
       const d_stagger = reducedMotion ? 0 : 0.055;
 
       if (cardRef.current) {
         timeline.fromTo(
           cardRef.current,
-          { y: reducedMotion ? 0 : 28, opacity: 0, scale: reducedMotion ? 1 : 0.985, filter: reducedMotion ? "blur(0px)" : "blur(14px)" },
-          { y: 0, opacity: 1, scale: 1, filter: "blur(0px)", duration: d_card, ease: "power4.out" },
+          { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
+          { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: MODAL_MOTION.entry.ease },
         );
       }
 

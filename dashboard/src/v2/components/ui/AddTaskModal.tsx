@@ -5,6 +5,7 @@ import { X, ListChecks, Target, Bot, Plus, AlertCircle } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 interface TaskDraft {
   sprintId: string;
@@ -69,16 +70,19 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   }, [sprintId, title]);
 
   useLayoutEffect(() => {
-    const d_backdrop = reducedMotion ? 0 : 0.3;
-    const d_card = reducedMotion ? 0 : 0.45;
-    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: "power2.out" });
-    gsap.fromTo(cardRef.current, { y: reducedMotion ? 0 : 40, opacity: 0, scale: reducedMotion ? 1 : 0.96 }, { y: 0, opacity: 1, scale: 1, duration: d_card, ease: "power4.out" });
+    const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.backdrop.duration;
+    const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
+    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
+    gsap.fromTo(cardRef.current,
+      { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
+      { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: MODAL_MOTION.entry.ease }
+    );
   }, [reducedMotion]);
 
   const handleClose = () => {
     if (isSubmitting) return;
-    const d = reducedMotion ? 0 : 0.25;
-    gsap.to(cardRef.current, { y: 24, opacity: 0, scale: 0.96, duration: d, ease: "power3.in" });
+    const d = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
+    gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration: d, ease: MODAL_MOTION.exit.ease });
     gsap.to(backdropRef.current, { opacity: 0, duration: d, delay: reducedMotion ? 0 : 0.05, onComplete: onClose });
   };
 
