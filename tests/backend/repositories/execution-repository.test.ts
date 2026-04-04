@@ -1294,7 +1294,7 @@ describe("ExecutionRepository", () => {
     const recentStartedAt = new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString();
     const recentFinishedAt = new Date(now - 2 * 24 * 60 * 60 * 1000 + 240_000).toISOString();
 
-    executionRepository.createTaskRun({
+    const run = executionRepository.createTaskRun({
       projectId: project.id,
       sprintId: sprint.id,
       taskId: task.id,
@@ -1316,9 +1316,18 @@ describe("ExecutionRepository", () => {
       provider: "claude-code",
       state: "completed",
       sessionId: "windowed-task-run-2",
+      prUrl: "https://github.com/org/repo/pull/1",
       startedAt: recentStartedAt,
       finishedAt: recentFinishedAt,
       durationMs: 240_000,
+    });
+
+    executionRepository.appendTaskRunEvent(run.id, "cli_git_pushed", "system", {
+      insertions: 42,
+      deletions: 12,
+      filesChanged: 3
+    }, {
+      createdAt: recentFinishedAt,
     });
 
     const olderInvocation = executionRepository.createProviderInvocationUsage({
