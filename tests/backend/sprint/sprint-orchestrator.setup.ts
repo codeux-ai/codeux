@@ -65,6 +65,7 @@ export const buildDeps = () => {
     listSessions,
     projectManagementRepository: {
       updateTask: vi.fn(),
+      getTasksByIds: vi.fn().mockReturnValue([]),
     },
     executionRepository: {
       acquireLease: vi.fn().mockReturnValue({ leaseToken: "lease-1" }),
