@@ -859,4 +859,88 @@ describe("ConnectionChatRepository", () => {
       const messages = connectionRepository.listMessages(thread.id);
       expect(messages[0].metadata).toEqual(messageMetadata);
     });
+
+  describe("Repository single entity operations", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-03-10T00:00:00.000Z"));
+    });
+    it("retrieves a single thread accurately with its state and metrics", async () => {
+      const { projectRepository, connectionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Test Project",
+        sourceType: "local",
+        sourceRef: "/tmp/test",
+      });
+
+      const thread = connectionRepository.createThread(project.id, { title: "Retrieve Me", runtimeState: { routeKind: "virtual" } });
+      connectionRepository.postDashboardMessage(project.id, { threadId: thread.id, bodyMarkdown: "First" });
+      connectionRepository.postSystemMessage(project.id, { threadId: thread.id, bodyMarkdown: "Second" });
+
+      const retrieved = connectionRepository.getThread(thread.id);
+      expect(retrieved.id).toBe(thread.id);
+      expect(retrieved.title).toBe("Retrieve Me");
+      expect(retrieved.messageCount).toBe(2);
+      expect(retrieved.runtimeState).toEqual({ routeKind: "virtual" });
+    });
+
+    it("retrieves ordered messages and respects hidden filter", async () => {
+      const { projectRepository, connectionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Test Project",
+        sourceType: "local",
+        sourceRef: "/tmp/test",
+      });
+
+      const thread = connectionRepository.createThread(project.id, { title: "Message Test Thread" });
+      connectionRepository.postDashboardMessage(project.id, { threadId: thread.id, bodyMarkdown: "Visible 1" });
+      vi.advanceTimersByTime(1000);
+      connectionRepository.postSystemMessage(project.id, { threadId: thread.id, bodyMarkdown: "Hidden 2", metadata: { internalVisibility: "hidden" } });
+      vi.advanceTimersByTime(1000);
+      connectionRepository.postSystemMessage(project.id, { threadId: thread.id, bodyMarkdown: "Visible 3" });
+      vi.advanceTimersByTime(1000);
+
+      const visibleMessages = connectionRepository.listMessages(thread.id);
+      expect(visibleMessages).toHaveLength(2);
+      expect(visibleMessages[0].bodyMarkdown).toBe("Visible 1");
+      expect(visibleMessages[1].bodyMarkdown).toBe("Visible 3");
+
+      const allMessages = connectionRepository.listMessages(thread.id, { includeHidden: true });
+      expect(allMessages).toHaveLength(3);
+      expect(allMessages[1].bodyMarkdown).toBe("Hidden 2");
+    });
+
+    it("returns the first reply after a specific message id", async () => {
+      const { projectRepository, connectionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Test Project",
+        sourceType: "local",
+        sourceRef: "/tmp/test",
+      });
+
+      const thread = connectionRepository.createThread(project.id, { title: "Reply Thread" });
+      const msg1 = connectionRepository.postDashboardMessage(project.id, { threadId: thread.id, bodyMarkdown: "First message" });
+      vi.advanceTimersByTime(1000);
+      const msg2 = connectionRepository.postSystemMessage(project.id, { threadId: thread.id, bodyMarkdown: "Hidden reply", metadata: { internalVisibility: "hidden" } });
+      vi.advanceTimersByTime(1000);
+      const msg3 = connectionRepository.postSystemMessage(project.id, { threadId: thread.id, bodyMarkdown: "Visible reply 1" });
+      vi.advanceTimersByTime(1000);
+      const msg4 = connectionRepository.postDashboardMessage(project.id, { threadId: thread.id, bodyMarkdown: "Another message" });
+
+      // Default (ignore hidden)
+      const visibleReply = connectionRepository.getFirstReplyAfterMessage(thread.id, msg1.id);
+      expect(visibleReply).not.toBeNull();
+      expect(visibleReply!.id).toBe(msg3.id);
+
+      // Include hidden
+      const allReply = connectionRepository.getFirstReplyAfterMessage(thread.id, msg1.id, { includeHidden: true });
+      expect(allReply).not.toBeNull();
+      expect(allReply!.id).toBe(msg2.id);
+
+      // No reply
+      const noReply = connectionRepository.getFirstReplyAfterMessage(thread.id, msg4.id);
+      expect(noReply).toBeNull();
+    });
   });
+
+});
