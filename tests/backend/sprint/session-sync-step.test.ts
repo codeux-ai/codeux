@@ -15,6 +15,135 @@ afterEach(async () => {
 });
 
 describe("runSessionSyncStep", () => {
+
+  it("fetches full transcript and syncs usage and git metrics on terminal session state without duplication", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-session-sync-metrics-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Session Sync Metrics",
+      sourceType: "local",
+      sourceRef: "/tmp/my-repo",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 7",
+      number: 7,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Sync metrics",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "jules",
+      status: "running",
+      startedAt: "2026-03-09T10:00:00.000Z",
+    });
+    const run = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "jules",
+      state: "RUNNING",
+      startedAt: "2026-03-09T10:00:00.000Z",
+    });
+
+    const subtasks: Subtask[] = [
+      {
+        id: task.taskKey,
+        record_id: task.id,
+        project_id: project.id,
+        title: task.title,
+        prompt: task.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "RUNNING",
+      },
+    ];
+
+    const deps = {
+      listSessions: vi.fn().mockResolvedValue({
+        sessions: [
+          {
+            id: "sync-metrics-session",
+            name: "sessions/sync-metrics-session",
+            title: "Sprint 7: [run:my-repo/s7/t01] [t01] Sync metrics",
+            state: "COMPLETED",
+            provider: "jules",
+            outputs: [{ pullRequest: { url: "https://example.com/pr/1", workerBranch: "feature/metrics", filesChanged: 3, insertions: 10, deletions: 2 } }],
+          },
+        ],
+      }),
+      resolveSessionName: (session: any) => session.name,
+      extractSessionId: (session: any) => session.id,
+      fetchRecentActivities: vi.fn().mockResolvedValue([]),
+      getSession: vi.fn().mockResolvedValue({
+        id: "sync-metrics-session",
+        prompt: "Fix the bug", // 11 chars -> 3 tokens
+      }),
+      listAllActivities: vi.fn().mockResolvedValue([
+        { userMessaged: { userMessage: "Here is the error" } }, // 17 chars -> 4 tokens + 3 = 7
+        { agentMessaged: { agentMessage: "I fixed it" } } // 10 chars -> 3 output tokens
+      ]),
+      isActionRequiredState: vi.fn().mockReturnValue(false),
+      executionRepository,
+      projectManagementRepository: projectRepository,
+      sprintRunId: sprintRun.id,
+      logger: { warn: vi.fn() },
+    };
+
+    await runSessionSyncStep(
+      subtasks,
+      deps as any,
+      false,
+      { repoPath: "/tmp/my-repo", sprintNumber: 7 }
+    );
+
+    const usage = executionRepository.getLatestProviderInvocationUsageBySession("sync-metrics-session");
+    expect(usage).toBeDefined();
+    expect(usage?.provider).toBe("jules");
+    expect(usage?.purpose).toBe("task_coding");
+    expect(usage?.inputTokens).toBe(7); // 28 chars / 4
+    expect(usage?.outputTokens).toBe(3); // 10 chars / 4
+    expect(usage?.usageSource).toBe("estimated");
+
+    const events = executionRepository.listTaskRunEvents(run.id);
+    const gitMetricsEvents = events.filter(e => e.eventType === "git_metrics");
+    expect(gitMetricsEvents).toHaveLength(1);
+    expect(gitMetricsEvents[0].payload?.filesChanged).toBe(3);
+
+    // Run again to ensure deduplication
+    await runSessionSyncStep(
+      subtasks,
+      deps as any,
+      false,
+      { repoPath: "/tmp/my-repo", sprintNumber: 7 }
+    );
+
+    const eventsAfterSecondRun = executionRepository.listTaskRunEvents(run.id);
+    const gitMetricsEventsAfterSecondRun = eventsAfterSecondRun.filter(e => e.eventType === "git_metrics");
+    expect(gitMetricsEventsAfterSecondRun).toHaveLength(1); // Still 1
+
+    // Usage is not duplicated
+    const usages = [usage];
+    // listProviderInvocationUsages is not directly on executionRepository, but we can verify it by session
+    expect(executionRepository.getLatestProviderInvocationUsageBySession("sync-metrics-session", "task_coding")?.id).toBe(usage?.id);
+  });
+
   it("matches sessions by repo/sprint/task run key to avoid task-id collisions", async () => {
     const subtasks: Subtask[] = [
       {

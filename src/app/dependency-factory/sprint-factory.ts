@@ -195,6 +195,8 @@ export function createSprintDependencies(
     resolveSessionName: (session) => context.resolveSessionName(session),
     extractSessionId: (session) => context.extractSessionId(session),
     fetchRecentActivities: (sessionName, pageSize) => context.fetchRecentActivities(sessionName, pageSize),
+    listAllActivities: (sessionId: string) => coreDeps.julesApi.listAllActivities(sessionId),
+    getSession: (sessionId: string) => coreDeps.julesApi.getSession(sessionId),
     listSessions: () => context.listSessionsForSync(),
     projectManagementRepository,
     executionRepository,
