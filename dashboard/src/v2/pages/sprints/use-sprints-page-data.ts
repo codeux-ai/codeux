@@ -34,6 +34,7 @@ import { getSprintHumanInterventionBySprintId } from "../../../lib/execution-int
 import { filterShowcaseSprints, sortSprintsByRecency } from "../../lib/sprint-gallery.js";
 import { toPlanningOverrides, type SprintSubmitMode, type PlanningRouteOption } from "../../lib/sprint-composer-state.js";
 import type { QuicksprintTemplateRecord } from "../../../../../src/contracts/quicksprint-types.js";
+import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import {
   fetchQuicksprintTemplates,
   executeQuicksprint,
@@ -96,6 +97,8 @@ export function useSprintsPageData() {
   const [quicksprintTemplates, setQuicksprintTemplates] = useState<QuicksprintTemplateRecord[]>([]);
   const [quicksprintLoading, setQuicksprintLoading] = useState(false);
   const [planningEta, setPlanningEta] = useState(180000);
+
+  const { feedback, setError, clearFeedback } = useActionFeedback();
 
   const { selectedProject } = useProjectData();
   const { data: sprints, refetch: refresh, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
@@ -334,7 +337,7 @@ export function useSprintsPageData() {
         return next;
       });
       await Promise.all([refresh(), refreshExecution()]);
-      window.alert(error instanceof Error ? error.message : String(error));
+      setError(error instanceof Error ? error.message : String(error));
       throw error;
     } finally {
       setPendingActionIds((current) => {
@@ -464,9 +467,9 @@ export function useSprintsPageData() {
       setAddTaskSprintTasks(tasks);
       setAddTaskForSprint(sprint);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : String(error));
+      setError(error instanceof Error ? error.message : String(error));
     }
-  }, [selectedProject, sprints]);
+  }, [selectedProject, sprints, setError]);
 
   const handleAppendTask = useCallback(async (draft: {
     sprintId: string;
@@ -506,7 +509,7 @@ export function useSprintsPageData() {
       });
       await refresh();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : String(error));
+      setError(error instanceof Error ? error.message : String(error));
     } finally {
       setPendingActionIds((current) => {
         const next = new Set(current);
@@ -553,10 +556,10 @@ export function useSprintsPageData() {
       setShowQuicksprint(false);
       await refresh();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : String(error));
+      setError(error instanceof Error ? error.message : String(error));
       throw error;
     }
-  }, [selectedProject, refresh]);
+  }, [selectedProject, refresh, setError]);
 
   const reloadQuicksprintTemplates = useCallback(async () => {
     if (!selectedProject) return;
@@ -632,6 +635,8 @@ export function useSprintsPageData() {
     handleCreateQuicksprintTemplate,
     handleUpdateQuicksprintTemplate,
     handleDeleteQuicksprintTemplate,
+    feedback,
+    clearFeedback,
     refreshSprints: refresh,
     refreshExecution,
     handleSprintToggle,

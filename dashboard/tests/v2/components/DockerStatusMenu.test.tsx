@@ -37,6 +37,47 @@ describe("DockerStatusMenu", () => {
     vi.useFakeTimers();
   });
 
+  it("opens popover on click and traps focus", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockContainers
+    } as Response);
+
+    render(<DockerStatusMenu />);
+    const button = screen.getByRole("button", { name: "Docker Status" });
+
+    fireEvent.click(button);
+
+    // Dialog should appear
+    expect(screen.getByRole("dialog", { name: "Active Docker Containers" })).toBeInTheDocument();
+
+    // Wait for fetch
+    await waitFor(() => {
+      expect(screen.getByText("test-container-1")).toBeInTheDocument();
+    });
+  });
+
+  it("closes popover on escape and restores focus", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockContainers
+    } as Response);
+
+    render(<DockerStatusMenu />);
+    const button = screen.getByRole("button", { name: "Docker Status" });
+    button.focus();
+
+    // Open via Enter
+    fireEvent.keyDown(button, { key: "Enter" });
+
+    expect(screen.getByRole("dialog", { name: "Active Docker Containers" })).toBeInTheDocument();
+
+    // Press Escape
+    fireEvent.keyDown(document.body, { key: "Escape" });
+
+    expect(screen.queryByRole("dialog", { name: "Active Docker Containers" })).not.toBeInTheDocument();
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();

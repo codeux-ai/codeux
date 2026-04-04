@@ -3,9 +3,24 @@ import { useEffect, useRef } from "preact/hooks";
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function useFocusTrap(active: boolean, onClose?: () => void) {
+export interface FocusTrapOptions {
+  onClose?: () => void;
+  initialFocusRef?: { current: HTMLElement | null };
+  restoreFocus?: boolean;
+}
+
+export function useFocusTrap(
+  active: boolean,
+  optionsOrOnClose?: (() => void) | FocusTrapOptions
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+
+  const options: FocusTrapOptions = typeof optionsOrOnClose === 'function'
+    ? { onClose: optionsOrOnClose }
+    : (optionsOrOnClose || {});
+
+  const { onClose, initialFocusRef, restoreFocus = true } = options;
   const onCloseRef = useRef(onClose);
 
   useEffect(() => {
@@ -19,6 +34,12 @@ export function useFocusTrap(active: boolean, onClose?: () => void) {
 
     const focusTimer = window.setTimeout(() => {
       if (!containerRef.current) return;
+
+      if (initialFocusRef?.current) {
+        initialFocusRef.current.focus();
+        return;
+      }
+
       const autoFocusTarget = containerRef.current.querySelector("[autofocus]") as HTMLElement | null;
       const focusableElements = Array.from(
         containerRef.current.querySelectorAll(FOCUSABLE_SELECTOR)
@@ -67,8 +88,10 @@ export function useFocusTrap(active: boolean, onClose?: () => void) {
     return () => {
       window.clearTimeout(focusTimer);
       document.removeEventListener("keydown", handleKeyDown);
-      if (triggerRef.current) {
-        triggerRef.current.focus();
+      if (restoreFocus && triggerRef.current) {
+        // Defer focus restoration to ensure element is re-enabled or DOM is updated
+        const trigger = triggerRef.current;
+        window.setTimeout(() => trigger.focus(), 0);
       }
     };
   }, [active]);

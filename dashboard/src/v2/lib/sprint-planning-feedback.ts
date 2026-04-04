@@ -38,6 +38,13 @@ const STAGES: Record<PlanningActionType, Array<{ text: string; threshold: number
 
 const SHIP_LOOP_MS = 12_000; // ship crosses the track every 12 seconds
 
+export const PLANNING_ACTION_LABELS: Record<PlanningActionType, string> = {
+  improve: "Refining prompt...",
+  plan_only: "Generating subtasks...",
+  plan_and_start: "Planning and initiating...",
+  replan: "Updating execution plan...",
+};
+
 export function getPlanningFeedback(actionType: PlanningActionType, elapsedMs: number): PlanningFeedback {
   // Use a Zeno-like curve for progress so it never actually reaches 1 until it's done
   // progress = 1 - e^(-elapsed / halfLife)

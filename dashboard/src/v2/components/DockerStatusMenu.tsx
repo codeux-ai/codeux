@@ -24,12 +24,11 @@ export interface DockerContainer {
 export const DockerStatusMenu: FunctionComponent = () => {
     const [containers, setContainers] = useState<DockerContainer[]>([]);
     const [loading, setLoading] = useState(false);
-    const [isHovered, setIsHovered] = useState(false);
-    const [isOpen, setIsOpen] = useState(false);
+    const [interactionState, setInteractionState] = useState<'closed' | 'hover' | 'open'>('closed');
     const menuRef = useRef<HTMLDivElement>(null);
     const timeoutRef = useRef<number | null>(null);
 
-    const trapRef = useFocusTrap(isOpen, () => setIsOpen(false));
+    const trapRef = useFocusTrap(interactionState === 'open', { onClose: () => setInteractionState('closed'), restoreFocus: true });
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -39,17 +38,17 @@ export const DockerStatusMenu: FunctionComponent = () => {
                 trapRef.current &&
                 !trapRef.current.contains(event.target as Node)
             ) {
-                setIsOpen(false);
+                setInteractionState('closed');
             }
         };
 
-        if (isOpen) {
+        if (interactionState === 'open') {
             document.addEventListener("mousedown", handleClickOutside);
         }
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
-    }, [isOpen, trapRef]);
+    }, [interactionState, trapRef]);
 
     const fetchContainers = async () => {
         try {
@@ -73,15 +72,18 @@ export const DockerStatusMenu: FunctionComponent = () => {
             window.clearTimeout(timeoutRef.current);
             timeoutRef.current = null;
         }
-        if (!isHovered) {
-            setIsHovered(true);
-            void fetchContainers();
-        }
+        setInteractionState(prev => {
+            if (prev === 'closed') {
+                void fetchContainers();
+                return 'hover';
+            }
+            return prev; // if open, stay open
+        });
     };
 
     const handleMouseLeave = () => {
         timeoutRef.current = window.setTimeout(() => {
-            setIsHovered(false);
+            setInteractionState(prev => prev === 'hover' ? 'closed' : prev);
         }, 150);
     };
 
@@ -106,34 +108,32 @@ export const DockerStatusMenu: FunctionComponent = () => {
                 type="button"
                 aria-label="Docker Status"
                 aria-haspopup="dialog"
-                aria-expanded={isHovered || isOpen}
+                aria-expanded={interactionState !== 'closed'}
                 onClick={() => {
-                    const nextOpen = !isOpen;
-                    setIsOpen(nextOpen);
-                    if (nextOpen) {
-                        void fetchContainers();
-                    }
+                    setInteractionState(prev => {
+                        if (prev === 'open') return 'closed';
+                        if (prev === 'closed' || prev === 'hover') void fetchContainers();
+                        return 'open';
+                    });
                 }}
                 onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
-                        const nextOpen = !isOpen;
-                        setIsOpen(nextOpen);
-                        if (nextOpen) {
+                        setInteractionState(prev => {
+                            if (prev === 'open') return 'closed';
                             void fetchContainers();
-                        }
+                            return 'open';
+                        });
                     } else if (e.key === "ArrowDown") {
                         e.preventDefault();
-                        if (!isOpen) {
-                            setIsOpen(true);
+                        if (interactionState !== 'open') {
                             void fetchContainers();
+                            setInteractionState('open');
                         }
-                        // Focus will automatically be moved to the first focusable element by `useFocusTrap`
-                        // when `isOpen` becomes true, as it executes a setTimeout after render.
                     }
                 }}
                 className={`w-11 h-11 flex items-center justify-center rounded-xl transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
-                    isHovered || isOpen
+                    interactionState !== 'closed'
                         ? "bg-black/[0.05] dark:bg-white/[0.05]"
                         : "hover:bg-black/[0.05] dark:hover:bg-white/[0.05]"
                 }`}
@@ -150,7 +150,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
                 </div>
             </button>
 
-            {(isHovered || isOpen) && (
+            {(interactionState !== 'closed') && (
                 <div
                     ref={trapRef}
                     role="dialog"

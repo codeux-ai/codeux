@@ -11,6 +11,11 @@ expect.extend(matchers);
 vi.mock("gsap", () => ({
   default: {
     fromTo: vi.fn(),
+    set: vi.fn(),
+    context: (fn: () => void) => {
+      fn();
+      return { revert: vi.fn() };
+    },
   },
 }));
 
@@ -125,7 +130,7 @@ describe("QuicksprintPanel", () => {
     expect(mockOnExecute).toHaveBeenCalled();
 
     // Dismiss overlay
-    const closeBtn = getByText("Close");
+    const closeBtn = getByText("Minimize");
     fireEvent.click(closeBtn);
 
     // Overlay should disappear

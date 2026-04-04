@@ -3,6 +3,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { AlertTriangle, GitBranch, RotateCcw, Trash2, X } from "lucide-preact";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import type { Subtask } from "../../../types.js";
 
 const PROVIDER_OPTIONS = [
@@ -36,6 +37,9 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     const [provider, setProvider] = useState("");
     const [clearWorktree, setClearWorktree] = useState(false);
     const [resetDependents, setResetDependents] = useState(false);
+
+    const reducedMotion = useReducedMotion();
+    const isSubmitting = useRef(false);
 
     const downstreamTasks = useMemo(() => {
         const byId = new Map(allTasks.map(candidate => [candidate.id, candidate]));
@@ -78,27 +82,38 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     const taskAlreadyMerged = Boolean(task.is_merged) || MERGED_TASK_INDICATORS.has(task.merge_indicator || "");
 
     useLayoutEffect(() => {
-        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
+        const d_backdrop = reducedMotion ? 0 : 0.3;
+        const d_card = reducedMotion ? 0 : 0.45;
+        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: "power2.out" });
         gsap.fromTo(cardRef.current,
-            { y: 36, opacity: 0, scale: 0.96 },
-            { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out", delay: 0.04 },
+            { y: reducedMotion ? 0 : 36, opacity: 0, scale: reducedMotion ? 1 : 0.96 },
+            { y: 0, opacity: 1, scale: 1, duration: d_card, ease: "power4.out", delay: reducedMotion ? 0 : 0.04 },
         );
-    }, []);
+    }, [reducedMotion]);
 
     const handleClose = () => {
-        gsap.to(cardRef.current, { y: 18, opacity: 0, scale: 0.97, duration: 0.22, ease: "power3.in" });
-        gsap.to(backdropRef.current, { opacity: 0, duration: 0.22, delay: 0.04, onComplete: onClose });
+        if (isSubmitting.current) return;
+        const duration = reducedMotion ? 0 : 0.22;
+        gsap.to(cardRef.current, { y: 18, opacity: 0, scale: 0.97, duration, ease: "power3.in" });
+        gsap.to(backdropRef.current, { opacity: 0, duration, delay: reducedMotion ? 0 : 0.04, onComplete: onClose });
     };
 
-    const backdropRef = useFocusTrap(true, handleClose);
+    const backdropRef = useFocusTrap(true, { onClose: handleClose, restoreFocus: true });
 
     const handleSubmit = () => {
-        onConfirm({
+        isSubmitting.current = true;
+        try {
+            onConfirm({
             provider: provider || undefined,
             clearWorktree,
             resetDependents,
-        });
-        handleClose();
+            });
+            isSubmitting.current = false;
+            handleClose();
+        } catch (err) {
+            isSubmitting.current = false;
+            throw err;
+        }
     };
 
     return (

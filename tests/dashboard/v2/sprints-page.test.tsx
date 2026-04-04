@@ -45,6 +45,8 @@ describe("SprintsPage", () => {
       quicksprintTemplates: [],
       showImportModal: false,
       setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
     } as any);
 
     const { rerender } = render(<SprintsPage />);
@@ -79,6 +81,8 @@ describe("SprintsPage", () => {
       quicksprintTemplates: [],
       showImportModal: true,
       setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
     } as any);
     rerender(<SprintsPage />);
 
@@ -100,6 +104,8 @@ describe("SprintsPage", () => {
       quicksprintTemplates: [],
       showImportModal: false,
       setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
     } as any);
 
     render(<SprintsPage />);
@@ -129,6 +135,8 @@ describe("SprintsPage", () => {
       quicksprintTemplates: [],
       showImportModal: false,
       setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
     } as any);
 
     render(<SprintsPage />);
@@ -178,6 +186,8 @@ describe("SprintsPage", () => {
       setEditingSprint,
       showImportModal: false,
       setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
     } as any);
 
     render(<SprintsPage />);
@@ -216,6 +226,8 @@ describe("SprintsPage", () => {
       editingSprint: null,
       setEditingSprint: vi.fn(),
       handleImprovePrompt,
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
     } as any);
 
     render(<SprintsPage />);
@@ -244,6 +256,8 @@ describe("SprintsPage", () => {
       setEditingSprint: vi.fn(),
       showImportModal: false,
       setShowImportModal: vi.fn(),
+      feedback: { status: "idle", message: null },
+      clearFeedback: vi.fn(),
     } as any);
 
     render(<SprintsPage />);

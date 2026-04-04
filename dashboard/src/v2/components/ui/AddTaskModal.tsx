@@ -4,6 +4,7 @@ import gsap from "gsap";
 import { X, ListChecks, Target, Bot, Plus, AlertCircle } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface TaskDraft {
   sprintId: string;
@@ -44,7 +45,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   onClose,
   onSubmit,
 }) => {
-  const backdropRef = useFocusTrap(true, onClose);
+  const backdropRef = useFocusTrap(true, { onClose: () => handleClose(), restoreFocus: true });
   const cardRef = useRef<HTMLDivElement>(null);
   const [sprintId, setSprintId] = useState(initialTask?.sprintId || defaultSprintId || initialSprintId || sprints[0]?.id || "");
   const [title, setTitle] = useState(initialTask?.title || "");
@@ -56,45 +57,75 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   const [dependsOnTaskIds, setDependsOnTaskIds] = useState<string[]>(initialTask?.dependsOnTaskIds || []);
   const [error, setError] = useState<string | null>(null);
 
+  const reducedMotion = useReducedMotion();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [dependencySearchQuery, setDependencySearchQuery] = useState("");
+
+  const validationErrors = useMemo(() => {
+    const errors: Record<string, string> = {};
+    if (!sprintId) errors.sprintId = "Sprint is required.";
+    if (!title.trim()) errors.title = "Title is required.";
+    return errors;
+  }, [sprintId, title]);
+
   useLayoutEffect(() => {
-    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
-    gsap.fromTo(cardRef.current, { y: 40, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" });
-  }, []);
+    const d_backdrop = reducedMotion ? 0 : 0.3;
+    const d_card = reducedMotion ? 0 : 0.45;
+    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: "power2.out" });
+    gsap.fromTo(cardRef.current, { y: reducedMotion ? 0 : 40, opacity: 0, scale: reducedMotion ? 1 : 0.96 }, { y: 0, opacity: 1, scale: 1, duration: d_card, ease: "power4.out" });
+  }, [reducedMotion]);
+
+  const handleClose = () => {
+    if (isSubmitting) return;
+    const d = reducedMotion ? 0 : 0.25;
+    gsap.to(cardRef.current, { y: 24, opacity: 0, scale: 0.96, duration: d, ease: "power3.in" });
+    gsap.to(backdropRef.current, { opacity: 0, duration: d, delay: reducedMotion ? 0 : 0.05, onComplete: onClose });
+  };
 
   const dependencyOptions = useMemo(() => {
-    return availableTasks.filter((task) => task.sprintId === sprintId && task.recordId !== initialTask?.recordId);
-  }, [availableTasks, initialTask?.recordId, sprintId]);
+    return availableTasks.filter((task) => {
+      if (task.sprintId !== sprintId) return false;
+      if (task.recordId === initialTask?.recordId) return false;
+      if (dependencySearchQuery) {
+        const query = dependencySearchQuery.toLowerCase();
+        const matchesId = task.id ? task.id.toLowerCase().includes(query) : false;
+        const matchesRecordId = task.recordId.toLowerCase().includes(query);
+        const matchesTitle = task.title.toLowerCase().includes(query);
+        return matchesId || matchesRecordId || matchesTitle;
+      }
+      return true;
+    });
+  }, [availableTasks, initialTask?.recordId, sprintId, dependencySearchQuery]);
 
-  const handleBackdropClick = (event: MouseEvent) => {
+  const handleBackdropClick = (event: PointerEvent) => {
     if (event.target === backdropRef.current) {
-      onClose();
+      handleClose();
     }
   };
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
-    if (!sprintId) {
-      setError("Sprint is required.");
-      return;
-    }
-    if (!title.trim()) {
-      setError("Title is required.");
-      return;
-    }
+    if (Object.keys(validationErrors).length > 0) return;
 
+    setIsSubmitting(true);
     setError(null);
-    await onSubmit({
-      sprintId,
-      title: title.trim(),
-      description: description.trim(),
-      promptMarkdown: promptMarkdown.trim(),
-      status,
-      priority,
-      executorType,
-      dependsOnTaskIds,
-    });
-
-    onClose();
+    try {
+      await onSubmit({
+        sprintId,
+        title: title.trim(),
+        description: description.trim(),
+        promptMarkdown: promptMarkdown.trim(),
+        status,
+        priority,
+        executorType,
+        dependsOnTaskIds,
+      });
+      setIsSubmitting(false);
+      handleClose();
+    } catch (err) {
+      setIsSubmitting(false);
+      setError(err instanceof Error ? err.message : String(err));
+    }
   };
 
   const toggleDependency = (taskId: string) => {
@@ -108,7 +139,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   return (
     <div
       ref={backdropRef}
-      onClick={handleBackdropClick}
+      onPointerDown={handleBackdropClick}
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-task-modal-title"
@@ -150,7 +181,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               </p>
             </div>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               aria-label="Close"
               className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500"
             >
@@ -176,16 +207,15 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     setSprintId((event.target as HTMLSelectElement).value);
                     if (error) setError(null);
                   }}
-                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500"
+                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500" aria-invalid={!!validationErrors.sprintId}
                   required
-                  aria-invalid={!!error && !sprintId}
-                  aria-describedby={error && !sprintId ? "task-form-error" : undefined}
                 >
                   <option value="" disabled>Select sprint</option>
                   {sprints.map((sprint) => (
                     <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
                   ))}
                 </select>
+                {validationErrors.sprintId && <div className="text-xs text-red-500 mt-1 font-medium">{validationErrors.sprintId}</div>}
               </div>
 
               <div className="group/field">
@@ -201,9 +231,10 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                   className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500"
                   placeholder="Define the task scope"
                   required
-                  aria-invalid={!!error && !title.trim()}
-                  aria-describedby={error && !title.trim() ? "task-form-error" : undefined}
+                  aria-invalid={!!validationErrors.title}
+
                 />
+                {validationErrors.title && <div className="text-xs text-red-500 mt-1 font-medium">{validationErrors.title}</div>}
               </div>
             </div>
 
@@ -296,10 +327,21 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             </div>
 
             <fieldset>
-              <legend className="flex items-center gap-2 mb-3">
-                <Target className="w-3.5 h-3.5 text-ember-500" strokeWidth={2.3} />
-                <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Dependencies</span>
-              </legend>
+              <div className="flex items-center justify-between mb-3">
+                <legend className="flex items-center gap-2">
+                  <Target className="w-3.5 h-3.5 text-ember-500" strokeWidth={2.3} />
+                  <span className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Dependencies</span>
+                </legend>
+                {availableTasks.filter(t => t.sprintId === sprintId && t.recordId !== initialTask?.recordId).length > 5 && (
+                  <input
+                    type="search"
+                    placeholder="Filter tasks..."
+                    value={dependencySearchQuery}
+                    onInput={(e) => setDependencySearchQuery((e.target as HTMLInputElement).value)}
+                    className="w-48 bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-3 py-1.5 text-xs rounded-xl focus:outline-none focus:border-ember-500 focus-visible:ring-1 focus-visible:ring-ember-500/50"
+                  />
+                )}
+              </div>
               {dependencyOptions.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-black/[0.08] dark:border-white/[0.08] px-4 py-4 text-xs text-slate-400">
                   No existing tasks in this sprint yet.
@@ -313,15 +355,21 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                         key={task.recordId}
                         type="button"
                         onClick={() => toggleDependency(task.recordId)}
+                        aria-pressed={active}
                         className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ember-500 ${
                           active
                             ? "border-ember-500/45 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400"
                             : "border-black/[0.07] dark:border-white/[0.07] bg-black/[0.02] dark:bg-white/[0.02] text-slate-500"
                         }`}
                       >
-                        <div className="min-w-0">
-                          <div className="text-[10px] font-mono uppercase tracking-[0.14em]">{task.id}</div>
-                          <div className="text-sm font-semibold truncate">{task.title}</div>
+                        <div className="min-w-0 flex-1 pr-2">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-slate-400">{task.id}</span>
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider ${task.priority === 'critical' ? 'bg-red-500/10 text-red-500' : task.priority === 'high' ? 'bg-orange-500/10 text-orange-500' : 'bg-slate-500/10 text-slate-500'}`}>
+                              {task.priority}
+                            </span>
+                          </div>
+                          <div className="text-sm font-semibold truncate leading-tight">{task.title}</div>
                         </div>
                         <span className={`w-4 h-4 rounded-full border ${active ? "border-ember-500 bg-ember-500" : "border-slate-300 dark:border-slate-600"}`} />
                       </button>
@@ -334,17 +382,22 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
             <div className="flex items-center justify-between pt-2">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800 rounded"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="group/btn flex items-center gap-2.5 px-6 py-3 bg-signal-500 hover:bg-signal-400 text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] hover:-translate-y-px focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800"
+                disabled={isSubmitting || Object.keys(validationErrors).length > 0}
+                className="group/btn flex items-center gap-2.5 px-6 py-3 bg-signal-500 hover:bg-signal-400 disabled:bg-slate-300 dark:disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] disabled:shadow-none hover:-translate-y-px disabled:hover:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-800"
               >
-                <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
-                {initialTask ? "Save Task" : "Create Task"}
+                {isSubmitting ? (
+                  <div className="w-4 h-4 rounded-full border-2 border-void-900/20 border-t-void-900 animate-spin" />
+                ) : (
+                  <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
+                )}
+                {isSubmitting ? "Saving..." : initialTask ? "Save Task" : "Create Task"}
               </button>
             </div>
           </form>

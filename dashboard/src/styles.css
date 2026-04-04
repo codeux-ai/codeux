@@ -427,12 +427,26 @@
 
   /* Reduced motion fallback */
   @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+
     .widget-running,
     .widget-queued,
     .ocean-wave,
     .ship-bob,
     .jules-j-glow,
-    .jules-j-draw {
+    .jules-j-draw,
+    .animate-organic,
+    .animate-organic-reverse,
+    .dag-aurora,
+    .dag-grid-pan,
+    .dag-running-ring {
       animation: none !important;
       transition: none !important;
     }

@@ -10,6 +10,11 @@ expect.extend(matchers);
 vi.mock("gsap", () => ({
   default: {
     fromTo: vi.fn(),
+    set: vi.fn(),
+    context: (fn: () => void) => {
+      fn();
+      return { revert: vi.fn() };
+    },
   },
 }));
 import { ChatPageShell } from "../../../dashboard/src/v2/components/chat/ChatPageShell.js";

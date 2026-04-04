@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { RefreshCw, Trash2, MessageCircle } from "lucide-preact";
+import { RefreshCw, Trash2, MessageCircle, AlertCircle, Activity } from "lucide-preact";
 import type { ChatThread } from "../../types.js";
 import { formatRelativeChatTime } from "../../lib/chat-time.js";
 import { ChatAvatar } from "./ChatAvatar.js";
@@ -37,8 +37,20 @@ export const ThreadListCard: FunctionComponent<{
                 </div>
               </div>
               <div className="min-w-0 flex-1">
-                <div className="truncate font-display text-lg font-black tracking-tight text-slate-900 dark:text-white">
-                  {thread.title}
+                <div className="flex items-center gap-2 truncate">
+                  <span className="truncate font-display text-lg font-black tracking-tight text-slate-900 dark:text-white">
+                    {thread.title}
+                  </span>
+                  {thread.runtimeState?.replayRequired && (
+                    <span className="shrink-0 inline-flex items-center gap-1 rounded-sm border border-status-amber/30 bg-status-amber/10 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider text-status-amber">
+                      <AlertCircle className="h-2.5 w-2.5" /> Replay Req
+                    </span>
+                  )}
+                  {thread.runtimeState?.sessionIds && thread.runtimeState.sessionIds.length > 0 && !thread.runtimeState?.replayRequired && (
+                    <span className="shrink-0 inline-flex items-center gap-1 rounded-sm border border-signal-500/30 bg-signal-500/10 px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider text-signal-500">
+                      <Activity className="h-2.5 w-2.5" /> Active
+                    </span>
+                  )}
                 </div>
                 <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                   {thread.lastMessagePreview || "No messages yet."}

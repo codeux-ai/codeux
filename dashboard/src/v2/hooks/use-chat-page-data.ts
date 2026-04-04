@@ -37,6 +37,8 @@ import { getProjectWorkerOptions, type WorkerRoutingPreference } from "../lib/pr
 import { buildThreadIndex, buildInvocationIndex, buildConnectionIndex } from "../lib/chat-entity-index.js";
 import { useProjectEffectiveSettings } from "./use-project-effective-settings.js";
 import { toChatTimestampMs } from "../lib/chat-time.js";
+import { useActionFeedback } from "./use-action-feedback.js";
+import { useConfirmDialog } from "./use-confirm-dialog.js";
 
 const isWorkingMessage = (
   message: ChatMessageRecord,
@@ -180,6 +182,15 @@ const selectedThreadIdRef = useRef<string | null>(null);
   const [assigningRoute, setAssigningRoute] = useState(false);
   const [compacting, setCompacting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const { feedback, setSuccess, clearFeedback } = useActionFeedback();
+  const {
+    isOpen: isConfirmOpen,
+    options: confirmOptions,
+    requestConfirm,
+    handleConfirm,
+    handleCancel,
+  } = useConfirmDialog();
 
   const threadIndex = useMemo(() => buildThreadIndex(threads), [threads]);
   const invocationIndex = useMemo(() => buildInvocationIndex(invocations), [invocations]);
@@ -710,6 +721,14 @@ const selectedThreadIdRef = useRef<string | null>(null);
       return;
     }
 
+    const confirmed = await requestConfirm({
+      title: "Reassign Route?",
+      body: "This will route future messages in this thread to a different connection.",
+      confirmLabel: "Reassign",
+    });
+
+    if (!confirmed) return;
+
     setAssigningRoute(true);
     try {
       let updated: ChatThread;
@@ -735,17 +754,26 @@ const selectedThreadIdRef = useRef<string | null>(null);
       setThreadsSnapshot(nextThreads);
       await refreshMessages(updated.id);
       setError(null);
+      setSuccess("Route updated.");
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : String(updateError));
     } finally {
       setAssigningRoute(false);
     }
-  }, [refreshMessages, selectedProject, selectedThread, setThreadsSnapshot]);
+  }, [refreshMessages, selectedProject, selectedThread, setThreadsSnapshot, requestConfirm, setSuccess]);
 
   const handleCompactThread = useCallback(async (): Promise<void> => {
     if (!selectedThread) {
       return;
     }
+
+    const confirmed = await requestConfirm({
+      title: "Compact Thread?",
+      body: "This will truncate previous active sessions.",
+      confirmLabel: "Compact",
+    });
+
+    if (!confirmed) return;
 
     setCompacting(true);
     try {
@@ -759,12 +787,13 @@ const selectedThreadIdRef = useRef<string | null>(null);
       setThreadsSnapshot(nextThreads);
       await refreshMessages(updated.id);
       setError(null);
+      setSuccess("Thread compacted.");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setCompacting(false);
     }
-  }, [selectedThread, selectedProject, setThreadsSnapshot, refreshMessages]);
+  }, [selectedThread, selectedProject, setThreadsSnapshot, refreshMessages, requestConfirm, setSuccess]);
 
   const handleSend = useCallback(async (): Promise<void> => {
     const bodyMarkdown = input.trim();
@@ -838,6 +867,15 @@ const selectedThreadIdRef = useRef<string | null>(null);
   const invocationMessagesLoading = isDetailLoading(selectedInvocationId, hasInvocationSnapshot, messagesLoading);
 
   const handleDeleteThread = useCallback(async (threadId: string): Promise<void> => {
+    const confirmed = await requestConfirm({
+      title: "Delete Thread?",
+      body: "Are you sure you want to delete this conversation?",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+
+    if (!confirmed) return;
+
     const nextThreads = removeThread(cache.getThreads(selectedProject?.id || "") || threadsRef.current, threadId);
     const userNextThreads = nextThreads.filter((t) => t.scope === "project");
     const nextSelection = resolveSelectedItemId(userNextThreads, selectedThreadId === threadId ? null : selectedThreadId);
@@ -855,13 +893,14 @@ const selectedThreadIdRef = useRef<string | null>(null);
     try {
       await deleteConversationThread(threadId);
       setError(null);
+      setSuccess("Thread deleted.");
     } catch (deleteError) {
       await refreshThreads();
       setError(deleteError instanceof Error ? deleteError.message : String(deleteError));
     } finally {
       setDeletingThreadId((current) => current === threadId ? null : current);
     }
-  }, [activateThread, refreshThreads, selectedProject, selectedThreadId, setThreadsSnapshot]);
+  }, [activateThread, refreshThreads, selectedProject, selectedThreadId, setThreadsSnapshot, requestConfirm, setSuccess]);
   return {
     chatMode,
     setChatMode,
@@ -905,5 +944,11 @@ const selectedThreadIdRef = useRef<string | null>(null);
     threadIndex,
     invocationIndex,
     selectedProject,
+    feedback,
+    clearFeedback,
+    isConfirmOpen,
+    confirmOptions,
+    handleConfirm,
+    handleCancel,
   };
 };

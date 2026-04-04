@@ -7,22 +7,31 @@ import { SourcesGrid } from "./components/SourcesGrid.js";
 import { TasksList } from "./components/TasksList.js";
 import { SkeletonPanel } from "./components/ui/ListSkeletons.js";
 import { useOverviewPageData } from "./hooks/use-overview-page-data.js";
+import { useReducedMotion } from "./hooks/use-reduced-motion.js";
 
 const OverviewTelemetry = lazy(() => import("./components/OverviewTelemetry.js").then(m => ({ default: m.OverviewTelemetry })));
 
 export const DashboardV2: FunctionComponent = () => {
     const mainContentRef = useRef<HTMLElement>(null);
     const pageData = useOverviewPageData();
+    const prefersReducedMotion = useReducedMotion();
 
     useLayoutEffect(() => {
-        if (mainContentRef.current) {
-            gsap.fromTo(
-                mainContentRef.current.children,
-                { opacity: 0, y: 40 },
-                { opacity: 1, y: 0, duration: 1, stagger: 0.12, ease: "power4.out", delay: 0.05 }
-            );
-        }
-    }, []);
+        const ctx = gsap.context(() => {
+            if (mainContentRef.current) {
+                if (prefersReducedMotion) {
+                    gsap.set(mainContentRef.current.children, { opacity: 1, y: 0 });
+                } else {
+                    gsap.fromTo(
+                        mainContentRef.current.children,
+                        { opacity: 0, y: 40 },
+                        { opacity: 1, y: 0, duration: 1, stagger: 0.12, ease: "power4.out", delay: 0.05 }
+                    );
+                }
+            }
+        });
+        return () => ctx.revert();
+    }, [prefersReducedMotion]);
 
     return (
         <main id="main-content" ref={mainContentRef} className="max-w-[2400px] mx-auto px-4 md:px-20 py-12 md:py-24 flex flex-col gap-12 md:gap-24">

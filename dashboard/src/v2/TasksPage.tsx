@@ -32,6 +32,7 @@ import { deriveTaskBoardState } from "./lib/task-board-state.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "./lib/list-window.js";
 import { ListWindowSelector } from "./components/ui/ListWindowSelector.js";
 import { SkeletonCard } from "./components/ui/ListSkeletons.js";
+import { FilterStrip } from "./components/ui/FilterStrip.js";
 
 const PRIORITY_CFG: Record<TaskPriority, { label: string; color: string; dot: string; bg: string }> = {
   critical: { label: "Critical", color: "text-status-red", dot: "bg-status-red shadow-[0_0_8px_rgba(227,0,15,0.6)]", bg: "bg-status-red/[0.08] border-status-red/20" },
@@ -194,16 +195,18 @@ const TaskCard: FunctionComponent<{
         </div>
       )}
 
-      <div className="absolute top-3 right-3 flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] translate-y-[-8px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] z-20">
+      <div className="absolute top-3 right-3 flex items-center gap-1 p-1 bg-white/90 dark:bg-void-700/95 backdrop-blur-md rounded-full shadow-[0_2px_12px_rgba(0,0,0,0.06)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.4)] border border-black/[0.05] dark:border-white/[0.08] translate-y-[-8px] opacity-0 group-hover:translate-y-0 group-hover:opacity-100 focus-within:opacity-100 focus-within:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0 transition-all duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] z-20">
         <button
-          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 rounded-full transition-colors"
+          type="button"
+          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 rounded-full transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
           title="Edit task"
           onClick={() => onEdit(task)}
         >
           <Settings className="w-3 h-3" />
         </button>
         <button
-          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-status-red rounded-full transition-colors"
+          type="button"
+          className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-status-red rounded-full transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30"
           title="Delete task"
           onClick={() => onDelete(task)}
         >
@@ -429,14 +432,14 @@ export const TasksPage: FunctionComponent = () => {
 
   useLayoutEffect(() => {
     if (boardRef.current) {
-      gsap.fromTo(Array.from(boardRef.current.children), { opacity: 0, y: 50, scale: 0.95 }, {
+      gsap.fromTo(Array.from(boardRef.current.children), { opacity: 0, y: 15, scale: 0.98 }, {
         opacity: 1,
         y: 0,
         scale: 1,
-        stagger: { amount: 0.4, from: "start" },
-        duration: 1,
-        ease: "elastic.out(1, 0.7)",
-        delay: 0.2,
+        stagger: { amount: 0.2, from: "start" },
+        duration: 0.6,
+        ease: "power2.out",
+        delay: 0.1,
       });
     }
   }, [selectedProject?.id, statusFilter, priorityFilter, taskScopeSprintId]);
@@ -520,8 +523,15 @@ export const TasksPage: FunctionComponent = () => {
 
           <p className="text-lg text-slate-500 dark:text-slate-500 font-medium max-w-xl mt-1 leading-relaxed">
             {selectedProject
-              ? `Task execution for ${selectedProject.name}. Manage backlog, live work, and completion state inside the database-backed model.`
+              ? taskScopeSprintId
+                ? `Task execution for ${selectedProject.name}, scoped to Sprint ${sprints.find((s: Sprint) => s.id === taskScopeSprintId)?.number ?? "..."}.`
+                : `Task execution for ${selectedProject.name}. Showing all tasks across the project.`
               : "Select a project to manage sprint tasks."}
+            {selectedProject && (statusFilter !== "all" || priorityFilter !== "all") && (
+              <span className="block text-sm text-signal-600 dark:text-signal-500 mt-1">
+                Filtered to show {statusFilter !== "all" ? statusFilter.replace("_", " ") : "all"} status and {priorityFilter !== "all" ? priorityFilter : "any"} priority.
+              </span>
+            )}
           </p>
         </div>
 
@@ -569,48 +579,28 @@ export const TasksPage: FunctionComponent = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 -mt-4">
         <SprintSelector sprints={sprints} selectedId={taskScopeSprintId} onSelect={handleSprintScopeSelect} />
 
-        <div className="flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl">
-          {[
-            { key: "all" as StatusFilter, label: "All" },
-            { key: "in_progress" as StatusFilter, label: "Running" },
-            { key: "pending" as StatusFilter, label: "Queued" },
-            { key: "completed" as StatusFilter, label: "Done" },
-          ].map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setStatusFilter(key)}
-              className={`text-xs font-semibold tracking-wide px-3 py-1.5 rounded-lg transition-all duration-200 ${
-                statusFilter === key
-                  ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
-                  : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <FilterStrip
+          options={[
+            { value: "all", label: "All" },
+            { value: "in_progress", label: "Running" },
+            { value: "pending", label: "Queued" },
+            { value: "completed", label: "Done" },
+          ]}
+          active={statusFilter}
+          onChange={(val) => setStatusFilter(val as StatusFilter)}
+        />
 
-        <div className="flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl">
-          {[
-            { key: "all" as PriorityFilter, label: "Any Priority" },
-            { key: "critical" as PriorityFilter, label: "Critical" },
-            { key: "high" as PriorityFilter, label: "High" },
-            { key: "medium" as PriorityFilter, label: "Medium" },
-            { key: "low" as PriorityFilter, label: "Low" },
-          ].map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setPriorityFilter(key)}
-              className={`text-xs font-semibold tracking-wide px-3 py-1.5 rounded-lg transition-all duration-200 ${
-                priorityFilter === key
-                  ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
-                  : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <FilterStrip
+          options={[
+            { value: "all", label: "Any Priority" },
+            { value: "critical", label: "Critical" },
+            { value: "high", label: "High" },
+            { value: "medium", label: "Medium" },
+            { value: "low", label: "Low" },
+          ]}
+          active={priorityFilter}
+          onChange={(val) => setPriorityFilter(val as PriorityFilter)}
+        />
 
         <div className="ml-auto">
           <ListWindowSelector value={listWindow} onChange={setListWindow} label="Show" />
@@ -668,7 +658,11 @@ export const TasksPage: FunctionComponent = () => {
                   <SkeletonCard />
                 </>
               ) : columnTasks.length === 0 ? (
-                <div className="flex-1 flex items-center justify-center text-xs font-medium text-slate-300 dark:text-slate-700">No tasks</div>
+                <div className="flex-1 flex items-center justify-center text-center p-6 text-xs font-medium text-slate-400 dark:text-slate-500 border-2 border-dashed border-black/[0.04] dark:border-white/[0.04] rounded-[1rem]">
+                  No {status.replace("_", " ")} tasks
+                  <br />
+                  {statusFilter !== "all" || priorityFilter !== "all" ? "matching current filters" : taskScopeSprintId ? "in this sprint" : "in this project"}.
+                </div>
               ) : (
                 columnTasks.map((task) => (
                   <TaskCard

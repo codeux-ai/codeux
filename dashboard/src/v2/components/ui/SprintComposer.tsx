@@ -21,7 +21,7 @@ import {
   resolveSubmitOriginalPrompt,
 } from "../../lib/sprint-composer-state.js";
 import { getProviderModelOptions } from "../../lib/settings-view-models.js";
-import { getPlanningFeedback, type PlanningActionType } from "../../lib/sprint-planning-feedback.js";
+import { getPlanningFeedback, type PlanningActionType, PLANNING_ACTION_LABELS } from "../../lib/sprint-planning-feedback.js";
 import { PlanningProgressOverlay } from "./PlanningProgressOverlay.js";
 import type { ImprovePromptInput, VirtualWorkerProvider } from "../../types.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
@@ -61,9 +61,10 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const cardRef = useRef<HTMLDivElement>(null);
   const fieldsRef = useRef<HTMLFormElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   const [isImproving, setIsImproving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [errorState, setErrorState] = useState<{ type: 'improve' | 'submit'; message: string } | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
 
@@ -135,17 +136,23 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     }
     setIsImproving(false);
     setIsSubmitting(false);
-    setSubmitError(null);
+    setErrorState(null);
+    if (previousFocusRef.current) {
+      const el = previousFocusRef.current;
+      setTimeout(() => el.focus(), 0);
+    }
   };
 
   const handleImprovePrompt = async (): Promise<void> => {
     if (!onImprovePrompt || !state.name.trim() || !state.goal.trim()) {
       return;
     }
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
     const rawPrompt = state.goal.trim();
     const controller = new AbortController();
     abortRef.current = controller;
     setIsImproving(true);
+    setErrorState(null);
     try {
       const improvedGoal = await onImprovePrompt({
         name: state.name.trim(),
@@ -157,10 +164,14 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       state.setOriginalPrompt(rawPrompt);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      throw error;
+      setErrorState({ type: 'improve', message: error instanceof Error ? error.message : String(error) });
     } finally {
       abortRef.current = null;
       setIsImproving(false);
+      if (previousFocusRef.current && !abortRef.current) {
+        const el = previousFocusRef.current;
+        setTimeout(() => el.focus(), 0);
+      }
     }
   };
 
@@ -175,10 +186,11 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       return;
     }
 
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
     const controller = new AbortController();
     abortRef.current = controller;
     setIsSubmitting(true);
-    setSubmitError(null);
+    setErrorState(null);
     try {
       await onSubmit({
         name: state.name.trim(),
@@ -193,10 +205,14 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       onClose();
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      setSubmitError(error instanceof Error ? error.message : String(error));
+      setErrorState({ type: 'submit', message: error instanceof Error ? error.message : String(error) });
     } finally {
       abortRef.current = null;
       setIsSubmitting(false);
+      if (previousFocusRef.current && !abortRef.current && document.activeElement === document.body) {
+        const el = previousFocusRef.current;
+        setTimeout(() => el.focus(), 0);
+      }
     }
   };
 
@@ -242,12 +258,34 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         onDismiss={() => setIsOverlayDismissed(true)}
       />
 
+      <div
+        aria-live="polite"
+        className="sr-only"
+      >
+        {isBusy ? PLANNING_ACTION_LABELS[busyAction!] || "Planning in progress" : errorState ? errorState.message : ""}
+      </div>
+
       <form
         ref={fieldsRef}
         onSubmit={handleSubmit}
         className="relative z-10 grid gap-0 xl:grid-cols-[minmax(0,1fr)_21rem]"
+        tabIndex={-1}
       >
         <div className="border-b border-black/[0.06] p-6 dark:border-white/[0.06] sm:p-8 lg:p-10 xl:border-b-0 xl:border-r">
+          {errorState?.type === 'improve' && (
+            <div data-composer-stagger className="mb-8 rounded-xl border border-status-red/20 bg-status-red/[0.06] px-4 py-3 text-sm leading-relaxed text-status-red transition-all">
+              <div className="font-bold">Prompt improvement failed</div>
+              <div className="mt-1 opacity-90">{errorState.message}</div>
+              <div className="mt-2 text-xs opacity-75">Your prompt is safely preserved. You can try again or proceed with the current definition.</div>
+            </div>
+          )}
+          {errorState?.type === 'submit' && (
+            <div data-composer-stagger className="mb-8 rounded-xl border border-status-red/20 bg-status-red/[0.06] px-4 py-3 text-sm leading-relaxed text-status-red transition-all">
+              <div className="font-bold">Execution request failed</div>
+              <div className="mt-1 opacity-90">{errorState.message}</div>
+              <div className="mt-2 text-xs opacity-75">Your sprint configuration is safely preserved. Adjust the details or try again.</div>
+            </div>
+          )}
           <div data-composer-stagger className="flex items-start justify-between gap-4">
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/15 bg-signal-500/[0.07] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:text-signal-300">
@@ -269,7 +307,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/78 text-slate-400 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-white"
+              disabled={isBusy}
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/[0.06] bg-white/78 text-slate-400 transition-colors hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03] dark:hover:text-white"
               aria-label="Close sprint composer"
             >
               <X className="h-4 w-4" />
@@ -284,12 +323,15 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
               </div>
             </div>
 
-            <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
+            <div className={`rounded-[1.4rem] border p-4 transition-all ${
+              isBusy ? "border-black/[0.06] bg-black/[0.025] opacity-50 dark:border-white/[0.06] dark:bg-white/[0.03]" : "border-black/[0.06] bg-black/[0.025] dark:border-white/[0.06] dark:bg-white/[0.03]"
+            }`}>
               <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Planning Route</div>
               <div className="mt-2">
                 <AvantgardeSelect
                   variant="compact"
                   aria-label="Planning Route"
+                  disabled={isBusy}
                   value={state.routeOverride?.id || ""}
                   onChange={(id) => {
                     const opt = routeOptions.find(o => o.id === id);
@@ -305,16 +347,16 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
             </div>
 
             <div className={`rounded-[1.4rem] border p-4 transition-all ${
-              showModelOverride 
-                ? "border-signal-500/20 bg-signal-500/[0.04] dark:bg-signal-500/[0.08]" 
-                : "border-black/[0.06] bg-black/[0.025] opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03]"
+              !showModelOverride || isBusy
+                ? "border-black/[0.06] bg-black/[0.025] opacity-40 dark:border-white/[0.06] dark:bg-white/[0.03]"
+                : "border-signal-500/20 bg-signal-500/[0.04] dark:bg-signal-500/[0.08]"
             }`}>
               <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Model Override</div>
               <div className="mt-2">
                 <AvantgardeSelect
                   variant="compact"
                   aria-label="Model Override"
-                  disabled={!showModelOverride}
+                  disabled={!showModelOverride || isBusy}
                   value={state.modelOverride || ""}
                   onChange={(val) => state.setModelOverride(val || null)}
                   options={[
@@ -333,8 +375,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
               type="text"
               value={state.name}
               onInput={(event) => state.setName((event.target as HTMLInputElement).value)}
+              disabled={isBusy}
               placeholder="Runtime hardening"
-              className="w-full border-0 border-b-2 border-black/[0.08] bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
+              className="w-full border-0 border-b-2 border-black/[0.08] bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-signal-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
               required
               autoFocus
             />
@@ -346,25 +389,28 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
               <button
                 type="button"
                 onClick={() => { void handleImprovePrompt(); }}
-                disabled={isImproving || !state.name.trim() || !state.goal.trim()}
+                disabled={isBusy || !state.name.trim() || !state.goal.trim()}
                 className="inline-flex items-center gap-2 rounded-full border border-signal-500/20 bg-signal-500/[0.08] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 transition-colors hover:bg-signal-500/[0.14] disabled:cursor-not-allowed disabled:opacity-50 dark:text-signal-300"
               >
                 {isImproving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" strokeWidth={2.2} />}
-                {isImproving ? "Thinking..." : "Plan ahead with AI"}
+                {isImproving ? PLANNING_ACTION_LABELS.improve : "Plan ahead with AI"}
               </button>
             </div>
 
             <div className={state.originalPrompt ? "grid gap-4 xl:grid-cols-2" : "grid gap-4"}>
-              <div className={`rounded-[1.7rem] border bg-black/[0.025] transition-all dark:bg-white/[0.03] ${
+              <div className={`rounded-[1.7rem] border transition-all ${
                 isImproving
-                  ? "border-signal-500/35 shadow-[0_0_0_1px_rgba(0,224,160,0.16),0_0_30px_rgba(0,224,160,0.1)]"
-                  : "border-black/[0.07] dark:border-white/[0.08]"
+                  ? "border-signal-500/35 bg-black/[0.025] shadow-[0_0_0_1px_rgba(0,224,160,0.16),0_0_30px_rgba(0,224,160,0.1)] dark:bg-white/[0.03]"
+                  : isBusy
+                    ? "border-black/[0.07] bg-black/[0.025] opacity-50 dark:border-white/[0.08] dark:bg-white/[0.03]"
+                    : "border-black/[0.07] bg-black/[0.025] dark:border-white/[0.08] dark:bg-white/[0.03]"
               }`}>
                 <textarea
                   value={state.goal}
                   onInput={(event) => state.setGoal((event.target as HTMLTextAreaElement).value)}
+                  disabled={isBusy}
                   placeholder="Describe the outcome, affected systems, and what done looks like when this sprint lands."
-                  className="min-h-[220px] w-full resize-none rounded-[1.7rem] bg-transparent px-4 py-4 text-sm leading-relaxed text-slate-700 outline-none placeholder:text-slate-300 dark:text-slate-300 dark:placeholder:text-slate-600 sm:min-h-[260px] sm:px-5"
+                  className="min-h-[220px] w-full resize-none rounded-[1.7rem] bg-transparent px-4 py-4 text-sm leading-relaxed text-slate-700 outline-none placeholder:text-slate-300 disabled:cursor-not-allowed dark:text-slate-300 dark:placeholder:text-slate-600 sm:min-h-[260px] sm:px-5"
                 />
               </div>
 
@@ -382,19 +428,22 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
 
         <aside className="flex flex-col gap-4 p-6 sm:p-8">
           <div data-composer-stagger>
-            <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Planning Agent</div>
-            <div className="mt-3">
-              <AvantgardeSelect
-                variant="card"
-                aria-label="Planning Agent"
-                value={state.planningAgentPresetId || ""}
-                onChange={(val) => state.setPlanningAgentPresetId(val || null)}
-                options={[
-                  { value: "", label: "Built-in Planning agent" },
-                  ...planningPresets.map((preset) => ({ value: preset.id, label: preset.name })),
-                ]}
-                placeholder="Built-in Planning agent"
-              />
+            <div className={`transition-all ${isBusy ? "opacity-50" : ""}`}>
+              <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Planning Agent</div>
+              <div className="mt-3">
+                <AvantgardeSelect
+                  variant="card"
+                  aria-label="Planning Agent"
+                  disabled={isBusy}
+                  value={state.planningAgentPresetId || ""}
+                  onChange={(val) => state.setPlanningAgentPresetId(val || null)}
+                  options={[
+                    { value: "", label: "Built-in Planning agent" },
+                    ...planningPresets.map((preset) => ({ value: preset.id, label: preset.name })),
+                  ]}
+                  placeholder="Built-in Planning agent"
+                />
+              </div>
             </div>
           </div>
 
@@ -408,12 +457,15 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
                   <button
                     key={mode.id}
                     type="button"
+                    disabled={isBusy}
                     onClick={() => state.setSubmitMode(mode.id)}
                     className={`rounded-[1.35rem] border p-4 text-left transition-all ${
                       isActive
                         ? "border-signal-500/30 bg-signal-500/[0.08] shadow-[0_12px_24px_rgba(0,224,160,0.08)]"
-                        : "border-black/[0.06] bg-white/66 hover:border-black/[0.1] hover:bg-white dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:border-white/[0.1]"
-                    }`}
+                        : isBusy
+                          ? "border-black/[0.06] bg-white/66 opacity-50 dark:border-white/[0.06] dark:bg-white/[0.02]"
+                          : "border-black/[0.06] bg-white/66 hover:border-black/[0.1] hover:bg-white dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:border-white/[0.1]"
+                    } disabled:cursor-not-allowed`}
                   >
                     <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-700 dark:text-white">
                       <ModeIcon className={`h-3.5 w-3.5 ${isActive ? "text-signal-500" : "text-slate-400"}`} strokeWidth={2.1} />
@@ -429,25 +481,45 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
           </div>
 
           <div data-composer-stagger className="mt-auto flex flex-col gap-3 pt-2">
-            {submitError && (
-              <div className="rounded-xl border border-status-red/20 bg-status-red/[0.06] px-4 py-3 text-xs leading-relaxed text-status-red">
-                {submitError}
-              </div>
+            {isBusy && isOverlayDismissed && feedback && (
+              <button
+                type="button"
+                onClick={() => setIsOverlayDismissed(false)}
+                className="flex w-full items-center justify-between rounded-xl border border-signal-500/30 bg-signal-500/[0.06] p-3 text-left transition-all hover:bg-signal-500/[0.1] dark:bg-signal-500/[0.08]"
+              >
+                <div className="flex items-center gap-3">
+                  <Loader2 className="h-4 w-4 animate-spin text-signal-500" />
+                  <div>
+                    <div className="text-xs font-bold text-signal-700 dark:text-signal-300">
+                      {PLANNING_ACTION_LABELS[busyAction!] || "Planning in progress..."}
+                    </div>
+                    <div className="mt-0.5 text-[10px] text-signal-600/70 dark:text-signal-400/70">
+                      {Math.floor(elapsedMs / 60000)}:{String(Math.floor((elapsedMs % 60000) / 1000)).padStart(2, "0")} elapsed
+                    </div>
+                  </div>
+                </div>
+              </button>
             )}
             <button
               type="submit"
-              disabled={isSubmitting || !state.name.trim()}
+              disabled={isBusy || !state.name.trim()}
               className="inline-flex items-center justify-center gap-2.5 rounded-[1.2rem] bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-px hover:opacity-92 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-void-900"
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <SubmitIcon className="h-4 w-4" strokeWidth={2.3} />}
-              {state.submitMode === 'draft' ? (state.isEditing ? "Save Changes" : "Save Draft") : activeMode.label}
+              {isSubmitting
+                ? PLANNING_ACTION_LABELS[state.submitMode as PlanningActionType] || "Processing..."
+                : state.submitMode === 'draft' ? (state.isEditing ? "Save Changes" : "Save Draft") : activeMode.label}
             </button>
             <button
               type="button"
-              onClick={onClose}
-              className="rounded-[1.2rem] border border-black/[0.06] bg-white/66 px-5 py-3 text-sm font-semibold text-slate-500 transition-colors hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:text-white"
+              onClick={isBusy ? handleCancel : onClose}
+              className={`rounded-[1.2rem] border px-5 py-3 text-sm font-semibold transition-colors ${
+                isBusy
+                  ? "border-status-red/30 bg-status-red/[0.06] text-status-red hover:bg-status-red/[0.12]"
+                  : "border-black/[0.06] bg-white/66 text-slate-500 hover:text-slate-900 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-300 dark:hover:text-white"
+              }`}
             >
-              Cancel
+              {isBusy ? "Cancel Active Request" : "Cancel"}
             </button>
           </div>
         </aside>

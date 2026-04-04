@@ -252,7 +252,7 @@ export const ExecutionRuntimePanel: FunctionComponent<{
                 <button
                     type="button"
                     onClick={() => setOpen(!open)}
-                    className="relative z-10 w-full flex items-center justify-between gap-4 p-5 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors duration-200"
+                    className="relative z-10 w-full flex items-center justify-between gap-4 p-5 hover:bg-black/[0.01] dark:hover:bg-white/[0.01] transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
                 >
                     <div className="flex items-center gap-2.5">
                         <Workflow className="w-4 h-4 text-signal-500" strokeWidth={1.5} />

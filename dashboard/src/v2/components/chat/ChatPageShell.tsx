@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { MessageCircle, RefreshCw, Plus } from "lucide-preact";
 import type { Source } from "../../types.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 export const ChatPageShell: FunctionComponent<{
   selectedProject: Source | null;
@@ -30,15 +31,23 @@ export const ChatPageShell: FunctionComponent<{
   detailSlot,
 }) => {
   const headerRef = useRef<HTMLDivElement>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   useLayoutEffect(() => {
-    if (!headerRef.current) return;
-    gsap.fromTo(
-      Array.from(headerRef.current.children),
-      { opacity: 0, y: 28 },
-      { opacity: 1, y: 0, duration: 0.8, stagger: 0.08, ease: "power4.out" }
-    );
-  }, []);
+    const ctx = gsap.context(() => {
+      if (!headerRef.current) return;
+      if (prefersReducedMotion) {
+        gsap.set(Array.from(headerRef.current.children), { opacity: 1, y: 0 });
+      } else {
+        gsap.fromTo(
+          Array.from(headerRef.current.children),
+          { opacity: 0, y: 28 },
+          { opacity: 1, y: 0, duration: 0.8, stagger: 0.08, ease: "power4.out" }
+        );
+      }
+    });
+    return () => ctx.revert();
+  }, [prefersReducedMotion]);
 
   return (
     <div className="relative z-10 mx-auto flex h-[calc(100vh-48px)] max-w-[1900px] flex-col gap-8 px-8 py-12 md:px-20">

@@ -33,8 +33,11 @@ export const WorkingBubble: FunctionComponent<WorkingBubbleProps> = ({ displayNa
               <div className="flex items-center gap-2">
                 <span className="text-[13px] font-medium text-slate-300">
                   {displayName || "Listener"} is preparing a reply
+                  <span className="ml-2 inline-flex items-center rounded-md border border-signal-500/30 bg-signal-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-signal-500">
+                    Pending Reply
+                  </span>
                 </span>
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1 ml-1">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-signal-500" />
                   <span className="h-2 w-2 animate-pulse rounded-full bg-signal-500 [animation-delay:120ms]" />
                   <span className="h-2 w-2 animate-pulse rounded-full bg-signal-500 [animation-delay:240ms]" />

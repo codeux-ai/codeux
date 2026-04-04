@@ -24,10 +24,12 @@ import { SprintComposer } from "../../components/ui/SprintComposer.js";
 import { SprintMarkdownModal } from "../../components/ui/SprintMarkdownModal.js";
 import { SprintSettingsOverrideModal } from "../../components/ui/SprintSettingsOverrideModal.js";
 import { SprintImportMenu } from "../../components/sprints/SprintImportMenu.js";
+import { ActionFeedbackRegion } from "../../components/ui/ActionFeedbackRegion.js";
 import { useSprintsPageData } from "./use-sprints-page-data.js";
 import { useProgressiveList } from "../../hooks/use-progressive-list.js";
 import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "../../lib/list-window.js";
 import { ExecutionTimelineProvider } from "../../../hooks/ExecutionTimelineContext.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 const ACCENT_CYCLE = ["text-signal-500", "text-ember-500", "text-status-green"] as const;
 
@@ -35,6 +37,7 @@ export const SprintsPage: FunctionComponent = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const bubblesRef = useRef<HTMLDivElement>(null);
   const createStageRef = useRef<HTMLDivElement>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   const {
     selectedProject,
@@ -68,6 +71,8 @@ export const SprintsPage: FunctionComponent = () => {
     handleCreateQuicksprintTemplate,
     handleUpdateQuicksprintTemplate,
     handleDeleteQuicksprintTemplate,
+    feedback,
+    clearFeedback,
     refreshSprints,
     refreshExecution,
     handleSprintToggle,
@@ -85,15 +90,22 @@ export const SprintsPage: FunctionComponent = () => {
   const [listWindow, setListWindow] = useState<ListWindowOption>(DEFAULT_LIST_WINDOW);
 
   useLayoutEffect(() => {
-    if (!headerRef.current) {
-      return;
-    }
-    gsap.fromTo(
-      Array.from(headerRef.current.children),
-      { opacity: 0, y: 28 },
-      { opacity: 1, y: 0, stagger: 0.08, duration: 0.75, ease: "power3.out" },
-    );
-  }, []);
+    const ctx = gsap.context(() => {
+      if (!headerRef.current) {
+        return;
+      }
+      if (prefersReducedMotion) {
+        gsap.set(Array.from(headerRef.current.children), { opacity: 1, y: 0 });
+      } else {
+        gsap.fromTo(
+          Array.from(headerRef.current.children),
+          { opacity: 0, y: 28 },
+          { opacity: 1, y: 0, stagger: 0.08, duration: 0.75, ease: "power3.out" },
+        );
+      }
+    });
+    return () => ctx.revert();
+  }, [prefersReducedMotion]);
 
   // No auto-scroll when opening the sprint composer — keep viewport stable.
 
@@ -127,17 +139,25 @@ export const SprintsPage: FunctionComponent = () => {
       if (!bubblesRef.current) {
         return;
       }
-      const newCell = bubblesRef.current.firstElementChild;
-      if (!newCell) {
-        return;
-      }
-      gsap.fromTo(
-        newCell,
-        { scale: 0.88, opacity: 0, y: 18 },
-        { scale: 1, opacity: 1, y: 0, duration: 0.8, ease: "elastic.out(1, 0.65)" },
-      );
+      const ctx = gsap.context(() => {
+        const newCell = bubblesRef.current?.firstElementChild;
+        if (!newCell) {
+          return;
+        }
+        if (prefersReducedMotion) {
+          gsap.set(newCell, { scale: 1, opacity: 1, y: 0 });
+        } else {
+          gsap.fromTo(
+            newCell,
+            { scale: 0.88, opacity: 0, y: 18 },
+            { scale: 1, opacity: 1, y: 0, duration: 0.8, ease: "elastic.out(1, 0.65)" },
+          );
+        }
+      });
+      // Do not revert this one immediately as it runs on demand,
+      // but typically we'd let it run or clean it up if component unmounts.
     });
-  }, []);
+  }, [prefersReducedMotion]);
 
   const onSprintSubmit = useCallback(async (payload: any) => {
     await handleSubmitSprint(payload);
@@ -202,6 +222,12 @@ export const SprintsPage: FunctionComponent = () => {
                 ? `Define the sprint once for ${selectedProject.name}. The Planning agent can improve the prompt, plan subtasks, and launch the sprint without manual task entry.`
                 : "Select a project to manage sprint structure."}
             </p>
+            <ActionFeedbackRegion
+              status={feedback.status}
+              message={feedback.message}
+              onDismiss={clearFeedback}
+              className="mt-2"
+            />
             {selectedProject && (
               <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${
                 planningRoute.available

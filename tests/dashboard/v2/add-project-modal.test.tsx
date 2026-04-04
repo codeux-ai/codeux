@@ -11,6 +11,11 @@ expect.extend(matchers);
 vi.mock("gsap", () => ({
   default: {
     fromTo: vi.fn(),
+    set: vi.fn(),
+    context: (fn: () => void) => {
+      fn();
+      return { revert: vi.fn() };
+    },
     to: vi.fn((_target, options) => {
       options?.onComplete?.();
     }),

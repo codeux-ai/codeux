@@ -59,7 +59,7 @@ describe("UI Components Coverage", () => {
       />
     );
     expect(document.body.textContent).toContain("Test Message");
-    expect(document.body.textContent).toContain("Planning in motion");
+    expect(document.body.textContent).toContain("Generating subtasks");
 
     rerender(
       <PlanningProgressOverlay 

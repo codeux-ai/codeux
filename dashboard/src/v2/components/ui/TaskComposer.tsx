@@ -1,7 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
-import { Bot, Plus, Target, X, Save } from "lucide-preact";
+import { Bot, Plus, Target, X, Save, AlertCircle } from "lucide-preact";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
 import { useTaskComposerState, type TaskDraft } from "../../lib/task-composer-state.js";
 
@@ -59,12 +59,19 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
-    if (!state.isValid) {
-      return;
-    }
+    if (!state.isValid) return;
 
-    await onSubmit(state.getPayload());
-    onClose();
+    state.setIsSubmitting(true);
+    state.setSubmitError(null);
+
+    try {
+      await onSubmit(state.getPayload());
+      state.setIsSubmitting(false);
+      onClose();
+    } catch (err) {
+      state.setIsSubmitting(false);
+      state.setSubmitError(err instanceof Error ? err.message : String(err));
+    }
   };
 
   return (
@@ -112,7 +119,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               <select
                 value={state.sprintId}
                 onInput={(event) => state.setSprintId((event.target as HTMLSelectElement).value)}
-                className="w-full bg-transparent text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-lg px-1 py-0.5 -ml-1"
+                className="w-full bg-transparent text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-lg px-1 py-0.5 -ml-1" aria-invalid={!!state.validationErrors.sprintId}
                 required
               >
                 <option value="" disabled>Select sprint</option>
@@ -120,6 +127,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                   <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
                 ))}
               </select>
+              {state.validationErrors.sprintId && <div className="text-xs text-red-500 mt-2 font-medium">{state.validationErrors.sprintId}</div>}
             </div>
 
             <div className="rounded-[1.4rem] border border-black/[0.06] bg-black/[0.025] p-4 dark:border-white/[0.06] dark:bg-white/[0.03]">
@@ -150,10 +158,11 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
               value={state.title}
               onInput={(event) => state.setTitle((event.target as HTMLInputElement).value)}
               placeholder="Fix navigation layout shift"
-              className="w-full border-0 border-b-2 border-black/[0.08] bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]"
+              className="w-full border-0 border-b-2 border-black/[0.08] bg-transparent pb-3 font-display text-[1.65rem] font-black leading-none tracking-tight text-slate-900 outline-none transition-colors placeholder:text-slate-200 focus:border-signal-500 dark:border-white/[0.08] dark:text-white dark:placeholder:text-slate-700 sm:text-[1.9rem]" aria-invalid={!!state.validationErrors.title}
               required
               autoFocus
             />
+            {state.validationErrors.title && <div className="text-xs text-red-500 mt-2 font-medium">{state.validationErrors.title}</div>}
           </label>
 
           <div data-composer-stagger className="mt-8 space-y-3">
@@ -183,9 +192,20 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
           </div>
 
           <div data-composer-stagger className="mt-8">
-            <div className="flex items-center gap-2 mb-3">
-              <Target className="w-3.5 h-3.5 text-ember-500" strokeWidth={2.3} />
-              <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Dependencies</label>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Target className="w-3.5 h-3.5 text-ember-500" strokeWidth={2.3} />
+                <label className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">Dependencies</label>
+              </div>
+              {availableTasks.filter(t => t.sprintId === state.sprintId && t.recordId !== initialTask?.recordId).length > 5 && (
+                <input
+                  type="search"
+                  placeholder="Filter tasks..."
+                  value={state.dependencySearchQuery}
+                  onInput={(e) => state.setDependencySearchQuery((e.target as HTMLInputElement).value)}
+                  className="w-48 bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-3 py-1.5 text-xs rounded-xl focus:outline-none focus:border-ember-500 focus-visible:ring-1 focus-visible:ring-ember-500/50"
+                />
+              )}
             </div>
             {state.dependencyOptions.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-black/[0.08] dark:border-white/[0.08] px-4 py-4 text-xs text-slate-400">
@@ -200,15 +220,21 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
                       key={task.recordId}
                       type="button"
                       onClick={() => state.toggleDependency(task.recordId)}
+                      aria-pressed={active}
                       className={`flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:focus-visible:ring-offset-void-900 ${
                         active
                           ? "border-ember-500/45 bg-ember-500/[0.08] text-ember-600 dark:text-ember-400"
                           : "border-black/[0.07] dark:border-white/[0.07] bg-black/[0.02] dark:bg-white/[0.02] text-slate-500"
                       }`}
                     >
-                      <div className="min-w-0">
-                        <div className="text-[10px] font-mono uppercase tracking-[0.14em]">{task.id}</div>
-                        <div className="text-sm font-semibold truncate">{task.title}</div>
+                      <div className="min-w-0 flex-1 pr-2">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-slate-400">{task.id}</span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider ${task.priority === 'critical' ? 'bg-red-500/10 text-red-500' : task.priority === 'high' ? 'bg-orange-500/10 text-orange-500' : 'bg-slate-500/10 text-slate-500'}`}>
+                            {task.priority}
+                          </span>
+                        </div>
+                        <div className="text-sm font-semibold truncate leading-tight">{task.title}</div>
                       </div>
                       <span className={`w-4 h-4 rounded-full border ${active ? "border-ember-500 bg-ember-500" : "border-slate-300 dark:border-slate-600"}`} />
                     </button>
@@ -273,13 +299,25 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
           </div>
 
           <div data-composer-stagger className="mt-auto flex flex-col gap-3 pt-2">
+            {state.submitError && (
+              <div className="flex items-start gap-3 rounded-2xl bg-red-500/[0.05] border border-red-500/20 p-4 text-sm text-red-600 dark:text-red-400">
+                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                <div className="leading-relaxed font-medium">{state.submitError}</div>
+              </div>
+            )}
             <button
               type="submit"
-              disabled={!state.isValid}
+              disabled={!state.isValid || state.isSubmitting}
               className="inline-flex items-center justify-center gap-2.5 rounded-[1.2rem] bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.16)] transition-all hover:-translate-y-px hover:opacity-92 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:ring-offset-1 focus-visible:ring-offset-white dark:bg-white dark:text-void-900 dark:focus-visible:ring-offset-void-900"
             >
-              {state.isEditing ? <Save className="h-4 w-4" strokeWidth={2.3} /> : <Plus className="h-4 w-4" strokeWidth={2.3} />}
-              {state.isEditing ? "Save Task" : "Create Task"}
+              {state.isSubmitting ? (
+                <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white dark:border-void-900/20 dark:border-t-void-900 animate-spin" />
+              ) : state.isEditing ? (
+                <Save className="h-4 w-4" strokeWidth={2.3} />
+              ) : (
+                <Plus className="h-4 w-4" strokeWidth={2.3} />
+              )}
+              {state.isSubmitting ? "Saving..." : state.isEditing ? "Save Task" : "Create Task"}
             </button>
             <button
               type="button"

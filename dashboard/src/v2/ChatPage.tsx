@@ -1,40 +1,11 @@
 import type { FunctionComponent } from "preact";
 import { useEffect, useRef } from "preact/hooks";
-import gsap from "gsap";
 import {
   ArrowUp,
   RefreshCw,
-  Sparkles,
-  UserCircle2,
 } from "lucide-preact";
-import type {
-  AgentConnection,
-  ChatMessageRecord,
-  ChatThread,
-  ExecutionInvocationRecord,
-  ExecutionInvocationMessageRecord,
-} from "./types.js";
-import type {
-  DashboardRealtimeServerMessage,
-  ExecutionDashboardSnapshot,
-  ExecutionConnectionSummary,
-} from "../types.js";
-
-
-
-
-
-
-import { renderMarkdown } from "../lib/markdown.js";
-
 import { ChatThreadHeader } from "./components/chat/ChatThreadHeader.js";
-
-
-import { fetchProjectEffectiveSettings } from "./lib/settings-api.js";
-
 import { ChatPageShell } from "./components/chat/ChatPageShell.js";
-
-
 import { ChatRail } from "./components/chat/ChatRail.js";
 import { ThreadListCard } from "./components/chat/ThreadListCard.js";
 import { InvocationListCard } from "./components/chat/InvocationListCard.js";
@@ -43,6 +14,9 @@ import { ChatMessageBubble } from "./components/chat/ChatMessageBubble.js";
 import { useChatPageData } from "./hooks/use-chat-page-data.js";
 import { InvocationMessageBubble } from "./components/chat/InvocationMessageBubble.js";
 import { WorkingBubble } from "./components/chat/WorkingBubble.js";
+import { ConfirmDialog } from "./components/ui/ConfirmDialog.js";
+import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
+import type { ExecutionInvocationRecord } from "./types.js";
 
 const formatInvocationErrorCategory = (value: ExecutionInvocationRecord["lastErrorCategory"]): string | null => {
   switch (value) {
@@ -61,11 +35,10 @@ const formatInvocationErrorCategory = (value: ExecutionInvocationRecord["lastErr
   }
 };
 
-
-
 export const ChatPage: FunctionComponent = () => {
   const messagesRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+
   const {
     chatMode,
     setChatMode,
@@ -105,6 +78,12 @@ export const ChatPage: FunctionComponent = () => {
     threadIndex,
     invocationIndex,
     selectedProject,
+    feedback,
+    clearFeedback,
+    isConfirmOpen,
+    confirmOptions,
+    handleConfirm,
+    handleCancel,
   } = useChatPageData({ composerRef, messagesRef });
 
   useEffect(() => {
@@ -168,6 +147,12 @@ export const ChatPage: FunctionComponent = () => {
     if (chatMode === "threads") {
       return (
         <>
+          <ConfirmDialog isOpen={isConfirmOpen} options={confirmOptions} onConfirm={handleConfirm} onCancel={handleCancel} />
+          {feedback.status !== "idle" && (
+            <div className="absolute top-4 right-4 z-50 shadow-lg">
+              <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} />
+            </div>
+          )}
           <ChatThreadHeader
             thread={selectedThread}
             workerOptions={workerOptions}

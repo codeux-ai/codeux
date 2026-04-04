@@ -6,10 +6,12 @@ import { ActionButton, NoticePanel } from "./components/settings/SettingsSurface
 import { useSettingsPageState } from "./hooks/use-settings-page-state.js";
 import { SettingsCategoryRail, CATEGORIES, CATEGORY_SEARCH_HINTS } from "./components/settings/SettingsCategoryRail.js";
 import { SettingsContentPanels } from "./components/settings/SettingsContentPanels.js";
+import { useReducedMotion } from "./hooks/use-reduced-motion.js";
 
 export const SettingsPage: FunctionComponent = () => {
   const headerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const prefersReducedMotion = useReducedMotion();
 
   const state = useSettingsPageState(CATEGORIES, CATEGORY_SEARCH_HINTS);
   const {
@@ -32,38 +34,50 @@ export const SettingsPage: FunctionComponent = () => {
   } = state;
 
   useLayoutEffect(() => {
-    if (!headerRef.current) {
-      return;
-    }
-    gsap.fromTo(
-      Array.from(headerRef.current.children),
-      { opacity: 0, y: 40 },
-      { opacity: 1, y: 0, stagger: 0.09, duration: 0.9, ease: "power4.out", delay: 0.05 },
-    );
-  }, []);
+    const ctx = gsap.context(() => {
+      if (!headerRef.current) {
+        return;
+      }
+      if (prefersReducedMotion) {
+        gsap.set(Array.from(headerRef.current.children), { opacity: 1, y: 0 });
+      } else {
+        gsap.fromTo(
+          Array.from(headerRef.current.children),
+          { opacity: 0, y: 40 },
+          { opacity: 1, y: 0, stagger: 0.09, duration: 0.9, ease: "power4.out", delay: 0.05 },
+        );
+      }
+    });
+    return () => ctx.revert();
+  }, [prefersReducedMotion]);
 
     const switchCategory = useCallback((categoryId: typeof activeCategory): void => {
     if (!contentRef.current || categoryId === activeCategory) {
       return;
     }
-    gsap.to(contentRef.current, {
-      opacity: 0,
-      y: 12,
-      duration: 0.18,
-      ease: "power2.in",
-      onComplete: () => {
-        state.setActiveCategory(categoryId);
-        if (!contentRef.current) {
-          return;
-        }
-        gsap.fromTo(
-          contentRef.current,
-          { opacity: 0, y: 12 },
-          { opacity: 1, y: 0, duration: 0.35, ease: "power3.out" },
-        );
-      },
-    });
-  }, [activeCategory, state]);
+    if (prefersReducedMotion) {
+      state.setActiveCategory(categoryId);
+      gsap.set(contentRef.current, { opacity: 1, y: 0 });
+    } else {
+      gsap.to(contentRef.current, {
+        opacity: 0,
+        y: 12,
+        duration: 0.18,
+        ease: "power2.in",
+        onComplete: () => {
+          state.setActiveCategory(categoryId);
+          if (!contentRef.current) {
+            return;
+          }
+          gsap.fromTo(
+            contentRef.current,
+            { opacity: 0, y: 12 },
+            { opacity: 1, y: 0, duration: 0.35, ease: "power3.out" },
+          );
+        },
+      });
+    }
+  }, [activeCategory, state, prefersReducedMotion]);
 
   return (
     <div className="relative z-10 mx-auto flex max-w-[1920px] flex-col gap-10 px-6 py-16 md:px-12 xl:px-20">

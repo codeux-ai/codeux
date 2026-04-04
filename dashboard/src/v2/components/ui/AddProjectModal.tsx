@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { X, Plus, FolderOpen, GitBranch, FolderInput, Link2 } from "lucide-preact";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface AddProjectModalProps {
     onClose: () => void;
@@ -22,42 +23,55 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     const [cloneDir, setCloneDir]   = useState('');
     const [error, setError]         = useState<string | null>(null);
 
+    const reducedMotion = useReducedMotion();
+    const isSubmitting = useRef(false);
+
     useLayoutEffect(() => {
-        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.35, ease: "power2.out" });
+        const d_backdrop = reducedMotion ? 0 : 0.35;
+        const d_card = reducedMotion ? 0 : 0.6;
+        const d_fields = reducedMotion ? 0 : 0.45;
+
+        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: "power2.out" });
         gsap.fromTo(cardRef.current,
-            { y: 48, opacity: 0, scale: 0.94 },
-            { y: 0, opacity: 1, scale: 1, duration: 0.6, ease: "power4.out", delay: 0.05 }
+            { y: reducedMotion ? 0 : 48, opacity: 0, scale: reducedMotion ? 1 : 0.94 },
+            { y: 0, opacity: 1, scale: 1, duration: d_card, ease: "power4.out", delay: reducedMotion ? 0 : 0.05 }
         );
         if (fieldsRef.current) {
             gsap.fromTo(Array.from(fieldsRef.current.children),
-                { y: 18, opacity: 0 },
-                { y: 0, opacity: 1, stagger: 0.07, duration: 0.45, ease: "power3.out", delay: 0.25 }
+                { y: reducedMotion ? 0 : 18, opacity: 0 },
+                { y: 0, opacity: 1, stagger: reducedMotion ? 0 : 0.07, duration: d_fields, ease: "power3.out", delay: reducedMotion ? 0 : 0.25 }
             );
         }
-    }, []);
+    }, [reducedMotion]);
 
     const handleClose = () => {
-        gsap.to(cardRef.current, { y: 24, opacity: 0, scale: 0.96, duration: 0.28, ease: "power3.in" });
-        gsap.to(backdropRef.current, { opacity: 0, duration: 0.28, delay: 0.05, onComplete: onClose });
+        if (isSubmitting.current) return;
+
+        const duration = reducedMotion ? 0 : 0.28;
+        gsap.to(cardRef.current, { y: 24, opacity: 0, scale: 0.96, duration, ease: "power3.in" });
+        gsap.to(backdropRef.current, { opacity: 0, duration, delay: reducedMotion ? 0 : 0.05, onComplete: onClose });
     };
 
-    const backdropRef = useFocusTrap(true, handleClose);
+    const backdropRef = useFocusTrap(true, { onClose: handleClose, restoreFocus: true });
 
-    const handleBackdropClick = (e: MouseEvent) => {
+    const handleBackdropClick = (e: PointerEvent) => {
         if (e.target === backdropRef.current) handleClose();
     };
 
     const handleSubmit = (e: Event) => {
         e.preventDefault();
+        isSubmitting.current = true;
         const path = sourceType === 'local' ? localPath.trim() : gitUrl.trim();
 
         if (!name.trim()) {
             setError("Project Name is required.");
+            isSubmitting.current = false;
             return;
         }
 
         if (!path) {
             setError(sourceType === 'local' ? "Directory Path is required." : "Repository URL is required.");
+            isSubmitting.current = false;
             return;
         }
 
@@ -86,7 +100,7 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
     return (
         <div
             ref={backdropRef}
-            onClick={handleBackdropClick}
+            onPointerDown={handleBackdropClick}
             role="dialog"
             aria-modal="true"
             aria-labelledby="add-project-modal-title"

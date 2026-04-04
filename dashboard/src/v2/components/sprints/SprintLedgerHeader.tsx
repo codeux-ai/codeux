@@ -49,20 +49,27 @@ export const SprintLedgerHeader: FunctionComponent<SprintLedgerHeaderProps> = ({
             value={searchQuery}
             onInput={(e) => onSearchQueryChange((e.target as HTMLInputElement).value)}
             placeholder="Search sprints…"
-            className="h-9 w-56 rounded-full border border-black/[0.08] bg-white/80 pl-9 pr-8 text-xs text-slate-700 placeholder:text-slate-400 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/10 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder:text-slate-500"
+            className="h-9 w-56 rounded-full border border-black/[0.08] bg-white/80 pl-9 pr-8 text-xs text-slate-700 placeholder:text-slate-400 focus:border-signal-500/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/20 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white dark:placeholder:text-slate-500"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => onSearchQueryChange("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 rounded-full"
             >
               <X className="h-3.5 w-3.5" strokeWidth={2.2} />
             </button>
           )}
         </div>
-        <div className="text-xs font-mono text-slate-400">
-          {searchQuery ? `${ledgerSprintsCount} / ${sprintsCount}` : `${sprintsCount} total`}
+        <div className="flex items-center gap-2 text-xs font-mono">
+          {searchQuery ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-signal-500/25 bg-signal-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-300">
+              {ledgerSprintsCount} results
+            </span>
+          ) : null}
+          <span className="text-slate-400">
+            {sprintsCount} total
+          </span>
         </div>
       </div>
     </div>
