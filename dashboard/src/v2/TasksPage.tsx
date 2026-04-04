@@ -424,6 +424,41 @@ export const TasksPage: FunctionComponent = () => {
     taskScopeSprintId
   );
 
+  const [showSkeletons, setShowSkeletons] = useState(false);
+  const [isFadingOut, setIsFadingOut] = useState(false);
+
+  useEffect(() => {
+    let timeoutId: number;
+    if (loading) {
+      setIsFadingOut(false);
+      timeoutId = window.setTimeout(() => setShowSkeletons(true), 200);
+    } else {
+      if (showSkeletons && boardRef.current) {
+        setIsFadingOut(true);
+        const skeletonCards = Array.from(boardRef.current.querySelectorAll(".skeleton-card-entry"));
+        if (skeletonCards.length > 0) {
+          gsap.to(skeletonCards, {
+            opacity: 0,
+            y: -10,
+            duration: 0.3,
+            stagger: 0.05,
+            ease: "power2.in",
+            onComplete: () => {
+              setShowSkeletons(false);
+              setIsFadingOut(false);
+            }
+          });
+        } else {
+          setShowSkeletons(false);
+          setIsFadingOut(false);
+        }
+      } else {
+        setShowSkeletons(false);
+      }
+    }
+    return () => window.clearTimeout(timeoutId);
+  }, [loading, showSkeletons]);
+
   useLayoutEffect(() => {
     if (headerRef.current) {
       gsap.fromTo(Array.from(headerRef.current.children), { opacity: 0, y: 40 }, { opacity: 1, y: 0, stagger: 0.1, duration: 0.9, ease: "power4.out", delay: 0.05 });
@@ -431,18 +466,21 @@ export const TasksPage: FunctionComponent = () => {
   }, []);
 
   useLayoutEffect(() => {
-    if (boardRef.current) {
-      gsap.fromTo(Array.from(boardRef.current.children), { opacity: 0, y: 15, scale: 0.98 }, {
-        opacity: 1,
-        y: 0,
-        scale: 1,
-        stagger: { amount: 0.2, from: "start" },
-        duration: 0.6,
-        ease: "power2.out",
-        delay: 0.1,
-      });
+    if (boardRef.current && !loading && !showSkeletons && !isFadingOut) {
+      const taskCards = Array.from(boardRef.current.querySelectorAll(".task-card-entry"));
+      if (taskCards.length > 0) {
+        gsap.fromTo(taskCards, { opacity: 0, y: 15, scale: 0.98 }, {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          stagger: { amount: 0.2, from: "start" },
+          duration: 0.6,
+          ease: "power2.out",
+          delay: 0.05,
+        });
+      }
     }
-  }, [selectedProject?.id, statusFilter, priorityFilter, taskScopeSprintId]);
+  }, [selectedProject?.id, statusFilter, priorityFilter, taskScopeSprintId, loading, showSkeletons, isFadingOut]);
 
   const dependenciesMap = useMemo(() => buildDependentTasksMap(tasks), [tasks]);
 
@@ -651,29 +689,30 @@ export const TasksPage: FunctionComponent = () => {
           <div key={status} className="flex flex-col">
             <ColumnHeader status={status} count={count} />
             <div className="flex-1 flex flex-col gap-4 p-4 rounded-[1.5rem] min-h-[200px] bg-black/[0.015] dark:bg-white/[0.015] border border-black/[0.03] dark:border-white/[0.03]">
-              {loading ? (
+              {showSkeletons ? (
                 <>
                   <SkeletonCard />
                   <SkeletonCard />
                   <SkeletonCard />
                 </>
-              ) : columnTasks.length === 0 ? (
+              ) : !loading && !isFadingOut && columnTasks.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center text-center p-6 text-xs font-medium text-slate-400 dark:text-slate-500 border-2 border-dashed border-black/[0.04] dark:border-white/[0.04] rounded-[1rem]">
                   No {status.replace("_", " ")} tasks
                   <br />
                   {statusFilter !== "all" || priorityFilter !== "all" ? "matching current filters" : taskScopeSprintId ? "in this sprint" : "in this project"}.
                 </div>
-              ) : (
+              ) : !loading && !isFadingOut ? (
                 columnTasks.map((task) => (
-                  <TaskCard
-                    key={task.recordId}
-                    task={task}
-                    dependents={dependenciesMap[task.recordId] ?? EMPTY_DEPENDENTS}
-                    onEdit={handleEditClick}
-                    onDelete={handleDeleteTask}
-                  />
+                  <div key={task.recordId} className="task-card-entry">
+                    <TaskCard
+                      task={task}
+                      dependents={dependenciesMap[task.recordId] ?? EMPTY_DEPENDENTS}
+                      onEdit={handleEditClick}
+                      onDelete={handleDeleteTask}
+                    />
+                  </div>
                 ))
-              )}
+              ) : null}
             </div>
           </div>
         ))}
