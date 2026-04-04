@@ -479,21 +479,24 @@ export const runSessionSyncStep = async (
       continue;
     }
 
+    const taskDispatches = task.record_id && task.project_id && deps.executionRepository
+      ? deps.executionRepository.listTaskDispatches({
+          projectId: task.project_id,
+          taskId: task.record_id,
+        })
+      : null;
+    const dispatchesWithError = taskDispatches ? taskDispatches.filter((d) => d.errorMessage) : null;
+
     if (match.state === "RATE_LIMITED") {
       let retryDelayActive = true;
       let rateLimitRetriesWithoutDelay = 0;
-      if (task.record_id && task.project_id && deps.executionRepository) {
-        const dispatches = deps.executionRepository.listTaskDispatches({
-          projectId: task.project_id,
-          taskId: task.record_id,
-        });
-        const withError = dispatches.filter((d) => d.errorMessage);
-        const latestError = withError.length > 0 ? withError[withError.length - 1].errorMessage : null;
+      if (taskDispatches && dispatchesWithError) {
+        const latestError = dispatchesWithError.length > 0 ? dispatchesWithError[dispatchesWithError.length - 1].errorMessage : null;
         retryDelayActive = isRetryAfterActive(latestError);
 
         if (!retryDelayActive) {
-          for (let i = withError.length - 1; i >= 0; i--) {
-            const err = withError[i].errorMessage;
+          for (let i = dispatchesWithError.length - 1; i >= 0; i--) {
+            const err = dispatchesWithError[i].errorMessage;
             if (!err || extractProviderErrorCategory(err) !== "RATE_LIMITED") {
               break;
             }
@@ -522,19 +525,14 @@ export const runSessionSyncStep = async (
       // Check if the quota cooldown has expired by looking at the latest dispatch error
       let cooldownActive = true;
       let quotaRetriesWithoutTimer = 0;
-      if (task.record_id && task.project_id && deps.executionRepository) {
-        const dispatches = deps.executionRepository.listTaskDispatches({
-          projectId: task.project_id,
-          taskId: task.record_id,
-        });
-        const withError = dispatches.filter((d) => d.errorMessage);
-        const latestError = withError.length > 0 ? withError[withError.length - 1].errorMessage : null;
+      if (taskDispatches && dispatchesWithError) {
+        const latestError = dispatchesWithError.length > 0 ? dispatchesWithError[dispatchesWithError.length - 1].errorMessage : null;
         cooldownActive = isQuotaCooldownActive(latestError);
 
         // Count consecutive quota dispatches without a reset timer
         if (!cooldownActive && latestError && extractProviderErrorCategory(latestError) !== "RATE_LIMITED") {
-          for (let i = withError.length - 1; i >= 0; i--) {
-            const err = withError[i].errorMessage;
+          for (let i = dispatchesWithError.length - 1; i >= 0; i--) {
+            const err = dispatchesWithError[i].errorMessage;
             if (!err || !err.toLowerCase().includes("quota")) break;
             if (extractProviderErrorCategory(err) === "RATE_LIMITED") break;
             if (isQuotaCooldownActive(err)) break;
