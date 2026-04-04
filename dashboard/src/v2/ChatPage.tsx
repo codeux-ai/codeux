@@ -6,6 +6,7 @@ import {
   RefreshCw,
   Sparkles,
   UserCircle2,
+  ArrowLeft,
 } from "lucide-preact";
 import type {
   AgentConnection,
@@ -958,6 +959,7 @@ export const ChatPage: FunctionComponent = () => {
             onAssignRoute={(option) => void handleAssignRoute(option)}
             onCompact={() => void handleCompactThread()}
             isCompacting={compacting}
+            onBack={() => void activateThread(null)}
           />
 
           <div ref={messagesRef} className="flex-1 min-h-0 space-y-6 overflow-y-auto px-6 py-6">
@@ -1025,21 +1027,29 @@ export const ChatPage: FunctionComponent = () => {
     return (
       <>
         <div className="shrink-0 border-b border-black/[0.05] px-6 py-5 dark:border-white/[0.05]">
-          <div className="flex items-start justify-between gap-6">
-            <div>
-              <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">
-                <span>Active Invocation</span>
+          <div className="flex flex-col lg:flex-row items-start justify-between gap-4 lg:gap-6">
+            <div className="flex items-start gap-3">
+              <button
+                type="button"
+                onClick={() => void activateInvocation(null)}
+                className="mt-1 flex-shrink-0 lg:hidden text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <div>
+                <div className="flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">
+                  <span>Active Invocation</span>
                 {formatInvocationErrorCategory(selectedInvocation?.lastErrorCategory || null) && (
                   <span className="rounded-full border border-status-amber/25 bg-status-amber/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-status-amber">
                     {formatInvocationErrorCategory(selectedInvocation?.lastErrorCategory || null)}
                   </span>
                 )}
               </div>
-              <h2 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white capitalize">
-                {selectedInvocation?.type || "No Invocation Selected"}
-              </h2>
-              {selectedInvocation && (
-                <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                <h2 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white capitalize break-words">
+                  {selectedInvocation?.type || "No Invocation Selected"}
+                </h2>
+                {selectedInvocation && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400">
                   {selectedInvocation.provider && (
                     <span className="rounded-full border border-black/25 bg-black/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] dark:border-white/25 dark:bg-white/10">
                       {selectedInvocation.provider}
@@ -1050,26 +1060,27 @@ export const ChatPage: FunctionComponent = () => {
                       {selectedInvocation.model}
                     </span>
                   )}
-                  <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
-                    selectedInvocation.status === "failed"
-                      ? "border-status-red/25 bg-status-red/10 text-status-red"
-                      : selectedInvocation.status === "completed"
-                        ? "border-signal-500/25 bg-signal-500/10 text-signal-500"
-                        : "border-black/25 bg-black/10 text-slate-500 dark:border-white/25 dark:bg-white/10 dark:text-slate-400"
-                  }`}>
-                    {selectedInvocation.status}
-                  </span>
-                </div>
-              )}
-              {selectedInvocation?.lastErrorMessage && (
-                <div className="mt-3 max-w-2xl text-sm leading-relaxed text-status-amber">
-                  {selectedInvocation.lastErrorMessage}
-                  {selectedInvocation.lastRetryAfterIso && ` Retry at ${selectedInvocation.lastRetryAfterIso}.`}
-                </div>
-              )}
+                    <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] ${
+                      selectedInvocation.status === "failed"
+                        ? "border-status-red/25 bg-status-red/10 text-status-red"
+                        : selectedInvocation.status === "completed"
+                          ? "border-signal-500/25 bg-signal-500/10 text-signal-500"
+                          : "border-black/25 bg-black/10 text-slate-500 dark:border-white/25 dark:bg-white/10 dark:text-slate-400"
+                    }`}>
+                      {selectedInvocation.status}
+                    </span>
+                  </div>
+                )}
+                {selectedInvocation?.lastErrorMessage && (
+                  <div className="mt-3 max-w-2xl text-sm leading-relaxed text-status-amber">
+                    {selectedInvocation.lastErrorMessage}
+                    {selectedInvocation.lastRetryAfterIso && ` Retry at ${selectedInvocation.lastRetryAfterIso}.`}
+                  </div>
+                )}
+              </div>
             </div>
-            <div className="text-right text-[10px] font-mono text-slate-400">
-              <div className="mb-2">{selectedInvocation ? `${selectedInvocation.messageCount} messages` : "0 messages"}</div>
+            <div className="text-left lg:text-right text-[10px] font-mono text-slate-400 w-full lg:w-auto">
+              <div className="mb-2 hidden lg:block">{selectedInvocation ? `${selectedInvocation.messageCount} messages` : "0 messages"}</div>
             </div>
           </div>
         </div>
@@ -1106,6 +1117,7 @@ export const ChatPage: FunctionComponent = () => {
       <ChatPageShell
         selectedProject={null}
         chatMode={chatMode}
+        isDetailActive={chatMode === "threads" ? !!selectedThreadId : !!selectedInvocationId}
         onSetChatMode={setChatMode}
         onRefresh={() => void refreshThreads({ manual: true })}
         manualRefreshing={manualRefreshing}
@@ -1123,6 +1135,7 @@ export const ChatPage: FunctionComponent = () => {
     <ChatPageShell
       selectedProject={selectedProject}
       chatMode={chatMode}
+      isDetailActive={chatMode === "threads" ? !!selectedThreadId : !!selectedInvocationId}
       onSetChatMode={setChatMode}
       onRefresh={() => void refreshThreads({ manual: true })}
       manualRefreshing={manualRefreshing}

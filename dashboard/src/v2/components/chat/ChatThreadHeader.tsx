@@ -1,5 +1,5 @@
 import { h, type FunctionComponent } from "preact";
-import { AlertCircle, Zap, Activity } from "lucide-preact";
+import { AlertCircle, Zap, Activity, ArrowLeft } from "lucide-preact";
 import type { ChatThread } from "../../types.js";
 import { buildWorkerOptionIndex } from "../../lib/chat-entity-index.js";
 import type { WorkerOption } from "../../lib/project-worker-options.js";
@@ -40,6 +40,7 @@ interface ChatThreadHeaderProps {
   onAssignRoute: (option: WorkerOption) => void;
   onCompact: () => void;
   isCompacting: boolean;
+  onBack?: () => void;
 }
 
 export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
@@ -49,6 +50,7 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
   onAssignRoute,
   onCompact,
   isCompacting,
+  onBack,
 }) => {
   const selectedRouteId = resolveSelectedRouteId(thread, workerOptions);
 
@@ -58,10 +60,20 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
 
   return (
     <div className="shrink-0 border-b border-black/[0.05] px-6 py-5 dark:border-white/[0.05]">
-      <div className="flex items-start justify-between gap-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">Active Thread</div>
+      <div className="flex flex-col lg:flex-row items-start justify-between gap-4 lg:gap-6">
+        <div className="flex items-start gap-3">
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="mt-1 flex-shrink-0 lg:hidden text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+          )}
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-signal-500">Active Thread</div>
             {isReplayRequired && (
               <span className="inline-flex items-center gap-1 rounded-sm border border-status-amber/30 bg-status-amber/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-status-amber">
                 <AlertCircle className="h-3 w-3" />
@@ -79,16 +91,17 @@ export const ChatThreadHeader: FunctionComponent<ChatThreadHeaderProps> = ({
                 New/Compacted
               </span>
             )}
+            </div>
+            <h2 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white break-words">
+              {thread?.title || "No Thread Selected"}
+            </h2>
           </div>
-          <h2 className="mt-2 font-display text-3xl font-black tracking-tight text-slate-900 dark:text-white">
-            {thread?.title || "No Thread Selected"}
-          </h2>
         </div>
-        <div className="text-right text-[10px] font-mono text-slate-400">
-          <div className="mb-2">
+        <div className="text-left lg:text-right text-[10px] font-mono text-slate-400 w-full lg:w-auto">
+          <div className="mb-2 hidden lg:block">
             {thread ? `${thread.messageCount} messages` : "0 messages"}
           </div>
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex flex-wrap items-center justify-start lg:justify-end gap-2">
             {thread && thread.messageCount > 0 && (
               <button
                 type="button"

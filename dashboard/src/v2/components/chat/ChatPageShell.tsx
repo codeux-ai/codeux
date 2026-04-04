@@ -14,6 +14,7 @@ export const ChatPageShell: FunctionComponent<{
   pendingDashboardMessages: number;
   activeConnectionLabel?: string;
   error: string | null;
+  isDetailActive?: boolean;
   railSlot: ComponentChildren;
   detailSlot: ComponentChildren;
 }> = ({
@@ -26,6 +27,7 @@ export const ChatPageShell: FunctionComponent<{
   pendingDashboardMessages,
   activeConnectionLabel,
   error,
+  isDetailActive,
   railSlot,
   detailSlot,
 }) => {
@@ -41,7 +43,7 @@ export const ChatPageShell: FunctionComponent<{
   }, []);
 
   return (
-    <div className="relative z-10 mx-auto flex h-[calc(100vh-48px)] max-w-[1900px] flex-col gap-8 px-8 py-12 md:px-20">
+    <div className="relative z-10 mx-auto flex h-[calc(100dvh-48px)] lg:h-[calc(100vh-48px)] max-w-[1900px] flex-col gap-8 px-4 py-6 md:px-8 md:py-12 lg:px-20">
       <div ref={headerRef} className="shrink-0 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-signal-500">
@@ -131,9 +133,11 @@ export const ChatPageShell: FunctionComponent<{
         </div>
       )}
 
-      <div className="flex-1 min-h-[70vh] flex flex-col md:grid md:grid-cols-[360px_minmax(0,1fr)] gap-6 pb-6">
-        {railSlot}
-        <section className="flex flex-col min-h-[70vh] flex-1 rounded-[1.9rem] border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+      <div className="flex-1 min-h-[70vh] flex flex-col lg:grid lg:grid-cols-[360px_minmax(0,1fr)] gap-6 pb-6">
+        <div className={isDetailActive ? "hidden lg:flex flex-col min-h-0 flex-1" : "flex flex-col min-h-0 flex-1"}>
+          {railSlot}
+        </div>
+        <section className={`flex-col min-h-[70vh] flex-1 rounded-[1.9rem] border border-black/[0.06] bg-white/70 shadow-[0_2px_20px_rgba(0,0,0,0.04)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/60 dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] ${isDetailActive ? "flex" : "hidden lg:flex"}`}>
           {detailSlot}
         </section>
       </div>
