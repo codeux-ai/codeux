@@ -2,12 +2,34 @@ import type { JulesActivity, JulesSession, Subtask } from "../../contracts/app-t
 import type { TaskRunRecord, TaskDispatchStatus, TaskRunState } from "../../contracts/execution-types.js";
 import type { SessionSyncDependencies } from "../sprint-types.js";
 import { buildTaskRunKey, extractTaskRunKeyFromTitle } from "../../services/task-run-key.js";
+import type { ProviderInvocationUsageRecord } from "../../contracts/execution-types.js";
 import { applyPendingTaskRuntimeReset } from "../../domain/sprint/task-reset-state.js";
 import {
   extractProviderErrorCategory,
   isQuotaCooldownActive,
   isRetryAfterActive,
 } from "../../shared/providers/provider-error-classifier.js";
+
+
+
+const extractGitMetrics = (session: JulesSession): Record<string, unknown> | null => {
+  const pullRequestOutput = Array.isArray(session.outputs)
+    ? session.outputs.find((entry) => entry && typeof entry === "object" && "pullRequest" in entry)
+    : undefined;
+  const pr = pullRequestOutput && typeof pullRequestOutput.pullRequest === "object"
+    ? pullRequestOutput.pullRequest as Record<string, unknown>
+    : null;
+
+  if (!pr) return null;
+
+  return {
+    filesChanged: typeof pr.filesChanged === "number" ? pr.filesChanged : undefined,
+    insertions: typeof pr.insertions === "number" ? pr.insertions : undefined,
+    deletions: typeof pr.deletions === "number" ? pr.deletions : undefined,
+    workerBranch: typeof pr.workerBranch === "string" ? pr.workerBranch : undefined,
+    prUrl: typeof pr.url === "string" ? pr.url : undefined,
+  };
+};
 
 const mapSessionStateToTaskRunState = (
   sessionState: string | undefined,
@@ -145,12 +167,12 @@ const resolvePrUrl = (session: JulesSession): string | null => {
   return typeof url === "string" && url.trim().length > 0 ? url : null;
 };
 
-const syncExecutionRunState = (
+const syncExecutionRunState = async (
   deps: SessionSyncDependencies,
   task: Subtask,
   session: JulesSession,
   activities: JulesActivity[] | undefined,
-): void => {
+): Promise<void> => {
   if (!deps.executionRepository || !deps.sprintRunId || !task.record_id) {
     return;
   }
@@ -251,6 +273,92 @@ const syncExecutionRunState = (
       sourceEventKey: `activity:${activity.id}`,
     });
   }
+
+  const isTerminal = nextRunState === "COMPLETED" || nextRunState === "FAILED";
+
+  if (isTerminal && deps.getSession && deps.listAllActivities) {
+    try {
+      const gitMetrics = extractGitMetrics(session);
+      if (gitMetrics && (gitMetrics.filesChanged !== undefined || gitMetrics.insertions !== undefined || gitMetrics.deletions !== undefined)) {
+        deps.executionRepository.appendTaskRunEvent(taskRun.id, "git_metrics", "provider", {
+          ...gitMetrics
+        }, {
+          sourceEventKey: `git-metrics:${sessionId || sessionName || taskRun.id}`
+        });
+      }
+
+      const existingUsage = deps.executionRepository.getLatestProviderInvocationUsageBySession(sessionId || sessionName || taskRun.id, "task_coding");
+
+      if (!existingUsage) {
+        const fullSession = await deps.getSession(sessionId || sessionName || "");
+        const fullActivities = await deps.listAllActivities(sessionId || sessionName || "");
+
+        let promptChars = fullSession.prompt ? fullSession.prompt.length : 0;
+        let agentChars = 0;
+        let userChars = 0;
+
+        for (const act of fullActivities) {
+          if (act.userMessaged?.userMessage) userChars += act.userMessaged.userMessage.length;
+          if (act.agentMessaged?.agentMessage) agentChars += act.agentMessaged.agentMessage.length;
+          if (act.planGenerated?.plan) agentChars += JSON.stringify(act.planGenerated.plan).length;
+          if (act.progressUpdated?.description) agentChars += act.progressUpdated.description.length;
+          if (act.progressUpdated?.title) agentChars += act.progressUpdated.title.length;
+        }
+
+        const inputTokens = Math.ceil((promptChars + userChars) / 4);
+        const outputTokens = Math.ceil(agentChars / 4);
+
+        deps.executionRepository.createProviderInvocationUsage({
+          projectId: task.project_id!,
+          sprintId: deps.executionRepository.getTaskRun(taskRun.id)?.sprintId || null,
+          taskId: task.record_id,
+          sprintRunId: deps.sprintRunId || null,
+          dispatchId: taskRun.dispatchId || null,
+          taskRunId: taskRun.id,
+          sessionId: sessionId || sessionName || taskRun.id,
+          provider: "jules",
+          purpose: "task_coding",
+          status: nextRunState === "COMPLETED" ? "completed" : "failed",
+          promptChars: promptChars,
+        });
+
+        // We need to update it immediately to add the transcript info, since createProviderInvocationUsage doesn't accept all token counts in CreateProviderInvocationUsageInput
+        const latestUsage = deps.executionRepository.getLatestProviderInvocationUsageBySession(sessionId || sessionName || taskRun.id, "task_coding");
+        if (latestUsage) {
+          deps.executionRepository.updateProviderInvocationUsage(latestUsage.id, {
+            transcriptChars: agentChars + userChars,
+            inputTokens: inputTokens,
+            outputTokens: outputTokens,
+            totalTokens: inputTokens + outputTokens,
+            usageSource: "estimated",
+            finishedAt: nextFinishedAt || now,
+            durationMs: nextDurationMs,
+          });
+
+          for (let i = 0; i < fullActivities.length; i++) {
+             const act = fullActivities[i];
+             const role = act.agentMessaged || act.planGenerated || act.progressUpdated ? "assistant" : act.userMessaged ? "user" : "system";
+             let content = act.agentMessaged?.agentMessage || act.userMessaged?.userMessage || act.description || "";
+             if (!content && act.progressUpdated) content = `[${act.progressUpdated.title}] ${act.progressUpdated.description || ""}`;
+
+             deps.executionRepository.appendExecutionInvocationMessage(latestUsage.id, {
+               role: role,
+               contentMarkdown: content,
+               createdAt: act.createTime || now,
+             });
+          }
+        }
+      } else if (existingUsage.status !== (nextRunState === "COMPLETED" ? "completed" : "failed")) {
+          deps.executionRepository.updateProviderInvocationUsage(existingUsage.id, {
+            status: nextRunState === "COMPLETED" ? "completed" : "failed",
+            finishedAt: nextFinishedAt || now,
+            durationMs: nextDurationMs,
+          });
+      }
+    } catch (e) {
+      deps.logger.warn("Failed to extract git metrics and token usage from full session", { error: e });
+    }
+  }
 };
 
 export const runSessionSyncStep = async (
@@ -346,7 +454,7 @@ export const runSessionSyncStep = async (
       task.activities = activitiesMap.get(sessionName);
     }
 
-    syncExecutionRunState(
+    await syncExecutionRunState(
       deps,
       task,
       match,
