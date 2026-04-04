@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { FolderOpen, Plus, ExternalLink, Settings, Trash2 } from "lucide-preact";
 import type { Source, SourceStatus } from "./types.js";
@@ -8,6 +8,7 @@ import { StatusDot } from "./components/ui/StatusDot.js";
 import { WaveFluid } from "./components/ui/WaveFluid.js";
 import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { useProjectData } from "./context/project-data.js";
+import { SkeletonPanel } from "./components/ui/ListSkeletons.js";
 
 const EMBER_HEX = '#FFB800';
 
@@ -268,15 +269,52 @@ const AddCard: FunctionComponent<{ onClick: () => void }> = ({ onClick }) => (
 
 export const ProjectsPage: FunctionComponent = () => {
     const mainRef      = useRef<HTMLDivElement>(null);
+    const gridRef = useRef<HTMLDivElement>(null);
     const [showModal, setShowModal]   = useState(false);
     const [activeFilter, setActiveFilter] = useState<Filter>('All');
     const {
         projects: sources,
         selectedProjectId,
+        loading,
         createProject,
         deleteProject,
         selectProject,
     } = useProjectData();
+
+    const [showSkeletons, setShowSkeletons] = useState(false);
+    const [isFadingOut, setIsFadingOut] = useState(false);
+
+    useEffect(() => {
+        let timeoutId: number;
+        if (loading) {
+            setIsFadingOut(false);
+            timeoutId = window.setTimeout(() => setShowSkeletons(true), 200);
+        } else {
+            if (showSkeletons && gridRef.current) {
+                setIsFadingOut(true);
+                const skeletonPanels = Array.from(gridRef.current.querySelectorAll(".skeleton-panel-entry"));
+                if (skeletonPanels.length > 0) {
+                    gsap.to(skeletonPanels, {
+                        opacity: 0,
+                        y: -10,
+                        duration: 0.3,
+                        stagger: 0.05,
+                        ease: "power2.in",
+                        onComplete: () => {
+                            setShowSkeletons(false);
+                            setIsFadingOut(false);
+                        }
+                    });
+                } else {
+                    setShowSkeletons(false);
+                    setIsFadingOut(false);
+                }
+            } else {
+                setShowSkeletons(false);
+            }
+        }
+        return () => window.clearTimeout(timeoutId);
+    }, [loading, showSkeletons]);
 
     useLayoutEffect(() => {
         if (mainRef.current) {
@@ -287,6 +325,27 @@ export const ProjectsPage: FunctionComponent = () => {
             );
         }
     }, []);
+
+    useLayoutEffect(() => {
+        if (gridRef.current && !loading && !showSkeletons && !isFadingOut) {
+            const projectCards = Array.from(gridRef.current.querySelectorAll(".project-card-entry"));
+            if (projectCards.length > 0) {
+                gsap.fromTo(
+                    projectCards,
+                    { opacity: 0, y: 15, scale: 0.98 },
+                    {
+                        opacity: 1,
+                        y: 0,
+                        scale: 1,
+                        stagger: { amount: 0.2, from: "start" },
+                        duration: 0.6,
+                        ease: "power2.out",
+                        delay: 0.05,
+                    }
+                );
+            }
+        }
+    }, [loading, showSkeletons, isFadingOut, activeFilter]);
 
     const handleAddProject = async (project: { name: string; type: 'local' | 'git'; path: string; cloneDir?: string }) => {
         await createProject({
@@ -433,17 +492,31 @@ export const ProjectsPage: FunctionComponent = () => {
                 </div>
 
                 {/* ── Cards Grid ──────────────────────────────────────── */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                    {filtered.map(source => (
-                        <ProjectCard
-                            key={source.id}
-                            source={source}
-                            isSelected={selectedProjectId === source.id}
-                            onSelect={() => { void selectProject(source.id); }}
-                            onDelete={() => { void deleteProject(source.id); }}
-                        />
-                    ))}
-                    <AddCard onClick={() => setShowModal(true)} />
+                <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                    {showSkeletons ? (
+                        <>
+                            <SkeletonPanel />
+                            <SkeletonPanel />
+                            <SkeletonPanel />
+                            <SkeletonPanel />
+                        </>
+                    ) : !loading && !isFadingOut ? (
+                        <>
+                            {filtered.map(source => (
+                                <div key={source.id} className="project-card-entry h-full">
+                                    <ProjectCard
+                                        source={source}
+                                        isSelected={selectedProjectId === source.id}
+                                        onSelect={() => { void selectProject(source.id); }}
+                                        onDelete={() => { void deleteProject(source.id); }}
+                                    />
+                                </div>
+                            ))}
+                            <div className="project-card-entry h-full">
+                                <AddCard onClick={() => setShowModal(true)} />
+                            </div>
+                        </>
+                    ) : null}
                 </div>
             </div>
 
