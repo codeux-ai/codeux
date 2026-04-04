@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -110,5 +110,83 @@ describe("DashboardRealtimeService Extra Coverage", () => {
     });
 
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("Dashboard realtime listener failed"), expect.any(Object));
+  });
+
+  describe("Parallel snapshot execution", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("publishes ready scopes in parallel despite mixed fast/slow loaders", async () => {
+      const { service, logger } = await createService();
+
+      let fastResolved = false;
+      service.setSnapshotLoaders({
+        getProjectsSnapshot: () => ({ projects: [], selectedProjectId: "fast-p" }),
+        getProjectExecutionSnapshot: async (projectId) => {
+          if (projectId === "slow-p") {
+            await new Promise((resolve) => setTimeout(resolve, 5000));
+            return { projectId: "slow-p" } as any;
+          }
+          fastResolved = true;
+          return { projectId: "fast-p" } as any;
+        },
+        getProjectStatusSnapshot: () => ({} as any),
+        getProjectLiveSnapshot: () => ({} as any),
+        getOverviewTelemetrySnapshot: () => ({} as any),
+      });
+
+      service.scheduleProjectExecutionRefresh("fast-p");
+      service.scheduleProjectExecutionRefresh("slow-p");
+
+      // Advance initial flush timer
+      vi.advanceTimersByTime(100);
+
+      // Fast one should resolve immediately and be published before the slow one completes
+      await Promise.resolve(); // flush async tick
+      await Promise.resolve(); // allSettled tick
+
+      expect(fastResolved).toBe(true);
+      // Wait for slow one to finish
+      vi.advanceTimersByTime(5000);
+      await Promise.resolve();
+
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it("continues publishing ready scopes when one fails", async () => {
+      const { service, logger } = await createService();
+
+      let fastResolved = false;
+      service.setSnapshotLoaders({
+        getProjectsSnapshot: () => ({ projects: [], selectedProjectId: "fast-p" }),
+        getProjectExecutionSnapshot: async (projectId) => {
+          if (projectId === "fail-p") {
+            throw new Error("Deliberate failure");
+          }
+          fastResolved = true;
+          return { projectId: "fast-p" } as any;
+        },
+        getProjectStatusSnapshot: () => ({} as any),
+        getProjectLiveSnapshot: () => ({} as any),
+        getOverviewTelemetrySnapshot: () => ({} as any),
+      });
+
+      service.scheduleProjectExecutionRefresh("fast-p");
+      service.scheduleProjectExecutionRefresh("fail-p");
+
+      vi.advanceTimersByTime(100);
+
+      // Let the promises resolve
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(fastResolved).toBe(true);
+      expect(logger.error).toHaveBeenCalledWith("Failed to publish project execution realtime snapshot", expect.any(Object));
+    });
   });
 });

@@ -78,6 +78,9 @@ const validateProviderSettings = (
   if (typeof value.apiKey !== "string") {
     issues.push({ path: `${path}.apiKey`, message: "Expected a string" });
   }
+  if (typeof value.maxConcurrentTasks !== "number") {
+    issues.push({ path: `${path}.maxConcurrentTasks`, message: "Expected a number" });
+  }
 };
 
 const validateAiProvider = (

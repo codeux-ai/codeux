@@ -158,36 +158,57 @@ export class ConnectionChatRepository {
   listConnections(projectId: string): McpConnectionRecord[] {
     requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const rows = this.db.prepare(`
+      WITH
+      task_runs_stats AS (
+        SELECT connection_id, COUNT(*) AS cnt
+        FROM task_runs
+        WHERE project_id = ?
+        GROUP BY connection_id
+      ),
+      threads_stats AS (
+        SELECT connection_id, COUNT(*) AS cnt
+        FROM conversation_threads
+        WHERE project_id = ? AND connection_id IS NOT NULL
+        GROUP BY connection_id
+      ),
+      messages_stats AS (
+        SELECT ct.connection_id, COUNT(*) AS cnt
+        FROM conversation_messages cm
+        INNER JOIN conversation_threads ct ON ct.id = cm.thread_id
+        WHERE ct.project_id = ? AND ct.connection_id IS NOT NULL
+          AND ${visibleConversationMessageFilter("cm")}
+        GROUP BY ct.connection_id
+      ),
+      pending_messages_stats AS (
+        SELECT COALESCE(ct.connection_id, 'null_conn') as conn_id, COUNT(*) AS cnt
+        FROM conversation_messages cm
+        INNER JOIN conversation_threads ct ON ct.id = cm.thread_id
+        WHERE ct.project_id = ?
+          AND cm.direction = 'dashboard_to_connection'
+          AND cm.delivery_status = 'pending'
+          AND ${visibleConversationMessageFilter("cm")}
+        GROUP BY COALESCE(ct.connection_id, 'null_conn')
+      ),
+      dispatches_stats AS (
+        SELECT td.connection_id, COUNT(*) AS cnt
+        FROM task_dispatches td
+        WHERE td.project_id = ? AND td.status IN ('claimed', 'running', 'cancel_requested')
+        GROUP BY td.connection_id
+      )
       SELECT
         c.*,
-        (SELECT COUNT(*) FROM task_runs tr WHERE tr.connection_id = c.id AND tr.project_id = ?) AS tasks_run_count,
-        (SELECT COUNT(*) FROM conversation_threads ct WHERE ct.project_id = ? AND ct.connection_id = c.id) AS thread_count,
-        (
-          SELECT COUNT(*)
-          FROM conversation_messages cm
-          INNER JOIN conversation_threads ct ON ct.id = cm.thread_id
-          WHERE ct.project_id = ?
-            AND ct.connection_id = c.id
-            AND ${visibleConversationMessageFilter("cm")}
-        ) AS message_count,
-        (
-          SELECT COUNT(*)
-          FROM conversation_messages cm
-          INNER JOIN conversation_threads ct ON ct.id = cm.thread_id
-          WHERE ct.project_id = ?
-            AND (ct.connection_id = c.id OR ct.connection_id IS NULL)
-            AND cm.direction = 'dashboard_to_connection'
-            AND cm.delivery_status = 'pending'
-            AND ${visibleConversationMessageFilter("cm")}
-        ) AS pending_inbox_count
-        ,
-        (
-          SELECT COUNT(*)
-          FROM task_dispatches td
-          WHERE td.connection_id = c.id
-            AND td.status IN ('claimed', 'running', 'cancel_requested')
-        ) AS active_dispatch_count
+        COALESCE(trs.cnt, 0) AS tasks_run_count,
+        COALESCE(ts.cnt, 0) AS thread_count,
+        COALESCE(ms.cnt, 0) AS message_count,
+        (COALESCE(pms.cnt, 0) + COALESCE(pms_null.cnt, 0)) AS pending_inbox_count,
+        COALESCE(ds.cnt, 0) AS active_dispatch_count
       FROM mcp_connections c
+      LEFT JOIN task_runs_stats trs ON trs.connection_id = c.id
+      LEFT JOIN threads_stats ts ON ts.connection_id = c.id
+      LEFT JOIN messages_stats ms ON ms.connection_id = c.id
+      LEFT JOIN pending_messages_stats pms ON pms.conn_id = c.id
+      LEFT JOIN pending_messages_stats pms_null ON pms_null.conn_id = 'null_conn'
+      LEFT JOIN dispatches_stats ds ON ds.connection_id = c.id
       WHERE EXISTS (
         SELECT 1
         FROM connection_project_bindings b
@@ -195,7 +216,7 @@ export class ConnectionChatRepository {
           AND b.project_id = ?
       )
       ORDER BY COALESCE(c.last_heartbeat_at, c.updated_at) DESC, c.display_name ASC
-    `).all(projectId, projectId, projectId, projectId, projectId) as unknown as ConnectionRow[];
+    `).all(projectId, projectId, projectId, projectId, projectId, projectId) as unknown as ConnectionRow[];
 
     return this.sortConnections(this.inflateConnections(rows));
   }
@@ -383,42 +404,43 @@ export class ConnectionChatRepository {
   listThreads(projectId: string): ConversationThreadRecord[] {
     requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const rows = this.db.prepare(`
+      WITH
+      message_stats AS (
+        SELECT
+          cm.thread_id,
+          COUNT(*) AS message_count,
+          SUM(CASE WHEN cm.direction = 'dashboard_to_connection' AND cm.delivery_status IN ('pending', 'delivered') THEN 1 ELSE 0 END) AS pending_message_count
+        FROM conversation_messages cm
+        INNER JOIN conversation_threads ct ON ct.id = cm.thread_id
+        WHERE ct.project_id = ? AND ${visibleConversationMessageFilter("cm")}
+        GROUP BY cm.thread_id
+      ),
+      last_messages AS (
+        SELECT thread_id, created_at, body_markdown
+        FROM (
+          SELECT
+            cm.thread_id,
+            cm.created_at,
+            cm.body_markdown,
+            ROW_NUMBER() OVER (PARTITION BY cm.thread_id ORDER BY cm.created_at DESC, cm.id DESC) as rn
+          FROM conversation_messages cm
+          INNER JOIN conversation_threads ct ON ct.id = cm.thread_id
+          WHERE ct.project_id = ? AND ${visibleConversationMessageFilter("cm")}
+        )
+        WHERE rn = 1
+      )
       SELECT
         ct.*,
-        (
-          SELECT COUNT(*)
-          FROM conversation_messages cm
-          WHERE cm.thread_id = ct.id
-            AND ${visibleConversationMessageFilter("cm")}
-        ) AS message_count,
-        (
-          SELECT COUNT(*)
-          FROM conversation_messages cm
-          WHERE cm.thread_id = ct.id
-            AND cm.direction = 'dashboard_to_connection'
-            AND cm.delivery_status IN ('pending', 'delivered')
-            AND ${visibleConversationMessageFilter("cm")}
-        ) AS pending_message_count,
-        (
-          SELECT cm.created_at
-          FROM conversation_messages cm
-          WHERE cm.thread_id = ct.id
-            AND ${visibleConversationMessageFilter("cm")}
-          ORDER BY cm.created_at DESC, cm.id DESC
-          LIMIT 1
-        ) AS last_message_at,
-        (
-          SELECT cm.body_markdown
-          FROM conversation_messages cm
-          WHERE cm.thread_id = ct.id
-            AND ${visibleConversationMessageFilter("cm")}
-          ORDER BY cm.created_at DESC, cm.id DESC
-          LIMIT 1
-        ) AS last_message_preview
+        COALESCE(ms.message_count, 0) AS message_count,
+        COALESCE(ms.pending_message_count, 0) AS pending_message_count,
+        lm.created_at AS last_message_at,
+        lm.body_markdown AS last_message_preview
       FROM conversation_threads ct
+      LEFT JOIN message_stats ms ON ms.thread_id = ct.id
+      LEFT JOIN last_messages lm ON lm.thread_id = ct.id
       WHERE ct.project_id = ?
-      ORDER BY COALESCE(last_message_at, ct.updated_at) DESC, ct.created_at DESC
-    `).all(projectId) as unknown as ThreadRow[];
+      ORDER BY COALESCE(lm.created_at, ct.updated_at) DESC, ct.created_at DESC
+    `).all(projectId, projectId, projectId) as unknown as ThreadRow[];
 
     return rows.map((row) => this.mapThreadRow(row));
   }
@@ -1302,41 +1324,42 @@ export class ConnectionChatRepository {
 
   private requireThread(threadId: string): ConversationThreadRecord {
     const row = this.db.prepare(`
+      WITH
+      message_stats AS (
+        SELECT
+          thread_id,
+          COUNT(*) AS message_count,
+          SUM(CASE WHEN direction = 'dashboard_to_connection' AND delivery_status IN ('pending', 'delivered') THEN 1 ELSE 0 END) AS pending_message_count
+        FROM conversation_messages cm
+        WHERE cm.thread_id = ?
+          AND ${visibleConversationMessageFilter("cm")}
+        GROUP BY thread_id
+      ),
+      last_messages AS (
+        SELECT thread_id, created_at, body_markdown
+        FROM (
+          SELECT
+            thread_id,
+            created_at,
+            body_markdown,
+            ROW_NUMBER() OVER (PARTITION BY thread_id ORDER BY created_at DESC, id DESC) as rn
+          FROM conversation_messages cm
+          WHERE cm.thread_id = ?
+            AND ${visibleConversationMessageFilter("cm")}
+        )
+        WHERE rn = 1
+      )
       SELECT
         ct.*,
-        (
-          SELECT COUNT(*)
-          FROM conversation_messages cm
-          WHERE cm.thread_id = ct.id
-            AND ${visibleConversationMessageFilter("cm")}
-        ) AS message_count,
-        (
-          SELECT COUNT(*)
-          FROM conversation_messages cm
-          WHERE cm.thread_id = ct.id
-            AND cm.direction = 'dashboard_to_connection'
-            AND cm.delivery_status IN ('pending', 'delivered')
-            AND ${visibleConversationMessageFilter("cm")}
-        ) AS pending_message_count,
-        (
-          SELECT cm.created_at
-          FROM conversation_messages cm
-          WHERE cm.thread_id = ct.id
-            AND ${visibleConversationMessageFilter("cm")}
-          ORDER BY cm.created_at DESC, cm.id DESC
-          LIMIT 1
-        ) AS last_message_at,
-        (
-          SELECT cm.body_markdown
-          FROM conversation_messages cm
-          WHERE cm.thread_id = ct.id
-            AND ${visibleConversationMessageFilter("cm")}
-          ORDER BY cm.created_at DESC, cm.id DESC
-          LIMIT 1
-        ) AS last_message_preview
+        COALESCE(ms.message_count, 0) AS message_count,
+        COALESCE(ms.pending_message_count, 0) AS pending_message_count,
+        lm.created_at AS last_message_at,
+        lm.body_markdown AS last_message_preview
       FROM conversation_threads ct
+      LEFT JOIN message_stats ms ON ms.thread_id = ct.id
+      LEFT JOIN last_messages lm ON lm.thread_id = ct.id
       WHERE ct.id = ?
-    `).get(threadId) as ThreadRow | undefined;
+    `).get(threadId, threadId, threadId) as ThreadRow | undefined;
 
     if (!row) {
       throw new Error(`Conversation thread not found: ${threadId}`);

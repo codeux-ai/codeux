@@ -84,6 +84,8 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_execution_invocations_task_run_started", "execution_invocations", "task_run_id, started_at DESC");
   ensureIndex(db, "idx_execution_invocation_messages_invocation_created", "execution_invocation_messages", "invocation_id, created_at ASC");
   ensureIndex(db, "idx_dashboard_realtime_events_scope_sequence", "dashboard_realtime_events", "scope_type, scope_id, is_replayable, sequence DESC");
+  ensureIndex(db, "idx_conversation_threads_project_updated", "conversation_threads", "project_id, updated_at DESC");
+  ensureIndex(db, "idx_conversation_messages_thread_created", "conversation_messages", "thread_id, created_at ASC");
   ensureIndex(db, "idx_memories_project_scope", "memories", "project_id, scope, updated_at DESC");
   ensureIndex(db, "idx_memories_project_sprint", "memories", "project_id, sprint_id, created_at DESC");
   ensureIndex(db, "idx_memories_project_agent", "memories", "project_id, agent_preset_id, created_at DESC");
@@ -94,10 +96,14 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_agent_presets_project_name", "agent_presets", "project_id, name");
   ensureUniqueIndex(db, "idx_worker_endpoints_connection", "worker_endpoints", "connection_id");
   ensureIndex(db, "idx_worker_endpoints_type_status", "worker_endpoints", "endpoint_type, status, updated_at DESC");
+  ensureIndex(db, "idx_connection_project_bindings_connection_active", "connection_project_bindings", "connection_id, is_active DESC, project_id ASC");
+  ensureIndex(db, "idx_task_dispatches_connection_executor", "task_dispatches", "connection_id, executor_type");
   ensureIndex(db, "idx_project_worker_assignments_project_status", "project_worker_assignments", "project_id, status, assignment_role, last_affinity_at DESC");
   ensureIndex(db, "idx_project_worker_assignments_worker_status", "project_worker_assignments", "worker_endpoint_id, status, last_affinity_at DESC");
   ensureIndex(db, "idx_project_attention_items_project_status", "project_attention_items", "project_id, status, opened_at DESC");
+  ensureIndex(db, "idx_project_attention_items_project_status_updated", "project_attention_items", "project_id, status, updated_at DESC");
   ensureIndex(db, "idx_project_attention_items_sprint_run_status", "project_attention_items", "sprint_run_id, status, opened_at DESC");
+  ensureIndex(db, "idx_project_attention_items_sprint_run_status_updated", "project_attention_items", "sprint_run_id, status, updated_at DESC");
   ensureIndex(db, "idx_project_attention_items_dispatch_status", "project_attention_items", "dispatch_id, status, opened_at DESC");
   ensureIndex(db, "idx_sprint_preview_sessions_project_updated", "sprint_preview_sessions", "project_id, updated_at DESC");
   ensureIndex(db, "idx_sprint_preview_sessions_sprint", "sprint_preview_sessions", "sprint_id, updated_at DESC");

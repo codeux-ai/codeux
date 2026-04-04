@@ -75,6 +75,14 @@ export async function getProjectLiveSnapshot(
 
   const selectedSprintId = listSprintsResult.selectedSprintId ?? null;
 
+  const tGit = Date.now();
+  const gitStatusPromise = deps.getGitStatus()
+    .then((result) => ({ result, error: null }))
+    .catch((error) => ({
+      result: null,
+      error: error instanceof Error ? error.message : "Unable to load git/ci/pr tracking.",
+    }));
+
   const tRuntime = Date.now();
   const status = deps.projectRuntimeRepository.getProjectStatus(projectId, selectedSprintId);
   const runtimeMs = Date.now() - tRuntime;
@@ -82,6 +90,9 @@ export async function getProjectLiveSnapshot(
   const tExecution = Date.now();
   const execution = deps.getProjectExecutionSnapshot(projectId);
   const executionMs = Date.now() - tExecution;
+
+  const { result: gitStatus, error: gitStatusError } = await gitStatusPromise;
+  const gitMs = Date.now() - tGit;
 
   if (!selectedSprintId && execution.sprintRuns.some(r => r.status === 'running' || r.status === 'queued')) {
     deps.logger.warn("selected_sprint_missing_while_active", {
@@ -104,21 +115,13 @@ export async function getProjectLiveSnapshot(
     });
   }
 
-  let gitStatus: GitTrackingStatus | null = null;
-  let gitStatusError: string | null = null;
-  const tGit = Date.now();
-  try {
-    gitStatus = await deps.getGitStatus();
-  } catch (error) {
-    gitStatusError = error instanceof Error
-      ? error.message
-      : "Unable to load git/ci/pr tracking.";
-  }
-  const gitMs = Date.now() - tGit;
-
-  const executionSizeBytes = Buffer.byteLength(JSON.stringify(execution), "utf8");
-  const gitSizeBytes = gitStatus ? Buffer.byteLength(JSON.stringify(gitStatus), "utf8") : 0;
-  const statusSizeBytes = Buffer.byteLength(JSON.stringify(status), "utf8");
+  const executionItemCount =
+    (execution.sprintRuns?.length || 0) +
+    (execution.taskDispatches?.length || 0) +
+    (execution.connections?.length || 0) +
+    (execution.attentionItems?.length || 0) +
+    (execution.recentEvents?.length || 0);
+  const statusSubtaskCount = status.subtasks?.length || 0;
 
   const snapshot: ProjectLiveDashboardSnapshot = {
     projectId,
@@ -137,10 +140,9 @@ export async function getProjectLiveSnapshot(
     runtimeMs,
     executionMs,
     gitMs,
-    executionSizeBytes,
-    gitSizeBytes,
-    statusSizeBytes,
-    payloadSizeBytes: Buffer.byteLength(JSON.stringify(snapshot), "utf8"),
+    executionItemCount,
+    statusSubtaskCount,
+    hasGitStatus: !!gitStatus,
   });
 
   return snapshot;

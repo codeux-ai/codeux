@@ -116,6 +116,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     weight: 60,
     thinkingMode: "MEDIUM",
     apiKey: "",
+    maxConcurrentTasks: 15,
   },
   gemini: {
     enabled: true,
@@ -123,6 +124,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     weight: 20,
     thinkingMode: "MEDIUM",
     apiKey: "",
+    maxConcurrentTasks: 0,
   },
   codex: {
     enabled: true,
@@ -130,6 +132,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     weight: 20,
     thinkingMode: "HIGH",
     apiKey: "",
+    maxConcurrentTasks: 0,
   },
   "claude-code": {
     enabled: false,
@@ -137,6 +140,7 @@ export const DEFAULT_PROVIDER_SETTINGS: Record<ProviderId, ProviderSettings> = {
     weight: 0,
     thinkingMode: "HIGH",
     apiKey: "",
+    maxConcurrentTasks: 0,
   },
 };
 

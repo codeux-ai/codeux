@@ -58,6 +58,7 @@ const normalizeProviderSettings = (
       weight: normalizedWeight,
       thinkingMode: normalizedThinkingMode,
       apiKey: typeof source?.apiKey === "string" ? source.apiKey : fallbackApiKey,
+      maxConcurrentTasks: typeof source?.maxConcurrentTasks === "number" ? source.maxConcurrentTasks : DEFAULT_PROVIDER_SETTINGS[providerId].maxConcurrentTasks,
     };
   }
 

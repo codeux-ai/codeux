@@ -14,6 +14,7 @@ import type {
 } from "../contracts/memory-types.js";
 import { MEMORY_SCOPES, MEMORY_CATEGORIES, EMBEDDING_MODEL_IDS } from "../contracts/memory-types.js";
 import { EMBEDDING_MODEL_CATALOG } from "../services/embedding-model-catalog.js";
+import { toErrorResponse, syncRoute, asyncRoute, requireTrimmedString, parseTrimmedString } from "./route-utils.js";
 
 export interface MemoryRouteDependencies {
   memoryService: MemoryService;
@@ -22,11 +23,6 @@ export interface MemoryRouteDependencies {
   embeddingService: EmbeddingService;
   memoryRepository: MemoryRepository;
   settingsRepository: SettingsRepository;
-}
-
-function toError(error: unknown, prefix: string): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return `${prefix}: ${message}`;
 }
 
 export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies): void {
@@ -41,9 +37,9 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
 
   // --- Memory CRUD ---
 
-  app.get("/api/projects/:projectId/memories", (req, res) => {
+  app.get("/api/projects/:projectId/memories", syncRoute((req, res) => {
     try {
-      const projectId = String(req.params.projectId).trim();
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
       const scope = req.query.scope as MemoryScope | undefined;
       const sprintId = req.query.sprintId as string | undefined;
       const agentPresetId = req.query.agentPresetId as string | undefined;
@@ -61,13 +57,13 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
         res.json(memoryService.listByProject(projectId, scope, limit));
       }
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to list memories") });
+      res.status(400).json(toErrorResponse(error, "Failed to list memories"));
     }
-  });
+  }));
 
-  app.post("/api/projects/:projectId/memories", async (req, res) => {
+  app.post("/api/projects/:projectId/memories", asyncRoute(async (req, res) => {
     try {
-      const projectId = String(req.params.projectId).trim();
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
       const body = req.body as Partial<CreateMemoryInput>;
 
       if (!body.content || typeof body.content !== "string") {
@@ -95,36 +91,36 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
 
       res.status(201).json(record);
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to create memory") });
+      res.status(400).json(toErrorResponse(error, "Failed to create memory"));
     }
-  });
+  }));
 
-  app.patch("/api/memories/:memoryId", (req, res) => {
+  app.patch("/api/memories/:memoryId", syncRoute((req, res) => {
     try {
-      const memoryId = String(req.params.memoryId).trim();
+      const memoryId = requireTrimmedString(req.params.memoryId, "memoryId");
       const body = req.body as Partial<UpdateMemoryInput>;
       const record = memoryService.updateMemory(memoryId, body);
       res.json(record);
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to update memory") });
+      res.status(400).json(toErrorResponse(error, "Failed to update memory"));
     }
-  });
+  }));
 
-  app.delete("/api/memories/:memoryId", (req, res) => {
+  app.delete("/api/memories/:memoryId", syncRoute((req, res) => {
     try {
-      const memoryId = String(req.params.memoryId).trim();
+      const memoryId = requireTrimmedString(req.params.memoryId, "memoryId");
       memoryService.deleteMemory(memoryId);
       res.status(204).send();
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to delete memory") });
+      res.status(400).json(toErrorResponse(error, "Failed to delete memory"));
     }
-  });
+  }));
 
   // --- Semantic search ---
 
-  app.post("/api/projects/:projectId/memories/search", async (req, res) => {
+  app.post("/api/projects/:projectId/memories/search", asyncRoute(async (req, res) => {
     try {
-      const projectId = String(req.params.projectId).trim();
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
       const { query, scope, limit, minSimilarity } = req.body as {
         query?: string;
         scope?: MemoryScope;
@@ -147,15 +143,15 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
 
       res.json(results);
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to search memories") });
+      res.status(400).json(toErrorResponse(error, "Failed to search memories"));
     }
-  });
+  }));
 
   // --- Promotion ---
 
-  app.post("/api/projects/:projectId/memories/promotion/analyze", async (req, res) => {
+  app.post("/api/projects/:projectId/memories/promotion/analyze", asyncRoute(async (req, res) => {
     try {
-      const projectId = String(req.params.projectId).trim();
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
       const { sprintId } = req.body as { sprintId?: string };
 
       if (!sprintId) {
@@ -166,13 +162,13 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
       const candidates = await memoryPromotionService.analyzeForPromotion(projectId, sprintId);
       res.json(candidates);
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to analyze for promotion") });
+      res.status(400).json(toErrorResponse(error, "Failed to analyze for promotion"));
     }
-  });
+  }));
 
-  app.post("/api/projects/:projectId/memories/promotion/execute", (req, res) => {
+  app.post("/api/projects/:projectId/memories/promotion/execute", syncRoute((req, res) => {
     try {
-      const projectId = String(req.params.projectId).trim();
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
       const { memoryIds, reason } = req.body as { memoryIds?: string[]; reason?: string };
 
       if (!memoryIds || !Array.isArray(memoryIds) || memoryIds.length === 0) {
@@ -183,13 +179,13 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
       const promoted = memoryPromotionService.promoteMemories(projectId, memoryIds, reason);
       res.json(promoted);
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to promote memories") });
+      res.status(400).json(toErrorResponse(error, "Failed to promote memories"));
     }
-  });
+  }));
 
   // --- Embedding model management ---
 
-  app.get("/api/embedding-models", (req, res) => {
+  app.get("/api/embedding-models", syncRoute((req, res) => {
     try {
       const statuses = embeddingModelManager.getStatuses();
       const models = statuses.map((status) => ({
@@ -199,11 +195,11 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
       }));
       res.json(models);
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to list embedding models") });
+      res.status(400).json(toErrorResponse(error, "Failed to list embedding models"));
     }
-  });
+  }));
 
-  app.post("/api/embedding-models/:modelId/download", async (req, res) => {
+  app.post("/api/embedding-models/:modelId/download", asyncRoute(async (req, res) => {
     try {
       const modelId = String(req.params.modelId) as EmbeddingModelId;
       if (!EMBEDDING_MODEL_IDS.includes(modelId)) {
@@ -218,21 +214,21 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
 
       res.json({ status: "downloading", modelId });
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to start download") });
+      res.status(400).json(toErrorResponse(error, "Failed to start download"));
     }
-  });
+  }));
 
-  app.post("/api/embedding-models/:modelId/cancel", (req, res) => {
+  app.post("/api/embedding-models/:modelId/cancel", syncRoute((req, res) => {
     try {
       const modelId = String(req.params.modelId) as EmbeddingModelId;
       embeddingModelManager.cancelDownload(modelId);
       res.json({ status: "cancelled", modelId });
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to cancel download") });
+      res.status(400).json(toErrorResponse(error, "Failed to cancel download"));
     }
-  });
+  }));
 
-  app.post("/api/embedding-models/:modelId/select", async (req, res) => {
+  app.post("/api/embedding-models/:modelId/select", asyncRoute(async (req, res) => {
     try {
       const modelId = String(req.params.modelId) as EmbeddingModelId;
       if (!EMBEDDING_MODEL_IDS.includes(modelId)) {
@@ -243,21 +239,21 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
       await embeddingModelManager.selectModel(modelId);
       res.json({ status: "active", modelId });
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to select model") });
+      res.status(400).json(toErrorResponse(error, "Failed to select model"));
     }
-  });
+  }));
 
-  app.delete("/api/embedding-models/:modelId", async (req, res) => {
+  app.delete("/api/embedding-models/:modelId", asyncRoute(async (req, res) => {
     try {
       const modelId = String(req.params.modelId) as EmbeddingModelId;
       await embeddingModelManager.deleteModel(modelId);
       res.status(204).send();
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to delete model") });
+      res.status(400).json(toErrorResponse(error, "Failed to delete model"));
     }
-  });
+  }));
 
-  app.get("/api/embedding-models/:modelId/status", (req, res) => {
+  app.get("/api/embedding-models/:modelId/status", syncRoute((req, res) => {
     try {
       const modelId = String(req.params.modelId) as EmbeddingModelId;
       const status = memoryRepository.getModelStatus(modelId);
@@ -278,23 +274,23 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
         active: embeddingService.getLoadedModelId() === modelId,
       });
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to get model status") });
+      res.status(400).json(toErrorResponse(error, "Failed to get model status"));
     }
-  });
+  }));
 
   // --- Re-embed ---
 
-  app.post("/api/projects/:projectId/memories/reembed", (req, res) => {
+  app.post("/api/projects/:projectId/memories/reembed", syncRoute((req, res) => {
     try {
-      const projectId = String(req.params.projectId).trim();
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
       memoryService.startReembedProject(projectId);
       res.json({ status: "started" });
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to start re-embed") });
+      res.status(400).json(toErrorResponse(error, "Failed to start re-embed"));
     }
-  });
+  }));
 
-  app.get("/api/projects/:projectId/memories/reembed/progress", (req, res) => {
+  app.get("/api/projects/:projectId/memories/reembed/progress", syncRoute((req, res) => {
     try {
       const progress = memoryService.getReembedProgress();
       if (!progress) {
@@ -303,15 +299,15 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
       }
       res.json(progress);
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to get re-embed progress") });
+      res.status(400).json(toErrorResponse(error, "Failed to get re-embed progress"));
     }
-  });
+  }));
 
   // --- Embedding map (2D projection + similarity edges) ---
 
-  app.get("/api/projects/:projectId/memories/embedding-map", (req, res) => {
+  app.get("/api/projects/:projectId/memories/embedding-map", syncRoute((req, res) => {
     try {
-      const projectId = String(req.params.projectId).trim();
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
       const scope = req.query.scope as MemoryScope | undefined;
       const sprintId = req.query.sprintId as string | undefined;
       const agentPresetId = req.query.agentPresetId as string | undefined;
@@ -322,15 +318,15 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
       );
       res.json(result);
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to get embedding map") });
+      res.status(400).json(toErrorResponse(error, "Failed to get embedding map"));
     }
-  });
+  }));
 
   // --- Memory stats ---
 
-  app.get("/api/projects/:projectId/memories/stats", (req, res) => {
+  app.get("/api/projects/:projectId/memories/stats", syncRoute((req, res) => {
     try {
-      const projectId = String(req.params.projectId).trim();
+      const projectId = requireTrimmedString(req.params.projectId, "projectId");
       res.json({
         sprint: memoryService.countByScope(projectId, "sprint"),
         agent: memoryService.countByScope(projectId, "agent"),
@@ -339,7 +335,7 @@ export function registerMemoryRoutes(app: Express, deps: MemoryRouteDependencies
         staleEmbeddings: memoryService.countStaleEmbeddings(projectId),
       });
     } catch (error) {
-      res.status(400).json({ error: toError(error, "Failed to get memory stats") });
+      res.status(400).json(toErrorResponse(error, "Failed to get memory stats"));
     }
-  });
+  }));
 }

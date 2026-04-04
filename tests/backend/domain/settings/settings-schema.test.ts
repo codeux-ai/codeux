@@ -116,6 +116,7 @@ describe("validateSettingsPayload", () => {
             weight: "bad",
             thinkingMode: "invalid",
             apiKey: 1,
+            maxConcurrentTasks: "bad",
           },
           gemini: "bad",
           "claude-code": {
@@ -124,6 +125,7 @@ describe("validateSettingsPayload", () => {
             weight: 0,
             thinkingMode: "HIGH",
             apiKey: "",
+            maxConcurrentTasks: 0,
           },
         },
       },

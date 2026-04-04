@@ -29,7 +29,10 @@ describe("runStartReadyTasksStep", () => {
         warn: vi.fn(),
         error: vi.fn(),
         child: vi.fn().mockReturnThis(),
-      },
+      } as any,
+      getProviderForTask: () => null,
+      getProviderSettings: () => ({}),
+      getRunningCounts: () => ({}),
     });
 
     expect(result.subtasks[0].status).toBe("RUNNING");

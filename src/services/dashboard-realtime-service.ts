@@ -210,36 +210,40 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
     this.pendingProjects = false;
     this.pendingOverview = false;
 
+    const publishTasks: Array<Promise<void>> = [];
+
     if (shouldPublishProjects) {
       const waitMs = this.getThrottleDelay(this.projectsPublishedAt, PROJECTS_MIN_INTERVAL_MS, now);
       if (waitMs > 0) {
         this.pendingProjects = true;
         nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
       } else {
-        try {
-          const projects = await Promise.resolve(loaders.getProjectsSnapshot());
-          this.publishRawEvent({
-            scopeType: "projects",
-            scopeId: "projects",
-            eventType: "projects.updated",
-            entityType: "project_collection",
-            entityId: "projects",
-            payload: projects,
-            replayable: false,
-          });
-          this.logger.info("realtime_background_refresh", { type: "projects" });
-          this.projectsPublishedAt = now;
-        } catch (error) {
-          this.logger.error("Failed to publish projects realtime snapshot", {
-            error,
-          });
-        }
+        publishTasks.push(
+          (async () => {
+            try {
+              const projects = await Promise.resolve(loaders.getProjectsSnapshot());
+              this.publishRawEvent({
+                scopeType: "projects",
+                scopeId: "projects",
+                eventType: "projects.updated",
+                entityType: "project_collection",
+                entityId: "projects",
+                payload: projects,
+                replayable: false,
+              });
+              this.logger.info("realtime_background_refresh", { type: "projects" });
+              this.projectsPublishedAt = now;
+            } catch (error) {
+              this.logger.error("Failed to publish projects realtime snapshot", {
+                error,
+              });
+            }
+          })()
+        );
       }
     }
 
     for (const projectId of projectLiveIds) {
-
-
       const lastPublishedAt = this.projectLivePublishedAt.get(projectId) ?? 0;
       const waitMs = this.getThrottleDelay(lastPublishedAt, PROJECT_LIVE_MIN_INTERVAL_MS, now);
       if (waitMs > 0) {
@@ -248,33 +252,37 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         continue;
       }
 
-      try {
-        const snapshot = await Promise.resolve(loaders.getProjectLiveSnapshot(projectId));
-        const payloadSizeBytes = Buffer.byteLength(JSON.stringify(snapshot), 'utf8');
-        this.publishRawEvent({
-          scopeType: "project",
-          scopeId: projectId,
-          eventType: "project.live.updated",
-          entityType: "project_live",
-          entityId: projectId,
-          projectId,
-          sprintId: snapshot.selectedSprintId,
-          payload: snapshot,
-          replayable: false,
-        });
-        this.logger.info("realtime_snapshot_published", {
-          type: "project.live.updated",
-          sizeBytes: payloadSizeBytes,
-          projectId,
-          publishFrequencyMs: lastPublishedAt > 0 ? now - lastPublishedAt : 0
-        });
-        this.projectLivePublishedAt.set(projectId, now);
-      } catch (error) {
-        this.logger.error("Failed to publish project live realtime snapshot", {
-          projectId,
-          error,
-        });
-      }
+      publishTasks.push(
+        (async () => {
+          try {
+            const snapshot = await Promise.resolve(loaders.getProjectLiveSnapshot(projectId));
+            const payloadSizeBytes = Buffer.byteLength(JSON.stringify(snapshot), "utf8");
+            this.publishRawEvent({
+              scopeType: "project",
+              scopeId: projectId,
+              eventType: "project.live.updated",
+              entityType: "project_live",
+              entityId: projectId,
+              projectId,
+              sprintId: snapshot.selectedSprintId,
+              payload: snapshot,
+              replayable: false,
+            });
+            this.logger.info("realtime_snapshot_published", {
+              type: "project.live.updated",
+              sizeBytes: payloadSizeBytes,
+              projectId,
+              publishFrequencyMs: lastPublishedAt > 0 ? now - lastPublishedAt : 0,
+            });
+            this.projectLivePublishedAt.set(projectId, now);
+          } catch (error) {
+            this.logger.error("Failed to publish project live realtime snapshot", {
+              projectId,
+              error,
+            });
+          }
+        })()
+      );
     }
 
     for (const projectId of projectIds) {
@@ -286,25 +294,29 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         continue;
       }
 
-      try {
-        const snapshot = await Promise.resolve(loaders.getProjectExecutionSnapshot(projectId));
-        this.publishRawEvent({
-          scopeType: "project",
-          scopeId: projectId,
-          eventType: "project.execution.updated",
-          entityType: "project",
-          entityId: projectId,
-          projectId,
-          payload: snapshot,
-          replayable: false,
-        });
-        this.projectExecutionPublishedAt.set(projectId, now);
-      } catch (error) {
-        this.logger.error("Failed to publish project execution realtime snapshot", {
-          projectId,
-          error,
-        });
-      }
+      publishTasks.push(
+        (async () => {
+          try {
+            const snapshot = await Promise.resolve(loaders.getProjectExecutionSnapshot(projectId));
+            this.publishRawEvent({
+              scopeType: "project",
+              scopeId: projectId,
+              eventType: "project.execution.updated",
+              entityType: "project",
+              entityId: projectId,
+              projectId,
+              payload: snapshot,
+              replayable: false,
+            });
+            this.projectExecutionPublishedAt.set(projectId, now);
+          } catch (error) {
+            this.logger.error("Failed to publish project execution realtime snapshot", {
+              projectId,
+              error,
+            });
+          }
+        })()
+      );
     }
 
     for (const projectId of projectStatusIds) {
@@ -316,25 +328,29 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         continue;
       }
 
-      try {
-        const snapshot = await Promise.resolve(loaders.getProjectStatusSnapshot(projectId));
-        this.publishRawEvent({
-          scopeType: "project",
-          scopeId: projectId,
-          eventType: "project.runtime_status.updated",
-          entityType: "project_status",
-          entityId: projectId,
-          projectId,
-          payload: snapshot,
-          replayable: false,
-        });
-        this.projectRuntimeStatusPublishedAt.set(projectId, now);
-      } catch (error) {
-        this.logger.error("Failed to publish project runtime status realtime snapshot", {
-          projectId,
-          error,
-        });
-      }
+      publishTasks.push(
+        (async () => {
+          try {
+            const snapshot = await Promise.resolve(loaders.getProjectStatusSnapshot(projectId));
+            this.publishRawEvent({
+              scopeType: "project",
+              scopeId: projectId,
+              eventType: "project.runtime_status.updated",
+              entityType: "project_status",
+              entityId: projectId,
+              projectId,
+              payload: snapshot,
+              replayable: false,
+            });
+            this.projectRuntimeStatusPublishedAt.set(projectId, now);
+          } catch (error) {
+            this.logger.error("Failed to publish project runtime status realtime snapshot", {
+              projectId,
+              error,
+            });
+          }
+        })()
+      );
     }
 
     for (const projectId of projectStructureIds) {
@@ -346,27 +362,31 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         continue;
       }
 
-      try {
-        this.publishRawEvent({
-          scopeType: "project",
-          scopeId: projectId,
-          eventType: "project.structure.updated",
-          entityType: "project",
-          entityId: projectId,
-          projectId,
-          payload: {
-            projectId,
-            updatedAt: new Date().toISOString(),
-          },
-          replayable: false,
-        });
-        this.projectStructurePublishedAt.set(projectId, now);
-      } catch (error) {
-        this.logger.error("Failed to publish project structure realtime snapshot", {
-          projectId,
-          error,
-        });
-      }
+      publishTasks.push(
+        (async () => {
+          try {
+            this.publishRawEvent({
+              scopeType: "project",
+              scopeId: projectId,
+              eventType: "project.structure.updated",
+              entityType: "project",
+              entityId: projectId,
+              projectId,
+              payload: {
+                projectId,
+                updatedAt: new Date().toISOString(),
+              },
+              replayable: false,
+            });
+            this.projectStructurePublishedAt.set(projectId, now);
+          } catch (error) {
+            this.logger.error("Failed to publish project structure realtime snapshot", {
+              projectId,
+              error,
+            });
+          }
+        })()
+      );
     }
 
     if (shouldPublishOverview) {
@@ -375,26 +395,32 @@ export class DashboardRealtimeService implements DashboardRealtimeMutationNotifi
         this.pendingOverview = true;
         nextDelayMs = this.getNextDelay(nextDelayMs, waitMs);
       } else {
-        try {
-          const telemetry = await Promise.resolve(loaders.getOverviewTelemetrySnapshot());
-          this.publishRawEvent({
-            scopeType: "overview",
-            scopeId: "overview",
-            eventType: "overview.telemetry.updated",
-            entityType: "overview",
-            entityId: "overview",
-            payload: telemetry,
-            replayable: false,
-          });
-          this.logger.info("realtime_background_refresh", { type: "overview" });
-          this.overviewPublishedAt = now;
-        } catch (error) {
-          this.logger.error("Failed to publish overview telemetry realtime snapshot", {
-            error,
-          });
-        }
+        publishTasks.push(
+          (async () => {
+            try {
+              const telemetry = await Promise.resolve(loaders.getOverviewTelemetrySnapshot());
+              this.publishRawEvent({
+                scopeType: "overview",
+                scopeId: "overview",
+                eventType: "overview.telemetry.updated",
+                entityType: "overview",
+                entityId: "overview",
+                payload: telemetry,
+                replayable: false,
+              });
+              this.logger.info("realtime_background_refresh", { type: "overview" });
+              this.overviewPublishedAt = now;
+            } catch (error) {
+              this.logger.error("Failed to publish overview telemetry realtime snapshot", {
+                error,
+              });
+            }
+          })()
+        );
       }
     }
+
+    await Promise.allSettled(publishTasks);
 
     if (nextDelayMs !== null) {
       this.scheduleFlush(nextDelayMs);

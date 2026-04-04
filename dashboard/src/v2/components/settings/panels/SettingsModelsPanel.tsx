@@ -508,6 +508,30 @@ export const SettingsModelsPanel: FunctionComponent<{ state: SettingsPageState }
                               max={100}
                             />
                           </div>
+
+                          <div>
+                            <div className="mb-1.5 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
+                              <span>Max Concurrent Tasks</span>
+                              {getFieldBadge(`aiProvider.providers.${providerKey}.maxConcurrentTasks`) ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
+                                  <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500 text-[9px] font-black leading-none text-white dark:bg-amber-300 dark:text-void-900">
+                                    !
+                                  </span>
+                                  {getFieldBadge(`aiProvider.providers.${providerKey}.maxConcurrentTasks`)}
+                                </span>
+                              ) : null}
+                            </div>
+                            <NumberInput
+                              value={provider.maxConcurrentTasks}
+                              onChange={(value) => updateEditableSettings((current) => updateProviderSettings(current, providerKey, {
+                                maxConcurrentTasks: value,
+                              }))}
+                              min={0}
+                            />
+                            <div className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                              0 means unlimited
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>

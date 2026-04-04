@@ -12,6 +12,10 @@ import type { ProjectManagementRepository } from "../repositories/project-manage
 import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
 import type { IProviderRunner, ProviderRunResult } from "../infrastructure/providers/cli/provider-runner.js";
+import {
+  buildChatReplayPrompt,
+  normalizeProviderReply,
+} from "./chat-reply-prompt.js";
 
 import { getRepoSprintOsPath } from "../shared/config/sprint-os-paths.js";
 import type { TaskService } from "./task-service.js";
@@ -57,9 +61,11 @@ export class WorkerInboxReplyService {
     const route = this.resolveProviderRoute("dashboard_reply", input.bodyMarkdown);
     const thread = this.deps.connectionChatRepository.getThread(input.threadId);
     const messages = this.deps.connectionChatRepository.listMessages(input.threadId);
-    const rawPrompt = input.mode === "compact_thread"
-      ? input.bodyMarkdown.trim()
-      : await this.buildPrompt({
+    let rawPrompt = input.bodyMarkdown.trim();
+
+    if (input.mode !== "compact_thread") {
+      const workerInstructions = (await this.deps.agentPresetSyncService.getWorkerAgent(input.projectId)).instructionMarkdown.trim();
+      rawPrompt = buildChatReplayPrompt({
         projectId: input.projectId,
         repoPath: project.baseDir,
         projectName: project.name,
@@ -67,7 +73,10 @@ export class WorkerInboxReplyService {
         threadTitle: input.threadTitle || thread.title,
         messages,
         bodyMarkdown: input.bodyMarkdown,
+        workerInstructions,
+        isDashboardReply: true,
       });
+    }
     const prompt = buildProviderPrompt(rawPrompt, route.providers[route.provider].thinkingMode);
 
     const execInvocation = this.deps.executionRepository.createExecutionInvocation({
@@ -109,7 +118,7 @@ export class WorkerInboxReplyService {
       throw err;
     }
 
-    const bodyMarkdown = this.normalizeProviderReply(output);
+    const bodyMarkdown = normalizeProviderReply(output);
 
     this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
       role: "assistant",
@@ -253,7 +262,7 @@ export class WorkerInboxReplyService {
       throw err;
     }
 
-    const reply = this.normalizeProviderReply(output);
+    const reply = normalizeProviderReply(output);
 
     const finishedAt = new Date().toISOString();
     this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
@@ -320,60 +329,6 @@ export class WorkerInboxReplyService {
     };
   }
 
-  private async buildPrompt(args: {
-    projectId: string;
-    repoPath: string;
-    projectName: string;
-    thread: ConversationThreadRecord;
-    threadTitle?: string;
-    messages: ConversationMessageRecord[];
-    bodyMarkdown: string;
-  }): Promise<string> {
-    const workerInstructions = (await this.deps.agentPresetSyncService.getWorkerAgent(args.projectId))
-      .instructionMarkdown
-      .trim();
-    const compactionSummary = this.getCompactionSummary(args.thread.runtimeState);
-    const replayMessages = args.messages.length > 0
-      ? (compactionSummary ? this.getMessagesAfterCompaction(args.messages, compactionSummary) : args.messages)
-      : [{ authorType: "dashboard_user", bodyMarkdown: args.bodyMarkdown } as ConversationMessageRecord];
-
-    const instructions = [
-      "You are a Sprint OS connected worker replying to a dashboard chat message.",
-      "Reply in concise markdown.",
-      "Do not claim code changes, PRs, or completed execution unless they actually happened.",
-      "If the message asks for status you do not know, say so plainly and ask for the next action.",
-      "Do not start implementation from this message. This is a reply-only interaction.",
-    ].join("\n");
-
-    return [
-      workerInstructions ? `## WORKER INSTRUCTIONS\n\n${workerInstructions}` : "",
-      "## ROLE",
-      instructions,
-      "",
-      "## CONTEXT",
-      `Project: ${args.projectName}`,
-      `Repo Path: ${args.repoPath}`,
-      `Thread ID: ${args.thread.id}`,
-      args.threadTitle ? `Thread Title: ${args.threadTitle}` : "",
-      "",
-      ...(compactionSummary ? [
-        "## COMPACTED HISTORY",
-        compactionSummary.markdown,
-        "",
-        "## MESSAGES SINCE COMPACTION",
-      ] : [
-        "## CONVERSATION HISTORY",
-      ]),
-      replayMessages.map((message) => {
-        const role = message.authorType === "dashboard_user" ? "User" : "Worker";
-        return `### ${role}\n${message.bodyMarkdown.trim()}`;
-      }).join("\n\n") || args.bodyMarkdown.trim(),
-      "",
-      "## REQUIRED OUTPUT",
-      "Return only the reply body in markdown. No JSON. No code fences unless the reply truly needs them.",
-    ].filter((part) => part.trim().length > 0).join("\n");
-  }
-
   private async runProvider(input: {
     provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
     prompt: string;
@@ -398,44 +353,4 @@ export class WorkerInboxReplyService {
     });
   }
 
-  private normalizeProviderReply(output: string): string {
-    const trimmed = output.trim();
-    if (!trimmed) {
-      return "";
-    }
-
-    try {
-      const parsed = JSON.parse(trimmed) as { response?: unknown };
-      if (typeof parsed?.response === "string") {
-        return parsed.response.trim();
-      }
-    } catch {
-      // Provider returned plain text; keep it as-is.
-    }
-
-    return trimmed;
-  }
-
-  private getCompactionSummary(runtimeState: ConversationRuntimeState | null | undefined): ConversationCompactionSummary | null {
-    const summary = runtimeState?.compactionSummary;
-    if (!summary || typeof summary.markdown !== "string" || !summary.markdown.trim()) {
-      return null;
-    }
-    return summary;
-  }
-
-  private getMessagesAfterCompaction(
-    messages: ConversationMessageRecord[],
-    summary: ConversationCompactionSummary,
-  ): ConversationMessageRecord[] {
-    if (!summary.sourceMessageId) {
-      return messages;
-    }
-    const index = messages.findIndex((message) => message.id === summary.sourceMessageId);
-    if (index === -1) {
-      return messages;
-    }
-    return messages.slice(index + 1);
-  }
-
-  }
+}

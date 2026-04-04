@@ -10,6 +10,12 @@ import type { IProviderRunner } from "../infrastructure/providers/cli/provider-r
 import type { Logger } from "../shared/logging/logger.js";
 import type { ConversationCompactionSummary, CreateDashboardConversationMessageInput, ConversationThreadRecord, ConversationMessageRecord, ConversationRuntimeState, UpdateConversationThreadRouteInput } from "../contracts/connection-chat-types.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
+import {
+  buildChatCompactionPrompt,
+  buildChatContinuationPrompt,
+  buildChatReplayPrompt,
+  normalizeProviderReply,
+} from "./chat-reply-prompt.js";
 
 interface ChatThreadRuntimeServiceDependencies {
   connectionChatRepository: ConnectionChatRepository;
@@ -254,9 +260,18 @@ export class ChatThreadRuntimeService {
     const allMessages = this.deps.connectionChatRepository.listMessages(thread.id);
 
     if (replayRequired) {
-      promptContent = await this.buildReplayPrompt(projectId, project.baseDir, project.name, thread, allMessages);
+      const workerInstructions = (await this.deps.agentPresetSyncService.getWorkerAgent(projectId)).instructionMarkdown.trim();
+      promptContent = buildChatReplayPrompt({
+        projectId,
+        repoPath: project.baseDir,
+        projectName: project.name,
+        thread,
+        messages: allMessages,
+        workerInstructions,
+        isDashboardReply: false,
+      });
     } else {
-      promptContent = await this.buildContinuationPrompt(latestMessage);
+      promptContent = buildChatContinuationPrompt(latestMessage);
       continueSessionId = runtimeState.sessionIds![0];
     }
 
@@ -311,7 +326,7 @@ export class ChatThreadRuntimeService {
         finishedAt: new Date().toISOString(),
       });
 
-      const replyMarkdown = this.normalizeProviderReply(result.text);
+      const replyMarkdown = normalizeProviderReply(result.text);
 
       this.deps.connectionChatRepository.markDashboardMessagesProcessed(thread.id, {
         upToMessageId: latestMessage.id,
@@ -350,74 +365,6 @@ export class ChatThreadRuntimeService {
     }
   }
 
-  private async buildReplayPrompt(projectId: string, repoPath: string, projectName: string, thread: ConversationThreadRecord, messages: ConversationMessageRecord[]): Promise<string> {
-    const workerInstructions = (await this.deps.agentPresetSyncService.getWorkerAgent(projectId)).instructionMarkdown.trim();
-    const compactionSummary = this.getCompactionSummary(thread.runtimeState);
-    const replayMessages = compactionSummary
-      ? this.getMessagesAfterCompaction(messages, compactionSummary)
-      : messages;
-
-    const instructions = [
-      "You are a Sprint OS connected worker replying to a dashboard chat message.",
-      "Reply in concise markdown.",
-      "Do not claim code changes, PRs, or completed execution unless they actually happened.",
-      "If the message asks for status you do not know, say so plainly and ask for the next action.",
-      "Do not start implementation from this message. This is a reply-only interaction.",
-    ].join("\\n");
-
-    const history = replayMessages.map(m => {
-      const role = m.authorType === "dashboard_user" ? "User" : "Worker";
-      return `### ${role}\\n${m.bodyMarkdown.trim()}`;
-    }).join("\\n\\n");
-
-    return [
-      workerInstructions ? `## WORKER INSTRUCTIONS\\n\\n${workerInstructions}` : "",
-      "## ROLE",
-      instructions,
-      "",
-      "## CONTEXT",
-      `Project: ${projectName}`,
-      `Repo Path: ${repoPath}`,
-      `Thread ID: ${thread.id}`,
-      thread.title ? `Thread Title: ${thread.title}` : "",
-      "",
-      ...(compactionSummary ? [
-        "## COMPACTED HISTORY",
-        compactionSummary.markdown,
-        "",
-        "## MESSAGES SINCE COMPACTION",
-      ] : [
-        "## CONVERSATION HISTORY",
-      ]),
-      history || "_No new messages since the compaction summary was generated._",
-      "",
-      "## REQUIRED OUTPUT",
-      "Return only the reply body in markdown. No JSON. No code fences unless the reply truly needs them.",
-    ].filter((part) => part.trim().length > 0).join("\\n");
-  }
-
-  private async buildContinuationPrompt(message: ConversationMessageRecord): Promise<string> {
-    return `### User\\n${message.bodyMarkdown.trim()}`;
-  }
-
-  private normalizeProviderReply(output: string): string {
-    const trimmed = output.trim();
-    if (!trimmed) {
-      return "";
-    }
-
-    try {
-      const parsed = JSON.parse(trimmed) as { response?: unknown };
-      if (typeof parsed?.response === "string") {
-        return parsed.response.trim();
-      }
-    } catch {
-      // Provider returned plain text; keep it as-is.
-    }
-
-    return trimmed;
-  }
-
   private isVirtualProvider(value: string | undefined | null): value is Extract<ProviderId, "gemini" | "codex" | "claude-code"> {
     return value === "gemini" || value === "codex" || value === "claude-code";
   }
@@ -436,7 +383,8 @@ export class ChatThreadRuntimeService {
     const thinkingMode = route.thinkingMode;
     const workflowSettings = this.deps.getDashboardSettings().cliWorkflow;
     const githubToken = this.deps.getGithubToken();
-    const promptContent = await this.buildCompactionPrompt(projectId, repoPath, projectName, thread, messages);
+    const workerInstructions = (await this.deps.agentPresetSyncService.getWorkerAgent(projectId)).instructionMarkdown.trim();
+    const promptContent = buildChatCompactionPrompt({ projectId, repoPath, projectName, thread, messages, workerInstructions });
     const finalPrompt = buildProviderPrompt(promptContent, thinkingMode as any);
     const execInvocation = this.deps.executionRepository.createExecutionInvocation({
       projectId,
@@ -478,7 +426,7 @@ export class ChatThreadRuntimeService {
         },
       });
 
-      const markdown = this.normalizeProviderReply(result.text);
+      const markdown = normalizeProviderReply(result.text);
       if (!markdown) {
         throw new Error(`Provider ${provider} returned an empty compaction summary.`);
       }
@@ -518,7 +466,8 @@ export class ChatThreadRuntimeService {
     connectionId: string,
   ): Promise<ConversationThreadRecord> {
     const requestId = randomUUID();
-    const compactionPrompt = await this.buildCompactionPrompt(projectId, repoPath, projectName, thread, messages);
+    const workerInstructions = (await this.deps.agentPresetSyncService.getWorkerAgent(projectId)).instructionMarkdown.trim();
+    const compactionPrompt = buildChatCompactionPrompt({ projectId, repoPath, projectName, thread, messages, workerInstructions });
     const boundThread = thread.connectionId === connectionId
       ? thread
       : this.deps.connectionChatRepository.updateThread(thread.id, { connectionId });
@@ -580,70 +529,6 @@ export class ChatThreadRuntimeService {
     }
 
     throw new Error("Timed out waiting for the selected chat worker to return a compaction summary.");
-  }
-
-  private async buildCompactionPrompt(
-    projectId: string,
-    repoPath: string,
-    projectName: string,
-    thread: ConversationThreadRecord,
-    messages: ConversationMessageRecord[],
-  ): Promise<string> {
-    const workerInstructions = (await this.deps.agentPresetSyncService.getWorkerAgent(projectId)).instructionMarkdown.trim();
-    const history = messages.map((message) => {
-      const role = message.authorType === "dashboard_user" ? "User" : "Worker";
-      return `### ${role}\n${message.bodyMarkdown.trim()}`;
-    }).join("\n\n");
-
-    return [
-      workerInstructions ? `## WORKER INSTRUCTIONS\n\n${workerInstructions}` : "",
-      "## ROLE",
-      "You are compacting a Sprint OS dashboard chat thread into a reusable handoff summary for a fresh worker session.",
-      "Preserve durable context, decisions, constraints, known facts, repo-specific details, and the user's standing goals.",
-      "Do not claim code changes, PRs, or completed work unless they are explicitly stated in the conversation.",
-      "Call out unresolved questions or pending follow-ups clearly.",
-      "",
-      "## CONTEXT",
-      `Project: ${projectName}`,
-      `Repo Path: ${repoPath}`,
-      `Thread ID: ${thread.id}`,
-      thread.title ? `Thread Title: ${thread.title}` : "",
-      `Message Count: ${messages.length}`,
-      "",
-      "## CONVERSATION HISTORY",
-      history,
-      "",
-      "## REQUIRED OUTPUT",
-      "Return only markdown.",
-      "Structure the summary with these sections in order:",
-      "1. Current Objective",
-      "2. Important Context",
-      "3. Decisions And Constraints",
-      "4. Open Questions Or Risks",
-      "5. Latest User Intent",
-    ].filter((part) => part.trim().length > 0).join("\n");
-  }
-
-  private getCompactionSummary(runtimeState: ConversationRuntimeState | null | undefined): ConversationCompactionSummary | null {
-    const summary = runtimeState?.compactionSummary;
-    if (!summary || typeof summary.markdown !== "string" || !summary.markdown.trim()) {
-      return null;
-    }
-    return summary;
-  }
-
-  private getMessagesAfterCompaction(
-    messages: ConversationMessageRecord[],
-    summary: ConversationCompactionSummary,
-  ): ConversationMessageRecord[] {
-    if (!summary.sourceMessageId) {
-      return messages;
-    }
-    const index = messages.findIndex((message) => message.id === summary.sourceMessageId);
-    if (index === -1) {
-      return messages;
-    }
-    return messages.slice(index + 1);
   }
 
   private async sleep(ms: number): Promise<void> {

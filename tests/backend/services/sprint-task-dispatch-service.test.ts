@@ -18,6 +18,7 @@ async function createFixture() {
   const taskService = {
     selectProviderForTask: vi.fn().mockReturnValue("codex"),
     selectCliProviderForTask: vi.fn().mockReturnValue("codex"),
+    resolveTaskProvider: vi.fn().mockReturnValue("codex"),
     startSprintTask: vi.fn(),
   };
   const service = new SprintTaskDispatchService(

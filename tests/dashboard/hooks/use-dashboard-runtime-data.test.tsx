@@ -83,4 +83,41 @@ describe("useDashboardRuntimeData", () => {
 
     expect(result.current.snapshotUpdatedAt).toBe("2024-01-02T00:00:00Z");
   });
+
+  it("handles snapshot_required fallback by triggering a silent refetch through the shared hook", async () => {
+    let realtimeCallback: (message: any) => void;
+
+    vi.mocked(realtime.subscribeToDashboardRealtime).mockImplementation((scopes, rc, tc) => {
+      realtimeCallback = rc;
+      return () => {};
+    });
+
+    const { result } = renderHook(() => useDashboardRuntimeData("p1"));
+
+    // Wait for initial fetch to resolve
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(api.fetchLivePayload).toHaveBeenCalledTimes(1);
+
+    // Provide a new payload for the next fetch
+    vi.mocked(api.fetchLivePayload).mockResolvedValueOnce({
+        ...mockPayload,
+        updatedAt: "2025-01-01T00:00:00Z",
+    } as any);
+
+    // Fire snapshot_required realtime fallback
+    await act(async () => {
+      realtimeCallback({
+        type: "snapshot_required",
+      });
+      // Allow the internal silent refresh promise to settle
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // Validates the fallback strategy triggered the REST fetch properly
+    expect(api.fetchLivePayload).toHaveBeenCalledTimes(2);
+    expect(result.current.snapshotUpdatedAt).toBe("2025-01-01T00:00:00Z");
+  });
 });

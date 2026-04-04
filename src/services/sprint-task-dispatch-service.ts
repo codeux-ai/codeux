@@ -44,18 +44,8 @@ export class SprintTaskDispatchService {
       projectId: args.projectId,
       sprintId: args.sprintId,
     };
-    // If task.provider is already set (e.g. from a rerun with provider override), respect it directly
-    const providerOverride = args.task.provider || null;
-    const provider = providerOverride
-      ? providerOverride
-      : preferredExecutor === "mcp_worker"
-      ? null
-      : preferredExecutor === "jules"
-      ? "jules"
-      : preferredExecutor === "docker_cli"
-        ? this.taskService.selectCliProviderForTask(args.task, settingsScope)
-        : this.taskService.selectProviderForTask(args.task, settingsScope);
-    const executorType: TaskDispatchExecutorType = preferredExecutor === "mcp_worker" && !providerOverride
+    const provider = this.taskService.resolveTaskProvider(args.task, settingsScope, preferredExecutor);
+    const executorType: TaskDispatchExecutorType = preferredExecutor === "mcp_worker" && !args.task.provider
       ? "mcp_worker"
       : provider === "jules"
         ? "jules"

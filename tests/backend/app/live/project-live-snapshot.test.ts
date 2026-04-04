@@ -20,7 +20,7 @@ describe("getProjectLiveSnapshot", () => {
     };
   });
 
-  it("assembles full snapshot for a valid project", async () => {
+  it("assembles full snapshot for a valid project and logs structural counts", async () => {
     const snapshot = await getProjectLiveSnapshot(deps);
 
     expect(snapshot.projectId).toBe("proj-1");
@@ -36,6 +36,16 @@ describe("getProjectLiveSnapshot", () => {
     expect(deps.projectRuntimeRepository.getProjectStatus).toHaveBeenCalledWith("proj-1", "sprint-1");
     expect(deps.getProjectExecutionSnapshot).toHaveBeenCalledWith("proj-1");
     expect(deps.getGitStatus).toHaveBeenCalled();
+
+    expect(deps.logger.info).toHaveBeenCalledWith(
+      "project_live_snapshot_assembled",
+      expect.objectContaining({
+        projectId: "proj-1",
+        executionItemCount: 0,
+        statusSubtaskCount: 0,
+        hasGitStatus: true,
+      })
+    );
   });
 
   it("returns empty/null snapshot when no project id is provided or selected", async () => {
@@ -74,5 +84,39 @@ describe("getProjectLiveSnapshot", () => {
     expect(deps.projectManagementRepository.listSprints).toHaveBeenCalledWith("proj-hint");
     expect(deps.projectRuntimeRepository.getProjectStatus).toHaveBeenCalledWith("proj-hint", "sprint-1");
     expect(deps.getProjectExecutionSnapshot).toHaveBeenCalledWith("proj-hint");
+  });
+
+  it("uses generic error message if gitStatus promise rejection is not an Error instance", async () => {
+    deps.getGitStatus = vi.fn().mockRejectedValue("Not an error object");
+
+    const snapshot = await getProjectLiveSnapshot(deps);
+
+    expect(snapshot.gitStatus).toBeNull();
+    expect(snapshot.gitStatusError).toBe("Unable to load git/ci/pr tracking.");
+  });
+
+  it("handles missing project array edge cases for execution item count", async () => {
+    deps.getProjectExecutionSnapshot = vi.fn().mockReturnValue({
+      sprintRuns: undefined,
+      taskDispatches: undefined,
+      connections: undefined,
+      attentionItems: undefined,
+      recentEvents: undefined,
+      projectId: "proj-1"
+    } as any);
+
+    deps.projectRuntimeRepository.getProjectStatus = vi.fn().mockReturnValue({
+      subtasks: undefined
+    } as any);
+
+    const snapshot = await getProjectLiveSnapshot(deps);
+
+    expect(deps.logger.info).toHaveBeenCalledWith(
+      "project_live_snapshot_assembled",
+      expect.objectContaining({
+        executionItemCount: 0,
+        statusSubtaskCount: 0,
+      })
+    );
   });
 });
