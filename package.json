@@ -39,6 +39,7 @@
     "gsap": "^3.14.2",
     "js-tiktoken": "^1.0.21",
     "lucide-preact": "^0.577.0",
+    "lucide-react": "^1.7.0",
     "marked": "^17.0.3",
     "onnxruntime-node": "^1.24.3",
     "preact": "^10.29.0",
