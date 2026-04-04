@@ -426,7 +426,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             </div>
 
             {/* ── Filter Strip ────────────────────────────────────────── */}
-            <div className="-mt-8 flex gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl w-fit">
+            <div className="-mt-8 flex flex-wrap gap-1 p-1 bg-black/[0.04] dark:bg-white/[0.04] rounded-xl w-fit">
                 {TASK_FILTERS.map((filter) => (
                     <button
                         key={filter}
@@ -451,7 +451,7 @@ export const LiveSessionPage: FunctionComponent = () => {
             </div>
 
             {/* ── Main Content Grid ───────────────────────────────────── */}
-            <div ref={contentRef} className="grid grid-cols-1 xl:grid-cols-12 gap-10 xl:gap-16">
+            <div ref={contentRef} className="flex flex-col xl:grid xl:grid-cols-12 gap-10 xl:gap-16">
 
                 {/* Task cards */}
                 <div className="xl:col-span-8 flex flex-col gap-5">

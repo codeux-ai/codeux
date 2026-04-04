@@ -1016,8 +1016,8 @@ export const MemoryPage: FunctionComponent = () => {
                     </p>
                 </div>
 
-                <div className="flex flex-col items-end gap-3.5 shrink-0">
-                    <div className="flex items-center gap-2.5">
+                <div className="flex flex-col md:items-end gap-3.5 shrink-0 w-full md:w-auto mt-4 md:mt-0">
+                    <div className="flex flex-wrap items-center gap-2.5">
                         {TIER_TABS.map(tab => {
                             const count = tab.key === "short_term"
                                 ? (stats.sprint + stats.agent)
@@ -1034,7 +1034,7 @@ export const MemoryPage: FunctionComponent = () => {
                             );
                         })}
                     </div>
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex flex-wrap items-center gap-2.5">
                         {/* Sprint selector — only for Short Term */}
                         {activeTier === "short_term" && sprints.length > 0 && (
                             <select
@@ -1067,7 +1067,7 @@ export const MemoryPage: FunctionComponent = () => {
                             </select>
                         )}
                     </div>
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex flex-wrap items-center gap-2.5">
                         <button onClick={() => setShowAddModal(true)}
                             className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold
                                        bg-signal-500/10 text-signal-500 hover:bg-signal-500/20
@@ -1198,7 +1198,7 @@ export const MemoryPage: FunctionComponent = () => {
                            bg-white/50 dark:bg-void-800/40 backdrop-blur-2xl
                            border border-black/[0.05] dark:border-white/[0.05]
                            shadow-[0_8px_48px_rgba(0,0,0,0.06)] dark:shadow-[0_8px_48px_rgba(0,0,0,0.4)]"
-                style={{ height: "max(600px, calc(100vh - 440px))" }}
+                style={{ height: "max(400px, calc(100dvh - 320px))" }}
             >
                 <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
 
@@ -1211,7 +1211,7 @@ export const MemoryPage: FunctionComponent = () => {
                             value={searchQuery}
                             onInput={e => handleSearch((e.target as HTMLInputElement).value)}
                             placeholder="Search memories…"
-                            className="w-56 pl-9 pr-4 py-2.5 rounded-xl text-xs font-medium
+                            className="w-40 sm:w-56 pl-9 pr-4 py-2.5 rounded-xl text-xs font-medium
                                        bg-white/80 dark:bg-void-800/80 backdrop-blur-2xl
                                        border border-black/[0.06] dark:border-white/[0.06]
                                        text-slate-700 dark:text-slate-300
@@ -1231,7 +1231,7 @@ export const MemoryPage: FunctionComponent = () => {
                 </div>
 
                 {/* Zoom controls */}
-                <div className="absolute bottom-5 right-5 z-20 flex flex-col gap-1.5">
+                <div className="absolute top-16 right-5 md:top-auto md:bottom-5 z-20 flex flex-col gap-1.5">
                     {[
                         { icon: ZoomIn, fn: zoomIn, title: "Zoom in" },
                         { icon: ZoomOut, fn: zoomOut, title: "Zoom out" },
