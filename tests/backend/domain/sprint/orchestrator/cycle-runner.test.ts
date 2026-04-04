@@ -18,6 +18,7 @@ function buildDeps(): SprintOrchestratorDependencies {
     projectManagementRepository: {
       updateTask: vi.fn(),
       getTask: vi.fn().mockReturnValue({ executorType: "codex" }),
+      getTasksByIds: vi.fn().mockReturnValue([{ id: "t1", executorType: "codex" }, { id: "t2", executorType: "codex" }]),
     } as any,
     taskService: {
       resolveTaskProvider: vi.fn().mockReturnValue("codex"),

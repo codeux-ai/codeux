@@ -691,6 +691,19 @@ export class ProjectManagementRepository {
     }
   }
 
+  getTasksByIds(taskIds: string[]): TaskRecord[] {
+    if (taskIds.length === 0) {
+      return [];
+    }
+
+    const rows = this.storage.executeChunkedInQuery<TaskRow>({
+      sqlPrefix: "SELECT * FROM tasks WHERE id IN",
+      items: taskIds,
+    });
+
+    return this.inflateTasks(rows);
+  }
+
   private requireProject(projectId: string): ProjectSummary {
     const project = this.getProject(projectId);
     if (!project) {

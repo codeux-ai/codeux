@@ -33,7 +33,7 @@ const buildDeps = () => {
     fetchRecentActivities: vi.fn().mockResolvedValue([]),
     getCiStatusForScope: vi.fn().mockResolvedValue(null),
     completedSprints: new Set<string>(),
-    projectManagementRepository: { updateTask: vi.fn() },
+    projectManagementRepository: { updateTask: vi.fn(), getTasksByIds: vi.fn().mockReturnValue([]) },
     executionRepository: { updateSprintRun: vi.fn() },
     sprintExecutionStateService: {
       resolveContext: vi.fn((args: any) => ({

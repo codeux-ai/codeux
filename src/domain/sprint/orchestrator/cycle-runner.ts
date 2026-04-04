@@ -326,13 +326,17 @@ export class CycleRunner {
     args: CycleRunnerArgs,
     dashboardSettings: ReturnType<SprintOrchestratorDependencies["getDashboardSettings"]>,
   ): Promise<{ subtasks: Subtask[]; reportText: string }> {
+    const taskIds = subtasks.map(t => t.record_id).filter((id): id is string => !!id);
+    const taskRecords = this.deps.projectManagementRepository.getTasksByIds(taskIds);
+    const taskRecordMap = new Map(taskRecords.map(t => [t.id, t]));
+
     return runStartReadyTasksStep(subtasks, {
       action: args.action,
       maxFailures: this.deps.settings.maxFailures || 5,
       getConsecutiveFailures: this.deps.getConsecutiveFailures,
       setConsecutiveFailures: this.deps.setConsecutiveFailures,
       getProviderForTask: (task) => {
-        const taskRecord = task.record_id ? this.deps.projectManagementRepository.getTask(task.record_id) : undefined;
+        const taskRecord = task.record_id ? taskRecordMap.get(task.record_id) : undefined;
         return this.deps.taskService?.resolveTaskProvider(
           task,
           { projectId: args.executionContext.project.id, sprintId: args.executionContext.sprint.id },
@@ -352,7 +356,7 @@ export class CycleRunner {
             const p = t.provider || (t.record_id ? this.deps.taskService?.resolveTaskProvider(
               t,
               { projectId: args.executionContext.project.id, sprintId: args.executionContext.sprint.id },
-              this.deps.projectManagementRepository.getTask(t.record_id)?.executorType
+              taskRecordMap.get(t.record_id)?.executorType
             ) : null);
             if (p) {
               counts[p] = (counts[p] || 0) + 1;

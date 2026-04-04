@@ -45,7 +45,7 @@ const buildDeps = () => {
     resolveSessionName: (s: any) => s.name,
     extractSessionId: (s: any) => s.id,
     completedSprints: new Set<string>(),
-    projectManagementRepository: { updateTask: vi.fn() },
+    projectManagementRepository: { updateTask: vi.fn(), getTasksByIds: vi.fn().mockReturnValue([]) },
     executionRepository: { updateSprintRun: vi.fn() },
     projectAttentionService: {
       openItem: vi.fn(),
