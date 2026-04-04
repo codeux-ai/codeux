@@ -1,5 +1,5 @@
 import type { FunctionComponent, RefObject } from "preact";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { Bell, Command, Search, Moon, Sun, ChevronDown, Activity, FolderOpen, ArrowRight, Cpu, Zap, Compass } from "lucide-preact";
 import { Link } from "@tanstack/react-router";
@@ -146,9 +146,9 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme }) 
     const sprintKb = useDropdownKeyboard(sprintDropdownOpen, setSprintDropdownOpen, sprintDropdownRef, setSprintFilter);
     const workerKb = useDropdownKeyboard(workerDropdownOpen, setWorkerDropdownOpen, workerDropdownRef, setWorkerFilter);
 
-    const filteredProjects = projects.filter(p => p.name.toLowerCase().includes(projectFilter.toLowerCase()));
-    const filteredSprints = sprints.filter(s => s.name.toLowerCase().includes(sprintFilter.toLowerCase()));
-    const filteredWorkers = workerOptions.filter(w => w.label.toLowerCase().includes(workerFilter.toLowerCase()) || (w.subLabel && w.subLabel.toLowerCase().includes(workerFilter.toLowerCase())));
+    const filteredProjects = useMemo(() => projects.filter(p => p.name.toLowerCase().includes(projectFilter.toLowerCase())), [projects, projectFilter]);
+    const filteredSprints = useMemo(() => sprints.filter(s => s.name.toLowerCase().includes(sprintFilter.toLowerCase())), [sprints, sprintFilter]);
+    const filteredWorkers = useMemo(() => workerOptions.filter(w => w.label.toLowerCase().includes(workerFilter.toLowerCase()) || (w.subLabel && w.subLabel.toLowerCase().includes(workerFilter.toLowerCase()))), [workerOptions, workerFilter]);
 
 
     useLayoutEffect(() => {
