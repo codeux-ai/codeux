@@ -326,6 +326,32 @@ describe("ProjectManagementRepository", () => {
     });
   });
 
+  it("loads task records by id through the chunked IN helper", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Batch Lookup Project",
+      sourceType: "local",
+      sourceRef: "/workspace/batch-lookup-project",
+    });
+    const sprint = repository.createSprint(project.id, {
+      name: "Batch Lookup Sprint",
+      number: 1,
+    });
+    const taskA = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "First lookup task",
+    });
+    const taskB = repository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Second lookup task",
+    });
+
+    const records = repository.getTasksByIds([taskA.id, taskB.id, taskA.id]);
+
+    expect(records).toHaveLength(2);
+    expect(records.map((record) => record.id).sort()).toEqual([taskA.id, taskB.id].sort());
+  });
+
   it("publishes project collection and structure refreshes on project mutations", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-project-repo-realtime-"));
     tempDirs.push(dir);

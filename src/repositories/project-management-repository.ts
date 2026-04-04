@@ -730,7 +730,7 @@ export class ProjectManagementRepository {
     }
 
     const rows = this.storage.executeChunkedInQuery<TaskRow>({
-      sqlPrefix: "SELECT * FROM tasks WHERE id IN",
+      sqlPrefix: "SELECT * FROM tasks WHERE id",
       items: taskIds,
     });
 

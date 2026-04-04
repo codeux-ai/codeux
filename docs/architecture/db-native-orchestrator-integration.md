@@ -99,6 +99,9 @@ When `startReadyTasksStep` launches work during `orchestrate`:
 3. it starts the provider workflow through the existing `TaskService`
 4. it writes session/provider metadata back onto the `task_run`
 
+Implementation note:
+- batched task-record hydration in the start-ready phase now uses the shared chunked `IN` query helper, and repository call sites must pass only the predicate prefix (for example `WHERE id`) because the helper appends the `IN (...)` clause itself
+
 Executor mapping in this slice:
 
 - `jules` provider -> `jules` dispatch executor
