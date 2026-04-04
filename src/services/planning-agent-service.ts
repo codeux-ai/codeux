@@ -24,6 +24,7 @@ import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
 import { extractJsonLikeBlock } from "./planning-json-extractor.js";
 import { ProviderExecutionService } from "./provider-execution-service.js";
+import { StructuredProviderResponseService, type StructuredProviderResult } from "./structured-provider-response-service.js";
 import { waitUntil } from "../shared/polling/wait-until.js";
 
 interface PlanningAgentServiceDeps {
@@ -36,6 +37,8 @@ interface PlanningAgentServiceDeps {
   memoryService?: MemoryService;
   providerRunner?: IProviderRunner;
   logger?: Logger;
+  providerExecutionService?: ProviderExecutionService;
+  structuredProviderResponseService?: StructuredProviderResponseService;
 }
 
 interface ImprovePromptResult {
@@ -68,9 +71,7 @@ interface PlannedSprintPayload {
   tasks: PlannedTaskDraft[];
 }
 
-interface VirtualPlanningResult {
-  bodyMarkdown: string;
-  nativeSessionId: string | null;
+interface PlanningResultContext {
   provider: DashboardSettings["workers"]["virtualWorkerProvider"];
   sessionId: string;
   workflowSettings: CliWorkflowSettings;
@@ -80,12 +81,18 @@ interface VirtualPlanningResult {
 export class PlanningAgentService {
   private readonly providerRunner: IProviderRunner;
   private readonly providerExecutionService: ProviderExecutionService;
+  private readonly structuredProviderResponseService: StructuredProviderResponseService;
 
   constructor(private readonly deps: PlanningAgentServiceDeps) {
     this.providerRunner = deps.providerRunner || new ProviderRunner(new DockerRunner());
-    this.providerExecutionService = new ProviderExecutionService({
+    this.providerExecutionService = deps.providerExecutionService || new ProviderExecutionService({
       executionRepository: deps.executionRepository,
       providerRunner: this.providerRunner,
+      logger: deps.logger,
+    });
+    this.structuredProviderResponseService = deps.structuredProviderResponseService || new StructuredProviderResponseService({
+      providerExecutionService: this.providerExecutionService,
+      executionRepository: deps.executionRepository,
       logger: deps.logger,
     });
   }
@@ -156,17 +163,16 @@ export class PlanningAgentService {
           rawPrompt: prompt,
           overrides: input.overrides,
           signal,
+          parseFn: (bodyMarkdown) => this.parseJsonReply<{ goal?: string }>(bodyMarkdown),
+          buildRetryPrompt: (lastError) => [
+            "Your previous output could not be parsed as valid JSON.",
+            `Parse error: ${lastError.message}`,
+            "",
+            "Please output ONLY valid JSON.",
+            "- Output raw JSON only — no markdown fences, no commentary, no prose before or after."
+          ].join("\n"),
         });
-        payload = await this.parseWithJsonRetry({
-          initialResult: virtualResult,
-          parseFn: (body) => this.parseJsonReply<{ goal?: string }>(body),
-          projectId,
-          sprintId: null,
-          invocationId: invocation?.id,
-          repoPath: project.baseDir,
-          settings: runtime.settings,
-          signal,
-        });
+        payload = virtualResult.parsed;
       }
 
       if (invocation) {
@@ -277,17 +283,18 @@ export class PlanningAgentService {
           rawPrompt: prompt,
           overrides: options.overrides,
           signal,
+          parseFn: (bodyMarkdown) => this.parsePlannedSprintReply(bodyMarkdown),
+          buildRetryPrompt: (lastError) => [
+            "Your previous output could not be parsed as valid JSON.",
+            `Parse error: ${lastError.message}`,
+            "",
+            "Please output ONLY the valid JSON sprint definition. Requirements:",
+            "- Output raw JSON only — no markdown fences, no commentary, no prose before or after.",
+            "- Ensure all string values are properly escaped (especially quotes and newlines inside promptMarkdown).",
+            "- Use the exact schema from the original instructions: {\"goal\":\"...\",\"tasks\":[...]}"
+          ].join("\n"),
         });
-        payload = await this.parseWithJsonRetry({
-          initialResult: virtualResult,
-          parseFn: (body) => this.parsePlannedSprintReply(body),
-          projectId,
-          sprintId,
-          invocationId: invocation?.id,
-          repoPath: project.baseDir,
-          settings: runtime.settings,
-          signal,
-        });
+        payload = virtualResult.parsed;
       }
 
       if (invocation) {
@@ -457,7 +464,7 @@ export class PlanningAgentService {
     };
   }
 
-  private async runVirtualPlanningRequest(args: {
+  private async runVirtualPlanningRequest<T>(args: {
     projectId: string;
     sprintId: string | null;
     invocationId?: string;
@@ -466,7 +473,9 @@ export class PlanningAgentService {
     rawPrompt: string;
     overrides?: PlanningOverrides;
     signal?: AbortSignal;
-  }): Promise<VirtualPlanningResult> {
+    parseFn: (bodyMarkdown: string) => T;
+    buildRetryPrompt: (lastError: Error) => string;
+  }): Promise<StructuredProviderResult<T> & PlanningResultContext> {
     const routingTask: Subtask = {
       id: args.sprintId || "planning",
       title: "Planning request",
@@ -513,185 +522,60 @@ export class PlanningAgentService {
       });
     }
 
-    const result = await this.providerExecutionService.executeProvider({
-      projectId: args.projectId,
-      sprintId: args.sprintId,
-      purpose: "planning",
-      type: "planning",
-      provider,
-      prompt: providerPrompt,
-      model: providerSettings.model,
-      apiKey: providerSettings.apiKey,
-      sessionId,
-      workflowSettings,
-      repoPath: args.repoPath,
-      githubToken: args.settings.git.githubToken,
-      signal: args.signal,
-      expectTextOutput: true,
-      invocationId: args.invocationId,
-      onActivity: (description, originator) => {
-        this.deps.logger?.debug("Virtual planning worker activity", {
-          projectId: args.projectId,
-          invocationId: args.invocationId,
-          provider,
-          originator: originator || "system",
-          description,
-        });
-      },
-    });
-
-    if (!result.ok) {
-      this.deps.logger?.error("Virtual planning provider failed", {
+    try {
+      const result = await this.structuredProviderResponseService.executeAndParse<T>({
         projectId: args.projectId,
+        sprintId: args.sprintId,
+        purpose: "planning",
+        type: "planning",
         provider,
-        exitCode: result.code,
-        stderr: result.stderr?.slice(0, 500),
-        stdout: result.stdout?.slice(0, 500),
-      });
-      throw new Error(`Virtual ${this.getProviderLabel(provider)} worker failed: ${result.stderr || result.stdout}`);
-    }
-
-    const bodyMarkdown = result.text?.trim();
-    if (!bodyMarkdown) {
-      throw new Error(`Virtual ${this.getProviderLabel(provider)} worker returned an empty Planning agent reply.`);
-    }
-
-    return {
-      bodyMarkdown,
-      nativeSessionId: result.nativeSessionId,
-      provider,
-      sessionId,
-      workflowSettings,
-      providerSettings: {
+        prompt: args.rawPrompt,
         model: providerSettings.model,
         apiKey: providerSettings.apiKey,
-        thinkingMode: providerSettings.thinkingMode,
-      },
-    };
-  }
-
-  private async runVirtualPlanningFollowUp(args: {
-    projectId: string;
-    sprintId: string | null;
-    invocationId?: string;
-    repoPath: string;
-    settings: DashboardSettings;
-    previousResult: VirtualPlanningResult;
-    followUpPrompt: string;
-    signal?: AbortSignal;
-  }): Promise<VirtualPlanningResult> {
-    const { previousResult } = args;
-    const { provider, sessionId, workflowSettings, providerSettings } = previousResult;
-
-    if (args.invocationId) {
-      this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
-        role: "system",
-        contentMarkdown: `Retrying JSON parse in same ${this.getProviderLabel(provider)} session (session: ${sessionId}).`,
-        metadata: {
-          provider,
-          model: providerSettings.model,
-          routeKind: "virtual",
+        sessionId,
+        workflowSettings,
+        repoPath: args.repoPath,
+        githubToken: args.settings.git.githubToken,
+        signal: args.signal,
+        invocationId: args.invocationId,
+        onActivity: (description, originator) => {
+          this.deps.logger?.debug("Virtual planning worker activity", {
+            projectId: args.projectId,
+            invocationId: args.invocationId,
+            provider,
+            originator: originator || "system",
+            description,
+          });
         },
+        settings: args.settings,
+        maxRetries: args.settings.cliWorkflow?.maxPlanningJsonRetries ?? 3,
+        providerLabel: this.getProviderLabel(provider),
+        parseFn: args.parseFn,
+        buildRetryPrompt: args.buildRetryPrompt,
       });
-    }
 
-    const result = await this.providerExecutionService.executeProvider({
-      projectId: args.projectId,
-      sprintId: args.sprintId,
-      purpose: "planning",
-      type: "planning",
-      provider,
-      prompt: args.followUpPrompt,
-      model: providerSettings.model,
-      apiKey: providerSettings.apiKey,
-      sessionId,
-      workflowSettings,
-      repoPath: args.repoPath,
-      githubToken: args.settings.git.githubToken,
-      signal: args.signal,
-      expectTextOutput: true,
-      invocationId: args.invocationId,
-      continueSessionId: previousResult.nativeSessionId || previousResult.sessionId,
-      onActivity: (description, originator) => {
-        this.deps.logger?.debug("Virtual planning JSON retry activity", {
-          projectId: args.projectId,
-          invocationId: args.invocationId,
-          provider,
-          originator: originator || "system",
-          description,
-        });
-      },
-    });
-
-    const bodyMarkdown = result.text?.trim();
-    if (!result.ok || !bodyMarkdown) {
-      throw new Error(`Virtual ${this.getProviderLabel(provider)} worker JSON retry returned no usable output.`);
-    }
-
-    return {
-      bodyMarkdown,
-      nativeSessionId: result.nativeSessionId || previousResult.nativeSessionId,
-      provider,
-      sessionId,
-      workflowSettings,
-      providerSettings,
-    };
-  }
-
-  private async parseWithJsonRetry<T>(args: {
-    initialResult: VirtualPlanningResult;
-    parseFn: (bodyMarkdown: string) => T;
-    projectId: string;
-    sprintId: string | null;
-    invocationId?: string;
-    repoPath: string;
-    settings: DashboardSettings;
-    signal?: AbortSignal;
-  }): Promise<T> {
-    const maxRetries = args.settings.cliWorkflow?.maxPlanningJsonRetries ?? 3;
-    let currentResult = args.initialResult;
-    let lastError: Error | null = null;
-
-    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-      try {
-        return args.parseFn(currentResult.bodyMarkdown);
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-
-        if (attempt >= maxRetries) break;
-
-        this.deps.logger?.warn("Planning agent JSON parse failed, retrying in same session", {
-          projectId: args.projectId,
-          attempt: attempt + 1,
-          maxRetries,
-          error: lastError.message,
-        });
-
-        const followUpPrompt = [
-          "Your previous output could not be parsed as valid JSON.",
-          `Parse error: ${lastError.message}`,
-          "",
-          "Please output ONLY the valid JSON sprint definition. Requirements:",
-          "- Output raw JSON only — no markdown fences, no commentary, no prose before or after.",
-          "- Ensure all string values are properly escaped (especially quotes and newlines inside promptMarkdown).",
-          "- Use the exact schema from the original instructions: {\"goal\":\"...\",\"tasks\":[...]}",
-        ].join("\n");
-
-        currentResult = await this.runVirtualPlanningFollowUp({
-          projectId: args.projectId,
-          sprintId: args.sprintId,
-          invocationId: args.invocationId,
-          repoPath: args.repoPath,
-          settings: args.settings,
-          previousResult: currentResult,
-          followUpPrompt,
-          signal: args.signal,
+      return {
+        ...result,
+        provider,
+        sessionId,
+        workflowSettings,
+        providerSettings: {
+          model: providerSettings.model,
+          apiKey: providerSettings.apiKey,
+          thinkingMode: providerSettings.thinkingMode,
+        },
+      };
+    } catch (error) {
+      if (args.invocationId) {
+        this.deps.executionRepository?.updateExecutionInvocation(args.invocationId, {
+          status: "failed",
+          finishedAt: new Date().toISOString(),
         });
       }
+      throw error;
     }
-
-    throw lastError || new Error("Planning agent reply was not valid JSON.");
   }
+
 
   private buildImprovePrompt(args: {
     projectName: string;
