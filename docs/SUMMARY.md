@@ -17,6 +17,7 @@
 - [Live Runtime Contract](./architecture/live-runtime-contract.md)
 - [Execution Runtime Event Timeline](./architecture/execution-runtime-event-timeline.md)
 - [Usage Telemetry And Stats](./architecture/usage-telemetry-and-stats.md)
+- [Git Stats Analytics](./architecture/git-stats-analytics.md)
 - [Dashboard Resource Layer](./architecture/dashboard-resource-layer.md)
 - [Unified Runtime Event Stream](./architecture/unified-runtime-event-stream.md)
 - [Execution Dashboard Controls](./architecture/execution-dashboard-controls.md)

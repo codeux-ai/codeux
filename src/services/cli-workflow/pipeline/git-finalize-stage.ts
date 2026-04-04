@@ -4,6 +4,11 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
   hasChanges: boolean;
   committedChanges: boolean;
   pushedBranch?: string;
+  stats?: {
+    filesChanged: number;
+    insertions: number;
+    deletions: number;
+  };
 }> {
   // Ensure we are on the right branch
   const currentBranch = (await ctx.runCommand("git", ["rev-parse", "--abbrev-ref", "HEAD"], ctx.worktreePath)).stdout.trim();
@@ -31,9 +36,34 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
 
   await ctx.runCommand("git", ["push", "-u", "origin", ctx.workerBranch], ctx.worktreePath);
 
+  // Calculate git metrics against the initial head
+  const diffOutput = (await ctx.runCommand("git", ["diff", "--numstat", ctx.initialHead, "HEAD"], ctx.worktreePath)).stdout;
+
+  let filesChanged = 0;
+  let insertions = 0;
+  let deletions = 0;
+
+  const lines = diffOutput.trim().split("\n");
+  for (const line of lines) {
+    if (!line) continue;
+    const parts = line.split("\t");
+    if (parts.length >= 2) {
+      filesChanged++;
+      const ins = parseInt(parts[0], 10);
+      const del = parseInt(parts[1], 10);
+      if (!isNaN(ins)) insertions += ins;
+      if (!isNaN(del)) deletions += del;
+    }
+  }
+
   return {
     hasChanges: true,
     committedChanges: hasWorkingTreeChanges || hasCommittedChanges,
     pushedBranch: ctx.workerBranch,
+    stats: {
+      filesChanged,
+      insertions,
+      deletions,
+    },
   };
 }

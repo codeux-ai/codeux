@@ -351,6 +351,8 @@ describe("WorkerInboxReplyService", () => {
         }),
       } as any,
       executionRepository: {
+        createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "usage-1" }),
+        updateProviderInvocationUsage: vi.fn(),
         createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-4" }),
         appendExecutionInvocationMessage: vi.fn(),
         updateExecutionInvocation: vi.fn(),
@@ -463,6 +465,8 @@ describe("WorkerInboxReplyService", () => {
         }),
       } as any,
       executionRepository: {
+        createProviderInvocationUsage: vi.fn().mockReturnValue({ id: "usage-2" }),
+        updateProviderInvocationUsage: vi.fn(),
         createExecutionInvocation: vi.fn().mockReturnValue({ id: "exec-inv-5" }),
         appendExecutionInvocationMessage: appendMessage,
         updateExecutionInvocation: vi.fn(),

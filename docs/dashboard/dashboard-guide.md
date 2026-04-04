@@ -221,7 +221,7 @@ Legacy runtime:
 - Tasks board is now scoped to the active sprint selection when one is set, filtering the view to only tasks for that sprint
 - Tasks page also stores explicit task executor preference (`auto`, `docker_cli`, `jules`, `mcp_worker`)
 - The Tasks board entrance animation now replays only for project/view/filter changes instead of every background task refresh
-- Stats page is project-scoped and visualizes tracked token/time usage for the selected project with `24h`, `7d`, `30d`, `all time`, and custom date windows
+- Stats page is project-scoped and visualizes tracked token, time, and Git usage (insertions, deletions, PRs) for the selected project with `24h`, `7d`, `30d`, `all time`, and custom date windows
 - Browser page is project-scoped and provides a polished in-app browser surface for sprint preview containers:
   - floating horizontal slider in its own top strip, with large-screen five-card visibility for preview selection
   - the browser window starts directly below the slider instead of sharing a stretched first-row layout with the sprint controls
@@ -245,6 +245,7 @@ Legacy runtime:
   - hourly views keep one-hour hover targets while reducing visible axis labels to a three-hour rhythm for readability
   - donut-style composition charts for providers, token anatomy, and telemetry-source mix now animate as interactive slices with hover emphasis and center-detail readouts
   - tabbed task and sprint telemetry sections replacing the always-visible ledger layout, complete with search, sort-by-recency/tokens/time/input/output/name, and richer token/time breakdowns
+  - a dedicated Git tab presenting programmatic git stats (Insertions, Deletions, Files Changed) alongside the Tokens and Time tabs
 - The Stats page uses the same project realtime invalidation channels as the rest of the v2 dashboard, then falls back to polling so usage graphs and tables stay current during active sprint execution
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface, and task streams are filtered to the currently selected active sprint only (a frontend-only view change with no API contract change)
 - Agents page features an immersive, showcase-first layout that defaults to presenting the selected agent's 3D animated avatar, details, and labels, rather than a raw edit form.

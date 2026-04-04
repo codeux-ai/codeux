@@ -320,6 +320,35 @@ export interface ExecutionUsageTotals {
   unsupportedInvocationCount: number;
 }
 
+export interface ExecutionGitMetrics {
+  insertions: number;
+  deletions: number;
+  filesChanged: number;
+  prCount: number;
+  mergedCount: number;
+}
+
+export interface ExecutionGitStatsEntitySummary {
+  id: string;
+  label: string;
+  secondaryLabel: string | null;
+  metrics: ExecutionGitMetrics;
+}
+
+export interface ExecutionGitStatsBucketSummary {
+  bucketStart: string;
+  bucketEnd: string;
+  label: string;
+  metrics: ExecutionGitMetrics;
+}
+
+export interface ExecutionGitStatsSummary {
+  totals: ExecutionGitMetrics;
+  buckets: ExecutionGitStatsBucketSummary[];
+  tasks: ExecutionGitStatsEntitySummary[];
+  sprints: ExecutionGitStatsEntitySummary[];
+}
+
 export interface ExecutionUsageBucketSummary {
   bucketStart: string;
   bucketEnd: string;
@@ -374,6 +403,7 @@ export interface ProjectExecutionStatsSnapshot {
   range: ProjectStatsRangeSummary;
   generatedAt: string;
   usage: ExecutionUsageTotals;
+  git: ExecutionGitStatsSummary;
   activeSprint: {
     sprintId: string;
     sprintName: string;

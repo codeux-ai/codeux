@@ -47,6 +47,7 @@ import type {
   ExecutionRuntimeEventSummary,
   ExecutionSprintRunSummary,
   ExecutionTaskDispatchSummary,
+  ExecutionGitMetrics,
 } from "../contracts/app-types.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
 import type { ProviderId } from "../contracts/app-types.js";
@@ -1267,10 +1268,104 @@ export class ExecutionRepository {
     const providerLastActivity = new Map<string, string>();
     const purposeLastActivity = new Map<string, string>();
 
+    const mappedInvocations = invocations.map(row => this.mapProviderInvocationUsageRow(row));
     const firstBucketStartMs = buckets.length > 0 ? buckets[0].bucketStartMs : 0;
 
-    for (const row of invocations) {
-      const invocation = this.mapProviderInvocationUsageRow(row);
+    const gitMetricsEvents = this.db.prepare(`
+      SELECT tr.id as task_run_id, tr.task_id, tr.sprint_id, tr.sprint_run_id, tr.pr_url, t.is_merged, tre.payload_json, tre.created_at
+      FROM task_run_events tre
+      INNER JOIN task_runs tr ON tr.id = tre.task_run_id
+      INNER JOIN tasks t ON t.id = tr.task_id
+      WHERE tr.project_id = ?
+        AND tre.event_type IN ('cli_git_pushed', 'jules_git_pushed', 'git_metrics')
+        AND tre.created_at >= ?
+        AND tre.created_at < ?
+      ORDER BY tre.created_at ASC
+    `).all(projectId, rangeStartIso, rangeEndIso) as Array<{
+      task_run_id: string; task_id: string; sprint_id: string; sprint_run_id: string | null; pr_url: string | null; is_merged: string | number; payload_json: string; created_at: string;
+    }>;
+
+    const gitTotals = { insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0 };
+    const gitBuckets = buckets.map(b => ({
+      bucketStart: b.bucketStart,
+      bucketEnd: b.bucketEnd,
+      label: b.label,
+      metrics: { insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0 }
+    }));
+    const gitTaskUsage = new Map<string, ExecutionGitMetrics>();
+    const gitSprintUsage = new Map<string, ExecutionGitMetrics>();
+
+    const getGitMetrics = (map: Map<string, ExecutionGitMetrics>, key: string) => {
+      if (!map.has(key)) map.set(key, { insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0 });
+      return map.get(key)!;
+    };
+
+    const processGitMetric = (metrics: ExecutionGitMetrics, insertions: number, deletions: number, filesChanged: number) => {
+      metrics.insertions += insertions;
+      metrics.deletions += deletions;
+      metrics.filesChanged += filesChanged;
+    };
+
+    for (const event of gitMetricsEvents) {
+      const payload = event.payload_json ? JSON.parse(event.payload_json) : {};
+      const insertions = typeof payload.insertions === "number" ? payload.insertions : 0;
+      const deletions = typeof payload.deletions === "number" ? payload.deletions : 0;
+      const filesChanged = typeof payload.filesChanged === "number" ? payload.filesChanged : 0;
+
+      processGitMetric(gitTotals, insertions, deletions, filesChanged);
+
+      const bucketIndex = Math.floor((new Date(event.created_at).getTime() - firstBucketStartMs) / normalized.bucketSizeMs);
+      if (bucketIndex >= 0 && bucketIndex < gitBuckets.length) {
+        processGitMetric(gitBuckets[bucketIndex]!.metrics, insertions, deletions, filesChanged);
+      }
+
+      const taskMetrics = getGitMetrics(gitTaskUsage, event.task_id);
+      processGitMetric(taskMetrics, insertions, deletions, filesChanged);
+
+      const sprintKey = event.sprint_run_id || event.sprint_id;
+      const sprintMetrics = getGitMetrics(gitSprintUsage, sprintKey);
+      processGitMetric(sprintMetrics, insertions, deletions, filesChanged);
+    }
+
+    const taskRunsInWindow = this.db.prepare(`
+      SELECT tr.id as task_run_id, tr.task_id, tr.sprint_id, tr.sprint_run_id, tr.pr_url, tr.started_at, tr.finished_at, t.is_merged
+      FROM task_runs tr
+      INNER JOIN tasks t ON t.id = tr.task_id
+      WHERE tr.project_id = ?
+        AND COALESCE(tr.finished_at, tr.started_at) >= ?
+        AND COALESCE(tr.finished_at, tr.started_at) < ?
+    `).all(projectId, rangeStartIso, rangeEndIso) as Array<{
+      task_run_id: string; task_id: string; sprint_id: string; sprint_run_id: string | null; pr_url: string | null; is_merged: string | number; started_at: string | null; finished_at: string | null;
+    }>;
+
+    const seenTaskRunPrs = new Set<string>();
+    const seenTaskRunMerged = new Set<string>();
+
+    for (const tr of taskRunsInWindow) {
+      const timestamp = tr.finished_at || tr.started_at || rangeStartIso;
+      const bucketIndex = Math.floor((new Date(timestamp).getTime() - firstBucketStartMs) / normalized.bucketSizeMs);
+
+      const hasPr = tr.pr_url !== null;
+      const isMerged = Boolean(tr.is_merged && tr.is_merged !== 0 && tr.is_merged !== "0");
+
+      if (hasPr && !seenTaskRunPrs.has(tr.task_run_id)) {
+        seenTaskRunPrs.add(tr.task_run_id);
+        gitTotals.prCount += 1;
+        if (bucketIndex >= 0 && bucketIndex < gitBuckets.length) gitBuckets[bucketIndex]!.metrics.prCount += 1;
+        getGitMetrics(gitTaskUsage, tr.task_id).prCount += 1;
+        getGitMetrics(gitSprintUsage, tr.sprint_run_id || tr.sprint_id).prCount += 1;
+      }
+
+      if (isMerged && !seenTaskRunMerged.has(tr.task_run_id)) {
+        seenTaskRunMerged.add(tr.task_run_id);
+        gitTotals.mergedCount += 1;
+        if (bucketIndex >= 0 && bucketIndex < gitBuckets.length) gitBuckets[bucketIndex]!.metrics.mergedCount += 1;
+        getGitMetrics(gitTaskUsage, tr.task_id).mergedCount += 1;
+        getGitMetrics(gitSprintUsage, tr.sprint_run_id || tr.sprint_id).mergedCount += 1;
+      }
+    }
+
+    for (const invocation of mappedInvocations) {
       this.mergeUsageTotals(usage, invocation);
       this.mergeUsageMap(taskUsage, invocation.taskId, invocation);
       this.mergeUsageMap(sprintUsage, invocation.sprintRunId || invocation.sprintId, invocation);
@@ -1362,6 +1457,28 @@ export class ExecutionRepository {
         label: bucket.label,
         usage: bucket.usage,
       })),
+      git: {
+        totals: gitTotals,
+        buckets: gitBuckets,
+        tasks: Array.from(gitTaskUsage.entries()).map(([id, metrics]) => {
+          const meta = taskMeta.get(id);
+          return {
+            id,
+            label: meta?.label || id,
+            secondaryLabel: meta?.secondaryLabel || null,
+            metrics,
+          };
+        }),
+        sprints: Array.from(gitSprintUsage.entries()).map(([id, metrics]) => {
+          const meta = sprintMeta.get(id);
+          return {
+            id,
+            label: meta?.label || id,
+            secondaryLabel: meta?.secondaryLabel || null,
+            metrics,
+          };
+        }),
+      },
       sprints: this.toStatsEntitySummaries({
         entries: sprintUsage,
         metadata: this.withLastActivityMetadata(sprintMeta, sprintLastActivity),

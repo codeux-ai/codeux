@@ -244,7 +244,7 @@ export class CliWorkflowService {
         }, `cli:memory:captured:${args.sessionId}`);
       }
 
-      const { hasChanges, committedChanges, pushedBranch } = await executeGitFinalizeStage(ctx);
+      const { hasChanges, committedChanges, pushedBranch, stats } = await executeGitFinalizeStage(ctx);
 
       if (!hasChanges) {
         const finishedAt = new Date().toISOString();
@@ -268,6 +268,7 @@ export class CliWorkflowService {
         provider: args.provider,
         committedChanges,
         pushedBranch: pushedBranch || args.workerBranch,
+        ...(stats || {}),
       }, `cli:git:pushed:${pushedBranch || args.workerBranch}`);
       
       const { prUrl } = await executePrFinalizeStage(ctx);
@@ -283,7 +284,7 @@ export class CliWorkflowService {
         provider: args.provider,
         prUrl: prUrl || null,
         workerBranch: args.workerBranch,
-      }, `cli:pr:${prUrl || "none"}`);
+      }, `cli:pr-finalized:${args.workerBranch}`);
       this.appendExecutionEvent(args, "cli_workflow_completed", {
         provider: args.provider,
         outcome: "pushed",

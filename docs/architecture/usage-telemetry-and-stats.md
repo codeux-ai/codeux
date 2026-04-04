@@ -18,8 +18,8 @@ This telemetry currently covers:
 - CLI task coding runs
 - virtual worker CI-fix runs
 - virtual worker merge-conflict runs
-
-`jules` is intentionally excluded for now because it does not expose a compatible token contract.
+- clarification runs (prompt rewrites or operator clarification)
+- QA coverage runs (automated verification sweeps)
 
 ## Storage Model
 
@@ -76,6 +76,10 @@ Sprint OS first looks for `token_count` JSONL events. If those are missing, it f
 Claude Code runs with a generated native `--session-id`.
 
 Sprint OS reads usage from the persisted Claude session JSONL artifact under `~/.claude/projects/...`. If usage is absent, it falls back to token estimation using `@anthropic-ai/tokenizer` over the prompt plus recovered transcript text.
+
+### Jules
+
+Jules does not expose a compatible native token contract. Instead of excluding it, Sprint OS computes **estimated** tokens for Jules by accumulating input and output characters divided by 4 (the characters-per-token heuristic).
 
 ## Usage Source Semantics
 

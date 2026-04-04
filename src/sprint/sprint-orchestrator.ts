@@ -48,6 +48,8 @@ export interface SprintOrchestratorDependencies {
   resolveSessionName: (session: Partial<JulesSession>) => string | undefined;
   extractSessionId: (session: Partial<JulesSession>) => string | undefined;
   fetchRecentActivities: (sessionName: string, pageSize?: number) => Promise<any[]>;
+  listAllActivities?: (sessionId: string) => Promise<any[]>;
+  getSession?: (sessionId: string) => Promise<JulesSession>;
   listSessions: () => Promise<{ sessions?: JulesSession[] }>;
   projectManagementRepository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;

@@ -136,7 +136,12 @@ describe("CliWorkflowService unpushed commit detection", () => {
 
     vi.mocked(executePrepareStage).mockResolvedValue({ providerPrompt: "mock prompt" });
     vi.mocked(executeProviderStage).mockResolvedValue(undefined);
-    vi.mocked(executeGitFinalizeStage).mockResolvedValue({ hasChanges: true, committedChanges: true, pushedBranch: "worker-1" });
+    vi.mocked(executeGitFinalizeStage).mockResolvedValue({
+      hasChanges: true,
+      committedChanges: true,
+      pushedBranch: "worker-1",
+      stats: { filesChanged: 2, insertions: 10, deletions: 5 },
+    });
     vi.mocked(executePrFinalizeStage).mockResolvedValue({ prUrl: "https://example.com/pr/1" });
     vi.mocked(executeCleanupStage).mockResolvedValue({ cleanedUp: true });
 
@@ -166,6 +171,26 @@ describe("CliWorkflowService unpushed commit detection", () => {
     );
     expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
       "run-1",
+      "cli_git_pushed",
+      "system",
+      expect.objectContaining({
+        committedChanges: true,
+        pushedBranch: "worker-1",
+        filesChanged: 2,
+        insertions: 10,
+        deletions: 5,
+      }),
+      expect.objectContaining({ sourceEventKey: "cli:git:pushed:worker-1" }),
+    );
+    expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "cli_pr_finalized",
+      "system",
+      expect.objectContaining({ prUrl: "https://example.com/pr/1", workerBranch: "worker-1" }),
+      expect.objectContaining({ sourceEventKey: "cli:pr-finalized:worker-1" }),
+    );
+    expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
       "cli_workflow_completed",
       "system",
       expect.objectContaining({ outcome: "pushed", prUrl: "https://example.com/pr/1" }),
@@ -182,6 +207,12 @@ describe("CliWorkflowService unpushed commit detection", () => {
   });
 
   it("runs task workflow pipeline and stops when no changes", async () => {
+    const executionRepository = {
+      getTaskRun: vi.fn().mockReturnValue({ id: "run-1", startedAt: "2024-01-01T00:00:00Z", taskId: "T1", dispatchId: "dispatch-1" }),
+      updateTaskRun: vi.fn(),
+      updateTaskDispatch: vi.fn(),
+      appendTaskRunEvent: vi.fn(),
+    };
     const deps = {
       sessionTracking: {
         findLatestFailedCliSessionForTask: vi.fn().mockReturnValue(null),
@@ -192,6 +223,7 @@ describe("CliWorkflowService unpushed commit detection", () => {
       getDashboardSettings: vi.fn().mockReturnValue({ cliWorkflow: { containerImage: "  " } }),
       agentPresetSyncService: { getOptionalWorkerAgentForRepoPath: vi.fn().mockResolvedValue({ instructionMarkdown: "guide" }) },
       getGithubToken: vi.fn().mockReturnValue("token"),
+      executionRepository,
       logger: { error: vi.fn() },
     };
     const service = new CliWorkflowService(deps as any);
@@ -212,12 +244,28 @@ describe("CliWorkflowService unpushed commit detection", () => {
       featureBranch: "main",
       sprintNumber: 1,
       sessionId: "sess-1",
+      taskRunId: "run-1",
       workerBranch: "worker-1",
       title: "Title",
     });
 
     expect(executePrFinalizeStage).not.toHaveBeenCalled();
     expect(executeCleanupStage).toHaveBeenCalled();
+    expect(executionRepository.appendTaskRunEvent).toHaveBeenCalledWith(
+      "run-1",
+      "cli_git_no_changes",
+      "system",
+      expect.any(Object),
+      expect.any(Object)
+    );
+    // ensure no stats are emitted
+    expect(executionRepository.appendTaskRunEvent).not.toHaveBeenCalledWith(
+      "run-1",
+      "cli_git_pushed",
+      expect.anything(),
+      expect.anything(),
+      expect.anything()
+    );
   });
 
 

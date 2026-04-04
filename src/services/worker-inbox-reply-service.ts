@@ -11,7 +11,7 @@ import type {
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { ConnectionChatRepository } from "../repositories/connection-chat-repository.js";
 import { buildProviderPrompt } from "./cli-workflow-utils.js";
-import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
+import type { IProviderRunner, ProviderRunResult } from "../infrastructure/providers/cli/provider-runner.js";
 import {
   buildChatReplayPrompt,
   normalizeProviderReply,
@@ -101,7 +101,7 @@ export class WorkerInboxReplyService {
 
     let output: string;
     try {
-      output = await this.runProvider({
+      const result = await this.runProvider({
         provider: route.provider,
         prompt,
         repoPath: project.baseDir,
@@ -109,6 +109,7 @@ export class WorkerInboxReplyService {
         apiKey: route.providers[route.provider].apiKey,
         githubToken: this.deps.getGithubToken(),
       });
+      output = result.text;
     } catch (err) {
       this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
         status: "failed",
@@ -198,15 +199,32 @@ export class WorkerInboxReplyService {
 
     const prompt = buildProviderPrompt(fullContextPrompt, route.providers[route.provider].thinkingMode);
 
+    const startedAt = new Date().toISOString();
+
+    const providerInvocationId = randomUUID();
+    const sessionId = "worker-reply-" + providerInvocationId;
+
+    const usageRecord = this.deps.executionRepository.createProviderInvocationUsage({
+      projectId: args.projectId,
+      taskId: invocationTaskId,
+      sessionId,
+      provider: route.provider,
+      purpose: "clarification_reply",
+      status: "running",
+      model: route.providers[route.provider].model,
+      startedAt,
+      promptChars: fullContextPrompt.length,
+    });
+
     const execInvocation = this.deps.executionRepository.createExecutionInvocation({
       projectId: args.projectId,
       type: "worker_reply",
       provider: route.provider,
       model: route.providers[route.provider].model,
-      startedAt: new Date().toISOString(),
+      startedAt,
       attentionItemId: null,
       dispatchId: null,
-      providerInvocationId: null,
+      providerInvocationId: usageRecord.id,
       sprintId: null,
       sprintRunId: null,
       taskId: invocationTaskId,
@@ -219,8 +237,9 @@ export class WorkerInboxReplyService {
     });
 
     let output: string;
+    let providerResult: ProviderRunResult & { text: string };
     try {
-      output = await this.runProvider({
+      providerResult = await this.runProvider({
         provider: route.provider,
         prompt,
         repoPath: project.baseDir,
@@ -228,23 +247,37 @@ export class WorkerInboxReplyService {
         apiKey: route.providers[route.provider].apiKey,
         githubToken: this.deps.getGithubToken(),
       });
+      output = providerResult.text;
     } catch (err) {
+      const finishedAt = new Date().toISOString();
       this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
         status: "failed",
-        finishedAt: new Date().toISOString(),
+        finishedAt,
+      });
+      this.deps.executionRepository.updateProviderInvocationUsage(usageRecord.id, {
+        status: "failed",
+        finishedAt,
+        durationMs: new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
       });
       throw err;
     }
 
     const reply = normalizeProviderReply(output);
 
+    const finishedAt = new Date().toISOString();
     this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
       role: "assistant",
       contentMarkdown: reply,
     });
     this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
       status: "completed",
-      finishedAt: new Date().toISOString(),
+      finishedAt,
+    });
+    this.deps.executionRepository.updateProviderInvocationUsage(usageRecord.id, {
+      status: "completed",
+      finishedAt,
+      durationMs: new Date(finishedAt).getTime() - new Date(startedAt).getTime(),
+      ...providerResult.usageTelemetry,
     });
 
     if (!reply) {
@@ -303,10 +336,10 @@ export class WorkerInboxReplyService {
     model: string;
     apiKey: string;
     githubToken?: string;
-  }): Promise<string> {
+  }): Promise<ProviderRunResult & { text: string }> {
     const workflowSettings = this.deps.getDashboardSettings().cliWorkflow;
 
-    const result = await this.deps.providerRunner.runProviderForText({
+    return await this.deps.providerRunner.runProviderForText({
       provider: input.provider,
       prompt: input.prompt,
       cwd: input.repoPath,
@@ -318,7 +351,6 @@ export class WorkerInboxReplyService {
       githubToken: input.githubToken,
       onActivity: () => {},
     });
-    return result.text;
   }
 
 }

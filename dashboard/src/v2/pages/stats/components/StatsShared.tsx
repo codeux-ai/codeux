@@ -1,4 +1,4 @@
-import type { FunctionComponent } from "preact";
+import type { FunctionComponent, ComponentType } from "preact";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import {
@@ -428,14 +428,14 @@ export const SignalMetricCard: FunctionComponent<{
 );
 
 export const TokenChip: FunctionComponent<{
-  icon: typeof ArrowDownRight | typeof Database | typeof ArrowUpRight | typeof Brain;
+  icon: ComponentType<any>;
   label: string;
-  value: number;
+  value: number | string;
   tone: string;
 }> = ({ icon: Icon, label, value, tone }) => (
   <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] ${tone}`}>
     <Icon className="h-3.5 w-3.5" strokeWidth={2.1} />
-    {label} {formatTokens(value)}
+    {label} {typeof value === "number" ? formatTokens(value) : value}
   </div>
 );
 
