@@ -122,13 +122,23 @@ describe("SprintLedger Component", () => {
       expect(screen.getByText("Alpha Design")).toBeInTheDocument();
     });
 
-    const checkboxes = screen.getAllByRole("button").filter(b => b.innerHTML.includes("lucide-square"));
+    const checkButtons = screen.getAllByRole("button").filter(b => b.innerHTML.includes("lucide-square"));
+    // Since we now have mobile and desktop views, we might find double the checkboxes for rows.
+    // The first one is the "Select all" in the header (if present) or header controls.
+    // We will just find all `button`s inside the rows and click one.
+    // Wait, let's filter by the row id wrapper to be safe, or just grab the mobile checkbox.
 
     // Initial state: bulk actions not present
     expect(screen.queryByText("1 selected")).not.toBeInTheDocument();
 
-    // Click first row's checkbox
-    fireEvent.click(checkboxes[1]); // This checks "Beta API" due to initial descending sort (date)
+    // The component renders "Select All" buttons in the mobile bar, and "Select All" in the header column.
+    // Let's just click the specific row using a simpler selector by targeting the desktop Checkbox
+    // It's the 3rd or 4th button. To be safer, click both buttons for Beta API to ensure it triggers.
+    // The safest way is to find the row text, traverse up, and find the button.
+    const betaRow = screen.getByText("Beta API").closest("tr") || screen.getByText("Beta API").closest("div.flex-col");
+    const checkBtn = betaRow!.querySelector("button")!;
+
+    fireEvent.click(checkBtn);
     await waitFor(() => {
       expect(screen.getByText("1 selected")).toBeInTheDocument();
     });
@@ -146,7 +156,7 @@ describe("SprintLedger Component", () => {
     // Actually, calling clear selection makes the bar vanish.
     // However, clicking Delete above also calls deselectAll internally!
     // That means the Clear button is gone already. Let's select it again to test clear:
-    fireEvent.click(checkboxes[1]);
+    fireEvent.click(checkBtn);
     await waitFor(() => {
       expect(screen.getByText("1 selected")).toBeInTheDocument();
     });

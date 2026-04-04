@@ -170,10 +170,49 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
         onClearSelection={handleClearSelection}
       />
 
+      {/* Mobile Sort & Select Controls */}
+      <div className="flex xl:hidden items-center justify-between gap-4 border-b border-black/[0.06] px-6 py-3 dark:border-white/[0.06] bg-slate-50 dark:bg-slate-900/50">
+        <button
+          type="button"
+          onClick={handleToggleSelectAll}
+          className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 transition-colors hover:text-slate-700 dark:hover:text-slate-200 focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
+        >
+          {allFilteredSelected
+            ? <CheckSquare className="h-4 w-4 text-signal-500" strokeWidth={2.2} />
+            : <Square className="h-4 w-4" strokeWidth={2.2} />}
+          {allFilteredSelected ? "Deselect All" : "Select All"}
+        </button>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Sort by:</span>
+          <select
+            value={sort.key}
+            onChange={(e) => handleSort(e.currentTarget.value as SprintTableSortKey)}
+            className="h-7 rounded border border-black/[0.08] bg-white px-2 py-1 text-xs font-medium text-slate-700 focus:border-signal-500/40 focus:outline-none focus:ring-2 focus:ring-signal-500/10 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-white"
+          >
+            <option value="createdAt">Created</option>
+            <option value="name">Sprint Name</option>
+            <option value="status">Status</option>
+            <option value="completion">Completion</option>
+            <option value="tasksCount">Tasks</option>
+            <option value="showcasePinned">Showcase</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => setSort((current) => ({ ...current, direction: current.direction === "asc" ? "desc" : "asc" }))}
+            className="inline-flex h-7 w-7 items-center justify-center rounded border border-black/[0.08] bg-white text-slate-500 transition-colors hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-signal-500/10 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400 dark:hover:text-slate-200"
+            title={`Sort ${sort.direction === "asc" ? "descending" : "ascending"}`}
+          >
+            {sort.direction === "asc"
+              ? <ArrowUp className="h-3.5 w-3.5" strokeWidth={2.2} />
+              : <ArrowDown className="h-3.5 w-3.5" strokeWidth={2.2} />}
+          </button>
+        </div>
+      </div>
+
       {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-left">
-          <thead>
+      <div className="w-full">
+        <table className="block xl:table min-w-full text-left">
+          <thead className="hidden xl:table-header-group">
             <tr className="border-b border-black/[0.06] text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:border-white/[0.06]">
               <th className="px-4 py-3 pl-6 w-10">
                 <button
@@ -260,18 +299,18 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
               <th className="px-4 py-3 pr-6 text-right">Controls</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="block xl:table-row-group">
             {isLoading && windowedSprints.length === 0 ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i} className="border-b border-black/[0.04] dark:border-white/[0.04]">
-                  <td colSpan={9} className="p-4">
+                <tr key={i} className="block xl:table-row border-b border-black/[0.04] dark:border-white/[0.04]">
+                  <td colSpan={9} className="block xl:table-cell p-4">
                     <SkeletonRow />
                   </td>
                 </tr>
               ))
             ) : windowedSprints.length === 0 ? (
-              <tr>
-                <td colSpan={9}>
+              <tr className="block xl:table-row">
+                <td colSpan={9} className="block xl:table-cell">
                   <div className="px-6 py-8 text-sm text-slate-400">
                     {searchQuery
                       ? `No sprints match "${searchQuery}".`
