@@ -1,3 +1,8 @@
+import { useMemoryPageData } from "./hooks/use-memory-page-data.js";
+import { useEmbeddingModelStatus } from "./hooks/use-embedding-model-status.js";
+import { ModelCard } from "./components/memory/ModelCard.js";
+import { Inspector } from "./components/memory/Inspector.js";
+import { AddMemoryModal } from "./components/memory/AddMemoryModal.js";
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useRef, useState, useCallback, useEffect } from "preact/hooks";
 import gsap from "gsap";
@@ -68,284 +73,6 @@ function formatBytes(bytes: number): string {
     return `${(bytes / 1e9).toFixed(1)} GB`;
 }
 
-/* ─── Model Download Card ───────────────────────────────────────────────── */
-
-const ModelCard: FunctionComponent<{
-    model: EmbeddingModelWithStatus;
-    onDownload: (id: string) => void;
-    onSelect: (id: string) => void;
-    onDelete: (id: string) => void;
-    onReembed: () => void;
-    reembedding: boolean;
-    staleCount: number;
-}> = ({ model, onDownload, onSelect, onDelete, onReembed, reembedding, staleCount }) => (
-    <div className="flex flex-col gap-3 p-4 rounded-[1.25rem]
-                   bg-white/60 dark:bg-void-800/50 backdrop-blur-xl
-                   border border-black/[0.06] dark:border-white/[0.06]
-                   shadow-[0_2px_12px_rgba(0,0,0,0.04)] dark:shadow-[0_2px_12px_rgba(0,0,0,0.2)]">
-        <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-                <HardDrive className="w-4 h-4 text-signal-500" strokeWidth={2} />
-                <span className="text-sm font-bold text-slate-800 dark:text-white">{model.displayName}</span>
-            </div>
-            {model.active && (
-                <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-signal-500 bg-signal-500/10 px-2 py-0.5 rounded-full">Active</span>
-            )}
-        </div>
-        <p className="text-[11px] text-slate-500 leading-relaxed">{model.description}</p>
-        <div className="flex items-center gap-3 text-[10px] font-mono text-slate-400">
-            <span>{model.dimension}d</span>
-            <span>{formatBytes(model.sizeBytes)}</span>
-            <span>{model.language}</span>
-        </div>
-        {model.downloading && (
-            <div className="flex flex-col gap-1.5">
-                <div className="h-1.5 w-full bg-black/[0.06] dark:bg-white/[0.06] rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-signal-500 transition-all duration-300"
-                        style={{ width: `${Math.round(model.downloadProgress * 100)}%` }} />
-                </div>
-                <span className="text-[9px] font-mono text-slate-400 flex items-center gap-1.5">
-                    <Loader2 className="w-3 h-3 animate-spin" strokeWidth={2} />
-                    Downloading {Math.round(model.downloadProgress * 100)}%
-                </span>
-            </div>
-        )}
-        <div className="flex items-center gap-2 pt-1">
-            {!model.downloaded && !model.downloading && (
-                <button onClick={() => onDownload(model.id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
-                               bg-signal-500 text-void-900 hover:bg-signal-400 transition-colors duration-200
-                               shadow-[0_2px_8px_rgba(0,224,160,0.25)]">
-                    <Download className="w-3 h-3" strokeWidth={2.5} />
-                    Download
-                </button>
-            )}
-            {model.downloaded && !model.active && (
-                <button onClick={() => onSelect(model.id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
-                               bg-signal-500/10 text-signal-500 hover:bg-signal-500/20 transition-colors duration-200">
-                    <Power className="w-3 h-3" strokeWidth={2.5} />
-                    Activate
-                </button>
-            )}
-            {model.active && !reembedding && (
-                <button onClick={onReembed}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
-                               bg-signal-500/10 text-signal-500 hover:bg-signal-500/20 transition-colors duration-200">
-                    <RefreshCw className="w-3 h-3" strokeWidth={2.5} />
-                    Re-embed{staleCount > 0 ? ` (${staleCount} stale)` : " All"}
-                </button>
-            )}
-            {model.active && reembedding && (
-                <span className="flex items-center gap-1.5 text-[11px] font-bold text-signal-500">
-                    <RefreshCw className="w-3 h-3 animate-spin" strokeWidth={2.5} />
-                    Re-embedding…
-                </span>
-            )}
-            {model.downloaded && (
-                <button onClick={() => onDelete(model.id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold
-                               text-slate-400 hover:text-status-red transition-colors duration-200">
-                    <Trash2 className="w-3 h-3" strokeWidth={2} />
-                </button>
-            )}
-            {model.error && (
-                <span className="text-[10px] text-status-red font-medium">{model.error}</span>
-            )}
-        </div>
-    </div>
-);
-
-/* ─── Inspector Panel ────────────────────────────────────────────────────── */
-
-const Inspector: FunctionComponent<{
-    node: MemNode | null;
-    allNodes: MemNode[];
-    edges: Edge[];
-    lobotomize: boolean;
-    onClose: () => void;
-    onDelete: (id: string) => void;
-}> = ({ node, allNodes, edges, lobotomize, onClose, onDelete }) => {
-    const cat = node ? (CAT[node.category] || CAT.context) : CAT.architecture;
-    const nodeIdx = node ? allNodes.findIndex(n => n.id === node.id) : -1;
-    const connected = node ? edges
-        .filter(e => e.a === nodeIdx || e.b === nodeIdx)
-        .map(e => ({
-            node: allNodes[e.a === nodeIdx ? e.b : e.a],
-            similarity: e.similarity,
-        }))
-        .filter(c => c.node.alive)
-        .sort((a, b) => b.similarity - a.similarity) : [];
-
-    return (
-        <div
-            className="absolute right-0 top-0 bottom-0 w-[300px] z-30
-                       bg-white/80 dark:bg-void-800/80 backdrop-blur-3xl
-                       border-l border-black/[0.06] dark:border-white/[0.06]
-                       shadow-[-20px_0_60px_rgba(0,0,0,0.08)] dark:shadow-[-20px_0_60px_rgba(0,0,0,0.4)]
-                       p-6 flex flex-col gap-4 overflow-y-auto dashboard-scrollbar
-                       transition-transform duration-500"
-            style={{
-                transform: `translateX(${node ? "0" : "100%"})`,
-                transitionTimingFunction: "cubic-bezier(0.33, 1, 0.68, 1)",
-                pointerEvents: node ? "auto" : "none",
-            }}
-        >
-            <button onClick={onClose}
-                className="absolute top-4 right-4 w-7 h-7 rounded-full flex items-center justify-center
-                           bg-black/[0.04] dark:bg-white/[0.04] hover:bg-black/[0.08] dark:hover:bg-white/[0.08]
-                           transition-colors duration-200">
-                <X className="w-3.5 h-3.5 text-slate-500" strokeWidth={2} />
-            </button>
-            {node && (
-                <>
-                    <div className="flex items-center gap-2 pt-1">
-                        <div className="w-2.5 h-2.5 rounded-full" style={{ background: cat.hex, boxShadow: `0 0 10px ${cat.hex}` }} />
-                        <span className="text-[10px] font-bold uppercase tracking-[0.2em] font-mono" style={{ color: cat.hex }}>
-                            {cat.label}
-                        </span>
-                        <span className="text-[9px] font-mono text-slate-400 ml-auto px-2 py-0.5 rounded-full bg-black/[0.04] dark:bg-white/[0.04]">
-                            {node.scope}
-                        </span>
-                    </div>
-                    <p className="text-[13px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed">
-                        {node.content}
-                    </p>
-                    <div className="flex flex-col gap-3 pt-3 border-t border-black/[0.06] dark:border-white/[0.06]">
-                        <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Strength</span>
-                            <div className="flex items-center gap-2">
-                                <div className="w-20 h-1.5 rounded-full bg-black/[0.06] dark:bg-white/[0.06] overflow-hidden">
-                                    <div className="h-full rounded-full transition-all duration-700"
-                                        style={{ width: `${node.strength * 100}%`, background: cat.hex }} />
-                                </div>
-                                <span className="text-[10px] font-mono text-slate-400">{Math.round(node.strength * 100)}%</span>
-                            </div>
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">ID</span>
-                            <span className="text-[11px] font-mono text-slate-400">{node.id.slice(0, 8)}…</span>
-                        </div>
-                    </div>
-                    {connected.length > 0 && (
-                        <div className="flex flex-col gap-2 pt-3 border-t border-black/[0.06] dark:border-white/[0.06]">
-                            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                                Synapses ({connected.length})
-                            </span>
-                            {connected.slice(0, 8).map(({ node: cn, similarity }) => (
-                                <div key={cn.id} className="flex items-start gap-2 py-1">
-                                    <div className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
-                                        style={{ background: (CAT[cn.category] || CAT.context).hex }} />
-                                    <div className="flex-1 min-w-0">
-                                        <span className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 font-medium">
-                                            {cn.content}
-                                        </span>
-                                    </div>
-                                    <span className="text-[9px] font-mono text-slate-400 shrink-0 mt-0.5"
-                                        style={{ color: similarity > 0.7 ? (CAT[cn.category] || CAT.context).hex : undefined }}>
-                                        {Math.round(similarity * 100)}%
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                    {lobotomize && (
-                        <button onClick={() => onDelete(node.id)}
-                            className="mt-auto flex items-center justify-center gap-2 w-full py-3 rounded-xl
-                                       bg-status-red text-white font-bold text-xs
-                                       shadow-[0_0_20px_rgba(227,0,15,0.3)] hover:shadow-[0_0_30px_rgba(227,0,15,0.5)]
-                                       transition-shadow duration-300">
-                            <X className="w-3.5 h-3.5" strokeWidth={2.5} />
-                            Excise Memory
-                        </button>
-                    )}
-                </>
-            )}
-        </div>
-    );
-};
-
-/* ─── Add Memory Modal ───────────────────────────────────────────────────── */
-
-const AddMemoryModal: FunctionComponent<{
-    open: boolean;
-    scope: MemoryScope;
-    projectId: string;
-    onClose: () => void;
-    onCreated: () => void;
-}> = ({ open, scope, projectId, onClose, onCreated }) => {
-    const [content, setContent] = useState("");
-    const [category, setCategory] = useState<MemoryCategory>("context");
-    const [strength, setStrength] = useState(0.7);
-    const [saving, setSaving] = useState(false);
-
-    if (!open) return null;
-
-    const handleSubmit = async () => {
-        if (!content.trim()) return;
-        setSaving(true);
-        try {
-            await createMemory(projectId, { scope, content: content.trim(), category, strength });
-            setContent("");
-            onCreated();
-            onClose();
-        } catch { /* ignore */ }
-        setSaving(false);
-    };
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/50 backdrop-blur-sm"
-            onClick={onClose}>
-            <div className="w-full max-w-md bg-white dark:bg-void-800 rounded-[1.5rem] p-6 flex flex-col gap-4
-                           border border-black/[0.06] dark:border-white/[0.06]
-                           shadow-[0_24px_80px_rgba(0,0,0,0.15)] dark:shadow-[0_24px_80px_rgba(0,0,0,0.5)]"
-                onClick={e => e.stopPropagation()}>
-                <h3 className="text-lg font-black text-slate-900 dark:text-white font-display">Add Memory</h3>
-                <textarea value={content} onInput={e => setContent((e.target as HTMLTextAreaElement).value)}
-                    placeholder="What should be remembered…"
-                    rows={3}
-                    className="w-full px-4 py-3 rounded-xl text-sm
-                               bg-black/[0.03] dark:bg-white/[0.03]
-                               border border-black/[0.06] dark:border-white/[0.06]
-                               text-slate-800 dark:text-slate-200
-                               placeholder:text-slate-400
-                               focus:outline-none focus:ring-2 focus:ring-signal-500/20 focus:border-signal-500/40
-                               resize-none" />
-                <div className="flex items-center gap-3">
-                    <select value={category} onChange={e => setCategory((e.target as HTMLSelectElement).value as MemoryCategory)}
-                        className="flex-1 px-3 py-2 rounded-lg text-xs font-medium
-                                   bg-black/[0.03] dark:bg-white/[0.03]
-                                   border border-black/[0.06] dark:border-white/[0.06]
-                                   text-slate-700 dark:text-slate-300">
-                        {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono text-slate-400">{Math.round(strength * 100)}%</span>
-                        <input type="range" min="0.1" max="1" step="0.1" value={strength}
-                            onInput={e => setStrength(parseFloat((e.target as HTMLInputElement).value))}
-                            className="w-20 accent-signal-500" />
-                    </div>
-                </div>
-                <div className="flex items-center gap-2 pt-2">
-                    <button onClick={onClose}
-                        className="flex-1 py-2.5 rounded-xl text-xs font-bold
-                                   bg-black/[0.04] dark:bg-white/[0.04] text-slate-500 hover:text-slate-900 dark:hover:text-white
-                                   transition-colors duration-200">
-                        Cancel
-                    </button>
-                    <button onClick={handleSubmit} disabled={!content.trim() || saving}
-                        className="flex-1 py-2.5 rounded-xl text-xs font-bold
-                                   bg-signal-500 text-void-900 hover:bg-signal-400
-                                   shadow-[0_2px_12px_rgba(0,224,160,0.3)]
-                                   transition-colors duration-200 disabled:opacity-50">
-                        {saving ? "Saving…" : "Add Memory"}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
 /* ─── Memory Page ────────────────────────────────────────────────────────── */
 
 export const MemoryPage: FunctionComponent = () => {
@@ -358,17 +85,11 @@ export const MemoryPage: FunctionComponent = () => {
     const [lobotomize, setLobotomize] = useState(false);
     const [selectedNode, setSelectedNode] = useState<MemNode | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
-    const [memoryCount, setMemoryCount] = useState(0);
-    const [deletedCount, setDeletedCount] = useState(0);
+        const [deletedCount, setDeletedCount] = useState(0);
     const [activeTier, setActiveTier] = useState<MemTier>("short_term");
     const activeScope: MemoryScope = activeTier === "short_term" ? "sprint" : "project";
-    const [models, setModels] = useState<EmbeddingModelWithStatus[]>([]);
     const [showModels, setShowModels] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
-    const [records, setRecords] = useState<MemoryRecord[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [stats, setStats] = useState({ sprint: 0, agent: 0, project: 0, activeModel: null as string | null, staleEmbeddings: 0 });
-    const [reembed, setReembed] = useState<ReembedProgress | null>(null);
 
     // Sprint / agent filter state
     const [sprints, setSprints] = useState<SprintRecord[]>([]);
@@ -376,6 +97,26 @@ export const MemoryPage: FunctionComponent = () => {
     const [selectedSprintId, setSelectedSprintId] = useState<string | undefined>(undefined);
     const [selectedAgentPresetId, setSelectedAgentPresetId] = useState<string | undefined>(undefined);
     const sprintsLoaded = useRef(false);
+
+    const {
+        loading,
+        records,
+        memoryCount,
+        setMemoryCount,
+        initialModels,
+        initialStats,
+        graphData,
+        loadData
+    } = useMemoryPageData(pid, activeScope, activeTier, selectedSprintId, selectedAgentPresetId);
+
+    const {
+        models,
+        setModels,
+        stats,
+        setStats,
+        reembed,
+        setReembed
+    } = useEmbeddingModelStatus(pid, initialModels, initialStats, loadData);
 
     // Mutable render state
     const S = useRef({
@@ -418,104 +159,32 @@ export const MemoryPage: FunctionComponent = () => {
         });
     }, [pid]);
 
-    /* ── Load data ─────────────────────────────────────────────────────── */
-    const loadData = useCallback(async () => {
-        if (!pid) return;
-        setLoading(true);
-        try {
-            const memoryParams: { projectId: string; scope: MemoryScope; sprintId?: string; agentPresetId?: string; limit: number } = {
-                projectId: pid, scope: activeScope, limit: 200,
-            };
-            if (activeTier === "short_term" && selectedSprintId) {
-                memoryParams.sprintId = selectedSprintId;
-            }
-            if (selectedAgentPresetId) {
-                memoryParams.agentPresetId = selectedAgentPresetId;
-            }
-
-            const [memoriesData, modelsData, statsData, mapData] = await Promise.all([
-                listMemories(memoryParams),
-                listEmbeddingModels(),
-                getMemoryStats(pid),
-                getEmbeddingMap(
-                    pid,
-                    activeScope,
-                    activeTier === "short_term" ? selectedSprintId : undefined,
-                    selectedAgentPresetId,
-                ).catch(() => null),
-            ]);
-            setRecords(memoriesData);
-            setModels(modelsData);
-            setStats(statsData);
-            setMemoryCount(memoriesData.length);
-
-            // Update canvas
-            const s = S.current;
-            s.embeddingMap = mapData;
-            s.graph = prepareMemoryGraph(memoriesData, mapData);
-            s.pulses = s.graph.edges.map((_, i) => ({ edgeIdx: i, progress: Math.random(), speed: 0.002 + Math.random() * 0.003 }));
-            s.selectedIdx = -1;
-            s.searchMatch = null;
-            setSelectedNode(null);
-
-            // Animate entrance
-            gsap.to(s.cam, { x: 0, y: 0, zoom: 0.55, duration: 0.01, overwrite: true });
-            const tl = gsap.timeline();
-            tl.to(s.cam, { zoom: 1, duration: 1.8, ease: "power2.out" }, 0);
-            s.graph.nodes.forEach((node, i) => {
-                tl.to(node, {
-                    x: node.targetX, y: node.targetY,
-                    scale: 1, opacity: 1,
-                    duration: 1.2, ease: "power3.out",
-                }, 0.15 + Math.min(i, 20) * 0.03);
-            });
-            s.entranceDone = true;
-        } catch { /* ignore */ }
-        setLoading(false);
-    }, [pid, activeScope, activeTier, selectedSprintId, selectedAgentPresetId]);
-
-    useEffect(() => { loadData(); }, [loadData]);
-
-    /* ── Polling for model download progress ───────────────────────────── */
-    const isDownloadingRef = useRef(false);
-    useEffect(() => {
-        isDownloadingRef.current = models.some(m => m.downloading);
-    }, [models]);
 
     useEffect(() => {
-        const interval = setInterval(async () => {
-            if (!isDownloadingRef.current) return;
-            try {
-                const updated = await listEmbeddingModels();
-                setModels(updated);
-            } catch { /* ignore */ }
-        }, 2000);
-        return () => clearInterval(interval);
-    }, []);
+        if (!graphData) return;
+        const s = S.current;
+        s.embeddingMap = graphData.map;
+        s.graph = graphData.graph;
+        s.pulses = s.graph.edges.map((_, i) => ({ edgeIdx: i, progress: Math.random(), speed: 0.002 + Math.random() * 0.003 }));
+        s.selectedIdx = -1;
+        s.searchMatch = null;
+        setSelectedNode(null);
 
-    /* ── Polling for re-embed progress ────────────────────────────────── */
-    const reembedStateRef = useRef({ active: reembed?.active, pid, loadData });
-    useEffect(() => {
-        reembedStateRef.current = { active: reembed?.active, pid, loadData };
-    }, [reembed?.active, pid, loadData]);
+        // Animate entrance
+        gsap.to(s.cam, { x: 0, y: 0, zoom: 0.55, duration: 0.01, overwrite: true });
+        const tl = gsap.timeline();
+        tl.to(s.cam, { zoom: 1, duration: 1.8, ease: "power2.out" }, 0);
+        s.graph.nodes.forEach((node, i) => {
+            tl.to(node, {
+                x: node.targetX, y: node.targetY,
+                scale: 1, opacity: 1,
+                duration: 1.2, ease: "power3.out",
+            }, 0.15 + Math.min(i, 20) * 0.03);
+        });
+        s.entranceDone = true;
+    }, [graphData]);
 
-    useEffect(() => {
-        const interval = setInterval(async () => {
-            const state = reembedStateRef.current;
-            if (!state.active || !state.pid) return;
-            try {
-                const progress = await getReembedProgress(state.pid);
-                setReembed(progress);
-                if (!progress.active) {
-                    // Refresh everything: stats, embedding map, and nodes
-                    state.loadData();
-                }
-            } catch { /* ignore */ }
-        }, 1000);
-        return () => clearInterval(interval);
-    }, []);
-
-    /* ── Canvas setup & render loop ───────────────────────────────────── */
+/* ── Canvas setup & render loop ───────────────────────────────────── */
     useLayoutEffect(() => {
         const canvas = canvasRef.current!;
         const ctx = canvas.getContext("2d")!;
@@ -1105,7 +774,7 @@ export const MemoryPage: FunctionComponent = () => {
             {/* ── Model Management ────────────────────────────────────── */}
             {showModels && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {models.map(model => (
+                    {models.map((model: EmbeddingModelWithStatus) => (
                         <ModelCard key={model.id} model={model}
                             onDownload={handleDownloadModel}
                             onSelect={handleSelectModelWithStats}
@@ -1303,7 +972,7 @@ export const MemoryPage: FunctionComponent = () => {
             <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
                 {Object.entries(CAT).map(([key, cfg]) => {
                     const alive = S.current.graph.nodes.filter(n => n.category === key && n.alive).length;
-                    const total = records.filter(r => r.category === key).length;
+                    const total = records.filter((r: MemoryRecord) => r.category === key).length;
                     return (
                         <div key={key}
                             className="relative overflow-hidden flex flex-col gap-2 p-4 rounded-[1.25rem]
