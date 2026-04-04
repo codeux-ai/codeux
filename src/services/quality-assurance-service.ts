@@ -650,7 +650,7 @@ export class QualityAssuranceService {
       throw new Error(result.stderr || result.stdout || "QA provider failed without output.");
     }
 
-    const text = (result as any).text.trim();
+    const text = result.text?.trim() || "";
     return normalizeQaReviewResult(text);
   }
 

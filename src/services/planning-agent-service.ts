@@ -552,7 +552,7 @@ export class PlanningAgentService {
       throw new Error(`Virtual ${this.getProviderLabel(provider)} worker failed: ${result.stderr || result.stdout}`);
     }
 
-    const bodyMarkdown = (result as any).text.trim();
+    const bodyMarkdown = result.text?.trim();
     if (!bodyMarkdown) {
       throw new Error(`Virtual ${this.getProviderLabel(provider)} worker returned an empty Planning agent reply.`);
     }
@@ -624,7 +624,7 @@ export class PlanningAgentService {
       },
     });
 
-    const bodyMarkdown = (result as any).text?.trim();
+    const bodyMarkdown = result.text?.trim();
     if (!result.ok || !bodyMarkdown) {
       throw new Error(`Virtual ${this.getProviderLabel(provider)} worker JSON retry returned no usable output.`);
     }

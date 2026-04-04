@@ -13,6 +13,7 @@ export type ProviderCommandSpec = (model: string, prompt: string) => { command: 
 export interface ProviderRunResult extends CommandResult {
   usageTelemetry: ProviderUsageTelemetry;
   nativeSessionId: string | null;
+  text?: string;
 }
 
 export const providerSpecs: Record<Extract<ProviderId, "gemini" | "codex" | "claude-code">, ProviderCommandSpec> = {
