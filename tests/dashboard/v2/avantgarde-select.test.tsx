@@ -5,7 +5,7 @@ import * as React from "preact/compat";
  */
 import { h, Fragment } from "preact";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, fireEvent, cleanup, screen } from "@testing-library/preact";
+import { render, fireEvent, cleanup, screen, waitFor } from "@testing-library/preact";
 import { AvantgardeSelect } from "../../../dashboard/src/v2/components/ui/AvantgardeSelect.js";
 
 describe("AvantgardeSelect", () => {
@@ -43,7 +43,7 @@ describe("AvantgardeSelect", () => {
     expect(onChange).toHaveBeenCalledWith("2");
   });
 
-  it("handles Home, End, and Escape keys", () => {
+  it("handles Home, End, and Escape keys", async () => {
     const onChange = vi.fn();
     const options = [
       { value: "1", label: "Option 1" },
@@ -76,10 +76,12 @@ describe("AvantgardeSelect", () => {
     fireEvent.click(trigger);
     expect(getByRole("listbox")).toBeDefined();
     fireEvent.keyDown(getByRole("listbox"), { key: "Escape" });
-    expect(screen.queryByRole("listbox")).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByRole("listbox")).toBeNull();
+    });
   });
 
-  it("closes when clicking outside", () => {
+  it("closes when clicking outside", async () => {
     const options = [{ value: "1", label: "Option 1" }];
     const { getByText, queryByRole } = render(
       <div>
@@ -92,7 +94,9 @@ describe("AvantgardeSelect", () => {
     expect(queryByRole("listbox")).not.toBeNull();
 
     fireEvent.mouseDown(document.getElementById("outside")!);
-    expect(queryByRole("listbox")).toBeNull();
+    await waitFor(() => {
+      expect(queryByRole("listbox")).toBeNull();
+    });
   });
 
   it("remains closed when disabled", () => {
