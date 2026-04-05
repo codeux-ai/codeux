@@ -58,15 +58,22 @@ export const InteractiveUsageChart: FunctionComponent<{
 
   const chartData = useMemo(() => {
     return stats.chartSeries.map((series, idx) => {
-      const accentHex = series.id === 'tokens' ? '#00E0A0' : series.id === 'active' ? '#FFB800' : series.id === 'invocations' ? '#0EA5E9' : ['#F43F5E', '#8B5CF6', '#10B981', '#F59E0B', '#3B82F6', '#EC4899', '#14B8A6'][idx % 7]!;
-      const formatter = series.id.includes('time') || series.id.includes('active') ? formatDuration : series.id.includes('invocations') || series.id.includes('calls') ? (val: number) => val.toLocaleString() : formatTokens;
+      const fallbackColors = ['#F43F5E', '#8B5CF6', '#10B981', '#F59E0B', '#3B82F6', '#EC4899', '#14B8A6'];
+      const accentHex = series.color || fallbackColors[idx % fallbackColors.length]!;
+
+      const formatter = series.formatter === 'duration'
+        ? formatDuration
+        : series.formatter === 'number'
+          ? (val: number) => val.toLocaleString()
+          : formatTokens;
+
       const values = visibleBuckets.map((_, bucketIdx) => series.data[viewStart + bucketIdx] || 0);
       const points = buildPoints(values.length > 0 ? values : [0], width, height, padding);
       return {
         ...series,
         accentHex,
         formatter,
-        signalLabel: series.id === 'tokens' ? 'Throughput' : series.id === 'active' ? 'Latency' : series.id === 'invocations' ? 'Volume' : 'Metric',
+        signalLabel: series.signalLabel || 'Metric',
         values,
         points,
         path: buildSmoothPath(points),
@@ -75,6 +82,14 @@ export const InteractiveUsageChart: FunctionComponent<{
       };
     });
   }, [stats.chartSeries, visibleBuckets, viewStart, width, height, padding]);
+
+  const seriesGroups = useMemo(() => {
+    return stats.chartSeries.reduce((acc, s) => {
+      if (!acc[s.grouping]) acc[s.grouping] = [];
+      acc[s.grouping].push(s);
+      return acc;
+    }, {} as Record<string, ProjectExecutionStatsChartSeries[]>);
+  }, [stats.chartSeries]);
 
   const visibleSeries = chartData.filter((series) => enabledSeries[series.id]);
   const activeSeriesCount = visibleSeries.length;
@@ -225,6 +240,41 @@ export const InteractiveUsageChart: FunctionComponent<{
               ) : null}
             </div>
             <div className="relative">
+              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-wrap gap-x-6 gap-y-4 px-4 py-3">
+                {Object.entries(seriesGroups).map(([grouping, groupSeries]) => (
+                  <div key={grouping} className="flex flex-col gap-2">
+                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 pl-1">{grouping}</div>
+                    <div className="pointer-events-auto flex flex-wrap gap-2">
+                      {groupSeries.map((s, idx) => {
+                        const active = enabledSeries[s.id] || false;
+                        const disabled = activeSeriesCount === 1 && active;
+                        const fallbackColors = ['#F43F5E', '#8B5CF6', '#10B981', '#F59E0B', '#3B82F6', '#EC4899', '#14B8A6'];
+                        const accentHex = s.color || fallbackColors[idx % fallbackColors.length];
+
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => {
+                              if (activeSeriesCount === 1 && enabledSeries[s.id]) return;
+                              setEnabledSeries((curr: Record<string, boolean>) => ({ ...curr, [s.id]: !curr[s.id] }));
+                            }}
+                            disabled={disabled}
+                            className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-all border ${
+                              active
+                                ? 'bg-white/68 dark:bg-void-900/35 border-signal-500/18 text-slate-800 dark:text-slate-200'
+                                : 'border-black/[0.05] bg-white/60 dark:border-white/[0.05] dark:bg-void-900/30 text-slate-500 dark:text-slate-400 opacity-72 hover:opacity-100'
+                            } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+                          >
+                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: accentHex }} />
+                            {s.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
               {activeBucket ? (
                 <div
                   className="pointer-events-none absolute top-3 z-10 w-56 -translate-x-1/2 rounded-[1.25rem] border border-black/[0.06] bg-white/88 px-4 py-3 shadow-[0_18px_38px_rgba(15,23,42,0.12)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-900/88 dark:shadow-[0_20px_40px_rgba(0,0,0,0.32)]"
@@ -388,10 +438,6 @@ export const InteractiveUsageChart: FunctionComponent<{
               series={stats.chartSeries}
               enabledSeries={enabledSeries}
               activeIndex={activeIndex}
-              onToggle={(id) => {
-                if (activeSeriesCount === 1 && enabledSeries[id]) return;
-                setEnabledSeries((curr: Record<string, boolean>) => ({ ...curr, [id]: !curr[id] }));
-              }}
             />
             <div className={`${SUBPANEL_CLASS} p-5`}>
               <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Focused Bucket</div>
