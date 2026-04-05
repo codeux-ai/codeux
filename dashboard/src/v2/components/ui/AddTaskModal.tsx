@@ -6,6 +6,7 @@ import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from ".
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
+import { Button } from "./Button.js";
 
 interface TaskDraft {
   sprintId: string;
@@ -391,18 +392,16 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               >
                 Cancel
               </button>
-              <button
+              <Button
                 type="submit"
-                disabled={isSubmitting || Object.keys(validationErrors).length > 0}
-                className="group/btn flex items-center gap-2.5 px-6 py-3 bg-signal-500 hover:bg-signal-400 active:scale-95 disabled:bg-slate-300 dark:disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-void-900 font-bold text-sm rounded-2xl transition-all duration-300 shadow-[0_4px_20px_rgba(0,224,160,0.25)] hover:shadow-[0_8px_32px_rgba(0,224,160,0.4)] disabled:shadow-none hover:-translate-y-px disabled:hover:translate-y-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500"
+                disabled={Object.keys(validationErrors).length > 0}
+                pending={isSubmitting}
+                variant="signal"
+                size="lg"
               >
-                {isSubmitting ? (
-                  <div className="w-4 h-4 rounded-full border-2 border-void-900/20 border-t-void-900 animate-spin" />
-                ) : (
-                  <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
-                )}
-                {isSubmitting ? "Saving..." : initialTask ? "Save Task" : "Create Task"}
-              </button>
+                <Plus className="w-4 h-4 group-hover/btn:rotate-90 transition-transform duration-300" />
+                {initialTask ? "Save Task" : "Create Task"}
+              </Button>
             </div>
           </form>
         </div>
