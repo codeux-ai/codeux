@@ -4,6 +4,29 @@ import { useMessageCache } from "./useMessageCache.js";
 import { fetchInvocationMessages } from "../lib/invocation-api.js";
 import { buildInvocationIndex } from "../lib/chat-entity-index.js";
 
+export const areInvocationsEqual = (left: ExecutionInvocationRecord[], right: ExecutionInvocationRecord[]): boolean => (
+  left.length === right.length
+  && left.every((invocation, index) => {
+    const candidate = right[index];
+    return Boolean(candidate)
+      && candidate.id === invocation.id
+      && candidate.status === invocation.status
+      && candidate.updatedAt === invocation.updatedAt
+      && candidate.messageCount === invocation.messageCount
+      && candidate.lastMessageAt === invocation.lastMessageAt;
+  })
+);
+
+export const areInvocationMessagesEqual = (left: ExecutionInvocationMessageRecord[], right: ExecutionInvocationMessageRecord[]): boolean => (
+  left.length === right.length
+  && left.every((message, index) => {
+    const candidate = right[index];
+    return Boolean(candidate)
+      && candidate.id === message.id
+      && candidate.createdAt === message.createdAt;
+  })
+);
+
 export const useInvocationPaneData = (options: {
   selectedProject: { id: string } | null;
   cache: ReturnType<typeof useMessageCache>;
@@ -31,11 +54,11 @@ export const useInvocationPaneData = (options: {
   );
 
   const setInvocationsSnapshot = useCallback((nextInvocations: ExecutionInvocationRecord[]): void => {
-    setInvocations(nextInvocations);
+    setInvocations((current) => areInvocationsEqual(current, nextInvocations) ? current : nextInvocations);
   }, []);
 
   const setInvocationMessagesSnapshot = useCallback((nextMessages: ExecutionInvocationMessageRecord[]): void => {
-    setInvocationMessages(nextMessages);
+    setInvocationMessages((current) => areInvocationMessagesEqual(current, nextMessages) ? current : nextMessages);
   }, []);
 
   const ensureInvocationMessagesLoaded = useCallback(async (invocationId: string): Promise<ExecutionInvocationMessageRecord[]> => {
