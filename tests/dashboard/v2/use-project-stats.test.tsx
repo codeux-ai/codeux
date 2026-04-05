@@ -2,13 +2,17 @@
  * @vitest-environment jsdom
  */
 import { h } from "preact";
-import { render, cleanup } from "@testing-library/preact";
+import { render, cleanup, waitFor } from "@testing-library/preact";
 import { useProjectStats } from "../../../dashboard/src/v2/hooks/use-project-stats.js";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 // Mock the realtime client
+let mockRealtimeCallback: ((message: any) => void) | null = null;
 vi.mock("../../../dashboard/src/v2/lib/realtime/dashboard-realtime-client.js", () => ({
-  subscribeToDashboardRealtime: vi.fn(() => vi.fn()),
+  subscribeToDashboardRealtime: vi.fn((scopes, callback, _transportCallback) => {
+    mockRealtimeCallback = callback;
+    return vi.fn();
+  }),
 }));
 
 // Mock the API
@@ -16,8 +20,15 @@ vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
   fetchProjectStats: vi.fn(async (projectId, query, signal) => {
     // Simulate network delay
     await new Promise((resolve, reject) => {
-      const timeout = setTimeout(resolve, 100);
+      const timeout = setTimeout(resolve, 50);
       if (signal) {
+        if (signal.aborted) {
+          clearTimeout(timeout);
+          const error = new Error('aborted');
+          error.name = 'AbortError';
+          reject(error);
+          return;
+        }
         signal.addEventListener('abort', () => {
           clearTimeout(timeout);
           const error = new Error('aborted');
@@ -32,8 +43,8 @@ vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
 
 import { fetchProjectStats } from "../../../dashboard/src/v2/lib/project-api.js";
 
-function TestComponent({ projectId, query }: { projectId: string | null; query: any }) {
-  const { stats, loading, error } = useProjectStats(projectId, query);
+function TestComponent({ projectId, query, pollIntervalMs = 30000 }: { projectId: string | null; query: any, pollIntervalMs?: number }) {
+  const { stats, loading, error } = useProjectStats(projectId, query, pollIntervalMs);
   return h('div', null,
     h('div', { 'data-testid': 'loading' }, loading ? 'loading' : 'idle'),
     h('div', { 'data-testid': 'stats' }, stats ? stats.id : 'none')
@@ -44,6 +55,12 @@ describe("useProjectStats cancellation", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    mockRealtimeCallback = null;
+    vi.useRealTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("cancels previous fetch on query change", async () => {
@@ -54,7 +71,9 @@ describe("useProjectStats cancellation", () => {
     rerender(h(TestComponent, { projectId: "p1", query: "30d" }));
 
     // Wait for the final fetch to settle
-    await new Promise(r => setTimeout(r, 200));
+    await waitFor(() => {
+      expect(getByTestId("loading").textContent).toBe("idle");
+    });
 
     // It should have called fetchProjectStats twice
     expect(fetchProjectStats).toHaveBeenCalledTimes(2);
@@ -68,7 +87,65 @@ describe("useProjectStats cancellation", () => {
     expect(secondCallSignal?.aborted).toBe(false);
 
     // The final state should be loaded and stable
-    expect(getByTestId("loading").textContent).toBe("idle");
     expect(getByTestId("stats").textContent).toBe("stats-snapshot");
+  });
+
+  it("performs background refresh on matching realtime event", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const { getByTestId } = render(h(TestComponent, { projectId: "p1", query: "7d" }));
+
+    // Wait for initial load
+    await waitFor(() => {
+      expect(getByTestId("loading").textContent).toBe("idle");
+    });
+
+    expect(fetchProjectStats).toHaveBeenCalledTimes(1);
+
+    // The subscription runs in a useEffect that may take an extra tick or requires timer advancement
+    vi.runOnlyPendingTimers();
+
+    // Trigger realtime event
+    if (mockRealtimeCallback) {
+      mockRealtimeCallback({
+        type: "event",
+        event: { eventType: "project.execution.updated", payload: {} }
+      });
+    }
+
+    // Run pending timers to let the refetch execute immediately (no debounce anymore)
+    vi.runOnlyPendingTimers();
+
+    // Wait for fetch.
+    await waitFor(() => {
+      expect(fetchProjectStats.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+
+    // It should be a silent refresh, so no foreground loading
+    expect(getByTestId("loading").textContent).toBe("idle");
+  });
+
+  it("performs background polling based on interval", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const { getByTestId } = render(h(TestComponent, { projectId: "p1", query: "7d", pollIntervalMs: 10000 }));
+
+    // Wait for initial load
+    await waitFor(() => {
+      expect(getByTestId("loading").textContent).toBe("idle");
+    });
+
+    expect(fetchProjectStats).toHaveBeenCalledTimes(1);
+
+    // Advance poll interval
+    vi.advanceTimersByTime(10500);
+
+    // Since useRealtimeResource uses window.setInterval, we advance time and wait for it
+    await waitFor(() => {
+      expect(fetchProjectStats).toHaveBeenCalledTimes(2);
+    });
+
+    // Check loading remains idle
+    expect(getByTestId("loading").textContent).toBe("idle");
   });
 });
