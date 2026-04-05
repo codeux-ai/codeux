@@ -32,6 +32,7 @@ export const StatsPage: FunctionComponent = () => {
     setCustomTo,
     visualMode,
     setVisualMode,
+    chartState,
     providerSegments,
     sourceSegments,
     tokenSegments,
@@ -139,6 +140,7 @@ export const StatsPage: FunctionComponent = () => {
             sourceSegments={sourceSegments}
             visualMode={visualMode}
             setVisualMode={setVisualMode}
+            chartState={chartState}
           />
 
           <TelemetrySectionsSection stats={stats} />

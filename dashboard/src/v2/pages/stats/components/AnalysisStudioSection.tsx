@@ -14,6 +14,7 @@ export const AnalysisStudioSection: FunctionComponent<any> = ({
   sourceSegments,
   visualMode,
   setVisualMode,
+  chartState,
 }) => {
   return (
     <>
@@ -24,7 +25,7 @@ export const AnalysisStudioSection: FunctionComponent<any> = ({
       ) : null}
 
       {visualMode === "trend" ? (
-        <TrendStudio stats={stats} planningUsage={planningUsage} />
+        <TrendStudio stats={stats} planningUsage={planningUsage} chartState={chartState} />
       ) : null}
 
       {visualMode === "composition" ? (

@@ -53,6 +53,20 @@ const baseMockValue = {
   setCustomTo: vi.fn(),
   visualMode: "trend",
   setVisualMode: vi.fn(),
+  chartState: {
+    visualMode: "trend",
+    setVisualMode: vi.fn(),
+    zoomRange: null,
+    setZoomRange: vi.fn(),
+    hoveredIndex: null,
+    setHoveredIndex: vi.fn(),
+    dragStartIndex: null,
+    setDragStartIndex: vi.fn(),
+    dragCurrentIndex: null,
+    setDragCurrentIndex: vi.fn(),
+    enabledSeries: { tokens: true, active: true },
+    setEnabledSeries: vi.fn(),
+  },
   providerSegments: [{ label: "P1", value: 100, color: "red", textClassName: "t1" }],
   sourceSegments: [{ label: "S1", value: 100, color: "blue", textClassName: "t2" }],
   tokenSegments: [{ label: "T1", value: 100, color: "green", textClassName: "t3" }],
@@ -112,6 +126,10 @@ describe("StatsPage Shell", () => {
     vi.mocked(useStatsPageData).mockReturnValueOnce({
       ...baseMockValue,
       visualMode: "composition",
+      chartState: {
+        ...baseMockValue.chartState,
+        visualMode: "composition",
+      },
     } as any);
     
     render(<StatsPage />);
@@ -124,6 +142,10 @@ describe("StatsPage Shell", () => {
     vi.mocked(useStatsPageData).mockReturnValueOnce({
       ...baseMockValue,
       visualMode: "reliability",
+      chartState: {
+        ...baseMockValue.chartState,
+        visualMode: "reliability",
+      },
     } as any);
     
     render(<StatsPage />);

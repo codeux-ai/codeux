@@ -26,22 +26,26 @@ import {
   formatAxisLabel,
 } from './StatsShared.js';
 import { UsageSeriesSidebar } from './UsageSeriesSidebar.js';
+import type { UsageChartState } from '../use-usage-chart-state.js';
 
 export const InteractiveUsageChart: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
-}> = ({ stats }) => {
+  chartState: UsageChartState;
+}> = ({ stats, chartState }) => {
   const panelRef = useRef<HTMLDivElement>(null);
-  const [zoomRange, setZoomRange] = useState<ChartZoomRange | null>(null);
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
-  const [dragCurrentIndex, setDragCurrentIndex] = useState<number | null>(null);
 
-  const [enabledSeries, setEnabledSeries] = useState<Record<string, boolean>>(() => {
-    return stats.chartSeries.reduce((acc, s) => {
-      acc[s.id] = s.defaultEnabled;
-      return acc;
-    }, {} as Record<string, boolean>);
-  });
+  const {
+    zoomRange,
+    setZoomRange,
+    hoveredIndex,
+    setHoveredIndex,
+    dragStartIndex,
+    setDragStartIndex,
+    dragCurrentIndex,
+    setDragCurrentIndex,
+    enabledSeries,
+    setEnabledSeries,
+  } = chartState;
 
   const buckets = stats.buckets;
 
@@ -386,7 +390,7 @@ export const InteractiveUsageChart: FunctionComponent<{
               activeIndex={activeIndex}
               onToggle={(id) => {
                 if (activeSeriesCount === 1 && enabledSeries[id]) return;
-                setEnabledSeries((curr) => ({ ...curr, [id]: !curr[id] }));
+                setEnabledSeries((curr: Record<string, boolean>) => ({ ...curr, [id]: !curr[id] }));
               }}
             />
             <div className={`${SUBPANEL_CLASS} p-5`}>
