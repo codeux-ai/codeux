@@ -2,7 +2,7 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
-import { Info } from "lucide-preact";
+import { Info, Copy, Check } from "lucide-preact";
 
 interface InfoIconPopoverProps {
     className?: string;
@@ -17,10 +17,13 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
     const wrapperRef = useRef<HTMLDivElement>(null);
     const popoverRef = useRef<HTMLDivElement>(null);
     const hoverTimeout = useRef<number | null>(null);
+    const leaveTimeout = useRef<number | null>(null);
 
     const [coords, setCoords] = useState({ top: 0, left: 0 });
+    const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
     const handleMouseEnter = () => {
+        if (leaveTimeout.current) clearTimeout(leaveTimeout.current);
         if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
         hoverTimeout.current = window.setTimeout(() => {
             setIsVisible(true);
@@ -30,7 +33,16 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
 
     const handleMouseLeave = () => {
         if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-        setIsVisible(false);
+        if (leaveTimeout.current) clearTimeout(leaveTimeout.current);
+        leaveTimeout.current = window.setTimeout(() => {
+            setIsVisible(false);
+        }, 150); // Small delay to allow mouse transition
+    };
+
+    const handleCopy = (key: string) => {
+        navigator.clipboard.writeText(key);
+        setCopiedKey(key);
+        setTimeout(() => setCopiedKey(null), 2000);
     };
 
     const handleClick = () => {
@@ -92,6 +104,7 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
     useEffect(() => {
         return () => {
             if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
+            if (leaveTimeout.current) clearTimeout(leaveTimeout.current);
         };
     }, []);
 
@@ -110,9 +123,11 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
             {isRendered && createPortal(
                 <div
                     ref={popoverRef}
-                    className="fixed z-[9999] p-4 bg-white/90 dark:bg-void-700/90 backdrop-blur-2xl rounded-xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] border border-black/[0.06] dark:border-white/[0.06] w-64 pointer-events-none"
+                    className="fixed z-[9999] p-4 bg-white/90 dark:bg-void-700/90 backdrop-blur-2xl rounded-xl shadow-[0_20px_40px_rgba(0,0,0,0.12)] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4)] border border-black/[0.06] dark:border-white/[0.06] w-64"
                     style={{ top: coords.top, left: coords.left }}
                     role="tooltip"
+                    onMouseEnter={handleMouseEnter}
+                    onMouseLeave={handleMouseLeave}
                 >
                     {title ? (
                         <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400 mb-3">
@@ -121,8 +136,22 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
                     ) : null}
                     <ul className="space-y-2">
                         {items.map(p => (
-                            <li key={p.key} className="flex flex-col gap-0.5">
-                                <span className="font-mono text-[11px] text-signal-500">{p.key}</span>
+                            <li key={p.key} className="flex flex-col gap-0.5 group">
+                                <div className="flex items-center gap-2">
+                                    <span className="font-mono text-[11px] text-signal-500">{p.key}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleCopy(p.key)}
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100 p-0.5 hover:bg-slate-100 dark:hover:bg-void-600 rounded"
+                                        title="Copy placeholder"
+                                    >
+                                        {copiedKey === p.key ? (
+                                            <Check className="w-3 h-3 text-green-500" strokeWidth={2} />
+                                        ) : (
+                                            <Copy className="w-3 h-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300" strokeWidth={1.5} />
+                                        )}
+                                    </button>
+                                </div>
                                 <span className="text-[11px] text-slate-600 dark:text-slate-300">{p.desc}</span>
                             </li>
                         ))}

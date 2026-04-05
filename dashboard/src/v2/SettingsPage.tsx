@@ -178,7 +178,10 @@ export const SettingsPage: FunctionComponent = () => {
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            {filteredCategories.slice(0, 4).map((category) => (
+            {filteredCategories
+              .filter((c) => !["general", "models", "sprint", "browser"].includes(c.id))
+              .slice(0, 4)
+              .map((category) => (
               <button
                 key={`quick-${category.id}`}
                 type="button"

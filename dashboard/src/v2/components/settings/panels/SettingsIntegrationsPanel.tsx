@@ -1,4 +1,7 @@
 import type { FunctionComponent, ComponentChildren } from "preact";
+import { useLayoutEffect, useRef, useState } from "preact/hooks";
+import gsap from "gsap";
+import { ArrowLeft } from "lucide-preact";
 import type { SettingsPageState, IntegrationId } from "../../../hooks/use-settings-page-state.js";
 import { NoticePanel, ActionButton } from "../SettingsSurface.js";
 import { Row, TextInput, Toggle, PillChoiceGroup } from "../SettingsFormFields.js";
@@ -25,6 +28,73 @@ import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
 
   const getBadge = (...prefixes: string[]) => getBadgeHelper(activeScope, projectSources, ...prefixes);
   const getFieldBadge = (path: string) => getFieldBadgeHelper(activeScope, projectSources, path);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
+  const [activeIntegrationDetail, setActiveIntegrationDetail] = useState<IntegrationId | null>(selectedIntegration);
+
+  const isInitialMount = useRef(true);
+
+  useLayoutEffect(() => {
+    if (!containerRef.current || !listRef.current || !detailRef.current) return;
+
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      if (selectedIntegration === null) {
+        gsap.set(detailRef.current, { display: "none" });
+      } else {
+        gsap.set(detailRef.current, { display: "block" });
+        gsap.set(listRef.current, { x: "-100%", opacity: 0 });
+      }
+      return;
+    }
+
+    const isEnteringDetail = selectedIntegration !== null;
+    const tl = gsap.timeline();
+
+    if (isEnteringDetail) {
+      setActiveIntegrationDetail(selectedIntegration);
+      gsap.set(detailRef.current, { display: "block", x: "100%", opacity: 0 });
+      gsap.set(containerRef.current, { height: detailRef.current.offsetHeight });
+
+      tl.to(listRef.current, {
+        x: "-100%",
+        opacity: 0,
+        duration: 0.4,
+        ease: "power3.inOut",
+      }, 0).to(detailRef.current, {
+        x: "0%",
+        opacity: 1,
+        duration: 0.4,
+        ease: "power3.inOut",
+        onComplete: () => {
+          if (containerRef.current) gsap.set(containerRef.current, { height: "auto" });
+        }
+      }, 0);
+    } else {
+      gsap.set(containerRef.current, { height: listRef.current.offsetHeight });
+
+      tl.to(detailRef.current, {
+        x: "100%",
+        opacity: 0,
+        duration: 0.4,
+        ease: "power3.inOut",
+        onComplete: () => {
+          setActiveIntegrationDetail(null);
+          if (detailRef.current) gsap.set(detailRef.current, { display: "none" });
+        }
+      }, 0).to(listRef.current, {
+        x: "0%",
+        opacity: 1,
+        duration: 0.4,
+        ease: "power3.inOut",
+        onComplete: () => {
+          if (containerRef.current) gsap.set(containerRef.current, { height: "auto" });
+        }
+      }, 0);
+    }
+  }, [selectedIntegration]);
 
     if (!editableSettings || !systemSettings) {
       return null;
@@ -58,7 +128,21 @@ import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
     const dockerExecutionEnabled = editableSettings.cliWorkflow.executionMode === "DOCKER";
 
     const renderIntegrationConfig = (): ComponentChildren => {
-      switch (selectedIntegration) {
+      const integrationToRender = activeIntegrationDetail || selectedIntegration;
+      if (!integrationToRender) return null;
+
+      const backButton = (
+        <button
+          className="flex items-center gap-2 text-sm text-neutral-400 hover:text-white transition-colors mb-4"
+          onClick={() => setSelectedIntegration(null)}
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Integrations
+        </button>
+      );
+
+      const renderConfig = () => {
+        switch (integrationToRender) {
         case "jules":
           if (activeScope === "project") {
             return (
@@ -426,26 +510,40 @@ import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
               </Row>
             </SectionCard>
           );
-      }
+        }
+      };
+
+      return (
+        <div>
+          {backButton}
+          {renderConfig()}
+        </div>
+      );
     };
 
     return (
       <div className="flex flex-col gap-5">
-        <SectionCard title="Connected Integrations" watermark="INT">
-          {integrations.map((integration, index) => (
-            <IntegrationConfigRow
-              key={integration.id}
-              label={integration.label}
-              description={integration.description}
-              connected={connectedState[integration.id]}
-              active={selectedIntegration === integration.id}
-              onConfigure={() => setSelectedIntegration(integration.id)}
-              last={index === integrations.length - 1}
-            />
-          ))}
-        </SectionCard>
+        <div ref={containerRef} className="relative overflow-hidden w-full">
+          <div ref={listRef} className="w-full">
+            <SectionCard title="Connected Integrations" watermark="INT">
+              {integrations.map((integration, index) => (
+                <IntegrationConfigRow
+                  key={integration.id}
+                  label={integration.label}
+                  description={integration.description}
+                  connected={connectedState[integration.id]}
+                  active={selectedIntegration === integration.id}
+                  onConfigure={() => setSelectedIntegration(integration.id)}
+                  last={index === integrations.length - 1}
+                />
+              ))}
+            </SectionCard>
+          </div>
 
-        {renderIntegrationConfig()}
+          <div ref={detailRef} className="absolute top-0 left-0 w-full" style={{ display: "none" }}>
+            {renderIntegrationConfig()}
+          </div>
+        </div>
 
         {activeScope === "system" ? (
           <SectionCard title="Integration Import" watermark="ENV">
