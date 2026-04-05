@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { registerProjectRoutes } from "../../../src/server/project-routes.js";
 import { registerSprintRoutes } from "../../../src/server/sprint-routes.js";
 import { registerTaskRoutes } from "../../../src/server/task-routes.js";
+import { registerRuntimeRoutes } from "../../../src/server/runtime-routes.js";
+import { registerExecutionControlRoutes } from "../../../src/server/execution-control-routes.js";
 import type { DashboardDependencies } from "../../../src/server/dashboard-server.js";
 
 // We need an express router to expose _router, but app does expose _router after the first route is added sometimes, but wait, `app._router` is internal.
@@ -515,11 +517,29 @@ describe("Full Branch/Function Coverage Hits", () => {
       getProjectEffectiveSettings: () => { throw new Error("Mock Error"); },
 
       orchestrateSprint: () => { throw new Error("Mock Error"); },
+      getStatus: () => { throw new Error("Mock Error"); },
+      getExecutionSnapshot: () => { throw new Error("Mock Error"); },
+      getLiveSnapshot: () => { throw new Error("Mock Error"); },
+      getOverviewTelemetrySnapshot: () => { throw new Error("Mock Error"); },
+      getProjectExecutionSnapshot: () => { throw new Error("Mock Error"); },
+      getProjectStatsSnapshot: () => { throw new Error("Mock Error"); },
+      setPreferredWorker: () => { throw new Error("Mock Error"); },
+      claimAttentionItem: () => { throw new Error("Mock Error"); },
+      resolveAttentionItem: () => { throw new Error("Mock Error"); },
+      rerunTask: () => { throw new Error("Mock Error"); },
+      pauseSprintRun: () => { throw new Error("Mock Error"); },
+      cancelSprintRun: () => { throw new Error("Mock Error"); },
+      forceCancelSprintRun: () => { throw new Error("Mock Error"); },
+      cancelTaskDispatch: () => { throw new Error("Mock Error"); },
+      forceCancelTaskDispatch: () => { throw new Error("Mock Error"); },
+      retryTaskDispatch: () => { throw new Error("Mock Error"); },
     } as unknown as DashboardDependencies;
 
     registerProjectRoutes(app, options);
     registerSprintRoutes(app, options);
     registerTaskRoutes(app, options);
+    registerRuntimeRoutes(app, options);
+    registerExecutionControlRoutes(app, options);
 
     const server = await new Promise<Server>((resolve) => {
       const s = app.listen(0, "127.0.0.1", () => resolve(s));
@@ -559,6 +579,24 @@ describe("Full Branch/Function Coverage Hits", () => {
     expect((await testUrl("/api/projects/1/tasks", "POST", {})).status).toBe(400);
     expect((await testUrl("/api/tasks/1", "PATCH", {})).status).toBe(400);
     expect((await testUrl("/api/tasks/1", "DELETE")).status).toBe(400);
+
+    expect((await testUrl("/api/status")).status).toBe(400);
+    expect((await testUrl("/api/execution")).status).toBe(400);
+    expect((await testUrl("/api/live")).status).toBe(400);
+    expect((await testUrl("/api/telemetry/overview")).status).toBe(400);
+    expect((await testUrl("/api/projects/1/execution")).status).toBe(400);
+    expect((await testUrl("/api/projects/1/stats")).status).toBe(400);
+    expect((await testUrl("/api/projects/1/preferred-worker", "PUT", {})).status).toBe(400);
+    expect((await testUrl("/api/projects/1/attention-items/1/claim", "POST", {})).status).toBe(400);
+    expect((await testUrl("/api/projects/1/attention-items/1/resolve", "POST", {})).status).toBe(400);
+    expect((await testUrl("/api/tasks/1/rerun", "POST", {})).status).toBe(400);
+    expect((await testUrl("/api/projects/1/sprints/1/orchestrate", "POST")).status).toBe(400);
+    expect((await testUrl("/api/sprint-runs/1/pause", "POST")).status).toBe(400);
+    expect((await testUrl("/api/sprint-runs/1/cancel", "POST")).status).toBe(400);
+    expect((await testUrl("/api/sprint-runs/1/force-cancel", "POST")).status).toBe(400);
+    expect((await testUrl("/api/task-dispatches/1/cancel", "POST")).status).toBe(400);
+    expect((await testUrl("/api/task-dispatches/1/force-cancel", "POST")).status).toBe(400);
+    expect((await testUrl("/api/task-dispatches/1/retry", "POST")).status).toBe(400);
 
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
