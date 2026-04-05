@@ -37,7 +37,7 @@ export class SprintExecutionStateService {
     const defaultBranch = settings.git.defaultBranch || "main";
     const featureBranch = args.feature_branch?.trim()
       || sprint.featureBranch?.trim()
-      || formatSprintBranch(settings.git.sprintBranchScheme, sprintNumber);
+      || formatSprintBranch(settings.git.sprintBranchScheme, { number: sprintNumber, slug: sprint.slug || "", name: sprint.name || "", createdAt: sprint.createdAt || new Date().toISOString(), tasksCount: sprint.tasksCount || 0 });
 
     return {
       project,

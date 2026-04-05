@@ -25,7 +25,7 @@ describe("SprintExecutionStateService", () => {
   describe("resolveContext", () => {
     it("should resolve context for a project and sprint", () => {
       const mockProject = { id: "p1", name: "P1", baseDir: "/tmp" };
-      const mockSprint = { id: "s1", number: 1, projectId: "p1" };
+      const mockSprint = { id: "s1", number: 1, projectId: "p1", slug: "1", name: "Sprint 1", createdAt: new Date().toISOString(), tasksCount: 0 };
       
       vi.mocked(mockProjectManagementRepository.getProject).mockReturnValue(mockProject);
       vi.mocked(mockProjectManagementRepository.getSprint).mockReturnValue(mockSprint);
@@ -83,7 +83,7 @@ describe("SprintExecutionStateService", () => {
 
     it("should resolve sprint by number", () => {
       const mockProject = { id: "p1", name: "P1", baseDir: "/tmp" };
-      const mockSprint = { id: "s1", number: 5, projectId: "p1" };
+      const mockSprint = { id: "s1", number: 5, projectId: "p1", slug: "5", name: "Sprint 5", createdAt: new Date().toISOString(), tasksCount: 0 };
       vi.mocked(mockProjectManagementRepository.getProject).mockReturnValue(mockProject);
       vi.mocked(mockProjectManagementRepository.findSprintByProjectAndNumber).mockReturnValue(mockSprint);
 

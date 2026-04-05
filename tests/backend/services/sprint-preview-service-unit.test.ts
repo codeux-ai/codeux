@@ -50,7 +50,7 @@ vi.mock("../../../src/infrastructure/providers/cli/docker-setup-image-cache.js",
 }));
 
 vi.mock("../../../src/git/sprint-branch-scheme.js", () => ({
-  formatSprintBranch: vi.fn((_scheme: string, num: number) => `feature/sprint-${num}`),
+  formatSprintBranch: vi.fn((_scheme: any, sprint: any) => "feature/sprint-" + (sprint.slug || "sprint-1")),
 }));
 
 vi.mock("../../../src/services/cli-workflow-utils.js", () => ({
@@ -1250,14 +1250,22 @@ describe("SprintPreviewService unit tests", () => {
         id: "sprint-1",
         projectId: "proj-1",
         name: "Sprint 1",
+        slug: "sprint-1",
+        createdAt: new Date().toISOString(),
+        tasksCount: 0,
         number: 5,
         status: "running",
         featureBranch: "",
       });
+      deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
+        settings: {
+          git: { defaultBranch: "main", sprintBranchScheme: "feature/sprint-{sprint}" },
+        }
+      });
 
       const service = new SprintPreviewService(deps as any);
       const branch = (service as any).resolveSprintFeatureBranch("proj-1", "sprint-1");
-      expect(branch).toBe("feature/sprint-5");
+      expect(branch).toBe("feature/sprint-sprint-1");
     });
   });
 

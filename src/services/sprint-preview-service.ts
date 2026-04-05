@@ -1129,7 +1129,7 @@ export class SprintPreviewService {
     }
     const settings = this.resolveSettings(projectId, sprintId);
     const sprintNumber = typeof sprint.number === "number" ? sprint.number : 0;
-    return formatSprintBranch(settings.git.sprintBranchScheme, sprintNumber);
+    return formatSprintBranch(settings.git.sprintBranchScheme, { number: sprintNumber, slug: sprint.slug || String(sprintNumber), name: sprint.name || "", createdAt: sprint.createdAt || new Date().toISOString(), tasksCount: sprint.tasksCount || 0 });
   }
 
   private async findFreePort(settings: SprintPreviewSettings): Promise<number> {

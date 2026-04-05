@@ -144,7 +144,7 @@ export class WorkerTaskDispatchService {
     this.projectWorkerAssignmentService.noteWorkerActivity(project.id, workerEndpoint.id);
     const featureBranch = sprint.featureBranch?.trim()
       || (typeof sprint.number === "number"
-        ? formatSprintBranch(dashboardSettings.git.sprintBranchScheme, sprint.number)
+        ? formatSprintBranch(dashboardSettings.git.sprintBranchScheme, { number: sprint.number as number, slug: sprint.slug || "", name: sprint.name || "", createdAt: sprint.createdAt || new Date().toISOString(), tasksCount: sprint.tasksCount || 0 })
         : dashboardSettings.git.featureBranchPrefix + task.taskKey.toLowerCase());
     const defaultBranch = dashboardSettings.git.defaultBranch || "main";
     const repoPath = project.baseDir;
