@@ -36,6 +36,7 @@ import {
   createSeries,
 } from "../stats-utils.js";
 import { useStatsPageData } from "../use-stats-page-data.js";
+import type { UsageChartState } from "../use-usage-chart-state.js";
 
 export type StatsVisualMode = "trend" | "composition" | "reliability";
 export type ChartSeriesId = "tokens" | "active" | "invocations";
@@ -668,7 +669,8 @@ export const StudioHeader: FunctionComponent<{
 export const TrendStudio: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
   planningUsage: ExecutionStatsEntitySummary | null;
-}> = ({ stats, planningUsage }) => (
+  chartState: UsageChartState;
+}> = ({ stats, planningUsage, chartState }) => (
   <section className="space-y-6">
     <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
       <div className="flex flex-col gap-6">
@@ -678,7 +680,7 @@ export const TrendStudio: FunctionComponent<{
           title="Trend analysis"
           description="A single interactive telemetry surface for flow, peaks, and pacing across the selected window."
         />
-        <InteractiveUsageChart stats={stats} />
+        <InteractiveUsageChart stats={stats} chartState={chartState} />
       </div>
     </div>
 
