@@ -42,23 +42,32 @@ export function queryProjectGitStats(
     metrics.filesChanged += filesChanged;
   };
 
-  // Process code metrics using SQL grouping
+  // Process code metrics using SQL grouping and deduplicate by taking MAX per task globally within the window
   const gitMetricsAggregations = db.prepare(`
     SELECT
-      tr.task_id,
-      COALESCE(tr.sprint_run_id, tr.sprint_id) as sprint_key,
-      (CAST(strftime('%s', tre.created_at) AS REAL) * 1000 - ?) / ? as raw_bucket_index,
-      SUM(CAST(json_extract(tre.payload_json, '$.insertions') AS INTEGER)) as sum_insertions,
-      SUM(CAST(json_extract(tre.payload_json, '$.deletions') AS INTEGER)) as sum_deletions,
-      SUM(CAST(json_extract(tre.payload_json, '$.filesChanged') AS INTEGER)) as sum_files
-    FROM task_run_events tre
-    INNER JOIN task_runs tr ON tr.id = tre.task_run_id
-    WHERE tr.project_id = ?
-      AND tre.event_type IN ('cli_git_pushed', 'jules_git_pushed', 'git_metrics')
-      AND tre.created_at >= ?
-      AND tre.created_at < ?
-    GROUP BY tr.task_id, sprint_key, CAST((CAST(strftime('%s', tre.created_at) AS REAL) * 1000 - ?) / ? AS INTEGER)
-  `).all(firstBucketStartMs, bucketSizeMs, projectId, rangeStartIso, rangeEndIso, firstBucketStartMs, bucketSizeMs) as Array<{
+      task_id,
+      sprint_key,
+      (CAST(strftime('%s', latest_created_at) AS REAL) * 1000 - ?) / ? as raw_bucket_index,
+      max_insertions as sum_insertions,
+      max_deletions as sum_deletions,
+      max_files as sum_files
+    FROM (
+      SELECT
+        tr.task_id,
+        COALESCE(tr.sprint_run_id, tr.sprint_id) as sprint_key,
+        MAX(tre.created_at) as latest_created_at,
+        MAX(CAST(json_extract(tre.payload_json, '$.insertions') AS INTEGER)) as max_insertions,
+        MAX(CAST(json_extract(tre.payload_json, '$.deletions') AS INTEGER)) as max_deletions,
+        MAX(CAST(json_extract(tre.payload_json, '$.filesChanged') AS INTEGER)) as max_files
+      FROM task_run_events tre
+      INNER JOIN task_runs tr ON tr.id = tre.task_run_id
+      WHERE tr.project_id = ?
+        AND tre.event_type IN ('cli_git_pushed', 'jules_git_pushed', 'git_metrics')
+        AND tre.created_at >= ?
+        AND tre.created_at < ?
+      GROUP BY tr.task_id, COALESCE(tr.sprint_run_id, tr.sprint_id)
+    )
+  `).all(firstBucketStartMs, bucketSizeMs, projectId, rangeStartIso, rangeEndIso) as Array<{
     task_id: string;
     sprint_key: string;
     raw_bucket_index: number | null;
@@ -88,21 +97,30 @@ export function queryProjectGitStats(
     processGitMetric(sprintMetrics, insertions, deletions, filesChanged);
   }
 
-  // Process PR and merged counts using SQL grouping
+  // Process PR and merged counts using SQL grouping, counting once per task globally within the window
   const prAndMergedAggregations = db.prepare(`
     SELECT
-      tr.task_id,
-      COALESCE(tr.sprint_run_id, tr.sprint_id) as sprint_key,
-      (CAST(strftime('%s', COALESCE(tr.finished_at, tr.started_at, ?)) AS REAL) * 1000 - ?) / ? as raw_bucket_index,
-      COUNT(DISTINCT CASE WHEN tr.pr_url IS NOT NULL THEN tr.id END) as pr_count,
-      COUNT(DISTINCT CASE WHEN t.is_merged IS NOT NULL AND t.is_merged != 0 AND t.is_merged != '0' THEN tr.id END) as merged_count
-    FROM task_runs tr
-    INNER JOIN tasks t ON t.id = tr.task_id
-    WHERE tr.project_id = ?
-      AND COALESCE(tr.finished_at, tr.started_at) >= ?
-      AND COALESCE(tr.finished_at, tr.started_at) < ?
-    GROUP BY tr.task_id, sprint_key, CAST((CAST(strftime('%s', COALESCE(tr.finished_at, tr.started_at, ?)) AS REAL) * 1000 - ?) / ? AS INTEGER)
-  `).all(rangeStartIso, firstBucketStartMs, bucketSizeMs, projectId, rangeStartIso, rangeEndIso, rangeStartIso, firstBucketStartMs, bucketSizeMs) as Array<{
+      task_id,
+      sprint_key,
+      (CAST(strftime('%s', latest_date) AS REAL) * 1000 - ?) / ? as raw_bucket_index,
+      MAX(has_pr) as pr_count,
+      MAX(has_merged) as merged_count
+    FROM (
+      SELECT
+        tr.task_id,
+        COALESCE(tr.sprint_run_id, tr.sprint_id) as sprint_key,
+        MAX(COALESCE(tr.finished_at, tr.started_at, ?)) as latest_date,
+        MAX(CASE WHEN tr.pr_url IS NOT NULL AND tr.pr_url != '' THEN 1 ELSE 0 END) as has_pr,
+        MAX(CASE WHEN t.is_merged IS NOT NULL AND t.is_merged != 0 AND t.is_merged != '0' THEN 1 ELSE 0 END) as has_merged
+      FROM task_runs tr
+      INNER JOIN tasks t ON t.id = tr.task_id
+      WHERE tr.project_id = ?
+        AND COALESCE(tr.finished_at, tr.started_at) >= ?
+        AND COALESCE(tr.finished_at, tr.started_at) < ?
+      GROUP BY tr.task_id, COALESCE(tr.sprint_run_id, tr.sprint_id)
+    )
+    GROUP BY task_id, sprint_key
+  `).all(firstBucketStartMs, bucketSizeMs, rangeStartIso, projectId, rangeStartIso, rangeEndIso) as Array<{
     task_id: string;
     sprint_key: string;
     raw_bucket_index: number | null;

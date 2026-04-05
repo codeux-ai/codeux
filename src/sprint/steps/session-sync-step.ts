@@ -22,10 +22,12 @@ const extractGitMetrics = (session: JulesSession): Record<string, unknown> | nul
 
   if (!pr) return null;
 
+  const parseStat = (val: unknown) => typeof val === "number" && !isNaN(val) ? val : (typeof val === "string" && !isNaN(parseInt(val, 10)) ? parseInt(val, 10) : undefined);
+
   return {
-    filesChanged: typeof pr.filesChanged === "number" ? pr.filesChanged : undefined,
-    insertions: typeof pr.insertions === "number" ? pr.insertions : undefined,
-    deletions: typeof pr.deletions === "number" ? pr.deletions : undefined,
+    filesChanged: parseStat(pr.filesChanged),
+    insertions: parseStat(pr.insertions),
+    deletions: parseStat(pr.deletions),
     workerBranch: typeof pr.workerBranch === "string" ? pr.workerBranch : undefined,
     prUrl: typeof pr.url === "string" ? pr.url : undefined,
   };

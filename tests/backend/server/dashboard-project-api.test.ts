@@ -859,9 +859,9 @@ describe("dashboard project management API", () => {
       },
       git: {
         totals: {
-          insertions: 145,
-          deletions: 23,
-          filesChanged: 5,
+          insertions: 140,
+          deletions: 22,
+          filesChanged: 4,
           prCount: 1,
           mergedCount: 2,
         }
