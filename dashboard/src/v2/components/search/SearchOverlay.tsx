@@ -2,6 +2,8 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import gsap from "gsap";
 import { Search, X, Layers, Activity, Cpu, Box, ArrowRight } from "lucide-preact";
+import { SearchResultRow } from "./SearchResultRow";
+
 
 export type SearchItem = { id: string; title?: string; name?: string; status?: string; sprint?: string };
 
@@ -166,22 +168,15 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
                                                 const currentIndex = globalItemIndex++;
 
                                                 return (
-                                                    <button
+                                                    <SearchResultRow
                                                         key={item.id}
-                                                        ref={isFocused ? activeItemRef : null}
-                                                        onMouseEnter={() => setFocusedIndex(currentIndex)}
-                                                        className={`flex items-center justify-between w-full text-left px-3 py-3 rounded-xl transition-all ${
-                                                            isFocused
-                                                            ? 'bg-signal-500/10 text-signal-600 dark:text-signal-400'
-                                                            : 'hover:bg-black/5 dark:hover:bg-white/5 text-slate-700 dark:text-slate-300'
-                                                        }`}
-                                                    >
-                                                        <span className="font-medium truncate mr-4">
-                                                            {'title' in item ? item.title : item.name}
-                                                        </span>
-                                                        {isFocused && <ArrowRight className="w-4 h-4 shrink-0" />}
-                                                    </button>
-                                                )
+                                                        item={item}
+                                                        categoryType={category.id}
+                                                        isFocused={isFocused}
+                                                        onFocus={() => setFocusedIndex(currentIndex)}
+                                                        activeItemRef={isFocused ? activeItemRef : null}
+                                                    />
+                                                );
                                             })
                                         )}
                                     </div>
