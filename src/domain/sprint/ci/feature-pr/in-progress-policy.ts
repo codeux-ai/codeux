@@ -1,4 +1,4 @@
-import type { GitTrackingStatus, Subtask, CiIntelligenceSettings, AutomationLevel } from "../../../../contracts/app-types.js";
+import type { GitTrackingStatus, Subtask, CiIntelligenceSettings, AutomationLevel, GitPullRequestStatus, GitStatusCheck } from "../../../../contracts/app-types.js";
 import { isCiFailure, selectFailedCiRuns, getFailedJobLabels } from "../../../../sprint/ci-status-utils.js";
 import { handleCiAutofixEscalation } from "./ci-autofix-policy.js";
 import type { WorkerCiFixPayload } from "./ci-autofix-policy.js";
@@ -12,8 +12,8 @@ export interface InProgressResult {
 
 export async function evaluateInProgressState(args: {
   task: Subtask;
-  pr: any;
-  checks: any[];
+  pr: GitPullRequestStatus;
+  checks: GitStatusCheck[];
   hasFailedChecks: boolean;
   hasPendingChecks: boolean;
   hasReviewBlockers: boolean;
@@ -41,8 +41,8 @@ export async function evaluateInProgressState(args: {
 
   if (args.hasFailedChecks) {
     const failedChecks = args.checks
-      .filter((check: any) => isCiFailure(check.status ?? "", check.conclusion ?? ""))
-      .map((check: any) => check.name);
+      .filter((check: GitStatusCheck) => isCiFailure(check.status ?? "", check.conclusion ?? ""))
+      .map((check: GitStatusCheck) => check.name);
     const failedRuns = selectFailedCiRuns(args.gitStatus, branchName);
     const failedJobLabels = getFailedJobLabels(failedRuns);
 
