@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { FeaturePrGateService, CiGateContext } from "../../../../../src/domain/sprint/ci/feature-pr-gate.js";
+import * as prMatcher from "../../../../../src/domain/sprint/ci/feature-pr/pr-matcher.js";
 import type { Subtask, GitTrackingStatus } from "../../../../../src/contracts/app-types.js";
 
 describe("FeaturePrGateService", () => {
@@ -80,6 +81,13 @@ describe("FeaturePrGateService", () => {
         appendTaskRunEvent: vi.fn(),
       } as any,
       sprintRunId: "sprint-run-1",
+      logger: {
+        error: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+        child: vi.fn(),
+      } as any,
     };
   });
 
@@ -419,6 +427,27 @@ jobs:
 
     expect(context.openCiFixAttention).not.toHaveBeenCalled();
     expect(context.sendSessionMessage).toHaveBeenCalled();
+  });
+
+  it("routes task-processing failures through structured logging instead of console.error", async () => {
+    const error = new Error("Mocked processing error");
+    vi.spyOn(prMatcher, "matchPrForTask").mockImplementation(() => {
+      throw error;
+    });
+
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    expect(context.logger?.error).toHaveBeenCalledWith(
+      `Error processing task ${subtasks[0].id}:`,
+      { error }
+    );
+    // When the gate errors out processing a completed task, it normally puts it into CODING_COMPLETED if it has merge evidence
+    expect(result.subtasks[0].status).toBe("CODING_COMPLETED");
+
+    consoleErrorSpy.mockRestore();
   });
 
   it("confirms the task as merged when the PR has already landed", async () => {
