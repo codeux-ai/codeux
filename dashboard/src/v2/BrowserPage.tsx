@@ -26,6 +26,7 @@ import { usePreviewSessions } from "./hooks/use-preview-sessions.js";
 import { useProjectEffectiveSettings } from "./hooks/use-project-effective-settings.js";
 import { PreviewSessionSlider } from "./components/browser/PreviewSessionSlider.js";
 import { PreviewWindowChrome } from "./components/browser/PreviewWindowChrome.js";
+import { LaunchContainerPanel } from "./components/browser/LaunchContainerPanel.js";
 import { useActionFeedback } from "./hooks/use-action-feedback.js";
 import { ActionFeedbackRegion } from "./components/ui/ActionFeedbackRegion.js";
 
@@ -437,15 +438,9 @@ export const BrowserPage: FunctionComponent = () => {
       <div className="mb-5">
         <PreviewSessionSlider
           sessions={sessionCards}
-          sprints={sprints}
           selectedSessionId={activeSessionId}
-          launchSprintId={launchSprintId}
           onSelectSession={setActiveSessionId}
-          onLaunchSprintChange={setLaunchSprintId}
-          onLaunchContainer={() => void handleStart()}
           onRemoveSession={(sessionId) => void handleRemove(sessionId)}
-          launchEnabled={launchEnabled}
-          launchBusy={launching}
           removingSessionIds={removingSessionIds}
         />
       </div>
@@ -494,6 +489,14 @@ export const BrowserPage: FunctionComponent = () => {
         </PreviewWindowChrome>
 
         <div className="space-y-5">
+          <LaunchContainerPanel
+            sprints={sprints}
+            launchSprintId={launchSprintId}
+            onLaunchSprintChange={setLaunchSprintId}
+            onLaunchContainer={() => void handleStart()}
+            launchEnabled={launchEnabled}
+            launchBusy={launching}
+          />
           <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
             <div className="flex items-start justify-between gap-3">
               <div>
