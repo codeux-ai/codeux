@@ -3,17 +3,18 @@ import { resolveRepositoryHost } from "../../../../src/infrastructure/git/reposi
 
 describe("RepositoryHostResolver", () => {
   it("resolves null to local", () => {
-    expect(resolveRepositoryHost(null)).toEqual({ provider: "local", hostDomain: null });
+    expect(resolveRepositoryHost(null)).toEqual({ provider: "local", hostDomain: null, repoTarget: null });
   });
 
   it("resolves empty string to local", () => {
-    expect(resolveRepositoryHost("")).toEqual({ provider: "local", hostDomain: null });
+    expect(resolveRepositoryHost("")).toEqual({ provider: "local", hostDomain: null, repoTarget: null });
   });
 
   it("resolves standard github.com SSH URL", () => {
     expect(resolveRepositoryHost("git@github.com:owner/repo.git")).toEqual({
       provider: "github",
       hostDomain: "github.com",
+      repoTarget: "owner/repo",
     });
   });
 
@@ -21,6 +22,7 @@ describe("RepositoryHostResolver", () => {
     expect(resolveRepositoryHost("https://github.com/owner/repo.git")).toEqual({
       provider: "github",
       hostDomain: "github.com",
+      repoTarget: "owner/repo",
     });
   });
 
@@ -28,6 +30,7 @@ describe("RepositoryHostResolver", () => {
     expect(resolveRepositoryHost("git@gitlab.com:group/subgroup/repo.git")).toEqual({
       provider: "gitlab",
       hostDomain: "gitlab.com",
+      repoTarget: "group/subgroup/repo",
     });
   });
 
@@ -35,6 +38,7 @@ describe("RepositoryHostResolver", () => {
     expect(resolveRepositoryHost("https://gitlab.example.com/group/repo.git")).toEqual({
       provider: "gitlab",
       hostDomain: "gitlab.example.com",
+      repoTarget: "group/repo",
     });
   });
 
@@ -42,6 +46,7 @@ describe("RepositoryHostResolver", () => {
     expect(resolveRepositoryHost("git@git.mycompany.com:group/subgroup/repo.git")).toEqual({
       provider: "gitlab",
       hostDomain: "git.mycompany.com",
+      repoTarget: "group/subgroup/repo",
     });
   });
 
@@ -49,6 +54,7 @@ describe("RepositoryHostResolver", () => {
     expect(resolveRepositoryHost("git@git.mycompany.com:owner/repo.git")).toEqual({
       provider: "local",
       hostDomain: "git.mycompany.com",
+      repoTarget: "owner/repo",
     });
   });
 
@@ -56,6 +62,7 @@ describe("RepositoryHostResolver", () => {
     expect(resolveRepositoryHost("https://git.mycompany.com/owner/repo.git")).toEqual({
       provider: "local",
       hostDomain: "git.mycompany.com",
+      repoTarget: "owner/repo",
     });
   });
 
@@ -63,6 +70,7 @@ describe("RepositoryHostResolver", () => {
     expect(resolveRepositoryHost("/Users/jules/code/my-repo")).toEqual({
       provider: "local",
       hostDomain: null,
+      repoTarget: null,
     });
   });
 
@@ -70,6 +78,7 @@ describe("RepositoryHostResolver", () => {
     expect(resolveRepositoryHost("C:\\Users\\jules\\code\\my-repo")).toEqual({
       provider: "local",
       hostDomain: null,
+      repoTarget: null,
     });
   });
 
@@ -77,6 +86,7 @@ describe("RepositoryHostResolver", () => {
     expect(resolveRepositoryHost("file:///path/to/repo")).toEqual({
       provider: "local",
       hostDomain: null,
+      repoTarget: null,
     });
   });
 });
