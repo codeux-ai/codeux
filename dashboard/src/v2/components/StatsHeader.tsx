@@ -3,6 +3,7 @@ import { memo } from "preact/compat";
 import { useLayoutEffect, useRef } from "preact/hooks";
 import gsap from "gsap";
 import { Radio, BarChart3, Ship, Workflow, AlertTriangle } from "lucide-preact";
+import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 import type {
   DashboardStats,
   ExecutionSprintRunSummary,

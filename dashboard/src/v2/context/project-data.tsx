@@ -24,7 +24,7 @@ interface ProjectDataContextValue {
   deleteProject: (projectId: string) => Promise<void>;
 }
 
-const ProjectDataContext = createContext<ProjectDataContextValue | null>(null);
+export const ProjectDataContext = createContext<ProjectDataContextValue | null>(null);
 
 interface ProjectsResponse {
   projects: Source[];

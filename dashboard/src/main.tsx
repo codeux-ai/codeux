@@ -20,24 +20,76 @@ import { DeepOceanBackground } from "./v2/components/chat/DeepOceanBackground.js
 import "./styles.css";
 
 // 0. AppLayout extracted to use context hooks
-const AppLayout = ({ isDark, toggleTheme }: { isDark: boolean; toggleTheme: () => void }) => {
+const AppLayout = () => {
   const { selectedProject } = useProjectData();
   const { data: effectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
 
-  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 1024);
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  const appearanceTheme = effectiveSettings?.settings.appearance?.theme || "SYSTEM";
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window === "undefined") return true;
+    if (appearanceTheme === "SYSTEM") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    return appearanceTheme === "DARK";
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (appearanceTheme === "SYSTEM") {
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      const listener = (e: MediaQueryListEvent) => setIsDark(e.matches);
+      setIsDark(mediaQuery.matches);
+      if (mediaQuery.addEventListener) {
+        mediaQuery.addEventListener("change", listener);
+      } else {
+        mediaQuery.addListener(listener);
+      }
+      return () => {
+        if (mediaQuery.removeEventListener) {
+          mediaQuery.removeEventListener("change", listener);
+        } else {
+          mediaQuery.removeListener(listener);
+        }
+      };
+    } else {
+      setIsDark(appearanceTheme === "DARK");
+    }
+  }, [appearanceTheme]);
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    const bg = isDark ? "#0d0f12" : "#dbe8f8";
+    if (isDark) root.classList.add("dark");
+    else root.classList.remove("dark");
+    root.style.background = bg;
+    document.body.style.background = bg;
+  }, [isDark]);
+
+  const toggleTheme = () => {
+    // If the theme is currently controlled by the user, we can temporarily override it
+    // Wait, the requirement says "integrate the Light/Dark theme preference into the app."
+    // It's probably best if toggleTheme still toggles it but maybe doesn't persist if they want to override?
+    // The requirements say: "Implement a root-level effect that applies the 'dark' class to the html element based on the appearance.theme setting."
+    // And "Preserve the 'Warm Void' aesthetic across both Light and Dark modes."
+    // Let's just update local state if they click toggle
+    setIsDark((prev) => !prev);
+  };
 
   const navMode = effectiveSettings?.settings.appearance?.navigationMode || "DOCK";
   const showSidebar = isMobile || navMode === "SIDEBAR";
 
   return (
     <div className="flex h-screen overflow-hidden font-sans text-slate-900 dark:text-slate-200 bg-[#F9F8F4] dark:bg-void-900 transition-colors duration-700">
-      {showSidebar && <Sidebar />}
+      {showSidebar && <Sidebar isMobile={isMobile} isOpen={isMobileSidebarOpen} onClose={() => setIsMobileSidebarOpen(false)} />}
 
       <div className="flex flex-col flex-1 h-screen overflow-hidden relative">
         <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:px-4 focus:py-2 focus:bg-white focus:text-slate-900 focus:font-bold focus:rounded-br-lg ">
@@ -46,7 +98,7 @@ const AppLayout = ({ isDark, toggleTheme }: { isDark: boolean; toggleTheme: () =
         <DeepOceanBackground />
 
         <div className="flex-1 flex flex-col h-full relative z-10 overflow-hidden">
-          <TopNav isDark={isDark} toggleTheme={toggleTheme} />
+          <TopNav isDark={isDark} toggleTheme={toggleTheme} onMenuToggle={() => setIsMobileSidebarOpen(prev => !prev)} isMobile={isMobile} />
 
           <main id="main-content" tabIndex={-1} aria-label="Main content" className={`flex-1 overflow-y-auto dashboard-scrollbar relative ${showSidebar ? '' : 'pb-32'}`}>
             <Suspense fallback={<div className="flex-1 p-8"><SkeletonPanel /></div>}>
@@ -76,39 +128,9 @@ const BrowserPage   = lazy(() => import("./v2/BrowserPage.js").then(m => ({ defa
 // 1. Root layout route
 const rootRoute = createRootRoute({
   component: () => {
-    const [isDark, setIsDark] = useState(() => {
-      try {
-        const stored = window.localStorage.getItem('sprintos-theme');
-        return stored !== 'light';
-      } catch (e) {
-        return true;
-      }
-    });
-
-    useEffect(() => {
-      const root = window.document.documentElement;
-      const bg = isDark ? "#0d0f12" : "#dbe8f8";
-      if (isDark) root.classList.add("dark");
-      else root.classList.remove("dark");
-      root.style.background = bg;
-      document.body.style.background = bg;
-    }, [isDark]);
-
-    const toggleTheme = () => {
-      setIsDark((prev) => {
-        const newIsDark = !prev;
-        try {
-          window.localStorage.setItem('sprintos-theme', newIsDark ? 'dark' : 'light');
-        } catch (e) {
-          // Ignore
-        }
-        return newIsDark;
-      });
-    };
-
     return (
       <ProjectDataProvider>
-        <AppLayout isDark={isDark} toggleTheme={toggleTheme} />
+        <AppLayout />
       </ProjectDataProvider>
     );
   },

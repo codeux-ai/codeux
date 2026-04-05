@@ -6,28 +6,34 @@ import { SectionHeader } from "./ui/SectionHeader.js";
 import { SourceCell } from "./ui/SourceCell.js";
 import { SkeletonCard } from "./ui/ListSkeletons.js";
 import { useProjectData } from "../context/project-data.js";
+import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 
 export const SourcesGrid: FunctionComponent = () => {
     const containerRef = useRef<HTMLDivElement>(null);
     const { projects, loading: projectsLoading } = useProjectData();
+    const prefersReducedMotion = useReducedMotion();
 
     useLayoutEffect(() => {
         if (containerRef.current) {
-            gsap.fromTo(
-                containerRef.current.children,
-                { y: 50, opacity: 0, scale: 0.9 },
-                {
-                    y: 0,
-                    opacity: 1,
-                    scale: 1,
-                    duration: 1.1,
-                    stagger: { amount: 0.7, from: "center" },
-                    ease: "elastic.out(1, 0.7)",
-                    delay: 0.1
-                }
-            );
+            if (prefersReducedMotion) {
+                gsap.set(containerRef.current.children, { y: 0, opacity: 1, scale: 1 });
+            } else {
+                gsap.fromTo(
+                    containerRef.current.children,
+                    { y: 50, opacity: 0, scale: 0.9 },
+                    {
+                        y: 0,
+                        opacity: 1,
+                        scale: 1,
+                        duration: 1.1,
+                        stagger: { amount: 0.7, from: "center" },
+                        ease: "elastic.out(1, 0.7)",
+                        delay: 0.1
+                    }
+                );
+            }
         }
-    }, []);
+    }, [prefersReducedMotion]);
 
     const recentSources = useMemo(() => {
         return [...projects].sort((a, b) =>

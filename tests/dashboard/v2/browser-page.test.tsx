@@ -12,11 +12,14 @@ import { fetchPreviewScript } from "../../../dashboard/src/v2/lib/browser-api.js
 
 expect.extend(matchers);
 
-vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
-  useProjectData: vi.fn(() => ({
-    selectedProject: { id: "p1", name: "Project 1" },
-  })),
-}));
+vi.mock("../../../dashboard/src/v2/context/project-data.js", () => {
+  return {
+    ProjectDataContext: {},
+    useProjectData: vi.fn(() => ({
+      selectedProject: { id: "p1", name: "Project 1" },
+    })),
+  };
+});
 
 vi.mock("../../../dashboard/src/hooks/useSprints.js", () => ({
   useSprints: vi.fn(() => ({

@@ -8,6 +8,8 @@ import * as agentPresetApi from "../../../dashboard/src/v2/lib/agent-preset-api.
 import * as dashboardApi from "../../../dashboard/src/lib/api/dashboard-api.js";
 
 vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
+
+
   useProjectData: vi.fn(() => ({
     deleteProject: vi.fn(() => Promise.resolve()),
     selectedProject: { id: "proj-1", name: "Test Project" },

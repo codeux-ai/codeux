@@ -13,9 +13,12 @@ import { fetchExternalSettingsHints } from "../../../dashboard/src/lib/api/dashb
 
 expect.extend(matchers);
 
-vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
-  useProjectData: vi.fn(),
-}));
+vi.mock("../../../dashboard/src/v2/context/project-data.js", () => {
+  return {
+    ProjectDataContext: {},
+    useProjectData: vi.fn(),
+  };
+});
 
 vi.mock("../../../dashboard/src/v2/lib/settings-api.js", () => ({
   fetchSystemSettings: vi.fn(),

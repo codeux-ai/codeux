@@ -56,7 +56,9 @@ vi.mock("../../../dashboard/src/v2/context/project-data.js", async () => {
   return {
     ...actual,
     ProjectDataProvider: ({ children }: any) => h(Fragment, null, children),
-    useProjectData: vi.fn(() => mockProjectData),
+
+
+  useProjectData: vi.fn(() => mockProjectData),
   };
 });
 

@@ -29,6 +29,8 @@ vi.mock("../../../dashboard/src/hooks/use-overview-telemetry.js", async (importO
 });
 
 vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
+
+
   useProjectData: vi.fn(),
 }));
 

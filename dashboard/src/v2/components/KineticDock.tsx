@@ -5,6 +5,7 @@ import { MessageCircle, Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, 
 import gsap from "gsap";
 import { useProjectData } from "../context/project-data.js";
 import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
+import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 
 /* Chat sits left of the divider — the rest are standard nav */
 const LEFT_ITEMS = [
@@ -37,6 +38,7 @@ export const KineticDock: FunctionComponent = () => {
     );
     const rightItems = browserVisible ? RIGHT_ITEMS : RIGHT_ITEMS.filter((item) => item.path !== "/browser");
     const allItems = [...LEFT_ITEMS, ...rightItems];
+    const prefersReducedMotion = useReducedMotion();
 
     const matches     = useRouterState({ select: (s) => s.matches });
     const currentPath = matches[matches.length - 1]?.pathname || "/";
@@ -55,12 +57,16 @@ export const KineticDock: FunctionComponent = () => {
     /* Entrance */
     useEffect(() => {
         if (dockRef.current) {
-            gsap.fromTo(dockRef.current,
-                { y: 100, opacity: 0, scale: 0.8 },
-                { y: 0, opacity: 1, scale: 1, duration: 1.4, ease: "elastic.out(1, 0.7)", delay: 0.2 },
-            );
+            if (prefersReducedMotion) {
+                gsap.set(dockRef.current, { y: 0, opacity: 1, scale: 1 });
+            } else {
+                gsap.fromTo(dockRef.current,
+                    { y: 100, opacity: 0, scale: 0.8 },
+                    { y: 0, opacity: 1, scale: 1, duration: 1.4, ease: "elastic.out(1, 0.7)", delay: 0.2 },
+                );
+            }
         }
-    }, []);
+    }, [prefersReducedMotion]);
 
     /* Active indicator — DOM-based so the divider doesn't break the math */
     useLayoutEffect(() => {
@@ -79,7 +85,7 @@ export const KineticDock: FunctionComponent = () => {
 
     /* Magnetic fisheye */
     const handleMouseMove = (e: MouseEvent) => {
-        if (!dockRef.current) return;
+        if (!dockRef.current || prefersReducedMotion) return;
         const dockRect = dockRef.current.getBoundingClientRect();
         const mouseX   = e.clientX;
 

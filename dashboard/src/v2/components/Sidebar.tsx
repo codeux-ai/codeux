@@ -5,6 +5,7 @@ import gsap from "gsap";
 import { Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, BarChart3, Compass, MessageCircle } from "lucide-preact";
 import { useProjectData } from "../context/project-data.js";
 import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
+import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 
 const ALL_NAV_ITEMS = [
     { icon: MessageCircle, label: "Chat",     path: "/chat" },
@@ -18,8 +19,15 @@ const ALL_NAV_ITEMS = [
     { icon: Zap,      label: "Live",     path: "/live" },
 ];
 
-export const Sidebar: FunctionComponent = () => {
+interface SidebarProps {
+    isMobile?: boolean;
+    isOpen?: boolean;
+    onClose?: () => void;
+}
+
+export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onClose }) => {
     const sidebarRef = useRef<HTMLElement>(null);
+    const overlayRef = useRef<HTMLDivElement>(null);
     const lineRef = useRef<SVGPathElement>(null);
     const navRef = useRef<HTMLDivElement>(null);
     const { selectedProject } = useProjectData();
@@ -32,15 +40,46 @@ export const Sidebar: FunctionComponent = () => {
 
     const navItems = browserVisible ? ALL_NAV_ITEMS : ALL_NAV_ITEMS.filter((item) => item.path !== "/browser");
 
+    const prefersReducedMotion = useReducedMotion();
+
     const matches = useRouterState({ select: (s) => s.matches });
     const currentPath = matches[matches.length - 1]?.pathname || "/";
     const activeIndex = Math.max(0, navItems.findIndex(i => i.path === currentPath));
 
     useEffect(() => {
-        if (sidebarRef.current) {
-            gsap.fromTo(sidebarRef.current, { x: -50, opacity: 0 }, { x: 0, opacity: 1, duration: 1.2, ease: "power4.out" });
+        if (!isMobile && sidebarRef.current) {
+            if (prefersReducedMotion) {
+                gsap.set(sidebarRef.current, { x: 0, opacity: 1 });
+            } else {
+                gsap.fromTo(sidebarRef.current, { x: -50, opacity: 0 }, { x: 0, opacity: 1, duration: 1.2, ease: "power4.out" });
+            }
         }
-    }, []);
+    }, [isMobile, prefersReducedMotion]);
+
+    useEffect(() => {
+        if (isMobile) {
+            const animDuration = prefersReducedMotion ? 0 : 0.4;
+            const overlayDuration = prefersReducedMotion ? 0 : 0.3;
+
+            if (isOpen) {
+                gsap.to(sidebarRef.current, { x: 0, opacity: 1, duration: animDuration, ease: "power3.out" });
+                if (overlayRef.current) {
+                    gsap.to(overlayRef.current, { opacity: 1, duration: overlayDuration, ease: "power2.out", display: "block" });
+                }
+            } else {
+                gsap.to(sidebarRef.current, { x: "-100%", opacity: 0, duration: animDuration, ease: "power3.in" });
+                if (overlayRef.current) {
+                    gsap.to(overlayRef.current, { opacity: 0, duration: overlayDuration, ease: "power2.in", display: "none" });
+                }
+            }
+        } else {
+            // Reset transforms if returning to desktop
+            gsap.set(sidebarRef.current, { x: 0, opacity: 1 });
+            if (overlayRef.current) {
+                gsap.set(overlayRef.current, { display: "none", opacity: 0 });
+            }
+        }
+    }, [isMobile, isOpen, prefersReducedMotion]);
 
     const updateLinePosition = () => {
         if (lineRef.current && navRef.current) {
@@ -73,10 +112,19 @@ export const Sidebar: FunctionComponent = () => {
     }, [activeIndex]);
 
     return (
+        <>
+        {isMobile && (
+            <div
+                ref={overlayRef}
+                className="fixed inset-0 bg-black/50 z-40 hidden backdrop-blur-sm"
+                aria-hidden="true"
+                onClick={onClose}
+            />
+        )}
         <aside
             aria-label="Primary Navigation"
             ref={sidebarRef}
-            className="w-[260px] h-screen shrink-0 border-r border-black/[0.05] dark:border-white/[0.04] bg-[#F5F3EF]/60 dark:bg-void-900 flex flex-col justify-between py-8 relative z-40"
+            className={`w-[260px] h-screen shrink-0 border-r border-black/[0.05] dark:border-white/[0.04] bg-[#F5F3EF]/60 dark:bg-void-900 flex flex-col justify-between py-8 z-50 ${isMobile ? 'fixed left-0 top-0 -translate-x-full opacity-0 shadow-2xl bg-[#F5F3EF] dark:bg-void-900' : 'relative'}`}
         >
             {/* Animated SVG Spline — signal jade to warm ember */}
             <svg
@@ -159,5 +207,6 @@ export const Sidebar: FunctionComponent = () => {
 
             <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#F5F3EF] dark:from-void-900 to-transparent pointer-events-none z-0" />
         </aside>
+        </>
     );
 };

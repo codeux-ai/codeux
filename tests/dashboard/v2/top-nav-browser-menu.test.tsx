@@ -12,7 +12,9 @@ import { buildPreviewUrl } from "../../../dashboard/src/v2/lib/preview-origin.js
 expect.extend(matchers);
 
 vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
-    useProjectData: vi.fn(),
+
+
+  useProjectData: vi.fn(),
 }));
 
 vi.mock("../../../dashboard/src/v2/lib/browser-api.js", () => ({
