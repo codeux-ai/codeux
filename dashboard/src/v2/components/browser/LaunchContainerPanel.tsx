@@ -20,7 +20,7 @@ export const LaunchContainerPanel: FunctionComponent<LaunchContainerPanelProps> 
   launchBusy,
 }) => {
   return (
-    <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
+    <div className="rounded-[2rem] border border-black/[0.06] bg-white/70 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur-md dark:border-white/[0.06] dark:bg-white/[0.03] dark:shadow-[0_20px_60px_rgba(0,0,0,0.24)]">
       <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
         Launch Container
       </div>
