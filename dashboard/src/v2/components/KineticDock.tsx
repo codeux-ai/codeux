@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { useRef, useEffect, useState } from "preact/hooks";
+import { useRef, useEffect, useState, useLayoutEffect, useCallback } from "preact/hooks";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { MessageCircle, Hexagon, Layers, ListChecks, Zap, Settings, Inbox, Cpu, BarChart3, Compass } from "lucide-preact";
 import gsap from "gsap";
@@ -42,6 +42,16 @@ export const KineticDock: FunctionComponent = () => {
     const currentPath = matches[matches.length - 1]?.pathname || "/";
     const activeIndex = Math.max(0, allItems.findIndex(i => i.path === currentPath));
 
+    /* Active indicator position update */
+    const updateIndicatorPosition = useCallback(() => {
+        const el = itemRefs.current[activeIndex];
+        if (!el || !dockRef.current) return;
+
+        // Use offsetLeft to make calculation transformation-invariant (GSAP scaling won't affect it)
+        const center = el.offsetLeft + (el.offsetWidth / 2);
+        setIndicatorLeft(center - 14); // 14 = half of 28px indicator
+    }, [activeIndex]);
+
     /* Entrance */
     useEffect(() => {
         if (dockRef.current) {
@@ -53,14 +63,19 @@ export const KineticDock: FunctionComponent = () => {
     }, []);
 
     /* Active indicator — DOM-based so the divider doesn't break the math */
+    useLayoutEffect(() => {
+        updateIndicatorPosition();
+    }, [updateIndicatorPosition]);
+
     useEffect(() => {
-        const el = itemRefs.current[activeIndex];
-        if (!el || !dockRef.current) return;
-        const dockRect = dockRef.current.getBoundingClientRect();
-        const elRect   = el.getBoundingClientRect();
-        const center   = elRect.left - dockRect.left + elRect.width / 2;
-        setIndicatorLeft(center - 14); // 14 = half of 28px indicator
-    }, [activeIndex]);
+        window.addEventListener('resize', updateIndicatorPosition);
+        // Also run once after a small delay to handle font loading/layout stabilization
+        const timer = setTimeout(updateIndicatorPosition, 50);
+        return () => {
+            window.removeEventListener('resize', updateIndicatorPosition);
+            clearTimeout(timer);
+        };
+    }, [updateIndicatorPosition]);
 
     /* Magnetic fisheye */
     const handleMouseMove = (e: MouseEvent) => {
