@@ -83,6 +83,7 @@ import { registerSprintRoutes } from "./sprint-routes.js";
 import { registerTaskRoutes } from "./task-routes.js";
 import { registerConversationRoutes } from "./conversation-routes.js";
 import { registerPlanningRoutes } from "./planning-routes.js";
+import { registerPreviewRoutes } from "./preview-routes.js";
 
 import { bootDashboardRealtimeWebSocketServer } from "./dashboard-realtime-websocket-server.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
@@ -1020,104 +1021,6 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     }
   }));
 
-  app.get("/api/projects/:projectId/preview/sessions", asyncRoute(async (req, res) => {
-    if (!listSprintPreviewSessions) {
-      res.json([]);
-      return;
-    }
-    res.json(await listSprintPreviewSessions(requireTrimmedString(req.params.projectId, "projectId")));
-  }));
-
-  app.post("/api/projects/:projectId/sprints/:sprintId/preview/start", asyncRoute(async (req, res) => {
-    if (!startSprintPreviewSession) {
-      throw new Error("Sprint preview runtime is unavailable.");
-    }
-    res.json(await startSprintPreviewSession(
-      requireTrimmedString(req.params.projectId, "projectId"),
-      requireTrimmedString(req.params.sprintId, "sprintId"),
-    ));
-  }));
-
-  app.post("/api/browser/sessions/:sessionId/rebuild", asyncRoute(async (req, res) => {
-    if (!rebuildSprintPreviewSession) {
-      throw new Error("Sprint preview runtime is unavailable.");
-    }
-    res.json(await rebuildSprintPreviewSession(requireTrimmedString(req.params.sessionId, "sessionId")));
-  }));
-
-  app.post("/api/browser/sessions/:sessionId/stop", asyncRoute(async (req, res) => {
-    if (!stopSprintPreviewSession) {
-      throw new Error("Sprint preview runtime is unavailable.");
-    }
-    res.json(await stopSprintPreviewSession(requireTrimmedString(req.params.sessionId, "sessionId")));
-  }));
-
-  app.delete("/api/browser/sessions/:sessionId", asyncRoute(async (req, res) => {
-    if (!removeSprintPreviewSession) {
-      throw new Error("Sprint preview runtime is unavailable.");
-    }
-    await removeSprintPreviewSession(requireTrimmedString(req.params.sessionId, "sessionId"));
-    res.status(204).end();
-  }));
-
-  app.get("/api/projects/:projectId/sprints/:sprintId/preview/script", asyncRoute(async (req, res) => {
-    if (!getSprintPreviewScript) {
-      throw new Error("Sprint preview runtime is unavailable.");
-    }
-    res.json(await getSprintPreviewScript(
-      requireTrimmedString(req.params.projectId, "projectId"),
-      requireTrimmedString(req.params.sprintId, "sprintId"),
-    ));
-  }));
-
-  app.put("/api/projects/:projectId/sprints/:sprintId/preview/script", asyncRoute(async (req, res) => {
-    if (!saveSprintPreviewScript) {
-      throw new Error("Sprint preview runtime is unavailable.");
-    }
-    res.json(await saveSprintPreviewScript(
-      requireTrimmedString(req.params.projectId, "projectId"),
-      requireTrimmedString(req.params.sprintId, "sprintId"),
-      typeof req.body?.content === "string" ? req.body.content : "",
-    ));
-  }));
-
-  app.get("/api/browser/sessions/:sessionId/logs", asyncRoute(async (req, res) => {
-    if (!getSprintPreviewLogs) {
-      throw new Error("Sprint preview runtime is unavailable.");
-    }
-    const tail = typeof req.query.tail === "string" ? Number(req.query.tail) : undefined;
-    res.json(await getSprintPreviewLogs(requireTrimmedString(req.params.sessionId, "sessionId"), tail));
-  }));
-
-  app.all("/api/browser/sessions/:sessionId/proxy{*rest}", asyncRoute(async (req, res) => {
-    if (!proxySprintPreviewRequest) {
-      throw new Error("Sprint preview runtime is unavailable.");
-    }
-    const sessionId = requireTrimmedString(req.params.sessionId, "sessionId");
-    const prefix = `/api/browser/sessions/${sessionId}/proxy`;
-    const pathWithQuery = req.originalUrl.startsWith(prefix)
-      ? req.originalUrl.slice(prefix.length) || "/"
-      : "/";
-    const body = req.body
-      ? Buffer.isBuffer(req.body)
-        ? req.body
-        : Buffer.from(JSON.stringify(req.body))
-      : undefined;
-    const proxied = await proxySprintPreviewRequest({
-      sessionId,
-      method: req.method,
-      path: pathWithQuery,
-      headers: Object.fromEntries(
-        Object.entries(req.headers).map(([key, value]) => [key, Array.isArray(value) ? value.join(", ") : value]),
-      ),
-      body,
-    });
-    for (const [key, value] of Object.entries(proxied.headers)) {
-      res.setHeader(key, value);
-    }
-    res.status(proxied.status).send(proxied.body);
-  }));
-
   // Combined endpoint — single HTTP call for live page initial load
   app.get("/api/live", asyncRoute(async (req, res) => {
     const requestedProjectId = parseTrimmedString(req.query.projectId);
@@ -1223,6 +1126,7 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   registerTaskRoutes(app, deps);
   registerConversationRoutes(app, deps);
   registerPlanningRoutes(app, deps);
+  registerPreviewRoutes(app, deps);
 
   app.get("/api/projects/:projectId/connections", syncRoute((req, res) => {
     res.json(options.listConnections(requireTrimmedString(req.params.projectId, "projectId")));
