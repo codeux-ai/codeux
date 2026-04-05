@@ -101,7 +101,7 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
               className={`flex-none w-[280px] lg:w-[calc(20%-0.6rem)] snap-start rounded-[1.5rem] border p-4 transition-all relative ${
                 active
                   ? "border-signal-500/60 bg-white/95 shadow-[0_10px_40px_rgba(15,23,42,0.1)] ring-1 ring-signal-500/20 dark:bg-[#05080d]/95 dark:shadow-[0_10px_40px_rgba(0,0,0,0.4)]"
-                  : "border-black/[0.08] bg-white/60 hover:border-black/[0.16] hover:bg-white/80 dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:border-white/[0.16] dark:hover:bg-white/[0.04]"
+                  : "border-black/[0.08] bg-white/60 backdrop-blur-md hover:border-black/[0.16] hover:bg-white/80 dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:border-white/[0.16] dark:hover:bg-white/[0.04]"
               }`}
             >
               {active && (
