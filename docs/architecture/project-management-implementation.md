@@ -17,6 +17,7 @@ It includes:
 - DB-backed project-scoped Agents and Chat pages
 - first listen-loop MCP connection and conversation contracts
 - first DB-native sprint orchestration slice for project/sprint scope
+- `manage_sprint_os` MCP tool handlers for projects and sprints domain actions
 
 It does not yet include:
 - multi-MCP scheduling
@@ -35,6 +36,9 @@ Primary implementation files:
 - `src/services/sprint-execution-state-service.ts`
 - `src/services/sprint-task-dispatch-service.ts`
 - `src/server/dashboard-server.ts`
+- `src/mcp/management-tool-handler.ts`
+- `src/mcp/management/project-actions.ts`
+- `src/mcp/management/sprint-actions.ts`
 - `dashboard/src/v2/context/project-data.tsx`
 - `dashboard/src/v2/lib/project-api.ts`
 
