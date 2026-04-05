@@ -174,3 +174,5 @@ export type {
   ProviderId,
   VirtualWorkerProvider,
 };
+
+export type { SprintReviewSummary };

@@ -348,6 +348,26 @@ export function useSprintsPageData() {
     }
   }, [refresh, refreshExecution, selectedProject]);
 
+  const handleMarkCompleted = useCallback(async (sprintId: string) => {
+    const actionId = `sprint-mark-completed:${sprintId}`;
+    if (pendingActionIds.has(actionId)) {
+      return;
+    }
+    setPendingActionIds((current) => new Set(current).add(actionId));
+    try {
+      await updateSprint(sprintId, { status: "completed" });
+      await refresh();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPendingActionIds((current) => {
+        const next = new Set(current);
+        next.delete(actionId);
+        return next;
+      });
+    }
+  }, [pendingActionIds, refresh]);
+
   const handleSprintToggle = useCallback((sprintId: string) => {
     if (!selectedProject) {
       return;
@@ -640,6 +660,7 @@ export function useSprintsPageData() {
     refreshSprints: refresh,
     refreshExecution,
     handleSprintToggle,
+    handleMarkCompleted,
     handleSubmitSprint,
     handleImprovePrompt,
     handleOpenAppendTasks,

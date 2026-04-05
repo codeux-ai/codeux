@@ -76,6 +76,7 @@ export const SprintsPage: FunctionComponent = () => {
     refreshSprints,
     refreshExecution,
     handleSprintToggle,
+    handleMarkCompleted,
     handleSubmitSprint,
     handleImprovePrompt,
     handleOpenAppendTasks,
@@ -329,6 +330,7 @@ export const SprintsPage: FunctionComponent = () => {
                         showcaseBusy={pendingActionIds.has(pinActionId)}
                         humanIntervention={interventionBySprintId.get(sprint.id) || null}
                         onPrimaryAction={() => { handleSprintToggle(sprint.id); }}
+                        onMarkCompleted={() => { void handleMarkCompleted(sprint.id); }}
                         onEdit={() => {
                           setEditingSprint(sprint);
                           setShowCreateComposer(false);
