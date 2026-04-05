@@ -137,6 +137,7 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
   } = invocationData;
 
   const refreshThreads = useCallback(async (refreshOptions?: { manual?: boolean; foreground?: boolean; mode?: "threads" | "invocations" | "both" }): Promise<void> => {
+    console.log("[ChatPageData] refreshThreads called", { refreshOptions, mode: refreshOptions?.mode, manual: refreshOptions?.manual, foreground: refreshOptions?.foreground });
     if (!selectedProject) {
       setThreadsSnapshot([]);
       setInvocationsSnapshot([]);
@@ -245,14 +246,18 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     setThreadsSnapshot,
   ]);
 
+  const projectId = selectedProject?.id;
   useEffect(() => {
-    if (!selectedProject) {
+    if (!projectId || !selectedProject) {
       return;
     }
 
-    const cachedThreads = cache.getThreads(selectedProject.id);
-    const cachedConnections = cache.getConnections(selectedProject.id);
-    const cachedInvocations = cache.getInvocations(selectedProject.id);
+    console.log("[ChatPageData] Initializing data for project:", projectId);
+
+    const cachedThreads = cache.getThreads(projectId);
+    const cachedConnections = cache.getConnections(projectId);
+    const cachedInvocations = cache.getInvocations(projectId);
+
     if (cachedThreads && cachedInvocations) {
       setThreadsSnapshot(cachedThreads);
       setConnectionsSnapshot(cachedConnections || []);
@@ -289,22 +294,8 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
     setSelectedThreadId(null);
     setSelectedInvocationId(null);
     void refreshThreads({ foreground: true });
-  }, [
-    activateInvocation,
-    activateThread,
-    cache,
-    refreshThreads,
-    selectedInvocationIdRef,
-    selectedProject,
-    selectedThreadIdRef,
-    setConnectionsSnapshot,
-    setInvocationMessagesSnapshot,
-    setInvocationsSnapshot,
-    setSelectedInvocationId,
-    setSelectedThreadId,
-    setMessagesSnapshot,
-    setThreadsSnapshot,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
 
   useEffect(() => {
     if (!selectedProject) {
