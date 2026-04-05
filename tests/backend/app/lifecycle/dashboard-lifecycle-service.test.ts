@@ -396,11 +396,20 @@ describe("dashboard-lifecycle-service", () => {
         expect(mockDeps.projectManagementRepository.setSelectedSprintId).toHaveBeenCalledWith("project-1", "sprint-2");
       });
 
-      it("does not throw on explicit invalidation during saveProjectSettings", async () => {
+      it("broadcasts structural invalidation during saveProjectSettings", async () => {
         await bootDashboard(mockDeps);
         const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
         setupArgs.saveProjectSettings!("project-1", {});
         expect(mockDeps.settingsRepository.saveProjectSettings).toHaveBeenCalledWith("project-1", {});
+        expect(mockDeps.dashboardRealtimeService.scheduleProjectStructureRefresh).toHaveBeenCalledWith("project-1", { includeProjects: true });
+      });
+
+      it("broadcasts structural invalidation during resetProjectSettings", async () => {
+        await bootDashboard(mockDeps);
+        const setupArgs = vi.mocked(setupDashboardServer).mock.calls[0][0];
+        setupArgs.resetProjectSettings!("project-1");
+        expect(mockDeps.settingsRepository.resetProjectSettings).toHaveBeenCalledWith("project-1");
+        expect(mockDeps.dashboardRealtimeService.scheduleProjectStructureRefresh).toHaveBeenCalledWith("project-1", { includeProjects: true });
       });
 
       it("does not throw on explicit invalidation during resetDatabase", async () => {

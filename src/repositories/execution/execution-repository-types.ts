@@ -126,3 +126,39 @@ export interface ProjectAttentionSummaryRow {
   payload_json: string | null;
   updated_at: string;
 }
+export interface ExecutionInvocationRow {
+  id: string;
+  project_id: string;
+  sprint_id: string | null;
+  task_id: string | null;
+  sprint_run_id: string | null;
+  dispatch_id: string | null;
+  task_run_id: string | null;
+  attention_item_id: string | null;
+  provider_invocation_id: string | null;
+  type: string;
+  status: string;
+  provider: string | null;
+  model: string | null;
+  system_prompt: string | null;
+  started_at: string;
+  finished_at: string | null;
+  error_message: string | null;
+  last_error_category: string | null;
+  last_error_message: string | null;
+  last_retry_after_iso: string | null;
+  message_count: number | string;
+  last_message_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExecutionInvocationMessageRow {
+  id: string;
+  invocation_id: string;
+  role: string;
+  content_markdown: string;
+  tool_calls_json: string | null;
+  metadata_json: string | null;
+  created_at: string;
+}

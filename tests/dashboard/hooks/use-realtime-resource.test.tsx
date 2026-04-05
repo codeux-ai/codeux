@@ -19,7 +19,12 @@ function TestComponent({ initialData, fetchResource }: any) {
   return h("div", null,
     h("div", { "data-testid": "loading" }, loading ? "true" : "false"),
     h("div", { "data-testid": "data-id" }, data.id),
-    h("button", { "data-testid": "refetch", onClick: () => refetch() }, "Refetch")
+    h("button", { "data-testid": "refetch", onClick: () => refetch() }, "Refetch"),
+    h("button", { "data-testid": "refetch-abort", onClick: () => {
+      const controller = new AbortController();
+      refetch({ signal: controller.signal });
+      controller.abort();
+    } }, "Refetch Abort")
   );
 }
 
@@ -73,6 +78,40 @@ describe("useRealtimeResource", () => {
      expect(firstCallSignal?.aborted).toBe(true);
   });
 
+  it("does not update state from a stale completion after supersession", async () => {
+     let resolve1: any;
+     const promise1 = new Promise((r) => resolve1 = r);
+
+     let resolve2: any;
+     const promise2 = new Promise((r) => resolve2 = r);
+
+     const fetchResource = vi.fn()
+       .mockReturnValueOnce(promise1)
+       .mockReturnValueOnce(promise2);
+
+     const { getByTestId } = render(h(TestComponent, { initialData: { id: "initial" }, fetchResource }));
+
+     // Trigger manual refetch
+     getByTestId("refetch").click();
+
+     // Resolve the first (stale) promise
+     resolve1({ id: "stale" });
+
+     // Yield to microtask queue
+     await new Promise(r => setTimeout(r, 10));
+
+     // It should NOT update because it was superseded
+     expect(getByTestId("data-id").textContent).toBe("initial");
+
+     // Resolve the active promise
+     resolve2({ id: "latest" });
+
+     await new Promise(r => setTimeout(r, 10));
+
+     // It should update to the latest
+     expect(getByTestId("data-id").textContent).toBe("latest");
+  });
+
   it("does not update state if snapshot is semantically equal", async () => {
     const fetchResource = vi.fn().mockResolvedValue({ id: "1", ignore: "me" });
     const { getByTestId } = render(h(TestComponent, { initialData: { id: "1", ignore: "old" }, fetchResource }));
@@ -84,5 +123,26 @@ describe("useRealtimeResource", () => {
 
     // The data-id should still be 1. The component should NOT have thrashed state.
     expect(getByTestId("data-id").textContent).toBe("1");
+  });
+
+  it("composes external abort signals", async () => {
+    let internalSignal: AbortSignal | undefined;
+    const fetchResource = vi.fn().mockImplementation(async (signal) => {
+      internalSignal = signal;
+      return new Promise(() => {}); // never resolves
+    });
+
+    const { getByTestId } = render(h(TestComponent, { initialData: { id: "1" }, fetchResource }));
+
+    // Mount triggers fetch 1
+    expect(fetchResource).toHaveBeenCalledTimes(1);
+
+    getByTestId("refetch-abort").click();
+
+    // Wait for the abort to propagate
+    await new Promise(r => setTimeout(r, 10));
+
+    expect(fetchResource).toHaveBeenCalledTimes(2);
+    expect(internalSignal?.aborted).toBe(true);
   });
 });

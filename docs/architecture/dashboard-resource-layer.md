@@ -27,6 +27,8 @@ Data fetching is governed by a unified resource layer rather than ad-hoc `useEff
 
 Resources are identified by deterministic keys (e.g., `project:<id>:sprints`, `project:<id>:tasks`, `project:<id>:execution`).
 
+The project data context now uses structural equality checks to stabilize the context reference and accepts abort signals to prevent stale state from overriding newer updates.
+
 When a realtime websocket event arrives (such as `project.structure.updated` or `project.execution.updated`), the resource layer invalidates the corresponding resource keys. The active page module then silently re-fetches the data in the background and updates the UI once the new read-model arrives.
 
 ## Page-Scoped Module Boundaries

@@ -83,6 +83,9 @@ import { registerSprintRoutes } from "./sprint-routes.js";
 import { registerTaskRoutes } from "./task-routes.js";
 import { registerConversationRoutes } from "./conversation-routes.js";
 import { registerPlanningRoutes } from "./planning-routes.js";
+import { registerPreviewRoutes } from "./preview-routes.js";
+import { registerRuntimeRoutes } from "./runtime-routes.js";
+import { registerExecutionControlRoutes } from "./execution-control-routes.js";
 
 import { bootDashboardRealtimeWebSocketServer } from "./dashboard-realtime-websocket-server.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
@@ -1003,14 +1006,6 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     }
   });
 
-  app.get("/api/status", syncRoute((req, res) => {
-    res.json(getStatus());
-  }));
-
-  app.get("/api/execution", syncRoute((req, res) => {
-    res.json(options.getExecutionSnapshot());
-  }));
-
   app.get("/api/docker/containers", asyncRoute(async (req, res) => {
     try {
       const containers = await listDockerContainers();
@@ -1018,175 +1013,6 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     } catch (error) {
       res.json([]);
     }
-  }));
-
-  app.get("/api/projects/:projectId/preview/sessions", asyncRoute(async (req, res) => {
-    if (!listSprintPreviewSessions) {
-      res.json([]);
-      return;
-    }
-    res.json(await listSprintPreviewSessions(requireTrimmedString(req.params.projectId, "projectId")));
-  }));
-
-  app.post("/api/projects/:projectId/sprints/:sprintId/preview/start", asyncRoute(async (req, res) => {
-    if (!startSprintPreviewSession) {
-      throw new Error("Sprint preview runtime is unavailable.");
-    }
-    res.json(await startSprintPreviewSession(
-      requireTrimmedString(req.params.projectId, "projectId"),
-      requireTrimmedString(req.params.sprintId, "sprintId"),
-    ));
-  }));
-
-  app.post("/api/browser/sessions/:sessionId/rebuild", asyncRoute(async (req, res) => {
-    if (!rebuildSprintPreviewSession) {
-      throw new Error("Sprint preview runtime is unavailable.");
-    }
-    res.json(await rebuildSprintPreviewSession(requireTrimmedString(req.params.sessionId, "sessionId")));
-  }));
-
-  app.post("/api/browser/sessions/:sessionId/stop", asyncRoute(async (req, res) => {
-    if (!stopSprintPreviewSession) {
-      throw new Error("Sprint preview runtime is unavailable.");
-    }
-    res.json(await stopSprintPreviewSession(requireTrimmedString(req.params.sessionId, "sessionId")));
-  }));
-
-  app.delete("/api/browser/sessions/:sessionId", asyncRoute(async (req, res) => {
-    if (!removeSprintPreviewSession) {
-      throw new Error("Sprint preview runtime is unavailable.");
-    }
-    await removeSprintPreviewSession(requireTrimmedString(req.params.sessionId, "sessionId"));
-    res.status(204).end();
-  }));
-
-  app.get("/api/projects/:projectId/sprints/:sprintId/preview/script", asyncRoute(async (req, res) => {
-    if (!getSprintPreviewScript) {
-      throw new Error("Sprint preview runtime is unavailable.");
-    }
-    res.json(await getSprintPreviewScript(
-      requireTrimmedString(req.params.projectId, "projectId"),
-      requireTrimmedString(req.params.sprintId, "sprintId"),
-    ));
-  }));
-
-  app.put("/api/projects/:projectId/sprints/:sprintId/preview/script", asyncRoute(async (req, res) => {
-    if (!saveSprintPreviewScript) {
-      throw new Error("Sprint preview runtime is unavailable.");
-    }
-    res.json(await saveSprintPreviewScript(
-      requireTrimmedString(req.params.projectId, "projectId"),
-      requireTrimmedString(req.params.sprintId, "sprintId"),
-      typeof req.body?.content === "string" ? req.body.content : "",
-    ));
-  }));
-
-  app.get("/api/browser/sessions/:sessionId/logs", asyncRoute(async (req, res) => {
-    if (!getSprintPreviewLogs) {
-      throw new Error("Sprint preview runtime is unavailable.");
-    }
-    const tail = typeof req.query.tail === "string" ? Number(req.query.tail) : undefined;
-    res.json(await getSprintPreviewLogs(requireTrimmedString(req.params.sessionId, "sessionId"), tail));
-  }));
-
-  app.all("/api/browser/sessions/:sessionId/proxy{*rest}", asyncRoute(async (req, res) => {
-    if (!proxySprintPreviewRequest) {
-      throw new Error("Sprint preview runtime is unavailable.");
-    }
-    const sessionId = requireTrimmedString(req.params.sessionId, "sessionId");
-    const prefix = `/api/browser/sessions/${sessionId}/proxy`;
-    const pathWithQuery = req.originalUrl.startsWith(prefix)
-      ? req.originalUrl.slice(prefix.length) || "/"
-      : "/";
-    const body = req.body
-      ? Buffer.isBuffer(req.body)
-        ? req.body
-        : Buffer.from(JSON.stringify(req.body))
-      : undefined;
-    const proxied = await proxySprintPreviewRequest({
-      sessionId,
-      method: req.method,
-      path: pathWithQuery,
-      headers: Object.fromEntries(
-        Object.entries(req.headers).map(([key, value]) => [key, Array.isArray(value) ? value.join(", ") : value]),
-      ),
-      body,
-    });
-    for (const [key, value] of Object.entries(proxied.headers)) {
-      res.setHeader(key, value);
-    }
-    res.status(proxied.status).send(proxied.body);
-  }));
-
-  // Combined endpoint — single HTTP call for live page initial load
-  app.get("/api/live", asyncRoute(async (req, res) => {
-    const requestedProjectId = parseTrimmedString(req.query.projectId);
-    res.json(await options.getLiveSnapshot(requestedProjectId || null));
-  }));
-
-  app.get("/api/telemetry/overview", syncRoute((req, res) => {
-    res.json(options.getOverviewTelemetrySnapshot());
-  }));
-
-  app.get("/api/projects/:projectId/execution", syncRoute((req, res) => {
-    res.json(options.getProjectExecutionSnapshot(requireTrimmedString(req.params.projectId, "projectId")));
-  }));
-
-  app.get("/api/projects/:projectId/stats", syncRoute((req, res) => {
-    const query = parseProjectStatsQuery(req.query);
-    res.json(options.getProjectStatsSnapshot(requireTrimmedString(req.params.projectId, "projectId"), query));
-  }));
-
-  app.put("/api/projects/:projectId/preferred-worker", syncRoute((req, res) => {
-    if (!options.setPreferredWorker) {
-      res.status(501).json({ error: "Preferred worker assignment is not enabled." });
-      return;
-    }
-
-    res.json(options.setPreferredWorker(
-      requireTrimmedString(req.params.projectId, "projectId"),
-      {
-        workerConnectionId: parseNullableTrimmedString(req.body?.workerConnectionId),
-        workerEndpointId: parseNullableTrimmedString(req.body?.workerEndpointId),
-        workerEndpointKey: parseNullableTrimmedString(req.body?.workerEndpointKey),
-      },
-    ));
-  }));
-
-  app.post("/api/projects/:projectId/attention-items/:attentionItemId/claim", syncRoute((req, res) => {
-    if (!options.claimAttentionItem) {
-      res.status(501).json({ error: "Attention item claim is not enabled." });
-      return;
-    }
-
-    res.json(options.claimAttentionItem(
-      requireTrimmedString(req.params.projectId, "projectId"),
-      requireTrimmedString(req.params.attentionItemId, "attentionItemId"),
-      {
-        workerEndpointId: typeof req.body?.workerEndpointId === "string" ? req.body.workerEndpointId.trim() : undefined,
-        claimReason: typeof req.body?.claimReason === "string" ? req.body.claimReason.trim() : undefined,
-      },
-    ));
-  }));
-
-  app.post("/api/projects/:projectId/attention-items/:attentionItemId/resolve", syncRoute((req, res) => {
-    if (!options.resolveAttentionItem) {
-      res.status(501).json({ error: "Attention item resolution is not enabled." });
-      return;
-    }
-
-    const requestedStatus = typeof req.body?.status === "string" ? req.body.status.trim() : undefined;
-    res.json(options.resolveAttentionItem(
-      requireTrimmedString(req.params.projectId, "projectId"),
-      requireTrimmedString(req.params.attentionItemId, "attentionItemId"),
-      {
-        status: requestedStatus === "dismissed" ? "dismissed" : "resolved",
-        reason: typeof req.body?.reason === "string" ? req.body.reason.trim() : undefined,
-        resolutionSummaryMarkdown: typeof req.body?.resolutionSummaryMarkdown === "string"
-          ? req.body.resolutionSummaryMarkdown
-          : undefined,
-      },
-    ));
   }));
 
   app.get("/api/live-activities", asyncRoute(async (req, res) => {
@@ -1223,6 +1049,9 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   registerTaskRoutes(app, deps);
   registerConversationRoutes(app, deps);
   registerPlanningRoutes(app, deps);
+  registerPreviewRoutes(app, deps);
+  registerRuntimeRoutes(app, deps);
+  registerExecutionControlRoutes(app, deps);
 
   app.get("/api/projects/:projectId/connections", syncRoute((req, res) => {
     res.json(options.listConnections(requireTrimmedString(req.params.projectId, "projectId")));
@@ -1285,24 +1114,6 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
       const message = error instanceof Error ? error.message : String(error);
       res.status(500).json({ error: `Failed to fetch git status: ${message}` });
     }
-  }));
-
-  app.post("/api/tasks/:taskId/rerun", asyncRoute(async (req, res) => {
-    const taskId = requireTrimmedString(req.params.taskId, "taskId");
-    const body = req.body as { provider?: string; clearWorktree?: boolean; resetDependents?: boolean } | undefined;
-    const task = await rerunTask(taskId, {
-      provider: typeof body?.provider === "string" ? body.provider : undefined,
-      clearWorktree: body?.clearWorktree === true,
-      resetDependents: body?.resetDependents === true,
-    });
-    res.json({ ok: true, task });
-  }));
-
-  app.post("/api/projects/:projectId/sprints/:sprintId/orchestrate", asyncRoute(async (req, res) => {
-    const projectId = requireTrimmedString(req.params.projectId, "projectId");
-    const sprintId = requireTrimmedString(req.params.sprintId, "sprintId");
-    const result = await orchestrateSprint(projectId, sprintId);
-    res.status(202).json(result);
   }));
 
   app.get("/api/projects/:projectId/quicksprints/templates", syncRoute((req, res) => {
@@ -1369,30 +1180,6 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     }
     const sprint = await options.quicksprintService.executeQuicksprint(projectId, req.body as QuicksprintExecutionInput);
     res.status(201).json(sprint);
-  }));
-
-  app.post("/api/sprint-runs/:sprintRunId/pause", asyncRoute(async (req, res) => {
-    res.json(await pauseSprintRun(requireTrimmedString(req.params.sprintRunId, "sprintRunId")));
-  }));
-
-  app.post("/api/sprint-runs/:sprintRunId/cancel", asyncRoute(async (req, res) => {
-    res.json(await cancelSprintRun(requireTrimmedString(req.params.sprintRunId, "sprintRunId")));
-  }));
-
-  app.post("/api/sprint-runs/:sprintRunId/force-cancel", asyncRoute(async (req, res) => {
-    res.json(await forceCancelSprintRun(requireTrimmedString(req.params.sprintRunId, "sprintRunId")));
-  }));
-
-  app.post("/api/task-dispatches/:dispatchId/cancel", asyncRoute(async (req, res) => {
-    res.json(await cancelTaskDispatch(requireTrimmedString(req.params.dispatchId, "dispatchId")));
-  }));
-
-  app.post("/api/task-dispatches/:dispatchId/force-cancel", asyncRoute(async (req, res) => {
-    res.json(await forceCancelTaskDispatch(requireTrimmedString(req.params.dispatchId, "dispatchId")));
-  }));
-
-  app.post("/api/task-dispatches/:dispatchId/retry", asyncRoute(async (req, res) => {
-    res.json(await retryTaskDispatch(requireTrimmedString(req.params.dispatchId, "dispatchId")));
   }));
 
   app.get("/favicon.ico", (req, res) => res.status(204).end());
@@ -1473,40 +1260,3 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   return handle;
 };
 
-function parseProjectStatsQuery(query: Record<string, unknown>): ProjectStatsQuery {
-  const requestedWindow = typeof query.window === "string" ? query.window.trim() : "";
-  const window: ProjectStatsWindow = (
-    requestedWindow === "24h"
-    || requestedWindow === "7d"
-    || requestedWindow === "30d"
-    || requestedWindow === "all"
-    || requestedWindow === "custom"
-  )
-    ? requestedWindow
-    : "7d";
-
-  const from = typeof query.from === "string" && query.from.trim().length > 0 ? query.from.trim() : undefined;
-  const to = typeof query.to === "string" && query.to.trim().length > 0 ? query.to.trim() : undefined;
-
-  if (window === "custom" && (!from || !to)) {
-    throw new Error("Custom stats windows require both from and to query parameters.");
-  }
-
-  return {
-    window,
-    from,
-    to,
-  };
-}
-
-function parseNullableTrimmedString(value: unknown): string | null | undefined {
-  if (value === null) {
-    return null;
-  }
-  if (typeof value !== "string") {
-    return undefined;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}

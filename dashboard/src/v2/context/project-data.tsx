@@ -38,11 +38,38 @@ const EMPTY_PROJECTS: ProjectsResponse = {
 
 export const ProjectDataProvider: FunctionComponent<{ children: ComponentChildren }> = ({ children }) => {
   const fetchResource = useCallback(async (signal?: AbortSignal) => {
-    // API client doesn't explicitly accept signal for this, but could be added
-    return await fetchProjects();
+    return await fetchProjects(signal);
   }, []);
 
-  const isEqual = useCallback((_prev: ProjectsResponse, _next: ProjectsResponse) => false, []);
+  const isEqual = useCallback((prev: ProjectsResponse, next: ProjectsResponse) => {
+    if (prev.selectedProjectId !== next.selectedProjectId) {
+      return false;
+    }
+    if (prev.projects.length !== next.projects.length) {
+      return false;
+    }
+    for (let i = 0; i < prev.projects.length; i++) {
+      const p1 = prev.projects[i];
+      const p2 = next.projects[i];
+      if (!p1 || !p2) return false;
+      if (
+        p1.id !== p2.id ||
+        p1.slug !== p2.slug ||
+        p1.name !== p2.name ||
+        p1.status !== p2.status ||
+        p1.openTasks !== p2.openTasks ||
+        p1.completedTasks !== p2.completedTasks ||
+        p1.isRunning !== p2.isRunning ||
+        p1.updatedAt !== p2.updatedAt ||
+        p1.sprintsCount !== p2.sprintsCount ||
+        JSON.stringify(p1.agentBindings) !== JSON.stringify(p2.agentBindings) ||
+        JSON.stringify(p1.settingsOverrides) !== JSON.stringify(p2.settingsOverrides)
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }, []);
 
   const {
     data,

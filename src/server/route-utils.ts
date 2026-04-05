@@ -3,6 +3,12 @@ import type {
   ImprovePromptInput,
   PlanSprintOptions,
 } from "../contracts/project-management-types.js";
+import type {
+  CreateConversationThreadInput,
+  UpdateConversationThreadInput,
+  CreateDashboardConversationMessageInput,
+  ConversationThreadScope,
+} from "../contracts/connection-chat-types.js";
 
 export function parseTrimmedString(value: unknown): string | undefined {
   if (typeof value !== "string") {
@@ -20,34 +26,162 @@ export function requireTrimmedString(value: unknown, name: string): string {
   return trimmed;
 }
 
-export function parseThreadRouteInput(body: any): { routeKind: "worker" | "virtual"; virtualProvider?: string; virtualModel?: string; workerEndpointId?: string } {
-  const input = {
-    routeKind: body?.routeKind as "worker" | "virtual",
-    virtualProvider: typeof body?.virtualProvider === "string" ? body.virtualProvider.trim() : undefined,
-    virtualModel: typeof body?.virtualModel === "string" ? body.virtualModel.trim() : undefined,
-    workerEndpointId: typeof body?.workerEndpointId === "string" ? body.workerEndpointId.trim() : undefined,
-  };
-  if (input.routeKind !== "worker" && input.routeKind !== "virtual") {
+export function parseThreadRouteInput(body: unknown): { routeKind: "worker" | "virtual"; virtualProvider?: string; virtualModel?: string; workerEndpointId?: string } {
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid input: body must be an object");
+  }
+  const typedBody = body as Record<string, unknown>;
+  const routeKind = typedBody.routeKind;
+  if (routeKind !== "worker" && routeKind !== "virtual") {
     throw new Error("Invalid routeKind. Must be 'worker' or 'virtual'.");
   }
-  return input;
-}
-
-export function parseImprovePromptInput(body: any): ImprovePromptInput {
   return {
-    name: typeof body?.name === "string" ? body.name.trim() : "",
-    goal: typeof body?.goal === "string" ? body.goal : "",
-    planningAgentPresetId: typeof body?.planningAgentPresetId === "string" ? body.planningAgentPresetId.trim() : undefined,
-    overrides: body?.overrides,
+    routeKind,
+    virtualProvider: typeof typedBody.virtualProvider === "string" ? typedBody.virtualProvider.trim() : undefined,
+    virtualModel: typeof typedBody.virtualModel === "string" ? typedBody.virtualModel.trim() : undefined,
+    workerEndpointId: typeof typedBody.workerEndpointId === "string" ? typedBody.workerEndpointId.trim() : undefined,
   };
 }
 
-export function parsePlanSprintOptions(body: any): PlanSprintOptions {
+export function parseImprovePromptInput(body: unknown): ImprovePromptInput {
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid input: body must be an object");
+  }
+  const typedBody = body as Record<string, unknown>;
   return {
-    autoStart: Boolean(body?.autoStart),
-    replan: Boolean(body?.replan),
-    planningAgentPresetId: typeof body?.planningAgentPresetId === "string" ? body.planningAgentPresetId.trim() : undefined,
-    overrides: body?.overrides,
+    name: typeof typedBody.name === "string" ? typedBody.name.trim() : "",
+    goal: typeof typedBody.goal === "string" ? typedBody.goal : "",
+    planningAgentPresetId: typeof typedBody.planningAgentPresetId === "string" ? typedBody.planningAgentPresetId.trim() : undefined,
+    overrides: typedBody.overrides as ImprovePromptInput["overrides"],
+  };
+}
+
+export function parsePlanSprintOptions(body: unknown): PlanSprintOptions {
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid input: body must be an object");
+  }
+  const typedBody = body as Record<string, unknown>;
+  return {
+    autoStart: Boolean(typedBody.autoStart),
+    replan: Boolean(typedBody.replan),
+    planningAgentPresetId: typeof typedBody.planningAgentPresetId === "string" ? typedBody.planningAgentPresetId.trim() : undefined,
+    overrides: typedBody.overrides as PlanSprintOptions["overrides"],
+  };
+}
+
+export function parseRerunTaskOptions(body: unknown): { provider?: string; clearWorktree?: boolean; resetDependents?: boolean } {
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid input: body must be an object");
+  }
+  const typedBody = body as Record<string, unknown>;
+  return {
+    provider: typeof typedBody.provider === "string" ? typedBody.provider : undefined,
+    clearWorktree: Boolean(typedBody.clearWorktree),
+    resetDependents: Boolean(typedBody.resetDependents),
+  };
+}
+
+export function parsePreferredWorkerAssignment(body: unknown): { workerConnectionId?: string | null; workerEndpointId?: string | null; workerEndpointKey?: string | null } {
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid input: body must be an object");
+  }
+  const typedBody = body as Record<string, unknown>;
+
+  const parseNullable = (value: unknown): string | null | undefined => {
+    if (value === null) return null;
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  };
+
+  return {
+    workerConnectionId: parseNullable(typedBody.workerConnectionId),
+    workerEndpointId: parseNullable(typedBody.workerEndpointId),
+    workerEndpointKey: parseNullable(typedBody.workerEndpointKey),
+  };
+}
+
+export function parseClaimAttentionItemPayload(body: unknown): { workerEndpointId?: string; claimReason?: string } {
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid input: body must be an object");
+  }
+  const typedBody = body as Record<string, unknown>;
+  return {
+    workerEndpointId: typeof typedBody.workerEndpointId === "string" ? typedBody.workerEndpointId.trim() : undefined,
+    claimReason: typeof typedBody.claimReason === "string" ? typedBody.claimReason.trim() : undefined,
+  };
+}
+
+export function parseResolveAttentionItemPayload(body: unknown): { status: "resolved" | "dismissed"; reason?: string; resolutionSummaryMarkdown?: string } {
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid input: body must be an object");
+  }
+  const typedBody = body as Record<string, unknown>;
+  const requestedStatus = typeof typedBody.status === "string" ? typedBody.status.trim() : undefined;
+
+  if (requestedStatus !== "resolved" && requestedStatus !== "dismissed") {
+    throw new Error("Invalid status. Must be 'resolved' or 'dismissed'.");
+  }
+
+  return {
+    status: requestedStatus,
+    reason: typeof typedBody.reason === "string" ? typedBody.reason.trim() : undefined,
+    resolutionSummaryMarkdown: typeof typedBody.resolutionSummaryMarkdown === "string"
+      ? typedBody.resolutionSummaryMarkdown
+      : undefined,
+  };
+}
+
+export function parseCreateConversationThreadInput(body: unknown): CreateConversationThreadInput {
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid input: body must be an object");
+  }
+  const typedBody = body as Record<string, unknown>;
+  const title = typeof typedBody.title === "string" ? typedBody.title.trim() : "";
+  if (!title) {
+    throw new Error("Missing or empty required field: title");
+  }
+
+  let scope = typedBody.scope as ConversationThreadScope | undefined;
+  if (scope !== undefined && scope !== "project" && scope !== "connection") {
+    throw new Error("Invalid scope. Must be 'project' or 'connection'.");
+  }
+
+  return {
+    title,
+    connectionId: typeof typedBody.connectionId === "string" ? typedBody.connectionId.trim() : (typedBody.connectionId === null ? null : undefined),
+    scope,
+    runtimeState: typedBody.runtimeState as CreateConversationThreadInput["runtimeState"],
+  };
+}
+
+export function parseUpdateConversationThreadInput(body: unknown): UpdateConversationThreadInput {
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid input: body must be an object");
+  }
+  const typedBody = body as Record<string, unknown>;
+  return {
+    connectionId: typeof typedBody.connectionId === "string" ? typedBody.connectionId.trim() : (typedBody.connectionId === null ? null : undefined),
+    runtimeState: typedBody.runtimeState as UpdateConversationThreadInput["runtimeState"],
+  };
+}
+
+export function parseCreateDashboardConversationMessageInput(body: unknown): CreateDashboardConversationMessageInput {
+  if (!body || typeof body !== "object") {
+    throw new Error("Invalid input: body must be an object");
+  }
+  const typedBody = body as Record<string, unknown>;
+  const bodyMarkdown = typeof typedBody.bodyMarkdown === "string" ? typedBody.bodyMarkdown.trim() : "";
+  if (!bodyMarkdown) {
+    throw new Error("Missing or empty required field: bodyMarkdown");
+  }
+
+  return {
+    bodyMarkdown,
+    threadId: typeof typedBody.threadId === "string" ? typedBody.threadId.trim() : undefined,
+    title: typeof typedBody.title === "string" ? typedBody.title.trim() : undefined,
+    connectionId: typeof typedBody.connectionId === "string" ? typedBody.connectionId.trim() : (typedBody.connectionId === null ? null : undefined),
+    metadata: typedBody.metadata as CreateDashboardConversationMessageInput["metadata"],
   };
 }
 

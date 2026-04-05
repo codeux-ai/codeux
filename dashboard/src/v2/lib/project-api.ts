@@ -24,8 +24,8 @@ import type {
 } from "../../types.js";
 import { fetchJson } from "../../lib/api/fetch-json.js";
 
-export const fetchProjects = async (): Promise<ProjectCollectionResponse> => {
-  return fetchJson<ProjectCollectionResponse>("/api/projects");
+export const fetchProjects = async (signal?: AbortSignal): Promise<ProjectCollectionResponse> => {
+  return fetchJson<ProjectCollectionResponse>("/api/projects", { signal });
 };
 
 export const createProject = async (input: CreateProjectInput): Promise<ProjectSummary> => {

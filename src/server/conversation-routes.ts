@@ -1,11 +1,14 @@
 import type { Express } from "express";
 import type { DashboardDependencies } from "./dashboard-server.js";
-import { asyncRoute, requireTrimmedString, syncRoute, parseThreadRouteInput } from "./route-utils.js";
-import type {
-  CreateConversationThreadInput,
-  UpdateConversationThreadInput,
-  CreateDashboardConversationMessageInput,
-} from "../contracts/connection-chat-types.js";
+import {
+  asyncRoute,
+  requireTrimmedString,
+  syncRoute,
+  parseThreadRouteInput,
+  parseCreateConversationThreadInput,
+  parseUpdateConversationThreadInput,
+  parseCreateDashboardConversationMessageInput,
+} from "./route-utils.js";
 
 export function registerConversationRoutes(app: Express, options: DashboardDependencies): void {
   app.get("/api/projects/:projectId/conversations/threads", syncRoute((req, res) => {
@@ -14,12 +17,18 @@ export function registerConversationRoutes(app: Express, options: DashboardDepen
 
   app.post("/api/projects/:projectId/conversations/threads", syncRoute((req, res) => {
     res.status(201).json(
-      options.createConversationThread(requireTrimmedString(req.params.projectId, "projectId"), req.body as CreateConversationThreadInput)
+      options.createConversationThread(
+        requireTrimmedString(req.params.projectId, "projectId"),
+        parseCreateConversationThreadInput(req.body)
+      )
     );
   }));
 
   app.patch("/api/conversations/threads/:threadId", syncRoute((req, res) => {
-    res.json(options.updateConversationThread(requireTrimmedString(req.params.threadId, "threadId"), req.body as UpdateConversationThreadInput));
+    res.json(options.updateConversationThread(
+      requireTrimmedString(req.params.threadId, "threadId"),
+      parseUpdateConversationThreadInput(req.body)
+    ));
   }));
 
   app.put("/api/conversations/threads/:threadId/route", syncRoute((req, res) => {
@@ -50,7 +59,10 @@ export function registerConversationRoutes(app: Express, options: DashboardDepen
 
   app.post("/api/projects/:projectId/conversations/messages", syncRoute((req, res) => {
     res.status(201).json(
-      options.postConversationMessage(requireTrimmedString(req.params.projectId, "projectId"), req.body as CreateDashboardConversationMessageInput)
+      options.postConversationMessage(
+        requireTrimmedString(req.params.projectId, "projectId"),
+        parseCreateDashboardConversationMessageInput(req.body)
+      )
     );
   }));
 }

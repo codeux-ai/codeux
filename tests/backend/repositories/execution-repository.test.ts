@@ -33,6 +33,33 @@ afterEach(async () => {
 
 describe("ExecutionRepository", () => {
 
+  it("validates project existence for execution snapshot", async () => {
+    const { executionRepository } = await createRepositories();
+    expect(() => executionRepository.getProjectExecutionSnapshot("non-existent-project"))
+      .toThrowError("Project not found: non-existent-project");
+  });
+
+  it("delegates execution snapshot projection to query module for empty project", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Empty Execution Project",
+      sourceType: "local",
+      sourceRef: "/workspace/empty-execution",
+    });
+
+    const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
+    expect(snapshot).toMatchObject({
+      projectId: project.id,
+      projectName: "Empty Execution Project",
+      sprintRuns: [],
+      taskDispatches: [],
+      recentEvents: [],
+      connections: [],
+      overflowAssignedWorkers: [],
+      attentionItems: [],
+    });
+  });
+
   it("creates, updates, lists, and appends messages to execution invocations", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({
@@ -105,11 +132,29 @@ describe("ExecutionRepository", () => {
       status: "running",
     });
 
+    await new Promise(resolve => setTimeout(resolve, 50));
+
+    const invocation3 = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      type: "coding",
+      status: "running",
+    });
+
     const list = executionRepository.listExecutionInvocations({ projectId: project.id });
-    expect(list.length).toBe(2);
+    expect(list.length).toBe(3);
     // ordered by startedAt DESC
-    expect(list[0]!.id).toBe(invocation2.id);
-    expect(list[1]!.id).toBe(invocation1.id);
+    expect(list[0]!.id).toBe(invocation3.id);
+    expect(list[1]!.id).toBe(invocation2.id);
+    expect(list[2]!.id).toBe(invocation1.id);
+
+    // Pagination test
+    const paginatedList = executionRepository.listExecutionInvocations({
+      projectId: project.id,
+      limit: 1,
+      offset: 1
+    });
+    expect(paginatedList.length).toBe(1);
+    expect(paginatedList[0]!.id).toBe(invocation2.id);
   });
 
   it("filters task dispatches by complex options combinations", async () => {

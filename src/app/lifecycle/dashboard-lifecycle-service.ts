@@ -350,6 +350,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
       const saved = deps.settingsRepository.saveProjectSettings(projectId, settings);
       cache.invalidateProjectExecution(projectId);
       cache.invalidateProjects();
+      deps.dashboardRealtimeService.scheduleProjectStructureRefresh(projectId, { includeProjects: true });
       return saved;
     },
     resetProjectSettings: (projectId) => {
@@ -358,6 +359,7 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
         throw new Error(`Project not found: ${projectId}`);
       }
       deps.settingsRepository.resetProjectSettings(projectId);
+      deps.dashboardRealtimeService.scheduleProjectStructureRefresh(projectId, { includeProjects: true });
     },
     getProjectEffectiveSettings: (projectId) => {
       const project = deps.projectManagementRepository.getProject(projectId);

@@ -14,6 +14,7 @@ import {
   detectPullRequestCiSupport,
   type PullRequestCiSupportResult,
 } from "./feature-pr/workflow-ci-detection.js";
+import type { Logger } from "../../../shared/logging/logger.js";
 import type {
   AutomationLevel,
   CiIntelligenceSettings,
@@ -45,6 +46,7 @@ export interface CiGateContext {
   openCiFixAttention?: (task: Subtask, payload: WorkerCiFixPayload) => void;
   hasActiveWorkerCiFixAttempt?: (task: Subtask, prNumber: number) => boolean;
   evaluateTaskQaGate?: (task: Subtask) => TaskQaMergeGateStatus;
+  logger?: Logger;
 }
 
 export interface CiGateResult {
@@ -111,7 +113,7 @@ export class FeaturePrGateService {
     const processResults = await Promise.all(
       completedAwaitingMerge.map((task) =>
         this.processTask(task, context).catch((err) => {
-          console.error(`Error processing task ${task.id}:`, err);
+          context.logger?.error(`Error processing task ${task.id}:`, { error: err });
           return { reportText: "", events: [], attentionItem: undefined };
         })
       )
