@@ -33,6 +33,33 @@ afterEach(async () => {
 
 describe("ExecutionRepository", () => {
 
+  it("validates project existence for execution snapshot", async () => {
+    const { executionRepository } = await createRepositories();
+    expect(() => executionRepository.getProjectExecutionSnapshot("non-existent-project"))
+      .toThrowError("Project not found: non-existent-project");
+  });
+
+  it("delegates execution snapshot projection to query module for empty project", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Empty Execution Project",
+      sourceType: "local",
+      sourceRef: "/workspace/empty-execution",
+    });
+
+    const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
+    expect(snapshot).toMatchObject({
+      projectId: project.id,
+      projectName: "Empty Execution Project",
+      sprintRuns: [],
+      taskDispatches: [],
+      recentEvents: [],
+      connections: [],
+      overflowAssignedWorkers: [],
+      attentionItems: [],
+    });
+  });
+
   it("creates, updates, lists, and appends messages to execution invocations", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({

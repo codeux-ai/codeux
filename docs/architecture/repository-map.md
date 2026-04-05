@@ -41,6 +41,8 @@ This map explains where major responsibilities live.
   - `dashboard-server.ts`
   - Express routes for dashboard APIs and static assets.
 - `repositories/`
+  - `execution-repository.ts`
+  - Delegates snapshot projection to `execution/project-execution-snapshot-query.ts` while keeping validation boundary.
   - `settings-repository.ts`
   - `settings-defaults.ts`
   - `settings-sanitizer.ts`

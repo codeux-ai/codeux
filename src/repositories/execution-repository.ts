@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import { AppDbStorage } from "./app-db-storage.js";
+import { queryProjectExecutionSnapshot } from "./execution/project-execution-snapshot-query.js";
 
 import type {
   ExecutionInvocationRecord,
@@ -1188,47 +1189,7 @@ export class ExecutionRepository {
 
   getProjectExecutionSnapshot(projectId: string): ExecutionDashboardSnapshot {
     this.requireProject(projectId);
-    const projectRow = this.db.prepare(`
-      SELECT id, name
-      FROM projects
-      WHERE id = ?
-    `).get(projectId) as { id: string; name: string } | undefined;
-
-    const { sprintRuns, expandedSprintRunIds } = queryExecutionSprintRuns(this.db, projectId);
-    const taskDispatches = queryExecutionTaskDispatches(this.db, this.storage, projectId, expandedSprintRunIds);
-    const runtimeEvents = queryExecutionRuntimeEvents(this.db, this.storage, projectId, expandedSprintRunIds);
-
-    const activeAttentionItems = this.listActiveAttentionRowsForProject(projectId);
-    const humanInterventionBySprintRunId = this.buildHumanInterventionSummaryBySprintRun(
-      sprintRuns,
-      activeAttentionItems,
-      runtimeEvents,
-    );
-    const usageBySprintRunId = this.getUsageTotalsBySprintRunIds(projectId, sprintRuns.map((row) => row.id));
-    const nowIso = new Date().toISOString();
-    const usageByTaskId = this.getUsageTotalsByTaskIds(projectId, taskDispatches.map((row) => row.task_id));
-    const wallTimeBySprintRunId = this.getWallTimeTotalsBySprintRunIds(sprintRuns.map((row) => row.id), nowIso);
-    const wallTimeByTaskId = this.getWallTimeTotalsByTaskIds(taskDispatches.map((row) => row.task_id), nowIso);
-
-    return {
-      projectId: projectRow?.id || null,
-      projectName: projectRow?.name || null,
-      sprintRuns: sprintRuns.map((row) => this.mapExecutionSprintRunSummaryRow(
-        row,
-        humanInterventionBySprintRunId.get(row.id) || null,
-        this.withWallTime(usageBySprintRunId.get(row.id), wallTimeBySprintRunId.get(row.id) || 0),
-      )),
-      taskDispatches: taskDispatches.map((row) => this.mapExecutionTaskDispatchSummaryRow(
-        row,
-        this.withWallTime(usageByTaskId.get(row.task_id), wallTimeByTaskId.get(row.task_id) || 0),
-      )),
-      connections: [],
-      primaryAssignedWorker: null,
-      overflowAssignedWorkers: [],
-      attentionItems: [],
-      recentEvents: runtimeEvents.map((row) => this.mapExecutionRuntimeEventSummaryRow(row)),
-      updatedAt: new Date().toISOString(),
-    };
+    return queryProjectExecutionSnapshot(this.db, this.storage, projectId);
   }
 
   getProjectStatsSnapshot(
@@ -1886,54 +1847,6 @@ export class ExecutionRepository {
     return map;
   }
 
-  private getWallTimeTotalsByTaskIds(taskIds: string[], nowIso: string): Map<string, number> {
-    if (taskIds.length === 0) {
-      return new Map();
-    }
-    const rows = this.storage.executeChunkedInQuery<{ task_id: string; total_duration_ms: number | string }>({
-      sqlPrefix: `
-      SELECT
-        task_id,
-        SUM(
-          CASE
-            WHEN duration_ms IS NOT NULL AND duration_ms > 0 THEN duration_ms
-            WHEN started_at IS NOT NULL AND finished_at IS NULL THEN CAST((julianday(?) - julianday(started_at)) * 86400000 AS INTEGER)
-            ELSE 0
-          END
-        ) AS total_duration_ms
-      FROM task_runs
-      WHERE task_id`,
-      sqlSuffix: "GROUP BY task_id",
-      items: taskIds,
-      bindParamsBefore: [nowIso],
-    });
-    return new Map(rows.map((row) => [row.task_id, Math.max(0, toNumber(row.total_duration_ms))] as const));
-  }
-
-  private getWallTimeTotalsBySprintRunIds(sprintRunIds: string[], nowIso: string): Map<string, number> {
-    if (sprintRunIds.length === 0) {
-      return new Map();
-    }
-    const rows = this.storage.executeChunkedInQuery<{ sprint_run_id: string; total_duration_ms: number | string }>({
-      sqlPrefix: `
-      SELECT
-        sprint_run_id,
-        SUM(
-          CASE
-            WHEN duration_ms IS NOT NULL AND duration_ms > 0 THEN duration_ms
-            WHEN started_at IS NOT NULL AND finished_at IS NULL THEN CAST((julianday(?) - julianday(started_at)) * 86400000 AS INTEGER)
-            ELSE 0
-          END
-        ) AS total_duration_ms
-      FROM task_runs
-      WHERE sprint_run_id`,
-      sqlSuffix: "GROUP BY sprint_run_id",
-      items: sprintRunIds,
-      bindParamsBefore: [nowIso],
-    });
-    return new Map(rows.map((row) => [row.sprint_run_id, Math.max(0, toNumber(row.total_duration_ms))] as const));
-  }
-
   private getWallTimeTotalsByTaskIdsForRange(projectId: string, rangeStartIso: string, rangeEndIso: string, nowIso: string): Map<string, number> {
     const rows = this.db.prepare(`
       SELECT
@@ -2302,42 +2215,6 @@ export class ExecutionRepository {
       activeLeaseOwnerKey: row.active_lease_owner_key,
       activeLeaseExpiresAt: row.active_lease_expires_at,
       humanIntervention,
-      usage,
-    };
-  }
-
-  private mapExecutionTaskDispatchSummaryRow(row: ExecutionTaskDispatchSummaryRow, usage: ExecutionUsageTotals): ExecutionTaskDispatchSummary {
-    return {
-      id: row.id,
-      projectId: row.project_id,
-      sprintId: row.sprint_id,
-      sprintRunId: row.sprint_run_id,
-      sprintName: row.sprint_name,
-      sprintNumber: row.sprint_number === null ? null : toNumber(row.sprint_number),
-      taskId: row.task_id,
-      taskKey: row.task_key,
-      taskTitle: row.task_title,
-      status: row.status,
-      executorType: row.executor_type,
-      priority: toNumber(row.priority),
-      connectionId: row.connection_id,
-      connectionDisplayName: row.connection_display_name,
-      connectionRole: row.connection_role,
-      taskRunId: row.task_run_id,
-      taskRunState: row.task_run_state,
-      provider: row.provider,
-      sessionId: row.session_id,
-      sessionName: row.session_name,
-      workerBranch: row.worker_branch,
-      prUrl: row.pr_url,
-      queuedAt: row.queued_at,
-      claimedAt: row.claimed_at,
-      startedAt: row.started_at,
-      finishedAt: row.finished_at,
-      lastHeartbeatAt: row.last_heartbeat_at,
-      errorMessage: row.error_message,
-      activeLeaseOwnerKey: row.active_lease_owner_key,
-      activeLeaseExpiresAt: row.active_lease_expires_at,
       usage,
     };
   }
