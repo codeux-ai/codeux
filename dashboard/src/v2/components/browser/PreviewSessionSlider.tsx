@@ -1,21 +1,14 @@
 import type { FunctionComponent } from "preact";
 import { useRef } from "preact/hooks";
-import { ChevronLeft, ChevronRight, ExternalLink, Globe, Play, Trash2, Loader2, CheckCircle2 } from "lucide-preact";
+import { ChevronLeft, ChevronRight, ExternalLink, Globe, Trash2, Loader2, CheckCircle2 } from "lucide-preact";
 import type { SprintPreviewSession } from "../../../types.js";
-import type { Sprint } from "../../types.js";
 import { buildPreviewOrigin } from "../../lib/preview-origin.js";
 
 interface PreviewSessionSliderProps {
   sessions: SprintPreviewSession[];
-  sprints: Sprint[];
   selectedSessionId: string | null;
-  launchSprintId: string;
   onSelectSession: (id: string) => void;
-  onLaunchSprintChange: (sprintId: string) => void;
-  onLaunchContainer: () => void;
   onRemoveSession: (sessionId: string) => void;
-  launchEnabled?: boolean;
-  launchBusy?: boolean;
   removingSessionIds?: string[];
 }
 
@@ -49,19 +42,13 @@ const formatPortMapping = (session: SprintPreviewSession): string => {
 
 export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> = ({
   sessions,
-  sprints,
   selectedSessionId,
-  launchSprintId,
   onSelectSession,
-  onLaunchSprintChange,
-  onLaunchContainer,
   onRemoveSession,
-  launchEnabled = true,
-  launchBusy = false,
   removingSessionIds = [],
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const cardCount = sessions.length + 1;
+  const cardCount = sessions.length;
   const removingSessionIdSet = new Set(removingSessionIds);
 
   const scrollLeft = () => {
@@ -111,10 +98,10 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
           return (
             <div
               key={session.id}
-              className={`flex-none w-[280px] lg:w-[calc(20%-0.6rem)] snap-center rounded-[1.5rem] border p-4 transition-all relative ${
+              className={`flex-none w-[280px] lg:w-[calc(20%-0.6rem)] snap-start rounded-[1.5rem] border p-4 transition-all relative ${
                 active
                   ? "border-signal-500/60 bg-white/95 shadow-[0_10px_40px_rgba(15,23,42,0.1)] ring-1 ring-signal-500/20 dark:bg-[#05080d]/95 dark:shadow-[0_10px_40px_rgba(0,0,0,0.4)]"
-                  : "border-black/[0.08] bg-white/60 hover:border-black/[0.16] hover:bg-white/80 dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:border-white/[0.16] dark:hover:bg-white/[0.04]"
+                  : "border-black/[0.08] bg-white/60 backdrop-blur-md hover:border-black/[0.16] hover:bg-white/80 dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:border-white/[0.16] dark:hover:bg-white/[0.04]"
               }`}
             >
               {active && (
@@ -191,63 +178,6 @@ export const PreviewSessionSlider: FunctionComponent<PreviewSessionSliderProps> 
           );
         })}
 
-        <div className="flex-none w-[280px] snap-center rounded-[1.5rem] border border-dashed border-signal-500/25 bg-gradient-to-br from-signal-500/[0.08] via-white/70 to-emerald-500/[0.06] p-4 dark:border-signal-500/20 dark:from-signal-500/[0.12] dark:via-[#05080d]/92 dark:to-emerald-500/[0.08] lg:w-[calc(20%-0.6rem)]">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <span className="truncate text-sm font-semibold text-slate-900 dark:text-white">
-              Launch Container
-            </span>
-            <span className="rounded-full border border-signal-500/20 bg-signal-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-signal-600 dark:text-signal-300">
-              New
-            </span>
-          </div>
-
-          <div className="text-[11px] leading-5 text-slate-600 dark:text-slate-400">
-            Start a preview container for any sprint without changing which sessions are shown in the browser rail.
-          </div>
-
-          <div className="mt-4 space-y-3">
-            <label className="block text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">
-              Sprint
-            </label>
-            <select
-              value={launchSprintId}
-              onChange={(event) => onLaunchSprintChange((event.currentTarget as HTMLSelectElement).value)}
-              aria-disabled={!launchEnabled || launchBusy || sprints.length === 0}
-              className={`w-full rounded-[1rem] border border-black/[0.08] bg-white/85 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-signal-500/40 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200 ${
-                (!launchEnabled || launchBusy || sprints.length === 0) ? "cursor-not-allowed opacity-60 pointer-events-none" : ""
-              }`}
-            >
-              {sprints.length === 0 && <option value="">No sprints available</option>}
-              {sprints.map((sprint) => (
-                <option key={sprint.id} value={sprint.id}>
-                  {sprint.name}
-                </option>
-              ))}
-            </select>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (launchEnabled && !launchBusy && sprints.length > 0 && launchSprintId) {
-                  onLaunchContainer();
-                }
-              }}
-              aria-disabled={!launchEnabled || launchBusy || sprints.length === 0 || !launchSprintId}
-              className={`inline-flex h-10 w-full items-center justify-center gap-2 rounded-[1rem] px-4 text-sm font-semibold text-void-900 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 ${
-                (!launchEnabled || launchBusy || sprints.length === 0 || !launchSprintId)
-                  ? "bg-signal-500/50 cursor-not-allowed opacity-80"
-                  : "bg-signal-500 hover:bg-signal-400"
-              }`}
-            >
-              {launchBusy ? (
-                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2.5} />
-              ) : (
-                <Play className="h-4 w-4" strokeWidth={2.2} />
-              )}
-              {launchBusy ? "Starting..." : sprints.length === 0 ? "No Sprints" : !launchEnabled ? "Unavailable" : "Launch Container"}
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );
