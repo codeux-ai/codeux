@@ -33,6 +33,8 @@ export interface RealtimeResourceOptions<T> {
     updateDirectlyFromEvent?: boolean;
     /** A callback invoked whenever the underlying connection changes state. */
     onTransportState?: (state: TransportState) => void;
+    /** Custom filter function to determine if a message should trigger a silent refetch. Overrides eventType behavior. */
+    shouldRefetch?: (message: DashboardRealtimeServerMessage) => boolean;
   };
 
   /**
@@ -215,7 +217,14 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
     const cleanupSubscription = subscribeToDashboardRealtime(
       options.realtime.scopes,
       (message: DashboardRealtimeServerMessage) => {
-        const { eventType, updateDirectlyFromEvent } = optionsRef.current.realtime || {};
+        const { eventType, updateDirectlyFromEvent, shouldRefetch } = optionsRef.current.realtime || {};
+
+        if (shouldRefetch) {
+          if (shouldRefetch(message)) {
+            void refreshInternal({ silent: true });
+          }
+          return;
+        }
 
         if (eventType && message.type === "event" && message.event.eventType === eventType) {
           if (updateDirectlyFromEvent) {
