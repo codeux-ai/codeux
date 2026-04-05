@@ -237,7 +237,8 @@ export class WorkerTaskDispatchService {
     const now = new Date().toISOString();
     this.projectWorkerAssignmentService.noteWorkerActivity(dispatch.projectId, workerEndpoint.id);
     const cancelRequested = dispatch.status === "cancel_requested";
-    const taskUpdateStatus = cancelRequested
+    const pauseRequested = dispatch.status === "paused";
+    const taskUpdateStatus = cancelRequested || pauseRequested
       ? "pending"
       : args.state === "COMPLETED"
         ? "coding_completed"
@@ -249,9 +250,9 @@ export class WorkerTaskDispatchService {
 
     const nextDispatch = this.executionRepository.updateTaskDispatch(dispatch.id, {
       connectionId: args.connectionId ?? dispatch.connectionId ?? null,
-      status: this.mapTaskRunStateToDispatchStatus(args.state, cancelRequested),
+      status: this.mapTaskRunStateToDispatchStatus(args.state, cancelRequested, pauseRequested),
       startedAt: dispatch.startedAt || now,
-      finishedAt: args.state === "RUNNING" ? dispatch.finishedAt : now,
+      finishedAt: args.state === "RUNNING" && !pauseRequested ? dispatch.finishedAt : now,
       lastHeartbeatAt: now,
       errorMessage: args.errorMessage === undefined ? dispatch.errorMessage : args.errorMessage,
     });
@@ -262,12 +263,12 @@ export class WorkerTaskDispatchService {
       mode: "mcp_worker",
       sessionId: args.sessionId === undefined ? taskRun.sessionId : args.sessionId,
       sessionName: args.sessionName === undefined ? taskRun.sessionName : args.sessionName,
-      state: args.state,
+      state: pauseRequested ? "PAUSED" : args.state,
       workerBranch: args.workerBranch === undefined ? taskRun.workerBranch : args.workerBranch,
       prUrl: args.prUrl === undefined ? taskRun.prUrl : args.prUrl,
       startedAt: taskRun.startedAt || now,
-      finishedAt: args.state === "RUNNING" ? null : now,
-      durationMs: args.state === "RUNNING" || !(taskRun.startedAt || nextDispatch.startedAt)
+      finishedAt: args.state === "RUNNING" && !pauseRequested ? null : now,
+      durationMs: args.state === "RUNNING" && !pauseRequested || !(taskRun.startedAt || nextDispatch.startedAt)
         ? null
         : Math.max(0, new Date(now).getTime() - new Date(taskRun.startedAt || nextDispatch.startedAt || now).getTime()),
     });
@@ -276,7 +277,7 @@ export class WorkerTaskDispatchService {
       status: taskUpdateStatus,
     });
 
-    this.executionRepository.appendTaskRunEvent(taskRun.id, this.mapTaskRunStateToEventType(args.state, cancelRequested), args.connectionId ? "connection" : "system", {
+    this.executionRepository.appendTaskRunEvent(taskRun.id, this.mapTaskRunStateToEventType(args.state, cancelRequested, pauseRequested), args.connectionId ? "connection" : "system", {
       dispatchId: dispatch.id,
       connectionId: args.connectionId ?? null,
       connectionKey: args.connectionKey ?? null,
@@ -295,7 +296,7 @@ export class WorkerTaskDispatchService {
       this.captureDispatchSummaryMemory(dispatch, args.summaryMarkdown);
     }
 
-    if (args.state === "RUNNING") {
+    if (args.state === "RUNNING" && !pauseRequested) {
       this.executionRepository.renewLease({
         scopeType: "task_dispatch",
         scopeId: dispatch.id,
@@ -315,6 +316,13 @@ export class WorkerTaskDispatchService {
         dispatch: nextDispatch,
         controlAction: cancelRequested ? "cancel" : null,
       };
+    }
+
+    if (pauseRequested) {
+        return {
+            dispatch: nextDispatch,
+            controlAction: "cancel",
+        };
     }
 
     this.executionRepository.releaseLease("task_dispatch", dispatch.id, args.leaseToken);
@@ -482,9 +490,16 @@ export class WorkerTaskDispatchService {
   }
 
   private mapTaskRunStateToDispatchStatus(
-    state: UpdateWorkerTaskDispatchArgs["state"],
+    state: UpdateWorkerTaskDispatchArgs["state"] | "PAUSED",
     cancelRequested: boolean,
+    pauseRequested: boolean,
   ) {
+    if (pauseRequested) {
+      if (state === "RUNNING") {
+        return "paused";
+      }
+      return "paused";
+    }
     if (cancelRequested) {
       if (state === "RUNNING") {
         return "cancel_requested";
@@ -500,6 +515,8 @@ export class WorkerTaskDispatchService {
         return "blocked";
       case "QUOTA":
         return "quota";
+      case "PAUSED":
+        return "paused";
       case "RUNNING":
       default:
         return "running";
@@ -507,9 +524,13 @@ export class WorkerTaskDispatchService {
   }
 
   private mapTaskRunStateToEventType(
-    state: UpdateWorkerTaskDispatchArgs["state"],
+    state: UpdateWorkerTaskDispatchArgs["state"] | "PAUSED",
     cancelRequested: boolean,
+    pauseRequested: boolean,
   ): string {
+    if (pauseRequested) {
+      return state === "RUNNING" ? "worker_pause_pending" : "worker_paused";
+    }
     if (cancelRequested) {
       return state === "RUNNING" ? "worker_cancel_pending" : "worker_cancelled";
     }
@@ -522,6 +543,8 @@ export class WorkerTaskDispatchService {
         return "worker_blocked";
       case "QUOTA":
         return "worker_quota";
+      case "PAUSED":
+        return "worker_paused";
       case "RUNNING":
       default:
         return "worker_heartbeat";

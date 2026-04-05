@@ -3,8 +3,8 @@ export type SprintRunTriggerType = "manual" | "dashboard" | "mcp" | "system";
 export type SprintRunExecutorMode = "mixed" | "docker_cli" | "jules" | "mcp_worker";
 
 export type TaskDispatchExecutorType = "docker_cli" | "jules" | "mcp_worker";
-export type TaskDispatchStatus = "queued" | "claimed" | "running" | "cancel_requested" | "completed" | "failed" | "cancelled" | "blocked" | "quota";
-export type TaskRunState = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED" | "QUOTA";
+export type TaskDispatchStatus = "queued" | "claimed" | "running" | "cancel_requested" | "completed" | "failed" | "cancelled" | "blocked" | "quota" | "paused";
+export type TaskRunState = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED" | "BLOCKED" | "QUOTA" | "PAUSED";
 export type ProviderInvocationPurpose = "task_coding" | "ci_fix" | "merge_conflict" | "planning" | "worker_reply" | "qa_review" | "clarification_reply";
 export type ProviderInvocationStatus = "running" | "completed" | "failed" | "cancelled";
 export type TokenUsageSource = "reported" | "estimated" | "unsupported" | "unavailable";
