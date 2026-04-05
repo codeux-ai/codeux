@@ -243,13 +243,14 @@ export class MemoryRepository {
     scope?: MemoryScope,
     sprintId?: string,
     agentPresetId?: string,
+    limit?: number,
   ): EmbeddingRecord[] {
     let sql = `
       SELECT id, embedding_blob, embedding_dimension
       FROM memories
       WHERE project_id = ? AND embedding_model = ? AND embedding_blob IS NOT NULL
     `;
-    const params: string[] = [projectId, model];
+    const params: any[] = [projectId, model];
 
     if (scope) {
       sql += " AND scope = ?";
@@ -262,6 +263,11 @@ export class MemoryRepository {
     if (agentPresetId) {
       sql += " AND agent_preset_id = ?";
       params.push(agentPresetId);
+    }
+
+    if (limit !== undefined) {
+      sql += " ORDER BY created_at DESC LIMIT ?";
+      params.push(limit);
     }
 
     const rows = this.db.prepare(sql).all(...params) as unknown as EmbeddingRow[];

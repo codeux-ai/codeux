@@ -66,16 +66,23 @@ export const useDashboardRuntimeData = (projectIdHint: string | null = null): Us
 
   // Use state to track the realtime project ID so it can be updated
   // when the snapshot is fetched and contains a different project ID
-  const [inferredProjectId, setInferredProjectId] = useState<string | null>(projectIdHint);
+  const [fetchedProjectId, setFetchedProjectId] = useState<string | null>(null);
 
   const fetchResourceWithProjectExtraction = useCallback(async (signal?: AbortSignal) => {
     const data = await fetchResource(signal);
-    const newId = projectIdHint || data.projectId || data.status.project_id || null;
+    const newId = data.projectId || data.status.project_id || null;
     if (newId) {
-       setInferredProjectId(newId);
+       setFetchedProjectId((prev) => prev !== newId ? newId : prev);
     }
     return data;
-  }, [fetchResource, projectIdHint]);
+  }, [fetchResource]);
+
+  const activeProjectId = projectIdHint || fetchedProjectId;
+
+  const initialData = useMemo(() => ({
+    ...EMPTY_LIVE_SNAPSHOT,
+    projectId: projectIdHint,
+  }), [projectIdHint]);
 
   const {
     data: finalSnapshot,
@@ -85,11 +92,11 @@ export const useDashboardRuntimeData = (projectIdHint: string | null = null): Us
     isRecovering: finalIsRecovering,
     refetch: finalRefetch,
   } = useRealtimeResource<ProjectLiveDashboardSnapshot>({
-    initialData: EMPTY_LIVE_SNAPSHOT,
+    initialData,
     fetchResource: fetchResourceWithProjectExtraction,
     isEqual,
-    realtime: inferredProjectId ? {
-      scopes: [`project:${inferredProjectId}`],
+    realtime: activeProjectId ? {
+      scopes: [`project:${activeProjectId}`],
       eventType: "project.live.updated",
       updateDirectlyFromEvent: true,
     } : undefined,

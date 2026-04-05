@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import type {
   AgentConnection,
-  ChatMessageRecord,
   ChatThread,
   ExecutionInvocationRecord,
-  ExecutionInvocationMessageRecord,
+  ChatMessageRecord,
 } from "../types.js";
 import type {
   DashboardRealtimeServerMessage,
@@ -14,90 +13,24 @@ import type {
 import { useMessageCache } from "./useMessageCache.js";
 import { useProjectData } from "../context/project-data.js";
 import {
-  createConversationThread,
-  deleteConversationThread,
-  fetchConversationMessages,
   fetchConversationThreads,
   fetchProjectConnections,
-  postConversationMessage,
-  updateConversationThread,
-  updateThreadRoute,
-  compactThreadSession,
 } from "../lib/connection-api.js";
 import {
   isDetailLoading,
   isListLoading,
   resolveSelectedItemId,
 } from "../lib/chat-page-state-utils.js";
-import { upsertChatThread } from "../lib/chat-thread-utils.js";
-import { fetchInvocationMessages, fetchProjectInvocations } from "../lib/invocation-api.js";
+import { fetchProjectInvocations } from "../lib/invocation-api.js";
 import { subscribeToDashboardRealtime } from "../../lib/realtime/dashboard-realtime-client.js";
 import { useExecutions } from "../../hooks/useExecutions.js";
 import { getProjectWorkerOptions, type WorkerRoutingPreference } from "../lib/project-worker-options.js";
-import { buildThreadIndex, buildInvocationIndex, buildConnectionIndex } from "../lib/chat-entity-index.js";
+import { buildConnectionIndex } from "../lib/chat-entity-index.js";
 import { useProjectEffectiveSettings } from "./use-project-effective-settings.js";
-import { toChatTimestampMs } from "../lib/chat-time.js";
-import { useActionFeedback } from "./use-action-feedback.js";
-import { useConfirmDialog } from "./use-confirm-dialog.js";
-
-const isWorkingMessage = (
-  message: ChatMessageRecord,
-  allMessages: ChatMessageRecord[],
-): boolean => {
-  if (message.direction !== "dashboard_to_connection" || message.deliveryStatus !== "delivered") {
-    return false;
-  }
-
-  return !allMessages.some((candidate) => (
-    candidate.threadId === message.threadId
-    && candidate.direction === "connection_to_dashboard"
-    && toChatTimestampMs(candidate.createdAt) >= toChatTimestampMs(message.createdAt)
-  ));
-};
-
-const upsertMessage = (messages: ChatMessageRecord[], nextMessage: ChatMessageRecord): ChatMessageRecord[] => {
-  if (messages.some((message) => message.id === nextMessage.id)) {
-    return messages;
-  }
-
-  return [...messages, nextMessage].sort((left, right) => {
-    const byCreatedAt = toChatTimestampMs(left.createdAt) - toChatTimestampMs(right.createdAt);
-    if (byCreatedAt !== 0) {
-      return byCreatedAt;
-    }
-    return left.id.localeCompare(right.id);
-  });
-};
-
-const removeThread = (threads: ChatThread[], threadId: string): ChatThread[] => (
-  threads.filter((thread) => thread.id !== threadId)
-);
-
-const areThreadsEqual = (left: ChatThread[], right: ChatThread[]): boolean => (
-  left.length === right.length
-  && left.every((thread, index) => {
-    const candidate = right[index];
-    return Boolean(candidate)
-      && candidate.id === thread.id
-      && candidate.updatedAt === thread.updatedAt
-      && candidate.lastMessageAt === thread.lastMessageAt
-      && candidate.lastMessagePreview === thread.lastMessagePreview
-      && candidate.messageCount === thread.messageCount
-      && candidate.pendingMessageCount === thread.pendingMessageCount
-      && candidate.connectionId === thread.connectionId;
-  })
-);
-
-const areMessagesEqual = (left: ChatMessageRecord[], right: ChatMessageRecord[]): boolean => (
-  left.length === right.length
-  && left.every((message, index) => {
-    const candidate = right[index];
-    return Boolean(candidate)
-      && candidate.id === message.id
-      && candidate.createdAt === message.createdAt
-      && candidate.deliveryStatus === message.deliveryStatus;
-  })
-);
+import { type RefObject } from "preact";
+import { useChatThreadData, removeThread, upsertMessage, isWorkingMessage } from "./use-chat-thread-data.js";
+import { useInvocationPaneData } from "./use-invocation-pane-data.js";
+import { upsertChatThread } from "../lib/chat-thread-utils.js";
 
 const areConnectionsEqual = (left: AgentConnection[], right: AgentConnection[]): boolean => (
   left.length === right.length
@@ -143,16 +76,8 @@ const toAgentConnection = (connection: ExecutionConnectionSummary): AgentConnect
   activeDispatchCount: connection.activeDispatchCount,
 });
 
-import { type RefObject } from "preact";
-
 export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextAreaElement>; messagesRef?: RefObject<HTMLDivElement> }) => {
-const selectedThreadIdRef = useRef<string | null>(null);
-  const selectedInvocationIdRef = useRef<string | null>(null);
-  const threadsRef = useRef<ChatThread[]>([]);
   const cache = useMessageCache();
-  const inflightMessageFetchesRef = useRef(new Map<string, Promise<ChatMessageRecord[]>>());
-  const inflightInvocationFetchesRef = useRef(new Map<string, Promise<ExecutionInvocationMessageRecord[]>>());
-  const activationTokenRef = useRef(0);
   const { selectedProject } = useProjectData();
 
   const { data: execution, loading: executionLoading } = useExecutions(selectedProject?.id || null);
@@ -166,328 +91,73 @@ const selectedThreadIdRef = useRef<string | null>(null);
   const { options: workerOptions } = getProjectWorkerOptions(execution, workerRouting, executionLoading);
 
   const [chatMode, setChatMode] = useState<"threads" | "invocations">("threads");
-  const [threads, setThreads] = useState<ChatThread[]>([]);
-  const [invocations, setInvocations] = useState<ExecutionInvocationRecord[]>([]);
   const [connections, setConnections] = useState<AgentConnection[]>([]);
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
-  const [selectedInvocationId, setSelectedInvocationId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessageRecord[]>([]);
-  const [invocationMessages, setInvocationMessages] = useState<ExecutionInvocationMessageRecord[]>([]);
-  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [messagesLoading, setMessagesLoading] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
-  const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
-  const [assigningRoute, setAssigningRoute] = useState(false);
-  const [compacting, setCompacting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const { feedback, setSuccess, clearFeedback } = useActionFeedback();
-  const {
-    isOpen: isConfirmOpen,
-    options: confirmOptions,
-    requestConfirm,
-    handleConfirm,
-    handleCancel,
-  } = useConfirmDialog();
+  const threadData = useChatThreadData({
+    selectedProject,
+    cache,
+    execution,
+    workerRouting,
+    composerRef: options?.composerRef,
+    messagesRef: options?.messagesRef,
+  });
 
-  const threadIndex = useMemo(() => buildThreadIndex(threads), [threads]);
-  const invocationIndex = useMemo(() => buildInvocationIndex(invocations), [invocations]);
+  const invocationData = useInvocationPaneData({
+    selectedProject,
+    cache,
+  });
+
   const connectionIndex = useMemo(() => buildConnectionIndex(connections), [connections]);
-
-  const selectedThread = useMemo(
-    () => (selectedThreadId ? threadIndex.get(selectedThreadId) || null : null),
-    [threadIndex, selectedThreadId]
-  );
-
-  const selectedInvocation = useMemo(
-    () => (selectedInvocationId ? invocationIndex.get(selectedInvocationId) || null : null),
-    [invocationIndex, selectedInvocationId]
-  );
-
-  useEffect(() => {
-    selectedThreadIdRef.current = selectedThreadId;
-  }, [selectedThreadId]);
-
-  useEffect(() => {
-    selectedInvocationIdRef.current = selectedInvocationId;
-  }, [selectedInvocationId]);
-
-  useEffect(() => {
-    threadsRef.current = threads;
-  }, [threads]);
-
-  const setThreadsSnapshot = useCallback((nextThreads: ChatThread[]): void => {
-    setThreads((current) => areThreadsEqual(current, nextThreads) ? current : nextThreads);
-  }, []);
-
-  const setInvocationsSnapshot = useCallback((nextInvocations: ExecutionInvocationRecord[]): void => {
-    setInvocations(nextInvocations);
-  }, []);
 
   const setConnectionsSnapshot = useCallback((nextConnections: AgentConnection[]): void => {
     setConnections((current) => areConnectionsEqual(current, nextConnections) ? current : nextConnections);
   }, []);
 
-  const setMessagesSnapshot = useCallback((nextMessages: ChatMessageRecord[]): void => {
-    setMessages((current) => areMessagesEqual(current, nextMessages) ? current : nextMessages);
-  }, []);
+  const {
+    setThreadsSnapshot,
+    setMessagesSnapshot,
+    setSelectedThreadId,
+    setError: setThreadError,
+    activateThread,
+    selectedThreadIdRef,
+    threadsRef,
+    refreshMessages,
+  } = threadData;
 
-  const setInvocationMessagesSnapshot = useCallback((nextMessages: ExecutionInvocationMessageRecord[]): void => {
-    setInvocationMessages(nextMessages);
-  }, []);
+  const {
+    setInvocationsSnapshot,
+    setInvocationMessagesSnapshot,
+    setSelectedInvocationId,
+    setError: setInvocationError,
+    activateInvocation,
+    selectedInvocationIdRef,
+    refreshInvocationMessages,
+  } = invocationData;
 
-  const ensureMessagesLoaded = useCallback(async (threadId: string): Promise<ChatMessageRecord[]> => {
-    const cachedMessages = cache.getMessages(threadId);
-    if (cachedMessages) {
-      return cachedMessages;
-    }
-
-    const inflightRequest = inflightMessageFetchesRef.current.get(threadId);
-    if (inflightRequest) {
-      return inflightRequest;
-    }
-
-    const request = fetchConversationMessages(threadId)
-      .then((nextMessages) => {
-        cache.setMessages(threadId, nextMessages);
-        return nextMessages;
-      })
-      .finally(() => {
-        inflightMessageFetchesRef.current.delete(threadId);
-      });
-
-    inflightMessageFetchesRef.current.set(threadId, request);
-    return request;
-  }, []);
-
-  const ensureInvocationMessagesLoaded = useCallback(async (invocationId: string): Promise<ExecutionInvocationMessageRecord[]> => {
-    const cachedMessages = cache.getInvocationMessages(invocationId);
-    if (cachedMessages) {
-      return cachedMessages;
-    }
-
-    const inflightRequest = inflightInvocationFetchesRef.current.get(invocationId);
-    if (inflightRequest) {
-      return inflightRequest;
-    }
-
-    const request = fetchInvocationMessages(invocationId)
-      .then((nextMessages) => {
-        cache.setInvocationMessages(invocationId, nextMessages);
-        return nextMessages;
-      })
-      .finally(() => {
-        inflightInvocationFetchesRef.current.delete(invocationId);
-      });
-
-    inflightInvocationFetchesRef.current.set(invocationId, request);
-    return request;
-  }, []);
-
-  const activateThread = useCallback(async (
-    threadId: string | null,
-    options?: { foreground?: boolean; preferredThread?: ChatThread | null },
-  ): Promise<void> => {
-    activationTokenRef.current += 1;
-    const activationToken = activationTokenRef.current;
-
-    if (!threadId) {
-      setSelectedThreadId(null);
-      setMessagesSnapshot([]);
-      setMessagesLoading(false);
-      return;
-    }
-
-    const targetThread = options?.preferredThread || threadsRef.current.find((thread) => thread.id === threadId) || null;
-    const cachedMessages = cache.getMessages(threadId);
-    if (cachedMessages) {
-      setSelectedThreadId(threadId);
-      setMessagesSnapshot(cachedMessages);
-      setMessagesLoading(false);
-      return;
-    }
-
-    if ((targetThread?.messageCount || 0) === 0) {
-      cache.setMessages(threadId, []);
-      setSelectedThreadId(threadId);
-      setMessagesSnapshot([]);
-      setMessagesLoading(false);
-      return;
-    }
-
-    if (options?.foreground) {
-      setSelectedThreadId(threadId);
-      setMessagesSnapshot([]);
-      setMessagesLoading(true);
-    }
-
-    try {
-      const nextMessages = await ensureMessagesLoaded(threadId);
-      if (activationToken !== activationTokenRef.current) {
-        return;
-      }
-      setSelectedThreadId(threadId);
-      setMessagesSnapshot(nextMessages);
-      setError(null);
-    } catch (fetchError) {
-      if (activationToken === activationTokenRef.current) {
-        setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
-      }
-    } finally {
-      if (activationToken === activationTokenRef.current) {
-        setMessagesLoading(false);
-      }
-    }
-  }, [ensureMessagesLoaded, setMessagesSnapshot]);
-
-  const activateInvocation = useCallback(async (
-    invocationId: string | null,
-    options?: { foreground?: boolean; preferredInvocation?: ExecutionInvocationRecord | null },
-  ): Promise<void> => {
-    activationTokenRef.current += 1;
-    const activationToken = activationTokenRef.current;
-
-    if (!invocationId) {
-      setSelectedInvocationId(null);
-      setInvocationMessagesSnapshot([]);
-      setMessagesLoading(false);
-      return;
-    }
-
-    const targetInvocation = options?.preferredInvocation || cache.getInvocations(selectedProject?.id || "")?.find((inv) => inv.id === invocationId) || null;
-    const cachedMessages = cache.getInvocationMessages(invocationId);
-    if (cachedMessages) {
-      setSelectedInvocationId(invocationId);
-      setInvocationMessagesSnapshot(cachedMessages);
-      setMessagesLoading(false);
-      return;
-    }
-
-    if ((targetInvocation?.messageCount || 0) === 0) {
-      cache.setInvocationMessages(invocationId, []);
-      setSelectedInvocationId(invocationId);
-      setInvocationMessagesSnapshot([]);
-      setMessagesLoading(false);
-      return;
-    }
-
-    if (options?.foreground) {
-      setSelectedInvocationId(invocationId);
-      setInvocationMessagesSnapshot([]);
-      setMessagesLoading(true);
-    }
-
-    try {
-      const nextMessages = await ensureInvocationMessagesLoaded(invocationId);
-      if (activationToken !== activationTokenRef.current) {
-        return;
-      }
-      setSelectedInvocationId(invocationId);
-      setInvocationMessagesSnapshot(nextMessages);
-      setError(null);
-    } catch (fetchError) {
-      if (activationToken === activationTokenRef.current) {
-        setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
-      }
-    } finally {
-      if (activationToken === activationTokenRef.current) {
-        setMessagesLoading(false);
-      }
-    }
-  }, [ensureInvocationMessagesLoaded, selectedProject?.id, setInvocationMessagesSnapshot]);
-
-  const refreshMessages = useCallback(async (
-    threadId: string | null,
-    options?: { foreground?: boolean; force?: boolean },
-  ): Promise<void> => {
-    if (!threadId) {
-      setMessagesSnapshot([]);
-      setMessagesLoading(false);
-      return;
-    }
-
-    if (options?.foreground) {
-      setMessagesLoading(true);
-    }
-
-    try {
-      const nextMessages = options?.force
-        ? await fetchConversationMessages(threadId).then((messagesResponse) => {
-          cache.setMessages(threadId, messagesResponse);
-          return messagesResponse;
-        })
-        : await ensureMessagesLoaded(threadId);
-      if (selectedThreadIdRef.current === threadId) {
-        setMessagesSnapshot(nextMessages);
-      }
-      setError(null);
-    } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
-    } finally {
-      if (options?.foreground) {
-        setMessagesLoading(false);
-      }
-    }
-  }, [ensureMessagesLoaded, setMessagesSnapshot]);
-
-  const refreshInvocationMessages = useCallback(async (
-    invocationId: string | null,
-    options?: { foreground?: boolean; force?: boolean },
-  ): Promise<void> => {
-    if (!invocationId) {
-      setInvocationMessagesSnapshot([]);
-      setMessagesLoading(false);
-      return;
-    }
-
-    if (options?.foreground) {
-      setMessagesLoading(true);
-    }
-
-    try {
-      const nextMessages = options?.force
-        ? await fetchInvocationMessages(invocationId).then((messagesResponse) => {
-          cache.setInvocationMessages(invocationId, messagesResponse);
-          return messagesResponse;
-        })
-        : await ensureInvocationMessagesLoaded(invocationId);
-      if (selectedInvocationIdRef.current === invocationId) {
-        setInvocationMessagesSnapshot(nextMessages);
-      }
-      setError(null);
-    } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
-    } finally {
-      if (options?.foreground) {
-        setMessagesLoading(false);
-      }
-    }
-  }, [ensureInvocationMessagesLoaded, setInvocationMessagesSnapshot]);
-
-  const refreshThreads = useCallback(async (options?: { manual?: boolean; foreground?: boolean; mode?: "threads" | "invocations" | "both" }): Promise<void> => {
+  const refreshThreads = useCallback(async (refreshOptions?: { manual?: boolean; foreground?: boolean; mode?: "threads" | "invocations" | "both" }): Promise<void> => {
     if (!selectedProject) {
-      setThreads([]);
-      setInvocations([]);
+      setThreadsSnapshot([]);
+      setInvocationsSnapshot([]);
       setConnections([]);
-      setMessages([]);
-      setInvocationMessages([]);
+      setMessagesSnapshot([]);
+      setInvocationMessagesSnapshot([]);
       setSelectedThreadId(null);
       setSelectedInvocationId(null);
-      setMessagesLoading(false);
-      setError(null);
+      setThreadError(null);
+      setInvocationError(null);
       return;
     }
 
-    if (options?.manual) {
+    if (refreshOptions?.manual) {
       setManualRefreshing(true);
     }
-    if (options?.foreground) {
+    if (refreshOptions?.foreground) {
       setLoading(true);
     }
 
-    const refreshMode = options?.mode || (options?.manual ? chatMode : "both");
+    const refreshMode = refreshOptions?.mode || (refreshOptions?.manual ? chatMode : "both");
 
     try {
       const fetchPromises: Promise<any>[] = [];
@@ -523,7 +193,7 @@ const selectedThreadIdRef = useRef<string | null>(null);
         const nextSelectedId = resolveSelectedItemId(userThreads, selectedThreadIdRef.current);
         const nextSelectedThread = userThreads.find((thread) => thread.id === nextSelectedId) || null;
         await activateThread(nextSelectedId, {
-          foreground: Boolean(options?.foreground),
+          foreground: Boolean(refreshOptions?.foreground),
           preferredThread: nextSelectedThread,
         });
       }
@@ -537,23 +207,43 @@ const selectedThreadIdRef = useRef<string | null>(null);
         const nextSelectedInvocationId = resolveSelectedItemId(nextInvocations, selectedInvocationIdRef.current);
         const nextSelectedInvocation = nextInvocations.find((inv) => inv.id === nextSelectedInvocationId) || null;
         await activateInvocation(nextSelectedInvocationId, {
-          foreground: Boolean(options?.foreground),
+          foreground: Boolean(refreshOptions?.foreground),
           preferredInvocation: nextSelectedInvocation,
         });
       }
 
-      setError(null);
+      setThreadError(null);
+      setInvocationError(null);
     } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
+      const errorMsg = fetchError instanceof Error ? fetchError.message : String(fetchError);
+      setThreadError(errorMsg);
+      setInvocationError(errorMsg);
     } finally {
-      if (options?.manual) {
+      if (refreshOptions?.manual) {
         setManualRefreshing(false);
       }
-      if (options?.foreground) {
+      if (refreshOptions?.foreground) {
         setLoading(false);
       }
     }
-  }, [activateInvocation, activateThread, chatMode, selectedProject, setConnectionsSnapshot, setInvocationsSnapshot, setThreadsSnapshot]);
+  }, [
+    activateInvocation,
+    activateThread,
+    cache,
+    chatMode,
+    selectedInvocationIdRef,
+    selectedProject,
+    selectedThreadIdRef,
+    setConnectionsSnapshot,
+    setInvocationError,
+    setInvocationMessagesSnapshot,
+    setInvocationsSnapshot,
+    setSelectedInvocationId,
+    setSelectedThreadId,
+    setThreadError,
+    setMessagesSnapshot,
+    setThreadsSnapshot,
+  ]);
 
   useEffect(() => {
     if (!selectedProject) {
@@ -591,16 +281,30 @@ const selectedThreadIdRef = useRef<string | null>(null);
       return;
     }
 
-    setThreads([]);
-    setInvocations([]);
+    setThreadsSnapshot([]);
+    setInvocationsSnapshot([]);
     setConnections([]);
-    setMessages([]);
-    setInvocationMessages([]);
+    setMessagesSnapshot([]);
+    setInvocationMessagesSnapshot([]);
     setSelectedThreadId(null);
     setSelectedInvocationId(null);
-    setMessagesLoading(false);
     void refreshThreads({ foreground: true });
-  }, [activateInvocation, activateThread, refreshThreads, selectedProject, setConnectionsSnapshot, setInvocationsSnapshot, setThreadsSnapshot]);
+  }, [
+    activateInvocation,
+    activateThread,
+    cache,
+    refreshThreads,
+    selectedInvocationIdRef,
+    selectedProject,
+    selectedThreadIdRef,
+    setConnectionsSnapshot,
+    setInvocationMessagesSnapshot,
+    setInvocationsSnapshot,
+    setSelectedInvocationId,
+    setSelectedThreadId,
+    setMessagesSnapshot,
+    setThreadsSnapshot,
+  ]);
 
   useEffect(() => {
     if (!selectedProject) {
@@ -608,15 +312,15 @@ const selectedThreadIdRef = useRef<string | null>(null);
     }
 
     const scopes = [`project:${selectedProject.id}`];
-    if (selectedThreadId) {
-      scopes.push(`thread:${selectedThreadId}`);
+    if (threadData.selectedThreadId) {
+      scopes.push(`thread:${threadData.selectedThreadId}`);
     }
 
     return subscribeToDashboardRealtime(scopes, (message: DashboardRealtimeServerMessage) => {
       if (message.type === "snapshot_required") {
         void refreshThreads();
-        if (selectedThreadIdRef.current) {
-          void refreshMessages(selectedThreadIdRef.current, { force: true });
+        if (threadData.selectedThreadId) {
+          void refreshMessages(threadData.selectedThreadIdRef.current, { force: true });
         }
         if (selectedInvocationIdRef.current) {
           void refreshInvocationMessages(selectedInvocationIdRef.current, { force: true });
@@ -647,9 +351,6 @@ const selectedThreadIdRef = useRef<string | null>(null);
         const nextThreads = upsertChatThread(currentThreads, thread);
         cache.setThreads(selectedProject.id, nextThreads);
         setThreadsSnapshot(nextThreads);
-        if (thread.id === selectedThreadIdRef.current) {
-          void refreshMessages(thread.id, { force: true });
-        }
         if (!selectedThreadIdRef.current) {
           void activateThread(thread.id, { preferredThread: thread });
         }
@@ -685,244 +386,79 @@ const selectedThreadIdRef = useRef<string | null>(null);
         }
       }
     });
-  }, [activateThread, chatMode, refreshInvocationMessages, refreshMessages, refreshThreads, selectedProject, setConnectionsSnapshot, setMessagesSnapshot, setThreadsSnapshot]);
+  }, [
+    activateThread,
+    cache,
+    refreshInvocationMessages,
+    refreshMessages,
+    refreshThreads,
+    selectedInvocationIdRef,
+    selectedProject,
+    threadData.selectedThreadId,
+    setConnectionsSnapshot,
+    setMessagesSnapshot,
+    setThreadsSnapshot,
+    threadsRef,
+  ]);
 
   useEffect(() => {
     if (!options?.messagesRef?.current) return;
     if (options?.messagesRef?.current) {
       options.messagesRef.current.scrollTop = options.messagesRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [threadData.messages, options?.messagesRef]);
 
   const activeConnection = useMemo(() => {
-    if (!selectedThread?.connectionId) {
+    if (!threadData.selectedThread?.connectionId) {
       return null;
     }
-    return connectionIndex.get(selectedThread.connectionId) || null;
-  }, [connectionIndex, selectedThread]);
+    return connectionIndex.get(threadData.selectedThread.connectionId) || null;
+  }, [connectionIndex, threadData.selectedThread]);
 
-  const createThreadForCompose = useCallback(async (): Promise<ChatThread> => {
-    if (!selectedProject) {
-      throw new Error("Select a project before starting a chat thread.");
-    }
-    const thread = await createConversationThread(selectedProject.id, {
-      title: `Project Chat ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`,
-    });
-    const nextThreads = upsertChatThread(cache.getThreads(selectedProject.id) || threadsRef.current, thread);
-    cache.setThreads(selectedProject.id, nextThreads);
-    cache.setMessages(thread.id, []);
-    setThreadsSnapshot(nextThreads);
-    await activateThread(thread.id, { preferredThread: thread });
-    return thread;
-  }, [activateThread, selectedProject, setThreadsSnapshot]);
-
-  const handleAssignRoute = useCallback(async (option: { id: string, label: string, status: string, isPrimary: boolean, type: string, isSelectable: boolean, connectionId?: string | null, workerEndpointId?: string | null, providerId?: string }): Promise<void> => {
-    if (!selectedThread) {
-      return;
-    }
-
-    const confirmed = await requestConfirm({
-      title: "Reassign Route?",
-      body: "This will route future messages in this thread to a different connection.",
-      confirmLabel: "Reassign",
-    });
-
-    if (!confirmed) return;
-
-    setAssigningRoute(true);
-    try {
-      let updated: ChatThread;
-      if (!option.id) {
-         updated = await updateConversationThread(selectedThread.id, {
-           connectionId: null,
-         });
-      } else {
-        const routeKind = option.type === "virtual" ? "virtual" : "worker";
-        updated = await updateThreadRoute(selectedThread.id, {
-          routeKind,
-          virtualProvider: routeKind === "virtual" ? option.providerId : undefined,
-          workerEndpointId: routeKind === "worker" ? (option.workerEndpointId || option.connectionId || undefined) : undefined,
-        });
-      }
-
-      const nextThreads = (cache.getThreads(selectedProject?.id || "") || threadsRef.current).map((thread) => (
-        thread.id === updated.id ? updated : thread
-      ));
-      if (selectedProject) {
-        cache.setThreads(selectedProject.id, nextThreads);
-      }
-      setThreadsSnapshot(nextThreads);
-      await refreshMessages(updated.id);
-      setError(null);
-      setSuccess("Route updated.");
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : String(updateError));
-    } finally {
-      setAssigningRoute(false);
-    }
-  }, [refreshMessages, selectedProject, selectedThread, setThreadsSnapshot, requestConfirm, setSuccess]);
-
-  const handleCompactThread = useCallback(async (): Promise<void> => {
-    if (!selectedThread) {
-      return;
-    }
-
-    const confirmed = await requestConfirm({
-      title: "Compact Thread?",
-      body: "This will truncate previous active sessions.",
-      confirmLabel: "Compact",
-    });
-
-    if (!confirmed) return;
-
-    setCompacting(true);
-    try {
-      const updated = await compactThreadSession(selectedThread.id);
-      const nextThreads = (cache.getThreads(selectedProject?.id || "") || threadsRef.current).map((thread) => (
-        thread.id === updated.id ? updated : thread
-      ));
-      if (selectedProject) {
-        cache.setThreads(selectedProject.id, nextThreads);
-      }
-      setThreadsSnapshot(nextThreads);
-      await refreshMessages(updated.id);
-      setError(null);
-      setSuccess("Thread compacted.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setCompacting(false);
-    }
-  }, [selectedThread, selectedProject, setThreadsSnapshot, refreshMessages, requestConfirm, setSuccess]);
-
-  const handleSend = useCallback(async (): Promise<void> => {
-    const bodyMarkdown = input.trim();
-    if (!bodyMarkdown || !selectedProject) {
-      return;
-    }
-
-    setSending(true);
-    try {
-      let thread = selectedThread || await createThreadForCompose();
-
-      if (thread.messageCount === 0 && !thread.connectionId && !thread.runtimeState?.virtualProvider && !thread.runtimeState?.workerEndpointId) {
-        const { options: defaultOptions, selectedOption } = getProjectWorkerOptions(execution, workerRouting, false);
-        const hasActiveRoute = selectedOption !== null;
-
-        if (hasActiveRoute && selectedOption) {
-          try {
-            const routeKind = selectedOption.type === "virtual" ? "virtual" : "worker";
-            thread = await updateThreadRoute(thread.id, {
-              routeKind,
-              virtualProvider: routeKind === "virtual" ? selectedOption.providerId : undefined,
-              workerEndpointId: routeKind === "worker" ? (selectedOption.workerEndpointId || selectedOption.connectionId || undefined) : undefined,
-            });
-          } catch (err) {
-            console.warn("Failed to set default route for thread before sending", err);
-          }
-        }
-      }
-
-      const created = await postConversationMessage(selectedProject.id, {
-        threadId: thread.id,
-        bodyMarkdown,
-      });
-      setInput("");
-      if (options?.composerRef?.current) {
-        if (options?.composerRef?.current) {
-        options.composerRef.current.style.height = "auto";
-      }
-      }
-      const nextMessages = upsertMessage(cache.getMessages(thread.id) || [], created);
-      cache.setMessages(thread.id, nextMessages);
-      setMessagesSnapshot(nextMessages);
-      await refreshThreads();
-      setError(null);
-    } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : String(sendError));
-    } finally {
-      setSending(false);
-    }
-  }, [createThreadForCompose, input, refreshThreads, selectedProject, selectedThread, setMessagesSnapshot]);
-
-  const pendingDashboardMessages = messages.filter((message) => (
+  const pendingDashboardMessages = threadData.messages.filter((message) => (
     message.direction === "dashboard_to_connection" && message.deliveryStatus !== "processed"
   )).length;
 
-  const hasWorkingReply = useMemo(() => messages.some((message) => isWorkingMessage(message, messages)), [messages]);
+  const hasWorkingReply = useMemo(() => threadData.messages.some((message) => isWorkingMessage(message, threadData.messages)), [threadData.messages]);
+
   const hasProjectSnapshot = Boolean(selectedProject && cache.hasThreads(selectedProject.id));
   const hasThreadSnapshot = Boolean(
-    selectedThreadId
-    && (cache.hasMessages(selectedThreadId) || (selectedThread?.messageCount || 0) === 0)
+    threadData.selectedThreadId
+    && (cache.hasMessages(threadData.selectedThreadId) || (threadData.selectedThread?.messageCount || 0) === 0)
   );
   const threadsLoading = isListLoading(selectedProject?.id || null, hasProjectSnapshot, loading);
-  const threadMessagesLoading = isDetailLoading(selectedThreadId, hasThreadSnapshot, messagesLoading);
+  const threadMessagesLoading = isDetailLoading(threadData.selectedThreadId, hasThreadSnapshot, threadData.messagesLoading);
 
   const hasInvocationProjectSnapshot = Boolean(selectedProject && cache.hasInvocations(selectedProject.id));
   const hasInvocationSnapshot = Boolean(
-    selectedInvocationId
-    && (cache.hasInvocationMessages(selectedInvocationId) || (selectedInvocation?.messageCount || 0) === 0)
+    invocationData.selectedInvocationId
+    && (cache.hasInvocationMessages(invocationData.selectedInvocationId) || (invocationData.selectedInvocation?.messageCount || 0) === 0)
   );
   const invocationsLoading = isListLoading(selectedProject?.id || null, hasInvocationProjectSnapshot, loading);
-  const invocationMessagesLoading = isDetailLoading(selectedInvocationId, hasInvocationSnapshot, messagesLoading);
+  const invocationMessagesLoading = isDetailLoading(invocationData.selectedInvocationId, hasInvocationSnapshot, invocationData.messagesLoading);
 
-  const handleDeleteThread = useCallback(async (threadId: string): Promise<void> => {
-    const confirmed = await requestConfirm({
-      title: "Delete Thread?",
-      body: "Are you sure you want to delete this conversation?",
-      confirmLabel: "Delete",
-      destructive: true,
-    });
-
-    if (!confirmed) return;
-
-    const nextThreads = removeThread(cache.getThreads(selectedProject?.id || "") || threadsRef.current, threadId);
-    const userNextThreads = nextThreads.filter((t) => t.scope === "project");
-    const nextSelection = resolveSelectedItemId(userNextThreads, selectedThreadId === threadId ? null : selectedThreadId);
-    setDeletingThreadId(threadId);
-    if (selectedProject) {
-      cache.setThreads(selectedProject.id, nextThreads);
-    }
-    setThreadsSnapshot(nextThreads);
-    if (selectedThreadId === threadId) {
-      const nextSelectedThread = nextThreads.find((thread) => thread.id === nextSelection) || null;
-      await activateThread(nextSelection, { preferredThread: nextSelectedThread });
-    }
-    cache.deleteMessages(threadId);
-
-    try {
-      await deleteConversationThread(threadId);
-      setError(null);
-      setSuccess("Thread deleted.");
-    } catch (deleteError) {
-      await refreshThreads();
-      setError(deleteError instanceof Error ? deleteError.message : String(deleteError));
-    } finally {
-      setDeletingThreadId((current) => current === threadId ? null : current);
-    }
-  }, [activateThread, refreshThreads, selectedProject, selectedThreadId, setThreadsSnapshot, requestConfirm, setSuccess]);
   return {
     chatMode,
     setChatMode,
-    threads,
-    invocations,
+    threads: threadData.threads,
+    invocations: invocationData.invocations,
     connections,
-    selectedThreadId,
-    selectedInvocationId,
-    messages,
-    invocationMessages,
-    input,
-    setInput,
+    selectedThreadId: threadData.selectedThreadId,
+    selectedInvocationId: invocationData.selectedInvocationId,
+    messages: threadData.messages,
+    invocationMessages: invocationData.invocationMessages,
+    input: threadData.input,
+    setInput: threadData.setInput,
     loading,
-    messagesLoading,
+    messagesLoading: threadData.messagesLoading || invocationData.messagesLoading,
     manualRefreshing,
-    deletingThreadId,
-    sending,
-    assigningRoute,
-    compacting,
-    error,
-    selectedThread,
-    selectedInvocation,
+    deletingThreadId: threadData.deletingThreadId,
+    sending: threadData.sending,
+    assigningRoute: threadData.assigningRoute,
+    compacting: threadData.compacting,
+    error: threadData.error || invocationData.error,
+    selectedThread: threadData.selectedThread,
+    selectedInvocation: invocationData.selectedInvocation,
     activeConnection,
     pendingDashboardMessages,
     hasWorkingReply,
@@ -931,24 +467,24 @@ const selectedThreadIdRef = useRef<string | null>(null);
     invocationsLoading,
     invocationMessagesLoading,
     refreshThreads,
-    refreshMessages,
-    refreshInvocationMessages,
-    activateThread,
-    activateInvocation,
-    handleAssignRoute,
-    handleCompactThread,
-    handleSend,
-    handleDeleteThread,
-    createThreadForCompose,
+    refreshMessages: threadData.refreshMessages,
+    refreshInvocationMessages: invocationData.refreshInvocationMessages,
+    activateThread: threadData.activateThread,
+    activateInvocation: invocationData.activateInvocation,
+    handleAssignRoute: threadData.handleAssignRoute,
+    handleCompactThread: threadData.handleCompactThread,
+    handleSend: threadData.handleSend,
+    handleDeleteThread: threadData.handleDeleteThread,
+    createThreadForCompose: threadData.createThreadForCompose,
     workerOptions,
-    threadIndex,
-    invocationIndex,
+    threadIndex: threadData.threadIndex,
+    invocationIndex: invocationData.invocationIndex,
     selectedProject,
-    feedback,
-    clearFeedback,
-    isConfirmOpen,
-    confirmOptions,
-    handleConfirm,
-    handleCancel,
+    feedback: threadData.feedback,
+    clearFeedback: threadData.clearFeedback,
+    isConfirmOpen: threadData.isConfirmOpen,
+    confirmOptions: threadData.confirmOptions,
+    handleConfirm: threadData.handleConfirm,
+    handleCancel: threadData.handleCancel,
   };
 };

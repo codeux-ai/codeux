@@ -1,6 +1,7 @@
 import * as fs from "fs/promises";
 import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workflow-utils.js";
 import { extractJsonLikeBlock } from "./planning-json-extractor.js";
+import { StructuredProviderResponseService } from "./structured-provider-response-service.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
 import { PrService } from "../infrastructure/providers/cli/pr-service.js";
 import type { IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
@@ -92,6 +93,7 @@ interface QualityAssuranceServiceDependencies {
   getGithubToken: () => string | undefined;
   sendSessionMessage: (sessionId: string, prompt: string) => Promise<unknown>;
   logger?: Logger;
+  structuredProviderResponseService?: StructuredProviderResponseService;
 }
 
 export class QualityAssuranceService {
@@ -100,6 +102,7 @@ export class QualityAssuranceService {
   private readonly prService = new PrService();
 
   private readonly providerExecutionService: ProviderExecutionService;
+  private readonly structuredProviderResponseService: StructuredProviderResponseService;
 
   constructor(private readonly deps: QualityAssuranceServiceDependencies) {
     this.providerExecutionService = new ProviderExecutionService({
@@ -108,6 +111,11 @@ export class QualityAssuranceService {
       logger: deps.logger,
       sessionTracking: deps.sessionTracking,
       getGithubToken: deps.getGithubToken,
+    });
+    this.structuredProviderResponseService = deps.structuredProviderResponseService || new StructuredProviderResponseService({
+      providerExecutionService: this.providerExecutionService,
+      executionRepository: deps.executionRepository,
+      logger: deps.logger,
     });
   }
 
@@ -640,7 +648,7 @@ export class QualityAssuranceService {
       contentMarkdown: args.agentInstructions.trim(),
     });
 
-    const result = await this.providerExecutionService.executeProvider({
+    const result = await this.structuredProviderResponseService.executeAndParse<NormalizedQaReviewResult>({
       projectId: args.scope.projectId!,
       sprintId: args.scope.sprintId,
       taskId: args.taskRun?.taskId,
@@ -658,17 +666,20 @@ export class QualityAssuranceService {
         ...this.deps.getDashboardSettings(args.scope).cliWorkflow,
       },
       repoPath: args.repoPath,
-      expectTextOutput: true,
       invocationId: invocation.id,
       onActivity: () => undefined,
+      settings: this.deps.getDashboardSettings(args.scope),
+      parseFn: (text) => normalizeQaReviewResult(text),
+      buildRetryPrompt: (error) => [
+        "Your previous response failed validation with this error:",
+        error.message,
+        "",
+        "Please provide a valid JSON object matching the requested schema exactly.",
+      ].join("\n"),
+      providerLabel: "QA",
     });
 
-    if (!result.ok) {
-      throw new Error(result.stderr || result.stdout || "QA provider failed without output.");
-    }
-
-    const text = result.text?.trim() || "";
-    return normalizeQaReviewResult(text);
+    return result.parsed;
   }
 
   private buildReviewPrompt(args: {
@@ -1077,26 +1088,43 @@ function triggerReviewModeDescription(triggerType: QaReviewTriggerType): string 
 
 function normalizeQaReviewResult(bodyMarkdown: string): NormalizedQaReviewResult {
   const rawJson = extractJsonLikeBlock(bodyMarkdown);
-  const parsed = JSON.parse(rawJson) as QaReviewResultPayload;
-  const raw = parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {};
-  const verdict = parsed.verdict === "changes_requested" ? "changes_requested" : "pass";
-  const summary = typeof parsed.summary === "string" && parsed.summary.trim().length > 0
-    ? parsed.summary.trim()
-    : verdict === "pass"
-      ? "QA review passed."
-      : "QA review requested follow-up fixes.";
-  const findings = Array.isArray(parsed.findings)
-    ? parsed.findings.map((entry) => String(entry || "").trim()).filter(Boolean)
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rawJson);
+  } catch (error) {
+    throw new Error(`Invalid JSON format: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Result must be a JSON object.");
+  }
+
+  const payload = parsed as Record<string, unknown>;
+
+  if (payload.verdict !== "pass" && payload.verdict !== "changes_requested") {
+    throw new Error("Missing or invalid 'verdict'. Must be 'pass' or 'changes_requested'.");
+  }
+
+  const verdict = payload.verdict;
+
+  if (typeof payload.summary !== "string" || payload.summary.trim() === "") {
+    throw new Error("Missing or invalid 'summary'. Must be a non-empty string.");
+  }
+
+  const summary = payload.summary.trim();
+
+  const findings = Array.isArray(payload.findings)
+    ? payload.findings.map((entry) => String(entry || "").trim()).filter(Boolean)
     : [];
-  const fixInstructions = typeof parsed.fixInstructions === "string" && parsed.fixInstructions.trim().length > 0
-    ? parsed.fixInstructions.trim()
+  const fixInstructions = typeof payload.fixInstructions === "string" && payload.fixInstructions.trim().length > 0
+    ? payload.fixInstructions.trim()
     : null;
-  const targetTaskKey = typeof parsed.targetTaskKey === "string" && parsed.targetTaskKey.trim().length > 0
-    ? parsed.targetTaskKey.trim()
+  const targetTaskKey = typeof payload.targetTaskKey === "string" && payload.targetTaskKey.trim().length > 0
+    ? payload.targetTaskKey.trim()
     : null;
-  const shouldHavePr = typeof parsed.shouldHavePr === "boolean" ? parsed.shouldHavePr : null;
-  const followUpTasks = Array.isArray(parsed.followUpTasks)
-    ? parsed.followUpTasks
+  const shouldHavePr = typeof payload.shouldHavePr === "boolean" ? payload.shouldHavePr : null;
+  const followUpTasks = Array.isArray(payload.followUpTasks)
+    ? payload.followUpTasks
       .map((entry) => normalizeFollowUpTask(entry))
       .filter((entry): entry is NormalizedQaFollowUpTask => entry !== null)
     : [];
@@ -1109,7 +1137,7 @@ function normalizeQaReviewResult(bodyMarkdown: string): NormalizedQaReviewResult
     targetTaskKey,
     shouldHavePr,
     followUpTasks,
-    raw,
+    raw: payload,
   };
 }
 

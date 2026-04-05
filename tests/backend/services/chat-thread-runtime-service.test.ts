@@ -10,7 +10,6 @@ describe("ChatThreadRuntimeService", () => {
       connectionChatRepository: {
         postDashboardMessage: vi.fn(),
         getThread: vi.fn(),
-        listThreads: vi.fn(),
         updateThread: vi.fn(),
         listMessages: vi.fn(),
         markDashboardMessagesProcessed: vi.fn(),
@@ -42,12 +41,19 @@ describe("ChatThreadRuntimeService", () => {
     service = new ChatThreadRuntimeService(deps);
   });
 
+  it("throws an error if thread is not found when posting a message", async () => {
+    deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-missing", threadId: "t-missing", bodyMarkdown: "hello" });
+    deps.connectionChatRepository.getThread.mockReturnValue(undefined); // Simulate missing thread
+
+    await expect(service.postMessage("p1", { bodyMarkdown: "hello" })).rejects.toThrow("Thread not found");
+  });
+
   it("binds to an active live worker assignment if available", async () => {
     deps.projectWorkerAssignmentRepository.listAssignmentsForProject.mockReturnValue([
       { assignmentRole: "primary", capabilities: { canSuperviseProjects: true }, workerStatus: "online", connectionId: "live-conn-1" },
     ]);
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-1", threadId: "t1", bodyMarkdown: "hello" });
-    deps.connectionChatRepository.listThreads.mockReturnValue([{ id: "t1", connectionId: null }]);
+    deps.connectionChatRepository.getThread.mockReturnValue({ id: "t1", connectionId: null });
     deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj" });
 
     await service.postMessage("p1", { bodyMarkdown: "hello" });
@@ -58,11 +64,11 @@ describe("ChatThreadRuntimeService", () => {
 
   it("runs virtual provider and replays history on provider switch", async () => {
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-2", threadId: "t1", bodyMarkdown: "hello" });
-    deps.connectionChatRepository.listThreads.mockReturnValue([{
+    deps.connectionChatRepository.getThread.mockReturnValue({
       id: "t1",
       connectionId: null,
       runtimeState: { virtualProvider: "old-provider", sessionIds: ["old-session"] }
-    }]);
+    });
     deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
     deps.taskService.resolveInvocationProvider.mockReturnValue({
       provider: "claude-code",
@@ -97,11 +103,11 @@ describe("ChatThreadRuntimeService", () => {
 
   it("continues with continueSessionId if same provider", async () => {
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-3", threadId: "t1", bodyMarkdown: "hello" });
-    deps.connectionChatRepository.listThreads.mockReturnValue([{
+    deps.connectionChatRepository.getThread.mockReturnValue({
       id: "t1",
       connectionId: null,
       runtimeState: { virtualProvider: "claude-code", sessionIds: ["existing-session"] }
-    }]);
+    });
     deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
     deps.taskService.resolveInvocationProvider.mockReturnValue({
       provider: "claude-code",
@@ -122,14 +128,14 @@ describe("ChatThreadRuntimeService", () => {
 
   it("honors an explicitly routed virtual provider before falling back to global routing", async () => {
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-4", threadId: "t1", bodyMarkdown: "hello" });
-    deps.connectionChatRepository.listThreads.mockReturnValue([{
+    deps.connectionChatRepository.getThread.mockReturnValue({
       id: "t1",
       connectionId: null,
       runtimeState: {
         routeKind: "virtual",
         virtualProvider: "codex",
       }
-    }]);
+    });
     deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
     deps.taskService.resolveInvocationProvider.mockReturnValue({
       provider: "jules",
@@ -303,7 +309,7 @@ describe("ChatThreadRuntimeService", () => {
 
   it("replays from the stored compaction summary on the next fresh virtual turn", async () => {
     deps.connectionChatRepository.postDashboardMessage.mockReturnValue({ id: "msg-5", threadId: "t1", bodyMarkdown: "next question" });
-    deps.connectionChatRepository.listThreads.mockReturnValue([{
+    deps.connectionChatRepository.getThread.mockReturnValue({
       id: "t1",
       projectId: "p1",
       title: "Thread",
@@ -322,7 +328,7 @@ describe("ChatThreadRuntimeService", () => {
           sourceMessageCount: 1,
         },
       },
-    }]);
+    });
     deps.projectManagementRepository.getProject.mockReturnValue({ id: "p1", name: "proj", baseDir: "/tmp" });
     deps.taskService.resolveInvocationProvider.mockReturnValue({
       provider: "claude-code",

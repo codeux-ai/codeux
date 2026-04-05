@@ -153,3 +153,5 @@ The QA provider is prompted to return JSON only with:
 - `followUpTasks`
 
 That contract keeps the follow-up automation deterministic instead of scraping prose heuristically.
+
+QA agent responses are processed using the shared structured response helper (`StructuredProviderResponseService`). This ensures that if the agent returns malformed JSON or omits required fields, Sprint OS automatically triggers an in-session retry to correct the output shape before failing the review.

@@ -8,16 +8,7 @@ import type {
   OverviewTelemetrySnapshot,
   ProjectLiveDashboardSnapshot,
 } from "../../types.js";
-
-const fetchJson = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  const response = await fetch(path, init);
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => ({}));
-    const errorMessage = typeof errorBody?.error === "string" ? errorBody.error : `Request failed: ${path}`;
-    throw new Error(errorMessage);
-  }
-  return (await response.json()) as T;
-};
+import { fetchJson } from "./fetch-json.js";
 
 export type RuntimeDashboardPayload = ProjectLiveDashboardSnapshot;
 

@@ -8,6 +8,8 @@ The dashboard resource layer manages data fetching, caching, and invalidation fo
 
 Importantly, **API routes and backend contracts remain unchanged**. The optimizations are entirely focused on frontend read-model consumption, backend read-model projection efficiency, and client-side rendering.
 
+To support cleaner, more testable backend projections, `ProjectRuntimeRepository` has been split into narrower modules (`RuntimeContextStore` and `RuntimeStatusProjection`) under `src/repositories/project-runtime/`. This modularization decouples persistence and caching from the actual live status assembly, ensuring that runtime state aggregation remains easy to trace and test independently.
+
 ## Shared Resource Provider
 
 Data fetching is governed by a unified resource layer rather than ad-hoc `useEffect` blocks. The shared resource provider ensures that:

@@ -77,6 +77,7 @@ export interface ProviderInvocationUsageRecord {
   dispatchId: string | null;
   taskRunId: string | null;
   attentionItemId: string | null;
+  connectionId: string | null;
   sessionId: string;
   provider: string;
   purpose: ProviderInvocationPurpose;
@@ -94,6 +95,7 @@ export interface ProviderInvocationUsageRecord {
   reasoningOutputTokens: number;
   totalTokens: number;
   usageSource: TokenUsageSource;
+  costCents: number | null;
   rawUsageJson: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;

@@ -316,7 +316,7 @@ export class MemoryService {
     }
 
     const records = this.memoryRepository.loadEmbeddingsForScope(
-      projectId, modelId, scope, sprintId, agentPresetId,
+      projectId, modelId, scope, sprintId, agentPresetId, 1000,
     );
 
     if (records.length === 0) {
@@ -383,28 +383,32 @@ export class MemoryService {
     // --- Top-K nearest neighbors per node ---
     // For each node, keep only its K strongest connections.
     // This produces a sparse, meaningful graph instead of a near-complete one.
-    const simMatrix: number[][] = Array.from({ length: n }, () => new Array(n).fill(0));
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
-        const sim = cosineSimilarity(vectors[i], vectors[j]);
-        simMatrix[i][j] = sim;
-        simMatrix[j][i] = sim;
+    const topNeighbors: Array<Array<{ j: number; sim: number }>> = Array.from({ length: n }, () => []);
+
+    const insertNeighbor = (list: Array<{ j: number; sim: number }>, neighborId: number, sim: number) => {
+      if (list.length < topKPerNode) {
+        list.push({ j: neighborId, sim });
+        list.sort((a, b) => b.sim - a.sim);
+      } else if (sim > list[list.length - 1].sim) {
+        list.pop();
+        list.push({ j: neighborId, sim });
+        list.sort((a, b) => b.sim - a.sim);
       }
-    }
+    };
 
     const edgeSet = new Set<string>();
     const edges: EmbeddingMapEdge[] = [];
 
     for (let i = 0; i < n; i++) {
-      // Find top-K neighbors for node i
-      const neighbors: Array<{ j: number; sim: number }> = [];
-      for (let j = 0; j < n; j++) {
-        if (j === i) continue;
-        neighbors.push({ j, sim: simMatrix[i][j] });
+      for (let j = i + 1; j < n; j++) {
+        const sim = cosineSimilarity(vectors[i], vectors[j]);
+        insertNeighbor(topNeighbors[i], j, sim);
+        insertNeighbor(topNeighbors[j], i, sim);
       }
-      neighbors.sort((a, b) => b.sim - a.sim);
+    }
 
-      for (const nb of neighbors.slice(0, topKPerNode)) {
+    for (let i = 0; i < n; i++) {
+      for (const nb of topNeighbors[i]) {
         const lo = Math.min(i, nb.j);
         const hi = Math.max(i, nb.j);
         const key = `${lo}:${hi}`;

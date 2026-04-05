@@ -73,7 +73,13 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
     isAlreadyLoaded = false,
   } = options;
 
-  const [data, setData] = useState<T>(initialData);
+  const [dataState, setDataState] = useState<T>(initialData);
+  const prevInitialDataRef = useRef<T>(initialData);
+
+  let data = dataState;
+  if (initialData !== prevInitialDataRef.current) {
+    data = initialData;
+  }
   const [loading, setLoading] = useState(!isAlreadyLoaded);
   const [error, setError] = useState<string | null>(null);
   const [transportState, setTransportState] = useState<TransportState>("disconnected");
@@ -85,17 +91,26 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
   // Keep track of what we used to initialize the state.
   // If `initialData` changes (e.g. from cached resources because the project changed),
   // we want to synchronously update `data` to avoid flashing old state while fetching.
-  const [prevInitialData, setPrevInitialData] = useState<T>(initialData);
+  useEffect(() => {
+    if (initialData !== prevInitialDataRef.current) {
+      prevInitialDataRef.current = initialData;
+      setDataState(initialData);
+    }
+  }, [initialData]);
 
-  if (initialData !== prevInitialData) {
-    setPrevInitialData(initialData);
-    setData(initialData);
-  }
+  const setData = useCallback((updater: T | ((curr: T) => T)) => {
+    setDataState((prev) => {
+      const base = optionsRef.current.initialData !== prevInitialDataRef.current ? optionsRef.current.initialData : prev;
+      return typeof updater === "function" ? (updater as any)(base) : updater;
+    });
+  }, []);
 
   // We keep a ref to options to avoid stale closures in effects without triggering re-runs
   // if consumers don't memoize them well.
   const optionsRef = useRef(options);
   optionsRef.current = options;
+
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const refreshInternal = useCallback(async (refreshOptions?: { silent?: boolean; signal?: AbortSignal }): Promise<void> => {
     // Determine if we show a foreground loading spinner.
@@ -103,19 +118,28 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
     // Subsequent polls/realtime refreshes update data silently.
     const isForeground = !refreshOptions?.silent && !hasLoadedRef.current;
 
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
     if (isForeground) {
-      setLoading(true);
+      setLoading((prev) => (prev !== true ? true : prev));
     }
 
     if (!isRecoveringRef.current && refreshOptions?.silent !== true) {
-      setIsRecovering(true);
+      setIsRecovering((prev) => (prev !== true ? true : prev));
       isRecoveringRef.current = true;
     }
 
     try {
-      const nextData = await optionsRef.current.fetchResource(refreshOptions?.signal);
+      // If the caller provided a signal, respect its abort state alongside our internal one
+      // Since fetchResource takes only one signal, we'll pass our internal one,
+      // but we will also check the caller's signal for abort conditions.
+      const nextData = await optionsRef.current.fetchResource(refreshOptions?.signal || abortController.signal);
 
-      if (!refreshOptions?.signal?.aborted) {
+      if (!abortController.signal.aborted && !refreshOptions?.signal?.aborted) {
         setData((prev) => {
           const stabilized = optionsRef.current.stabilizeNext ? optionsRef.current.stabilizeNext(prev, nextData) : nextData;
           return optionsRef.current.isEqual(prev, stabilized) ? prev : stabilized;
@@ -124,14 +148,14 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
         setError(null);
       }
     } catch (fetchError: any) {
-      if (fetchError.name === "AbortError") return;
+      if (fetchError.name === "AbortError" || abortController.signal.aborted || refreshOptions?.signal?.aborted) return;
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
     } finally {
-      if (!refreshOptions?.signal?.aborted) {
+      if (!abortController.signal.aborted && !refreshOptions?.signal?.aborted) {
         if (isForeground) {
-          setLoading(false);
+          setLoading((prev) => (prev !== false ? false : prev));
         }
-        setIsRecovering(false);
+        setIsRecovering((prev) => (prev !== false ? false : prev));
         isRecoveringRef.current = false;
       }
     }
@@ -145,15 +169,18 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
     if (!options.isAlreadyLoaded) {
       hasLoadedRef.current = false;
       isRecoveringRef.current = true;
-      setIsRecovering(true);
-      setLoading(true);
+      setIsRecovering((prev) => (prev !== true ? true : prev));
+      setLoading((prev) => (prev !== true ? true : prev));
     } else {
       hasLoadedRef.current = true;
     }
 
-    const controller = new AbortController();
-    void refreshInternal({ signal: controller.signal });
-    return () => controller.abort();
+    void refreshInternal();
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
   }, [options.fetchResource, options.isAlreadyLoaded, refreshInternal]);
 
   // 2. Realtime WebSocket Subscription Effect
@@ -182,9 +209,9 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
             setError(null);
             // Instead of directly depending on the reactive `loading` state here,
             // we use the functional update pattern or just accept we might trigger a
-            // reactive render by setting `setLoading(false)` unconditionally
+            // reactive render by setting `setLoading((prev) => (prev !== false ? false : prev))` unconditionally
             // but preact will batch it if it's identical.
-            setLoading(false);
+            setLoading((prev) => (prev !== false ? false : prev));
           } else {
             // Received event but configured to refetch instead of direct update
             void refreshInternal({ silent: true });

@@ -6,7 +6,9 @@ import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { QaReviewRepository } from "../../../src/repositories/qa-review-repository.js";
+import { AgentPresetRepository } from "../../../src/repositories/agent-preset-repository.js";
 import { QualityAssuranceService } from "../../../src/services/quality-assurance-service.js";
+import { StructuredProviderResponseService } from "../../../src/services/structured-provider-response-service.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 const tempDirs: string[] = [];
@@ -394,5 +396,225 @@ describe("QualityAssuranceService", () => {
       reportText: "",
     });
     expect(providerRunner.runProviderForText).not.toHaveBeenCalled();
+  });
+
+  it("retries when the provider returns malformed JSON", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-malformed-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "QA Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Ship safely",
+      status: "running",
+      featureBranch: "feature/sprint-1",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Initial task",
+      promptMarkdown: "Implement the initial feature.",
+      status: "completed",
+      isIndependent: true,
+    });
+
+    const mockProviderRunner = {
+      runProviderForText: vi.fn(),
+      runProvider: vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          text: "Here is my review: this is not json",
+          nativeSessionId: "native-1",
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: '{"verdict": "pass", "summary": "Looks good now", "findings": [], "fixInstructions": null, "targetTaskKey": null, "shouldHavePr": true, "followUpTasks": []}',
+          nativeSessionId: "native-1",
+        }),
+    };
+
+    const structuredResponseService = new StructuredProviderResponseService({
+      providerExecutionService: {
+        executeProvider: mockProviderRunner.runProvider,
+      } as any,
+      executionRepository,
+    });
+
+    const service = new QualityAssuranceService({
+      projectManagementRepository: projectRepository,
+      executionRepository,
+      sessionTracking: {} as any,
+      qaReviewRepository: new QaReviewRepository(storage),
+      taskService: {
+        resolveInvocationProvider: () => ({
+          provider: "claude-code",
+          providers: { "claude-code": { model: "claude-3-5-sonnet", thinkingMode: false } },
+        }),
+      } as any,
+      agentPresetSyncService: {
+        resolveTargetedQualityAssuranceAgent: async () => {
+          const preset = agentPresetRepository.createAgentPreset(project.id, {
+            name: "QA",
+            presetId: "QA-1",
+            instructionMarkdown: "QA Agent",
+          });
+          return { id: preset.id, name: "QA", instructionMarkdown: "QA Agent" };
+        },
+      } as any,
+      providerRunner: mockProviderRunner as any,
+      structuredProviderResponseService: structuredResponseService,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            maxTaskReviewRuns: 3,
+            completedTaskWithoutPr: { enabled: true, agentPresetId: "QA-1" },
+          },
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+
+    const outcome = await service.reviewCompletedTask({
+      projectId: project.id,
+      sprintId: sprint.id,
+      repoPath: dir,
+      task: {
+        ...task,
+        record_id: task.id,
+        id: "T1",
+        depends_on: [],
+        session_id: "s1",
+      } as any,
+      subtasks: [],
+    });
+
+    expect(outcome.reviewed).toBe(true);
+    expect(outcome.reportText).toContain("Looks good now");
+    expect(mockProviderRunner.runProvider).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries when the provider returns JSON missing required fields", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-missing-fields-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "QA Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Ship safely",
+      status: "running",
+      featureBranch: "feature/sprint-1",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Initial task",
+      promptMarkdown: "Implement the initial feature.",
+      status: "completed",
+      isIndependent: true,
+    });
+
+    const mockProviderRunner = {
+      runProviderForText: vi.fn(),
+      runProvider: vi.fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          text: '{"summary": "missing verdict field"}',
+          nativeSessionId: "native-1",
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: '{"verdict": "changes_requested", "summary": "Fix it", "findings": [], "fixInstructions": "Please fix", "targetTaskKey": null, "shouldHavePr": true, "followUpTasks": []}',
+          nativeSessionId: "native-1",
+        }),
+    };
+
+    const structuredResponseService = new StructuredProviderResponseService({
+      providerExecutionService: {
+        executeProvider: mockProviderRunner.runProvider,
+      } as any,
+      executionRepository,
+    });
+
+    const service = new QualityAssuranceService({
+      projectManagementRepository: projectRepository,
+      executionRepository,
+      sessionTracking: {} as any,
+      qaReviewRepository: new QaReviewRepository(storage),
+      taskService: {
+        resolveInvocationProvider: () => ({
+          provider: "claude-code",
+          providers: { "claude-code": { model: "claude-3-5-sonnet", thinkingMode: false } },
+        }),
+      } as any,
+      agentPresetSyncService: {
+        resolveTargetedQualityAssuranceAgent: async () => {
+          const preset = agentPresetRepository.createAgentPreset(project.id, {
+            name: "QA",
+            presetId: "QA-1",
+            instructionMarkdown: "QA Agent",
+          });
+          return { id: preset.id, name: "QA", instructionMarkdown: "QA Agent" };
+        },
+        getOptionalWorkerAgentForRepoPath: async () => undefined,
+      } as any,
+      providerRunner: mockProviderRunner as any,
+      structuredProviderResponseService: structuredResponseService,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            maxTaskReviewRuns: 3,
+            completedTaskWithoutPr: { enabled: true, agentPresetId: "QA-1" },
+          },
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+
+    // Mock continueCliTaskSession to avoid actual filesystem work
+    vi.spyOn(service as any, "continueCliTaskSession").mockResolvedValue(undefined);
+
+    const outcome = await service.reviewCompletedTask({
+      projectId: project.id,
+      sprintId: sprint.id,
+      repoPath: dir,
+      task: {
+        ...task,
+        record_id: task.id,
+        id: "T1",
+        depends_on: [],
+        session_id: "s1",
+      } as any,
+      subtasks: [],
+    });
+
+    expect(outcome.reviewed).toBe(true);
+    expect(outcome.reportText).toContain("Fix it");
+    expect(mockProviderRunner.runProvider).toHaveBeenCalledTimes(2);
   });
 });

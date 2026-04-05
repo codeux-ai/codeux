@@ -21,6 +21,8 @@ afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
 });
 
+
+
 describe("PlanningAgentService", () => {
   it("resolves connected-worker reply when it arrives in the thread", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-resolve-"));

@@ -722,8 +722,38 @@ describe("MemoryService", () => {
       service.getEmbeddingMap("proj-1", "project", "s1", "a1");
 
       expect(mockRepo.loadEmbeddingsForScope).toHaveBeenCalledWith(
-        "proj-1", "bge-small-en-v1.5", "project", "s1", "a1",
+        "proj-1", "bge-small-en-v1.5", "project", "s1", "a1", 1000,
       );
+    });
+
+    it("fetches at most 1000 items as a large-input safeguard", () => {
+      mockEmbeddingService.getLoadedModelId.mockReturnValue("bge-small-en-v1.5");
+      mockEmbeddingService.getDimension.mockReturnValue(3);
+      mockRepo.loadEmbeddingsForScope.mockReturnValue([]);
+
+      service.getEmbeddingMap("proj-1");
+
+      expect(mockRepo.loadEmbeddingsForScope).toHaveBeenCalledWith(
+        "proj-1", "bge-small-en-v1.5", undefined, undefined, undefined, 1000,
+      );
+    });
+
+    it("produces deterministic edges based on top-K bounded arrays", () => {
+      mockEmbeddingService.getLoadedModelId.mockReturnValue("bge-small-en-v1.5");
+      mockEmbeddingService.getDimension.mockReturnValue(3);
+
+      mockRepo.loadEmbeddingsForScope.mockReturnValue([
+        { id: "m1", embeddingBlob: makeFloat32Buffer([1, 0, 0]), embeddingDimension: 3 },
+        { id: "m2", embeddingBlob: makeFloat32Buffer([0.9, 0.1, 0]), embeddingDimension: 3 },
+        { id: "m3", embeddingBlob: makeFloat32Buffer([0.8, 0.2, 0]), embeddingDimension: 3 },
+        { id: "m4", embeddingBlob: makeFloat32Buffer([0, 0, 1]), embeddingDimension: 3 },
+      ]);
+
+      const result = service.getEmbeddingMap("proj-1", undefined, undefined, undefined, 2);
+      expect(result.edges.length).toBeLessThanOrEqual(6);
+
+      const m1m2Edge = result.edges.find(e => (e.source === "m1" && e.target === "m2") || (e.source === "m2" && e.target === "m1"));
+      expect(m1m2Edge).toBeDefined();
     });
   });
 });

@@ -192,7 +192,7 @@ export class ProviderExecutionService {
         } else {
           this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
             role: "assistant",
-            contentMarkdown: args.expectTextOutput ? result.text! : result.usageTelemetry.transcriptText,
+            contentMarkdown: args.expectTextOutput ? (result as any).text : result.usageTelemetry.transcriptText,
           });
         }
       }

@@ -1,134 +1,30 @@
 import type { FunctionComponent, ComponentChildren } from "preact";
 import type { ProjectSettings, SettingsValueSource, ThinkingMode } from "../../../types.js";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
-import { TextInput, TextAreaInput, NumberInput, SelectInput, Toggle, Row as SharedRow } from "./SettingsFormFields.js";
+import { TextInput, TextAreaInput, NumberInput, SelectInput, Toggle } from "./SettingsFormFields.js";
 import {
   getFieldSource,
   getFieldSourceLabel,
   getSectionSource,
   getProviderModelOptions,
-  PROVIDER_CARD_TOKENS,
   providerSupportsModelSelection,
   providerSupportsThinkingMode,
+  sourceLabel,
+  thinkingModeOptions,
+  providerLabels,
   type SettingsEditorScope,
 } from "../../lib/settings-view-models.js";
+import { Card, OverrideBadge, Row } from "./panels/SharedPanelComponents.js";
+import { AutomationPanel } from "./panels/AutomationPanel.js";
+import { ProviderPanel } from "./panels/ProviderPanel.js";
+import { WorkerPanel } from "./panels/WorkerPanel.js";
 
-interface ProjectSettingsEditorProps {
+export interface ProjectSettingsEditorProps {
   settings: ProjectSettings;
   onChange: (next: ProjectSettings) => void;
   sources?: Record<string, SettingsValueSource>;
   editingScope?: SettingsEditorScope;
 }
-
-const Card: FunctionComponent<{ title: string; description: string; badge?: string; children: ComponentChildren }> = ({
-  title,
-  description,
-  badge,
-  children,
-}) => {
-  const isOverridden = badge === "Project override" || badge === "Sprint override";
-  const isMixed = badge === "Mixed sources";
-  const isInherited = badge === "Inherited";
-
-  return (
-    <section className={`rounded-[2rem] border transition-colors duration-300 p-6 shadow-[0_10px_30px_rgba(15,23,42,0.04)] backdrop-blur-2xl dark:shadow-[0_12px_36px_rgba(0,0,0,0.22)] ${
-      isOverridden
-        ? "border-amber-500/20 bg-amber-500/[0.03] dark:border-amber-500/20 dark:bg-amber-500/[0.02]"
-        : isMixed
-          ? "border-sky-500/20 bg-sky-500/[0.02] dark:border-sky-500/20 dark:bg-sky-500/[0.02]"
-          : "border-black/[0.06] bg-white/72 dark:border-white/[0.06] dark:bg-white/[0.03]"
-    }`}>
-      <div className={`mb-5 flex flex-wrap items-start justify-between gap-3 border-b pb-4 transition-colors duration-300 ${
-        isOverridden
-          ? "border-amber-500/10 dark:border-amber-500/10"
-          : isMixed
-            ? "border-sky-500/10 dark:border-sky-500/10"
-            : "border-black/[0.06] dark:border-white/[0.06]"
-      }`}>
-        <div>
-          <h3 className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">{title}</h3>
-          <p className="mt-1 max-w-2xl text-sm font-medium text-slate-500 dark:text-slate-400">{description}</p>
-        </div>
-        {badge ? (
-          <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors duration-300 ${
-            isOverridden
-              ? "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:border-amber-400/25 dark:bg-amber-400/10 dark:text-amber-400"
-              : isMixed
-                ? "border-sky-500/25 bg-sky-500/10 text-sky-700 dark:border-sky-400/25 dark:bg-sky-400/10 dark:text-sky-400"
-                : "border-slate-500/20 bg-slate-500/5 text-slate-600 dark:border-slate-400/20 dark:bg-slate-400/10 dark:text-slate-400"
-          }`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${
-              isOverridden ? "bg-amber-500 dark:bg-amber-400" : isMixed ? "bg-sky-500 dark:bg-sky-400" : "bg-slate-400 dark:bg-slate-500"
-            }`} />
-            {badge}
-          </span>
-        ) : null}
-      </div>
-      <div className="space-y-4">{children}</div>
-    </section>
-  );
-};
-
-const OverrideBadge: FunctionComponent<{ label: string }> = ({ label }) => (
-  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
-    <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-300" />
-    {label}
-  </span>
-);
-
-const Row: FunctionComponent<{ label: string; description?: string; children: ComponentChildren; badge?: string }> = ({ label, description, children, badge }) => (
-  <SharedRow label={label} description={description} badge={badge ? <OverrideBadge label={badge} /> : undefined}>
-    {children}
-  </SharedRow>
-);
-
-
-
-
-
-const ProviderLogo: FunctionComponent<{
-  providerId: keyof ProjectSettings["aiProvider"]["providers"];
-  disabled?: boolean;
-}> = ({ providerId, disabled = false }) => {
-  const token = PROVIDER_CARD_TOKENS[providerId];
-
-  return (
-    <div
-      className={`flex h-11 w-11 items-center justify-center rounded-[1rem] border border-black/[0.08] bg-[#F9F8F4] font-display text-sm font-black tracking-[0.16em] text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)] dark:border-white/[0.08] dark:bg-void-900 dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${disabled ? "opacity-60" : ""}`}
-      aria-hidden
-    >
-      {token.logoLabel}
-    </div>
-  );
-};
-
-
-const sourceLabel = (source: SettingsValueSource | "mixed"): string => {
-  switch (source) {
-    case "project":
-      return "Project override";
-    case "sprint":
-      return "Sprint override";
-    case "mixed":
-      return "Mixed sources";
-    case "system":
-    default:
-      return "Inherited";
-  }
-};
-
-const thinkingModeOptions: Array<{ value: ThinkingMode; label: string }> = [
-  { value: "SMALL", label: "Small" },
-  { value: "MEDIUM", label: "Medium" },
-  { value: "HIGH", label: "High" },
-];
-
-const providerLabels: Record<keyof ProjectSettings["aiProvider"]["providers"], string> = {
-  jules: "Jules",
-  gemini: "Gemini",
-  codex: "Codex",
-  "claude-code": "Claude Code",
-};
 
 export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps> = ({
   settings,
@@ -157,381 +53,28 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
 
   return (
     <div className="space-y-6">
-      <Card
-        title="Automation"
-        description="Project-level operating posture and intervention policy."
-        badge={automationSource ? sourceLabel(automationSource) : undefined}
-      >
-        <Row label="Automation level" description="Choose whether the system runs autonomously or pauses for operator approval." badge={getBadge("automationLevel")}>
-          <SelectInput
-            value={settings.automationLevel}
-            onChange={(value) => update({ automationLevel: value as ProjectSettings["automationLevel"] })}
-            options={[
-              { value: "FULL", label: "Full" },
-              { value: "SEMI_AUTO", label: "Semi-auto" },
-              { value: "ALWAYS_ASK", label: "Always ask" },
-            ]}
-          />
-        </Row>
-        <Row label="Auto-approve plans" description="Approve planning checkpoints automatically when the sprint asks for plan confirmation." badge={getBadge("automationInterventions.autoApprovePlan")}>
-          <Toggle
-            value={settings.automationInterventions.autoApprovePlan}
-            onChange={(value) => update({
-              automationInterventions: {
-                ...settings.automationInterventions,
-                autoApprovePlan: value,
-              },
-            })}
-          />
-        </Row>
-        <Row label="Auto-answer clarifications" description="Use the clarification template when a task asks for routine clarification." badge={getBadge("automationInterventions.autoAnswerClarification")}>
-          <Toggle
-            value={settings.automationInterventions.autoAnswerClarification}
-            onChange={(value) => update({
-              automationInterventions: {
-                ...settings.automationInterventions,
-                autoAnswerClarification: value,
-              },
-            })}
-          />
-        </Row>
-        {settings.automationInterventions.autoAnswerClarification && (
-          <Row label="Clarification answer mode" description="Choose whether to use a static template or let a worker generate a contextual answer." badge={getBadge("automationInterventions.autoAnswerClarificationMode")}>
-            <div className="flex gap-1 p-1 rounded-xl bg-black/[0.04] dark:bg-white/[0.04]">
-              <button
-                onClick={() => update({
-                  automationInterventions: { ...settings.automationInterventions, autoAnswerClarificationMode: "TEMPLATE" },
-                })}
-                className={`px-3 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all duration-200 ${
-                  settings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE"
-                    ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
-                    : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                }`}
-              >
-                Template
-              </button>
-              <button
-                onClick={() => update({
-                  automationInterventions: { ...settings.automationInterventions, autoAnswerClarificationMode: "WORKER" },
-                })}
-                className={`px-3 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all duration-200 ${
-                  settings.automationInterventions.autoAnswerClarificationMode === "WORKER"
-                    ? "bg-white dark:bg-void-700 text-slate-900 dark:text-white shadow-[0_1px_4px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_4px_rgba(0,0,0,0.3)]"
-                    : "text-slate-500 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                }`}
-              >
-                Worker
-              </button>
-            </div>
-          </Row>
-        )}
-        {(!settings.automationInterventions.autoAnswerClarification || settings.automationInterventions.autoAnswerClarificationMode === "TEMPLATE") && (
-          <div>
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">Clarification answer template</div>
-              {getBadge("automationInterventions.clarificationAnswerTemplate") ? <OverrideBadge label={getBadge("automationInterventions.clarificationAnswerTemplate")!} /> : null}
-            </div>
-            <TextAreaInput
-              value={settings.automationInterventions.clarificationAnswerTemplate}
-              onChange={(value) => update({
-                automationInterventions: {
-                  ...settings.automationInterventions,
-                  clarificationAnswerTemplate: value,
-                },
-              })}
-            />
-          </div>
-        )}
-        <Row label="Auto-resume paused runs" description="Resume paused sessions automatically after a transient pause condition clears." badge={getBadge("automationInterventions.autoResumePaused")}>
-          <Toggle
-            value={settings.automationInterventions.autoResumePaused}
-            onChange={(value) => update({
-              automationInterventions: {
-                ...settings.automationInterventions,
-                autoResumePaused: value,
-              },
-            })}
-          />
-        </Row>
-      </Card>
+      <AutomationPanel
+        settings={settings}
+        update={update}
+        getBadge={getBadge}
+        sourceLabel={automationSource ? sourceLabel(automationSource) : undefined}
+      />
 
       <Card
         title="AI Models"
         description="Select the provider strategy, model mix, and worker runtime settings this scope should use."
         badge={providerSource || workerSource ? sourceLabel(providerSource === workerSource ? (providerSource || "system") : "mixed") : undefined}
       >
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Row label="Worker mode" description="Connected workers stay in listen mode. Virtual workers wake only when worker work exists, run one unit of work, then shut down." badge={getBadge("workers.executionMode")}>
-            <SelectInput
-              value={settings.workers.executionMode}
-              onChange={(value) => update({
-                workers: {
-                  ...settings.workers,
-                  executionMode: value as ProjectSettings["workers"]["executionMode"],
-                },
-              })}
-              options={[
-                { value: "CONNECTED_MCP", label: "Connected MCP" },
-                { value: "VIRTUAL", label: "Virtual on-demand" },
-              ]}
-            />
-          </Row>
-          {virtualWorkerModeEnabled ? (
-            <Row label="Virtual worker CLI" description="Preferred provider when worker mode is virtual. Jules is intentionally excluded from worker execution." badge={getBadge("workers.virtualWorkerProvider")}>
-              <SelectInput
-                value={settings.workers.virtualWorkerProvider}
-                onChange={(value) => update({
-                  workers: {
-                    ...settings.workers,
-                    virtualWorkerProvider: value as ProjectSettings["workers"]["virtualWorkerProvider"],
-                    model: "default",
-                  },
-                })}
-                options={[
-                  { value: "gemini", label: "Gemini" },
-                  { value: "codex", label: "Codex" },
-                  { value: "claude-code", label: "Claude Code" },
-                ]}
-              />
-            </Row>
-          ) : null}
-          {virtualWorkerModeEnabled ? (
-            <Row label="Worker model" description="Override the global model for virtual workers. If set to 'Default', the global model for the selected CLI provider is used." badge={getBadge("workers.model")}>
-              <SelectInput
-                value={settings.workers.model || "default"}
-                onChange={(value) => update({
-                  workers: {
-                    ...settings.workers,
-                    model: value,
-                  },
-                })}
-                options={[
-                  { value: "default", label: `Default (${settings.aiProvider.providers[settings.workers.virtualWorkerProvider].model})` },
-                  ...getProviderModelOptions(settings.workers.virtualWorkerProvider),
-                ]}
-              />
-            </Row>
-          ) : null}
-          <Row label="Max concurrency" description="Maximum number of parallel tasks a worker can handle simultaneously." badge={getBadge("workers.maxConcurrency")}>
-            <NumberInput
-              value={settings.workers.maxConcurrency}
-              min={1}
-              max={20}
-              onChange={(value) => update({
-                workers: {
-                  ...settings.workers,
-                  maxConcurrency: value,
-                },
-              })}
-            />
-          </Row>
-          <Row label="Dispatch timeout" description="Seconds to wait for a worker to finish a single task dispatch before timing out." badge={getBadge("workers.timeoutSeconds")}>
-            <NumberInput
-              value={settings.workers.timeoutSeconds}
-              min={60}
-              max={3600}
-              onChange={(value) => update({
-                workers: {
-                  ...settings.workers,
-                  timeoutSeconds: value,
-                },
-              })}
-            />
-          </Row>
-        </div>
-
-        <div className={`grid gap-4 ${settings.aiProvider.strategy === "MANUAL" ? "lg:grid-cols-2" : ""}`}>
-          <Row label="Routing strategy" description="Manual pins one provider, weighted spreads work, orchestrator can make routing decisions." badge={getBadge("aiProvider.strategy")}>
-            <SelectInput
-              value={settings.aiProvider.strategy}
-              onChange={(value) => update({
-                aiProvider: {
-                  ...settings.aiProvider,
-                  strategy: value as ProjectSettings["aiProvider"]["strategy"],
-                },
-              })}
-              options={[
-                { value: "MANUAL", label: "Manual" },
-                { value: "WEIGHTED", label: "Weighted" },
-                { value: "ORCHESTRATOR", label: "Orchestrator" },
-              ]}
-            />
-          </Row>
-          {settings.aiProvider.strategy === "MANUAL" ? (
-            <Row label="Primary provider" description="Default provider when the strategy is manual." badge={getBadge("aiProvider.provider")}>
-              <SelectInput
-                value={settings.aiProvider.provider}
-                onChange={(value) => update({
-                  aiProvider: {
-                    ...settings.aiProvider,
-                    provider: value as ProjectSettings["aiProvider"]["provider"],
-                  },
-                })}
-                options={[
-                  { value: "jules", label: "Jules" },
-                  { value: "gemini", label: "Gemini" },
-                  { value: "codex", label: "Codex" },
-                  { value: "claude-code", label: "Claude Code" },
-                ]}
-              />
-            </Row>
-          ) : null}
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-2">
-          {Object.entries(settings.aiProvider.providers).map(([providerId, provider]) => {
-            const providerKey = providerId as keyof ProjectSettings["aiProvider"]["providers"];
-            const supportsModelSelection = providerSupportsModelSelection(providerKey);
-            const supportsThinkingMode = providerSupportsThinkingMode(providerKey);
-            const modelOptions = getProviderModelOptions(providerKey);
-            const cardTokens = PROVIDER_CARD_TOKENS[providerKey];
-
-            return (
-            <div
-              key={providerId}
-              className={`group relative overflow-hidden rounded-[1.6rem] border border-black/[0.06] bg-white/72 p-5 shadow-[0_10px_24px_rgba(15,23,42,0.045)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-800/65 dark:shadow-[0_12px_28px_rgba(0,0,0,0.2)] ${provider.enabled ? "" : "opacity-60"}`}
-            >
-                <div aria-hidden className={`pointer-events-none absolute inset-0 ${cardTokens.glowClassName}`} />
-                <div aria-hidden className={`absolute left-0 top-5 bottom-5 w-1 rounded-r-full ${cardTokens.railClassName}`} />
-                <div aria-hidden className="pointer-events-none absolute -right-2 -top-3 select-none font-display text-[4.75rem] font-black leading-none tracking-tighter text-black/[0.035] dark:text-white/[0.03]">
-                  {cardTokens.watermark}
-                </div>
-                <div className="relative z-10 mb-4 flex items-center justify-between">
-                  <div className="flex items-start gap-3">
-                    <ProviderLogo providerId={providerKey} disabled={!provider.enabled} />
-                    <div>
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.16em] ${cardTokens.badgeClassName}`}>
-                        {cardTokens.badgeLabel}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{providerLabels[providerId as keyof typeof providerLabels]}</div>
-                      {getBadge(`aiProvider.providers.${providerId}.enabled`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.enabled`)!} /> : null}
-                    </div>
-                    <div className="mt-1 text-xs font-medium leading-relaxed text-slate-500 dark:text-slate-400">
-                      {providerId === "jules"
-                        ? "Enabled state and routing weight. Jules follows API-managed defaults for model behavior."
-                        : "Model choice, weight, and thinking mode."}
-                    </div>
-                    </div>
-                  </div>
-                <Toggle
-                  value={provider.enabled}
-                  onChange={(value) => update({
-                    aiProvider: {
-                      ...settings.aiProvider,
-                      providers: {
-                        ...settings.aiProvider.providers,
-                        [providerId]: {
-                          ...provider,
-                          enabled: value,
-                        },
-                      },
-                    },
-                  })}
-                />
-              </div>
-              {!supportsModelSelection || !supportsThinkingMode ? (
-                <div className={`relative z-10 mb-3 rounded-2xl border px-4 py-3 text-xs font-medium leading-relaxed ${cardTokens.noteClassName}`}>
-                  Jules API currently does not expose model selection or thinking controls, so this provider uses Jules-managed defaults.
-                </div>
-              ) : null}
-              <div className={`relative z-10 grid gap-3 ${supportsModelSelection && supportsThinkingMode ? "md:grid-cols-2" : "md:grid-cols-1"}`}>
-                {supportsModelSelection ? (
-                <div>
-                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                    <span>Model</span>
-                    {getBadge(`aiProvider.providers.${providerId}.model`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.model`)!} /> : null}
-                  </div>
-                  {modelOptions.length > 0 ? (
-                    <SelectInput
-                      value={provider.model}
-                      onChange={(value) => update({
-                        aiProvider: {
-                          ...settings.aiProvider,
-                          providers: {
-                            ...settings.aiProvider.providers,
-                            [providerId]: {
-                              ...provider,
-                              model: value,
-                            },
-                          },
-                        },
-                      })}
-                      options={modelOptions}
-                    />
-                  ) : (
-                    <TextInput
-                      value={provider.model}
-                      onChange={(value) => update({
-                        aiProvider: {
-                          ...settings.aiProvider,
-                          providers: {
-                            ...settings.aiProvider.providers,
-                            [providerId]: {
-                              ...provider,
-                              model: value,
-                            },
-                          },
-                        },
-                      })}
-                      mono
-                    />
-                  )}
-                </div>
-                ) : null}
-                {supportsThinkingMode ? (
-                <div>
-                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                    <span>Thinking mode</span>
-                    {getBadge(`aiProvider.providers.${providerId}.thinkingMode`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.thinkingMode`)!} /> : null}
-                  </div>
-                  <SelectInput
-                    value={provider.thinkingMode}
-                    onChange={(value) => update({
-                      aiProvider: {
-                        ...settings.aiProvider,
-                        providers: {
-                          ...settings.aiProvider.providers,
-                          [providerId]: {
-                            ...provider,
-                            thinkingMode: value as ThinkingMode,
-                          },
-                        },
-                      },
-                    })}
-                    options={thinkingModeOptions}
-                  />
-                </div>
-                ) : null}
-                <div>
-                  <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">
-                    <span>Weight</span>
-                    {getBadge(`aiProvider.providers.${providerId}.weight`) ? <OverrideBadge label={getBadge(`aiProvider.providers.${providerId}.weight`)!} /> : null}
-                  </div>
-                  <NumberInput
-                    value={provider.weight}
-                    min={0}
-                    max={100}
-                    onChange={(value) => update({
-                      aiProvider: {
-                        ...settings.aiProvider,
-                        providers: {
-                          ...settings.aiProvider.providers,
-                          [providerId]: {
-                            ...provider,
-                            weight: value,
-                          },
-                        },
-                      },
-                    })}
-                  />
-                </div>
-              </div>
-            </div>
-          )})}
-        </div>
+        <WorkerPanel
+          settings={settings}
+          update={update}
+          getBadge={getBadge}
+        />
+        <ProviderPanel
+          settings={settings}
+          update={update}
+          getBadge={getBadge}
+        />
       </Card>
 
       <Card

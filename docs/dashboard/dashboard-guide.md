@@ -371,6 +371,7 @@ Runtime scoping:
 - the selected project and selected sprint in the v2 top navigation now also scope live session status, reruns, live activities, and git tracking
 - the selected project also scopes Agents and Chat data
 - dashboard runtime state is projected through sqlite task-run records instead of being served only from one in-memory global payload
+- Memory embedding map uses a bounded nearest-neighbor algorithm and caps results at 1000 items to guarantee dashboard responsiveness for large projects
 
 ### Settings view
 - The active backend model is now scoped as `system -> project -> sprint`

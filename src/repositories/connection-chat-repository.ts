@@ -21,6 +21,23 @@ import type {
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import { WorkerEndpointRepository } from "./worker-endpoint-repository.js";
 import {
+  HIDDEN_INTERNAL_VISIBILITY,
+  toNumber,
+  visibleConversationMessageFilter,
+} from "./connection-chat/conversation-query-utils.js";
+import { requireConversationThreadQuery } from "./connection-chat/conversation-thread-query.js";
+import { ThreadRow, mapThreadRow, MessageRow } from "./connection-chat/conversation-query-utils.js";
+
+interface InboxRow extends MessageRow {
+  title: string;
+  project_id: string;
+}
+import {
+  listConversationMessagesQuery,
+  requireConversationMessageQuery,
+  getFirstReplyAfterMessageQuery,
+} from "./connection-chat/conversation-message-query.js";
+import {
   deriveConnectionHeartbeatStatus,
 } from "./connection-lifecycle.js";
 
@@ -71,46 +88,7 @@ export interface CreateSystemConversationMessageInput {
   metadata?: Record<string, unknown> | null;
 }
 
-interface ThreadRow {
-  id: string;
-  project_id: string;
-  connection_id: string | null;
-  scope: string;
-  title: string;
-  runtime_state_json?: string | null;
-  status: string;
-  created_at: string;
-  updated_at: string;
-  message_count: number | string | null;
-  pending_message_count: number | string | null;
-  last_message_at: string | null;
-  last_message_preview: string | null;
-}
-
-interface MessageRow {
-  id: string;
-  thread_id: string;
-  direction: string;
-  author_type: string;
-  author_connection_id: string | null;
-  body_markdown: string;
-  delivery_status: string;
-  metadata_json?: string | null;
-  created_at: string;
-}
-
-interface InboxRow extends MessageRow {
-  title: string;
-  project_id: string;
-}
-
 const SELECTED_PROJECT_KEY = "selected_project_id";
-const HIDDEN_INTERNAL_VISIBILITY = "hidden";
-
-function visibleConversationMessageFilter(alias: string): string {
-  return `(COALESCE(json_extract(${alias}.metadata_json, '$.internalVisibility'), '') != '${HIDDEN_INTERNAL_VISIBILITY}')`;
-}
-
 function isHiddenConversationMessage(metadata?: Record<string, unknown> | null): boolean {
   return metadata?.internalVisibility === HIDDEN_INTERNAL_VISIBILITY;
 }
@@ -121,12 +99,6 @@ export interface ConnectionLifecycleCleanupResult {
   prunedConnectionIds: string[];
 }
 
-function toNumber(value: number | string | null | undefined): number {
-  if (typeof value === "number") {
-    return value;
-  }
-  return Number.parseInt(String(value ?? 0), 10) || 0;
-}
 
 function toBoolean(value: number | string | null | undefined): boolean {
   return value === 1 || value === "1";
@@ -442,7 +414,7 @@ export class ConnectionChatRepository {
       ORDER BY COALESCE(lm.created_at, ct.updated_at) DESC, ct.created_at DESC
     `).all(projectId, projectId, projectId) as unknown as ThreadRow[];
 
-    return rows.map((row) => this.mapThreadRow(row));
+    return rows.map((row) => mapThreadRow(row));
   }
 
   createThread(projectId: string, input: CreateConversationThreadInput): ConversationThreadRecord {
@@ -469,32 +441,30 @@ export class ConnectionChatRepository {
       now
     );
 
-    const thread = this.requireThread(threadId);
+    const thread = requireConversationThreadQuery(this.db, threadId);
     this.notifyProjects([thread.projectId]);
     this.publishThreadUpdatedEvent(thread);
     return thread;
   }
 
   listMessages(threadId: string, options?: { includeHidden?: boolean }): ConversationMessageRecord[] {
-    this.requireThread(threadId);
-    const includeHidden = options?.includeHidden === true;
-    const rows = this.db.prepare(`
-      SELECT *
-      FROM conversation_messages
-      WHERE thread_id = ?
-        ${includeHidden ? "" : `AND ${visibleConversationMessageFilter("conversation_messages")}`}
-      ORDER BY created_at ASC, id ASC
-    `).all(threadId) as unknown as MessageRow[];
+    requireConversationThreadQuery(this.db, threadId);
+    return listConversationMessagesQuery(this.db, threadId, options);
+  }
 
-    return rows.map((row) => this.mapMessageRow(row));
+
+
+  getFirstReplyAfterMessage(threadId: string, messageId: string, options?: { includeHidden?: boolean }): ConversationMessageRecord | null {
+    requireConversationThreadQuery(this.db, threadId);
+    return getFirstReplyAfterMessageQuery(this.db, threadId, messageId, options);
   }
 
   getThread(threadId: string): ConversationThreadRecord {
-    return this.requireThread(threadId);
+    return requireConversationThreadQuery(this.db, threadId);
   }
 
   updateThread(threadId: string, input: UpdateConversationThreadInput): ConversationThreadRecord {
-    const thread = this.requireThread(threadId);
+    const thread = requireConversationThreadQuery(this.db, threadId);
     const now = new Date().toISOString();
     const normalizedConnectionId = input.connectionId === undefined
       ? thread.connectionId
@@ -533,14 +503,14 @@ export class ConnectionChatRepository {
       }
     });
 
-    const updated = this.requireThread(threadId);
+    const updated = requireConversationThreadQuery(this.db, threadId);
     this.notifyProjects([updated.projectId]);
     this.publishThreadUpdatedEvent(updated);
     return updated;
   }
 
   deleteThread(threadId: string): void {
-    const thread = this.requireThread(threadId);
+    const thread = requireConversationThreadQuery(this.db, threadId);
 
     this.db.prepare(`
       DELETE FROM conversation_threads
@@ -554,7 +524,7 @@ export class ConnectionChatRepository {
   postDashboardMessage(projectId: string, input: CreateDashboardConversationMessageInput): ConversationMessageRecord {
     requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const thread = input.threadId
-      ? this.requireThread(input.threadId)
+      ? requireConversationThreadQuery(this.db, input.threadId)
       : this.createThread(projectId, {
         title: input.title?.trim() || `Project Chat ${new Date().toISOString().slice(0, 16)}`,
         connectionId: input.connectionId ?? undefined,
@@ -601,10 +571,10 @@ export class ConnectionChatRepository {
       );
     });
 
-    const created = this.requireMessage(messageId);
+    const created = requireConversationMessageQuery(this.db, messageId);
     this.notifyProjects([projectId]);
     if (!hiddenMessage) {
-      this.publishThreadUpdatedEvent(this.requireThread(thread.id));
+      this.publishThreadUpdatedEvent(requireConversationThreadQuery(this.db, thread.id));
       this.publishMessageCreatedEvent(projectId, thread.id, created);
     }
     return created;
@@ -613,7 +583,7 @@ export class ConnectionChatRepository {
   postSystemMessage(projectId: string, input: CreateSystemConversationMessageInput): ConversationMessageRecord {
     requireRecord(this.db.prepare('SELECT id FROM projects WHERE id = ?').get(projectId), "Project", projectId);
     const thread = input.threadId
-      ? this.requireThread(input.threadId)
+      ? requireConversationThreadQuery(this.db, input.threadId)
       : this.createThread(projectId, {
         title: input.title?.trim() || `Worker Attention ${new Date().toISOString().slice(0, 16)}`,
         connectionId: input.connectionId ?? undefined,
@@ -659,18 +629,18 @@ export class ConnectionChatRepository {
       );
     });
 
-    const message = this.requireMessage(messageId);
+    const message = requireConversationMessageQuery(this.db, messageId);
     const hiddenMessage = isHiddenConversationMessage(input.metadata);
     this.notifyProjects([projectId]);
     if (!hiddenMessage) {
-      this.publishThreadUpdatedEvent(this.requireThread(thread.id));
+      this.publishThreadUpdatedEvent(requireConversationThreadQuery(this.db, thread.id));
       this.publishMessageCreatedEvent(projectId, thread.id, message);
     }
     return message;
   }
 
   markDashboardMessagesProcessed(threadId: string, options?: { upToMessageId?: string | null }): ConversationThreadRecord {
-    const thread = this.requireThread(threadId);
+    const thread = requireConversationThreadQuery(this.db, threadId);
     const now = new Date().toISOString();
 
     this.runInTransaction(() => {
@@ -705,7 +675,7 @@ export class ConnectionChatRepository {
       `).run(now, threadId);
     });
 
-    const updatedThread = this.requireThread(threadId);
+    const updatedThread = requireConversationThreadQuery(this.db, threadId);
     this.notifyProjects([thread.projectId]);
     this.publishThreadUpdatedEvent(updatedThread);
     return updatedThread;
@@ -818,7 +788,7 @@ export class ConnectionChatRepository {
     for (const row of rows) {
       const metadata = row.metadata_json ? JSON.parse(row.metadata_json) as Record<string, unknown> : null;
       if (!isHiddenConversationMessage(metadata)) {
-        this.publishThreadUpdatedEvent(this.requireThread(row.thread_id));
+        this.publishThreadUpdatedEvent(requireConversationThreadQuery(this.db, row.thread_id));
       }
     }
     return inbox;
@@ -826,7 +796,7 @@ export class ConnectionChatRepository {
 
   postListenReply(input: PostListenReplyInput): ConversationMessageRecord {
     const connection = this.requireConnectionByKey(input.connectionKey);
-    const thread = this.requireThread(input.threadId);
+    const thread = requireConversationThreadQuery(this.db, input.threadId);
     const activeProjectIds = this.getActiveProjectIds(connection.id);
     if (activeProjectIds.length > 0 && !activeProjectIds.includes(thread.projectId)) {
       throw new Error(`Connection ${connection.connectionKey} is not bound to project ${thread.projectId}`);
@@ -884,11 +854,11 @@ export class ConnectionChatRepository {
     });
 
     this.touchConnection(connection, "listening");
-    const message = this.requireMessage(messageId);
+    const message = requireConversationMessageQuery(this.db, messageId);
     const hiddenMessage = isHiddenConversationMessage(input.metadata);
     this.notifyProjects([thread.projectId]);
     if (!hiddenMessage) {
-      this.publishThreadUpdatedEvent(this.requireThread(thread.id));
+      this.publishThreadUpdatedEvent(requireConversationThreadQuery(this.db, thread.id));
       this.publishMessageCreatedEvent(thread.projectId, thread.id, message);
     }
     return message;
@@ -1274,38 +1244,6 @@ export class ConnectionChatRepository {
     return rows.map((row) => row.project_id);
   }
 
-  private mapThreadRow(row: ThreadRow): ConversationThreadRecord {
-    return {
-      id: row.id,
-      projectId: row.project_id,
-      connectionId: row.connection_id,
-      scope: row.scope as ConversationThreadRecord["scope"],
-      title: row.title,
-      status: row.status as ConversationThreadRecord["status"],
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      messageCount: toNumber(row.message_count),
-      pendingMessageCount: toNumber(row.pending_message_count),
-      lastMessageAt: row.last_message_at,
-      lastMessagePreview: row.last_message_preview,
-      runtimeState: row.runtime_state_json ? JSON.parse(row.runtime_state_json) : null,
-    };
-  }
-
-  private mapMessageRow(row: MessageRow): ConversationMessageRecord {
-    return {
-      id: row.id,
-      threadId: row.thread_id,
-      direction: row.direction as ConversationMessageRecord["direction"],
-      authorType: row.author_type as ConversationMessageRecord["authorType"],
-      authorConnectionId: row.author_connection_id,
-      bodyMarkdown: row.body_markdown,
-      deliveryStatus: row.delivery_status as ConversationMessageRecord["deliveryStatus"],
-      metadata: row.metadata_json ? JSON.parse(row.metadata_json) : null,
-      createdAt: row.created_at,
-    };
-  }
-
   private requireConnection(connectionId: string): McpConnectionRecord {
     const connection = this.getConnection(connectionId);
     if (!connection) {
@@ -1320,66 +1258,6 @@ export class ConnectionChatRepository {
       throw new Error(`Connection not found for key: ${connectionKey}`);
     }
     return connection;
-  }
-
-  private requireThread(threadId: string): ConversationThreadRecord {
-    const row = this.db.prepare(`
-      WITH
-      message_stats AS (
-        SELECT
-          thread_id,
-          COUNT(*) AS message_count,
-          SUM(CASE WHEN direction = 'dashboard_to_connection' AND delivery_status IN ('pending', 'delivered') THEN 1 ELSE 0 END) AS pending_message_count
-        FROM conversation_messages cm
-        WHERE cm.thread_id = ?
-          AND ${visibleConversationMessageFilter("cm")}
-        GROUP BY thread_id
-      ),
-      last_messages AS (
-        SELECT thread_id, created_at, body_markdown
-        FROM (
-          SELECT
-            thread_id,
-            created_at,
-            body_markdown,
-            ROW_NUMBER() OVER (PARTITION BY thread_id ORDER BY created_at DESC, id DESC) as rn
-          FROM conversation_messages cm
-          WHERE cm.thread_id = ?
-            AND ${visibleConversationMessageFilter("cm")}
-        )
-        WHERE rn = 1
-      )
-      SELECT
-        ct.*,
-        COALESCE(ms.message_count, 0) AS message_count,
-        COALESCE(ms.pending_message_count, 0) AS pending_message_count,
-        lm.created_at AS last_message_at,
-        lm.body_markdown AS last_message_preview
-      FROM conversation_threads ct
-      LEFT JOIN message_stats ms ON ms.thread_id = ct.id
-      LEFT JOIN last_messages lm ON lm.thread_id = ct.id
-      WHERE ct.id = ?
-    `).get(threadId, threadId, threadId) as ThreadRow | undefined;
-
-    if (!row) {
-      throw new Error(`Conversation thread not found: ${threadId}`);
-    }
-
-    return this.mapThreadRow(row);
-  }
-
-  private requireMessage(messageId: string): ConversationMessageRecord {
-    const row = this.db.prepare(`
-      SELECT *
-      FROM conversation_messages
-      WHERE id = ?
-    `).get(messageId) as MessageRow | undefined;
-
-    if (!row) {
-      throw new Error(`Conversation message not found: ${messageId}`);
-    }
-
-    return this.mapMessageRow(row);
   }
 
   private touchConnection(connection: McpConnectionRecord, status?: string): boolean {

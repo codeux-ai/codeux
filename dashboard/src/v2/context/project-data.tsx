@@ -1,5 +1,5 @@
 import { createContext } from "preact";
-import { useCallback, useContext, useMemo, useState } from "preact/hooks";
+import { useCallback, useContext, useMemo } from "preact/hooks";
 import type { ComponentChildren, FunctionComponent } from "preact";
 import type { CreateProjectInput, Source, UpdateProjectInput } from "../types.js";
 import {

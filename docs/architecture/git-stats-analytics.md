@@ -12,7 +12,7 @@ Instead, when an automated tool (e.g. Jules, Codex) or a CLI agent pushes code o
 - `cli_git_pushed`
 - `jules_git_pushed`
 
-These payloads carry the `numstat` delta metrics (generated from `git diff --numstat`). A custom backend parser correctly handles standard files (reporting specific insertion and deletion line counts) and binary files (which output `-` for insertion/deletion counts, treated safely without causing numeric blowups).
+These payloads carry the `numstat` delta metrics (generated from `git diff --numstat`), which are now aggregated efficiently using SQL `GROUP BY` logic and SQLite JSON functions rather than in-memory application-level loops. A custom backend parser correctly handles standard files (reporting specific insertion and deletion line counts) and binary files (which output `-` for insertion/deletion counts, treated safely without causing numeric blowups).
 
 We track pull requests and merge confirmations via orchestration checkpoints:
 - **PR Count**: Determined via the presence of a non-null `pr_url` on `task_runs`.

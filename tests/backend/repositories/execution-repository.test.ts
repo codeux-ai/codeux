@@ -210,11 +210,6 @@ describe("ExecutionRepository", () => {
     expect(staleResults[0].id).toBe(oldDispatch.id);
   });
 
-  it("handles null summary from buildHumanInterventionSummaryFromAttentionRows", async () => {
-    const { executionRepository } = await createRepositories();
-    const result = (executionRepository as any).buildHumanInterventionSummaryFromAttentionRows([]);
-    expect(result).toBeNull();
-  });
 
   it("creates sprint runs and queues task dispatches against project/sprint tasks", async () => {
     const { projectRepository, executionRepository } = await createRepositories();

@@ -1,114 +1,23 @@
 import { randomUUID } from "crypto";
 import * as path from "path";
 import { DatabaseAdapter } from "./db/database-adapter.js";
-import type { DashboardStatus, JulesActivity, Subtask, SubtaskMergeIndicator, SubtaskStatus } from "../contracts/app-types.js";
+import type { DashboardStatus, Subtask, SubtaskStatus } from "../contracts/app-types.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import type { DashboardRealtimeMutationNotifier } from "../services/dashboard-realtime-service.js";
-import { mapPlanningStatusToRuntimeStatus, mapRuntimeStatusToPlanningStatus, toMergeIndicator } from "../services/subtask-state-mapper.js";
-
-const RUNTIME_CONTEXT_PREFIX = "runtime_context:";
-
-type PlanningTaskStatus = "pending" | "in_progress" | "coding_completed" | "completed";
-type ProjectStatus = "running" | "failed" | "intervention" | "idle";
-type TaskRunState = Exclude<SubtaskStatus, undefined>;
-type JulesPlan = { steps?: Array<{ title?: string }> };
-
-interface ProjectRow {
-  id: string;
-  base_dir: string;
-  source_ref: string | null;
-}
-
-interface SprintRow {
-  id: string;
-  number: number | string | null;
-}
-
-interface TaskRow {
-  id: string;
-  project_id: string;
-  sprint_id: string;
-  task_key: string;
-  title: string;
-  prompt_markdown: string;
-  description: string | null;
-  status: PlanningTaskStatus;
-  is_independent: number | string;
-  is_merged: number | string;
-  merge_indicator: string | null;
-  updated_at: string;
-}
-
-interface DependencyRow {
-  task_id: string;
-  depends_on_task_id: string;
-}
-
-interface TaskRunRow {
-  id: string;
-  task_id: string;
-  connection_id: string | null;
-  provider: string | null;
-  mode: string | null;
-  session_id: string | null;
-  session_name: string | null;
-  state: TaskRunState;
-  worker_branch: string | null;
-  pr_url: string | null;
-  started_at: string | null;
-  finished_at: string | null;
-  duration_ms: number | string | null;
-}
-
-interface TaskActivityRow {
-  task_id: string;
-  session_id: string | null;
-  session_name: string | null;
-  provider: string | null;
-  activity_id: string | null;
-  activity_name: string | null;
-  created_at: string;
-  originator: string | null;
-  payload_json: string | null;
-}
-
-interface RuntimeContextPayload {
-  projectId: string;
-  sprintId: string | null;
-  sprintNumber: number | null;
-  sourceId: string | null;
-  repoPath: string | null;
-  featureBranch: string | null;
-  reportText: string;
-  statusTable: string;
-  instructions: string;
-  timestamp: string | null;
-}
-
-interface MappedTask {
-  row: TaskRow;
-  dependsOnTaskIds: string[];
-}
+import { mapRuntimeStatusToPlanningStatus } from "../services/subtask-state-mapper.js";
+import { RuntimeContextStore } from "./project-runtime/runtime-context-store.js";
+import {
+  RuntimeStatusProjection,
+  ProjectStatus,
+  TaskRunState,
+  TaskRow,
+  TaskRunRow,
+  ProjectRow,
+  SprintRow,
+  toNumber
+} from "./project-runtime/runtime-status-projection.js";
 
 const TERMINAL_TASK_STATES = new Set<TaskRunState>(["CODING_COMPLETED", "COMPLETED", "FAILED", "BLOCKED"]);
-
-function toBoolean(value: number | string | null | undefined): boolean {
-  return value === 1 || value === "1";
-}
-
-function toNumber(value: number | string | null | undefined): number {
-  if (typeof value === "number") {
-    return value;
-  }
-  return Number.parseInt(String(value ?? 0), 10) || 0;
-}
-
-function runtimeContextKey(projectId: string, sprintId?: string | null): string {
-  if (!sprintId) {
-    throw new Error("Sprint runtime context requires a sprint id.");
-  }
-  return `${RUNTIME_CONTEXT_PREFIX}${projectId}:${sprintId}`;
-}
 
 function normalizePath(value: string | null | undefined): string | null {
   if (typeof value !== "string") {
@@ -138,35 +47,18 @@ function toPersistedTaskRunState(status: TaskRunState): Exclude<TaskRunState, "C
   return status === "CODING_COMPLETED" ? "COMPLETED" : status;
 }
 
-function parsePayloadJson(value: string | null | undefined): Record<string, unknown> | null {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
-  } catch {
-    return null;
-  }
-}
-
-function asString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" ? value as Record<string, unknown> : undefined;
-}
-
 export class ProjectRuntimeRepository {
   private readonly db: DatabaseAdapter;
+  private readonly runtimeContextStore: RuntimeContextStore;
+  private readonly runtimeStatusProjection: RuntimeStatusProjection;
 
   constructor(
     private readonly storage: AppDbStorage = new AppDbStorage(),
     private readonly realtimeNotifier?: DashboardRealtimeMutationNotifier,
   ) {
     this.db = storage.getDatabase();
+    this.runtimeContextStore = new RuntimeContextStore(this.db);
+    this.runtimeStatusProjection = new RuntimeStatusProjection(this.storage, this.db);
   }
 
   syncDashboardStatus(status: Partial<DashboardStatus> | null): DashboardStatus | null {
@@ -180,7 +72,7 @@ export class ProjectRuntimeRepository {
     }
 
     const sprint = this.resolveSprintForStatus(project.id, status);
-    const tasks = this.getMappedTasks(project.id, sprint?.id ?? null);
+    const tasks = this.runtimeStatusProjection.getMappedTasks(project.id, sprint?.id ?? null);
     const tasksByRecordId = new Map(tasks.map((task) => [task.row.id, task]));
     const tasksByKey = new Map(tasks.map((task) => [task.row.task_key, task]));
     const subtasks = Array.isArray(status.subtasks) ? status.subtasks : [];
@@ -188,7 +80,7 @@ export class ProjectRuntimeRepository {
 
     this.runInTransaction(() => {
       if (sprint?.id) {
-        this.saveRuntimeContext({
+        this.runtimeContextStore.saveRuntimeContext({
           projectId: project.id,
           sprintId: sprint.id,
           sprintNumber: sprint.number === null || sprint.number === undefined
@@ -202,7 +94,7 @@ export class ProjectRuntimeRepository {
           instructions: typeof status.instructions === "string" ? status.instructions : "",
           timestamp: typeof status.timestamp === "string" ? status.timestamp : now,
         });
-        this.clearLegacyProjectRuntimeContext(project.id);
+        this.runtimeContextStore.clearLegacyProjectRuntimeContext(project.id);
       }
 
       let hasRunning = false;
@@ -210,7 +102,7 @@ export class ProjectRuntimeRepository {
       let hasIntervention = false;
 
       for (const subtask of subtasks) {
-        const mappedTask = this.resolveMappedTask(subtask, tasksByRecordId, tasksByKey);
+        const mappedTask = this.runtimeStatusProjection.resolveMappedTask(subtask, tasksByRecordId, tasksByKey);
         if (!mappedTask) {
           continue;
         }
@@ -296,52 +188,8 @@ export class ProjectRuntimeRepository {
 
   getProjectStatus(projectId: string, explicitSprintId?: string | null): DashboardStatus {
     const sprintIdToLoad = explicitSprintId ?? this.getSelectedSprintId(projectId) ?? null;
-    const context = sprintIdToLoad ? this.getRuntimeContext(projectId, sprintIdToLoad) : null;
-    const tasks = this.getMappedTasks(projectId, sprintIdToLoad);
-    const latestRuns = this.getLatestRuns(tasks.map((task) => task.row.id));
-    const recentActivitiesByTaskId = this.getRecentActivitiesByTask(tasks.map((task) => task.row.id));
-    const taskKeyByRecordId = new Map(tasks.map((task) => [task.row.id, task.row.task_key]));
-
-    const subtasks: Subtask[] = tasks.map((task) => {
-      const run = latestRuns.get(task.row.id);
-      return {
-        record_id: task.row.id,
-        project_id: task.row.project_id,
-        sprint_id: task.row.sprint_id,
-        id: task.row.task_key,
-        title: task.row.title,
-        prompt: task.row.prompt_markdown || task.row.description || "",
-        depends_on: task.dependsOnTaskIds.map((dependencyId) => taskKeyByRecordId.get(dependencyId) || dependencyId),
-        status: run?.state && run.state !== "COMPLETED"
-          ? run.state
-          : mapPlanningStatusToRuntimeStatus(task.row.status),
-        session_id: run?.session_id || undefined,
-        session_name: run?.session_name || undefined,
-        provider: run?.provider ? run.provider as Subtask["provider"] : undefined,
-        worker_branch: run?.worker_branch || undefined,
-        pr_url: run?.pr_url || undefined,
-        activities: recentActivitiesByTaskId.get(task.row.id),
-        is_independent: toBoolean(task.row.is_independent),
-        is_merged: task.row.merge_indicator === "MERGED"
-          || task.row.merge_indicator === "AUTOMERGE"
-          || toBoolean(task.row.is_merged),
-        merge_indicator: toMergeIndicator(task.row.merge_indicator),
-      };
-    });
-
-    return {
-      project_id: projectId,
-      sprint_id: sprintIdToLoad ?? undefined,
-      sprint_number: context?.sprintNumber ?? undefined,
-      source_id: context?.sourceId ?? undefined,
-      repo_path: context?.repoPath ?? undefined,
-      feature_branch: context?.featureBranch ?? undefined,
-      subtasks,
-      reportText: context?.reportText || undefined,
-      statusTable: context?.statusTable || undefined,
-      instructions: context?.instructions || undefined,
-      timestamp: context?.timestamp ?? null,
-    };
+    const context = sprintIdToLoad ? this.runtimeContextStore.getRuntimeContext(projectId, sprintIdToLoad) : null;
+    return this.runtimeStatusProjection.buildProjectStatus(projectId, sprintIdToLoad, context);
   }
 
   getSelectedProjectRepoPath(fallbackPath: string): string {
@@ -509,226 +357,6 @@ export class ProjectRuntimeRepository {
     }
 
     return null;
-  }
-
-  private getRuntimeContext(projectId: string, sprintId?: string | null): RuntimeContextPayload | null {
-    if (!sprintId) {
-      return null;
-    }
-    const primaryKey = runtimeContextKey(projectId, sprintId);
-    const row = this.db.prepare(`
-      SELECT payload
-      FROM app_settings
-      WHERE key = ?
-    `).get(primaryKey) as { payload: string } | undefined;
-
-    if (!row) {
-      return null;
-    }
-
-    try {
-      return JSON.parse(row.payload) as RuntimeContextPayload;
-    } catch {
-      return null;
-    }
-  }
-
-  private saveRuntimeContext(context: RuntimeContextPayload): void {
-    if (!context.sprintId) {
-      return;
-    }
-    const now = new Date().toISOString();
-    this.db.prepare(`
-      INSERT INTO app_settings (key, payload, updated_at)
-      VALUES (?, ?, ?)
-      ${this.db.dialect.upsert(["key"], ["payload", "updated_at"])}
-    `).run(
-      runtimeContextKey(context.projectId, context.sprintId),
-      JSON.stringify(context),
-      now
-    );
-  }
-
-  private clearLegacyProjectRuntimeContext(projectId: string): void {
-    this.db.prepare(`
-      DELETE FROM app_settings
-      WHERE key = ?
-    `).run(`${RUNTIME_CONTEXT_PREFIX}${projectId}`);
-  }
-
-  private getMappedTasks(projectId: string, sprintId: string | null): MappedTask[] {
-    const rows = sprintId
-      ? this.db.prepare(`
-        SELECT *
-        FROM tasks
-        WHERE project_id = ? AND sprint_id = ?
-        ORDER BY sort_order ASC, created_at ASC, task_key ASC
-      `).all(projectId, sprintId)
-      : this.db.prepare(`
-        SELECT *
-        FROM tasks
-        WHERE project_id = ?
-        ORDER BY sort_order ASC, created_at ASC, task_key ASC
-      `).all(projectId);
-
-    const taskRows = rows as unknown as TaskRow[];
-    if (taskRows.length === 0) {
-      return [];
-    }
-
-    const dependencyRows = this.storage.executeChunkedInQuery<DependencyRow>({
-      sqlPrefix: "SELECT task_id, depends_on_task_id FROM task_dependencies WHERE task_id",
-      sqlSuffix: "ORDER BY depends_on_task_id ASC",
-      items: taskRows.map((row) => row.id),
-    });
-
-    const dependencyMap = new Map<string, string[]>();
-    for (const row of dependencyRows) {
-      const current = dependencyMap.get(row.task_id) || [];
-      current.push(row.depends_on_task_id);
-      dependencyMap.set(row.task_id, current);
-    }
-
-    return taskRows.map((row) => ({
-      row,
-      dependsOnTaskIds: dependencyMap.get(row.id) || [],
-    }));
-  }
-
-  private getLatestRuns(taskIds: string[]): Map<string, TaskRunRow> {
-    if (taskIds.length === 0) {
-      return new Map();
-    }
-
-    const rows = this.storage.executeChunkedInQuery<TaskRunRow>({
-      sqlPrefix: `SELECT tr.*
-      FROM task_runs tr
-      INNER JOIN (
-        SELECT task_id, MAX(COALESCE(started_at, '')) AS latest_started_at
-        FROM task_runs
-        WHERE task_id`,
-      sqlSuffix: `GROUP BY task_id
-      ) latest
-        ON latest.task_id = tr.task_id
-       AND COALESCE(tr.started_at, '') = latest.latest_started_at
-      ORDER BY tr.rowid DESC`,
-      items: taskIds,
-    });
-
-    const map = new Map<string, TaskRunRow>();
-    for (const row of rows) {
-      if (!map.has(row.task_id)) {
-        map.set(row.task_id, row);
-      }
-    }
-    return map;
-  }
-
-  private getRecentActivitiesByTask(taskIds: string[], limitPerTask: number = 5): Map<string, JulesActivity[]> {
-    if (taskIds.length === 0) {
-      return new Map();
-    }
-
-    const rows = this.storage.executeChunkedInQuery<TaskActivityRow>({
-      sqlPrefix: `SELECT
-        task_id,
-        session_id,
-        session_name,
-        provider,
-        activity_id,
-        activity_name,
-        created_at,
-        originator,
-        payload_json
-      FROM (
-        SELECT
-          tr.task_id,
-          tr.session_id,
-          tr.session_name,
-          tr.provider,
-          ${this.db.dialect.jsonExtract("tre.payload_json", "$.activityId")} AS activity_id,
-          ${this.db.dialect.jsonExtract("tre.payload_json", "$.activityName")} AS activity_name,
-          tre.created_at,
-          tre.originator,
-          tre.payload_json,
-          ROW_NUMBER() OVER (
-            PARTITION BY tr.task_id
-            ORDER BY tre.created_at DESC, tre.id DESC
-          ) AS activity_rank
-        FROM task_run_events tre
-        INNER JOIN task_runs tr ON tr.id = tre.task_run_id
-        WHERE tr.task_id`,
-      sqlSuffix: `AND tre.event_type = 'provider_activity'
-      )
-      WHERE activity_rank <= ?
-      ORDER BY task_id ASC, created_at ASC`,
-      items: taskIds,
-      bindParamsAfter: [limitPerTask],
-    });
-
-    const activitiesByTaskId = new Map<string, JulesActivity[]>();
-    for (const row of rows) {
-      const activity = this.mapTaskActivityRow(row);
-      if (!activity) {
-        continue;
-      }
-      const existing = activitiesByTaskId.get(row.task_id) || [];
-      existing.push(activity);
-      activitiesByTaskId.set(row.task_id, existing);
-    }
-
-    return activitiesByTaskId;
-  }
-
-  private mapTaskActivityRow(row: TaskActivityRow): JulesActivity | null {
-    const payload = parsePayloadJson(row.payload_json);
-    const agentMessaged = asRecord(payload?.agentMessaged);
-    const userMessaged = asRecord(payload?.userMessaged);
-    const progressUpdated = asRecord(payload?.progressUpdated);
-    const planGenerated = asRecord(payload?.planGenerated);
-    const planApproved = asRecord(payload?.planApproved);
-    const sessionFailed = asRecord(payload?.sessionFailed);
-    const activityId = asString(row.activity_id) || asString(payload?.activityId);
-    const sessionName = asString(row.session_name) || asString(payload?.sessionName);
-
-    if (!activityId) {
-      return null;
-    }
-
-    return {
-      id: activityId,
-      name: asString(row.activity_name) || asString(payload?.activityName) || (sessionName ? `${sessionName}/activities/${activityId}` : `activities/${activityId}`),
-      createTime: row.created_at,
-      originator: asString(row.originator) || asString(payload?.originator) || "provider",
-      description: asString(payload?.description),
-      agentMessaged: agentMessaged ? { agentMessage: asString(agentMessaged.agentMessage) } : undefined,
-      userMessaged: userMessaged ? { userMessage: asString(userMessaged.userMessage) } : undefined,
-      progressUpdated: progressUpdated ? {
-        title: asString(progressUpdated.title),
-        description: asString(progressUpdated.description),
-      } : undefined,
-      planGenerated: planGenerated ? { plan: asRecord(planGenerated.plan) as JulesPlan | undefined } : undefined,
-      planApproved: planApproved ? { planId: asString(planApproved.planId) } : undefined,
-      sessionFailed: sessionFailed ? { reason: asString(sessionFailed.reason) } : undefined,
-      sessionCompleted: payload?.sessionCompleted ?? undefined,
-    };
-  }
-
-  private resolveMappedTask(
-    subtask: Subtask,
-    tasksByRecordId: Map<string, MappedTask>,
-    tasksByKey: Map<string, MappedTask>
-  ): MappedTask | null {
-    if (typeof subtask.record_id === "string" && tasksByRecordId.has(subtask.record_id)) {
-      return tasksByRecordId.get(subtask.record_id) || null;
-    }
-
-    const taskKey = typeof subtask.id === "string" ? subtask.id.trim() : "";
-    if (taskKey.length === 0) {
-      return null;
-    }
-
-    return tasksByKey.get(taskKey) || null;
   }
 
   private syncTaskRun(task: TaskRow, subtask: Subtask, now: string): void {
