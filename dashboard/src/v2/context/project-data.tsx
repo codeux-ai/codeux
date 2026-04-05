@@ -62,29 +62,33 @@ export const ProjectDataProvider: FunctionComponent<{ children: ComponentChildre
     isAlreadyLoaded: false,
   });
 
-  const selectProject = async (projectId: string): Promise<void> => {
+  const selectProject = useCallback(async (projectId: string): Promise<void> => {
     updateDataLocally((curr) => ({ ...curr, selectedProjectId: projectId }));
     const nextProjectId = await selectProjectRequest(projectId);
     updateDataLocally((curr) => ({ ...curr, selectedProjectId: nextProjectId }));
-  };
+  }, [updateDataLocally]);
 
-  const createProject = async (input: CreateProjectInput): Promise<Source> => {
+  const createProject = useCallback(async (input: CreateProjectInput): Promise<Source> => {
     const project = await createProjectRequest(input);
     await refetch({ silent: true });
     await selectProject(project.id);
     return project;
-  };
+  }, [refetch, selectProject]);
 
-  const updateProject = async (projectId: string, input: UpdateProjectInput): Promise<Source> => {
+  const updateProject = useCallback(async (projectId: string, input: UpdateProjectInput): Promise<Source> => {
     const project = await updateProjectRequest(projectId, input);
     await refetch({ silent: true });
     return project;
-  };
+  }, [refetch]);
 
-  const deleteProject = async (projectId: string): Promise<void> => {
+  const deleteProject = useCallback(async (projectId: string): Promise<void> => {
     await deleteProjectRequest(projectId);
     await refetch({ silent: true });
-  };
+  }, [refetch]);
+
+  const refreshProjects = useCallback(async (): Promise<void> => {
+    await refetch({ silent: true });
+  }, [refetch]);
 
   const activeSelectedProjectId = data.selectedProjectId ?? data.projects[0]?.id ?? null;
 
@@ -93,18 +97,29 @@ export const ProjectDataProvider: FunctionComponent<{ children: ComponentChildre
     [data.projects, activeSelectedProjectId],
   );
 
-  const value: ProjectDataContextValue = {
+  const value = useMemo<ProjectDataContextValue>(() => ({
     projects: data.projects,
     selectedProjectId: activeSelectedProjectId,
     selectedProject,
     loading,
     error,
-    refreshProjects: () => refetch({ silent: true }),
+    refreshProjects,
     selectProject,
     createProject,
     updateProject,
     deleteProject,
-  };
+  }), [
+    data.projects,
+    activeSelectedProjectId,
+    selectedProject,
+    loading,
+    error,
+    refreshProjects,
+    selectProject,
+    createProject,
+    updateProject,
+    deleteProject,
+  ]);
 
   return (
     <ProjectDataContext.Provider value={value}>
