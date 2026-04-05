@@ -53,6 +53,20 @@ const baseMockValue = {
   setCustomTo: vi.fn(),
   visualMode: "trend",
   setVisualMode: vi.fn(),
+  chartState: {
+    visualMode: "trend",
+    setVisualMode: vi.fn(),
+    zoomRange: null,
+    setZoomRange: vi.fn(),
+    hoveredIndex: null,
+    setHoveredIndex: vi.fn(),
+    dragStartIndex: null,
+    setDragStartIndex: vi.fn(),
+    dragCurrentIndex: null,
+    setDragCurrentIndex: vi.fn(),
+    enabledSeries: { tokens: true, active: true },
+    setEnabledSeries: vi.fn(),
+  },
   providerSegments: [{ label: "P1", value: 100, color: "red", textClassName: "t1" }],
   sourceSegments: [{ label: "S1", value: 100, color: "blue", textClassName: "t2" }],
   tokenSegments: [{ label: "T1", value: 100, color: "green", textClassName: "t3" }],
@@ -97,12 +111,22 @@ describe("StatsPage Shell", () => {
     expect(screen.getByRole("button", { name: /Trend/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Composition/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Reliability/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ledgers/i })).toBeInTheDocument();
 
     // Default mode from mock is "trend"
     expect(screen.getByText("Trend analysis")).toBeInTheDocument();
   });
 
-  it("renders telemetry ledgers", () => {
+  it("renders ledgers mode when active", () => {
+    vi.mocked(useStatsPageData).mockReturnValueOnce({
+      ...baseMockValue,
+      visualMode: "ledgers",
+      chartState: {
+        ...baseMockValue.chartState,
+        visualMode: "ledgers",
+      },
+    } as any);
+
     render(<StatsPage />);
     expect(screen.getAllByText("Task Telemetry")[0]).toBeInTheDocument();
     expect(screen.getAllByText("Sprint Telemetry")[0]).toBeInTheDocument();
@@ -112,6 +136,10 @@ describe("StatsPage Shell", () => {
     vi.mocked(useStatsPageData).mockReturnValueOnce({
       ...baseMockValue,
       visualMode: "composition",
+      chartState: {
+        ...baseMockValue.chartState,
+        visualMode: "composition",
+      },
     } as any);
     
     render(<StatsPage />);
@@ -124,6 +152,10 @@ describe("StatsPage Shell", () => {
     vi.mocked(useStatsPageData).mockReturnValueOnce({
       ...baseMockValue,
       visualMode: "reliability",
+      chartState: {
+        ...baseMockValue.chartState,
+        visualMode: "reliability",
+      },
     } as any);
     
     render(<StatsPage />);
@@ -133,6 +165,14 @@ describe("StatsPage Shell", () => {
   });
 
   it("allows searching in telemetry ledgers", () => {
+    vi.mocked(useStatsPageData).mockReturnValueOnce({
+      ...baseMockValue,
+      visualMode: "ledgers",
+      chartState: {
+        ...baseMockValue.chartState,
+        visualMode: "ledgers",
+      },
+    } as any);
     render(<StatsPage />);
     const searchInputs = screen.getAllByPlaceholderText(/Search/i);
     const taskSearch = searchInputs[0]!;

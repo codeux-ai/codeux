@@ -49,10 +49,13 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
     const parts = line.split("\t");
     if (parts.length >= 2) {
       filesChanged++;
-      const ins = parseInt(parts[0], 10);
-      const del = parseInt(parts[1], 10);
-      if (!isNaN(ins)) insertions += ins;
-      if (!isNaN(del)) deletions += del;
+      // Handle binary files which output '-' instead of a number
+      if (parts[0] !== '-' && parts[1] !== '-') {
+        const ins = parseInt(parts[0], 10);
+        const del = parseInt(parts[1], 10);
+        if (!isNaN(ins)) insertions += ins;
+        if (!isNaN(del)) deletions += del;
+      }
     }
   }
 

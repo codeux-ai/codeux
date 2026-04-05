@@ -5,6 +5,7 @@ import type {
   ProjectStatsWindow,
 } from "../../types.js";
 import { createStatsSegments, createSeries, EMPTY_USAGE } from "./stats-utils.js";
+import { useUsageChartState } from "./use-usage-chart-state.js";
 
 export function useStatsPageData(projectId: string | null) {
   const today = useMemo(() => new Date(), []);
@@ -15,9 +16,9 @@ export function useStatsPageData(projectId: string | null) {
     return from.toISOString().slice(0, 10);
   });
   const [customTo, setCustomTo] = useState(() => today.toISOString().slice(0, 10));
-  const [visualMode, setVisualMode] = useState<"trend" | "composition" | "reliability">("trend");
   
   const { stats, loading, error } = useProjectStats(projectId, activeQuery);
+  const chartState = useUsageChartState(projectId, stats || null);
 
 
 
@@ -77,8 +78,9 @@ export function useStatsPageData(projectId: string | null) {
     setCustomFrom,
     customTo,
     setCustomTo,
-    visualMode,
-    setVisualMode,
+    visualMode: chartState.visualMode,
+    setVisualMode: chartState.setVisualMode,
+    chartState,
     providerSegments,
     sourceSegments,
     tokenSegments,

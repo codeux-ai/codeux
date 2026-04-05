@@ -164,5 +164,11 @@ describe("queryProjectStatsSnapshot", () => {
     expect(snapshot.git).toBeDefined();
     expect(snapshot.git.totals).toEqual({ insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0 });
     expect(snapshot.activeSprint?.sprintId).toBe("sprint-1");
+
+    // Assert git series
+    expect(snapshot.chartSeries.find(s => s.id === 'git_insertions')).toMatchObject({ grouping: 'git', formatter: 'number', defaultEnabled: true });
+    expect(snapshot.chartSeries.find(s => s.id === 'git_deletions')).toMatchObject({ grouping: 'git', formatter: 'number', defaultEnabled: true });
+    expect(snapshot.chartSeries.find(s => s.id === 'git_prs')).toMatchObject({ grouping: 'git', formatter: 'number', defaultEnabled: false });
+    expect(snapshot.chartSeries.find(s => s.id === 'git_merges')).toMatchObject({ grouping: 'git', formatter: 'number', defaultEnabled: false });
   });
 });

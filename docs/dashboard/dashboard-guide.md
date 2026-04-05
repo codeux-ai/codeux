@@ -237,15 +237,16 @@ Legacy runtime:
   - rebuild, stop, open-in-tab, startup-script editing, and log viewing
   - sprint previews are proxied through the dashboard instead of embedding raw localhost origins directly
   - extensionless preview-host deep links such as `/sprints` now recover to the preview app shell when the upstream dev server returns `404`, so direct loads and refreshes stay routable
-- Stats page now matches the high-interaction v2 dashboard card language more closely:
-  - animated metric cards
-  - a unified glass-panel system that mirrors the premium live card surfaces instead of using a separate visual treatment
-  - a relocated analysis-mode control that focuses the workspace on trend, composition, or reliability
-  - a full-width interactive trend graph with hover bucket inspection, a clickable detailed-series sidebar for configuring the chart, smooth staged line-draw animation that matches the metric-card sparkline language, and drag-to-zoom timeframe selection
+- Stats page now matches the high-interaction v2 dashboard card language more closely with a unified **Analysis Studio UX**:
+  - unified glass-panel system that mirrors the premium live card surfaces instead of using a separate visual treatment
+  - an embedded grouped metric selector instead of separate tabs, organizing Tokens, Time, and Git metrics into unified groupings
+  - relocated analysis-mode controls that focus the workspace on trend, composition, or reliability
+  - a full-width interactive trend graph (Usage Graph) with hover bucket inspection and drag-to-zoom timeframe selection
+  - a persistent right-side selected-metrics rail for configuring the chart series; same-window refreshes preserve user chart selections
   - hourly views keep one-hour hover targets while reducing visible axis labels to a three-hour rhythm for readability
   - donut-style composition charts for providers, token anatomy, and telemetry-source mix now animate as interactive slices with hover emphasis and center-detail readouts
   - tabbed task and sprint telemetry sections replacing the always-visible ledger layout, complete with search, sort-by-recency/tokens/time/input/output/name, and richer token/time breakdowns
-  - a dedicated Git tab presenting programmatic git stats (Insertions, Deletions, Files Changed) alongside the Tokens and Time tabs
+  - Git stats (Insertions, Deletions, Files Changed, Pull Requests, Merged PRs) are integrated directly alongside Tokens and Time metrics in the Analysis Studio
 - The Stats page uses the same project realtime invalidation channels as the rest of the v2 dashboard, then falls back to polling so usage graphs and tables stay current during active sprint execution
 - Overview widgets and headline stat cards now read project/task data from the same project-management API surface, and task streams are filtered to the currently selected active sprint only (a frontend-only view change with no API contract change)
 - Agents page features an immersive, showcase-first layout that defaults to presenting the selected agent's 3D animated avatar, details, and labels, rather than a raw edit form.

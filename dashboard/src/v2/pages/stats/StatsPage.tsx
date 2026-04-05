@@ -10,7 +10,6 @@ import {
 import { useStatsPageData } from "./use-stats-page-data.js";
 import { StatsPageHero } from "./components/StatsPageHero.js";
 import { AnalysisStudioSection } from "./components/AnalysisStudioSection.js";
-import { TelemetrySectionsSection } from "./components/TelemetrySectionsSection.js";
 import { SignalMetricCard } from "./components/StatsShared.js";
 
 export const StatsPage: FunctionComponent = () => {
@@ -32,6 +31,7 @@ export const StatsPage: FunctionComponent = () => {
     setCustomTo,
     visualMode,
     setVisualMode,
+    chartState,
     providerSegments,
     sourceSegments,
     tokenSegments,
@@ -139,10 +139,10 @@ export const StatsPage: FunctionComponent = () => {
             sourceSegments={sourceSegments}
             visualMode={visualMode}
             setVisualMode={setVisualMode}
+            chartState={chartState}
           />
 
-          <TelemetrySectionsSection stats={stats} />
-        </>
+                  </>
       ) : null}
     </div>
   );

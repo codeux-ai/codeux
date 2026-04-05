@@ -393,6 +393,9 @@ export interface ProjectExecutionStatsChartSeries {
   grouping: string;
   defaultEnabled: boolean;
   data: number[];
+  color?: string;
+  signalLabel?: string;
+  formatter?: 'tokens' | 'duration' | 'number';
 }
 
 export interface ProjectExecutionStatsSnapshot {

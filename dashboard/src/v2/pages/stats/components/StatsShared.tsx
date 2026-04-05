@@ -36,8 +36,9 @@ import {
   createSeries,
 } from "../stats-utils.js";
 import { useStatsPageData } from "../use-stats-page-data.js";
+import type { UsageChartState } from "../use-usage-chart-state.js";
 
-export type StatsVisualMode = "trend" | "composition" | "reliability";
+export type StatsVisualMode = "trend" | "composition" | "reliability" | "ledgers";
 export type ChartSeriesId = "tokens" | "active" | "invocations";
 export type LedgerSortKey = "last" | "tokens" | "active" | "input" | "output" | "name";
 
@@ -371,10 +372,11 @@ export const ViewToggle: FunctionComponent<{
   value: StatsVisualMode;
   onChange: (value: StatsVisualMode) => void;
 }> = ({ value, onChange }) => {
-  const modes: Array<{ id: StatsVisualMode; label: string; icon: typeof BarChart3 }> = [
+  const modes: Array<{ id: StatsVisualMode; label: string; icon: any }> = [
     { id: "trend", label: "Trend", icon: BarChart3 },
     { id: "composition", label: "Composition", icon: PieChart },
     { id: "reliability", label: "Reliability", icon: ShieldCheck },
+    { id: "ledgers", label: "Ledgers", icon: Layers3 },
   ];
 
   return (
@@ -668,8 +670,79 @@ export const StudioHeader: FunctionComponent<{
 export const TrendStudio: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
   planningUsage: ExecutionStatsEntitySummary | null;
-}> = ({ stats, planningUsage }) => (
+  chartState: UsageChartState;
+}> = ({ stats, planningUsage, chartState }) => (
   <section className="space-y-6">
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <MetricCard hoverTint="group-hover:bg-signal-500/[0.03]" accentHex="#00E0A0">
+        <div className="relative z-10 flex flex-col h-full">
+          <div className="flex items-center gap-3">
+            <Workflow className="h-4 w-4 text-signal-500" strokeWidth={2} />
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Execution Lanes</div>
+          </div>
+          <div className="mt-4 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Purpose mix</div>
+          <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 flex-1">
+            Planning, coding, merge recovery, and CI repair are now visible as a unified telemetry system rather than separate operational silos.
+          </div>
+          <div className="mt-6 pt-4">
+            <PurposeRibbon purposes={stats.purposes} />
+          </div>
+        </div>
+      </MetricCard>
+
+      <MetricCard hoverTint="group-hover:bg-amber-500/[0.03]" accentHex="#FFB800">
+        <div className="relative z-10 flex flex-col h-full">
+          <div className="flex items-center gap-3">
+            <Layers3 className="h-4 w-4 text-amber-500" strokeWidth={2} />
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Focus</div>
+          </div>
+          <div className="mt-4 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+            {stats.activeSprint ? stats.activeSprint.sprintName : "Historical view"}
+          </div>
+          <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 flex-1">
+            {stats.activeSprint
+                ? `Sprint ${stats.activeSprint.sprintNumber ?? "?"} is the live telemetry anchor for this project.`
+                : "No live sprint is active, so the dashboard is reading the selected historical window only."}
+          </div>
+          <div className="mt-6 grid grid-cols-2 gap-4">
+            <div className={SUBPANEL_CLASS}>
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Planning</div>
+              <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{planningUsage ? formatTokens(planningUsage.usage.totalTokens) : "0"}</div>
+              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{planningUsage ? formatDuration(planningUsage.usage.activeTimeMs) : "No data yet"}</div>
+            </div>
+            <div className={SUBPANEL_CLASS}>
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Providers</div>
+              <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{stats.providers.length}</div>
+              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Active inside</div>
+            </div>
+          </div>
+        </div>
+      </MetricCard>
+
+      <MetricCard hoverTint="group-hover:bg-cyan-500/[0.03]" accentHex="#0EA5E9">
+        <div className="relative z-10 flex flex-col h-full">
+          <div className="flex items-center gap-3">
+            <Clock3 className="h-4 w-4 text-cyan-500" strokeWidth={2} />
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Window Discipline</div>
+          </div>
+          <div className="mt-4 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Time framing</div>
+          <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 flex-1">
+            Granular control over how telemetry is chunked and visualized across the selected operational window.
+          </div>
+          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className={SUBPANEL_CLASS}>
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Buckets</div>
+              <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{stats.buckets.length}</div>
+            </div>
+            <div className={SUBPANEL_CLASS}>
+              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Window</div>
+              <div className="mt-2 text-[13px] font-black leading-tight text-slate-900 dark:text-white">{stats.range.label}</div>
+            </div>
+          </div>
+        </div>
+      </MetricCard>
+    </div>
+
     <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
       <div className="flex flex-col gap-6">
         <StudioHeader
@@ -678,71 +751,7 @@ export const TrendStudio: FunctionComponent<{
           title="Trend analysis"
           description="A single interactive telemetry surface for flow, peaks, and pacing across the selected window."
         />
-        <InteractiveUsageChart stats={stats} />
-      </div>
-    </div>
-
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-      <div className={`${PANEL_CLASS} p-6`}>
-        <div className="flex items-center gap-3">
-          <Workflow className="h-4 w-4 text-signal-500" strokeWidth={2} />
-          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Execution Lanes</div>
-        </div>
-        <div className="mt-4 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Purpose mix</div>
-        <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-          Planning, coding, merge recovery, and CI repair are now visible as a unified telemetry system rather than separate operational silos.
-        </div>
-        <div className="mt-5">
-          <PurposeRibbon purposes={stats.purposes} />
-        </div>
-      </div>
-      <div className="grid grid-cols-1 gap-6">
-        <div className={`${PANEL_CLASS} p-6`}>
-          <div className="flex items-center gap-3">
-            <Layers3 className="h-4 w-4 text-amber-500" strokeWidth={2} />
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Focus</div>
-          </div>
-          <div className="mt-4 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-            {stats.activeSprint ? stats.activeSprint.sprintName : "Historical view"}
-          </div>
-          <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-            {stats.activeSprint
-                ? `Sprint ${stats.activeSprint.sprintNumber ?? "?"} is the live telemetry anchor for this project.`
-                : "No live sprint is active, so the dashboard is reading the selected historical window only."}
-          </div>
-          <div className="mt-5 grid grid-cols-2 gap-4">
-            <div className={SUBPANEL_CLASS}>
-              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Planning</div>
-              <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{planningUsage ? formatTokens(planningUsage.usage.totalTokens) : "0"}</div>
-              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{planningUsage ? formatDuration(planningUsage.usage.activeTimeMs) : "No planning data yet"}</div>
-            </div>
-            <div className={SUBPANEL_CLASS}>
-              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Providers</div>
-              <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{stats.providers.length}</div>
-              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Active in {stats.range.label.toLowerCase()}</div>
-            </div>
-          </div>
-        </div>
-        <div className={`${PANEL_CLASS} p-6`}>
-          <div className="flex items-center gap-3">
-            <Clock3 className="h-4 w-4 text-cyan-500" strokeWidth={2} />
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Window Discipline</div>
-          </div>
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div className={SUBPANEL_CLASS}>
-              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Buckets</div>
-              <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{stats.buckets.length}</div>
-            </div>
-            <div className={SUBPANEL_CLASS}>
-              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Generated</div>
-              <div className="mt-2 text-sm font-black text-slate-900 dark:text-white">{formatDateTime(stats.generatedAt)}</div>
-            </div>
-            <div className={SUBPANEL_CLASS}>
-              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Window</div>
-              <div className="mt-2 text-sm font-black text-slate-900 dark:text-white">{stats.range.label}</div>
-            </div>
-          </div>
-        </div>
+        <InteractiveUsageChart stats={stats} chartState={chartState} />
       </div>
     </div>
   </section>

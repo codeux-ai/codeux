@@ -847,7 +847,7 @@ describe("dashboard project management API", () => {
         usage: { totalTokens: number; activeTimeMs: number; wallTimeMs: number };
         tasks: Array<{ label: string; usage: { totalTokens: number } }>;
         providers: Array<{ id: string; usage: { totalTokens: number } }>;
-        chartSeries: Array<{ id: string; grouping: string }>;
+        chartSeries: Array<{ id: string; grouping: string; color?: string; signalLabel?: string; formatter?: 'tokens' | 'duration' | 'number' }>;
       };
     expect(statsSnapshot).toMatchObject({
       projectId: project.id,
@@ -859,14 +859,22 @@ describe("dashboard project management API", () => {
       },
       git: {
         totals: {
-          insertions: 145,
-          deletions: 23,
-          filesChanged: 5,
+          insertions: 140,
+          deletions: 22,
+          filesChanged: 4,
           prCount: 1,
           mergedCount: 2,
         }
       }
     });
+
+    expect(statsSnapshot.chartSeries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'core_total_tokens', formatter: 'tokens' }),
+        expect.objectContaining({ id: 'git_insertions', formatter: 'number' }),
+        expect.objectContaining({ id: 'git_deletions', formatter: 'number' }),
+      ])
+    );
     expect(statsSnapshot.usage.wallTimeMs).toBeGreaterThanOrEqual(90_000);
     expect(statsSnapshot.tasks[0]).toMatchObject({
       label: "T01 Wire selected project state",
