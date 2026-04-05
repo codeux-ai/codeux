@@ -111,12 +111,22 @@ describe("StatsPage Shell", () => {
     expect(screen.getByRole("button", { name: /Trend/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Composition/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Reliability/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ledgers/i })).toBeInTheDocument();
 
     // Default mode from mock is "trend"
     expect(screen.getByText("Trend analysis")).toBeInTheDocument();
   });
 
-  it("renders telemetry ledgers", () => {
+  it("renders ledgers mode when active", () => {
+    vi.mocked(useStatsPageData).mockReturnValueOnce({
+      ...baseMockValue,
+      visualMode: "ledgers",
+      chartState: {
+        ...baseMockValue.chartState,
+        visualMode: "ledgers",
+      },
+    } as any);
+
     render(<StatsPage />);
     expect(screen.getAllByText("Task Telemetry")[0]).toBeInTheDocument();
     expect(screen.getAllByText("Sprint Telemetry")[0]).toBeInTheDocument();
@@ -155,6 +165,14 @@ describe("StatsPage Shell", () => {
   });
 
   it("allows searching in telemetry ledgers", () => {
+    vi.mocked(useStatsPageData).mockReturnValueOnce({
+      ...baseMockValue,
+      visualMode: "ledgers",
+      chartState: {
+        ...baseMockValue.chartState,
+        visualMode: "ledgers",
+      },
+    } as any);
     render(<StatsPage />);
     const searchInputs = screen.getAllByPlaceholderText(/Search/i);
     const taskSearch = searchInputs[0]!;
