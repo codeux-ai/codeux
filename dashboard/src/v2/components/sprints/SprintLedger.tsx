@@ -41,6 +41,8 @@ export interface SprintLedgerProps {
   onOpenRowMenu: (event: MouseEvent, sprintId: string) => void;
   onBulkStart: (sprintIds: string[]) => void;
   onBulkDelete: (sprintIds: string[]) => void;
+  onBulkShowcaseEnable: (sprintIds: string[]) => void;
+  onBulkShowcaseDisable: (sprintIds: string[]) => void;
 }
 
 export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
@@ -56,6 +58,8 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
   onOpenRowMenu,
   onBulkStart,
   onBulkDelete,
+  onBulkShowcaseEnable,
+  onBulkShowcaseDisable,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [sort, setSort] = useState<LedgerSort>({ key: "createdAt", direction: "desc" });
@@ -141,6 +145,14 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
     setSelectedIds(deselectAll());
   }, [onBulkDelete, selectedFiltered]);
 
+  const handleBulkShowcaseEnable = useCallback(() => {
+    onBulkShowcaseEnable(selectedFiltered.map((s) => s.id));
+  }, [onBulkShowcaseEnable, selectedFiltered]);
+
+  const handleBulkShowcaseDisable = useCallback(() => {
+    onBulkShowcaseDisable(selectedFiltered.map((s) => s.id));
+  }, [onBulkShowcaseDisable, selectedFiltered]);
+
   // Memoize stable handlers to pass to memoized SprintLedgerRow
   const stableOnToggleShowcase = useCallback(
     (sprint: Sprint) => onToggleShowcase(sprint),
@@ -180,6 +192,8 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
         isPending={isBulkPending}
         onBulkStart={handleBulkStart}
         onBulkDelete={handleBulkDelete}
+        onBulkShowcaseEnable={handleBulkShowcaseEnable}
+        onBulkShowcaseDisable={handleBulkShowcaseDisable}
         onClearSelection={handleClearSelection}
       />
 

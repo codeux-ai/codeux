@@ -10,6 +10,7 @@ import {
   Square,
 } from "lucide-preact";
 import { HumanInterventionBadge } from "../ui/HumanInterventionBadge.js";
+import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import type { Sprint, SprintStatus } from "../../types.js";
 import type { ExecutionHumanInterventionSummary } from "../../../../../src/contracts/app-types.js";
 import { formatSprintKey, STATUS_LABELS } from "../../lib/sprint-ledger-state.js";
@@ -72,14 +73,14 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
 
   // Polished stripe depth
   const rowBg = isSelected
-    ? "bg-signal-500/[0.06] dark:bg-signal-500/[0.08]"
+    ? "bg-signal-jade/[0.1] dark:bg-slate-500/[0.08]"
     : isEven
       ? "bg-white/80 dark:bg-slate-900/40"
       : "bg-slate-50/80 dark:bg-slate-800/40";
 
   return (
     <tr
-      className={`group border-b border-black/[0.06] transition-colors hover:bg-gradient-to-r hover:from-transparent hover:via-signal-500/[0.04] hover:to-transparent focus-within:bg-signal-500/[0.02] dark:border-white/[0.06] dark:hover:via-signal-500/[0.06] ${rowBg} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""}`}
+      className={`group border-b border-black/[0.06] transition-colors hover:bg-gradient-to-r hover:from-transparent hover:via-slate-500/[0.04] hover:to-transparent focus-within:bg-white/[0.03] dark:border-white/[0.06] dark:hover:via-slate-500/[0.06] ${rowBg} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""}`}
     >
       <td className="px-4 py-3 pl-6 align-middle">
         <button
@@ -123,6 +124,11 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
         {humanIntervention && (
           <div className="mt-3">
             <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="left" />
+          </div>
+        )}
+        {sprint.latestReview && (
+          <div className="mt-3">
+            <SprintReviewBadge summary={sprint.latestReview} compact align="left" />
           </div>
         )}
         {sprint.goal ? (

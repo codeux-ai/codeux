@@ -216,3 +216,10 @@ export const deleteTask = async (taskId: string): Promise<void> => {
     method: "DELETE",
   });
 };
+
+export async function updateSprintShowcase(sprintId: string, pinned: boolean): Promise<any> {
+  return fetchJson(`/api/sprints/${encodeURIComponent(sprintId)}/showcase`, {
+    method: "PUT",
+    body: JSON.stringify({ pinned }),
+  });
+}

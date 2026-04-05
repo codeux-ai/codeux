@@ -14,6 +14,7 @@ import { useExecutions } from "../../../hooks/useExecutions.js";
 import {
   createSprint,
   createTask,
+  updateSprintShowcase,
   deleteSprint,
   exportSprintMarkdown,
   fetchProjectExecution,
@@ -366,7 +367,33 @@ export function useSprintsPageData() {
         return next;
       });
     }
-  }, [pendingActionIds, refresh]);
+  }, [pendingActionIds, refresh, setError]);
+
+  const handleBulkToggleShowcase = useCallback(async (sprintIds: string[], state: boolean) => {
+    const availableIds = sprintIds.filter((id) => !pendingActionIds.has(`sprint-showcase:${id}`));
+    if (availableIds.length === 0) return;
+
+    setPendingActionIds((current) => {
+      const next = new Set(current);
+      for (const id of availableIds) next.add(`sprint-showcase:${id}`);
+      return next;
+    });
+
+    try {
+      await Promise.all(
+        availableIds.map((id) => updateSprintShowcase(id, state))
+      );
+      await refresh();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPendingActionIds((current) => {
+        const next = new Set(current);
+        for (const id of availableIds) next.delete(`sprint-showcase:${id}`);
+        return next;
+      });
+    }
+  }, [pendingActionIds, refresh, setError]);
 
   const handleSprintToggle = useCallback((sprintId: string) => {
     if (!selectedProject) {
@@ -667,6 +694,7 @@ export function useSprintsPageData() {
     handleAppendTask,
     handleDeleteSprint,
     handleToggleShowcase,
+    handleBulkToggleShowcase,
     handleOpenExport,
     handleImportSprint,
   };

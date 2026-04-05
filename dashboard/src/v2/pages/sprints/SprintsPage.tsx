@@ -5,6 +5,7 @@ import gsap from "gsap";
 import {
   Activity,
   CheckCircle2,
+  CheckSquare,
   Download,
   Heart,
   Pencil,
@@ -83,6 +84,7 @@ export const SprintsPage: FunctionComponent = () => {
     handleAppendTask,
     handleDeleteSprint,
     handleToggleShowcase,
+    handleBulkToggleShowcase,
     handleOpenExport,
     handleImportSprint,
   } = useSprintsPageData();
@@ -201,6 +203,14 @@ export const SprintsPage: FunctionComponent = () => {
   const handleBulkDelete = useCallback((ids: string[]) => {
     for (const id of ids) void handleDeleteSprint(id);
   }, [handleDeleteSprint]);
+
+  const handleBulkShowcaseEnable = useCallback((ids: string[]) => {
+    void handleBulkToggleShowcase(ids, true);
+  }, [handleBulkToggleShowcase]);
+
+  const handleBulkShowcaseDisable = useCallback((ids: string[]) => {
+    void handleBulkToggleShowcase(ids, false);
+  }, [handleBulkToggleShowcase]);
 
   return (
     <ExecutionTimelineProvider
@@ -447,6 +457,8 @@ export const SprintsPage: FunctionComponent = () => {
                 onOpenRowMenu={openRowActionsMenu}
                 onBulkStart={handleBulkStart}
                 onBulkDelete={handleBulkDelete}
+                onBulkShowcaseEnable={handleBulkShowcaseEnable}
+                onBulkShowcaseDisable={handleBulkShowcaseDisable}
               />
             </div>
           </>
@@ -514,6 +526,20 @@ export const SprintsPage: FunctionComponent = () => {
               <Sparkles className="h-3.5 w-3.5" strokeWidth={2.1} />
               Overrides
             </button>
+            {activeRowMenuSprint.status !== "completed" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setRowMenu(null);
+                  void handleMarkCompleted(activeRowMenuSprint.id);
+                }}
+                disabled={pendingActionIds.has(`sprint-mark-completed:${activeRowMenuSprint.id}`)}
+                className="flex w-full items-center gap-2 rounded-[0.9rem] px-3 py-2 text-left text-xs font-medium text-slate-600 transition-colors hover:bg-black/[0.04] hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-white"
+              >
+                <CheckSquare className="h-3.5 w-3.5" strokeWidth={2.1} />
+                Mark Completed
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {

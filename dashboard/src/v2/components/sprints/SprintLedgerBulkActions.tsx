@@ -1,11 +1,13 @@
 import type { FunctionComponent } from "preact";
-import { Play, Trash2 } from "lucide-preact";
+import { Heart, Play, Trash2 } from "lucide-preact";
 
 export interface SprintLedgerBulkActionsProps {
   selectedCount: number;
   isPending?: boolean;
   onBulkStart: () => void;
   onBulkDelete: () => void;
+  onBulkShowcaseEnable: () => void;
+  onBulkShowcaseDisable: () => void;
   onClearSelection: () => void;
 }
 
@@ -14,6 +16,8 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
   isPending,
   onBulkStart,
   onBulkDelete,
+  onBulkShowcaseEnable,
+  onBulkShowcaseDisable,
   onClearSelection,
 }) => {
   return (
@@ -27,6 +31,24 @@ export const SprintLedgerBulkActions: FunctionComponent<SprintLedgerBulkActionsP
           {selectedCount} selected
         </span>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onBulkShowcaseEnable}
+            disabled={isPending}
+            className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-black/[0.06] hover:text-slate-700 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Heart className="h-3 w-3" fill="currentColor" />
+            Pin
+          </button>
+          <button
+            type="button"
+            onClick={onBulkShowcaseDisable}
+            disabled={isPending}
+            className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.06] bg-black/[0.03] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500 transition-colors hover:bg-black/[0.06] hover:text-slate-700 dark:border-white/[0.06] dark:bg-white/[0.03] dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Heart className="h-3 w-3" />
+            Unpin
+          </button>
           <button
             type="button"
             onClick={onBulkStart}
