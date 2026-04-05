@@ -126,13 +126,26 @@ export class PlanningAgentService {
     });
 
     const memoryContext = this.buildMemoryContext(projectId, null, planningAgent.id);
-    const prompt = this.buildImprovePrompt({
+    let prompt = this.buildImprovePrompt({
       projectName: project.name,
       planningAgent,
       sprintName: input.name,
       goal: input.goal,
       memoryContext,
     });
+
+    const isMemoryCaptureEnabled = runtime.settings.memory?.enabled && runtime.settings.memory?.autoCaptureSprint;
+    if (isMemoryCaptureEnabled) {
+      let learningsInstruction = "";
+      if (planningAgent.memoryTemplateOverrideEnabled && planningAgent.memoryTemplateMarkdown?.trim()) {
+        learningsInstruction = planningAgent.memoryTemplateMarkdown.trim();
+      } else if (runtime.settings.memory?.workerLearningsInstruction?.trim()) {
+        learningsInstruction = runtime.settings.memory.workerLearningsInstruction.trim();
+      }
+      if (learningsInstruction) {
+        prompt += `\n\n## LEARNINGS CAPTURE (Required)\n\n${learningsInstruction}`;
+      }
+    }
 
     if (invocation) {
       this.deps.executionRepository?.appendExecutionInvocationMessage(invocation.id, {
@@ -180,6 +193,16 @@ export class PlanningAgentService {
           status: "completed",
           finishedAt: new Date().toISOString(),
         });
+      }
+
+      if (isMemoryCaptureEnabled) {
+        await this.deps.memoryService?.captureMemoriesFromWorktree(
+          projectId,
+          undefined,
+          planningAgent.id,
+          project.baseDir,
+          invocation?.id || ""
+        );
       }
     } catch (error) {
       if (invocation) {
@@ -246,7 +269,7 @@ export class PlanningAgentService {
 
     signal?.throwIfAborted();
     const memoryContext = this.buildMemoryContext(projectId, sprintId, planningAgent.id);
-    const prompt = this.buildPlanPrompt({
+    let prompt = this.buildPlanPrompt({
       projectName: project.name,
       planningAgent,
       sprintNumber: sprint.number,
@@ -254,6 +277,19 @@ export class PlanningAgentService {
       goal: sprint.goal,
       memoryContext,
     });
+
+    const isMemoryCaptureEnabled = runtime.settings.memory?.enabled && runtime.settings.memory?.autoCaptureSprint;
+    if (isMemoryCaptureEnabled) {
+      let learningsInstruction = "";
+      if (planningAgent.memoryTemplateOverrideEnabled && planningAgent.memoryTemplateMarkdown?.trim()) {
+        learningsInstruction = planningAgent.memoryTemplateMarkdown.trim();
+      } else if (runtime.settings.memory?.workerLearningsInstruction?.trim()) {
+        learningsInstruction = runtime.settings.memory.workerLearningsInstruction.trim();
+      }
+      if (learningsInstruction) {
+        prompt += `\n\n## LEARNINGS CAPTURE (Required)\n\n${learningsInstruction}`;
+      }
+    }
 
     if (invocation) {
       this.deps.executionRepository?.appendExecutionInvocationMessage(invocation.id, {
@@ -302,6 +338,16 @@ export class PlanningAgentService {
           status: "completed",
           finishedAt: new Date().toISOString(),
         });
+      }
+
+      if (isMemoryCaptureEnabled) {
+        await this.deps.memoryService?.captureMemoriesFromWorktree(
+          projectId,
+          sprintId,
+          planningAgent.id,
+          project.baseDir,
+          invocation?.id || ""
+        );
       }
     } catch (error) {
       if (invocation) {
