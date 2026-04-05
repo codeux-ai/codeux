@@ -169,7 +169,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
 
   useLayoutEffect(() => {
     if (shouldRender && !isClosing) {
-      const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.backdrop.duration;
+      const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
       const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
 
       if (backdropRef.current) {

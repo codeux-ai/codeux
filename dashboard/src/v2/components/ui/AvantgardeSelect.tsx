@@ -2,6 +2,8 @@ import type { FunctionComponent, ComponentChildren } from "preact";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import { Check, ChevronDown } from "lucide-preact";
+import gsap from "gsap";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 export interface SelectOption {
   value: string;
@@ -57,11 +59,13 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   "aria-labelledby": ariaLabelledby,
 }) => {
   const [open, setOpen] = useState(false);
+  const [isRendered, setIsRendered] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<DropdownPosition | null>(null);
+  const reducedMotion = useReducedMotion();
 
   const updatePosition = useCallback(() => {
     const el = triggerRef.current;
@@ -110,7 +114,7 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   // Reposition on open, scroll, resize
   useLayoutEffect(() => {
     if (!open) {
-      setPosition(null);
+      // Delay position nullification until exit animation finishes (managed via isRendered later)
       return;
     }
     updatePosition();
@@ -122,6 +126,63 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
     };
   }, [open, updatePosition]);
 
+  useEffect(() => {
+    if (open) {
+      setIsRendered(true);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!isRendered) {
+      setPosition(null);
+    }
+  }, [isRendered]);
+
+  useLayoutEffect(() => {
+    if (!isRendered || !panelRef.current || !position) return;
+
+    const panel = panelRef.current;
+    let ctx = gsap.context(() => {
+      const isUp = position.direction === "up";
+      const initialY = isUp ? "calc(-100% + 10px)" : "-10px";
+      const targetY = isUp ? "-100%" : "0px";
+
+      // Check if gsap is mocked or unavailable in test environment
+      if (typeof gsap.fromTo !== 'function' || typeof gsap.to !== 'function') {
+        if (!open) setIsRendered(false);
+        return;
+      }
+
+      if (open) {
+        gsap.fromTo(panel,
+          { opacity: 0, y: initialY, scale: 0.98, filter: "blur(4px)" },
+          {
+            opacity: 1,
+            y: targetY,
+            scale: 1,
+            filter: "blur(0px)",
+            duration: reducedMotion ? 0 : 0.3,
+            ease: "power3.out",
+            clearProps: "filter"
+          }
+        );
+      } else {
+        gsap.to(panel, {
+          opacity: 0,
+          y: initialY,
+          scale: 0.98,
+          filter: "blur(4px)",
+          duration: reducedMotion ? 0 : 0.2,
+          ease: "power2.in",
+          onComplete: () => {
+            setIsRendered(false);
+          }
+        });
+      }
+    }, panel);
+
+    return () => ctx.revert();
+  }, [open, isRendered, position?.direction, reducedMotion]);
 
   useEffect(() => {
     if (open) {
@@ -222,20 +283,20 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
               : "cursor-pointer border-black/[0.06] bg-white/52 text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_10px_24px_rgba(15,23,42,0.04)] backdrop-blur-xl hover:border-black/[0.12] dark:border-white/[0.06] dark:bg-white/[0.045] dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_10px_24px_rgba(0,0,0,0.18)] dark:hover:border-white/[0.12]"
           }`;
 
-  const panel = open && position
+  const panel = isRendered && position
     ? createPortal(
         <div
           ref={panelRef}
           style={{
             position: "absolute",
             left: `${position.left}px`,
-            ...(position.direction === "down"
-              ? { top: `${position.top}px` }
-              : { top: `${position.top}px`, transform: "translateY(-100%)" }),
+            top: `${position.top}px`,
             width: `${position.width}px`,
             zIndex: 9999,
           }}
-          className="overflow-hidden rounded-2xl border border-black/[0.06] bg-white/[0.97] shadow-[0_20px_40px_rgba(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.03)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/[0.97] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4),0_0_0_1px_rgba(255,255,255,0.04)]"
+          className={`overflow-hidden rounded-2xl border border-black/[0.06] bg-white/[0.97] shadow-[0_20px_40px_rgba(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.03)] backdrop-blur-2xl dark:border-white/[0.08] dark:bg-void-800/[0.97] dark:shadow-[0_20px_40px_rgba(0,0,0,0.4),0_0_0_1px_rgba(255,255,255,0.04)] ${
+            position.direction === "up" ? "origin-bottom" : "origin-top"
+          }`}
         >
           <div
             ref={listboxRef}

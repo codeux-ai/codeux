@@ -2,6 +2,8 @@ import type { FunctionComponent } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
 import { X, Download, Upload, Copy, Check } from "lucide-preact";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 interface SprintMarkdownModalProps {
   mode: "import" | "export";
@@ -26,24 +28,42 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
   const [tasksText, setTasksText] = useState(tasksMarkdown);
   const [copiedField, setCopiedField] = useState<"sprint" | "tasks" | null>(null);
 
+  const reducedMotion = useReducedMotion();
+  const isSubmitting = useRef(false);
+
   useLayoutEffect(() => {
-    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
-    gsap.fromTo(cardRef.current, { y: 42, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" });
-  }, []);
+    const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
+    const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
+
+    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
+    gsap.fromTo(cardRef.current,
+      { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
+      { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: MODAL_MOTION.entry.ease }
+    );
+  }, [reducedMotion]);
+
+  const handleClose = () => {
+    if (isSubmitting.current) return;
+    const d = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
+
+    if (cardRef.current) gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration: d, ease: MODAL_MOTION.exit.ease });
+    if (backdropRef.current) gsap.to(backdropRef.current, { opacity: 0, duration: d, delay: reducedMotion ? 0 : 0.05, onComplete: onClose });
+    else onClose();
+  };
 
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onClose();
+        handleClose();
       }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, [reducedMotion, onClose]);
 
   const handleBackdropClick = (event: MouseEvent) => {
     if (event.target === backdropRef.current) {
-      onClose();
+      handleClose();
     }
   };
 
@@ -59,8 +79,13 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
       return;
     }
 
-    await onImport({ sprintMarkdown: sprintText, tasksMarkdown: tasksText });
-    onClose();
+    isSubmitting.current = true;
+    try {
+      await onImport({ sprintMarkdown: sprintText, tasksMarkdown: tasksText });
+    } finally {
+      isSubmitting.current = false;
+    }
+    handleClose();
   };
 
   const handleDownload = (fileName: string, text: string) => {
@@ -120,7 +145,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
               </p>
             </div>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="w-9 h-9 flex items-center justify-center rounded-full bg-black/[0.05] dark:bg-white/[0.05] hover:bg-black/10 dark:hover:bg-white/10 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all shrink-0"
             >
               <X className="w-4 h-4" />
@@ -203,7 +228,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={onClose}
+                  onClick={handleClose}
                   className="text-sm font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
                 >
                   Close

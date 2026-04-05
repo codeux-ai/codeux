@@ -1,6 +1,7 @@
 import type { FunctionComponent } from "preact";
 import { memo, createPortal } from "preact/compat";
-import { useEffect, useRef, useState, useMemo, useCallback } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState, useMemo, useCallback } from "preact/hooks";
+import gsap from "gsap";
 import {
     Clock, ChevronDown, ChevronRight, Eye, EyeOff,
     FileText, RotateCcw, GitPullRequest, ExternalLink, Timer,
@@ -22,6 +23,7 @@ import {
     type LiveDurationDispatchTiming,
 } from "../lib/live-duration-display.js";
 import { RerunTaskModal } from "./ui/RerunTaskModal.js";
+import { Button } from "./ui/Button.js";
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
@@ -150,6 +152,15 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     const [showFeed, setShowFeed] = useState(false);
     const [showRerunModal, setShowRerunModal] = useState(false);
     const cardRef = useRef<HTMLDivElement>(null);
+
+    const previewRef = useRef<HTMLDivElement>(null);
+    const promptRef = useRef<HTMLDivElement>(null);
+    const feedRef = useRef<HTMLDivElement>(null);
+    const chevronRef = useRef<SVGSVGElement>(null);
+    const isMounted = useRef(false);
+
+    const isPreviewVisible = !expanded && !showFeed;
+
     const taskPhase = getTaskProgressPhase(task);
     const cfg = getTaskCfg(taskPhase);
     const StatusIcon = cfg.icon;
@@ -188,6 +199,40 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
         setExpanded(prev => !prev);
         setShowFeed(false);
     }, []);
+
+    useLayoutEffect(() => {
+        if (!isMounted.current) {
+            gsap.set(previewRef.current, { height: isPreviewVisible ? "auto" : 0, opacity: isPreviewVisible ? 1 : 0 });
+            gsap.set(promptRef.current, { height: expanded ? "auto" : 0, opacity: expanded ? 1 : 0 });
+            gsap.set(feedRef.current, { height: showFeed ? "auto" : 0, opacity: showFeed ? 1 : 0 });
+            gsap.set(chevronRef.current, { rotation: expanded ? 90 : 0 });
+            isMounted.current = true;
+            return;
+        }
+
+        const duration = 0.3;
+        const ease = "power2.inOut";
+
+        if (isPreviewVisible) {
+            gsap.to(previewRef.current, { height: "auto", opacity: 1, duration, ease });
+        } else {
+            gsap.to(previewRef.current, { height: 0, opacity: 0, duration, ease });
+        }
+
+        if (expanded) {
+            gsap.to(promptRef.current, { height: "auto", opacity: 1, duration, ease });
+            gsap.to(chevronRef.current, { rotation: 90, duration, ease });
+        } else {
+            gsap.to(promptRef.current, { height: 0, opacity: 0, duration, ease });
+            gsap.to(chevronRef.current, { rotation: 0, duration, ease });
+        }
+
+        if (showFeed) {
+            gsap.to(feedRef.current, { height: "auto", opacity: 1, duration, ease });
+        } else {
+            gsap.to(feedRef.current, { height: 0, opacity: 0, duration, ease });
+        }
+    }, [expanded, showFeed, isPreviewVisible]);
 
     return (
         <div
@@ -274,7 +319,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                 <TaskStagePills timing={taskTiming} />
 
                 {/* Prompt preview — collapsed */}
-                {!expanded && !showFeed && (
+                <div ref={previewRef} className="overflow-hidden">
                     <button
                         type="button"
                         onClick={handleExpandCollapsed}
@@ -282,10 +327,10 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                     >
                         {task.prompt.substring(0, 140)}...
                     </button>
-                )}
+                </div>
 
                 {/* Expanded prompt */}
-                {expanded && (
+                <div ref={promptRef} className="overflow-hidden">
                     <div className="mb-5 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
                         <div className="flex items-center gap-2 mb-3">
                             <FileText className="w-3 h-3 text-slate-400" strokeWidth={2} />
@@ -302,10 +347,10 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                             dangerouslySetInnerHTML={{ __html: renderedPrompt }}
                         />
                     </div>
-                )}
+                </div>
 
                 {/* Live session feed */}
-                {showFeed && (
+                <div ref={feedRef} className="overflow-hidden">
                     <div className="mb-5 p-5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.04]">
                         <div className="flex items-center gap-2 mb-3">
                             <span className="w-1.5 h-1.5 rounded-full bg-signal-500 animate-pulse" />
@@ -313,7 +358,7 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                         </div>
                         <RuntimeEventFeed events={events} />
                     </div>
-                )}
+                </div>
 
                 {/* Dispatch error / quota countdown */}
                 {dispatchInfo?.errorMessage && (
@@ -350,18 +395,19 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                                            : 'bg-black/[0.03] dark:bg-white/[0.03] text-slate-400 border-transparent hover:text-ember-500 hover:border-ember-500/15'
                                        }`}
                         >
-                            {expanded ? <ChevronDown className="w-3 h-3" strokeWidth={2.5} /> : <ChevronRight className="w-3 h-3" strokeWidth={2.5} />}
+                            <ChevronRight ref={chevronRef} className="w-3 h-3" strokeWidth={2.5} />
                             Prompt
                         </button>
-                        <button
+                        <Button
                             type="button"
                             onClick={handleRerunClick}
-                            disabled={isRerunning}
-                            className="flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] rounded-xl text-[10px] font-bold uppercase tracking-[0.1em] bg-black/[0.03] dark:bg-white/[0.03] text-slate-400 border border-transparent hover:text-status-amber hover:border-status-amber/15 disabled:opacity-40 disabled:pointer-events-none transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
+                            pending={isRerunning}
+                            variant="ghost"
+                            className="px-3 py-2.5 min-h-[44px] text-[10px] uppercase tracking-[0.1em] hover:text-status-amber hover:border-status-amber/15 disabled:opacity-40 disabled:pointer-events-none focus-visible:ring-offset-2 dark:focus-visible:ring-offset-void-800"
                         >
-                            <RotateCcw className={`w-3 h-3 ${isRerunning ? 'animate-spin' : ''}`} strokeWidth={2} />
-                            {isRerunning ? "Rerunning" : "Rerun"}
-                        </button>
+                            <RotateCcw className="w-3 h-3" strokeWidth={2} />
+                            Rerun
+                        </Button>
                     </div>
                     {task.pr_url && (
                         <a
