@@ -84,7 +84,7 @@ export function createDashboardDependencies(
       const runtimeTask = (runtimeStatus.subtasks || []).find((task) => task.record_id === taskId || task.id === taskRecord.taskKey);
       const effectiveSettings = settingsRepository.resolveSprintDashboardSettings(taskRecord.projectId, sprint.id).settings;
       const derivedFeatureBranch = typeof sprint.number === "number"
-        ? formatSprintBranch(effectiveSettings.git.sprintBranchScheme, sprint.number)
+        ? formatSprintBranch(effectiveSettings.git.sprintBranchScheme, { number: sprint.number as number, slug: sprint.slug || "", name: sprint.name || "", createdAt: sprint.createdAt || new Date().toISOString(), tasksCount: sprint.tasksCount || 0 })
         : null;
       const featureBranch = sprint.featureBranch || derivedFeatureBranch || runtimeStatus.feature_branch || null;
       const repoPath = project.baseDir || runtimeStatus.repo_path || null;

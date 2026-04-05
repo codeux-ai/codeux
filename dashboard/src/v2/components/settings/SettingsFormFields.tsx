@@ -196,13 +196,17 @@ export const Row: FunctionComponent<{
   children: ComponentChildren;
   last?: boolean;
   badge?: ComponentChildren;
-}> = ({ label, description, children, last, badge }) => (
+  info?: ComponentChildren;
+}> = ({ label, description, children, last, badge, info }) => (
   <div
     className={`group flex flex-col gap-4 rounded-[1.35rem] border border-black/[0.05] hover:border-black/[0.1] bg-black/[0.02] hover:bg-black/[0.03] px-4 py-4 md:flex-row md:items-start md:justify-between transition-colors duration-200 ${!last ? "" : ""} dark:border-white/[0.05] dark:hover:border-white/[0.1] dark:bg-white/[0.02] dark:hover:bg-white/[0.03]`}
   >
     <div className="min-w-0 flex-1">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="text-sm font-semibold leading-snug text-slate-800 group-hover:text-slate-900 dark:text-slate-100 dark:group-hover:text-white transition-colors duration-200">{label}</div>
+        <div className="flex items-center gap-1.5">
+          <div className="text-sm font-semibold leading-snug text-slate-800 group-hover:text-slate-900 dark:text-slate-100 dark:group-hover:text-white transition-colors duration-200">{label}</div>
+          {info ? info : null}
+        </div>
         {badge && typeof badge === "string" ? (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/25 bg-amber-500/12 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-amber-700 dark:border-amber-300/25 dark:bg-amber-300/14 dark:text-amber-200">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-300" />

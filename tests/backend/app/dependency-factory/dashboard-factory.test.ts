@@ -268,7 +268,7 @@ describe("Dashboard Factory", () => {
 
     expect(mockCoreDeps.projectRuntimeRepository.getProjectStatus).toHaveBeenCalledWith("project-1", "sprint-1");
     expect(ctx).not.toBeNull();
-    expect(ctx!.featureBranch).toBe("feature/sprint89");
+    expect(ctx!.featureBranch).toBe("feature/sprint");
     expect(ctx!.sprintNumber).toBe(89);
   });
 

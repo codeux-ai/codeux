@@ -18,6 +18,7 @@ import { Card, OverrideBadge, Row } from "./panels/SharedPanelComponents.js";
 import { AutomationPanel } from "./panels/AutomationPanel.js";
 import { ProviderPanel } from "./panels/ProviderPanel.js";
 import { WorkerPanel } from "./panels/WorkerPanel.js";
+import { InfoIconPopover } from "../ui/InfoIconPopover.js";
 
 export interface ProjectSettingsEditorProps {
   settings: ProjectSettings;
@@ -122,7 +123,13 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
               mono
             />
           </Row>
-          <Row label="Sprint branch scheme" description="Template used when naming sprint branches." badge={getBadge("git.sprintBranchScheme")}>
+          <Row label="Sprint branch scheme" description="Template used when naming sprint branches." badge={getBadge("git.sprintBranchScheme")} info={<InfoIconPopover items={[
+            { key: "{sprint}", desc: "Sprint identifier" },
+            { key: "{sprintNumber}", desc: "Sprint sequence number" },
+            { key: "{sprintName}", desc: "Name of the sprint" },
+            { key: "{date}", desc: "Current date" },
+            { key: "{taskCount}", desc: "Number of tasks" },
+          ]} />}>
             <TextInput
               value={settings.git.sprintBranchScheme}
               onChange={(value) => update({

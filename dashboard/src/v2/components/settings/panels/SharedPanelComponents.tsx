@@ -166,8 +166,8 @@ export const OverrideBadge: FunctionComponent<{ label: string }> = ({ label }) =
 
 import { Row as SharedRow } from "../SettingsFormFields.js";
 
-export const Row: FunctionComponent<{ label: string; description?: string; children: ComponentChildren; badge?: string; last?: boolean }> = ({ label, description, children, badge, last }) => (
-  <SharedRow label={label} description={description} badge={badge ? <OverrideBadge label={badge} /> : undefined} last={last}>
+export const Row: FunctionComponent<{ label: string; description?: string; children: ComponentChildren; badge?: string; last?: boolean; info?: ComponentChildren }> = ({ label, description, children, badge, last, info }) => (
+  <SharedRow label={label} description={description} badge={badge ? <OverrideBadge label={badge} /> : undefined} last={last} info={info}>
     {children}
   </SharedRow>
 );
