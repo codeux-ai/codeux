@@ -31,6 +31,7 @@ const cloneInvocationRouting = (
 );
 
 export const dashboardSettingsToProjectSettings = (settings: DashboardSettings): ProjectSettings => ({
+  appearance: { ...settings.appearance },
   automationLevel: settings.automationLevel,
   automationInterventions: {
     ...settings.automationInterventions,
@@ -108,6 +109,7 @@ export const dashboardSettingsToProjectSettings = (settings: DashboardSettings):
 });
 
 export const cloneProjectSettings = (settings: ProjectSettings): ProjectSettings => ({
+  appearance: { ...settings.appearance },
   automationLevel: settings.automationLevel,
   automationInterventions: {
     ...settings.automationInterventions,

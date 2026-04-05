@@ -668,6 +668,12 @@ export interface AgentSettings {
   qualityAssurance: QualityAssuranceSettings;
 }
 
+export interface AppearanceSettings {
+  navigationMode: "DOCK" | "SIDEBAR";
+  theme: "LIGHT" | "DARK" | "SYSTEM";
+  reducedMotion: "AUTO" | "REDUCE" | "NONE";
+}
+
 export interface SkillToggle {
   name: string;
   enabled: boolean;
@@ -683,6 +689,7 @@ export interface McpToolToggle {
 export interface DashboardSettings {
   dashboardPort: number;
   enableDebugLogFile: boolean;
+  appearance: AppearanceSettings;
   automationLevel: AutomationLevel;
   automationInterventions: AutomationInterventionsSettings;
   aiProvider: AiProviderSettings;

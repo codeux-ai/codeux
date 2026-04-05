@@ -1,5 +1,6 @@
 import type {
   AgentSettings,
+  AppearanceSettings,
   AutomationInterventionsSettings,
   AutomationLevel,
   CiIntelligenceSettings,
@@ -53,6 +54,7 @@ export interface ProjectGitSettings {
 }
 
 export interface ProjectSettings {
+  appearance: AppearanceSettings;
   automationLevel: AutomationLevel;
   automationInterventions: AutomationInterventionsSettings;
   aiProvider: ProjectAiProviderSettings;

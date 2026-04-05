@@ -199,6 +199,11 @@ export const DEFAULT_INVOCATION_ROUTING: Record<InvocationRoutingId, InvocationR
 export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   dashboardPort: 4444,
   enableDebugLogFile: false,
+  appearance: {
+    navigationMode: "DOCK",
+    theme: "SYSTEM",
+    reducedMotion: "AUTO",
+  },
   automationLevel: "SEMI_AUTO",
   automationInterventions: {
     autoApprovePlan: true,

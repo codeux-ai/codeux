@@ -84,6 +84,7 @@ const sanitizeQualityAssuranceTrigger = (
 export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardSettings => ({
   dashboardPort: DEFAULT_DASHBOARD_SETTINGS.dashboardPort,
   enableDebugLogFile: DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile,
+  appearance: { ...DEFAULT_DASHBOARD_SETTINGS.appearance },
   automationLevel: DEFAULT_DASHBOARD_SETTINGS.automationLevel,
   automationInterventions: {
     ...DEFAULT_DASHBOARD_SETTINGS.automationInterventions,
@@ -149,6 +150,17 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const input = (value && typeof value === "object" ? value : {}) as Partial<DashboardSettings>;
   const dashboardPort = readPort(input.dashboardPort, DEFAULT_DASHBOARD_SETTINGS.dashboardPort);
   const enableDebugLogFile = readBoolean(input.enableDebugLogFile, DEFAULT_DASHBOARD_SETTINGS.enableDebugLogFile);
+
+  const appearanceInput = (input.appearance && typeof input.appearance === "object"
+    ? input.appearance
+    : {}) as Partial<DashboardSettings["appearance"]>;
+
+  const appearance = {
+    navigationMode: appearanceInput.navigationMode === "SIDEBAR" ? "SIDEBAR" : "DOCK" as "DOCK" | "SIDEBAR",
+    theme: appearanceInput.theme === "LIGHT" || appearanceInput.theme === "DARK" ? appearanceInput.theme : "SYSTEM" as "LIGHT" | "DARK" | "SYSTEM",
+    reducedMotion: appearanceInput.reducedMotion === "REDUCE" || appearanceInput.reducedMotion === "NONE" ? appearanceInput.reducedMotion : "AUTO" as "AUTO" | "REDUCE" | "NONE",
+  };
+
   const automationLevel = input.automationLevel;
   const validAutomationLevel = automationLevel === "FULL" || automationLevel === "SEMI_AUTO" || automationLevel === "ALWAYS_ASK"
     ? automationLevel
@@ -296,6 +308,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   return {
     dashboardPort,
     enableDebugLogFile,
+    appearance,
     automationLevel: validAutomationLevel,
     automationInterventions,
     aiProvider,
