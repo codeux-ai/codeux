@@ -92,6 +92,32 @@ describe("chat-reply-prompt", () => {
       });
       expect(prompt).not.toContain("## WORKER INSTRUCTIONS");
       expect(prompt).toContain("### User\nHello");
+      expect(prompt).toContain("You must return STRICT JSON format containing exactly two keys: `replyMarkdown` and `action`");
+    });
+
+    it("includes pending management action context if it exists in runtime state", () => {
+      const threadWithPending = {
+        id: "t1",
+        title: "Test",
+        runtimeState: {
+          pendingManagementAction: {
+            action: { domain: "projects", action: "delete_project", payload: {} },
+            approvalMessage: "Are you sure you want to delete this project?",
+            proposedAt: new Date().toISOString(),
+          }
+        }
+      } as any;
+      const prompt = buildChatReplayPrompt({
+        projectId: "p1",
+        repoPath: "/repo",
+        projectName: "Proj",
+        thread: threadWithPending,
+        messages: [{ authorType: "dashboard_user", bodyMarkdown: "yes" } as any],
+        workerInstructions: "",
+      });
+      expect(prompt).toContain("## PENDING ACTION CONTEXT");
+      expect(prompt).toContain("delete_project");
+      expect(prompt).toContain("Are you sure you want to delete this project?");
     });
 
     it("builds correct prompt with compaction summary", () => {
@@ -113,6 +139,16 @@ describe("chat-reply-prompt", () => {
   describe("buildChatContinuationPrompt", () => {
     it("builds prompt correctly", () => {
       expect(buildChatContinuationPrompt({ bodyMarkdown: "hello" } as any)).toBe("### User\nhello");
+    });
+
+    it("includes pending management action context if provided", () => {
+      const prompt = buildChatContinuationPrompt(
+        { bodyMarkdown: "hello" } as any,
+        { action: { domain: "test", action: "test" }, approvalMessage: "approve?", proposedAt: "2023" } as any
+      );
+      expect(prompt).toContain("## PENDING ACTION CONTEXT");
+      expect(prompt).toContain("approve?");
+      expect(prompt).toContain("### User\nhello");
     });
   });
 

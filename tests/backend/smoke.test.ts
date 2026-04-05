@@ -49,6 +49,7 @@ describe("Smoke Test", () => {
     const toolNames = result.tools.map((t: any) => t.name);
     expect(toolNames).toContain("listen");
     expect(toolNames).toContain("generate_dashboard_reply");
+    expect(toolNames).toContain("manage_sprint_os");
 
     errorSpy.mockRestore();
     warnSpy.mockRestore();

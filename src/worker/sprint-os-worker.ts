@@ -276,7 +276,7 @@ export class SprintOsWorker {
           cancelRequested = true;
           await this.callJsonTool(localExecutorClient, "cancel_local_dispatch", {
             dispatch_id: claim.dispatch.id,
-            reason: "Dashboard requested cancellation for the active worker dispatch.",
+            reason: update.dispatch.status === "paused" ? "Dashboard requested pause for the active worker dispatch." : "Dashboard requested cancellation for the active worker dispatch.",
           }).catch((error) => {
             this.logger.error("Failed to cancel local dispatch", { error });
           });

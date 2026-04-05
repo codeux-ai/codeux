@@ -57,6 +57,7 @@ export function buildChatReplayPrompt(args: {
   isDashboardReply?: boolean;
 }): string {
   const compactionSummary = getCompactionSummary(args.thread.runtimeState);
+  const pendingAction = args.thread.runtimeState?.pendingManagementAction;
   let replayMessages: ConversationMessageRecord[];
 
   if (args.messages.length > 0) {
@@ -82,6 +83,26 @@ export function buildChatReplayPrompt(args: {
 
   const fallbackBody = args.bodyMarkdown ? args.bodyMarkdown.trim() : "_No new messages since the compaction summary was generated._";
 
+  const jsonInstructions = [
+    "You must return STRICT JSON format containing exactly two keys: `replyMarkdown` and `action`.",
+    "1. `replyMarkdown`: A string containing your concise markdown reply to the user.",
+    "2. `action`: An optional object if you want to perform a Sprint OS management action. Otherwise, set this to `null`.",
+    "   - Format: `{ \"domain\": \"...\", \"action\": \"...\", \"payload\": { ... } }`",
+    "   - Domains: `projects`, `sprints`, `tasks`, `settings`, `agents`, `memory`, `preview`, `telemetry`.",
+    "   - Note: Destructive actions (starting with `delete_`, `reset_`, `replace_`) and bulk settings updates MUST pause for explicit user approval.",
+    "     If you propose an approval-gated action, it will not execute immediately; the user will see a confirmation prompt.",
+  ].join("\n");
+
+  const pendingActionContext = pendingAction ? [
+    "## PENDING ACTION CONTEXT",
+    "You previously proposed the following management action which requires user approval:",
+    "```json",
+    JSON.stringify(pendingAction.action, null, 2),
+    "```",
+    `Approval Message: ${pendingAction.approvalMessage}`,
+    "The user's latest message may be an approval (e.g., 'yes', 'confirm') or rejection.",
+  ].join("\n") : "";
+
   return [
     args.workerInstructions ? `## WORKER INSTRUCTIONS\n\n${args.workerInstructions}` : "",
     "## ROLE",
@@ -92,6 +113,8 @@ export function buildChatReplayPrompt(args: {
     `Repo Path: ${args.repoPath}`,
     `Thread ID: ${args.thread.id}`,
     args.threadTitle || args.thread.title ? `Thread Title: ${args.threadTitle || args.thread.title}` : "",
+    "",
+    pendingActionContext,
     "",
     ...(compactionSummary ? [
       "## COMPACTED HISTORY",
@@ -104,12 +127,22 @@ export function buildChatReplayPrompt(args: {
     history || fallbackBody,
     "",
     "## REQUIRED OUTPUT",
-    "Return only the reply body in markdown. No JSON. No code fences unless the reply truly needs them.",
+    jsonInstructions,
   ].filter((part) => part.trim().length > 0).join("\n");
 }
 
-export function buildChatContinuationPrompt(message: ConversationMessageRecord): string {
-  return `### User\n${message.bodyMarkdown.trim()}`;
+export function buildChatContinuationPrompt(message: ConversationMessageRecord, pendingAction?: ConversationRuntimeState["pendingManagementAction"]): string {
+  const pendingActionContext = pendingAction ? [
+    "## PENDING ACTION CONTEXT",
+    "You previously proposed the following management action which requires user approval:",
+    "```json",
+    JSON.stringify(pendingAction.action, null, 2),
+    "```",
+    `Approval Message: ${pendingAction.approvalMessage}`,
+    "The user's latest message may be an approval (e.g., 'yes', 'confirm') or rejection.",
+    "",
+  ].join("\n") : "";
+  return `${pendingActionContext}### User\n${message.bodyMarkdown.trim()}`;
 }
 
 export function buildChatCompactionPrompt(args: {

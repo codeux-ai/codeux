@@ -16,6 +16,7 @@ import {
   buildChatReplayPrompt,
   normalizeProviderReply,
 } from "./chat-reply-prompt.js";
+import type { ChatManagementActionService } from "./chat-management-action-service.js";
 
 interface ChatThreadRuntimeServiceDependencies {
   connectionChatRepository: ConnectionChatRepository;
@@ -27,6 +28,7 @@ interface ChatThreadRuntimeServiceDependencies {
   agentPresetSyncService: AgentPresetSyncService;
   projectManagementRepository: ProjectManagementRepository;
   providerRunner: IProviderRunner;
+  chatManagementActionService: ChatManagementActionService;
   logger?: Logger;
 }
 
@@ -247,10 +249,69 @@ export class ChatThreadRuntimeService {
     const model = route.model!;
     const apiKey = route.apiKey!;
     const thinkingMode = route.thinkingMode;
-    const workflowSettings = this.deps.getDashboardSettings().cliWorkflow;
-    const githubToken = this.deps.getGithubToken();
+    const dashboardSettings = this.deps.getDashboardSettings();
 
     const runtimeState = thread.runtimeState || {};
+    const pendingAction = runtimeState.pendingManagementAction;
+
+    if (pendingAction) {
+      const lowerBody = latestMessage.bodyMarkdown.trim().toLowerCase();
+      const isApproval = lowerBody === "yes" || lowerBody === "approve" || lowerBody === "confirm" || lowerBody === "y";
+      const isRejection = lowerBody === "no" || lowerBody === "reject" || lowerBody === "cancel" || lowerBody === "n";
+
+      if (isApproval || isRejection) {
+        this.deps.connectionChatRepository.markDashboardMessagesProcessed(thread.id, {
+          upToMessageId: latestMessage.id,
+        });
+
+        if (isRejection) {
+          this.deps.connectionChatRepository.postSystemMessage(projectId, {
+            threadId: thread.id,
+            bodyMarkdown: "_Management action canceled by user._",
+          });
+          const newRuntimeState: ConversationRuntimeState = { ...runtimeState };
+          delete newRuntimeState.pendingManagementAction;
+          this.deps.connectionChatRepository.updateThread(thread.id, { runtimeState: newRuntimeState });
+          return;
+        }
+
+        try {
+          const result = await this.deps.chatManagementActionService.executeApprovedAction(
+            projectId,
+            provider,
+            model,
+            pendingAction.action
+          );
+
+          let systemReply = result.replyMarkdown;
+          if (result.result) {
+            const stringifiedResult = typeof result.result === "object" ? JSON.stringify(result.result, null, 2) : String(result.result);
+            systemReply += `\n\n_Action completed successfully._\n\`\`\`json\n${stringifiedResult}\n\`\`\``;
+          }
+
+          this.deps.connectionChatRepository.postSystemMessage(projectId, {
+            threadId: thread.id,
+            bodyMarkdown: systemReply.trim(),
+          });
+
+          const newRuntimeState: ConversationRuntimeState = { ...runtimeState };
+          delete newRuntimeState.pendingManagementAction;
+          this.deps.connectionChatRepository.updateThread(thread.id, { runtimeState: newRuntimeState });
+          return;
+
+        } catch (err: any) {
+          this.deps.connectionChatRepository.postSystemMessage(projectId, {
+            threadId: thread.id,
+            bodyMarkdown: `Execution failed: ${err.message}`,
+          });
+          const newRuntimeState: ConversationRuntimeState = { ...runtimeState };
+          delete newRuntimeState.pendingManagementAction;
+          this.deps.connectionChatRepository.updateThread(thread.id, { runtimeState: newRuntimeState });
+          return;
+        }
+      }
+    }
+
     const lastProvider = runtimeState.virtualProvider;
     const replayRequired = runtimeState.replayRequired === true || lastProvider !== provider || !runtimeState.sessionIds?.length;
 
@@ -271,70 +332,48 @@ export class ChatThreadRuntimeService {
         isDashboardReply: false,
       });
     } else {
-      promptContent = buildChatContinuationPrompt(latestMessage);
+      promptContent = buildChatContinuationPrompt(latestMessage, pendingAction);
       continueSessionId = runtimeState.sessionIds![0];
     }
 
     const finalPrompt = buildProviderPrompt(promptContent, thinkingMode as any);
 
-    const execInvocation = this.deps.executionRepository.createExecutionInvocation({
-      projectId,
-      type: "worker_reply",
-      provider,
-      model,
-      startedAt: new Date().toISOString(),
-      attentionItemId: null,
-      dispatchId: null,
-      providerInvocationId: null,
-      sprintId: null,
-      sprintRunId: null,
-      taskId: null,
-      taskRunId: null,
-    });
-
-    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-      role: "user",
-      contentMarkdown: finalPrompt,
-    });
-
     try {
-      const result = await this.deps.providerRunner.runProviderForText({
+      const result = await this.deps.chatManagementActionService.processManagementAction({
+        projectId,
         provider,
-        prompt: finalPrompt,
-        cwd: project.baseDir,
         model,
         apiKey,
-        sessionId: thread.id,
-        workflowSettings,
-        repoPath: project.baseDir,
-        githubToken,
-        continueSessionId,
-        onActivity: (desc, originator) => {
-          this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-            role: originator === "user" ? "user" : "assistant",
-            contentMarkdown: `[Status] ${desc}`,
-          });
-        },
+        sessionId: continueSessionId || thread.id,
+        settings: dashboardSettings,
+        prompt: finalPrompt,
       });
-
-      this.deps.executionRepository.appendExecutionInvocationMessage(execInvocation.id, {
-        role: "assistant",
-        contentMarkdown: result.text,
-      });
-      this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
-        status: "completed",
-        finishedAt: new Date().toISOString(),
-      });
-
-      const replyMarkdown = normalizeProviderReply(result.text);
 
       this.deps.connectionChatRepository.markDashboardMessagesProcessed(thread.id, {
         upToMessageId: latestMessage.id,
       });
 
+      let systemReply = result.replyMarkdown;
+      let newPendingAction = null;
+
+      if (result.action) {
+        if (result.approvalRequired) {
+          systemReply += `\n\n_Action requires approval: ${result.approvalMessage}_\n_Please reply with "yes" to confirm or "no" to cancel._`;
+          newPendingAction = {
+            action: result.action,
+            approvalMessage: result.approvalMessage || "Action requires approval.",
+            proposedAt: new Date().toISOString(),
+          };
+        } else if (result.result) {
+          // Ensure result is stringified nicely if it's an object
+          const stringifiedResult = typeof result.result === "object" ? JSON.stringify(result.result, null, 2) : String(result.result);
+          systemReply += `\n\n_Action completed successfully._\n\`\`\`json\n${stringifiedResult}\n\`\`\``;
+        }
+      }
+
       this.deps.connectionChatRepository.postSystemMessage(projectId, {
         threadId: thread.id,
-        bodyMarkdown: replyMarkdown,
+        bodyMarkdown: systemReply.trim(),
       });
 
       const newRuntimeState: ConversationRuntimeState = {
@@ -342,9 +381,15 @@ export class ChatThreadRuntimeService {
         routeKind: "virtual",
         virtualProvider: provider,
         modelLabel: model,
-        sessionIds: result.nativeSessionId ? [result.nativeSessionId] : [],
+        sessionIds: [continueSessionId || thread.id], // processManagementAction doesn't currently return nativeSessionId from StructuredProviderResponseService!
         replayRequired: false,
       };
+
+      if (newPendingAction) {
+        newRuntimeState.pendingManagementAction = newPendingAction;
+      } else {
+        delete newRuntimeState.pendingManagementAction;
+      }
 
       this.deps.connectionChatRepository.updateThread(thread.id, {
         connectionId: null,
@@ -352,11 +397,6 @@ export class ChatThreadRuntimeService {
       });
 
     } catch (err: any) {
-      this.deps.executionRepository.updateExecutionInvocation(execInvocation.id, {
-        status: "failed",
-        finishedAt: new Date().toISOString(),
-      });
-
       this.deps.connectionChatRepository.postSystemMessage(projectId, {
         threadId: thread.id,
         bodyMarkdown: `Worker execution failed: ${err.message}`,

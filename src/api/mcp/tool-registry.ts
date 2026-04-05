@@ -2,6 +2,7 @@ import type { ToolName as ContractToolName } from "../../contracts/mcp-tool-defi
 import type { McpConnectionCapabilities, McpConnectionRole } from "../../contracts/connection-chat-types.js";
 import type { TaskRunState } from "../../contracts/execution-types.js";
 import type { WorkerAttentionOutcome } from "../../contracts/project-attention-types.js";
+import type { ManageSprintOsArgs } from "../../contracts/internal-management-types.js";
 
 export interface GetSessionArgs {
   session_id: string;
@@ -122,6 +123,7 @@ export interface McpToolArgsByName {
   claim_attention_item: ClaimAttentionItemArgs;
   resolve_attention_item: ResolveAttentionItemArgs;
   report_attention_outcome: ReportAttentionOutcomeArgs;
+  manage_sprint_os: ManageSprintOsArgs;
 }
 
 export type McpToolName = keyof McpToolArgsByName;

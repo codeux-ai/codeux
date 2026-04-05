@@ -125,6 +125,7 @@ export class JulesAgentServer {
   private projectAttentionRepository: ProjectAttentionRepository;
   private agentPresetRepository: AgentPresetRepository;
   private dockerService: DockerService;
+  private managementToolHandler: import("../mcp/management-tool-handler.js").ManagementToolHandler;
   private sprintPreviewRepository: SprintPreviewRepository;
   private sprintPreviewService: SprintPreviewService;
   private agentPresetSyncService: AgentPresetSyncService;
@@ -199,6 +200,9 @@ export class JulesAgentServer {
     this.cliWorkflowService = deps.cliWorkflowService;
     this.coreToolHandler = deps.coreToolHandler;
     this.agentToolHandler = deps.agentToolHandler;
+    this.managementToolHandler = deps.managementToolHandler;
+    // Re-inject dependencies since sprintPreviewService is created late
+    (this.managementToolHandler as any).deps.sprintPreviewService = this.sprintPreviewService;
     this.activityCacheService = deps.activityCacheService;
     this.taskRerunService = deps.taskRerunService;
     this.executionControlService = deps.executionControlService;
@@ -260,6 +264,7 @@ export class JulesAgentServer {
       server,
       coreToolHandler: this.coreToolHandler,
       agentToolHandler: this.agentToolHandler,
+      managementToolHandler: this.managementToolHandler,
       getDashboardSettings: () => this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
       getRuntimeRole: () => runtimeRole,
       formatError: (error: unknown) => this.formatError(error),

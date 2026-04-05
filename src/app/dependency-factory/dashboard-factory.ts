@@ -10,6 +10,10 @@ import { WorkspaceManager } from "../../infrastructure/providers/cli/workspace-m
 import { formatSprintBranch } from "../../git/sprint-branch-scheme.js";
 
 import { ChatThreadRuntimeService } from "../../services/chat-thread-runtime-service.js";
+import { ManagementToolHandler } from "../../mcp/management-tool-handler.js";
+import { StructuredProviderResponseService } from "../../services/structured-provider-response-service.js";
+import { ChatManagementActionService } from "../../services/chat-management-action-service.js";
+import { ProviderExecutionService } from "../../services/provider-execution-service.js";
 
 export interface DashboardDependencies {
   chatThreadRuntimeService: ChatThreadRuntimeService;
@@ -41,7 +45,47 @@ export function createDashboardDependencies(
   } = coreDeps;
   const { sprintTaskDispatchService, sprintOrchestrator, taskService } = sprintDeps;
 
-    const chatThreadRuntimeService = new ChatThreadRuntimeService({
+  const executionControlService = new ExecutionControlService({
+    projectManagementRepository,
+    executionRepository,
+    projectAttentionService,
+    taskRerunService: {} as any, // Will link below
+    sprintOrchestrator,
+    julesApi,
+    activeDispatchRegistry,
+    logger: logger.child({ component: "execution-control-service" }),
+  });
+
+  const managementToolHandler = new ManagementToolHandler({
+    sprintPreviewService: (sprintDeps as any).sprintPreviewService || (null as any), // Re-injected top-level later
+    executionRepository: coreDeps.executionRepository,
+    getDashboardSettings: () => settingsRepository.getDefaultDashboardSettings(),
+    projectManagementRepository: coreDeps.projectManagementRepository,
+    executionControlService,
+    taskRerunService: {} as any, // Will link below
+    settingsRepository: coreDeps.settingsRepository,
+    agentPresetSyncService: coreDeps.agentPresetSyncService,
+    memoryService: coreDeps.memoryService,
+    memoryPromotionService: coreDeps.memoryPromotionService,
+    embeddingModelManager: coreDeps.embeddingModelManager,
+  });
+
+  const structuredProviderResponseService = new StructuredProviderResponseService({
+    providerExecutionService: new ProviderExecutionService({
+      providerRunner,
+      logger: logger.child({ component: "provider-execution-service" }),
+    }),
+    executionRepository,
+    logger: logger.child({ component: "structured-provider-response-service" }),
+  });
+
+  const chatManagementActionService = new ChatManagementActionService({
+    structuredProviderResponseService,
+    managementToolHandler,
+    executionRepository,
+  });
+
+  const chatThreadRuntimeService = new ChatThreadRuntimeService({
     connectionChatRepository,
     projectWorkerAssignmentRepository,
     executionRepository,
@@ -51,6 +95,7 @@ export function createDashboardDependencies(
     agentPresetSyncService,
     projectManagementRepository,
     providerRunner,
+    chatManagementActionService,
     logger: logger.child({ component: "chat-thread-runtime-service" }),
   });
 
@@ -248,16 +293,9 @@ export function createDashboardDependencies(
     logger: logger.child({ component: "task-rerun-service" }),
   });
 
-  const executionControlService = new ExecutionControlService({
-    projectManagementRepository,
-    executionRepository,
-    projectAttentionService,
-    taskRerunService,
-    sprintOrchestrator,
-    julesApi,
-    activeDispatchRegistry,
-    logger: logger.child({ component: "execution-control-service" }),
-  });
+  // Link the taskRerunService to the executionControlService and managementToolHandler
+  (executionControlService as any).deps.taskRerunService = taskRerunService;
+  (managementToolHandler as any).deps.taskRerunService = taskRerunService;
 
   const planningAgentService = new PlanningAgentService({
     projectManagementRepository,

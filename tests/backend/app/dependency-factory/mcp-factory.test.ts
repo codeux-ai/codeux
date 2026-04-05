@@ -28,6 +28,7 @@ describe("MCP Factory", () => {
   let mockContext: any;
   let mockCoreDeps: any;
   let mockSprintDeps: any;
+  let mockDashboardDeps: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -85,13 +86,18 @@ describe("MCP Factory", () => {
       taskService: {},
       workerInboxReplyService: {},
     };
+
+    mockDashboardDeps = {
+      executionControlService: {},
+    };
   });
 
   it("should create mcp dependencies and wire them correctly", () => {
     const result = createMcpDependencies(
       mockContext as unknown as ServerContext,
       mockCoreDeps as unknown as CoreDependencies,
-      mockSprintDeps as unknown as SprintDependencies
+      mockSprintDeps as unknown as SprintDependencies,
+      mockDashboardDeps as any
     );
 
     expect(result.coreToolHandler).toBeDefined();
@@ -141,7 +147,8 @@ describe("MCP Factory", () => {
     createMcpDependencies(
       mockContext as unknown as ServerContext,
       mockCoreDeps as unknown as CoreDependencies,
-      mockSprintDeps as unknown as SprintDependencies
+      mockSprintDeps as unknown as SprintDependencies,
+      mockDashboardDeps as any
     );
 
     const agentArgs = vi.mocked(AgentToolHandler).mock.calls[0][0];

@@ -34,6 +34,25 @@ describe("ToolRegistry", () => {
     const registry = new ToolRegistry<McpToolArgsByName>();
     await expect(registry.dispatch("unknown_tool", {})).rejects.toThrow("Tool not found: unknown_tool");
   });
+
+  it("can register and dispatch manage_sprint_os", async () => {
+    const registry = new ToolRegistry<McpToolArgsByName, string>();
+    const handler = vi.fn(async (args: McpToolArgsByName["manage_sprint_os"]) => `manage:${args.domain}:${args.action}`);
+
+    registry.register("manage_sprint_os", handler);
+
+    const result = await registry.dispatch("manage_sprint_os", {
+      domain: "system",
+      action: "restart",
+      payload: {},
+    });
+    expect(result).toBe("manage:system:restart");
+    expect(handler).toHaveBeenCalledWith({
+      domain: "system",
+      action: "restart",
+      payload: {},
+    });
+  });
 });
 
 const compileTimeTypeChecks = (): void => {

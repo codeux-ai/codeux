@@ -4,6 +4,13 @@ This guide defines the MCP tool surface, behavior expectations, and key operatio
 
 ## Tool Handler Split
 
+### Management tools
+Implemented in:
+- `src/mcp/management-tool-handler.ts`
+
+These cover:
+- `manage_sprint_os`
+
 ### Core tools
 Implemented in:
 - `src/mcp/core-tool-handler.ts`
@@ -21,6 +28,9 @@ These cover:
 - `execute_worker_dispatch`
 - `cancel_local_dispatch`
 - `generate_dashboard_reply`
+
+### Management
+- `manage_sprint_os`
 
 ## Registered Tools
 
@@ -69,6 +79,14 @@ Errors return:
 ```
 
 Unknown tool names raise MCP `MethodNotFound`.
+
+### Destructive Action Approvals
+
+Destructive actions (e.g., actions starting with `delete_`, `reset_`, `replace_`) executed via the `manage_sprint_os` tool follow an explicit approval flow to prevent accidental data loss:
+1. The initial call is sent without an `approval` block, or with `approval.confirmed: false`.
+2. The server short-circuits the action, returning an early envelope with `approvalRequired: true` and an explanatory `approvalMessage`.
+3. The agent reviews the message and issues the exact same call again, but with `approval.confirmed: true` added to the payload.
+4. The server executes the operation and returns the `result` block.
 
 ## Important Runtime Behaviors
 

@@ -3,6 +3,7 @@ import { CoreDependencies } from "./core-factory.js";
 import { SprintDependencies } from "./sprint-factory.js";
 import { CoreToolHandler } from "../../mcp/core-tool-handler.js";
 import { AgentToolHandler } from "../../mcp/agent-tool-handler.js";
+import { ManagementToolHandler } from "../../mcp/management-tool-handler.js";
 import { type DashboardSettings, type DashboardSettingsScope } from "../../contracts/app-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 import { WorkerTaskDispatchService } from "../../services/worker-task-dispatch-service.js";
@@ -10,15 +11,19 @@ import { WorkerDispatchExecutionService } from "../../services/worker-dispatch-e
 import { WorkerListenEventService } from "../../domain/workers/worker-listen-event-service.js";
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
 
+import type { DashboardDependencies } from "./dashboard-factory.js";
+
 export interface McpDependencies {
   coreToolHandler: CoreToolHandler;
   agentToolHandler: AgentToolHandler;
+  managementToolHandler: ManagementToolHandler;
 }
 
 export function createMcpDependencies(
   context: ServerContext,
   coreDeps: CoreDependencies,
-  sprintDeps: SprintDependencies
+  sprintDeps: SprintDependencies,
+  dashboardDeps: DashboardDependencies
 ): McpDependencies {
   const {
     logger,
@@ -124,8 +129,23 @@ export function createMcpDependencies(
     workerInboxReplyService: sprintDeps.workerInboxReplyService,
   });
 
+  const managementToolHandler = new ManagementToolHandler({
+    sprintPreviewService: (sprintDeps as any).sprintPreviewService || (null as any), // Re-injected at the top-level by jules-agent-server if needed
+    executionRepository: coreDeps.executionRepository,
+    getDashboardSettings: () => getDashboardSettings(),
+    projectManagementRepository: coreDeps.projectManagementRepository,
+    executionControlService: dashboardDeps.executionControlService,
+    taskRerunService: dashboardDeps.taskRerunService,
+    settingsRepository: coreDeps.settingsRepository,
+    agentPresetSyncService: coreDeps.agentPresetSyncService,
+    memoryService: coreDeps.memoryService,
+    memoryPromotionService: coreDeps.memoryPromotionService,
+    embeddingModelManager: coreDeps.embeddingModelManager,
+  });
+
   return {
     coreToolHandler,
     agentToolHandler,
+    managementToolHandler,
   };
 }

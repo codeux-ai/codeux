@@ -83,6 +83,10 @@ describe("Dashboard Chat API", () => {
       providerRunner: {
         runProviderForText: vi.fn().mockResolvedValue({ text: "## Current Objective\nCompact thread" }),
       } as any,
+      chatManagementActionService: {
+        processManagementAction: vi.fn(),
+        executeApprovedAction: vi.fn(),
+      } as any,
     });
 
     const project = projectManagementRepository.createProject({
@@ -226,6 +230,7 @@ describe("Dashboard Chat API", () => {
       agentPresetSyncService: {} as any,
       projectManagementRepository,
       providerRunner: {} as any,
+      chatManagementActionService: {} as any,
     });
 
     const project = projectManagementRepository.createProject({

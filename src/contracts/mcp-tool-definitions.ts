@@ -210,6 +210,26 @@ export const TOOL_DEFINITIONS = [
       required: ["connection_key", "attention_item_id", "outcome", "summary_markdown"],
     },
   },
+  {
+    name: "manage_sprint_os",
+    runtimeRoles: ["project_manager"],
+    description: "Manage internal Sprint OS state. Used for configuration and destructive actions. Destructive actions require approval confirmation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        domain: { type: "string", description: "The management domain (e.g., 'system', 'projects', 'settings')." },
+        action: { type: "string", description: "The specific management action to perform." },
+        payload: { type: "object", additionalProperties: true, description: "Action-specific parameters." },
+        approval: {
+          type: "object",
+          properties: {
+            confirmed: { type: "boolean", description: "Set to true to confirm a destructive action after reviewing the approval requirement." },
+          },
+        },
+      },
+      required: ["domain", "action", "payload"],
+    },
+  },
 ] as const;
 
 export type ToolName = (typeof TOOL_DEFINITIONS)[number]["name"];

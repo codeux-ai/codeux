@@ -6,6 +6,7 @@ import type { DashboardSettings } from "../contracts/app-types.js";
 import type { AgentToolHandler } from "../mcp/agent-tool-handler.js";
 import { validateToolArguments } from "../api/mcp/validators/tool-validators.js";
 import type { CoreToolHandler } from "../mcp/core-tool-handler.js";
+import type { ManagementToolHandler } from "../mcp/management-tool-handler.js";
 import { getEnabledToolDefinitions, isToolEnabled } from "../mcp/mcp-tool-availability.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { McpRuntimeRole } from "../contracts/mcp-tool-definitions.js";
@@ -14,6 +15,7 @@ export interface McpRequestRouterArgs {
   server: Server;
   coreToolHandler: CoreToolHandler;
   agentToolHandler: AgentToolHandler;
+  managementToolHandler: ManagementToolHandler;
   getDashboardSettings: () => DashboardSettings;
   getRuntimeRole: () => McpRuntimeRole;
   formatError: (error: unknown) => { content: Array<{ type: string; text: string }>; isError: true };
@@ -36,7 +38,8 @@ export const registerMcpRequestHandlers = (args: McpRequestRouterArgs): void => 
     .register("report_attention_outcome", (input) => args.coreToolHandler.handleReportAttentionOutcome(input))
     .register("execute_worker_dispatch", async (input) => (await args.agentToolHandler.handleExecuteWorkerDispatch(input)) as McpToolResponse)
     .register("cancel_local_dispatch", async (input) => (await args.agentToolHandler.handleCancelLocalDispatch(input)) as McpToolResponse)
-    .register("generate_dashboard_reply", async (input) => (await args.agentToolHandler.handleGenerateDashboardReply(input)) as McpToolResponse);
+    .register("generate_dashboard_reply", async (input) => (await args.agentToolHandler.handleGenerateDashboardReply(input)) as McpToolResponse)
+    .register("manage_sprint_os", async (input) => (await args.managementToolHandler.handleManageSprintOs(input)) as McpToolResponse);
 
   args.server.setRequestHandler(ListToolsRequestSchema, async () => {
     logger?.debug("MCP list_tools request received");

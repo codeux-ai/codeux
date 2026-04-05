@@ -64,6 +64,12 @@ To prevent scanning entire thread collections or loading full message arrays int
 
 These precise reads are separated into read-query helper modules (`conversation-thread-query.ts`, `conversation-message-query.ts`, `conversation-query-utils.ts`), which keeps repository files clean and side-effect free. These methods are now actively utilized by the ChatThreadRuntimeService and PlanningAgentService to eliminate full-collection rescans.
 
+### Virtual Provider Management Actions
+
+When operating in virtual provider mode, management actions follow a structured execution path. The `ChatManagementActionService` leverages `StructuredProviderResponseService` to prompt the virtual provider for a strict JSON payload containing `{ replyMarkdown, action }`.
+
+If an action is proposed, it is evaluated through the shared `ManagementToolHandler`, aligning the virtual chat's business logic exactly with the connected MCP workers. If the action is approval-gated (e.g., destructive actions), the service returns a non-mutating confirmation result alongside the serialized payload, awaiting user confirmation without altering project state. All exchanges—prompts, JSON parsing results, and execution envelopes—are durably recorded in the invocation history.
+
 ### Performance and Metrics Aggregation
 
 To ensure real-time responsiveness on the chat dashboard and maintain thread/connection lists optimally under high scale, we perform aggregation directly inside single query payloads using Common Table Expressions (CTEs).
