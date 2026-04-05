@@ -116,13 +116,11 @@ Before any task is considered complete, the following MUST pass:
 To maintain a production-grade workspace, these rules are **NON-NEGOTIABLE**:
 
 ### A. Temporary File Management
-- **Identify**: `*.cjs` and `*.log` files are considered temporary "leakage" unless explicitly tracked in `.gitignore`.
+- **Identify**: Temporary files that you have created.
 - **Action**: You MUST delete all such files before concluding a task.
-- **Cleanup Locations**: Check project root, `dashboard/`, and `.sprint-os/` directories.
-
 ### B. Commit Lock
-- **RULE**: **COMMITS ARE NOT ALLOWED** as long as temporary files (`.cjs`, `.log`) are present in the workspace.
-- **Validation**: Run `find . -name "*.cjs" -o -name "*.log"` to verify cleanliness before staging.
+- **RULE**: **COMMITS ARE NOT ALLOWED** as long as temporary files are present in the workspace.
+- **Validation**: Check if there are any temporary files in the workspace before committing.
 
 ### C. Credential Security
 - Never hardcode `JULES_API_KEY`.
