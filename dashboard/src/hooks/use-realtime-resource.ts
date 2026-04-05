@@ -111,6 +111,7 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
   optionsRef.current = options;
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const fetchIdRef = useRef<number>(0);
 
   const refreshInternal = useCallback(async (refreshOptions?: { silent?: boolean; signal?: AbortSignal }): Promise<void> => {
     // Determine if we show a foreground loading spinner.
@@ -121,8 +122,24 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
+
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
+
+    // Compose the external signal if provided
+    if (refreshOptions?.signal) {
+      const externalSignal = refreshOptions.signal;
+      if (externalSignal.aborted) {
+        abortController.abort(externalSignal.reason);
+      } else {
+        externalSignal.addEventListener("abort", () => {
+          abortController.abort(externalSignal.reason);
+        }, { once: true });
+      }
+    }
+
+    fetchIdRef.current += 1;
+    const currentFetchId = fetchIdRef.current;
 
     if (isForeground) {
       setLoading((prev) => (prev !== true ? true : prev));
@@ -137,9 +154,9 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
       // If the caller provided a signal, respect its abort state alongside our internal one
       // Since fetchResource takes only one signal, we'll pass our internal one,
       // but we will also check the caller's signal for abort conditions.
-      const nextData = await optionsRef.current.fetchResource(refreshOptions?.signal || abortController.signal);
+      const nextData = await optionsRef.current.fetchResource(abortController.signal);
 
-      if (!abortController.signal.aborted && !refreshOptions?.signal?.aborted) {
+      if (!abortController.signal.aborted && fetchIdRef.current === currentFetchId) {
         setData((prev) => {
           const stabilized = optionsRef.current.stabilizeNext ? optionsRef.current.stabilizeNext(prev, nextData) : nextData;
           return optionsRef.current.isEqual(prev, stabilized) ? prev : stabilized;
@@ -148,10 +165,11 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
         setError(null);
       }
     } catch (fetchError: any) {
-      if (fetchError.name === "AbortError" || abortController.signal.aborted || refreshOptions?.signal?.aborted) return;
+      if (fetchError.name === "AbortError" || abortController.signal.aborted) return;
+      if (fetchIdRef.current !== currentFetchId) return;
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
     } finally {
-      if (!abortController.signal.aborted && !refreshOptions?.signal?.aborted) {
+      if (!abortController.signal.aborted && fetchIdRef.current === currentFetchId) {
         if (isForeground) {
           setLoading((prev) => (prev !== false ? false : prev));
         }
