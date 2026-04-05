@@ -3,21 +3,23 @@ import { Layers3 } from "lucide-preact";
 import type { Category, CategoryId } from "../../hooks/use-settings-page-state.js";
 import { NoticePanel } from "./SettingsSurface.js";
 
-import { AlertTriangle, Bot, BrainCircuit, Compass, Cpu, Plug, Settings, SlidersHorizontal, Target } from "lucide-preact";
+import { AlertTriangle, Bot, BrainCircuit, Compass, Cpu, Monitor, Plug, Settings, SlidersHorizontal, Target } from "lucide-preact";
 
 export const CATEGORIES: Category[] = [
   { id: "general", num: "01", label: "General", icon: SlidersHorizontal, description: "Scope, runtime, and automation posture" },
-  { id: "models", num: "02", label: "AI Models", icon: Cpu, description: "Provider routing, models, and weighting" },
-  { id: "sprint", num: "03", label: "Sprint Engine", icon: Target, description: "Merge rules, loop control, and execution runtime" },
-  { id: "browser", num: "04", label: "Browser Preview", icon: Compass, description: "Preview runtime, browser visibility, and container policy" },
-  { id: "agents", num: "05", label: "Agents", icon: Bot, description: "Project-local markdown mirrors and agent authoring behavior" },
-  { id: "memory", num: "06", label: "Memory", icon: BrainCircuit, description: "Embedding models, auto-capture, and promotion policy" },
-  { id: "integrations", num: "07", label: "Integrations", icon: Plug, description: "Provider keys, GitHub, and external connection policy" },
-  { id: "danger", num: "08", label: "Danger Zone", icon: AlertTriangle, description: "Reset project overrides only when needed", danger: true },
+  { id: "appearance", num: "02", label: "Appearance", icon: Monitor, description: "Dashboard layout and theme preferences" },
+  { id: "models", num: "03", label: "AI Models", icon: Cpu, description: "Provider routing, models, and weighting" },
+  { id: "sprint", num: "04", label: "Sprint Engine", icon: Target, description: "Merge rules, loop control, and execution runtime" },
+  { id: "browser", num: "05", label: "Browser Preview", icon: Compass, description: "Preview runtime, browser visibility, and container policy" },
+  { id: "agents", num: "06", label: "Agents", icon: Bot, description: "Project-local markdown mirrors and agent authoring behavior" },
+  { id: "memory", num: "07", label: "Memory", icon: BrainCircuit, description: "Embedding models, auto-capture, and promotion policy" },
+  { id: "integrations", num: "08", label: "Integrations", icon: Plug, description: "Provider keys, GitHub, and external connection policy" },
+  { id: "danger", num: "09", label: "Danger Zone", icon: AlertTriangle, description: "Reset project overrides only when needed", danger: true },
 ];
 
 export const CATEGORY_SEARCH_HINTS: Record<CategoryId, string[]> = {
   general: ["automation", "scope", "runtime", "dashboard", "clarification", "pause", "resume"],
+  appearance: ["theme", "layout", "dock", "sidebar", "light", "dark", "motion", "appearance"],
   models: ["provider", "routing", "model", "thinking", "worker", "codex", "gemini", "claude", "jules"],
   sprint: ["ci", "merge", "watch", "loop", "docker", "execution", "cleanup", "branch", "autofix", "browser", "preview", "container", "port"],
   browser: ["browser", "preview", "container", "port", "routing", "rebuild", "launch", "concurrent", "iframe"],
