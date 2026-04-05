@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type MutableRefObject } from "preact/hooks";
+import { useCallback, useEffect, useState } from "preact/hooks";
+import type { MutableRef } from "preact/hooks";
 import type { AgentConnection, ChatThread, ExecutionInvocationRecord, ChatMessageRecord } from "../types.js";
 import type { DashboardRealtimeServerMessage, ExecutionDashboardSnapshot, ExecutionConnectionSummary } from "../../types.js";
 import { useMessageCache } from "./useMessageCache.js";
@@ -59,8 +60,8 @@ export const useChatPageResources = (options: {
   chatMode: "threads" | "invocations";
   threadData: {
     selectedThreadId: string | null;
-    selectedThreadIdRef: MutableRefObject<string | null>;
-    threadsRef: MutableRefObject<ChatThread[]>;
+    selectedThreadIdRef: MutableRef<string | null>;
+    threadsRef: MutableRef<ChatThread[]>;
     setThreadsSnapshot: (threads: ChatThread[]) => void;
     setMessagesSnapshot: (messages: ChatMessageRecord[]) => void;
     setSelectedThreadId: (id: string | null) => void;
@@ -69,7 +70,7 @@ export const useChatPageResources = (options: {
     refreshMessages: (id: string | null, options?: { foreground?: boolean; force?: boolean }) => Promise<void>;
   };
   invocationData: {
-    selectedInvocationIdRef: MutableRefObject<string | null>;
+    selectedInvocationIdRef: MutableRef<string | null>;
     setInvocationsSnapshot: (invs: ExecutionInvocationRecord[]) => void;
     setInvocationMessagesSnapshot: (messages: any[]) => void;
     setSelectedInvocationId: (id: string | null) => void;
