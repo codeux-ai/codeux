@@ -90,7 +90,12 @@ describe("useProjectEffectiveSettings", () => {
 
     rerender({ projectId: null });
 
-    expect(result.current.data).toBeNull();
+    // useRealtimeResource doesn't automatically drop previously fetched valid state if fetchResource returns null
+    // It will return `null` once the promise resolves. Let's wait for it.
+    await waitFor(() => {
+      expect(result.current.data).toBeNull();
+    });
+
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
 

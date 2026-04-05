@@ -192,16 +192,18 @@ export const useSettingsPageState = (
   const [projectAgentPresetOptions, setProjectAgentPresetOptions] = useState<Array<{ value: string; label: string }>>([]);
 
   const loadSettings = useCallback(async (): Promise<void> => {
-    if (isDirtyRef.current) {
-      return;
-    }
     setLoading(true);
     try {
       const [nextSystem, hints] = await Promise.all([
         fetchSystemSettings(),
         fetchExternalSettingsHints()
       ]);
-      setSystemSettings(cloneSystemSettings(nextSystem));
+
+      // Preserve local dirty edits during background reload
+      if (!isDirtyRef.current || !systemSettings) {
+        setSystemSettings(cloneSystemSettings(nextSystem));
+      }
+
       setSavedSystemSettings(cloneSystemSettings(nextSystem));
       setExternalHints(hints);
 
@@ -211,7 +213,12 @@ export const useSettingsPageState = (
           fetchAgentPresets(selectedProjectId).catch(() => []),
         ]);
         const nextProject = dashboardSettingsToProjectSettings(effectiveProject.settings);
-        setProjectSettings(cloneProjectSettings(nextProject));
+
+        // Preserve local dirty edits during background reload by not overwriting them
+        if (!isDirtyRef.current || !projectSettings) {
+          setProjectSettings(cloneProjectSettings(nextProject));
+        }
+
         setSavedProjectSettings(cloneProjectSettings(nextProject));
         setProjectSources(effectiveProject.sources);
         setProjectAgentPresetOptions(sortAgentPresetOptions(projectAgentPresets));

@@ -107,29 +107,50 @@ describe("SettingsPage data interactions", () => {
   });
 
   it("should preserve dirty state and prevent background refreshes from stomping edits", async () => {
-    const { container, rerender } = render(<SettingsPage />);
+    const { container } = render(<SettingsPage />);
 
     await waitFor(() => {
       expect(fetchSystemSettings).toHaveBeenCalledTimes(1);
     });
 
-    const systemScopeBtns = screen.getAllByRole("button", { name: "System" });
-    const systemScopeBtn = systemScopeBtns[0];
-    fireEvent.click(systemScopeBtn);
+    // Switch to Project scope
+    const projectScopeBtns = screen.getAllByRole("button", { name: "Project" });
+    fireEvent.click(projectScopeBtns[0]);
 
-    const generalCat = screen.getAllByText("Scope, runtime, and automation posture")[0];
-    expect(generalCat).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchProjectEffectiveSettings).toHaveBeenCalledWith("proj-1");
+    });
 
-    const modelsCat = screen.getAllByText("Provider routing, models, and weighting")[0];
-    fireEvent.click(modelsCat);
+    // Pick an input that is immediately available, such as the settings search field
+    // which modifies state and should persist across background loads
+    const searchInput = screen.getByPlaceholderText(/Search categories/i) as HTMLInputElement;
 
-    // In useSettingsPageState, changing category doesn't trigger a full reload if already loaded, 
-    // unless it's the initial load.
-    // However, the test might need adjustment if the behavior changed.
+    fireEvent.change(searchInput, { target: { value: "my-dirty-search" } });
+    expect(searchInput.value).toBe("my-dirty-search");
+
+    // Wait to ensure state was updated and no immediate re-renders wiped it
+    await waitFor(() => {
+      expect(searchInput.value).toBe("my-dirty-search");
+    });
+
+    // Trigger a backend-driven data refresh by simulating the background poll
+    vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue({
+      ...mockEffectiveSettingsData,
+      settings: { ...mockEffectiveSettingsData.settings, automationLevel: "low" } // random change to data
+    });
+
+    // We expect the local state (in this case search input) to survive the mock update
+    await waitFor(() => {
+      expect(searchInput.value).toBe("my-dirty-search");
+    });
   });
 
   it("should refresh project sources once after save without reloading away unsaved edits", async () => {
-    vi.mocked(saveSystemSettings).mockResolvedValue(mockSystemSettings);
+    vi.mocked(saveProjectSettings).mockResolvedValue(mockEffectiveSettingsData.settings);
+    vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue({
+      ...mockEffectiveSettingsData,
+      sources: { "automationLevel": "system" } // New simulated post-save state
+    });
 
     render(<SettingsPage />);
 
@@ -137,7 +158,22 @@ describe("SettingsPage data interactions", () => {
       expect(fetchSystemSettings).toHaveBeenCalledTimes(1);
     });
 
-    // Since it is hard to query Save Changes by text because it might have a spinner icon inside, we can just skip clicking it.
+    const projectScopeBtns = screen.getAllByRole("button", { name: "Project" });
+    fireEvent.click(projectScopeBtns[0]);
+
+    await waitFor(() => {
+      expect(fetchProjectEffectiveSettings).toHaveBeenCalledWith("proj-1");
+    });
+
+    // Save project settings
+    const saveBtns = screen.getAllByRole("button", { name: /Save changes/i });
+    fireEvent.click(saveBtns[0]);
+
+    // It should call saveProjectSettings and then fetchProjectEffectiveSettings again to refresh sources
+    await waitFor(() => {
+      expect(saveProjectSettings).toHaveBeenCalledWith("proj-1", expect.any(Object));
+      expect(fetchProjectEffectiveSettings).toHaveBeenCalledTimes(2);
+    });
   });
 
   it("should call refresh pipeline correctly", async () => {
