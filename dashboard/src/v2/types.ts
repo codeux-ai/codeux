@@ -59,6 +59,7 @@ import type {
   SprintCollectionResponse,
   SprintMarkdownImportTask,
   SprintRecord,
+  SprintReviewSummary,
   SprintStatus,
   TaskExecutorType,
   TaskPriority,
@@ -85,6 +86,7 @@ export type ChatMessageRecord = ConversationMessageRecord;
 
 export interface Sprint extends SprintRecord {
   date: string;
+  latestReview?: SprintReviewSummary;
 }
 
 export interface Task {

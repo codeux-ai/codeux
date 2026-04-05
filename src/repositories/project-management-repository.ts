@@ -62,6 +62,7 @@ interface SprintRow {
   tasks_count: number | string | null;
   completed_tasks: number | string | null;
   latest_run_status: string | null;
+  latest_sprint_review_json?: string | null;
 }
 
 interface TaskRow {
@@ -317,7 +318,21 @@ export class ProjectManagementRepository {
           WHERE sr.sprint_id = s.id
           ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC, sr.rowid DESC
           LIMIT 1
-        ) AS latest_run_status
+        ) AS latest_run_status,
+        (
+          SELECT json_object(
+            'status', q.status,
+            'outcome', q.outcome,
+            'summary', q.summary_markdown,
+            'reviewer', q.agent_name,
+            'finishedAt', q.finished_at
+          )
+          FROM qa_review_runs q
+          WHERE q.sprint_id = s.id
+            AND q.trigger_type = 'sprint_completion'
+          ORDER BY q.started_at DESC, q.rowid DESC
+          LIMIT 1
+        ) AS latest_sprint_review_json
       FROM sprints s
       LEFT JOIN tasks t ON t.sprint_id = s.id
       WHERE s.project_id = ?
@@ -705,7 +720,21 @@ export class ProjectManagementRepository {
           WHERE sr.sprint_id = s.id
           ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC, sr.rowid DESC
           LIMIT 1
-        ) AS latest_run_status
+        ) AS latest_run_status,
+        (
+          SELECT json_object(
+            'status', q.status,
+            'outcome', q.outcome,
+            'summary', q.summary_markdown,
+            'reviewer', q.agent_name,
+            'finishedAt', q.finished_at
+          )
+          FROM qa_review_runs q
+          WHERE q.sprint_id = s.id
+            AND q.trigger_type = 'sprint_completion'
+          ORDER BY q.started_at DESC, q.rowid DESC
+          LIMIT 1
+        ) AS latest_sprint_review_json
       FROM sprints s
       LEFT JOIN tasks t ON t.sprint_id = s.id
       WHERE s.project_id = ? AND s.number = ?
@@ -770,7 +799,21 @@ export class ProjectManagementRepository {
           WHERE sr.sprint_id = s.id
           ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC, sr.rowid DESC
           LIMIT 1
-        ) AS latest_run_status
+        ) AS latest_run_status,
+        (
+          SELECT json_object(
+            'status', q.status,
+            'outcome', q.outcome,
+            'summary', q.summary_markdown,
+            'reviewer', q.agent_name,
+            'finishedAt', q.finished_at
+          )
+          FROM qa_review_runs q
+          WHERE q.sprint_id = s.id
+            AND q.trigger_type = 'sprint_completion'
+          ORDER BY q.started_at DESC, q.rowid DESC
+          LIMIT 1
+        ) AS latest_sprint_review_json
       FROM sprints s
       LEFT JOIN tasks t ON t.sprint_id = s.id
       WHERE s.id = ?
@@ -887,6 +930,15 @@ export class ProjectManagementRepository {
     const tasksCount = toNumber(row.tasks_count);
     const completedTasks = toNumber(row.completed_tasks);
 
+    let latestReview: import("../contracts/project-management-types.js").SprintReviewSummary | undefined;
+    if (row.latest_sprint_review_json) {
+      try {
+        latestReview = JSON.parse(row.latest_sprint_review_json) as import("../contracts/project-management-types.js").SprintReviewSummary;
+      } catch {
+        // Ignore JSON parse errors
+      }
+    }
+
     return {
       id: row.id,
       projectId: row.project_id,
@@ -902,6 +954,7 @@ export class ProjectManagementRepository {
       featureBranch: row.feature_branch,
       tasksCount,
       completion: tasksCount > 0 ? Math.round((completedTasks / tasksCount) * 100) : 0,
+      latestReview,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };

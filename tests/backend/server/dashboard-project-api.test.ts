@@ -139,6 +139,7 @@ afterEach(async () => {
 async function createServerHandle(): Promise<{
   dir: string;
   port: number;
+  storage: AppDbStorage;
   repository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;
   runtimeRepository: ProjectRuntimeRepository;
@@ -405,6 +406,7 @@ async function createServerHandle(): Promise<{
   return {
     dir,
     port: handle.port,
+    storage,
     repository,
     executionRepository,
     runtimeRepository,
@@ -420,6 +422,65 @@ async function createServerHandle(): Promise<{
 }
 
 describe("dashboard project management API", () => {
+
+  it("supports optional sprint review summaries in API listSprints", async () => {
+    const { port, storage } = await createServerHandle();
+    const baseUrl = `http://localhost:${port}`;
+
+    const projectResponse = await fetch(`${baseUrl}/api/projects`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "QA API Test", sourceType: "local", sourceRef: "/tmp/api-qa" }),
+    });
+    const project = await projectResponse.json();
+
+    const sprint1Response = await fetch(`${baseUrl}/api/projects/${project.id}/sprints`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Sprint Unreviewed", goal: "API Test 1" }),
+    });
+    const sprint1 = await sprint1Response.json();
+
+    const sprint2Response = await fetch(`${baseUrl}/api/projects/${project.id}/sprints`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Sprint Reviewed", goal: "API Test 2" }),
+    });
+    const sprint2 = await sprint2Response.json();
+
+    const db = storage.getDatabase();
+
+    // Create a task completion review run for sprint1 to ensure it is ignored
+    db.prepare(`
+      INSERT INTO qa_review_runs (
+        id, project_id, sprint_id, trigger_type, status, outcome, run_index, summary_markdown, agent_name, started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, 'task_completion', 'completed', 'pass', 1, 'Task Looks good!', 'Task Bot', ?, ?, ?, ?)
+    `).run('api-task-qa-run-123', project.id, sprint1.id, new Date().toISOString(), new Date().toISOString(), new Date().toISOString(), new Date().toISOString());
+
+    // Create a sprint completion review run for sprint2
+    db.prepare(`
+      INSERT INTO qa_review_runs (
+        id, project_id, sprint_id, trigger_type, status, outcome, run_index, summary_markdown, agent_name, started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, 'sprint_completion', 'completed', 'pass', 1, 'API Looks good!', 'QA Bot', ?, ?, ?, ?)
+    `).run('api-qa-run-123', project.id, sprint2.id, new Date().toISOString(), new Date().toISOString(), new Date().toISOString(), new Date().toISOString());
+
+    const listSprintsResponse = await fetch(`${baseUrl}/api/projects/${project.id}/sprints`);
+    expect(listSprintsResponse.status).toBe(200);
+    const listData = await listSprintsResponse.json();
+
+    expect(listData.sprints.length).toBe(2);
+
+    const apiSprint1 = listData.sprints.find(s => s.id === sprint1.id);
+    expect(apiSprint1.latestReview).toBeUndefined();
+
+    const apiSprint2 = listData.sprints.find(s => s.id === sprint2.id);
+    expect(apiSprint2.latestReview).toBeDefined();
+    expect(apiSprint2.latestReview.status).toBe('completed');
+    expect(apiSprint2.latestReview.outcome).toBe('pass');
+    expect(apiSprint2.latestReview.summary).toBe('API Looks good!');
+    expect(apiSprint2.latestReview.reviewer).toBe('QA Bot');
+  });
+
   it("creates and queries DB-backed projects, sprints, tasks, and markdown export", async () => {
     const {
       dir,
