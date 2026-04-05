@@ -30,7 +30,7 @@ vi.mock("gsap", () => ({
 }));
 
 describe("UsageSeriesSidebar", () => {
-  it("renders group controls correctly", () => {
+  it("renders only enabled series without interactive grouping labels", () => {
     const series = [
       { id: "tokens", label: "Tokens", grouping: "Usage", defaultEnabled: true, data: [100] },
       { id: "active", label: "Active Time", grouping: "Usage", defaultEnabled: true, data: [200] },
@@ -39,16 +39,22 @@ describe("UsageSeriesSidebar", () => {
       { id: "purpose_time_task_coding", label: "task coding Time", grouping: "purposes_time", defaultEnabled: false, data: [500] }
     ];
 
-    render(<UsageSeriesSidebar series={series as any} enabledSeries={{ tokens: true, active: false, foo: false, provider_codex: false, purpose_time_task_coding: false }} onToggle={vi.fn()} activeIndex={0} />);
+    render(<UsageSeriesSidebar series={series as any} enabledSeries={{ tokens: true, active: false, foo: false, provider_codex: false, purpose_time_task_coding: false }} activeIndex={0} />);
 
-    expect(screen.getAllByText("Usage").length).toBeGreaterThan(0);
-    expect(screen.getByText("Details")).toBeInTheDocument();
+    // Renders the enabled metric label
     expect(screen.getAllByText("Tokens").length).toBeGreaterThan(0);
-    expect(screen.getByText("Active Time")).toBeInTheDocument();
-    expect(screen.getAllByText("providers").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("codex Tokens").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("purposes_time").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("task coding Time").length).toBeGreaterThan(0);
+
+    // Does NOT render disabled metrics
+    expect(screen.queryByText("Active Time")).not.toBeInTheDocument();
+    expect(screen.queryByText("Foo")).not.toBeInTheDocument();
+    expect(screen.queryByText("codex Tokens")).not.toBeInTheDocument();
+    expect(screen.queryByText("task coding Time")).not.toBeInTheDocument();
+
+    // Does NOT render grouping titles anymore
+    expect(screen.queryByText("Usage")).not.toBeInTheDocument();
+    expect(screen.queryByText("Details")).not.toBeInTheDocument();
+    expect(screen.queryByText("providers")).not.toBeInTheDocument();
+    expect(screen.queryByText("purposes_time")).not.toBeInTheDocument();
   });
 });
 
@@ -92,7 +98,9 @@ describe("InteractiveUsageChart", () => {
 
     expect(screen.getAllByText("Usage").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Tokens").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("providers").length).toBeGreaterThan(0);
     expect(screen.getAllByText("codex Tokens").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("purposes_time").length).toBeGreaterThan(0);
     expect(screen.getAllByText("task coding Time").length).toBeGreaterThan(0);
   });
 
