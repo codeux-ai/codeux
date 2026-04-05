@@ -1,4 +1,4 @@
-import { useRef, useCallback } from "preact/hooks";
+import { useRef, useCallback, useMemo } from "preact/hooks";
 import type {
   AgentConnection,
   ChatMessageRecord,
@@ -54,22 +54,25 @@ export function useMessageCache() {
     invocationMessageCacheRef.current.clear();
   }, []);
 
-  return {
-    getMessages,
-    setMessages,
-    hasMessages,
-    deleteMessages,
-    getThreads,
-    setThreads,
-    hasThreads,
-    getConnections,
-    setConnections,
-    getInvocations,
-    setInvocations,
-    hasInvocations,
-    getInvocationMessages,
-    setInvocationMessages,
-    hasInvocationMessages,
-    clearAll,
-  };
+  return useMemo(
+    () => ({
+      getMessages,
+      setMessages,
+      hasMessages,
+      deleteMessages,
+      getThreads,
+      setThreads,
+      hasThreads,
+      getConnections,
+      setConnections,
+      getInvocations,
+      setInvocations,
+      hasInvocations,
+      getInvocationMessages,
+      setInvocationMessages,
+      hasInvocationMessages,
+      clearAll,
+    }),
+    []
+  );
 }

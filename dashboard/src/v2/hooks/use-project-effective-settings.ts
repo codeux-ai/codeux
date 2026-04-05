@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { EffectiveSettingsResponse } from "../../types.js";
 import { fetchProjectEffectiveSettings } from "../lib/settings-api.js";
 
@@ -68,10 +68,15 @@ export function useProjectEffectiveSettings(projectId: string | null): {
     void refreshInternal();
   }, [refreshInternal]);
 
-  return {
-    data,
-    loading,
-    error,
-    refresh: () => refreshInternal({ silent: true }),
-  };
+  const refresh = useCallback(() => refreshInternal({ silent: true }), [refreshInternal]);
+
+  return useMemo(
+    () => ({
+      data,
+      loading,
+      error,
+      refresh,
+    }),
+    [data, loading, error, refresh]
+  );
 }
