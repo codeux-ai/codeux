@@ -10,6 +10,7 @@ import { SprintMarkdownService } from "../../../src/services/sprint-markdown-ser
 const tempDirs: string[] = [];
 
 async function createRepository(): Promise<{
+  storage: AppDbStorage;
   repository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;
   markdownService: SprintMarkdownService;
@@ -20,7 +21,7 @@ async function createRepository(): Promise<{
   const repository = new ProjectManagementRepository(storage);
   const executionRepository = new ExecutionRepository(storage);
   const markdownService = new SprintMarkdownService(repository);
-  return { repository, executionRepository, markdownService };
+  return { storage, repository, executionRepository, markdownService };
 }
 
 afterEach(async () => {
@@ -164,6 +165,55 @@ describe("ProjectManagementRepository", () => {
     });
   });
 
+
+  it("supports optional sprint review summaries in listSprints and ignores task-level QA", async () => {
+    const { repository, storage } = await createRepository();
+
+    const project = repository.createProject({
+      name: "QA Review Summary Project",
+      sourceType: "local",
+      sourceRef: "/tmp/qa",
+    });
+
+    const sprint1 = repository.createSprint(project.id, {
+      name: "Sprint Unreviewed",
+      goal: "No QA review run yet",
+    });
+
+    const sprint2 = repository.createSprint(project.id, {
+      name: "Sprint Reviewed",
+      goal: "Has QA review run",
+    });
+
+    const db = storage.getDatabase();
+
+    // Insert task level QA run for Sprint 1
+    db.prepare(`
+      INSERT INTO qa_review_runs (
+        id, project_id, sprint_id, trigger_type, status, outcome, run_index, summary_markdown, agent_name, started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, 'task_completion', 'completed', 'pass', 1, 'Task looks good', 'Task Bot', ?, ?, ?, ?)
+    `).run('task-qa-run', project.id, sprint1.id, new Date().toISOString(), new Date().toISOString(), new Date().toISOString(), new Date().toISOString());
+
+    // Insert sprint completion QA run for Sprint 2
+    db.prepare(`
+      INSERT INTO qa_review_runs (
+        id, project_id, sprint_id, trigger_type, status, outcome, run_index, summary_markdown, agent_name, started_at, finished_at, created_at, updated_at
+      ) VALUES (?, ?, ?, 'sprint_completion', 'completed', 'pass', 1, 'Looks good!', 'QA Bot', ?, ?, ?, ?)
+    `).run('qa-run-123', project.id, sprint2.id, new Date().toISOString(), new Date().toISOString(), new Date().toISOString(), new Date().toISOString());
+
+    const { sprints } = repository.listSprints(project.id);
+    expect(sprints.length).toBe(2);
+
+    const mappedUnreviewed = sprints.find(s => s.id === sprint1.id);
+    expect(mappedUnreviewed?.latestReview).toBeUndefined(); // Ignored task-level QA
+
+    const mappedReviewed = sprints.find(s => s.id === sprint2.id);
+    expect(mappedReviewed?.latestReview).toBeDefined();
+    expect(mappedReviewed?.latestReview?.status).toBe('completed');
+    expect(mappedReviewed?.latestReview?.outcome).toBe('pass');
+    expect(mappedReviewed?.latestReview?.summary).toBe('Looks good!');
+    expect(mappedReviewed?.latestReview?.reviewer).toBe('QA Bot');
+  });
   it("handles originalPrompt in sprints and supports clearing tasks", async () => {
     const { repository } = await createRepository();
 

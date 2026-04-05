@@ -6,6 +6,7 @@ export function toSprintViewModel(sprint: SprintRecord): Sprint {
   return {
     ...sprint,
     date: formatSprintDateRange(sprint.startDate, sprint.endDate),
+    latestReview: sprint.latestReview,
   };
 }
 

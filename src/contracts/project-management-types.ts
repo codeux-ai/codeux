@@ -30,6 +30,15 @@ export interface ProjectSummary {
   updatedAt: string;
 }
 
+
+export interface SprintReviewSummary {
+  status: string;
+  outcome: string | null;
+  summary: string | null;
+  reviewer: string | null;
+  finishedAt: string | null;
+}
+
 export interface SprintRecord {
   id: string;
   projectId: string;
@@ -45,6 +54,7 @@ export interface SprintRecord {
   featureBranch: string | null;
   tasksCount: number;
   completion: number;
+  latestReview?: SprintReviewSummary;
   createdAt: string;
   updatedAt: string;
 }
