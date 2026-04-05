@@ -135,4 +135,56 @@ describe("SprintComposer", () => {
       expect(document.body.textContent).not.toContain("Generating subtasks...");
     });
   });
+
+  it("shows New Sprint secondary action and calls onClose without aborting", async () => {
+    let resolveSubmit: (val: any) => void;
+    let isAborted = false;
+    const submitPromise = new Promise((resolve) => {
+      resolveSubmit = resolve;
+    });
+
+    const mockOnSubmit = vi.fn(async ({ signal }) => {
+      if (signal) {
+        signal.addEventListener('abort', () => {
+          isAborted = true;
+        });
+      }
+      return submitPromise;
+    });
+    const mockOnClose = vi.fn();
+
+    const { getByText, getByPlaceholderText, getAllByText } = render(
+      <SprintComposer {...defaultProps} onSubmit={mockOnSubmit} onClose={mockOnClose} />
+    );
+
+    const nameInput = getByPlaceholderText("Runtime hardening");
+    fireEvent.input(nameInput, { target: { value: "Test Sprint" } });
+
+    // Switch to Plan mode
+    const planModeBtn = getAllByText("Plan Only")[0]!;
+    fireEvent.click(planModeBtn);
+
+    const submitBtn = getAllByText("Plan Only").pop()!;
+    fireEvent.click(submitBtn);
+
+    // Overlay should appear
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("Generating subtasks");
+    });
+
+    expect(mockOnSubmit).toHaveBeenCalled();
+
+    // Click New Sprint
+    const newSprintBtn = getByText("New Sprint");
+    fireEvent.click(newSprintBtn);
+
+    // Should call onClose
+    expect(mockOnClose).toHaveBeenCalled();
+
+    // Should NOT abort
+    expect(isAborted).toBe(false);
+
+    // Resolve the promise to cleanup
+    resolveSubmit!(undefined);
+  });
 });

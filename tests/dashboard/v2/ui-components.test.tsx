@@ -88,6 +88,21 @@ describe("UI Components Coverage", () => {
       />
     );
     expect(document.body.textContent).toContain("Quicksprint in motion");
+
+    rerender(
+      <PlanningProgressOverlay
+        isBusy={true}
+        feedback={feedback}
+        planningEta={60000}
+        elapsedMs={1000}
+        isDark={false}
+        actionType="plan_only"
+        onDismiss={() => {}}
+        secondaryActionLabel="New Sprint"
+        onSecondaryAction={() => {}}
+      />
+    );
+    expect(document.body.textContent).toContain("New Sprint");
   });
 
   it("handles keyboard opening in AvantgardeSelect", () => {

@@ -62,6 +62,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const fieldsRef = useRef<HTMLFormElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const isUnmountedRef = useRef(false);
   const [isImproving, setIsImproving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorState, setErrorState] = useState<{ type: 'improve' | 'submit'; message: string } | null>(null);
@@ -69,6 +70,13 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
 
   const state = useSprintComposerState(initialSprint);
+
+  useEffect(() => {
+    isUnmountedRef.current = false;
+    return () => {
+      isUnmountedRef.current = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (state.planningAgentPresetId && !planningPresets.find(p => p.id === state.planningAgentPresetId)) {
@@ -164,13 +172,17 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
       state.setOriginalPrompt(rawPrompt);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      setErrorState({ type: 'improve', message: error instanceof Error ? error.message : String(error) });
+      if (!isUnmountedRef.current) {
+        setErrorState({ type: 'improve', message: error instanceof Error ? error.message : String(error) });
+      }
     } finally {
       abortRef.current = null;
-      setIsImproving(false);
-      if (previousFocusRef.current && !abortRef.current) {
-        const el = previousFocusRef.current;
-        setTimeout(() => el.focus(), 0);
+      if (!isUnmountedRef.current) {
+        setIsImproving(false);
+        if (previousFocusRef.current) {
+          const el = previousFocusRef.current;
+          setTimeout(() => el.focus(), 0);
+        }
       }
     }
   };
@@ -202,16 +214,22 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         planningAgentPresetId: state.planningAgentPresetId,
         signal: controller.signal,
       });
-      onClose();
+      if (!isUnmountedRef.current) {
+        onClose();
+      }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
-      setErrorState({ type: 'submit', message: error instanceof Error ? error.message : String(error) });
+      if (!isUnmountedRef.current) {
+        setErrorState({ type: 'submit', message: error instanceof Error ? error.message : String(error) });
+      }
     } finally {
       abortRef.current = null;
-      setIsSubmitting(false);
-      if (previousFocusRef.current && !abortRef.current && document.activeElement === document.body) {
-        const el = previousFocusRef.current;
-        setTimeout(() => el.focus(), 0);
+      if (!isUnmountedRef.current) {
+        setIsSubmitting(false);
+        if (previousFocusRef.current && document.activeElement === document.body) {
+          const el = previousFocusRef.current;
+          setTimeout(() => el.focus(), 0);
+        }
       }
     }
   };
@@ -256,6 +274,8 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         themeAccent="signal"
         onCancel={handleCancel}
         onDismiss={() => setIsOverlayDismissed(true)}
+        secondaryActionLabel="New Sprint"
+        onSecondaryAction={onClose}
       />
 
       <div

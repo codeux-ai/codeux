@@ -16,6 +16,8 @@ interface PlanningProgressOverlayProps {
   themeAccent?: "signal" | "ember";
   onCancel?: () => void;
   onDismiss: () => void;
+  secondaryActionLabel?: string;
+  onSecondaryAction?: () => void;
 }
 
 export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayProps> = ({
@@ -28,6 +30,8 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
   themeAccent = "signal",
   onCancel,
   onDismiss,
+  secondaryActionLabel,
+  onSecondaryAction,
 }) => {
   const textContainerRef = useRef<HTMLDivElement>(null);
   const prevTextRef = useRef(feedback?.text);
@@ -180,6 +184,15 @@ export const PlanningProgressOverlay: FunctionComponent<PlanningProgressOverlayP
           >
             Minimize
           </button>
+          {secondaryActionLabel && onSecondaryAction && (
+            <button
+              type="button"
+              onClick={onSecondaryAction}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+            >
+              {secondaryActionLabel}
+            </button>
+          )}
           {onCancel && (
             <button
               type="button"
