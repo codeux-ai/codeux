@@ -60,7 +60,7 @@ export function createRuntimeDependencies(
   const coreDeps = createCoreDependencies(options, context);
   const sprintDeps = createSprintDependencies(options, context, coreDeps);
   const dashDeps = createDashboardDependencies(context, coreDeps, sprintDeps);
-  const mcpDeps = createMcpDependencies(context, coreDeps, sprintDeps, dashDeps.executionControlService, dashDeps.taskRerunService);
+  const mcpDeps = createMcpDependencies(context, coreDeps, sprintDeps, dashDeps);
 
   return { ...coreDeps, ...sprintDeps, ...mcpDeps, ...dashDeps };
 }

@@ -1,9 +1,10 @@
 import type { ManageSprintOsArgs, ManagementResponseEnvelope } from "../contracts/internal-management-types.js";
-
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { ExecutionControlService } from "../services/execution-control-service.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { TaskRerunService } from "../services/task-rerun-service.js";
+import { handleProjectAction } from "./management/project-actions.js";
+import { handleSprintAction } from "./management/sprint-actions.js";
 import { TaskActions } from "./management/task-actions.js";
 
 export interface ManagementToolHandlerDeps {
@@ -16,7 +17,7 @@ export interface ManagementToolHandlerDeps {
 export class ManagementToolHandler {
   private readonly taskActions: TaskActions;
 
-  constructor(deps: ManagementToolHandlerDeps) {
+  constructor(private readonly deps: ManagementToolHandlerDeps) {
     this.taskActions = new TaskActions(
       deps.projectManagementRepository,
       deps.executionControlService,
@@ -26,31 +27,49 @@ export class ManagementToolHandler {
   }
 
   async handleManageSprintOs(args: ManageSprintOsArgs) {
-    const isDestructive = args.action.startsWith("delete_") || args.action.startsWith("reset_") || args.action.startsWith("replace_");
-
-    if (isDestructive && args.approval?.confirmed !== true) {
-      const envelope: ManagementResponseEnvelope = {
-        approvalRequired: true,
-        approvalMessage: `The action '${args.action}' is destructive and requires explicit approval. Please review the changes and call this tool again with approval.confirmed set to true.`,
-      };
-      return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
-    }
-
     try {
       let envelope: ManagementResponseEnvelope;
 
-      if (args.domain === "tasks") {
+      if (args.domain === "projects") {
+        envelope = await handleProjectAction(
+          args.action,
+          args.payload,
+          this.deps.projectManagementRepository,
+          args.domain,
+          args.approval
+        );
+      } else if (args.domain === "sprints") {
+        envelope = await handleSprintAction(
+          args.action,
+          args.payload,
+          this.deps.projectManagementRepository,
+          this.deps.executionControlService,
+          this.deps.executionRepository,
+          args.domain,
+          args.approval
+        );
+      } else if (args.domain === "tasks") {
         envelope = await this.taskActions.handleTaskAction(args);
       } else {
-        envelope = {
-          result: {
-            status: "success",
-            domain: args.domain,
-            action: args.action,
-            message: `Domain ${args.domain} is not implemented yet.`,
-          },
-        };
+        const isDestructive = args.action.startsWith("delete_") || args.action.startsWith("reset_") || args.action.startsWith("replace_");
+
+        if (isDestructive && args.approval?.confirmed !== true) {
+          envelope = {
+            approvalRequired: true,
+            approvalMessage: `The action '${args.action}' is destructive and requires explicit approval. Please review the changes and call this tool again with approval.confirmed set to true.`,
+          };
+        } else {
+          envelope = {
+            result: {
+              status: "success",
+              domain: args.domain,
+              action: args.action,
+              message: `Domain ${args.domain} is not implemented yet.`,
+            },
+          };
+        }
       }
+
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     } catch (error) {
       const envelope: ManagementResponseEnvelope = {
