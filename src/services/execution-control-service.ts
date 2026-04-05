@@ -160,11 +160,85 @@ export class ExecutionControlService {
       return this.cancelDispatchInternal(dispatch, now, "Dispatch was cancelled from the dashboard.");
     }
 
+    if (dispatch.status === "paused") {
+      const now = new Date().toISOString();
+      return await this.forceCancelDispatchInternal(dispatch, now, "Dispatch was cancelled from the dashboard.");
+    }
+
     if (dispatch.status !== "running") {
-      throw new Error(`Only queued, claimed, or running dispatches can be cancelled. Current status: ${dispatch.status}`);
+      throw new Error(`Only queued, claimed, paused, or running dispatches can be cancelled. Current status: ${dispatch.status}`);
     }
 
     return await this.requestRunningDispatchStop(dispatch, "Dispatch was cancelled from the dashboard.");
+  }
+
+  async pauseTaskDispatch(dispatchId: string): Promise<TaskDispatchRecord> {
+    const dispatch = this.requireTaskDispatch(dispatchId);
+    if (dispatch.status !== "running") {
+      throw new Error(`Only running dispatches can be paused. Current status: ${dispatch.status}`);
+    }
+
+    const now = new Date().toISOString();
+    const taskRun = this.requireTaskRunForDispatch(dispatch.id);
+
+    if (dispatch.executorType === "jules") {
+      if (taskRun?.sessionId) {
+        try {
+          await this.deps.julesApi.sendSessionMessage(
+            taskRun.sessionId,
+            "Task paused. Please halt your implementation.",
+          );
+          this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "jules_pause_requested", "user", {
+            dispatchId: dispatch.id,
+            sessionId: taskRun.sessionId,
+          }, {
+            sourceEventKey: `dashboard-jules-pause-request:${dispatch.id}`,
+          });
+        } catch (error) {
+          this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "jules_pause_request_failed", "system", {
+            dispatchId: dispatch.id,
+            sessionId: taskRun.sessionId,
+            errorMessage: error instanceof Error ? error.message : String(error),
+          }, {
+            sourceEventKey: `dashboard-jules-pause-request-failed:${dispatch.id}`,
+          });
+        }
+      }
+    }
+
+    if (dispatch.executorType === "docker_cli") {
+      // NOTE: We don't have a specific `activeDispatchRegistry.requestPause`,
+      // so for now we fallback to stop, or we just let it keep running and let it hit a lease timeout.
+      // But we will mark it paused in DB so that it correctly updates.
+      // For now we will call requestStop to avoid keeping the container running.
+      await this.deps.activeDispatchRegistry.requestStop(dispatch.id, "Dispatch paused from the dashboard.").catch(() => undefined);
+    }
+
+    this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
+
+    const updated = this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+      status: "paused",
+      lastHeartbeatAt: now,
+    });
+
+    if (taskRun) {
+      this.deps.executionRepository.updateTaskRun(taskRun.id, {
+        state: "PAUSED",
+        durationMs: this.calculateDurationMs(taskRun, now),
+      });
+      this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "dispatch_paused", "user", {
+        dispatchId: dispatch.id,
+        requestedBy: "dashboard",
+      }, {
+        sourceEventKey: `dashboard-dispatch-pause:${dispatch.id}`,
+      });
+    }
+
+    this.deps.projectManagementRepository.updateTask(dispatch.taskId, {
+      status: "pending",
+    });
+
+    return updated;
   }
 
   async forceCancelTaskDispatch(dispatchId: string): Promise<TaskDispatchRecord> {

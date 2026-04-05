@@ -20,7 +20,9 @@ export interface McpDependencies {
 export function createMcpDependencies(
   context: ServerContext,
   coreDeps: CoreDependencies,
-  sprintDeps: SprintDependencies
+  sprintDeps: SprintDependencies,
+  executionControlService: any,
+  taskRerunService: any
 ): McpDependencies {
   const {
     logger,
@@ -126,7 +128,12 @@ export function createMcpDependencies(
     workerInboxReplyService: sprintDeps.workerInboxReplyService,
   });
 
-  const managementToolHandler = new ManagementToolHandler();
+  const managementToolHandler = new ManagementToolHandler({
+    projectManagementRepository: coreDeps.projectManagementRepository,
+    executionControlService,
+    executionRepository: coreDeps.executionRepository,
+    taskRerunService,
+  });
 
   return {
     coreToolHandler,
