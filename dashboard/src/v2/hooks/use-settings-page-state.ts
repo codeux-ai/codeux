@@ -169,7 +169,7 @@ export const useSettingsPageState = (
 
   const [activeCategory, setActiveCategory] = useState<CategoryId>("general");
   const [activeScope, setActiveScope] = useState<SettingsScope>("system");
-  const [selectedIntegration, setSelectedIntegration] = useState<IntegrationId>("github");
+  const [selectedIntegration, setSelectedIntegration] = useState<IntegrationId | null>(null);
   const [selectedAgentTemplate, setSelectedAgentTemplate] = useState<AgentInstructionTemplateId>("planningMissing");
   const [activeInvocationRoute, setActiveInvocationRoute] = useState<InvocationRoutingId>("task_coding");
   const [activeProviderPanel, setActiveProviderPanel] = useState<ProviderId>("gemini");
