@@ -264,12 +264,14 @@ export class CliWorkflowService {
         return;
       }
 
+      const eventKey = `cli:git:pushed:${pushedBranch || args.workerBranch}`;
       this.appendExecutionEvent(args, "cli_git_pushed", {
         provider: args.provider,
         committedChanges,
         pushedBranch: pushedBranch || args.workerBranch,
         ...(stats || {}),
-      }, `cli:git:pushed:${pushedBranch || args.workerBranch}`);
+        sourceEventKey: eventKey,
+      }, eventKey);
       
       const { prUrl } = await executePrFinalizeStage(ctx);
       const finishedAt = new Date().toISOString();
