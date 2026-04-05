@@ -43,6 +43,8 @@ This map explains where major responsibilities live.
 - `repositories/`
   - `execution-repository.ts`
   - Delegates snapshot projection to `execution/project-execution-snapshot-query.ts` while keeping validation boundary.
+  - `execution/execution-invocations-query.ts`
+  - Focused query module separating invocation and message lists from write concerns.
   - `execution/execution-stats-types.ts`
   - Dedicated module for stats query types to decouple queries from the main execution repository.
   - `settings-repository.ts`
