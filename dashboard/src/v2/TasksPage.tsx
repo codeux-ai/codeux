@@ -33,6 +33,7 @@ import { DEFAULT_LIST_WINDOW, type ListWindowOption } from "./lib/list-window.js
 import { ListWindowSelector } from "./components/ui/ListWindowSelector.js";
 import { SkeletonCard } from "./components/ui/ListSkeletons.js";
 import { FilterStrip } from "./components/ui/FilterStrip.js";
+import { formatSprintDisplay } from "./lib/format-sprint.js";
 
 const PRIORITY_CFG: Record<TaskPriority, { label: string; color: string; dot: string; bg: string }> = {
   critical: { label: "Critical", color: "text-status-red", dot: "bg-status-red shadow-[0_0_8px_rgba(227,0,15,0.6)]", bg: "bg-status-red/[0.08] border-status-red/20" },
@@ -262,7 +263,7 @@ const SprintSelector: FunctionComponent<{
       >
         <Target className={`w-4 h-4 ${selected ? "text-ember-500" : "text-slate-400"} transition-colors`} strokeWidth={2} />
         <span className={`text-sm font-bold tracking-tight ${selected ? "text-ember-600 dark:text-ember-400" : "text-slate-600 dark:text-slate-400"}`}>
-          {selected ? selected.name : "All Sprints"}
+          {selected ? formatSprintDisplay(selected) : "All Sprints"}
         </span>
         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-300 ${open ? "rotate-180" : ""}`} strokeWidth={2} />
       </button>
@@ -303,7 +304,7 @@ const SprintSelector: FunctionComponent<{
                 }`} />
                 <div className="flex-1 min-w-0">
                   <span className={`text-sm font-bold tracking-tight ${isActive ? "text-ember-600 dark:text-ember-400" : "text-slate-800 dark:text-white"}`}>
-                    {sprint.name}
+                    {formatSprintDisplay(sprint)}
                   </span>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[9px] font-mono text-slate-400 uppercase tracking-[0.1em]">{sprint.date}</span>
