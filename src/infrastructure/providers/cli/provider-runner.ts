@@ -118,13 +118,13 @@ export class ProviderRunner implements IProviderRunner {
     const nativeSessionId = input.continueSessionId || (provider === "claude-code" ? randomUUID() : null);
 
     const continueSession = !!input.continueSessionId;
-    const spec = this.buildCommandSpec(provider, model, prompt, input.codexOutputPath, nativeSessionId, continueSession);
+    const spec = this.buildCommandSpec(provider, model, prompt, input.codexOutputPath, nativeSessionId, continueSession, !!input.mcpConnection);
     const { command, args } = spec;
 
-    const localMcpConfigPaths: string[] = [];
+    const localMcpCleanup: Array<{ path: string; originalContent: string | null }> = [];
     if (input.mcpConnection && workflowSettings.executionMode !== "DOCKER") {
-      const paths = await this.writeLocalMcpConfig(input.mcpConnection, cwd, provider);
-      localMcpConfigPaths.push(...paths);
+      const entries = await this.writeLocalMcpConfig(input.mcpConnection, cwd, provider);
+      localMcpCleanup.push(...entries);
     }
 
     const runCmd = async () => {
@@ -177,8 +177,12 @@ export class ProviderRunner implements IProviderRunner {
         nativeSessionId: usageTelemetry.nativeSessionId || nativeSessionId,
       };
     } finally {
-      for (const p of localMcpConfigPaths) {
-        await fs.rm(p, { force: true }).catch(() => undefined);
+      for (const entry of localMcpCleanup) {
+        if (entry.originalContent !== null) {
+          await fs.writeFile(entry.path, entry.originalContent).catch(() => undefined);
+        } else {
+          await fs.rm(entry.path, { force: true }).catch(() => undefined);
+        }
       }
     }
   }
@@ -190,6 +194,7 @@ export class ProviderRunner implements IProviderRunner {
     codexOutputPath?: string | null,
     nativeSessionId?: string | null,
     continueSession?: boolean,
+    mcpNative?: boolean,
   ): { command: string; args: string[] } {
     if (provider === "codex" && codexOutputPath) {
       // `codex exec resume --last` continues the most recent session in the cwd
@@ -210,6 +215,14 @@ export class ProviderRunner implements IProviderRunner {
       }
       args.push("-p", prompt);
       return { command: "claude", args };
+    }
+
+    if (provider === "gemini" && mcpNative) {
+      // MCP-native mode: drop --output-format json so Gemini loads MCP tools and returns plain text
+      const args = continueSession
+        ? ["--resume", "--yolo", "--p", prompt]
+        : ["--yolo", "--p", prompt];
+      return { command: "gemini", args };
     }
 
     if (provider === "gemini" && continueSession) {
@@ -286,12 +299,12 @@ export class ProviderRunner implements IProviderRunner {
     conn: McpConnectionInfo,
     cwd: string,
     provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">
-  ): Promise<string[]> {
+  ): Promise<Array<{ path: string; originalContent: string | null }>> {
     const headers: Record<string, string> = {};
     if (conn.authToken) {
       headers["Authorization"] = `Bearer ${conn.authToken}`;
     }
-    const created: string[] = [];
+    const created: Array<{ path: string; originalContent: string | null }> = [];
 
     if (provider === "claude-code") {
       const configPath = path.join(cwd, ".mcp.json");
@@ -304,22 +317,28 @@ export class ProviderRunner implements IProviderRunner {
           },
         },
       };
+      const originalContent = await fs.readFile(configPath, "utf8").catch(() => null);
       await fs.writeFile(configPath, JSON.stringify(config, null, 2));
-      created.push(configPath);
+      created.push({ path: configPath, originalContent });
     } else if (provider === "gemini") {
       const dirPath = path.join(cwd, ".gemini");
       await fs.mkdir(dirPath, { recursive: true });
       const configPath = path.join(dirPath, "settings.json");
-      const config = {
-        mcpServers: {
-          "sprint-os": {
-            httpUrl: conn.url,
-            ...(Object.keys(headers).length > 0 ? { headers } : {}),
-          },
+      const mcpServers = {
+        "sprint-os": {
+          httpUrl: conn.url,
+          ...(Object.keys(headers).length > 0 ? { headers } : {}),
         },
       };
-      await fs.writeFile(configPath, JSON.stringify(config, null, 2));
-      created.push(configPath);
+      // Merge with existing project-level settings to preserve other config (e.g. general.maxAttempts)
+      let existing: Record<string, unknown> = {};
+      const originalContent = await fs.readFile(configPath, "utf8").catch(() => null);
+      if (originalContent) {
+        try { existing = JSON.parse(originalContent); } catch { /* ignore parse errors */ }
+      }
+      existing.mcpServers = { ...(existing.mcpServers as Record<string, unknown> || {}), ...mcpServers };
+      await fs.writeFile(configPath, JSON.stringify(existing, null, 2));
+      created.push({ path: configPath, originalContent });
     } else if (provider === "codex") {
       const dirPath = path.join(cwd, ".codex");
       await fs.mkdir(dirPath, { recursive: true });
@@ -328,8 +347,9 @@ export class ProviderRunner implements IProviderRunner {
       if (conn.authToken) {
         lines.push(`http_headers = { "Authorization" = "Bearer ${conn.authToken}" }`);
       }
+      const originalContent = await fs.readFile(configPath, "utf8").catch(() => null);
       await fs.writeFile(configPath, lines.join("\n") + "\n");
-      created.push(configPath);
+      created.push({ path: configPath, originalContent });
     }
 
     return created;

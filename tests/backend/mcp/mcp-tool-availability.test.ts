@@ -28,7 +28,7 @@ describe("tool availability", () => {
     expect(workerGatewayTools.some((tool) => tool.name === "report_attention_outcome")).toBe(true);
     expect(workerGatewayTools.some((tool) => tool.name === "update_task_dispatch")).toBe(true);
     expect(workerGatewayTools.some((tool) => tool.name === "execute_worker_dispatch")).toBe(false);
-    expect(workerGatewayTools.some((tool) => tool.name === "manage_sprint_os")).toBe(false);
+    expect(workerGatewayTools.some((tool) => tool.name === "manage_sprint_os")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "listen", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "listen", "worker_gateway")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "claim_attention_item", "worker_host")).toBe(true);
@@ -44,7 +44,7 @@ describe("tool availability", () => {
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "execute_worker_dispatch", "worker_gateway")).toBe(false);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_sprint_os", "project_manager")).toBe(true);
     expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_sprint_os", "worker_host")).toBe(false);
-    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_sprint_os", "worker_gateway")).toBe(false);
+    expect(isToolEnabled(DEFAULT_DASHBOARD_SETTINGS, "manage_sprint_os", "worker_gateway")).toBe(true);
   });
 
   it("respects disabled tools for listing and dispatch checks", () => {

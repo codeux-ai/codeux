@@ -1,5 +1,10 @@
 {
   "general": {
     "maxAttempts": 10
+  },
+  "mcpServers": {
+    "sprint-os": {
+      "httpUrl": "http://127.0.0.1:4445/mcp"
+    }
   }
 }

@@ -72,7 +72,7 @@ export class DockerRunner implements IDockerRunner {
     await fs.mkdir(runtimeNpmCache, { recursive: true });
 
     if (input.mcpConnection) {
-      await this.writeProviderMcpConfig(input.mcpConnection, runtimeHome, providerLabel);
+      await this.writeProviderMcpConfig(input.mcpConnection, runtimeHome, providerLabel, cwd);
     }
 
     const repoSource = this.mapDockerSourcePathForDaemon(repoPath, repoPath, sessionId, "workspace", onActivity);
@@ -235,7 +235,8 @@ export class DockerRunner implements IDockerRunner {
   private async writeProviderMcpConfig(
     conn: McpConnectionInfo,
     runtimeHome: string,
-    provider: "gemini" | "codex" | "claude-code"
+    provider: "gemini" | "codex" | "claude-code",
+    cwd: string,
   ): Promise<void> {
     const headers: Record<string, string> = {};
     if (conn.authToken) {
@@ -254,15 +255,23 @@ export class DockerRunner implements IDockerRunner {
       };
       await fs.writeFile(path.join(runtimeHome, ".mcp.json"), JSON.stringify(config, null, 2));
     } else if (provider === "gemini") {
-      const config = {
-        mcpServers: {
-          "sprint-os": {
-            httpUrl: conn.url,
-            ...(Object.keys(headers).length > 0 ? { headers } : {}),
-          },
+      const mcpServers = {
+        "sprint-os": {
+          httpUrl: conn.url,
+          ...(Object.keys(headers).length > 0 ? { headers } : {}),
         },
       };
-      await fs.writeFile(path.join(runtimeHome, ".gemini", "settings.json"), JSON.stringify(config, null, 2));
+      // Write to user-level config
+      await fs.writeFile(path.join(runtimeHome, ".gemini", "settings.json"), JSON.stringify({ mcpServers }, null, 2));
+      // Also merge into project-level config so Gemini CLI discovers MCP regardless of scope
+      const projectSettingsPath = path.join(cwd, ".gemini", "settings.json");
+      let projectSettings: Record<string, unknown> = {};
+      try {
+        projectSettings = JSON.parse(await fs.readFile(projectSettingsPath, "utf8"));
+      } catch { /* no existing project settings */ }
+      projectSettings.mcpServers = { ...(projectSettings.mcpServers as Record<string, unknown> || {}), ...mcpServers };
+      await fs.mkdir(path.join(cwd, ".gemini"), { recursive: true });
+      await fs.writeFile(projectSettingsPath, JSON.stringify(projectSettings, null, 2));
     } else if (provider === "codex") {
       const lines = ["[mcp_servers.sprint-os]", `url = "${conn.url}"`];
       if (conn.authToken) {

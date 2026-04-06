@@ -212,7 +212,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "manage_sprint_os",
-    runtimeRoles: ["project_manager"],
+    runtimeRoles: ["project_manager", "worker_gateway"],
     description: "Manage internal Sprint OS state. Used for configuration and destructive actions. Destructive actions require approval confirmation.",
     inputSchema: {
       type: "object",
