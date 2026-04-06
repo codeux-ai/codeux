@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { afterEach, describe, expect, it } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
@@ -2083,4 +2084,140 @@ describe("ExecutionRepository", () => {
 
       expect(claimed).toBeNull();
     });
+
+
+
+
+
+
+
+describe("ExecutionLeaseStore specific logic", () => {
+    it("should reject renewing a lease with a mismatched token", async () => {
+      const { executionRepository, projectRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Mismatch Lease Project",
+        sourceType: "local",
+        sourceRef: "/tmp/mismatch",
+      });
+      const sprint = projectRepository.createSprint(project.id, {
+        name: "Sprint 1",
+        number: 1,
+      });
+
+      const acquireInput = {
+        scopeType: "sprint",
+        scopeId: sprint.id,
+        ownerKey: "worker-1",
+        leaseToken: "token-1",
+        expiresAt: new Date(Date.now() + 10000).toISOString(),
+      };
+      executionRepository.acquireLease(acquireInput as any);
+
+      expect(() => {
+        executionRepository.renewLease({
+          scopeType: "sprint",
+          scopeId: sprint.id,
+          leaseToken: "token-wrong",
+          expiresAt: new Date(Date.now() + 20000).toISOString(),
+        });
+      }).toThrow(/Lease token mismatch for sprint:/);
+    });
+
+    it("should successfully release a stale sprint lease when idle", async () => {
+      const { executionRepository, projectRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Stale Idle Lease Project",
+        sourceType: "local",
+        sourceRef: "/tmp/stale-idle",
+      });
+      const sprint = projectRepository.createSprint(project.id, {
+        name: "Sprint 1",
+        number: 1,
+      });
+
+      executionRepository.acquireLease({
+        scopeType: "sprint",
+        scopeId: sprint.id,
+        ownerKey: "worker-stale",
+        leaseToken: "token-stale",
+        expiresAt: new Date(Date.now() - 1000).toISOString(), // expired
+      } as any);
+
+      const released = executionRepository.releaseStaleSprintLease(project.id, sprint.id);
+      expect(released).toBe(true);
+
+      const lease = executionRepository.getLease("sprint", sprint.id);
+      expect(lease).toBeNull();
+    });
+
+    it("should not release a stale sprint lease if the sprint run is actively running", async () => {
+      const { executionRepository, projectRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Stale Active Lease Project",
+        sourceType: "local",
+        sourceRef: "/tmp/stale-active",
+      });
+      const sprint = projectRepository.createSprint(project.id, {
+        name: "Sprint 1",
+        number: 1,
+      });
+
+      const sprintRun = executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+      });
+      executionRepository.updateSprintRun(sprintRun.id, { status: "running" });
+
+      executionRepository.acquireLease({
+        scopeType: "sprint",
+        scopeId: sprint.id,
+        ownerKey: "worker-active",
+        leaseToken: "token-active",
+        expiresAt: new Date(Date.now() - 1000).toISOString(), // expired
+      } as any);
+
+      const released = executionRepository.releaseStaleSprintLease(project.id, sprint.id);
+      expect(released).toBe(false);
+
+      const lease = executionRepository.getLease("sprint", sprint.id);
+      expect(lease).not.toBeNull();
+    });
+
+    it("should release a lease when sprint run cancellation is finalized", async () => {
+      const { executionRepository, projectRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Cancel Finalize Lease Project",
+        sourceType: "local",
+        sourceRef: "/tmp/cancel-finalize",
+      });
+      const sprint = projectRepository.createSprint(project.id, {
+        name: "Sprint 1",
+        number: 1,
+      });
+
+      const sprintRun = executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+      });
+      // Set to cancel_requested so it can be finalized
+      executionRepository.updateSprintRun(sprintRun.id, { status: "cancel_requested" });
+
+      executionRepository.acquireLease({
+        scopeType: "sprint",
+        scopeId: sprint.id,
+        ownerKey: "worker-cancel",
+        leaseToken: "token-cancel",
+        expiresAt: new Date(Date.now() + 10000).toISOString(), // active lease
+      } as any);
+
+      // Finalize should update status and release lease
+      const finalized = executionRepository.finalizeSprintRunCancellationIfIdle(sprintRun.id);
+      expect(finalized).not.toBeNull();
+      expect(finalized?.status).toBe("cancelled");
+
+      const lease = executionRepository.getLease("sprint", sprint.id);
+      expect(lease).toBeNull();
+    });
   });
+
+});
