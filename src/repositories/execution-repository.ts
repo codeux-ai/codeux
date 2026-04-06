@@ -68,7 +68,7 @@ import { normalizeProjectStatsQuery } from "./execution/project-stats-query.js";
 import { queryProjectStatsSnapshot } from "./execution/project-stats-snapshot-query.js";
 import { OverviewTelemetryQuery } from "./execution/overview-telemetry-query.js";
 import { createUsageBuckets, createEmptyUsageTotals } from "./execution/stats-buckets.js";
-
+import { claimNextTaskDispatchTransaction } from "./execution/task-dispatch-claim-query.js";
 
 interface SprintRunRow {
   id: string;
@@ -1263,24 +1263,19 @@ export class ExecutionRepository {
     sprintId?: string;
     sprintRunId?: string;
   }): TaskDispatchRecord | null {
-    const queue = this.listTaskDispatches({
-      projectId: args.projectId,
-      sprintId: args.sprintId,
-      sprintRunId: args.sprintRunId,
-    }).filter((dispatch) => dispatch.executorType === args.executorType && dispatch.status === "queued");
+    const nowIso = new Date().toISOString();
+    const claimedId = claimNextTaskDispatchTransaction(this.db, {
+      ...args,
+      nowIso,
+    });
 
-    const next = queue[0];
-    if (!next) {
+    if (!claimedId) {
       return null;
     }
 
-    const now = new Date().toISOString();
-    return this.updateTaskDispatch(next.id, {
-      connectionId: args.connectionId ?? null,
-      status: "claimed",
-      claimedAt: now,
-      lastHeartbeatAt: now,
-    });
+    const updated = this.requireTaskDispatch(claimedId);
+    this.notifyRealtime(updated.projectId, true);
+    return updated;
   }
 
   listWorkerProjectAffinity(connectionId: string): string[] {

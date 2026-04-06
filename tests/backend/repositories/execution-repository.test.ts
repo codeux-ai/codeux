@@ -1908,3 +1908,179 @@ describe("ExecutionRepository", () => {
       expect(messages[0].metadata).toEqual(messageMetadata);
     });
   });
+
+  describe("claimNextTaskDispatch", () => {
+    it("claims the highest priority task", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Claim Priority Project",
+        sourceType: "local",
+        sourceRef: "/workspace/claim-priority",
+      });
+      const sprint = projectRepository.createSprint(project.id, {
+        name: "Claim Sprint",
+        goalMarkdown: "Goal",
+      });
+      const sprintRun = executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+      });
+
+      const task1 = projectRepository.createTask(project.id, {
+        title: "Task 1",
+        sprintId: sprint.id,
+      });
+      const task2 = projectRepository.createTask(project.id, {
+        title: "Task 2",
+        sprintId: sprint.id,
+      });
+
+      const dispatchLow = executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task1.id,
+        sprintRunId: sprintRun.id,
+        executorType: "mcp_worker",
+        priority: 10,
+        queuedAt: new Date(Date.now() - 1000).toISOString(),
+      });
+
+      const dispatchHigh = executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task2.id,
+        sprintRunId: sprintRun.id,
+        executorType: "mcp_worker",
+        priority: 100,
+        queuedAt: new Date().toISOString(),
+      });
+
+      const claimed = executionRepository.claimNextTaskDispatch({
+        projectId: project.id,
+        executorType: "mcp_worker",
+      });
+
+      expect(claimed).not.toBeNull();
+      expect(claimed?.id).toBe(dispatchHigh.id);
+      expect(claimed?.status).toBe("claimed");
+    });
+
+    it("scopes claim by sprint and sprint run filters", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Claim Scoped Project",
+        sourceType: "local",
+        sourceRef: "/workspace/claim-scoped",
+      });
+      const sprint1 = projectRepository.createSprint(project.id, {
+        name: "Sprint 1",
+        goalMarkdown: "Goal 1",
+      });
+      const sprintRun1 = executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint1.id,
+      });
+      const task1 = projectRepository.createTask(project.id, {
+        title: "Task 1",
+        sprintId: sprint1.id,
+      });
+
+      const sprint2 = projectRepository.createSprint(project.id, {
+        name: "Sprint 2",
+        goalMarkdown: "Goal 2",
+      });
+      const sprintRun2 = executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint2.id,
+      });
+      const task2 = projectRepository.createTask(project.id, {
+        title: "Task 2",
+        sprintId: sprint2.id,
+      });
+
+      executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint1.id,
+        taskId: task1.id,
+        sprintRunId: sprintRun1.id,
+        executorType: "mcp_worker",
+        priority: 100,
+      });
+
+      const dispatch2 = executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint2.id,
+        taskId: task2.id,
+        sprintRunId: sprintRun2.id,
+        executorType: "mcp_worker",
+        priority: 50,
+      });
+
+      const claimed = executionRepository.claimNextTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint2.id,
+        sprintRunId: sprintRun2.id,
+        executorType: "mcp_worker",
+      });
+
+      expect(claimed).not.toBeNull();
+      expect(claimed?.id).toBe(dispatch2.id);
+    });
+
+    it("prevents double claiming of the same dispatch", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Double Claim Project",
+        sourceType: "local",
+        sourceRef: "/workspace/double-claim",
+      });
+      const sprint = projectRepository.createSprint(project.id, {
+        name: "Sprint",
+        goalMarkdown: "Goal",
+      });
+      const sprintRun = executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+      });
+      const task = projectRepository.createTask(project.id, {
+        title: "Task",
+        sprintId: sprint.id,
+      });
+
+      executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        executorType: "mcp_worker",
+      });
+
+      const claim1 = executionRepository.claimNextTaskDispatch({
+        projectId: project.id,
+        executorType: "mcp_worker",
+      });
+      expect(claim1).not.toBeNull();
+
+      const claim2 = executionRepository.claimNextTaskDispatch({
+        projectId: project.id,
+        executorType: "mcp_worker",
+      });
+      expect(claim2).toBeNull();
+    });
+
+    it("returns null if no queued tasks exist for executor type", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "No Queue Project",
+        sourceType: "local",
+        sourceRef: "/workspace/no-queue",
+      });
+
+      const claimed = executionRepository.claimNextTaskDispatch({
+        projectId: project.id,
+        executorType: "mcp_worker",
+      });
+
+      expect(claimed).toBeNull();
+    });
+  });
