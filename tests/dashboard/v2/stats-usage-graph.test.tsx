@@ -3,7 +3,7 @@
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/preact";
+import { render, screen, act } from "@testing-library/preact";
 import * as matchers from '@testing-library/jest-dom/matchers';
 expect.extend(matchers);
 
@@ -125,7 +125,7 @@ describe("UsageSeriesSidebar", () => {
 });
 
 describe("InteractiveUsageChart", () => {
-  it("renders with stats and updates the sidebar", () => {
+  it("renders with stats and updates the sidebar", async () => {
     const stats = {
       buckets: [
         { label: "B1", bucketStart: "2023-01-01", bucketEnd: "2023-01-02", usage: { totalTokens: 10, activeTimeMs: 1000, invocationCount: 1 } }
@@ -162,6 +162,11 @@ describe("InteractiveUsageChart", () => {
 
     render(<InteractiveUsageChart stats={stats} chartState={chartState} />);
 
+    // Open the settings menu
+    const settingsButton = screen.getByRole("button", { name: /Settings/i });
+    await act(() => { settingsButton.click(); });
+
+    // Now verify the options are there
     expect(screen.getAllByText("Usage").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Tokens").length).toBeGreaterThan(0);
     expect(screen.getAllByText("providers").length).toBeGreaterThan(0);

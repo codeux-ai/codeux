@@ -12,6 +12,7 @@ vi.mock("../../../dashboard/src/v2/context/project-data.js", () => ({
   useProjectData: () => ({
     selectedProject: { id: "proj-1", name: "Test Project" },
   }),
+  ProjectDataContext: {},
 }));
 
 const baseStats = {

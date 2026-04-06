@@ -1,7 +1,7 @@
 import type { FunctionComponent } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import gsap from 'gsap';
-import { Activity } from 'lucide-preact';
+import { Activity, Settings } from 'lucide-preact';
 import type {
   ProjectExecutionStatsSnapshot,
 } from '../../../types.js';
@@ -18,6 +18,7 @@ import {
   formatAxisLabel,
 } from './StatsShared.js';
 import { UsageSeriesSidebar } from './UsageSeriesSidebar.js';
+import { Menu, MenuTrigger, MenuContent } from '../../../components/ui/Menu.js';
 import type { UsageChartState } from '../use-usage-chart-state.js';
 import {
   getVisibleBuckets,
@@ -171,6 +172,56 @@ export const InteractiveUsageChart: FunctionComponent<{
           <div className={`${SUBPANEL_CLASS} p-4 md:p-5`}>
             <div className="mb-5 flex flex-wrap items-center gap-3">
               <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Interactive Legend</div>
+
+              <Menu>
+                <MenuTrigger className={`inline-flex items-center gap-2 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 transition-colors hover:text-slate-900 dark:text-slate-300 dark:hover:text-white ${CHIP_CLASS}`}>
+                  <Settings className="w-3 h-3" />
+                  Settings
+                </MenuTrigger>
+                <MenuContent className="p-3 w-64 max-h-[400px] overflow-y-auto dropdown-scrollbar">
+                  <div className="flex flex-col gap-4">
+                    {Object.entries(seriesGroups).map(([grouping, groupSeries]) => (
+                      <div key={grouping} className="flex flex-col gap-2">
+                        <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 pl-1">{grouping}</div>
+                        <div className="flex flex-col gap-1">
+                          {groupSeries.map((s, idx) => {
+                            const active = enabledSeries[s.id] || false;
+                            const disabled = activeSeriesCount === 1 && active;
+                            const fallbackColors = ['#F43F5E', '#8B5CF6', '#10B981', '#F59E0B', '#3B82F6', '#EC4899', '#14B8A6'];
+                            const accentHex = s.color || fallbackColors[idx % fallbackColors.length];
+
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => {
+                                  if (activeSeriesCount === 1 && enabledSeries[s.id]) return;
+                                  setEnabledSeries((curr: Record<string, boolean>) => ({ ...curr, [s.id]: !curr[s.id] }));
+                                }}
+                                disabled={disabled}
+                                className={`flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[11px] font-bold uppercase tracking-[0.14em] transition-colors ${
+                                  active
+                                    ? 'bg-signal-500/10 text-signal-700 dark:bg-signal-500/15 dark:text-signal-300'
+                                    : 'text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-white/5'
+                                } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: accentHex }} />
+                                  {s.label}
+                                </div>
+                                <div className={`w-3 h-3 rounded-sm border flex items-center justify-center ${active ? 'border-signal-500 bg-signal-500' : 'border-slate-300 dark:border-slate-600'}`}>
+                                  {active && <svg viewBox="0 0 14 14" fill="none" className="w-2 h-2 text-white"><path d="M11.6666 3.5L5.24992 9.91667L2.33325 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </MenuContent>
+              </Menu>
+
               <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-300 ${CHIP_CLASS}`}>
                 Hover buckets for exact values
               </div>
@@ -188,41 +239,6 @@ export const InteractiveUsageChart: FunctionComponent<{
               ) : null}
             </div>
             <div className="relative">
-              <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex flex-wrap gap-x-6 gap-y-4 px-4 py-3">
-                {Object.entries(seriesGroups).map(([grouping, groupSeries]) => (
-                  <div key={grouping} className="flex flex-col gap-2">
-                    <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 pl-1">{grouping}</div>
-                    <div className="pointer-events-auto flex flex-wrap gap-2">
-                      {groupSeries.map((s, idx) => {
-                        const active = enabledSeries[s.id] || false;
-                        const disabled = activeSeriesCount === 1 && active;
-                        const fallbackColors = ['#F43F5E', '#8B5CF6', '#10B981', '#F59E0B', '#3B82F6', '#EC4899', '#14B8A6'];
-                        const accentHex = s.color || fallbackColors[idx % fallbackColors.length];
-
-                        return (
-                          <button
-                            key={s.id}
-                            type="button"
-                            onClick={() => {
-                              if (activeSeriesCount === 1 && enabledSeries[s.id]) return;
-                              setEnabledSeries((curr: Record<string, boolean>) => ({ ...curr, [s.id]: !curr[s.id] }));
-                            }}
-                            disabled={disabled}
-                            className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] transition-all border ${
-                              active
-                                ? 'bg-white/68 dark:bg-void-900/35 border-signal-500/18 text-slate-800 dark:text-slate-200'
-                                : 'border-black/[0.05] bg-white/60 dark:border-white/[0.05] dark:bg-void-900/30 text-slate-500 dark:text-slate-400 opacity-72 hover:opacity-100'
-                            } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
-                          >
-                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: accentHex }} />
-                            {s.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
               {activeBucket ? (
                 <div
                   className="pointer-events-none absolute top-3 z-10 w-56 -translate-x-1/2 rounded-[1.25rem] border border-black/[0.06] bg-white/88 px-4 py-3 shadow-[0_18px_38px_rgba(15,23,42,0.12)] backdrop-blur-2xl dark:border-white/[0.06] dark:bg-void-900/88 dark:shadow-[0_20px_40px_rgba(0,0,0,0.32)]"
