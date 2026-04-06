@@ -9,6 +9,7 @@ import { QaReviewRepository } from "../../../src/repositories/qa-review-reposito
 import { AgentPresetRepository } from "../../../src/repositories/agent-preset-repository.js";
 import { QualityAssuranceService } from "../../../src/services/quality-assurance-service.js";
 import { StructuredProviderResponseService } from "../../../src/services/structured-provider-response-service.js";
+import { StructuredAgentRequestService } from "../../../src/services/structured-agent-request-service.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 const tempDirs: string[] = [];
@@ -448,6 +449,11 @@ describe("QualityAssuranceService", () => {
       executionRepository,
     });
 
+    const structuredAgentRequestService = new StructuredAgentRequestService({
+      executionRepository,
+      structuredProviderResponseService: structuredResponseService,
+    });
+
     const service = new QualityAssuranceService({
       projectManagementRepository: projectRepository,
       executionRepository,
@@ -470,7 +476,7 @@ describe("QualityAssuranceService", () => {
         },
       } as any,
       providerRunner: mockProviderRunner as any,
-      structuredProviderResponseService: structuredResponseService,
+      structuredAgentRequestService,
       getDashboardSettings: () => ({
         ...DEFAULT_DASHBOARD_SETTINGS,
         agents: {
@@ -556,6 +562,11 @@ describe("QualityAssuranceService", () => {
       executionRepository,
     });
 
+    const structuredAgentRequestService = new StructuredAgentRequestService({
+      executionRepository,
+      structuredProviderResponseService: structuredResponseService,
+    });
+
     const service = new QualityAssuranceService({
       projectManagementRepository: projectRepository,
       executionRepository,
@@ -579,7 +590,7 @@ describe("QualityAssuranceService", () => {
         getOptionalWorkerAgentForRepoPath: async () => undefined,
       } as any,
       providerRunner: mockProviderRunner as any,
-      structuredProviderResponseService: structuredResponseService,
+      structuredAgentRequestService,
       getDashboardSettings: () => ({
         ...DEFAULT_DASHBOARD_SETTINGS,
         agents: {

@@ -9,6 +9,13 @@ expect.extend(matchers);
 
 import { InteractiveUsageChart } from "../../../dashboard/src/v2/pages/stats/components/InteractiveUsageChart.js";
 import { UsageSeriesSidebar } from "../../../dashboard/src/v2/pages/stats/components/UsageSeriesSidebar.js";
+import {
+  getVisibleBuckets,
+  normalizeChartSeries,
+  groupChartSeries,
+  calculateChartMetrics,
+  getTooltipState,
+} from "../../../dashboard/src/v2/pages/stats/chart-view-models.js";
 
 // Basic stubs
 window.SVGElement.prototype.getTotalLength = () => 100;
@@ -29,14 +36,73 @@ vi.mock("gsap", () => ({
   }
 }));
 
+describe("Chart View Models", () => {
+  it("getVisibleBuckets slices correctly", () => {
+    const buckets = [{ id: 1 }, { id: 2 }, { id: 3 }] as any;
+    expect(getVisibleBuckets(buckets, 0, 1)).toEqual([{ id: 1 }, { id: 2 }]);
+  });
+
+  it("normalizeChartSeries normalizes data and creates formatters", () => {
+    const chartSeries = [{
+      id: "tokens",
+      color: "#000",
+      formatter: "number",
+      signalLabel: "Tk",
+      data: [100, 200]
+    }] as any;
+    const buckets = [{}, {}] as any;
+    const normalized = normalizeChartSeries(chartSeries, buckets, 0, 100, 100, 10);
+
+    expect(normalized[0]?.id).toBe("tokens");
+    expect(normalized[0]?.values).toEqual([100, 200]);
+    expect(normalized[0]?.points.length).toBe(2);
+    expect(typeof normalized[0]?.formatter).toBe("function");
+    expect(normalized[0]?.formatter(1000)).toBe("1,000");
+  });
+
+  it("groupChartSeries groups by grouping key", () => {
+    const chartSeries = [
+      { id: "s1", grouping: "G1" },
+      { id: "s2", grouping: "G1" },
+      { id: "s3", grouping: "G2" },
+    ] as any;
+    const grouped = groupChartSeries(chartSeries);
+    expect(grouped["G1"]?.length).toBe(2);
+    expect(grouped["G2"]?.length).toBe(1);
+  });
+
+  it("calculateChartMetrics calculates peak and average metrics", () => {
+    const buckets = [
+      { usage: { totalTokens: 10, activeTimeMs: 100, invocationCount: 1 } },
+      { usage: { totalTokens: 20, activeTimeMs: 200, invocationCount: 2 } },
+    ] as any;
+    const metrics = calculateChartMetrics(buckets);
+    expect(metrics.peakTokens).toBe(20);
+    expect(metrics.peakTime).toBe(200);
+    expect(metrics.peakInvocations).toBe(2);
+    expect(metrics.averageTokens).toBe(15);
+  });
+
+  it("getTooltipState calculates correct index and active bucket", () => {
+    const buckets = [{ id: "b1" }, { id: "b2" }] as any;
+    const chartData = [{ points: [{ x: 10 }, { x: 20 }] }] as any;
+
+    const state = getTooltipState(buckets, chartData, 0, 0, 100);
+    expect(state.activeIndex).toBe(0);
+    expect(state.activeBucket).toEqual({ id: "b1" });
+    expect(state.xPositions).toEqual([10, 20]);
+    expect(state.tooltipLeft).toBe(10);
+  });
+});
+
 describe("UsageSeriesSidebar", () => {
   it("renders only enabled series without interactive grouping labels", () => {
     const series = [
-      { id: "tokens", label: "Tokens", grouping: "Usage", defaultEnabled: true, data: [100] },
-      { id: "active", label: "Active Time", grouping: "Usage", defaultEnabled: true, data: [200] },
-      { id: "foo", label: "Foo", grouping: "Details", defaultEnabled: false, data: [300] },
-      { id: "provider_codex", label: "codex Tokens", grouping: "providers", defaultEnabled: false, data: [400] },
-      { id: "purpose_time_task_coding", label: "task coding Time", grouping: "purposes_time", defaultEnabled: false, data: [500] }
+      { id: "tokens", label: "Tokens", grouping: "Usage", defaultEnabled: true, values: [100], formatter: (val: any) => String(val), accentHex: "#000" },
+      { id: "active", label: "Active Time", grouping: "Usage", defaultEnabled: true, values: [200], formatter: (val: any) => String(val), accentHex: "#000" },
+      { id: "foo", label: "Foo", grouping: "Details", defaultEnabled: false, values: [300], formatter: (val: any) => String(val), accentHex: "#000" },
+      { id: "provider_codex", label: "codex Tokens", grouping: "providers", defaultEnabled: false, values: [400], formatter: (val: any) => String(val), accentHex: "#000" },
+      { id: "purpose_time_task_coding", label: "task coding Time", grouping: "purposes_time", defaultEnabled: false, values: [500], formatter: (val: any) => String(val), accentHex: "#000" }
     ];
 
     render(<UsageSeriesSidebar series={series as any} enabledSeries={{ tokens: true, active: false, foo: false, provider_codex: false, purpose_time_task_coding: false }} activeIndex={0} />);
@@ -139,12 +205,16 @@ describe("InteractiveUsageChart", () => {
 
     const { rerender } = render(<InteractiveUsageChart stats={stats} chartState={chartState} />);
 
-    // Update stats instance with same window context
+    // Update stats instance with same window context and new chartSeries reference
+    // This simulates a polling refresh where range stays identical but arrays are new
     const updatedStats = {
       ...stats,
       buckets: [
         ...stats.buckets,
         { label: "B2", bucketStart: "2023-01-02", bucketEnd: "2023-01-03", usage: { totalTokens: 20, activeTimeMs: 2000, invocationCount: 2 } }
+      ],
+      chartSeries: [
+        { id: "tokens", label: "Tokens", grouping: "Usage", defaultEnabled: true, data: [100, 150] },
       ]
     };
 
@@ -153,5 +223,71 @@ describe("InteractiveUsageChart", () => {
 
     // We confirm that it renders using the preserved chartState correctly without crashing
     expect(screen.getAllByText("Tokens").length).toBeGreaterThan(0);
+
+    // Explicitly verify the test spy didn't get called to reset the enabled series state,
+    // ensuring the chart component isn't aggressively reinitializing it from stats
+    expect(chartState.setEnabledSeries).not.toHaveBeenCalled();
+    expect(chartState.setZoomRange).not.toHaveBeenCalled();
+  });
+});
+
+describe("useUsageChartState", () => {
+  it("resets state when the actual stats range or project changes", async () => {
+    // A simplified test for the hook behavior using preact testing library render
+    let currentState: any = null;
+
+    const HookWrapper = ({ projectId, stats }: { projectId: string | null, stats: any }) => {
+      // Import inline for testing
+      const { useUsageChartState } = require("../../../dashboard/src/v2/pages/stats/use-usage-chart-state.ts");
+      currentState = useUsageChartState(projectId, stats);
+      return <div data-testid="wrapper">Test</div>;
+    };
+
+    const initialStats = {
+      buckets: [{ bucketStart: "2023-01-01" }, { bucketStart: "2023-01-02" }, { bucketStart: "2023-01-03" }],
+      range: { from: "2023-01-01", to: "2023-01-07", resolution: "day" },
+      chartSeries: [
+        { id: "tokens", defaultEnabled: true },
+        { id: "active", defaultEnabled: false }
+      ]
+    };
+
+    const { rerender } = render(<HookWrapper projectId="proj-1" stats={initialStats} />);
+
+    // Initial state correctly sets the first series to true based on defaultEnabled
+    expect(currentState.enabledSeries).toEqual({ tokens: true, active: false });
+
+    // Simulate user interaction: toggle 'active' to true and 'tokens' to false, add zoom
+    currentState.setEnabledSeries({ tokens: false, active: true });
+    currentState.setZoomRange({ start: 0, end: 1 });
+
+    // Trigger re-render to apply new state
+    rerender(<HookWrapper projectId="proj-1" stats={initialStats} />);
+
+    expect(currentState.enabledSeries).toEqual({ tokens: false, active: true });
+    expect(currentState.zoomRange).toEqual({ start: 0, end: 1 });
+
+    // Rerender with SAME date range but new stats object reference (like a polling refresh)
+    const refreshedStats = {
+      ...initialStats,
+      chartSeries: [...initialStats.chartSeries]
+    };
+    rerender(<HookWrapper projectId="proj-1" stats={refreshedStats} />);
+
+    // State is PRESERVED
+    expect(currentState.enabledSeries).toEqual({ tokens: false, active: true });
+    expect(currentState.zoomRange).toEqual({ start: 0, end: 1 });
+
+    // Rerender with DIFFERENT date range (e.g. user selected 30 days instead of 7 days)
+    const newRangeStats = {
+      ...initialStats,
+      range: { from: "2023-01-01", to: "2023-01-31", resolution: "day" },
+      chartSeries: [...initialStats.chartSeries]
+    };
+    rerender(<HookWrapper projectId="proj-1" stats={newRangeStats} />);
+
+    // State is RESET appropriately to defaults
+    expect(currentState.enabledSeries).toEqual({ tokens: true, active: false });
+    expect(currentState.zoomRange).toBeNull();
   });
 });

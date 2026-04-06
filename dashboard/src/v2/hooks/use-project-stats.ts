@@ -8,6 +8,7 @@ import type {
 import { subscribeToDashboardRealtime } from "../../lib/realtime/dashboard-realtime-client.js";
 import { fetchProjectStats } from "../lib/project-api.js";
 import { useRealtimeResource } from "../../hooks/use-realtime-resource.js";
+import { isEqualProjectStatsSnapshot, stabilizeProjectStatsSnapshot } from "../lib/resource-equality.js";
 
 const EMPTY_STATS: ProjectExecutionStatsSnapshot | null = null;
 
@@ -28,14 +29,11 @@ export function useProjectStats(
     return await fetchProjectStats(projectId, statsQuery, signal);
   }, [projectId, statsQuery]);
 
-  const isEqual = useCallback((prev: ProjectExecutionStatsSnapshot | null, next: ProjectExecutionStatsSnapshot | null) => {
-    return JSON.stringify(prev) === JSON.stringify(next);
-  }, []);
-
   const { data: stats, loading, error, refetch } = useRealtimeResource<ProjectExecutionStatsSnapshot | null>({
     initialData: EMPTY_STATS,
     fetchResource,
-    isEqual,
+    isEqual: isEqualProjectStatsSnapshot,
+    stabilizeNext: stabilizeProjectStatsSnapshot,
     pollIntervalMs: projectId ? pollIntervalMs : 0,
     isAlreadyLoaded: false,
     realtime: projectId ? {

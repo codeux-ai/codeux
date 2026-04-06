@@ -23,6 +23,9 @@ import { ProjectWorkerAssignmentRepository } from "./project-worker-assignment-r
 import type { ProjectSettingsOverride } from "../contracts/settings-scope-types.js";
 import type { ProjectWorkerAssignmentRecord } from "../contracts/worker-types.js";
 import { resolveRepositoryHost } from "../infrastructure/git/repository-host-resolver.js";
+import { projectSummaryQuery } from "./project-management/project-summary-query.js";
+import { sprintSummaryQuery } from "./project-management/sprint-summary-query.js";
+import { validateTaskDependencies } from "./project-management/task-dependency-graph.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
 
@@ -106,25 +109,8 @@ export class ProjectManagementRepository {
 
   listProjects(): ProjectCollectionResponse {
     const rows = this.db.prepare(`
-      SELECT
-        p.id,
-        p.slug,
-        p.name,
-        p.base_dir,
-        p.repo_url,
-        p.default_branch,
-        p.feature_branch_prefix,
-        p.status,
-        p.created_at,
-        p.updated_at,
-        ps.source_type,
-        ps.source_ref,
-        (SELECT COUNT(*) FROM sprints s WHERE s.project_id = p.id) AS sprints_count,
-        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'completed') AS completed_tasks,
-        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status != 'completed') AS open_tasks,
-        (SELECT MAX(CASE WHEN sr.status IN ('running', 'queued') THEN 1 ELSE 0 END) FROM sprint_runs sr WHERE sr.project_id = p.id) AS has_active_runs
-      FROM projects p
-      LEFT JOIN project_sources ps ON ps.project_id = p.id
+      ${projectSummaryQuery.select}
+      ${projectSummaryQuery.from}
       ORDER BY p.updated_at DESC, p.name ASC
     `).all() as unknown as ProjectRow[];
 
@@ -136,25 +122,8 @@ export class ProjectManagementRepository {
 
   getProject(projectId: string): ProjectSummary | null {
     const row = this.db.prepare(`
-      SELECT
-        p.id,
-        p.slug,
-        p.name,
-        p.base_dir,
-        p.repo_url,
-        p.default_branch,
-        p.feature_branch_prefix,
-        p.status,
-        p.created_at,
-        p.updated_at,
-        ps.source_type,
-        ps.source_ref,
-        (SELECT COUNT(*) FROM sprints s WHERE s.project_id = p.id) AS sprints_count,
-        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'completed') AS completed_tasks,
-        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status != 'completed') AS open_tasks,
-        (SELECT MAX(CASE WHEN sr.status IN ('running', 'queued') THEN 1 ELSE 0 END) FROM sprint_runs sr WHERE sr.project_id = p.id) AS has_active_runs
-      FROM projects p
-      LEFT JOIN project_sources ps ON ps.project_id = p.id
+      ${projectSummaryQuery.select}
+      ${projectSummaryQuery.from}
       WHERE p.id = ?
     `).get(projectId) as ProjectRow | undefined;
 
@@ -167,25 +136,8 @@ export class ProjectManagementRepository {
     // Also match paths stored with a trailing slash
     const withTrailingSlash = normalizedRepoPath + "/";
     const row = this.db.prepare(`
-      SELECT
-        p.id,
-        p.slug,
-        p.name,
-        p.base_dir,
-        p.repo_url,
-        p.default_branch,
-        p.feature_branch_prefix,
-        p.status,
-        p.created_at,
-        p.updated_at,
-        ps.source_type,
-        ps.source_ref,
-        (SELECT COUNT(*) FROM sprints s WHERE s.project_id = p.id) AS sprints_count,
-        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status = 'completed') AS completed_tasks,
-        (SELECT COUNT(*) FROM tasks t WHERE t.project_id = p.id AND t.status != 'completed') AS open_tasks,
-        (SELECT MAX(CASE WHEN sr.status IN ('running', 'queued') THEN 1 ELSE 0 END) FROM sprint_runs sr WHERE sr.project_id = p.id) AS has_active_runs
-      FROM projects p
-      LEFT JOIN project_sources ps ON ps.project_id = p.id
+      ${projectSummaryQuery.select}
+      ${projectSummaryQuery.from}
       WHERE p.base_dir IN (?, ?)
          OR ps.source_ref IN (?, ?)
       ORDER BY p.updated_at DESC
@@ -296,48 +248,10 @@ export class ProjectManagementRepository {
   listSprints(projectId: string): SprintCollectionResponse {
     const selectedSprintId = this.getSelectedSprintId(projectId);
     const rows = this.db.prepare(`
-      SELECT
-        s.id,
-        s.project_id,
-        s.number,
-        s.slug,
-        s.name,
-        s.original_prompt,
-        s.goal,
-        s.status,
-        s.showcase_pinned,
-        s.start_date,
-        s.end_date,
-        s.feature_branch,
-        s.created_at,
-        s.updated_at,
-        COUNT(t.id) AS tasks_count,
-        COALESCE(SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END), 0) AS completed_tasks,
-        (
-          SELECT sr.status
-          FROM sprint_runs sr
-          WHERE sr.sprint_id = s.id
-          ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC, sr.rowid DESC
-          LIMIT 1
-        ) AS latest_run_status,
-        (
-          SELECT json_object(
-            'status', q.status,
-            'outcome', q.outcome,
-            'summary', q.summary_markdown,
-            'reviewer', q.agent_name,
-            'finishedAt', q.finished_at
-          )
-          FROM qa_review_runs q
-          WHERE q.sprint_id = s.id
-            AND q.trigger_type = 'sprint_completion'
-          ORDER BY q.started_at DESC, q.rowid DESC
-          LIMIT 1
-        ) AS latest_sprint_review_json
-      FROM sprints s
-      LEFT JOIN tasks t ON t.sprint_id = s.id
+      ${sprintSummaryQuery.select}
+      ${sprintSummaryQuery.from}
       WHERE s.project_id = ?
-      GROUP BY s.id
+      ${sprintSummaryQuery.groupBy}
       ORDER BY COALESCE(s.number, 0) DESC, s.created_at DESC
     `).all(projectId) as unknown as SprintRow[];
 
@@ -477,6 +391,12 @@ export class ProjectManagementRepository {
       VALUES (?, ?)
     `);
 
+    const normalizedDependsOnTaskIds = this.normalizeDependencyIds(input.dependsOnTaskIds);
+    if (normalizedDependsOnTaskIds.length > 0) {
+      const sprintTasks = this.listTasks(projectId, input.sprintId);
+      validateTaskDependencies(id, input.sprintId, normalizedDependsOnTaskIds, sprintTasks);
+    }
+
     this.runInTransaction(() => {
       insertTask.run(
         id,
@@ -499,7 +419,7 @@ export class ProjectManagementRepository {
         now
       );
 
-      for (const dependencyId of this.normalizeDependencyIds(input.dependsOnTaskIds)) {
+      for (const dependencyId of normalizedDependsOnTaskIds) {
         insertDependency.run(id, dependencyId);
       }
     });
@@ -529,6 +449,12 @@ export class ProjectManagementRepository {
       : current.dependsOnTaskIds;
     const dependenciesChanged = input.dependsOnTaskIds !== undefined
       && !sameStringArray(nextDependsOnTaskIds, current.dependsOnTaskIds);
+
+    if (dependenciesChanged) {
+      const sprintTasks = this.listTasks(current.projectId, current.sprintId);
+      validateTaskDependencies(taskId, current.sprintId, nextDependsOnTaskIds, sprintTasks);
+    }
+
     const taskChanged = nextTitle !== current.title
       || nextPromptMarkdown !== current.promptMarkdown
       || nextDescription !== current.description
@@ -699,47 +625,10 @@ export class ProjectManagementRepository {
   findSprintByProjectAndNumber(projectId: string, sprintNumber: number): SprintRecord | null {
     this.requireProject(projectId);
     const row = this.db.prepare(`
-      SELECT
-        s.id,
-        s.project_id,
-        s.number,
-        s.slug,
-        s.name,
-        s.original_prompt,
-        s.goal,
-        s.status,
-        s.start_date,
-        s.end_date,
-        s.feature_branch,
-        s.created_at,
-        s.updated_at,
-        COUNT(t.id) AS tasks_count,
-        COALESCE(SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END), 0) AS completed_tasks,
-        (
-          SELECT sr.status
-          FROM sprint_runs sr
-          WHERE sr.sprint_id = s.id
-          ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC, sr.rowid DESC
-          LIMIT 1
-        ) AS latest_run_status,
-        (
-          SELECT json_object(
-            'status', q.status,
-            'outcome', q.outcome,
-            'summary', q.summary_markdown,
-            'reviewer', q.agent_name,
-            'finishedAt', q.finished_at
-          )
-          FROM qa_review_runs q
-          WHERE q.sprint_id = s.id
-            AND q.trigger_type = 'sprint_completion'
-          ORDER BY q.started_at DESC, q.rowid DESC
-          LIMIT 1
-        ) AS latest_sprint_review_json
-      FROM sprints s
-      LEFT JOIN tasks t ON t.sprint_id = s.id
+      ${sprintSummaryQuery.select}
+      ${sprintSummaryQuery.from}
       WHERE s.project_id = ? AND s.number = ?
-      GROUP BY s.id
+      ${sprintSummaryQuery.groupBy}
       LIMIT 1
     `).get(projectId, sprintNumber) as SprintRow | undefined;
 
@@ -777,48 +666,10 @@ export class ProjectManagementRepository {
 
   private requireSprint(sprintId: string): SprintRecord {
     const row = this.db.prepare(`
-      SELECT
-        s.id,
-        s.project_id,
-        s.number,
-        s.slug,
-        s.name,
-        s.original_prompt,
-        s.goal,
-        s.status,
-        s.showcase_pinned,
-        s.start_date,
-        s.end_date,
-        s.feature_branch,
-        s.created_at,
-        s.updated_at,
-        COUNT(t.id) AS tasks_count,
-        COALESCE(SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END), 0) AS completed_tasks,
-        (
-          SELECT sr.status
-          FROM sprint_runs sr
-          WHERE sr.sprint_id = s.id
-          ORDER BY COALESCE(sr.started_at, sr.created_at) DESC, sr.created_at DESC, sr.rowid DESC
-          LIMIT 1
-        ) AS latest_run_status,
-        (
-          SELECT json_object(
-            'status', q.status,
-            'outcome', q.outcome,
-            'summary', q.summary_markdown,
-            'reviewer', q.agent_name,
-            'finishedAt', q.finished_at
-          )
-          FROM qa_review_runs q
-          WHERE q.sprint_id = s.id
-            AND q.trigger_type = 'sprint_completion'
-          ORDER BY q.started_at DESC, q.rowid DESC
-          LIMIT 1
-        ) AS latest_sprint_review_json
-      FROM sprints s
-      LEFT JOIN tasks t ON t.sprint_id = s.id
+      ${sprintSummaryQuery.select}
+      ${sprintSummaryQuery.from}
       WHERE s.id = ?
-      GROUP BY s.id
+      ${sprintSummaryQuery.groupBy}
     `).get(sprintId) as SprintRow | undefined;
 
     if (!row) {

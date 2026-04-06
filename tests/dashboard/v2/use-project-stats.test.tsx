@@ -37,14 +37,23 @@ vi.mock("../../../dashboard/src/v2/lib/project-api.js", () => ({
         });
       }
     });
-    return { id: "stats-snapshot" };
+    return {
+      id: "stats-snapshot",
+      usage: { total: 0 },
+      git: { commits: 0 }
+    };
   }),
 }));
 
 import { fetchProjectStats } from "../../../dashboard/src/v2/lib/project-api.js";
 
-function TestComponent({ projectId, query, pollIntervalMs = 30000 }: { projectId: string | null; query: any, pollIntervalMs?: number }) {
+function TestComponent({ projectId, query, pollIntervalMs = 30000, onStats }: { projectId: string | null; query: any, pollIntervalMs?: number, onStats?: (s: any) => void }) {
   const { stats, loading, error } = useProjectStats(projectId, query, pollIntervalMs);
+
+  if (onStats && stats) {
+    onStats(stats);
+  }
+
   return h('div', null,
     h('div', { 'data-testid': 'loading' }, loading ? 'loading' : 'idle'),
     h('div', { 'data-testid': 'stats' }, stats ? stats.id : 'none')
@@ -61,6 +70,37 @@ describe("useProjectStats cancellation", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("keeps stable reference on unchanged stats snapshot", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    let capturedStats: any = null;
+    const { getByTestId } = render(h(TestComponent, {
+      projectId: "p1",
+      query: "7d",
+      pollIntervalMs: 10000,
+      onStats: (s) => { capturedStats = s; }
+    }));
+
+    // Wait for initial load
+    await waitFor(() => {
+      expect(getByTestId("loading").textContent).toBe("idle");
+    });
+
+    const firstStatsRef = capturedStats;
+    expect(firstStatsRef).toBeTruthy();
+
+    // Advance poll interval to trigger a background fetch
+    vi.advanceTimersByTime(10500);
+
+    // Wait for the second fetch
+    await waitFor(() => {
+      expect(fetchProjectStats).toHaveBeenCalledTimes(2);
+    });
+
+    // capturedStats shouldn't have structurally changed
+    expect(capturedStats).toBe(firstStatsRef);
   });
 
   it("cancels previous fetch on query change", async () => {

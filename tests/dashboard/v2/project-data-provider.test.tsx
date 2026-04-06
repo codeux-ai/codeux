@@ -104,7 +104,13 @@ describe("ProjectDataProvider", () => {
     const renderCountAfterMount = renderCount;
     const projectArrayAfterMount = lastData.projects;
 
-    // Trigger silent background refresh
+    // Trigger silent background refresh by providing a structurally identical, but new object reference
+    const secondResponse: ProjectCollectionResponse = {
+      projects: [{ ...mockProject }],
+      selectedProjectId: "p1",
+    };
+    vi.mocked(projectApi.fetchProjects).mockResolvedValue(secondResponse);
+
     await act(async () => {
       screen.getByTestId("refresh-btn").click();
     });
@@ -112,6 +118,7 @@ describe("ProjectDataProvider", () => {
     // We shouldn't trigger an extra render with a new array reference because the data is equal
     expect(renderCount).toBe(renderCountAfterMount);
     expect(lastData.projects).toBe(projectArrayAfterMount);
+    expect(lastData.projects[0]).toBe(projectArrayAfterMount[0]); // Check stabilization
     expect(vi.mocked(projectApi.fetchProjects)).toHaveBeenCalledTimes(2);
   });
 

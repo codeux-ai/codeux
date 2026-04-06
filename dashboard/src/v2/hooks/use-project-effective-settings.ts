@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "preact/hooks";
 import type { EffectiveSettingsResponse } from "../../types.js";
 import { fetchProjectEffectiveSettings } from "../lib/settings-api.js";
 import { useRealtimeResource } from "../../hooks/use-realtime-resource.js";
+import { isEqualEffectiveSettings, stabilizeEffectiveSettings } from "../lib/resource-equality.js";
 
 export function useProjectEffectiveSettings(projectId: string | null): {
   data: EffectiveSettingsResponse | null;
@@ -19,7 +20,8 @@ export function useProjectEffectiveSettings(projectId: string | null): {
   const { data, loading, error, refetch } = useRealtimeResource<EffectiveSettingsResponse | null>({
     initialData: null,
     fetchResource,
-    isEqual: (prev, next) => JSON.stringify(prev) === JSON.stringify(next),
+    isEqual: isEqualEffectiveSettings,
+    stabilizeNext: stabilizeEffectiveSettings,
     realtime: {
       scopes: projectId ? [`project:${projectId}`] : [],
       eventType: "project.structure.updated",

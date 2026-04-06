@@ -40,7 +40,6 @@ describe("useProjectEffectiveSettings", () => {
       llmModel: "claude-3",
     },
     sources: [],
-    system: {},
   };
 
   it("should fetch effective settings for the selected project", async () => {
@@ -59,6 +58,35 @@ describe("useProjectEffectiveSettings", () => {
     }));
     expect(result.current.data).toEqual(MOCK_SETTINGS);
     expect(result.current.error).toBeNull();
+  });
+
+  it("should keep stable reference on unchanged settings", async () => {
+    vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue(MOCK_SETTINGS as any);
+
+    const { result } = renderHook(() => useProjectEffectiveSettings("proj-1"));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    const oldData = result.current.data;
+
+    // Return structurally equivalent but new object reference
+    vi.mocked(fetchProjectEffectiveSettings).mockResolvedValue({
+      settings: { ...MOCK_SETTINGS.settings },
+      sources: [ ...MOCK_SETTINGS.sources ],
+    } as any);
+
+    let refreshPromise: Promise<void> | undefined;
+    await waitFor(() => {
+      refreshPromise = result.current.refresh();
+      return true;
+    });
+
+    await refreshPromise;
+
+    // Check that stabilization preserves the original reference
+    expect(result.current.data).toBe(oldData);
   });
 
   it("should handle error when fetching fails", async () => {

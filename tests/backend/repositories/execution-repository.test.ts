@@ -665,6 +665,32 @@ describe("ExecutionRepository", () => {
       expiresAt: "2030-03-09T12:05:00.000Z",
     });
 
+    const invocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      taskRunId: run.id,
+      sessionId: "session-snapshot-1",
+      provider: "codex",
+      purpose: "task_coding",
+      status: "completed",
+      startedAt: "2026-03-09T10:00:00.000Z",
+      promptChars: 100,
+    });
+    executionRepository.updateProviderInvocationUsage(invocation.id, {
+      status: "completed",
+      durationMs: 15000,
+      inputTokens: 50,
+      cachedInputTokens: 0,
+      outputTokens: 25,
+      reasoningOutputTokens: 0,
+      totalTokens: 75,
+      usageSource: "reported",
+      rawUsageJson: { provider: "codex" },
+    });
+
     const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
 
     expect(snapshot).toMatchObject({
@@ -678,6 +704,11 @@ describe("ExecutionRepository", () => {
       status: "running",
       activeLeaseOwnerKey: "sprint_orchestrator",
     });
+    expect(snapshot.sprintRuns[0]?.usage).toMatchObject({
+      totalTokens: 75,
+      activeTimeMs: 15000,
+      invocationCount: 1,
+    });
     expect(snapshot.taskDispatches[0]).toMatchObject({
       id: dispatch.id,
       taskId: task.id,
@@ -688,6 +719,11 @@ describe("ExecutionRepository", () => {
       taskRunState: "RUNNING",
       sessionId: "session-snapshot-1",
       activeLeaseOwnerKey: "worker-snapshot-1",
+      usage: expect.objectContaining({
+        totalTokens: 75,
+        activeTimeMs: 15000,
+        invocationCount: 1,
+      }),
     });
     expect(snapshot.recentEvents[0]).toMatchObject({
       scopeType: "task_run",
@@ -1039,6 +1075,79 @@ describe("ExecutionRepository", () => {
       reason: "Task T02 is complete and waiting to be merged into the sprint branch.",
     });
     expect(snapshot.sprintRuns[0]?.humanIntervention?.instructions).toContain("enable feature PR automerge");
+  });
+
+
+  it("includes active projects and orders recent events in overview telemetry", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Active Telemetry Project",
+      sourceType: "local",
+      sourceRef: "/workspace/active-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Active Sprint",
+      number: 9,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      triggerType: "dashboard",
+      executorMode: "mixed",
+    });
+
+    const task = projectRepository.createTask(project.id, { sprintId: sprint.id,
+      title: "Active Task",
+      taskKey: "TSK-1",
+      status: "running",
+      type: "feature",
+      promptMarkdown: "Do work",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      state: "RUNNING",
+      provider: "virtual",
+      workerBranch: "worker-branch",
+    });
+
+
+
+    // Add some events in order
+    executionRepository.appendSprintRunEvent(sprintRun.id, "sprint_run_started", "system", {
+      startedBy: "User",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10)); // Ensure different timestamps
+
+    executionRepository.appendTaskRunEvent(taskRun.id, "task_run_started", "worker", {
+      workerId: "worker-1",
+    });
+
+    const telemetry = executionRepository.getOverviewTelemetrySnapshot();
+
+    expect(telemetry.activeProjects).toHaveLength(1);
+    expect(telemetry.activeProjects[0]).toMatchObject({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+      sprintRunStatus: "running",
+    });
+
+    expect(telemetry.attentionProjects).toHaveLength(0);
+
+    // Recent events should be ordered DESC (newest first)
+    expect(telemetry.recentEvents.length).toBeGreaterThanOrEqual(2);
+    expect(telemetry.recentEvents[0]).toMatchObject({
+      scopeType: "task_run",
+      eventType: "task_run_started",
+    });
+    expect(telemetry.recentEvents[1]).toMatchObject({
+      scopeType: "sprint_run",
+      eventType: "sprint_run_started",
+    });
   });
 
   it("includes paused intervention projects in overview telemetry", async () => {
@@ -1797,5 +1906,181 @@ describe("ExecutionRepository", () => {
 
       const messages = executionRepository.listExecutionInvocationMessages(invocation.id);
       expect(messages[0].metadata).toEqual(messageMetadata);
+    });
+  });
+
+  describe("claimNextTaskDispatch", () => {
+    it("claims the highest priority task", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Claim Priority Project",
+        sourceType: "local",
+        sourceRef: "/workspace/claim-priority",
+      });
+      const sprint = projectRepository.createSprint(project.id, {
+        name: "Claim Sprint",
+        goalMarkdown: "Goal",
+      });
+      const sprintRun = executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+      });
+
+      const task1 = projectRepository.createTask(project.id, {
+        title: "Task 1",
+        sprintId: sprint.id,
+      });
+      const task2 = projectRepository.createTask(project.id, {
+        title: "Task 2",
+        sprintId: sprint.id,
+      });
+
+      const dispatchLow = executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task1.id,
+        sprintRunId: sprintRun.id,
+        executorType: "mcp_worker",
+        priority: 10,
+        queuedAt: new Date(Date.now() - 1000).toISOString(),
+      });
+
+      const dispatchHigh = executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task2.id,
+        sprintRunId: sprintRun.id,
+        executorType: "mcp_worker",
+        priority: 100,
+        queuedAt: new Date().toISOString(),
+      });
+
+      const claimed = executionRepository.claimNextTaskDispatch({
+        projectId: project.id,
+        executorType: "mcp_worker",
+      });
+
+      expect(claimed).not.toBeNull();
+      expect(claimed?.id).toBe(dispatchHigh.id);
+      expect(claimed?.status).toBe("claimed");
+    });
+
+    it("scopes claim by sprint and sprint run filters", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Claim Scoped Project",
+        sourceType: "local",
+        sourceRef: "/workspace/claim-scoped",
+      });
+      const sprint1 = projectRepository.createSprint(project.id, {
+        name: "Sprint 1",
+        goalMarkdown: "Goal 1",
+      });
+      const sprintRun1 = executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint1.id,
+      });
+      const task1 = projectRepository.createTask(project.id, {
+        title: "Task 1",
+        sprintId: sprint1.id,
+      });
+
+      const sprint2 = projectRepository.createSprint(project.id, {
+        name: "Sprint 2",
+        goalMarkdown: "Goal 2",
+      });
+      const sprintRun2 = executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint2.id,
+      });
+      const task2 = projectRepository.createTask(project.id, {
+        title: "Task 2",
+        sprintId: sprint2.id,
+      });
+
+      executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint1.id,
+        taskId: task1.id,
+        sprintRunId: sprintRun1.id,
+        executorType: "mcp_worker",
+        priority: 100,
+      });
+
+      const dispatch2 = executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint2.id,
+        taskId: task2.id,
+        sprintRunId: sprintRun2.id,
+        executorType: "mcp_worker",
+        priority: 50,
+      });
+
+      const claimed = executionRepository.claimNextTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint2.id,
+        sprintRunId: sprintRun2.id,
+        executorType: "mcp_worker",
+      });
+
+      expect(claimed).not.toBeNull();
+      expect(claimed?.id).toBe(dispatch2.id);
+    });
+
+    it("prevents double claiming of the same dispatch", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "Double Claim Project",
+        sourceType: "local",
+        sourceRef: "/workspace/double-claim",
+      });
+      const sprint = projectRepository.createSprint(project.id, {
+        name: "Sprint",
+        goalMarkdown: "Goal",
+      });
+      const sprintRun = executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+      });
+      const task = projectRepository.createTask(project.id, {
+        title: "Task",
+        sprintId: sprint.id,
+      });
+
+      executionRepository.createTaskDispatch({
+        projectId: project.id,
+        sprintId: sprint.id,
+        taskId: task.id,
+        sprintRunId: sprintRun.id,
+        executorType: "mcp_worker",
+      });
+
+      const claim1 = executionRepository.claimNextTaskDispatch({
+        projectId: project.id,
+        executorType: "mcp_worker",
+      });
+      expect(claim1).not.toBeNull();
+
+      const claim2 = executionRepository.claimNextTaskDispatch({
+        projectId: project.id,
+        executorType: "mcp_worker",
+      });
+      expect(claim2).toBeNull();
+    });
+
+    it("returns null if no queued tasks exist for executor type", async () => {
+      const { projectRepository, executionRepository } = await createRepositories();
+      const project = projectRepository.createProject({
+        name: "No Queue Project",
+        sourceType: "local",
+        sourceRef: "/workspace/no-queue",
+      });
+
+      const claimed = executionRepository.claimNextTaskDispatch({
+        projectId: project.id,
+        executorType: "mcp_worker",
+      });
+
+      expect(claimed).toBeNull();
     });
   });

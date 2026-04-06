@@ -188,6 +188,25 @@ describe("Memory Capture Integration", () => {
     expect(capturedPrompt).not.toContain(agentOverride);
     expect(capturedPrompt).toContain(globalInstruction);
 
+    // Now test with override enabled but empty template
+    deps.agentPresetSyncService.resolveTargetedPlanningAgent = vi.fn().mockResolvedValue({
+      id: "agent-plan",
+      instructionMarkdown: "I am planning agent.",
+      memoryTemplateOverrideEnabled: true,
+      memoryTemplateMarkdown: "   \n"
+    });
+
+    await planningAgentService.improveSprintPrompt(projectId, {
+      sessionId: "session-3",
+      agentPresetId: "agent-plan",
+      name: "Sprint 1",
+      goal: "Make it better",
+      overrides: {}
+    } as any);
+
+    expect(capturedPrompt).not.toContain(agentOverride);
+    expect(capturedPrompt).toContain(globalInstruction);
+
     // Wait a tick for async memory capture to finish
     await new Promise(r => setTimeout(r, 50));
     fsSync.writeFileSync(join(projectRepo.getProject(projectId)!.baseDir, LEARNINGS_FILENAME), `## Category: Planning\n- plan carefully again`);
@@ -299,6 +318,26 @@ describe("Memory Capture Integration", () => {
     });
 
     const res2 = await qaService.reviewSprintCompletion({
+      projectId,
+      sprintId: "sprint-1",
+      repoPath: projectRepo.getProject(projectId)!.baseDir,
+      subtasks: [],
+      sprintRunId: "run-1"
+    });
+
+    expect(capturedPrompt).not.toContain(agentOverride);
+    expect(capturedPrompt).toContain(globalInstruction);
+
+    // Now test with override enabled but empty template
+    deps.agentPresetSyncService.resolveTargetedQualityAssuranceAgent = vi.fn().mockResolvedValue({
+      id: "agent-qa",
+      name: "agent-qa",
+      instructionMarkdown: "I am QA agent.",
+      memoryTemplateOverrideEnabled: true,
+      memoryTemplateMarkdown: "   \n"
+    });
+
+    const res3 = await qaService.reviewSprintCompletion({
       projectId,
       sprintId: "sprint-1",
       repoPath: projectRepo.getProject(projectId)!.baseDir,

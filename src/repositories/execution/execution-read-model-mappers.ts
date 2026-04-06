@@ -4,6 +4,7 @@ import {
   ExecutionRuntimeEventSummary,
   ExecutionHumanInterventionSummary,
   ExecutionUsageTotals,
+  OverviewTelemetryProjectSummary,
 } from "../../contracts/app-types.js";
 import { ProviderInvocationUsageRecord } from "../../contracts/execution-types.js";
 import { ExecutionInvocationRecord, ExecutionInvocationMessageRecord } from "../../contracts/invocation-types.js";
@@ -15,7 +16,27 @@ import {
   ProviderInvocationUsageRow,
   ExecutionInvocationRow,
   ExecutionInvocationMessageRow,
+  OverviewTelemetryProjectSummaryRow,
 } from "./execution-repository-types.js";
+
+export function mapOverviewTelemetryProjectSummaryRow(
+  row: OverviewTelemetryProjectSummaryRow,
+  humanIntervention: ExecutionHumanInterventionSummary | null,
+): OverviewTelemetryProjectSummary {
+  return {
+    projectId: row.project_id,
+    projectName: row.project_name,
+    sprintId: row.sprint_id,
+    sprintName: row.sprint_name,
+    sprintNumber: row.sprint_number === null ? null : toNumber(row.sprint_number),
+    sprintRunId: row.sprint_run_id,
+    sprintRunStatus: row.sprint_run_status,
+    activeDispatchCount: toNumber(row.active_dispatch_count),
+    runningDispatchCount: toNumber(row.running_dispatch_count),
+    updatedAt: row.updated_at,
+    humanIntervention,
+  };
+}
 
 export function mapProviderInvocationUsageRow(row: ProviderInvocationUsageRow): ProviderInvocationUsageRecord {
   return {
