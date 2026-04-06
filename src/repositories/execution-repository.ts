@@ -11,6 +11,12 @@ import { randomUUID } from "crypto";
 import { DatabaseAdapter } from "./db/database-adapter.js";
 import { AppDbStorage } from "./app-db-storage.js";
 import { queryProjectExecutionSnapshot } from "./execution/project-execution-snapshot-query.js";
+import {
+  mapProviderInvocationUsageRow,
+  mapExecutionSprintRunSummaryRow,
+  mapExecutionRuntimeEventSummaryRow
+} from "./execution/execution-read-model-mappers.js";
+
 
 import type {
   ExecutionInvocationRecord,
@@ -69,6 +75,27 @@ import { queryProjectStatsSnapshot } from "./execution/project-stats-snapshot-qu
 import { OverviewTelemetryQuery } from "./execution/overview-telemetry-query.js";
 import { createUsageBuckets, createEmptyUsageTotals } from "./execution/stats-buckets.js";
 import { claimNextTaskDispatchTransaction } from "./execution/task-dispatch-claim-query.js";
+import {
+  requireProject,
+  requireSprint,
+  requireTask,
+  requireConnection,
+  requireSprintRun,
+  requireSprintRunScoped,
+  requireTaskDispatch,
+  requireTaskRun,
+  requireProviderInvocationUsage,
+  requireLease
+} from "./execution/execution-validators.js";
+
+import type {
+  ExecutionSprintRunSummaryRow,
+  ExecutionTaskDispatchSummaryRow,
+  ExecutionRuntimeEventSummaryRow,
+  ProviderInvocationUsageRow,
+  ProjectAttentionSummaryRow
+} from "./execution/execution-repository-types.js";
+
 
 interface SprintRunRow {
   id: string;
@@ -146,37 +173,6 @@ interface TaskRunEventRow {
   created_at: string;
 }
 
-interface ProviderInvocationUsageRow {
-  id: string;
-  project_id: string;
-  sprint_id: string | null;
-  task_id: string | null;
-  sprint_run_id: string | null;
-  dispatch_id: string | null;
-  task_run_id: string | null;
-  attention_item_id: string | null;
-  session_id: string;
-  provider: string;
-  purpose: string;
-  status: string;
-  model: string | null;
-  native_session_id: string | null;
-  started_at: string;
-  finished_at: string | null;
-  duration_ms: number | string | null;
-  prompt_chars: number | string;
-  transcript_chars: number | string;
-  input_tokens: number | string;
-  cached_input_tokens: number | string;
-  output_tokens: number | string;
-  reasoning_output_tokens: number | string;
-  total_tokens: number | string;
-  usage_source: string;
-  raw_usage_json: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 interface SprintRunEventRow {
   id: string;
   sprint_run_id: string;
@@ -185,102 +181,6 @@ interface SprintRunEventRow {
   payload_json: string | null;
   source_event_key: string | null;
   created_at: string;
-}
-
-interface ExecutionSprintRunSummaryRow {
-  id: string;
-  project_id: string;
-  sprint_id: string;
-  sprint_name: string;
-  sprint_number: number | string | null;
-  status: string;
-  trigger_type: string;
-  triggered_by: string | null;
-  executor_mode: string;
-  started_at: string | null;
-  finished_at: string | null;
-  last_heartbeat_at: string | null;
-  created_at: string;
-  active_lease_owner_key: string | null;
-  active_lease_expires_at: string | null;
-}
-
-interface ExecutionTaskDispatchSummaryRow {
-  id: string;
-  project_id: string;
-  sprint_id: string;
-  sprint_run_id: string;
-  sprint_name: string;
-  sprint_number: number | string | null;
-  task_id: string;
-  task_key: string;
-  task_title: string;
-  status: string;
-  executor_type: string;
-  priority: number | string;
-  connection_id: string | null;
-  connection_display_name: string | null;
-  connection_role: string | null;
-  task_run_id: string | null;
-  task_run_state: string | null;
-  provider: string | null;
-  session_id: string | null;
-  session_name: string | null;
-  worker_branch: string | null;
-  pr_url: string | null;
-  queued_at: string;
-  claimed_at: string | null;
-  started_at: string | null;
-  finished_at: string | null;
-  last_heartbeat_at: string | null;
-  error_message: string | null;
-  active_lease_owner_key: string | null;
-  active_lease_expires_at: string | null;
-}
-
-interface ExecutionRuntimeEventSummaryRow {
-  id: string;
-  scope_type: string;
-  task_run_id: string | null;
-  sprint_run_id: string | null;
-  dispatch_id: string | null;
-  project_id: string;
-  sprint_id: string;
-  sprint_name: string;
-  sprint_number: number | string | null;
-  sprint_run_status: string | null;
-  task_id: string | null;
-  task_key: string | null;
-  task_title: string | null;
-  task_run_state: string | null;
-  event_type: string;
-  originator: string | null;
-  source_event_key: string | null;
-  provider: string | null;
-  session_id: string | null;
-  session_name: string | null;
-  worker_branch: string | null;
-  pr_url: string | null;
-  connection_id: string | null;
-  connection_display_name: string | null;
-  connection_role: string | null;
-  created_at: string;
-  payload_json: string | null;
-}
-
-interface ProjectAttentionSummaryRow {
-  id: string;
-  project_id: string;
-  sprint_id: string | null;
-  sprint_run_id: string | null;
-  attention_type: string;
-  severity: string;
-  owner_type: string;
-  status: string;
-  title: string;
-  summary_markdown: string;
-  payload_json: string | null;
-  updated_at: string;
 }
 
 export interface StatsEntityMetadata {
@@ -348,21 +248,21 @@ export class ExecutionRepository {
 
 
   createExecutionInvocation(input: CreateExecutionInvocationInput): ExecutionInvocationRecord {
-    this.requireProject(input.projectId);
+    requireProject(this.db, input.projectId);
     if (input.sprintId) {
-      this.requireSprint(input.sprintId, input.projectId);
+      requireSprint(this.db, input.sprintId, input.projectId);
     }
     if (input.taskId) {
-      this.requireTask(input.taskId, input.projectId, input.sprintId || undefined);
+      requireTask(this.db, input.taskId, input.projectId, input.sprintId || undefined);
     }
     if (input.sprintRunId) {
-      this.requireSprintRun(input.sprintRunId);
+      requireSprintRun((id) => this.getSprintRun(id), input.sprintRunId);
     }
     if (input.dispatchId) {
-      this.requireTaskDispatch(input.dispatchId);
+      requireTaskDispatch((id) => this.getTaskDispatch(id), input.dispatchId);
     }
     if (input.taskRunId) {
-      this.requireTaskRun(input.taskRunId);
+      requireTaskRun((id) => this.getTaskRun(id), input.taskRunId);
     }
 
     const id = `xi_${randomUUID().replace(/-/g, "")}`;
@@ -577,8 +477,8 @@ export class ExecutionRepository {
   }
 
   createSprintRun(input: CreateSprintRunInput): SprintRunRecord {
-    this.requireProject(input.projectId);
-    this.requireSprint(input.sprintId, input.projectId);
+    requireProject(this.db, input.projectId);
+    requireSprint(this.db, input.sprintId, input.projectId);
     const id = randomUUID();
     const now = new Date().toISOString();
 
@@ -602,13 +502,13 @@ export class ExecutionRepository {
       now
     );
 
-    const created = this.requireSprintRun(id);
+    const created = requireSprintRun((id) => this.getSprintRun(id), id);
     this.notifyRealtime(created.projectId, true);
     return created;
   }
 
   listSprintRuns(projectId: string, sprintId?: string): SprintRunRecord[] {
-    this.requireProject(projectId);
+    requireProject(this.db, projectId);
     const rows = sprintId
       ? this.db.prepare(`
         SELECT *
@@ -638,14 +538,14 @@ export class ExecutionRepository {
     const values: string[] = [...normalizedStatuses];
 
     if (options?.projectId) {
-      this.requireProject(options.projectId);
+      requireProject(this.db, options.projectId);
       clauses.push("project_id = ?");
       values.push(options.projectId);
     }
 
     if (options?.sprintId) {
       if (options.projectId) {
-        this.requireSprint(options.sprintId, options.projectId);
+        requireSprint(this.db, options.sprintId, options.projectId);
       }
       clauses.push("sprint_id = ?");
       values.push(options.sprintId);
@@ -671,8 +571,8 @@ export class ExecutionRepository {
   }
 
   findActiveSprintRun(projectId: string, sprintId: string): SprintRunRecord | null {
-    this.requireProject(projectId);
-    this.requireSprint(sprintId, projectId);
+    requireProject(this.db, projectId);
+    requireSprint(this.db, sprintId, projectId);
     const row = this.db.prepare(`
       SELECT *
       FROM sprint_runs
@@ -684,7 +584,7 @@ export class ExecutionRepository {
   }
 
   updateSprintRun(runId: string, input: UpdateSprintRunInput): SprintRunRecord {
-    const current = this.requireSprintRun(runId);
+    const current = requireSprintRun((id) => this.getSprintRun(id), runId);
     const now = new Date().toISOString();
     this.db.prepare(`
       UPDATE sprint_runs
@@ -699,7 +599,7 @@ export class ExecutionRepository {
       now,
       runId
     );
-    const updated = this.requireSprintRun(runId);
+    const updated = requireSprintRun((id) => this.getSprintRun(id), runId);
     if (this.shouldPublishSprintRunUpdate(input)) {
       this.notifyRealtime(updated.projectId, true);
     }
@@ -707,12 +607,12 @@ export class ExecutionRepository {
   }
 
   createTaskDispatch(input: CreateTaskDispatchInput): TaskDispatchRecord {
-    this.requireProject(input.projectId);
-    this.requireSprint(input.sprintId, input.projectId);
-    this.requireTask(input.taskId, input.projectId, input.sprintId);
-    this.requireSprintRunScoped(input.sprintRunId, input.projectId, input.sprintId);
+    requireProject(this.db, input.projectId);
+    requireSprint(this.db, input.sprintId, input.projectId);
+    requireTask(this.db, input.taskId, input.projectId, input.sprintId);
+    requireSprintRunScoped((id) => this.getSprintRun(id), input.sprintRunId, input.projectId, input.sprintId);
     if (input.connectionId) {
-      this.requireConnection(input.connectionId);
+      requireConnection(this.db, input.connectionId);
     }
 
     const id = randomUUID();
@@ -743,13 +643,13 @@ export class ExecutionRepository {
       now
     );
 
-    const created = this.requireTaskDispatch(id);
+    const created = requireTaskDispatch((id) => this.getTaskDispatch(id), id);
     this.notifyRealtime(created.projectId, true);
     return created;
   }
 
   listTaskDispatches(args: { projectId: string; sprintId?: string; sprintRunId?: string; taskId?: string }): TaskDispatchRecord[] {
-    this.requireProject(args.projectId);
+    requireProject(this.db, args.projectId);
     const clauses = ["project_id = ?"];
     const values: string[] = [args.projectId];
     if (args.sprintId) {
@@ -788,7 +688,7 @@ export class ExecutionRepository {
     const values: string[] = [...normalizedStatuses];
 
     if (options?.projectId) {
-      this.requireProject(options.projectId);
+      requireProject(this.db, options.projectId);
       clauses.push("project_id = ?");
       values.push(options.projectId);
     }
@@ -832,9 +732,9 @@ export class ExecutionRepository {
   }
 
   updateTaskDispatch(dispatchId: string, input: UpdateTaskDispatchInput): TaskDispatchRecord {
-    const current = this.requireTaskDispatch(dispatchId);
+    const current = requireTaskDispatch((id) => this.getTaskDispatch(id), dispatchId);
     if (input.connectionId) {
-      this.requireConnection(input.connectionId);
+      requireConnection(this.db, input.connectionId);
     }
     const now = new Date().toISOString();
     this.db.prepare(`
@@ -852,7 +752,7 @@ export class ExecutionRepository {
       now,
       dispatchId
     );
-    const updated = this.requireTaskDispatch(dispatchId);
+    const updated = requireTaskDispatch((id) => this.getTaskDispatch(id), dispatchId);
     if (this.shouldPublishTaskDispatchUpdate(input)) {
       this.notifyRealtime(updated.projectId, true);
     }
@@ -860,17 +760,17 @@ export class ExecutionRepository {
   }
 
   createTaskRun(input: CreateTaskRunInput): TaskRunRecord {
-    this.requireProject(input.projectId);
-    this.requireSprint(input.sprintId, input.projectId);
-    this.requireTask(input.taskId, input.projectId, input.sprintId);
+    requireProject(this.db, input.projectId);
+    requireSprint(this.db, input.sprintId, input.projectId);
+    requireTask(this.db, input.taskId, input.projectId, input.sprintId);
     if (input.sprintRunId) {
-      this.requireSprintRunScoped(input.sprintRunId, input.projectId, input.sprintId);
+      requireSprintRunScoped((id) => this.getSprintRun(id), input.sprintRunId, input.projectId, input.sprintId);
     }
     if (input.dispatchId) {
-      this.requireTaskDispatch(input.dispatchId);
+      requireTaskDispatch((id) => this.getTaskDispatch(id), input.dispatchId);
     }
     if (input.connectionId) {
-      this.requireConnection(input.connectionId);
+      requireConnection(this.db, input.connectionId);
     }
 
     const id = randomUUID();
@@ -899,27 +799,27 @@ export class ExecutionRepository {
       input.durationMs ?? null
     );
 
-    const created = this.requireTaskRun(id);
+    const created = requireTaskRun((id) => this.getTaskRun(id), id);
     this.notifyRealtime(created.projectId, false);
     return created;
   }
 
   createProviderInvocationUsage(input: CreateProviderInvocationUsageInput): ProviderInvocationUsageRecord {
-    this.requireProject(input.projectId);
+    requireProject(this.db, input.projectId);
     if (input.sprintId) {
-      this.requireSprint(input.sprintId, input.projectId);
+      requireSprint(this.db, input.sprintId, input.projectId);
     }
     if (input.taskId) {
-      this.requireTask(input.taskId, input.projectId, input.sprintId || undefined);
+      requireTask(this.db, input.taskId, input.projectId, input.sprintId || undefined);
     }
     if (input.sprintRunId) {
-      this.requireSprintRun(input.sprintRunId);
+      requireSprintRun((id) => this.getSprintRun(id), input.sprintRunId);
     }
     if (input.dispatchId) {
-      this.requireTaskDispatch(input.dispatchId);
+      requireTaskDispatch((id) => this.getTaskDispatch(id), input.dispatchId);
     }
     if (input.taskRunId) {
-      this.requireTaskRun(input.taskRunId);
+      requireTaskRun((id) => this.getTaskRun(id), input.taskRunId);
     }
 
     const id = randomUUID();
@@ -962,13 +862,13 @@ export class ExecutionRepository {
       now,
     );
 
-    const created = this.requireProviderInvocationUsage(id);
+    const created = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), id);
     this.notifyRealtime(created.projectId, false);
     return created;
   }
 
   updateProviderInvocationUsage(invocationId: string, input: UpdateProviderInvocationUsageInput): ProviderInvocationUsageRecord {
-    const current = this.requireProviderInvocationUsage(invocationId);
+    const current = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), invocationId);
     const now = new Date().toISOString();
     this.db.prepare(`
       UPDATE provider_invocations
@@ -996,7 +896,7 @@ export class ExecutionRepository {
       invocationId,
     );
 
-    const updated = this.requireProviderInvocationUsage(invocationId);
+    const updated = requireProviderInvocationUsage((id) => this.getProviderInvocationUsage(id), invocationId);
     this.notifyRealtime(updated.projectId, false);
     return updated;
   }
@@ -1057,7 +957,7 @@ export class ExecutionRepository {
   }
 
   getLatestTaskRun(taskId: string, sprintRunId?: string): TaskRunRecord | null {
-    this.requireTask(taskId);
+    requireTask(this.db, taskId);
     const row = sprintRunId
       ? this.db.prepare(`
         SELECT *
@@ -1078,7 +978,7 @@ export class ExecutionRepository {
   }
 
   getProjectExecutionSnapshot(projectId: string): ExecutionDashboardSnapshot {
-    this.requireProject(projectId);
+    requireProject(this.db, projectId);
     return queryProjectExecutionSnapshot(this.db, this.storage, projectId);
   }
 
@@ -1087,12 +987,12 @@ export class ExecutionRepository {
     input: ProjectStatsQuery | ProjectStatsWindow = "7d",
   ): ProjectExecutionStatsSnapshot {
     return queryProjectStatsSnapshot(this.db, projectId, input, {
-      requireProject: (id) => this.requireProject(id),
+      requireProject: (id) => requireProject(this.db, id),
       getWallTimeTotalsByTaskIdsForRange: (id, start, end, now) => this.getWallTimeTotalsByTaskIdsForRange(id, start, end, now),
       getWallTimeTotalsBySprintRunIdsForRange: (id, start, end, now) => this.getWallTimeTotalsBySprintRunIdsForRange(id, start, end, now),
       getTaskMetadata: (id) => this.getTaskMetadata(id),
       getSprintMetadata: (id) => this.getSprintMetadata(id),
-      mapProviderInvocationUsageRow: (row: any) => this.mapProviderInvocationUsageRow(row as any),
+      mapProviderInvocationUsageRow: (row: any) => mapProviderInvocationUsageRow(row as any),
       mergeUsageTotals: (target, source) => this.mergeUsageTotals(target, source),
       mergeUsageMap: (map, key, source) => this.mergeUsageMap(map, key, source),
       updateLastActivity: (map, key, date) => this.updateLastActivity(map, key, date),
@@ -1104,7 +1004,7 @@ export class ExecutionRepository {
   }
 
   countRunningTasksPerProvider(projectId: string): Map<ProviderId, number> {
-    this.requireProject(projectId);
+    requireProject(this.db, projectId);
     const rows = this.db.prepare(`
       SELECT provider, COUNT(*) as count
       FROM task_runs
@@ -1122,7 +1022,7 @@ export class ExecutionRepository {
   }
 
   updateTaskRun(taskRunId: string, input: UpdateTaskRunInput): TaskRunRecord {
-    const current = this.requireTaskRun(taskRunId);
+    const current = requireTaskRun((id) => this.getTaskRun(id), taskRunId);
     this.db.prepare(`
       UPDATE task_runs
       SET connection_id = ?, provider = ?, mode = ?, session_id = ?, session_name = ?, state = ?, worker_branch = ?,
@@ -1142,7 +1042,7 @@ export class ExecutionRepository {
       input.durationMs === undefined ? current.durationMs : input.durationMs,
       taskRunId
     );
-    const updated = this.requireTaskRun(taskRunId);
+    const updated = requireTaskRun((id) => this.getTaskRun(id), taskRunId);
     this.notifyRealtime(updated.projectId, false);
     return updated;
   }
@@ -1185,7 +1085,7 @@ export class ExecutionRepository {
     payload: Record<string, unknown>,
     options?: { createdAt?: string; sourceEventKey?: string | null },
   ): boolean {
-    const taskRun = this.requireTaskRun(taskRunId);
+    const taskRun = requireTaskRun((id) => this.getTaskRun(id), taskRunId);
     const result = this.db.prepare(`
       INSERT OR IGNORE INTO task_run_events (id, task_run_id, event_type, originator, payload_json, source_event_key, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -1212,7 +1112,7 @@ export class ExecutionRepository {
     payload: Record<string, unknown>,
     options?: { createdAt?: string; sourceEventKey?: string | null },
   ): boolean {
-    const sprintRun = this.requireSprintRun(sprintRunId);
+    const sprintRun = requireSprintRun((id) => this.getSprintRun(id), sprintRunId);
     const result = this.db.prepare(`
       INSERT OR IGNORE INTO sprint_run_events (id, sprint_run_id, event_type, originator, payload_json, source_event_key, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -1233,7 +1133,7 @@ export class ExecutionRepository {
   }
 
   listTaskRunEvents(taskRunId: string, limit: number = 50): TaskRunEventRecord[] {
-    this.requireTaskRun(taskRunId);
+    requireTaskRun((id) => this.getTaskRun(id), taskRunId);
     const rows = this.db.prepare(`
       SELECT *
       FROM task_run_events
@@ -1245,7 +1145,7 @@ export class ExecutionRepository {
   }
 
   listSprintRunEvents(sprintRunId: string, limit: number = 50): SprintRunEventRecord[] {
-    this.requireSprintRun(sprintRunId);
+    requireSprintRun((id) => this.getSprintRun(id), sprintRunId);
     const rows = this.db.prepare(`
       SELECT *
       FROM sprint_run_events
@@ -1273,7 +1173,7 @@ export class ExecutionRepository {
       return null;
     }
 
-    const updated = this.requireTaskDispatch(claimedId);
+    const updated = requireTaskDispatch((id) => this.getTaskDispatch(id), claimedId);
     this.notifyRealtime(updated.projectId, true);
     return updated;
   }
@@ -1318,7 +1218,7 @@ export class ExecutionRepository {
         input.scopeType,
         input.scopeId
       );
-      const updated = this.requireLease(input.scopeType, input.scopeId);
+      const updated = requireLease((type, id) => this.getLease(type, id), input.scopeType, input.scopeId);
       this.notifyRealtimeForLease(input.scopeType, input.scopeId);
       return updated;
     }
@@ -1337,13 +1237,13 @@ export class ExecutionRepository {
       input.expiresAt,
       now
     );
-    const created = this.requireLease(input.scopeType, input.scopeId);
+    const created = requireLease((type, id) => this.getLease(type, id), input.scopeType, input.scopeId);
     this.notifyRealtimeForLease(input.scopeType, input.scopeId);
     return created;
   }
 
   renewLease(input: RenewExecutionLeaseInput): ExecutionLeaseRecord {
-    const current = this.requireLease(input.scopeType, input.scopeId);
+    const current = requireLease((type, id) => this.getLease(type, id), input.scopeType, input.scopeId);
     if (current.leaseToken !== input.leaseToken) {
       throw new Error(`Lease token mismatch for ${input.scopeType}:${input.scopeId}`);
     }
@@ -1353,7 +1253,7 @@ export class ExecutionRepository {
       SET expires_at = ?, last_heartbeat_at = ?
       WHERE scope_type = ? AND scope_id = ? AND lease_token = ?
     `).run(input.expiresAt, now, input.scopeType, input.scopeId, input.leaseToken);
-    return this.requireLease(input.scopeType, input.scopeId);
+    return requireLease((type, id) => this.getLease(type, id), input.scopeType, input.scopeId);
   }
 
   releaseLease(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string, leaseToken?: string): void {
@@ -1379,8 +1279,8 @@ export class ExecutionRepository {
   }
 
   releaseStaleSprintLease(projectId: string, sprintId: string): boolean {
-    this.requireProject(projectId);
-    this.requireSprint(sprintId, projectId);
+    requireProject(this.db, projectId);
+    requireSprint(this.db, sprintId, projectId);
 
     const lease = this.getLease("sprint", sprintId);
     if (!lease) {
@@ -1461,13 +1361,6 @@ export class ExecutionRepository {
     return updated;
   }
 
-  private requireSprintRun(runId: string): SprintRunRecord {
-    const run = this.getSprintRun(runId);
-    if (!run) {
-      throw new Error(`Sprint run not found: ${runId}`);
-    }
-    return run;
-  }
 
   private withWallTime(usage: ExecutionUsageTotals | undefined, wallTimeMs: number): ExecutionUsageTotals {
     const next = cloneUsageTotals(usage);
@@ -1521,7 +1414,7 @@ export class ExecutionRepository {
       items: taskIds,
       bindParamsBefore: [projectId],
     });
-    return this.groupUsageBy(rows.map((row) => this.mapProviderInvocationUsageRow(row)), (row) => row.taskId);
+    return this.groupUsageBy(rows.map((row) => mapProviderInvocationUsageRow(row)), (row) => row.taskId);
   }
 
   private getUsageTotalsBySprintRunIds(projectId: string, sprintRunIds: string[]): Map<string, ExecutionUsageTotals> {
@@ -1533,7 +1426,7 @@ export class ExecutionRepository {
       items: sprintRunIds,
       bindParamsBefore: [projectId],
     });
-    return this.groupUsageBy(rows.map((row) => this.mapProviderInvocationUsageRow(row)), (row) => row.sprintRunId);
+    return this.groupUsageBy(rows.map((row) => mapProviderInvocationUsageRow(row)), (row) => row.sprintRunId);
   }
 
   private groupUsageBy(
@@ -1682,89 +1575,14 @@ export class ExecutionRepository {
     }
   }
 
-  private requireTaskDispatch(dispatchId: string): TaskDispatchRecord {
-    const dispatch = this.getTaskDispatch(dispatchId);
-    if (!dispatch) {
-      throw new Error(`Task dispatch not found: ${dispatchId}`);
-    }
-    return dispatch;
-  }
 
-  private requireTaskRun(taskRunId: string): TaskRunRecord {
-    const taskRun = this.getTaskRun(taskRunId);
-    if (!taskRun) {
-      throw new Error(`Task run not found: ${taskRunId}`);
-    }
-    return taskRun;
-  }
 
-  private requireProviderInvocationUsage(invocationId: string): ProviderInvocationUsageRecord {
-    const invocation = this.getProviderInvocationUsage(invocationId);
-    if (!invocation) {
-      throw new Error(`Provider invocation not found: ${invocationId}`);
-    }
-    return invocation;
-  }
 
-  private requireLease(scopeType: ExecutionLeaseRecord["scopeType"], scopeId: string): ExecutionLeaseRecord {
-    const lease = this.getLease(scopeType, scopeId);
-    if (!lease) {
-      throw new Error(`Execution lease not found: ${scopeType}:${scopeId}`);
-    }
-    return lease;
-  }
 
-  private requireProject(projectId: string): void {
-    const row = this.db.prepare(`SELECT id FROM projects WHERE id = ?`).get(projectId) as { id: string } | undefined;
-    if (!row) {
-      throw new Error(`Project not found: ${projectId}`);
-    }
-  }
 
-  private requireSprint(sprintId: string, projectId?: string): void {
-    const row = this.db.prepare(`
-      SELECT id, project_id
-      FROM sprints
-      WHERE id = ?
-    `).get(sprintId) as { id: string; project_id: string } | undefined;
-    if (!row) {
-      throw new Error(`Sprint not found: ${sprintId}`);
-    }
-    if (projectId && row.project_id !== projectId) {
-      throw new Error(`Sprint ${sprintId} does not belong to project ${projectId}`);
-    }
-  }
 
-  private requireTask(taskId: string, projectId?: string, sprintId?: string): void {
-    const row = this.db.prepare(`
-      SELECT id, project_id, sprint_id
-      FROM tasks
-      WHERE id = ?
-    `).get(taskId) as { id: string; project_id: string; sprint_id: string } | undefined;
-    if (!row) {
-      throw new Error(`Task not found: ${taskId}`);
-    }
-    if (projectId && row.project_id !== projectId) {
-      throw new Error(`Task ${taskId} does not belong to project ${projectId}`);
-    }
-    if (sprintId && row.sprint_id !== sprintId) {
-      throw new Error(`Task ${taskId} does not belong to sprint ${sprintId}`);
-    }
-  }
 
-  private requireSprintRunScoped(runId: string, projectId: string, sprintId: string): void {
-    const run = this.requireSprintRun(runId);
-    if (run.projectId !== projectId || run.sprintId !== sprintId) {
-      throw new Error(`Sprint run ${runId} does not belong to ${projectId}/${sprintId}`);
-    }
-  }
 
-  private requireConnection(connectionId: string): void {
-    const row = this.db.prepare(`SELECT id FROM mcp_connections WHERE id = ?`).get(connectionId) as { id: string } | undefined;
-    if (!row) {
-      throw new Error(`Connection not found: ${connectionId}`);
-    }
-  }
 
   private mapSprintRunRow(row: SprintRunRow): SprintRunRecord {
     return {
@@ -1852,40 +1670,6 @@ export class ExecutionRepository {
     };
   }
 
-  private mapProviderInvocationUsageRow(row: ProviderInvocationUsageRow): ProviderInvocationUsageRecord {
-    return {
-      id: row.id,
-      projectId: row.project_id,
-      sprintId: row.sprint_id,
-      taskId: row.task_id,
-      sprintRunId: row.sprint_run_id,
-      dispatchId: row.dispatch_id,
-      taskRunId: row.task_run_id,
-      attentionItemId: row.attention_item_id,
-      sessionId: row.session_id,
-      provider: row.provider,
-      purpose: row.purpose as any,
-      status: row.status as any,
-      model: row.model,
-      nativeSessionId: row.native_session_id,
-      startedAt: row.started_at,
-      finishedAt: row.finished_at,
-      durationMs: row.duration_ms !== null ? Number(row.duration_ms) : null,
-      promptChars: Number(row.prompt_chars),
-      transcriptChars: Number(row.transcript_chars),
-      inputTokens: Number(row.input_tokens),
-      cachedInputTokens: Number(row.cached_input_tokens),
-      outputTokens: Number(row.output_tokens),
-      reasoningOutputTokens: Number(row.reasoning_output_tokens),
-      totalTokens: Number(row.total_tokens),
-      usageSource: row.usage_source as any,
-      connectionId: (row as any).connection_id || null,
-      costCents: (row as any).cost_cents !== null && (row as any).cost_cents !== undefined ? Number((row as any).cost_cents) : null,
-      rawUsageJson: (row as any).raw_usage_json ? parsePayloadJson((row as any).raw_usage_json) : null,
-      createdAt: row.created_at,
-      updatedAt: (row as any).updated_at || row.created_at,
-    };
-  }
 
   private mapSprintRunEventRow(row: SprintRunEventRow): SprintRunEventRecord {
     return {
@@ -1899,63 +1683,7 @@ export class ExecutionRepository {
     };
   }
 
-  private mapExecutionSprintRunSummaryRow(
-    row: ExecutionSprintRunSummaryRow,
-    humanIntervention: ExecutionHumanInterventionSummary | null,
-    usage: ExecutionUsageTotals,
-  ): ExecutionSprintRunSummary {
-    return {
-      id: row.id,
-      projectId: row.project_id,
-      sprintId: row.sprint_id,
-      sprintName: row.sprint_name,
-      sprintNumber: row.sprint_number === null ? null : toNumber(row.sprint_number),
-      status: row.status,
-      triggerType: row.trigger_type,
-      triggeredBy: row.triggered_by,
-      executorMode: row.executor_mode,
-      startedAt: row.started_at,
-      finishedAt: row.finished_at,
-      lastHeartbeatAt: row.last_heartbeat_at,
-      createdAt: row.created_at,
-      activeLeaseOwnerKey: row.active_lease_owner_key,
-      activeLeaseExpiresAt: row.active_lease_expires_at,
-      humanIntervention,
-      usage,
-    };
-  }
 
-  private mapExecutionRuntimeEventSummaryRow(row: ExecutionRuntimeEventSummaryRow): ExecutionRuntimeEventSummary {
-    return {
-      id: row.id,
-      scopeType: row.scope_type === "sprint_run" ? "sprint_run" : "task_run",
-      taskRunId: row.task_run_id,
-      sprintRunId: row.sprint_run_id,
-      dispatchId: row.dispatch_id,
-      projectId: row.project_id,
-      sprintId: row.sprint_id,
-      sprintName: row.sprint_name,
-      sprintNumber: row.sprint_number === null ? null : toNumber(row.sprint_number),
-      sprintRunStatus: row.sprint_run_status,
-      taskId: row.task_id,
-      taskKey: row.task_key,
-      taskTitle: row.task_title,
-      taskRunState: row.task_run_state,
-      eventType: row.event_type,
-      originator: row.originator,
-      sourceEventKey: row.source_event_key,
-      provider: row.provider,
-      sessionId: row.session_id,
-      sessionName: row.session_name,
-      workerBranch: row.worker_branch,
-      prUrl: row.pr_url,
-      connectionId: row.connection_id,
-      connectionDisplayName: row.connection_display_name,
-      connectionRole: row.connection_role,
-      createdAt: row.created_at,
-      payload: parsePayloadJson(row.payload_json),
-    };
-  }
 
   private listActiveAttentionRowsForProject(projectId: string): ProjectAttentionSummaryRow[] {
     return this.db.prepare(`
