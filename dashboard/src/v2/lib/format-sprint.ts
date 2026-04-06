@@ -1,7 +1,7 @@
-export function formatSprintDisplay(sprint?: { name?: string; sprintNumber?: number | string } | null): string {
+export function formatSprintDisplay(sprint?: { name?: string; sprintNumber?: number | string | null; number?: number | string | null } | null): string {
     if (!sprint) return "All Sprints";
 
-    let num = sprint.sprintNumber;
+    let num = sprint.sprintNumber || sprint.number;
     let name = sprint.name;
 
     // Attempt to extract sprint number if not provided

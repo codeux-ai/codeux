@@ -6,6 +6,10 @@ describe("formatSprintDisplay", () => {
     expect(formatSprintDisplay({ name: "Some Feature", sprintNumber: 102 })).toBe("SPR-102: Some Feature");
   });
 
+  it("formats sprint with name and number property", () => {
+    expect(formatSprintDisplay({ name: "Some Feature", number: 102 })).toBe("SPR-102: Some Feature");
+  });
+
   it("handles empty sprint", () => {
     expect(formatSprintDisplay(null)).toBe("All Sprints");
     expect(formatSprintDisplay(undefined)).toBe("All Sprints");
@@ -29,5 +33,9 @@ describe("formatSprintDisplay", () => {
 
   it("returns Unnamed Sprint if only number is present", () => {
     expect(formatSprintDisplay({ sprintNumber: 102 })).toBe("SPR-102: Sprint 102");
+  });
+
+  it("returns Unnamed Sprint if only number property is present", () => {
+    expect(formatSprintDisplay({ number: 102 })).toBe("SPR-102: Sprint 102");
   });
 });
