@@ -19,6 +19,6 @@ export const fetchJson = async <T>(path: string, init?: RequestInit): Promise<T>
   try {
     return JSON.parse(text) as T;
   } catch {
-    return {} as T;
+    throw new Error("Invalid JSON response");
   }
 };

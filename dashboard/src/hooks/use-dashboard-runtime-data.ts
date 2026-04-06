@@ -54,9 +54,11 @@ export interface UseDashboardRuntimeDataResult {
 export const useDashboardRuntimeData = (projectIdHint: string | null = null): UseDashboardRuntimeDataResult => {
   const fetchResource = useCallback(async (signal?: AbortSignal) => {
     try {
-      // API currently doesn't accept signal, but could be added
-      return await fetchLivePayload(projectIdHint);
-    } catch (err) {
+      return await fetchLivePayload(projectIdHint, { signal });
+    } catch (err: any) {
+      if (err.name === "AbortError" || signal?.aborted) {
+        throw err; // allow abort to propagate to useRealtimeResource
+      }
       throw new Error("Unable to connect to Orchestrator API");
     }
   }, [projectIdHint]);

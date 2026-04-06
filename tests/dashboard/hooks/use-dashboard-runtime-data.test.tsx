@@ -120,4 +120,28 @@ describe("useDashboardRuntimeData", () => {
     expect(api.fetchLivePayload).toHaveBeenCalledTimes(2);
     expect(result.current.snapshotUpdatedAt).toBe("2025-01-01T00:00:00Z");
   });
+
+  it("passes abort signal down to fetchLivePayload", async () => {
+    vi.mocked(realtime.subscribeToDashboardRealtime).mockImplementation(() => {
+      return () => {};
+    });
+
+    const { result } = renderHook(() => useDashboardRuntimeData("p1"));
+
+    // Trigger a refetch which uses a new AbortController inside useRealtimeResource
+    await act(async () => {
+      // Intentionally don't wait for it to finish, trigger another one immediately to cause an abort
+      const p1 = result.current.refreshRuntimeStatus();
+      const p2 = result.current.refreshRuntimeStatus();
+      await Promise.all([p1, p2]);
+    });
+
+    // Check that fetchLivePayload was called with an init object containing a signal
+    expect(api.fetchLivePayload).toHaveBeenCalledWith(
+      "p1",
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+      })
+    );
+  });
 });

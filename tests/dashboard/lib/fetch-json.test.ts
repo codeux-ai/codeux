@@ -76,4 +76,15 @@ describe("fetchJson", () => {
     await fetchJson("/api/abort", { signal: controller.signal });
     expect(fetch).toHaveBeenCalledWith("/api/abort", { signal: controller.signal });
   });
+
+  it("should throw on invalid JSON body", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      text: async () => "invalid json",
+    } as any);
+
+    await expect(fetchJson("/api/invalid")).rejects.toThrow("Invalid JSON response");
+  });
 });

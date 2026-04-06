@@ -25,11 +25,11 @@ export const fetchRuntimeDashboardPayload = async (projectId?: string | null): P
 };
 
 /** Single HTTP call returning both status + execution — used for fast initial load. */
-export const fetchLivePayload = async (projectId?: string | null): Promise<RuntimeDashboardPayload> => {
+export const fetchLivePayload = async (projectId?: string | null, init?: RequestInit): Promise<RuntimeDashboardPayload> => {
   const query = typeof projectId === "string" && projectId.trim().length > 0
     ? `?projectId=${encodeURIComponent(projectId.trim())}`
     : "";
-  return fetchJson<RuntimeDashboardPayload>(`/api/live${query}`);
+  return fetchJson<RuntimeDashboardPayload>(`/api/live${query}`, init);
 };
 
 export const fetchLiveActivities = async (): Promise<import("../../types.js").LiveActivitiesResponse> => {
