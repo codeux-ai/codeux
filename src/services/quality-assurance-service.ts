@@ -17,6 +17,7 @@ import type { TaskService } from "./task-service.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import { runCommandStrict } from "./cli-process-runner.js";
+import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import type { MemoryService } from "./memory-service.js";
 
 type CliQaProvider = Extract<ProviderId, "gemini" | "codex" | "claude-code">;
@@ -167,9 +168,10 @@ export class QualityAssuranceService {
       : qaSettings.taskCompletion.agentPresetId;
     const agent = await this.deps.agentPresetSyncService.resolveTargetedQualityAssuranceAgent(args.projectId, agentPresetId);
 
-    let memoryInstructions = agent.memoryTemplateOverrideEnabled
-      ? (agent.memoryTemplateMarkdown || "")
-      : (settings.memory?.workerLearningsInstruction || "");
+    const memoryInstructions = resolveAgentMemoryInstructions(
+      agent,
+      settings.memory?.workerLearningsInstruction
+    );
     let agentInstructions = agent.instructionMarkdown + (memoryInstructions ? `\n\n### Memory Capture Instructions\n${memoryInstructions}` : "");
 
     const run = this.deps.qaReviewRepository.createRun({
@@ -394,9 +396,10 @@ export class QualityAssuranceService {
     });
 
     try {
-      let memoryInstructions = agent.memoryTemplateOverrideEnabled
-        ? (agent.memoryTemplateMarkdown || "")
-        : (settings.memory?.workerLearningsInstruction || "");
+      const memoryInstructions = resolveAgentMemoryInstructions(
+        agent,
+        settings.memory?.workerLearningsInstruction
+      );
       let agentInstructions = agent.instructionMarkdown + (memoryInstructions ? `\n\n### Memory Capture Instructions\n${memoryInstructions}` : "");
 
       const review = await this.runReview({

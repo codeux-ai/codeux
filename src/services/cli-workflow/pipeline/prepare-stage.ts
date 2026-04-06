@@ -2,6 +2,7 @@ import { buildProviderPrompt } from "../../cli-workflow-utils.js";
 import type { PipelineContext } from "./pipeline-context.js";
 import type { MemoryRecord } from "../../../contracts/memory-types.js";
 import { resolveProviderForInvocation } from "../../provider-routing.js";
+import { resolveAgentMemoryInstructions } from "../../agent-memory-instructions.js";
 
 function formatMemoryContext(shortTerm: MemoryRecord[], longTerm: MemoryRecord[]): string {
   if (shortTerm.length === 0 && longTerm.length === 0) return "";
@@ -52,17 +53,18 @@ export async function executePrepareStage(
     } catch { /* memory injection is best-effort */ }
   }
 
-  let learningsInstruction = "";
   if (ctx.settings.memory?.enabled && ctx.settings.memory.autoCaptureSprint) {
-    if (ctx.memoryTemplateOverrideEnabled && ctx.memoryTemplateMarkdown?.trim()) {
-      learningsInstruction = ctx.memoryTemplateMarkdown.trim();
-    } else if (ctx.settings.memory.workerLearningsInstruction?.trim()) {
-      learningsInstruction = ctx.settings.memory.workerLearningsInstruction.trim();
-    }
-  }
+    const learningsInstruction = resolveAgentMemoryInstructions(
+      {
+        memoryTemplateOverrideEnabled: ctx.memoryTemplateOverrideEnabled,
+        memoryTemplateMarkdown: ctx.memoryTemplateMarkdown,
+      },
+      ctx.settings.memory.workerLearningsInstruction
+    );
 
-  if (learningsInstruction) {
-    promptBody += `\n\n## LEARNINGS CAPTURE (Required)\n\n${learningsInstruction}`;
+    if (learningsInstruction) {
+      promptBody += `\n\n## LEARNINGS CAPTURE (Required)\n\n${learningsInstruction}`;
+    }
   }
 
   const { worktreePath: finalPath, resumed } = await ctx.workspaceManager.prepareWorktree(

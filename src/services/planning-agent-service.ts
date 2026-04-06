@@ -21,6 +21,7 @@ import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workfl
 import { buildReadFileRetryPrompt, isReadFileNotFoundToolError } from "./cli-workflow-text-utils.js";
 import { ProviderRunner, type IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
+import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
 import { extractJsonLikeBlock } from "./planning-json-extractor.js";
 import { ProviderExecutionService } from "./provider-execution-service.js";
@@ -136,12 +137,10 @@ export class PlanningAgentService {
 
     const isMemoryCaptureEnabled = runtime.settings.memory?.enabled && runtime.settings.memory?.autoCaptureSprint;
     if (isMemoryCaptureEnabled) {
-      let learningsInstruction = "";
-      if (planningAgent.memoryTemplateOverrideEnabled && planningAgent.memoryTemplateMarkdown?.trim()) {
-        learningsInstruction = planningAgent.memoryTemplateMarkdown.trim();
-      } else if (runtime.settings.memory?.workerLearningsInstruction?.trim()) {
-        learningsInstruction = runtime.settings.memory.workerLearningsInstruction.trim();
-      }
+      const learningsInstruction = resolveAgentMemoryInstructions(
+        planningAgent,
+        runtime.settings.memory?.workerLearningsInstruction
+      );
       if (learningsInstruction) {
         prompt += `\n\n## LEARNINGS CAPTURE (Required)\n\n${learningsInstruction}`;
       }
@@ -280,12 +279,10 @@ export class PlanningAgentService {
 
     const isMemoryCaptureEnabled = runtime.settings.memory?.enabled && runtime.settings.memory?.autoCaptureSprint;
     if (isMemoryCaptureEnabled) {
-      let learningsInstruction = "";
-      if (planningAgent.memoryTemplateOverrideEnabled && planningAgent.memoryTemplateMarkdown?.trim()) {
-        learningsInstruction = planningAgent.memoryTemplateMarkdown.trim();
-      } else if (runtime.settings.memory?.workerLearningsInstruction?.trim()) {
-        learningsInstruction = runtime.settings.memory.workerLearningsInstruction.trim();
-      }
+      const learningsInstruction = resolveAgentMemoryInstructions(
+        planningAgent,
+        runtime.settings.memory?.workerLearningsInstruction
+      );
       if (learningsInstruction) {
         prompt += `\n\n## LEARNINGS CAPTURE (Required)\n\n${learningsInstruction}`;
       }
