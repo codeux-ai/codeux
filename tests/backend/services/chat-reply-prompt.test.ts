@@ -134,6 +134,48 @@ describe("chat-reply-prompt", () => {
       expect(prompt).toContain("compacted");
       expect(prompt).toContain("_No new messages since the compaction summary was generated._");
     });
+
+    it("uses JSON output instructions when mcpAvailable is false", () => {
+      const prompt = buildChatReplayPrompt({
+        projectId: "p1",
+        repoPath: "/repo",
+        projectName: "Proj",
+        thread,
+        messages: [{ authorType: "dashboard_user", bodyMarkdown: "Hello" } as any],
+        workerInstructions: "",
+        mcpAvailable: false,
+      });
+      expect(prompt).toContain("You must return STRICT JSON format");
+      expect(prompt).not.toContain("manage_sprint_os");
+    });
+
+    it("uses MCP-native output instructions when mcpAvailable is true", () => {
+      const prompt = buildChatReplayPrompt({
+        projectId: "p1",
+        repoPath: "/repo",
+        projectName: "Proj",
+        thread,
+        messages: [{ authorType: "dashboard_user", bodyMarkdown: "Hello" } as any],
+        workerInstructions: "",
+        mcpAvailable: true,
+      });
+      expect(prompt).toContain("manage_sprint_os");
+      expect(prompt).toContain("Do NOT wrap your response in JSON");
+      expect(prompt).not.toContain("You must return STRICT JSON format");
+    });
+
+    it("defaults to JSON output instructions when mcpAvailable is omitted", () => {
+      const prompt = buildChatReplayPrompt({
+        projectId: "p1",
+        repoPath: "/repo",
+        projectName: "Proj",
+        thread,
+        messages: [{ authorType: "dashboard_user", bodyMarkdown: "Hello" } as any],
+        workerInstructions: "",
+      });
+      expect(prompt).toContain("You must return STRICT JSON format");
+      expect(prompt).not.toContain("manage_sprint_os");
+    });
   });
 
   describe("buildChatContinuationPrompt", () => {

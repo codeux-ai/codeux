@@ -3,6 +3,7 @@ import * as path from "path";
 import os from "os";
 import { fileURLToPath } from "url";
 import { CliWorkflowSettings, ProviderId } from "../../../contracts/app-types.js";
+import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
 import {
   getDockerUserSpec,
@@ -36,6 +37,7 @@ export interface IDockerRunner {
     repoPath: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
+    mcpConnection?: McpConnectionInfo | null;
   }): Promise<CommandResult>;
 }
 
@@ -53,6 +55,7 @@ export class DockerRunner implements IDockerRunner {
     repoPath: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
+    mcpConnection?: McpConnectionInfo | null;
   }): Promise<CommandResult> {
     const { command, args, cwd, providerEnv, sessionId, providerLabel, workflowSettings, repoPath, signal, onActivity } = input;
 
@@ -64,8 +67,13 @@ export class DockerRunner implements IDockerRunner {
 
     await fs.mkdir(path.join(runtimeHome, ".config"), { recursive: true });
     await fs.mkdir(path.join(runtimeHome, ".codex"), { recursive: true });
+    await fs.mkdir(path.join(runtimeHome, ".gemini"), { recursive: true });
     await fs.mkdir(runtimeNpmPrefix, { recursive: true });
     await fs.mkdir(runtimeNpmCache, { recursive: true });
+
+    if (input.mcpConnection) {
+      await this.writeProviderMcpConfig(input.mcpConnection, runtimeHome, providerLabel);
+    }
 
     const repoSource = this.mapDockerSourcePathForDaemon(repoPath, repoPath, sessionId, "workspace", onActivity);
     const runtimeSource = this.mapDockerSourcePathForDaemon(runtimeRoot, repoPath, sessionId, "runtime", onActivity);
@@ -222,6 +230,46 @@ export class DockerRunner implements IDockerRunner {
       onActivity("Docker setup image cache is enabled, but no container setup script was resolved.");
     }
     return undefined;
+  }
+
+  private async writeProviderMcpConfig(
+    conn: McpConnectionInfo,
+    runtimeHome: string,
+    provider: "gemini" | "codex" | "claude-code"
+  ): Promise<void> {
+    const headers: Record<string, string> = {};
+    if (conn.authToken) {
+      headers["Authorization"] = `Bearer ${conn.authToken}`;
+    }
+
+    if (provider === "claude-code") {
+      const config = {
+        mcpServers: {
+          "sprint-os": {
+            type: "http",
+            url: conn.url,
+            ...(Object.keys(headers).length > 0 ? { headers } : {}),
+          },
+        },
+      };
+      await fs.writeFile(path.join(runtimeHome, ".mcp.json"), JSON.stringify(config, null, 2));
+    } else if (provider === "gemini") {
+      const config = {
+        mcpServers: {
+          "sprint-os": {
+            httpUrl: conn.url,
+            ...(Object.keys(headers).length > 0 ? { headers } : {}),
+          },
+        },
+      };
+      await fs.writeFile(path.join(runtimeHome, ".gemini", "settings.json"), JSON.stringify(config, null, 2));
+    } else if (provider === "codex") {
+      const lines = ["[mcp_servers.sprint-os]", `url = "${conn.url}"`];
+      if (conn.authToken) {
+        lines.push(`http_headers = { "Authorization" = "Bearer ${conn.authToken}" }`);
+      }
+      await fs.writeFile(path.join(runtimeHome, ".codex", "config.toml"), lines.join("\n") + "\n");
+    }
   }
 
 }

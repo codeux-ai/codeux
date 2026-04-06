@@ -1,4 +1,5 @@
 import type { DashboardSettings } from "../contracts/app-types.js";
+import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { ProviderInvocationPurpose } from "../contracts/execution-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { SessionTrackingRepository } from "../repositories/session-tracking-repository.js";
@@ -48,6 +49,9 @@ export interface ExecutionProviderRunArgs {
   expectTextOutput?: boolean;
 
   invocationId?: string; // Use existing execution invocation if passed
+
+  /** MCP server connection info for injecting management tools into the CLI provider. */
+  mcpConnection?: McpConnectionInfo | null;
 }
 
 export class ProviderExecutionService {
@@ -125,6 +129,7 @@ export class ProviderExecutionService {
         githubToken: args.githubToken ?? this.deps.getGithubToken?.(),
         signal: args.signal,
         continueSessionId,
+        mcpConnection: args.mcpConnection,
         onActivity: (desc: string, originator?: string) => {
           if (args.onActivity) {
             args.onActivity(desc, originator);

@@ -1,6 +1,7 @@
 import { CliWorkflowSettings, ProviderId } from "../../../contracts/app-types.js";
+import type { McpConnectionInfo } from "../../../contracts/mcp-connection-types.js";
 import { CommandResult, runStreamingCommand } from "../../../services/cli-process-runner.js";
-import { IDockerRunner } from "./docker-runner.js";
+import type { IDockerRunner } from "./docker-runner.js";
 import { isDockerWorkspaceMountError } from "../../../services/cli-docker-utils.js";
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -50,6 +51,8 @@ export interface ProviderRunInput {
   /** Pass a previous nativeSessionId to continue an existing CLI session.
    *  Claude Code: reuses --session-id. Gemini: adds --resume. Codex: uses exec resume --last. */
   continueSessionId?: string | null;
+  /** MCP server connection info for injecting management tools into the CLI provider. */
+  mcpConnection?: McpConnectionInfo | null;
 }
 
 export interface IProviderRunner {
@@ -108,6 +111,7 @@ export class ProviderRunner implements IProviderRunner {
     onActivity: (desc: string, originator?: string) => void;
     codexOutputPath?: string | null;
     continueSessionId?: string | null;
+    mcpConnection?: McpConnectionInfo | null;
   }): Promise<ProviderRunResult> {
     const { provider, prompt, cwd, model, apiKey, sessionId, workflowSettings, repoPath, githubToken, signal, onActivity } = input;
     const providerEnv = this.withProviderEnv(provider, model, apiKey, workflowSettings, githubToken);
@@ -117,11 +121,18 @@ export class ProviderRunner implements IProviderRunner {
     const spec = this.buildCommandSpec(provider, model, prompt, input.codexOutputPath, nativeSessionId, continueSession);
     const { command, args } = spec;
 
+    const localMcpConfigPaths: string[] = [];
+    if (input.mcpConnection && workflowSettings.executionMode !== "DOCKER") {
+      const paths = await this.writeLocalMcpConfig(input.mcpConnection, cwd, provider);
+      localMcpConfigPaths.push(...paths);
+    }
+
     const runCmd = async () => {
       if (workflowSettings.executionMode === "DOCKER") {
         const result = await this.dockerRunner.runProviderInDocker({
           command, args, cwd, providerEnv, sessionId,
-          providerLabel: provider, workflowSettings, repoPath, signal, onActivity
+          providerLabel: provider, workflowSettings, repoPath, signal, onActivity,
+          mcpConnection: input.mcpConnection
         });
         if (!result.ok && isDockerWorkspaceMountError(result)) {
           try { await fs.access(cwd); onActivity(`Docker could not mount workspace path (${cwd}) even though it exists locally. Path visibility mismatch.`); } catch { /* ignore */ }
@@ -140,30 +151,36 @@ export class ProviderRunner implements IProviderRunner {
       });
     };
 
-    let result = await runCmd();
-    if (!result.ok && provider === "codex" && this.isTransientCodexTransportError(result)) {
-      onActivity("Codex transport disconnected. Retrying once automatically...");
-      await new Promise(r => setTimeout(r, 1500));
-      result = await runCmd();
+    try {
+      let result = await runCmd();
+      if (!result.ok && provider === "codex" && this.isTransientCodexTransportError(result)) {
+        onActivity("Codex transport disconnected. Retrying once automatically...");
+        await new Promise(r => setTimeout(r, 1500));
+        result = await runCmd();
+      }
+      const capturedText = input.codexOutputPath
+        ? (await fs.readFile(input.codexOutputPath, "utf8").catch(() => "")).trim()
+        : "";
+      const usageTelemetry = await collectProviderUsageTelemetry({
+        provider,
+        model,
+        prompt,
+        cwd,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        capturedText,
+        nativeSessionId,
+      });
+      return {
+        ...result,
+        usageTelemetry,
+        nativeSessionId: usageTelemetry.nativeSessionId || nativeSessionId,
+      };
+    } finally {
+      for (const p of localMcpConfigPaths) {
+        await fs.rm(p, { force: true }).catch(() => undefined);
+      }
     }
-    const capturedText = input.codexOutputPath
-      ? (await fs.readFile(input.codexOutputPath, "utf8").catch(() => "")).trim()
-      : "";
-    const usageTelemetry = await collectProviderUsageTelemetry({
-      provider,
-      model,
-      prompt,
-      cwd,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      capturedText,
-      nativeSessionId,
-    });
-    return {
-      ...result,
-      usageTelemetry,
-      nativeSessionId: usageTelemetry.nativeSessionId || nativeSessionId,
-    };
   }
 
   private buildCommandSpec(
@@ -263,5 +280,58 @@ export class ProviderRunner implements IProviderRunner {
     } catch {
       return false;
     }
+  }
+
+  private async writeLocalMcpConfig(
+    conn: McpConnectionInfo,
+    cwd: string,
+    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">
+  ): Promise<string[]> {
+    const headers: Record<string, string> = {};
+    if (conn.authToken) {
+      headers["Authorization"] = `Bearer ${conn.authToken}`;
+    }
+    const created: string[] = [];
+
+    if (provider === "claude-code") {
+      const configPath = path.join(cwd, ".mcp.json");
+      const config = {
+        mcpServers: {
+          "sprint-os": {
+            type: "http",
+            url: conn.url,
+            ...(Object.keys(headers).length > 0 ? { headers } : {}),
+          },
+        },
+      };
+      await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+      created.push(configPath);
+    } else if (provider === "gemini") {
+      const dirPath = path.join(cwd, ".gemini");
+      await fs.mkdir(dirPath, { recursive: true });
+      const configPath = path.join(dirPath, "settings.json");
+      const config = {
+        mcpServers: {
+          "sprint-os": {
+            httpUrl: conn.url,
+            ...(Object.keys(headers).length > 0 ? { headers } : {}),
+          },
+        },
+      };
+      await fs.writeFile(configPath, JSON.stringify(config, null, 2));
+      created.push(configPath);
+    } else if (provider === "codex") {
+      const dirPath = path.join(cwd, ".codex");
+      await fs.mkdir(dirPath, { recursive: true });
+      const configPath = path.join(dirPath, "config.toml");
+      const lines = ["[mcp_servers.sprint-os]", `url = "${conn.url}"`];
+      if (conn.authToken) {
+        lines.push(`http_headers = { "Authorization" = "Bearer ${conn.authToken}" }`);
+      }
+      await fs.writeFile(configPath, lines.join("\n") + "\n");
+      created.push(configPath);
+    }
+
+    return created;
   }
 }

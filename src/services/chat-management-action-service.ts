@@ -1,11 +1,14 @@
 import type { ManageSprintOsArgs, ManagementResponseEnvelope } from "../contracts/internal-management-types.js";
+import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { DashboardSettings, ProviderId } from "../contracts/app-types.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import type { ManagementToolHandler } from "../mcp/management-tool-handler.js";
 import type { StructuredProviderResponseService } from "./structured-provider-response-service.js";
+import type { ProviderExecutionService } from "./provider-execution-service.js";
 
 export interface ChatManagementActionServiceDeps {
   structuredProviderResponseService: StructuredProviderResponseService;
+  providerExecutionService: ProviderExecutionService;
   managementToolHandler: ManagementToolHandler;
   executionRepository: ExecutionRepository;
 }
@@ -32,6 +35,7 @@ export interface ProcessManagementActionArgs {
   settings: DashboardSettings;
   prompt: string;
   repoPath: string;
+  mcpConnection?: McpConnectionInfo | null;
 }
 
 export class ChatManagementActionService {
@@ -90,6 +94,86 @@ export class ChatManagementActionService {
   }
 
   async processManagementAction(args: ProcessManagementActionArgs): Promise<ManagementActionProposedResult> {
+    if (args.mcpConnection) {
+      return this.processWithNativeMcp(args);
+    }
+    return this.processWithJsonParsing(args);
+  }
+
+  private async processWithNativeMcp(args: ProcessManagementActionArgs): Promise<ManagementActionProposedResult> {
+    const startedAt = new Date().toISOString();
+    const execInvocationId = this.deps.executionRepository.createExecutionInvocation({
+      projectId: args.projectId,
+      sprintId: null,
+      taskId: null,
+      sprintRunId: null,
+      dispatchId: null,
+      taskRunId: null,
+      attentionItemId: null,
+      type: "worker_reply",
+      provider: args.provider,
+      model: args.model,
+      startedAt,
+    }).id;
+
+    this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
+      role: "user",
+      contentMarkdown: args.prompt,
+    });
+
+    try {
+      const result = await this.deps.providerExecutionService.executeProvider({
+        projectId: args.projectId,
+        purpose: "dashboard_reply",
+        type: "worker_reply",
+        provider: args.provider,
+        prompt: args.prompt,
+        model: args.model,
+        apiKey: args.apiKey,
+        sessionId: args.sessionId,
+        workflowSettings: args.settings.cliWorkflow,
+        repoPath: args.repoPath,
+        invocationId: execInvocationId,
+        expectTextOutput: true,
+        mcpConnection: args.mcpConnection,
+      });
+
+      const replyText = (result.text?.trim() || result.stdout || "").trim();
+
+      this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
+        role: "assistant",
+        contentMarkdown: replyText || "_No response from provider._",
+      });
+
+      this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
+        status: result.ok ? "completed" : "failed",
+        finishedAt: new Date().toISOString(),
+      });
+
+      if (!result.ok) {
+        throw new Error(`Virtual ${args.provider} worker failed: ${result.stderr || result.stdout}`);
+      }
+
+      return {
+        replyMarkdown: replyText || "_No response._",
+        action: null,
+        approvalRequired: false,
+      };
+    } catch (err: unknown) {
+      const errMessage = err instanceof Error ? err.message : String(err);
+      this.deps.executionRepository.appendExecutionInvocationMessage(execInvocationId, {
+        role: "system",
+        contentMarkdown: `Error: ${errMessage}`,
+      });
+      this.deps.executionRepository.updateExecutionInvocation(execInvocationId, {
+        status: "failed",
+        finishedAt: new Date().toISOString(),
+      });
+      throw err;
+    }
+  }
+
+  private async processWithJsonParsing(args: ProcessManagementActionArgs): Promise<ManagementActionProposedResult> {
     const purpose = "dashboard_reply";
     const startedAt = new Date().toISOString();
 

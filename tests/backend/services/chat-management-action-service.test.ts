@@ -3,11 +3,13 @@ import { ChatManagementActionService } from "../../../src/services/chat-manageme
 import type { StructuredProviderResponseService } from "../../../src/services/structured-provider-response-service.js";
 import type { ManagementToolHandler } from "../../../src/mcp/management-tool-handler.js";
 import type { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
+import type { ProviderExecutionService } from "../../../src/services/provider-execution-service.js";
 import type { DashboardSettings } from "../../../src/contracts/app-types.js";
 
 describe("ChatManagementActionService", () => {
   let service: ChatManagementActionService;
   let structuredProviderResponseService: vitest.Mocked<StructuredProviderResponseService>;
+  let providerExecutionService: vitest.Mocked<ProviderExecutionService>;
   let managementToolHandler: vitest.Mocked<ManagementToolHandler>;
   let executionRepository: vitest.Mocked<ExecutionRepository>;
 
@@ -16,6 +18,10 @@ describe("ChatManagementActionService", () => {
   beforeEach(() => {
     structuredProviderResponseService = {
       executeAndParse: vi.fn(),
+    } as any;
+
+    providerExecutionService = {
+      executeProvider: vi.fn(),
     } as any;
 
     managementToolHandler = {
@@ -30,6 +36,7 @@ describe("ChatManagementActionService", () => {
 
     service = new ChatManagementActionService({
       structuredProviderResponseService,
+      providerExecutionService,
       managementToolHandler,
       executionRepository,
     });
@@ -211,5 +218,102 @@ describe("ChatManagementActionService", () => {
      expect(parseFn('{"replyMarkdown": "Hello", "action": null}')).toEqual({replyMarkdown: "Hello", action: null});
 
      expect(() => parseFn('{"action": null}')).toThrow("Missing or invalid 'replyMarkdown'");
+  });
+
+  describe("MCP-native mode", () => {
+    const mcpConnection = { url: "http://127.0.0.1:4445/mcp", authToken: null };
+
+    it("should use providerExecutionService directly when mcpConnection is provided", async () => {
+      providerExecutionService.executeProvider.mockResolvedValue({
+        ok: true,
+        stdout: "",
+        stderr: "",
+        text: "Here are the sprints for your project.",
+        usageTelemetry: { transcriptText: "", inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, reasoningOutputTokens: 0, totalTokens: 0, nativeSessionId: null },
+        nativeSessionId: null,
+      } as any);
+
+      const result = await service.processManagementAction({
+        projectId: "proj1",
+        provider: "gemini",
+        model: "gemini-2",
+        apiKey: "test-key",
+        sessionId: "sess1",
+        settings: mockSettings,
+        prompt: "List sprints",
+        repoPath: "/tmp/test-repo",
+        mcpConnection,
+      });
+
+      expect(result.replyMarkdown).toBe("Here are the sprints for your project.");
+      expect(result.action).toBeNull();
+      expect(result.approvalRequired).toBe(false);
+
+      // Should NOT call structuredProviderResponseService
+      expect(structuredProviderResponseService.executeAndParse).not.toHaveBeenCalled();
+
+      // Should call providerExecutionService with mcpConnection
+      expect(providerExecutionService.executeProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mcpConnection,
+          expectTextOutput: true,
+          provider: "gemini",
+        })
+      );
+
+      // Verify tracking
+      const calls = executionRepository.appendExecutionInvocationMessage.mock.calls;
+      expect(calls[0]).toEqual(["exec-123", { role: "user", contentMarkdown: "List sprints" }]);
+      expect(calls[1]).toEqual(["exec-123", { role: "assistant", contentMarkdown: "Here are the sprints for your project." }]);
+    });
+
+    it("should handle provider failure in MCP-native mode", async () => {
+      providerExecutionService.executeProvider.mockResolvedValue({
+        ok: false,
+        stdout: "",
+        stderr: "connection refused",
+        text: "",
+        usageTelemetry: { transcriptText: "" },
+        nativeSessionId: null,
+      } as any);
+
+      await expect(service.processManagementAction({
+        projectId: "proj1",
+        provider: "claude-code",
+        model: "claude-3",
+        apiKey: "test-key",
+        sessionId: "sess1",
+        settings: mockSettings,
+        prompt: "Do something",
+        repoPath: "/tmp/test-repo",
+        mcpConnection,
+      })).rejects.toThrow("Virtual claude-code worker failed: connection refused");
+
+      expect(executionRepository.updateExecutionInvocation).toHaveBeenCalledWith("exec-123", { status: "failed", finishedAt: expect.any(String) });
+    });
+
+    it("should fall back to JSON parsing when mcpConnection is null", async () => {
+      structuredProviderResponseService.executeAndParse.mockResolvedValue({
+        parsed: { replyMarkdown: "Fallback reply", action: null },
+        nativeSessionId: "sess1",
+        bodyMarkdown: "",
+      });
+
+      const result = await service.processManagementAction({
+        projectId: "proj1",
+        provider: "claude-code",
+        model: "claude-3",
+        apiKey: "test-key",
+        sessionId: "sess1",
+        settings: mockSettings,
+        prompt: "Say hello",
+        repoPath: "/tmp/test-repo",
+        mcpConnection: null,
+      });
+
+      expect(result.replyMarkdown).toBe("Fallback reply");
+      expect(structuredProviderResponseService.executeAndParse).toHaveBeenCalled();
+      expect(providerExecutionService.executeProvider).not.toHaveBeenCalled();
+    });
   });
 });

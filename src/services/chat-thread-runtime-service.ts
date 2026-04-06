@@ -17,6 +17,8 @@ import {
   normalizeProviderReply,
 } from "./chat-reply-prompt.js";
 import type { ChatManagementActionService } from "./chat-management-action-service.js";
+import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
+import type { McpApprovalTracker } from "./mcp-approval-tracker.js";
 
 interface ChatThreadRuntimeServiceDependencies {
   connectionChatRepository: ConnectionChatRepository;
@@ -29,6 +31,8 @@ interface ChatThreadRuntimeServiceDependencies {
   projectManagementRepository: ProjectManagementRepository;
   providerRunner: IProviderRunner;
   chatManagementActionService: ChatManagementActionService;
+  getMcpConnectionInfo?: () => McpConnectionInfo | null;
+  getMcpApprovalTracker?: () => McpApprovalTracker;
   logger?: Logger;
 }
 
@@ -317,6 +321,8 @@ export class ChatThreadRuntimeService {
 
     let promptContent = "";
     let continueSessionId: string | null = null;
+    const mcpConnection = this.deps.getMcpConnectionInfo?.() ?? null;
+    const mcpAvailable = mcpConnection !== null;
 
     const allMessages = this.deps.connectionChatRepository.listMessages(thread.id);
 
@@ -330,9 +336,10 @@ export class ChatThreadRuntimeService {
         messages: allMessages,
         workerInstructions,
         isDashboardReply: false,
+        mcpAvailable,
       });
     } else {
-      promptContent = buildChatContinuationPrompt(latestMessage, pendingAction);
+      promptContent = buildChatContinuationPrompt(latestMessage, pendingAction, mcpAvailable);
       continueSessionId = runtimeState.sessionIds![0];
     }
 
@@ -348,6 +355,7 @@ export class ChatThreadRuntimeService {
         settings: dashboardSettings,
         prompt: finalPrompt,
         repoPath: project.baseDir,
+        mcpConnection,
       });
 
       this.deps.connectionChatRepository.markDashboardMessagesProcessed(thread.id, {
@@ -366,9 +374,21 @@ export class ChatThreadRuntimeService {
             proposedAt: new Date().toISOString(),
           };
         } else if (result.result) {
-          // Ensure result is stringified nicely if it's an object
           const stringifiedResult = typeof result.result === "object" ? JSON.stringify(result.result, null, 2) : String(result.result);
           systemReply += `\n\n_Action completed successfully._\n\`\`\`json\n${stringifiedResult}\n\`\`\``;
+        }
+      }
+
+      // In MCP-native mode, check if the worker triggered an approval-gated action
+      if (mcpAvailable && !newPendingAction) {
+        const tracker = this.deps.getMcpApprovalTracker?.();
+        const pendingApproval = tracker?.takePending() ?? null;
+        if (pendingApproval) {
+          newPendingAction = {
+            action: pendingApproval.action,
+            approvalMessage: pendingApproval.approvalMessage,
+            proposedAt: pendingApproval.proposedAt,
+          };
         }
       }
 

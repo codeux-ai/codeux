@@ -1,4 +1,6 @@
 import type { AppConfig } from "../config/app-config.js";
+import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
+import type { McpApprovalTracker } from "../services/mcp-approval-tracker.js";
 import type {
   DashboardSettings,
   JulesActivity,
@@ -51,6 +53,8 @@ export interface ServerContext {
   persistTaskMergedFlag: (args: PersistTaskMergedFlagArgs) => Promise<void>;
   normalizeName: (type: string, id: string) => string;
   isTrackedCliSession: (sessionId: string) => boolean;
+  getMcpConnectionInfo?: () => McpConnectionInfo | null;
+  getMcpApprovalTracker?: () => McpApprovalTracker;
 }
 
 export function createRuntimeDependencies(

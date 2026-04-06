@@ -70,17 +70,20 @@ export function createDashboardDependencies(
     embeddingModelManager: coreDeps.embeddingModelManager,
   });
 
+  const providerExecutionService = new ProviderExecutionService({
+    providerRunner,
+    logger: logger.child({ component: "provider-execution-service" }),
+  });
+
   const structuredProviderResponseService = new StructuredProviderResponseService({
-    providerExecutionService: new ProviderExecutionService({
-      providerRunner,
-      logger: logger.child({ component: "provider-execution-service" }),
-    }),
+    providerExecutionService,
     executionRepository,
     logger: logger.child({ component: "structured-provider-response-service" }),
   });
 
   const chatManagementActionService = new ChatManagementActionService({
     structuredProviderResponseService,
+    providerExecutionService,
     managementToolHandler,
     executionRepository,
   });
@@ -96,6 +99,8 @@ export function createDashboardDependencies(
     projectManagementRepository,
     providerRunner,
     chatManagementActionService,
+    getMcpConnectionInfo: context.getMcpConnectionInfo,
+    getMcpApprovalTracker: context.getMcpApprovalTracker,
     logger: logger.child({ component: "chat-thread-runtime-service" }),
   });
 
