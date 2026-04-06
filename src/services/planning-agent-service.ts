@@ -25,7 +25,8 @@ import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
 import { extractJsonLikeBlock } from "./planning-json-extractor.js";
 import { ProviderExecutionService } from "./provider-execution-service.js";
-import { StructuredProviderResponseService, type StructuredProviderResult } from "./structured-provider-response-service.js";
+import { StructuredAgentRequestService, type StructuredAgentRequestResult } from "./structured-agent-request-service.js";
+import { StructuredProviderResponseService } from "./structured-provider-response-service.js";
 import { waitUntil } from "../shared/polling/wait-until.js";
 
 interface PlanningAgentServiceDeps {
@@ -39,7 +40,7 @@ interface PlanningAgentServiceDeps {
   providerRunner?: IProviderRunner;
   logger?: Logger;
   providerExecutionService?: ProviderExecutionService;
-  structuredProviderResponseService?: StructuredProviderResponseService;
+  structuredAgentRequestService?: StructuredAgentRequestService;
 }
 
 interface ImprovePromptResult {
@@ -82,7 +83,7 @@ interface PlanningResultContext {
 export class PlanningAgentService {
   private readonly providerRunner: IProviderRunner;
   private readonly providerExecutionService: ProviderExecutionService;
-  private readonly structuredProviderResponseService: StructuredProviderResponseService;
+  private readonly structuredAgentRequestService: StructuredAgentRequestService;
 
   constructor(private readonly deps: PlanningAgentServiceDeps) {
     this.providerRunner = deps.providerRunner || new ProviderRunner(new DockerRunner());
@@ -91,11 +92,21 @@ export class PlanningAgentService {
       providerRunner: this.providerRunner,
       logger: deps.logger,
     });
-    this.structuredProviderResponseService = deps.structuredProviderResponseService || new StructuredProviderResponseService({
-      providerExecutionService: this.providerExecutionService,
-      executionRepository: deps.executionRepository,
-      logger: deps.logger,
-    });
+
+    if (deps.structuredAgentRequestService) {
+      this.structuredAgentRequestService = deps.structuredAgentRequestService;
+    } else {
+      const structuredProviderResponseService = new StructuredProviderResponseService({
+        providerExecutionService: this.providerExecutionService,
+        executionRepository: deps.executionRepository,
+        logger: deps.logger,
+      });
+      this.structuredAgentRequestService = new StructuredAgentRequestService({
+        executionRepository: deps.executionRepository,
+        structuredProviderResponseService,
+        logger: deps.logger,
+      });
+    }
   }
 
   async improveSprintPrompt(projectId: string, input: ImprovePromptInput, signal?: AbortSignal): Promise<ImprovePromptResult> {
@@ -518,7 +529,7 @@ export class PlanningAgentService {
     signal?: AbortSignal;
     parseFn: (bodyMarkdown: string) => T;
     buildRetryPrompt: (lastError: Error) => string;
-  }): Promise<StructuredProviderResult<T> & PlanningResultContext> {
+  }): Promise<StructuredAgentRequestResult<T> & PlanningResultContext> {
     const routingTask: Subtask = {
       id: args.sprintId || "planning",
       title: "Planning request",
@@ -546,41 +557,32 @@ export class PlanningAgentService {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...args.settings.cliWorkflow,
     };
-    const sessionId = `planning-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
     const providerPrompt = buildProviderPrompt(args.rawPrompt, providerSettings.thinkingMode);
-
-    if (args.invocationId) {
-      this.deps.executionRepository?.updateExecutionInvocation(args.invocationId, {
-        provider,
-        model: providerSettings.model,
-      });
-      this.deps.executionRepository?.appendExecutionInvocationMessage(args.invocationId, {
-        role: "system",
-        contentMarkdown: `Planning request routed through virtual ${this.getProviderLabel(provider)} worker (model: ${providerSettings.model}).`,
-        metadata: {
-          provider,
-          model: providerSettings.model,
-          routeKind: "virtual",
-        },
-      });
-    }
+    const systemRoutingMessage = `Planning request routed through virtual ${this.getProviderLabel(provider)} worker (model: ${providerSettings.model}).`;
 
     try {
-      const result = await this.structuredProviderResponseService.executeAndParse<T>({
+      const result = await this.structuredAgentRequestService.executeRequest<T>({
         projectId: args.projectId,
         sprintId: args.sprintId,
         purpose: "planning",
         type: "planning",
         provider,
-        prompt: args.rawPrompt,
         model: providerSettings.model,
         apiKey: providerSettings.apiKey,
-        sessionId,
-        workflowSettings,
+        providerPrompt: args.rawPrompt,
         repoPath: args.repoPath,
+        settings: {
+          ...args.settings,
+          cliWorkflow: workflowSettings,
+        },
+        parseFn: args.parseFn,
+        buildRetryPrompt: args.buildRetryPrompt,
+        providerLabel: this.getProviderLabel(provider),
+        sessionIdPrefix: "planning",
+        invocationId: args.invocationId,
+        systemRoutingMessage,
         githubToken: args.settings.git.githubToken,
         signal: args.signal,
-        invocationId: args.invocationId,
         onActivity: (description, originator) => {
           this.deps.logger?.debug("Virtual planning worker activity", {
             projectId: args.projectId,
@@ -590,17 +592,12 @@ export class PlanningAgentService {
             description,
           });
         },
-        settings: args.settings,
-        maxRetries: args.settings.cliWorkflow?.maxPlanningJsonRetries ?? 3,
-        providerLabel: this.getProviderLabel(provider),
-        parseFn: args.parseFn,
-        buildRetryPrompt: args.buildRetryPrompt,
       });
 
       return {
         ...result,
         provider,
-        sessionId,
+        sessionId: result.sessionId,
         workflowSettings,
         providerSettings: {
           model: providerSettings.model,
