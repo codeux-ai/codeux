@@ -2,7 +2,7 @@ import { h } from "preact";
 import type { FunctionComponent } from "preact";
 import { Zap, RefreshCcw, WifiOff, AlertTriangle } from "lucide-preact";
 import type { TransportState } from "../../../lib/realtime/dashboard-realtime-client.js";
-import { useEffect, useState } from "preact/hooks";
+import { useLiveNow } from "../../hooks/use-live-now.js";
 
 export interface LiveTransportBannerProps {
   transportState: TransportState;
@@ -19,12 +19,7 @@ export const LiveTransportBanner: FunctionComponent<LiveTransportBannerProps> = 
   snapshotUpdatedAt,
   error,
 }) => {
-  const [now, setNow] = useState(Date.now());
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const now = useLiveNow();
 
   const isStale =
     snapshotUpdatedAt && transportState === "connected" && !isRecovering

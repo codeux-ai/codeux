@@ -24,6 +24,7 @@ import {
 } from "../lib/live-duration-display.js";
 import { RerunTaskModal } from "./ui/RerunTaskModal.js";
 import { Button } from "./ui/Button.js";
+import { useLiveNow } from "../hooks/use-live-now.js";
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
@@ -44,21 +45,15 @@ function extractRetryAfterIso(errorMessage: string): string | null {
 
 export const QuotaCountdown: FunctionComponent<{ errorMessage: string }> = memo(({ errorMessage }) => {
     const retryIso = extractRetryAfterIso(errorMessage);
-    const [remaining, setRemaining] = useState(() =>
-        retryIso ? Math.max(0, Math.floor((new Date(retryIso).getTime() - Date.now()) / 1000)) : null
-    );
 
-    useEffect(() => {
-        if (!retryIso) { setRemaining(null); return; }
-        const update = () => Math.max(0, Math.floor((new Date(retryIso).getTime() - Date.now()) / 1000));
-        setRemaining(update());
-        const timer = window.setInterval(() => {
-            const left = update();
-            setRemaining(left);
-            if (left <= 0) window.clearInterval(timer);
-        }, 1000);
-        return () => window.clearInterval(timer);
-    }, [retryIso]);
+    // We only need the clock tick if there's a valid future retry date.
+    const needsUpdates = !!retryIso;
+    const now = useLiveNow(needsUpdates);
+
+    const remaining = useMemo(() => {
+        if (!retryIso) return null;
+        return Math.max(0, Math.floor((new Date(retryIso).getTime() - now) / 1000));
+    }, [retryIso, now]);
 
     if (remaining == null) {
         return <div className="text-status-red">{errorMessage}</div>;
@@ -80,31 +75,18 @@ export const TaskDuration: FunctionComponent<{
     taskTiming?: LiveTaskTimingSummary | null;
     dispatchTiming?: LiveDurationDispatchTiming | null;
 }> = memo(({ taskTiming, dispatchTiming }) => {
-    const [now, setNow] = useState(() => Date.now());
+    // Only subscribe to live updates if we are actively running.
+    const isLive =
+        taskTiming?.activeStage != null ||
+        (dispatchTiming?.status === "running" && dispatchTiming.finishedAt == null);
+
+    const now = useLiveNow(isLive);
+
     const display = useMemo(() => deriveLiveDurationDisplay({
         taskTiming,
         dispatchTiming,
         now,
     }), [taskTiming, dispatchTiming, now]);
-
-    useEffect(() => {
-        setNow(Date.now());
-    }, [
-        dispatchTiming?.finishedAt,
-        dispatchTiming?.startedAt,
-        dispatchTiming?.status,
-        taskTiming?.activeStage,
-        taskTiming?.startedAt,
-        taskTiming?.totalSeconds,
-    ]);
-
-    useEffect(() => {
-        if (display.mode !== "live") {
-            return;
-        }
-        const timer = window.setInterval(() => setNow(Date.now()), 1000);
-        return () => window.clearInterval(timer);
-    }, [display.mode]);
 
     if (!display.visible) return null;
 

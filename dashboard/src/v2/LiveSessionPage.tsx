@@ -39,6 +39,7 @@ import { LiveTransportBanner } from "./components/live-session/LiveTransportBann
 import { RuntimeEventFeed } from "./components/RuntimeEventFeed.js";
 import { GitCIStatusPanel } from "./components/GitCIStatusPanel.js";
 import { deriveLiveDurationDisplay } from "./lib/live-duration-display.js";
+import { useLiveNow } from "./hooks/use-live-now.js";
 import { useProjectData } from "./context/project-data.js";
 import { useReducedMotion } from "./hooks/use-reduced-motion.js";
 import { useConfirmDialog } from "./hooks/use-confirm-dialog.js";
@@ -247,16 +248,11 @@ export const LiveSessionPage: FunctionComponent = () => {
         ))
     ), [sprintDispatches, taskTimings]);
 
+    const globalNow = useLiveNow(hasLiveDurationTicker);
+
     useEffect(() => {
-        setNowIso(new Date().toISOString());
-        if (!hasLiveDurationTicker) {
-            return;
-        }
-        const timer = window.setInterval(() => {
-            setNowIso(new Date().toISOString());
-        }, 1000);
-        return () => window.clearInterval(timer);
-    }, [hasLiveDurationTicker]);
+        setNowIso(new Date(globalNow).toISOString());
+    }, [globalNow]);
 
     const taskEventsByRecordId = useMemo(() => {
         const byRecordId = new Map<string, ExecutionRuntimeEventSummary[]>();

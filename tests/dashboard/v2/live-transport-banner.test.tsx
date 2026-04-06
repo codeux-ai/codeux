@@ -8,12 +8,14 @@ import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
 
 import { LiveTransportBanner } from "../../../dashboard/src/v2/components/live-session/LiveTransportBanner.js";
+import { resetLiveNowClockForTesting } from "../../../dashboard/src/v2/hooks/use-live-now.js";
 
 describe("LiveTransportBanner", () => {
   beforeEach(() => {
     cleanup();
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-01T00:00:20Z")); // Set system time to 20 seconds
+    resetLiveNowClockForTesting();
   });
 
   afterEach(() => {

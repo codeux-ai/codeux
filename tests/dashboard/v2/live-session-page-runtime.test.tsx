@@ -11,6 +11,7 @@ expect.extend(matchers);
 import { LiveSessionPage } from "../../../dashboard/src/v2/LiveSessionPage.js";
 import { useDashboardRuntimeData } from "../../../dashboard/src/hooks/use-dashboard-runtime-data.js";
 import { useProjectData } from "../../../dashboard/src/v2/context/project-data.js";
+import { resetLiveNowClockForTesting } from "../../../dashboard/src/v2/hooks/use-live-now.js";
 
 vi.mock("../../../dashboard/src/hooks/use-dashboard-runtime-data.js");
 vi.mock("../../../dashboard/src/v2/context/project-data.js");
@@ -52,6 +53,7 @@ describe("LiveSessionPage Runtime Status", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    resetLiveNowClockForTesting();
     vi.mocked(useProjectData).mockReturnValue({ selectedProjectId: "p1" } as any);
   });
 
@@ -128,6 +130,7 @@ describe("LiveSessionPage Integration Isolation", () => {
   beforeEach(() => {
     cleanup();
     vi.clearAllMocks();
+    resetLiveNowClockForTesting();
     vi.mocked(useProjectData).mockReturnValue({ selectedProjectId: "p1" } as any);
   });
 
