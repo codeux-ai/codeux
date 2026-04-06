@@ -3,30 +3,29 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 import gsap from 'gsap';
 import { Activity } from 'lucide-preact';
 import type {
-  ExecutionUsageBucketSummary,
   ProjectExecutionStatsSnapshot,
-  ProjectExecutionStatsChartSeries,
 } from '../../../types.js';
 import {
   formatTokens,
   formatDuration,
   formatDateTime,
-  sumUsage,
 } from '../stats-utils.js';
 import {
   CHIP_CLASS,
   PANEL_CLASS,
   SUBPANEL_CLASS,
-  type ChartZoomRange,
-  type ChartPoint,
-  buildPoints,
-  buildSmoothPath,
-  buildSmoothAreaPath,
   getAxisLabelStep,
   formatAxisLabel,
 } from './StatsShared.js';
 import { UsageSeriesSidebar } from './UsageSeriesSidebar.js';
 import type { UsageChartState } from '../use-usage-chart-state.js';
+import {
+  getVisibleBuckets,
+  normalizeChartSeries,
+  groupChartSeries,
+  calculateChartMetrics,
+  getTooltipState,
+} from '../chart-view-models.js';
 
 export const InteractiveUsageChart: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
@@ -54,51 +53,23 @@ export const InteractiveUsageChart: FunctionComponent<{
   const padding = 34;
   const viewStart = zoomRange?.start ?? 0;
   const viewEnd = zoomRange?.end ?? Math.max(0, buckets.length - 1);
-  const visibleBuckets = buckets.slice(viewStart, viewEnd + 1);
+  const visibleBuckets = getVisibleBuckets(buckets, viewStart, viewEnd);
 
   const chartData = useMemo(() => {
-    return stats.chartSeries.map((series, idx) => {
-      const fallbackColors = ['#F43F5E', '#8B5CF6', '#10B981', '#F59E0B', '#3B82F6', '#EC4899', '#14B8A6'];
-      const accentHex = series.color || fallbackColors[idx % fallbackColors.length]!;
-
-      const formatter = series.formatter === 'duration'
-        ? formatDuration
-        : series.formatter === 'number'
-          ? (val: number) => val.toLocaleString()
-          : formatTokens;
-
-      const values = visibleBuckets.map((_, bucketIdx) => series.data[viewStart + bucketIdx] || 0);
-      const points = buildPoints(values.length > 0 ? values : [0], width, height, padding);
-      return {
-        ...series,
-        accentHex,
-        formatter,
-        signalLabel: series.signalLabel || 'Metric',
-        values,
-        points,
-        path: buildSmoothPath(points),
-        areaPath: buildSmoothAreaPath(points, height, padding),
-        max: Math.max(...(values.length > 0 ? values : [0]), 1),
-      };
-    });
+    return normalizeChartSeries(stats.chartSeries, visibleBuckets, viewStart, width, height, padding);
   }, [stats.chartSeries, visibleBuckets, viewStart, width, height, padding]);
 
   const seriesGroups = useMemo(() => {
-    return stats.chartSeries.reduce((acc, s) => {
-      if (!acc[s.grouping]) acc[s.grouping] = [];
-      acc[s.grouping].push(s);
-      return acc;
-    }, {} as Record<string, ProjectExecutionStatsChartSeries[]>);
+    return groupChartSeries(stats.chartSeries);
   }, [stats.chartSeries]);
 
   const visibleSeries = chartData.filter((series) => enabledSeries[series.id]);
   const activeSeriesCount = visibleSeries.length;
-  const activeIndex = hoveredIndex ?? (visibleBuckets.length > 0 ? visibleBuckets.length - 1 : 0);
-  const activeBucket = visibleBuckets[activeIndex] ?? null;
-  const xPositions = chartData[0]?.points.map((point) => point.x) ?? [];
-  const tooltipLeft = xPositions[activeIndex]
-    ? ((xPositions[activeIndex]! - padding) / Math.max(1, width - padding * 2)) * 100
-    : 50;
+
+  const { activeIndex, activeBucket, tooltipLeft, xPositions } = getTooltipState(
+    visibleBuckets, chartData, hoveredIndex, padding, width
+  );
+
   const selectionBounds = dragStartIndex !== null && dragCurrentIndex !== null
     ? {
       start: Math.min(dragStartIndex, dragCurrentIndex),
@@ -110,19 +81,7 @@ export const InteractiveUsageChart: FunctionComponent<{
     : stats.range.label;
   const axisLabelStep = getAxisLabelStep(stats.range);
 
-  const peakTokens = Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.totalTokens));
-  const peakTime = Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.activeTimeMs));
-  const peakInvocations = Math.max(0, ...visibleBuckets.map((bucket) => bucket.usage.invocationCount));
-  const averageTokens = visibleBuckets.length > 0 ? Math.round(sumUsage(visibleBuckets.map((bucket) => ({
-    id: bucket.bucketStart,
-    label: bucket.label,
-    secondaryLabel: null,
-    status: null,
-    purpose: null,
-    provider: null,
-    usage: bucket.usage,
-    lastActivityAt: bucket.bucketEnd,
-  }))).totalTokens / visibleBuckets.length) : 0;
+  const { peakTokens, peakTime, peakInvocations, averageTokens } = calculateChartMetrics(visibleBuckets);
 
   useEffect(() => {
     const handleMouseUp = () => {
@@ -424,7 +383,7 @@ export const InteractiveUsageChart: FunctionComponent<{
 
           <div className="flex flex-col gap-4">
             <UsageSeriesSidebar
-              series={stats.chartSeries}
+              series={chartData}
               enabledSeries={enabledSeries}
               activeIndex={activeIndex}
             />
