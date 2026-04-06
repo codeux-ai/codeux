@@ -425,6 +425,7 @@ export class JulesAgentServer {
           }
         : null,
       getMcpApprovalTracker: () => this.mcpApprovalTracker,
+      getSprintPreviewService: () => this.sprintPreviewService || null,
     };
   }
 

@@ -57,7 +57,7 @@ export function createDashboardDependencies(
   });
 
   const managementToolHandler = new ManagementToolHandler({
-    getSprintPreviewService: () => (sprintDeps as any).sprintPreviewService || null,
+    getSprintPreviewService: context.getSprintPreviewService,
     executionRepository: coreDeps.executionRepository,
     getDashboardSettings: () => settingsRepository.getDefaultDashboardSettings(),
     projectManagementRepository: coreDeps.projectManagementRepository,

@@ -40,9 +40,9 @@ async function createFixture(): Promise<{
       projectAttentionRepository,
       new ProjectWorkerAssignmentRepository(storage),
     ),
-    taskRerunService: {
+    getTaskRerunService: () => ({
       rerunTask,
-    } as any,
+    } as any),
     sprintOrchestrator: {
       execute: executeOrchestrator,
     } as any,

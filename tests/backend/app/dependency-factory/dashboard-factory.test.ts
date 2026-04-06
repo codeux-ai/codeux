@@ -47,6 +47,7 @@ describe("Dashboard Factory", () => {
       invalidateGitStatusCache: vi.fn(),
       resolveSessionName: vi.fn(),
       extractSessionId: vi.fn(),
+      getSprintPreviewService: vi.fn(),
     };
 
     mockCoreDeps = {

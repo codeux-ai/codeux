@@ -55,6 +55,7 @@ export interface ServerContext {
   isTrackedCliSession: (sessionId: string) => boolean;
   getMcpConnectionInfo?: () => McpConnectionInfo | null;
   getMcpApprovalTracker?: () => McpApprovalTracker;
+  getSprintPreviewService: () => any | null; // Using any here to break direct dependency on SprintPreviewService definition, type handled in target factories
 }
 
 export function createRuntimeDependencies(
