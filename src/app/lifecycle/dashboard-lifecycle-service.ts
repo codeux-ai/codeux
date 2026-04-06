@@ -374,7 +374,15 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
       if (!sprint || sprint.projectId !== projectId) {
         throw new Error(`Sprint not found in project: ${sprintId}`);
       }
-      return deps.settingsRepository.saveSprintSettings(sprintId, deps.settingsRepository.getProjectResolvedSettings(projectId), settings);
+      const saved = deps.settingsRepository.saveSprintSettings(sprintId, deps.settingsRepository.getProjectResolvedSettings(projectId), settings);
+      cache.invalidateProjectExecution(projectId);
+      cache.invalidateProjectStats(projectId);
+      deps.dashboardRealtimeService.scheduleProjectExecutionRefresh(projectId, {
+        includeOverview: false,
+        includeProjects: false,
+      });
+      deps.dashboardRealtimeService.scheduleProjectStructureRefresh(projectId, { includeProjects: false });
+      return saved;
     },
     resetSprintSettings: (sprintId) => {
       const sprint = deps.projectManagementRepository.getSprint(sprintId);
@@ -382,6 +390,13 @@ export async function bootDashboard(deps: BootDashboardDeps): Promise<void> {
         throw new Error(`Sprint not found: ${sprintId}`);
       }
       deps.settingsRepository.resetSprintSettings(sprintId);
+      cache.invalidateProjectExecution(sprint.projectId);
+      cache.invalidateProjectStats(sprint.projectId);
+      deps.dashboardRealtimeService.scheduleProjectExecutionRefresh(sprint.projectId, {
+        includeOverview: false,
+        includeProjects: false,
+      });
+      deps.dashboardRealtimeService.scheduleProjectStructureRefresh(sprint.projectId, { includeProjects: false });
     },
     getSprintEffectiveSettings: (projectId, sprintId) => {
       const sprint = deps.projectManagementRepository.getSprint(sprintId);
