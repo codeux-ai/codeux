@@ -139,12 +139,16 @@ describe("InteractiveUsageChart", () => {
 
     const { rerender } = render(<InteractiveUsageChart stats={stats} chartState={chartState} />);
 
-    // Update stats instance with same window context
+    // Update stats instance with same window context and new chartSeries reference
+    // This simulates a polling refresh where range stays identical but arrays are new
     const updatedStats = {
       ...stats,
       buckets: [
         ...stats.buckets,
         { label: "B2", bucketStart: "2023-01-02", bucketEnd: "2023-01-03", usage: { totalTokens: 20, activeTimeMs: 2000, invocationCount: 2 } }
+      ],
+      chartSeries: [
+        { id: "tokens", label: "Tokens", grouping: "Usage", defaultEnabled: true, data: [100, 150] },
       ]
     };
 
@@ -153,5 +157,71 @@ describe("InteractiveUsageChart", () => {
 
     // We confirm that it renders using the preserved chartState correctly without crashing
     expect(screen.getAllByText("Tokens").length).toBeGreaterThan(0);
+
+    // Explicitly verify the test spy didn't get called to reset the enabled series state,
+    // ensuring the chart component isn't aggressively reinitializing it from stats
+    expect(chartState.setEnabledSeries).not.toHaveBeenCalled();
+    expect(chartState.setZoomRange).not.toHaveBeenCalled();
+  });
+});
+
+describe("useUsageChartState", () => {
+  it("resets state when the actual stats range or project changes", async () => {
+    // A simplified test for the hook behavior using preact testing library render
+    let currentState: any = null;
+
+    const HookWrapper = ({ projectId, stats }: { projectId: string | null, stats: any }) => {
+      // Import inline for testing
+      const { useUsageChartState } = require("../../../dashboard/src/v2/pages/stats/use-usage-chart-state.ts");
+      currentState = useUsageChartState(projectId, stats);
+      return <div data-testid="wrapper">Test</div>;
+    };
+
+    const initialStats = {
+      buckets: [{ bucketStart: "2023-01-01" }, { bucketStart: "2023-01-02" }, { bucketStart: "2023-01-03" }],
+      range: { from: "2023-01-01", to: "2023-01-07", resolution: "day" },
+      chartSeries: [
+        { id: "tokens", defaultEnabled: true },
+        { id: "active", defaultEnabled: false }
+      ]
+    };
+
+    const { rerender } = render(<HookWrapper projectId="proj-1" stats={initialStats} />);
+
+    // Initial state correctly sets the first series to true based on defaultEnabled
+    expect(currentState.enabledSeries).toEqual({ tokens: true, active: false });
+
+    // Simulate user interaction: toggle 'active' to true and 'tokens' to false, add zoom
+    currentState.setEnabledSeries({ tokens: false, active: true });
+    currentState.setZoomRange({ start: 0, end: 1 });
+
+    // Trigger re-render to apply new state
+    rerender(<HookWrapper projectId="proj-1" stats={initialStats} />);
+
+    expect(currentState.enabledSeries).toEqual({ tokens: false, active: true });
+    expect(currentState.zoomRange).toEqual({ start: 0, end: 1 });
+
+    // Rerender with SAME date range but new stats object reference (like a polling refresh)
+    const refreshedStats = {
+      ...initialStats,
+      chartSeries: [...initialStats.chartSeries]
+    };
+    rerender(<HookWrapper projectId="proj-1" stats={refreshedStats} />);
+
+    // State is PRESERVED
+    expect(currentState.enabledSeries).toEqual({ tokens: false, active: true });
+    expect(currentState.zoomRange).toEqual({ start: 0, end: 1 });
+
+    // Rerender with DIFFERENT date range (e.g. user selected 30 days instead of 7 days)
+    const newRangeStats = {
+      ...initialStats,
+      range: { from: "2023-01-01", to: "2023-01-31", resolution: "day" },
+      chartSeries: [...initialStats.chartSeries]
+    };
+    rerender(<HookWrapper projectId="proj-1" stats={newRangeStats} />);
+
+    // State is RESET appropriately to defaults
+    expect(currentState.enabledSeries).toEqual({ tokens: true, active: false });
+    expect(currentState.zoomRange).toBeNull();
   });
 });

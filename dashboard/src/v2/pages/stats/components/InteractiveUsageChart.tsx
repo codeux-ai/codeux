@@ -142,17 +142,6 @@ export const InteractiveUsageChart: FunctionComponent<{
     return () => globalThis.window.removeEventListener("mouseup", handleMouseUp);
   }, [dragCurrentIndex, dragStartIndex, buckets]);
 
-  useEffect(() => {
-    setHoveredIndex(null);
-    setZoomRange(null);
-    setDragStartIndex(null);
-    setDragCurrentIndex(null);
-    setEnabledSeries(stats.chartSeries.reduce((acc, s) => {
-      acc[s.id] = s.defaultEnabled;
-      return acc;
-    }, {} as Record<string, boolean>));
-  }, [stats.range.from, stats.range.to, stats.range.resolution, stats.chartSeries]);
-
   useLayoutEffect(() => {
     if (!panelRef.current) {
       return;
