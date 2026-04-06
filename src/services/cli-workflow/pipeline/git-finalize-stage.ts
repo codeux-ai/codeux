@@ -37,7 +37,7 @@ export async function executeGitFinalizeStage(ctx: PipelineContext): Promise<{
   await ctx.runCommand("git", ["push", "-u", "origin", ctx.workerBranch], ctx.worktreePath);
 
   // Calculate git metrics against the initial head
-  const diffOutput = (await ctx.runCommand("git", ["diff", "--numstat", ctx.initialHead, "HEAD"], ctx.worktreePath)).stdout;
+  const diffOutput = (await ctx.runCommand("git", ["diff", "--numstat", `${ctx.initialHead}...HEAD`], ctx.worktreePath)).stdout;
 
   let filesChanged = 0;
   let insertions = 0;
