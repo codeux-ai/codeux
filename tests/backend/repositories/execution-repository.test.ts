@@ -665,6 +665,32 @@ describe("ExecutionRepository", () => {
       expiresAt: "2030-03-09T12:05:00.000Z",
     });
 
+    const invocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      taskRunId: run.id,
+      sessionId: "session-snapshot-1",
+      provider: "codex",
+      purpose: "task_coding",
+      status: "completed",
+      startedAt: "2026-03-09T10:00:00.000Z",
+      promptChars: 100,
+    });
+    executionRepository.updateProviderInvocationUsage(invocation.id, {
+      status: "completed",
+      durationMs: 15000,
+      inputTokens: 50,
+      cachedInputTokens: 0,
+      outputTokens: 25,
+      reasoningOutputTokens: 0,
+      totalTokens: 75,
+      usageSource: "reported",
+      rawUsageJson: { provider: "codex" },
+    });
+
     const snapshot = executionRepository.getProjectExecutionSnapshot(project.id);
 
     expect(snapshot).toMatchObject({
@@ -678,6 +704,11 @@ describe("ExecutionRepository", () => {
       status: "running",
       activeLeaseOwnerKey: "sprint_orchestrator",
     });
+    expect(snapshot.sprintRuns[0]?.usage).toMatchObject({
+      totalTokens: 75,
+      activeTimeMs: 15000,
+      invocationCount: 1,
+    });
     expect(snapshot.taskDispatches[0]).toMatchObject({
       id: dispatch.id,
       taskId: task.id,
@@ -688,6 +719,11 @@ describe("ExecutionRepository", () => {
       taskRunState: "RUNNING",
       sessionId: "session-snapshot-1",
       activeLeaseOwnerKey: "worker-snapshot-1",
+      usage: expect.objectContaining({
+        totalTokens: 75,
+        activeTimeMs: 15000,
+        invocationCount: 1,
+      }),
     });
     expect(snapshot.recentEvents[0]).toMatchObject({
       scopeType: "task_run",
