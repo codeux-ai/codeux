@@ -71,7 +71,7 @@ export function useUsageChartState(
   }, [stats]);
 
   // Reset state on project or range change
-  const currentRangeKey = stats ? `${stats.range.from}-${stats.range.to}` : null;
+  const currentRangeKey = stats ? `${stats.range.from}-${stats.range.to}-${stats.range.resolution}` : null;
   useEffect(() => {
     setZoomRange(null);
     setHoveredIndex(null);
