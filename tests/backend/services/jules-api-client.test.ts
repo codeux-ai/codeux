@@ -2,7 +2,22 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { JulesApiClient } from "../../../src/integrations/jules-api-client.js";
 import axios from "axios";
 
-vi.mock("axios");
+const mockAxiosInstance = {
+  interceptors: {
+    request: { use: vi.fn() },
+    response: { use: vi.fn() },
+  },
+  get: vi.fn(),
+  post: vi.fn(),
+};
+
+vi.mock("axios", () => {
+  return {
+    default: {
+      create: vi.fn(() => mockAxiosInstance),
+    },
+  };
+});
 
 describe("JulesApiClient", () => {
   let client: JulesApiClient;
@@ -10,14 +25,7 @@ describe("JulesApiClient", () => {
   const apiKey = "test-key";
 
   beforeEach(() => {
-    vi.mocked(axios.create).mockReturnValue({
-      interceptors: {
-        request: { use: vi.fn() },
-        response: { use: vi.fn() },
-      },
-      get: vi.fn(),
-      post: vi.fn(),
-    } as any);
+    vi.clearAllMocks();
     client = new JulesApiClient({ baseUrl, apiKey });
   });
 
@@ -39,20 +47,20 @@ describe("JulesApiClient", () => {
     const mockAxios = () => (client as any).axiosInstance;
 
     it("gets source", async () => {
-      mockAxios().get.mockResolvedValue({ data: { id: "s1" } });
+      vi.mocked(mockAxios().get).mockResolvedValue({ data: { id: "s1" } });
       const res = await client.getSource("s1");
       expect(res.id).toBe("s1");
       expect(mockAxios().get).toHaveBeenCalledWith("/sources/s1");
     });
 
     it("lists sources", async () => {
-      mockAxios().get.mockResolvedValue({ data: { sources: [] } });
+      vi.mocked(mockAxios().get).mockResolvedValue({ data: { sources: [] } });
       await client.listSources({ filter: "f" });
       expect(mockAxios().get).toHaveBeenCalledWith("/sources", expect.anything());
     });
 
     it("lists all sources", async () => {
-      mockAxios().get
+      vi.mocked(mockAxios().get)
         .mockResolvedValueOnce({ data: { sources: [{ id: "1" }], nextPageToken: "next" } })
         .mockResolvedValueOnce({ data: { sources: [{ id: "2" }] } });
       const sources = await client.listAllSources();
@@ -60,37 +68,37 @@ describe("JulesApiClient", () => {
     });
 
     it("creates session", async () => {
-      mockAxios().post.mockResolvedValue({ data: { id: "s1" } });
+      vi.mocked(mockAxios().post).mockResolvedValue({ data: { id: "s1" } });
       const res = await client.createSession({ prompt: "p", sourceContext: { source: "src" } });
       expect(res.id).toBe("s1");
     });
 
     it("gets session", async () => {
-      mockAxios().get.mockResolvedValue({ data: { id: "s1" } });
+      vi.mocked(mockAxios().get).mockResolvedValue({ data: { id: "s1" } });
       await client.getSession("s1");
       expect(mockAxios().get).toHaveBeenCalledWith("/sessions/s1");
     });
 
     it("approves plan", async () => {
-      mockAxios().post.mockResolvedValue({ data: { ok: true } });
+      vi.mocked(mockAxios().post).mockResolvedValue({ data: { ok: true } });
       await client.approveSessionPlan("s1");
       expect(mockAxios().post).toHaveBeenCalledWith("/sessions/s1:approvePlan");
     });
 
     it("sends message", async () => {
-      mockAxios().post.mockResolvedValue({ data: { ok: true } });
+      vi.mocked(mockAxios().post).mockResolvedValue({ data: { ok: true } });
       await client.sendSessionMessage("s1", "hi");
       expect(mockAxios().post).toHaveBeenCalledWith("/sessions/s1:sendMessage", { prompt: "hi" });
     });
 
     it("gets activity", async () => {
-      mockAxios().get.mockResolvedValue({ data: { id: "a1" } });
+      vi.mocked(mockAxios().get).mockResolvedValue({ data: { id: "a1" } });
       await client.getActivity("s1", "a1");
       expect(mockAxios().get).toHaveBeenCalledWith("/sessions/s1/activities/a1");
     });
 
     it("lists all activities", async () => {
-      mockAxios().get
+      vi.mocked(mockAxios().get)
         .mockResolvedValueOnce({ data: { activities: [{ id: "1" }], nextPageToken: "next" } })
         .mockResolvedValueOnce({ data: { activities: [{ id: "2" }] } });
       const activities = await client.listAllActivities("s1");
@@ -98,7 +106,7 @@ describe("JulesApiClient", () => {
     });
 
     it("fetches the latest activities across pages and hydrates them via get", async () => {
-      mockAxios().get
+      vi.mocked(mockAxios().get)
         .mockResolvedValueOnce({
           data: {
             activities: [

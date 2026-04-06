@@ -2,29 +2,29 @@ import { describe, expect, it, vi } from "vitest";
 import { JulesApiClient } from "../../../src/integrations/jules-api-client.js";
 import axios from "axios";
 
-vi.mock("axios", () => {
-  const instance = {
-    get: vi.fn(),
-    post: vi.fn(),
-    interceptors: {
-      request: {
-        use: vi.fn((cb) => {
-            instance.interceptors.request._cb = cb;
-        }),
-      }
+const mockInstance = {
+  get: vi.fn(),
+  post: vi.fn(),
+  interceptors: {
+    request: {
+      use: vi.fn((cb) => {
+        (mockInstance.interceptors.request as any)._cb = cb;
+      }),
     }
-  };
+  }
+};
+
+vi.mock("axios", () => {
   return {
     default: {
-      create: vi.fn(() => instance),
+      create: vi.fn(() => mockInstance),
     }
   };
 });
 
 describe("JulesApiClient coverage", () => {
     it("handles listAllSources pagination", async () => {
-        const mockAxios = axios.create();
-        vi.mocked(mockAxios.get)
+        vi.mocked(mockInstance.get)
             .mockResolvedValueOnce({ data: { sources: [{ id: "1" }], nextPageToken: "token" } })
             .mockResolvedValueOnce({ data: { sources: [{ id: "2" }] } });
 
@@ -34,8 +34,7 @@ describe("JulesApiClient coverage", () => {
     });
 
     it("handles listAllActivities pagination", async () => {
-        const mockAxios = axios.create();
-        vi.mocked(mockAxios.get)
+        vi.mocked(mockInstance.get)
             .mockResolvedValueOnce({ data: { activities: [{ id: "1" }], nextPageToken: "token" } })
             .mockResolvedValueOnce({ data: { activities: [{ id: "2" }] } });
 
@@ -72,17 +71,15 @@ describe("JulesApiClient coverage", () => {
     });
 
     it("interceptor adds api key if present", () => {
-        const mockAxios: any = axios.create();
         const client = new JulesApiClient({ baseUrl: "http://url", apiKey: "key" });
-        const cb = mockAxios.interceptors.request._cb;
+        const cb = (mockInstance.interceptors.request as any)._cb;
         const config = cb({ headers: {} });
         expect(config.headers["X-Goog-Api-Key"]).toBe("key");
     });
 
     it("interceptor removes api key if absent", () => {
-        const mockAxios: any = axios.create();
         const client = new JulesApiClient({ baseUrl: "http://url" });
-        const cb = mockAxios.interceptors.request._cb;
+        const cb = (mockInstance.interceptors.request as any)._cb;
         const config = cb({ headers: { "X-Goog-Api-Key": "test" } });
         expect(config.headers["X-Goog-Api-Key"]).toBeUndefined();
     });

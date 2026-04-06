@@ -3,6 +3,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { h } from "preact";
 import { render, screen, fireEvent } from "@testing-library/preact";
+import userEvent from "@testing-library/user-event";
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { ChatThreadHeader } from "../../../dashboard/src/v2/components/chat/ChatThreadHeader.js";
 
@@ -149,7 +150,8 @@ describe("ChatThreadHeader", () => {
     expect(select).toBeDisabled();
   });
 
-  it("calls onAssignRoute with correctly selected option when a new worker is selected", () => {
+  it("calls onAssignRoute with correctly selected option when a new worker is selected", async () => {
+    const user = userEvent.setup();
     const onAssignRoute = vi.fn();
     const thread = { ...baseThread, title: "Select Change Test Thread" };
     render(
@@ -164,7 +166,7 @@ describe("ChatThreadHeader", () => {
     );
     const selects = screen.getAllByRole("combobox");
     const select = selects[selects.length - 1];
-    fireEvent.change(select, { target: { value: "virtual:gemini" } });
+    await user.selectOptions(select, "virtual:gemini");
     expect(onAssignRoute).toHaveBeenCalledWith(mockOptions[1]);
   });
 });

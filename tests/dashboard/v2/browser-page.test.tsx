@@ -3,6 +3,7 @@
 import { h } from "preact";
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, act, cleanup } from "@testing-library/preact";
+import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { BrowserPage } from "../../../dashboard/src/v2/BrowserPage.js";
 import { PreviewSessionSlider } from "../../../dashboard/src/v2/components/browser/PreviewSessionSlider.js";
@@ -430,15 +431,14 @@ describe("BrowserPage", () => {
   });
 
   it("launches a container from the placeholder card for any sprint", async () => {
+    const user = userEvent.setup();
     render(<BrowserPage />);
 
-    await act(async () => {
-      fireEvent.change(screen.getByRole("combobox"), { target: { value: "s3" } });
-    });
+    const combobox = screen.getByRole("combobox");
+    await user.selectOptions(combobox, "s3");
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Launch Container" }));
-    });
+    const button = screen.getByRole("button", { name: "Launch Container" });
+    await user.click(button);
 
     expect(mockStartPreviewSession).toHaveBeenCalledWith("p1", "s3");
     expect(mockRefreshSessions).toHaveBeenCalled();
