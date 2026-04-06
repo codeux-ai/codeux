@@ -440,6 +440,76 @@ describe("ProjectManagementRepository", () => {
     expect(notifier.scheduleProjectStructureRefresh).toHaveBeenCalledWith(project.id, { includeProjects: true });
   });
 
+  it("allows valid DAG dependencies within the same sprint", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "DAG Project",
+      sourceType: "local",
+      sourceRef: "/workspace/dag",
+    });
+    const sprint = repository.createSprint(project.id, { name: "Sprint 1" });
+
+    const taskA = repository.createTask(project.id, { sprintId: sprint.id, title: "A" });
+    const taskB = repository.createTask(project.id, { sprintId: sprint.id, title: "B", dependsOnTaskIds: [taskA.id] });
+    const taskC = repository.createTask(project.id, { sprintId: sprint.id, title: "C", dependsOnTaskIds: [taskB.id] });
+
+    const tasks = repository.listTasks(project.id, sprint.id);
+    expect(tasks.find((t) => t.id === taskB.id)?.dependsOnTaskIds).toEqual([taskA.id]);
+    expect(tasks.find((t) => t.id === taskC.id)?.dependsOnTaskIds).toEqual([taskB.id]);
+  });
+
+  it("rejects self-dependencies during creation and update", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Self Dep Project",
+      sourceType: "local",
+      sourceRef: "/workspace/self-dep",
+    });
+    const sprint = repository.createSprint(project.id, { name: "Sprint 1" });
+
+    const taskA = repository.createTask(project.id, { sprintId: sprint.id, title: "A" });
+
+    expect(() => {
+      repository.updateTask(taskA.id, { dependsOnTaskIds: [taskA.id] });
+    }).toThrow("cannot depend on itself");
+  });
+
+  it("rejects cross-sprint dependencies", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Cross Sprint Project",
+      sourceType: "local",
+      sourceRef: "/workspace/cross-sprint",
+    });
+    const sprint1 = repository.createSprint(project.id, { name: "Sprint 1" });
+    const sprint2 = repository.createSprint(project.id, { name: "Sprint 2" });
+
+    const task1 = repository.createTask(project.id, { sprintId: sprint1.id, title: "Task 1" });
+
+    expect(() => {
+      repository.createTask(project.id, { sprintId: sprint2.id, title: "Task 2", dependsOnTaskIds: [task1.id] });
+    }).toThrow(/does not belong to the same sprint/);
+  });
+
+  it("rejects cycles created via updates", async () => {
+    const { repository } = await createRepository();
+    const project = repository.createProject({
+      name: "Cycle Project",
+      sourceType: "local",
+      sourceRef: "/workspace/cycle",
+    });
+    const sprint = repository.createSprint(project.id, { name: "Sprint 1" });
+
+    const taskA = repository.createTask(project.id, { sprintId: sprint.id, title: "A" });
+    const taskB = repository.createTask(project.id, { sprintId: sprint.id, title: "B", dependsOnTaskIds: [taskA.id] });
+    const taskC = repository.createTask(project.id, { sprintId: sprint.id, title: "C", dependsOnTaskIds: [taskB.id] });
+
+    // Try to make A depend on C (creating a cycle: A -> C -> B -> A)
+    expect(() => {
+      repository.updateTask(taskA.id, { dependsOnTaskIds: [taskC.id] });
+    }).toThrow(/circular dependency graph/);
+  });
+
   it("does not touch updatedAt on no-op task updates", async () => {
     const { repository } = await createRepository();
     const project = repository.createProject({

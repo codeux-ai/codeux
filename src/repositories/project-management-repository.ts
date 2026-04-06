@@ -25,6 +25,7 @@ import type { ProjectWorkerAssignmentRecord } from "../contracts/worker-types.js
 import { resolveRepositoryHost } from "../infrastructure/git/repository-host-resolver.js";
 import { projectSummaryQuery } from "./project-management/project-summary-query.js";
 import { sprintSummaryQuery } from "./project-management/sprint-summary-query.js";
+import { validateTaskDependencies } from "./project-management/task-dependency-graph.js";
 
 const SELECTED_PROJECT_KEY = "selected_project_id";
 
@@ -390,6 +391,12 @@ export class ProjectManagementRepository {
       VALUES (?, ?)
     `);
 
+    const normalizedDependsOnTaskIds = this.normalizeDependencyIds(input.dependsOnTaskIds);
+    if (normalizedDependsOnTaskIds.length > 0) {
+      const sprintTasks = this.listTasks(projectId, input.sprintId);
+      validateTaskDependencies(id, input.sprintId, normalizedDependsOnTaskIds, sprintTasks);
+    }
+
     this.runInTransaction(() => {
       insertTask.run(
         id,
@@ -412,7 +419,7 @@ export class ProjectManagementRepository {
         now
       );
 
-      for (const dependencyId of this.normalizeDependencyIds(input.dependsOnTaskIds)) {
+      for (const dependencyId of normalizedDependsOnTaskIds) {
         insertDependency.run(id, dependencyId);
       }
     });
@@ -442,6 +449,12 @@ export class ProjectManagementRepository {
       : current.dependsOnTaskIds;
     const dependenciesChanged = input.dependsOnTaskIds !== undefined
       && !sameStringArray(nextDependsOnTaskIds, current.dependsOnTaskIds);
+
+    if (dependenciesChanged) {
+      const sprintTasks = this.listTasks(current.projectId, current.sprintId);
+      validateTaskDependencies(taskId, current.sprintId, nextDependsOnTaskIds, sprintTasks);
+    }
+
     const taskChanged = nextTitle !== current.title
       || nextPromptMarkdown !== current.promptMarkdown
       || nextDescription !== current.description
