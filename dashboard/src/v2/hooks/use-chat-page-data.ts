@@ -47,6 +47,7 @@ export const useChatPageData = (options?: { composerRef?: RefObject<HTMLTextArea
   const { connections, loading, manualRefreshing, refreshThreads } = useChatPageResources({
     selectedProject,
     cache,
+    execution,
     chatMode,
     threadData,
     invocationData,

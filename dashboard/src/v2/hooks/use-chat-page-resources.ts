@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "preact/hooks";
+import { useCallback, useEffect, useState, useRef } from "preact/hooks";
 import type { MutableRef } from "preact/hooks";
 import type { AgentConnection, ChatThread, ExecutionInvocationRecord, ChatMessageRecord } from "../types.js";
 import type { DashboardRealtimeServerMessage, ExecutionDashboardSnapshot, ExecutionConnectionSummary } from "../../types.js";
@@ -57,6 +57,7 @@ export const toAgentConnection = (connection: ExecutionConnectionSummary): Agent
 export const useChatPageResources = (options: {
   selectedProject: { id: string } | null;
   cache: ReturnType<typeof useMessageCache>;
+  execution: ExecutionDashboardSnapshot | null;
   chatMode: "threads" | "invocations";
   threadData: {
     selectedThreadId: string | null;
@@ -79,15 +80,22 @@ export const useChatPageResources = (options: {
     refreshInvocationMessages: (id: string | null, options?: { force?: boolean }) => Promise<void>;
   };
 }) => {
-  const { selectedProject, cache, chatMode, threadData, invocationData } = options;
+  const { selectedProject, cache, execution, chatMode, threadData, invocationData } = options;
 
   const [connections, setConnections] = useState<AgentConnection[]>([]);
   const [loading, setLoading] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
+  const refreshGuardRef = useRef<number>(0);
 
   const setConnectionsSnapshot = useCallback((nextConnections: AgentConnection[]): void => {
     setConnections((current) => areConnectionsEqual(current, nextConnections) ? current : nextConnections);
   }, []);
+
+  // Keep execution out of dependency array to prevent infinite refresh loops on execution ticks
+  const executionRef = useRef(execution);
+  useEffect(() => {
+    executionRef.current = execution;
+  }, [execution]);
 
   const refreshThreads = useCallback(async (refreshOptions?: { manual?: boolean; foreground?: boolean; mode?: "threads" | "invocations" | "both" }): Promise<void> => {
     if (!selectedProject) {
@@ -111,6 +119,7 @@ export const useChatPageResources = (options: {
     }
 
     const refreshMode = refreshOptions?.mode || (refreshOptions?.manual ? chatMode : "both");
+    const currentGuard = ++refreshGuardRef.current;
 
     try {
       const fetchPromises: Promise<any>[] = [];
@@ -118,11 +127,16 @@ export const useChatPageResources = (options: {
       let fetchConnectionsIndex = -1;
       let fetchInvocationsIndex = -1;
 
+      const currentExecution = executionRef.current;
+      const hasExecutionConnections = Boolean(selectedProject?.id && currentExecution?.projectId === selectedProject.id);
+
       if (refreshMode === "both" || refreshMode === "threads") {
         fetchThreadsIndex = fetchPromises.length;
         fetchPromises.push(fetchConversationThreads(selectedProject.id));
-        fetchConnectionsIndex = fetchPromises.length;
-        fetchPromises.push(fetchProjectConnections(selectedProject.id));
+        if (!hasExecutionConnections) {
+          fetchConnectionsIndex = fetchPromises.length;
+          fetchPromises.push(fetchProjectConnections(selectedProject.id));
+        }
       }
 
       if (refreshMode === "both" || refreshMode === "invocations") {
@@ -132,9 +146,15 @@ export const useChatPageResources = (options: {
 
       const results = await Promise.all(fetchPromises);
 
-      if (fetchThreadsIndex !== -1 && fetchConnectionsIndex !== -1) {
+      if (currentGuard !== refreshGuardRef.current) {
+        return;
+      }
+
+      if (fetchThreadsIndex !== -1) {
         const nextThreads = results[fetchThreadsIndex] as ChatThread[];
-        const nextConnections = results[fetchConnectionsIndex] as AgentConnection[];
+        const nextConnections = hasExecutionConnections
+          ? (currentExecution?.connections || []).map((c) => toAgentConnection(c))
+          : results[fetchConnectionsIndex] as AgentConnection[];
 
         cache.setThreads(selectedProject.id, nextThreads);
         cache.setConnections(selectedProject.id, nextConnections);

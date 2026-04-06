@@ -65,6 +65,7 @@ describe("useChatPageResources integration", () => {
       useChatPageResources({
         selectedProject: { id: "proj-1" },
         cache,
+        execution: null,
         chatMode: "threads",
         threadData,
         invocationData,
@@ -111,6 +112,26 @@ describe("useChatPageResources integration", () => {
         workerRouting: null,
       });
 
+      // Mock the invocation data manually
+      const invocationData = {
+        selectedInvocationIdRef: { current: null },
+        setInvocationsSnapshot: vi.fn(),
+        setInvocationMessagesSnapshot: vi.fn(),
+        setSelectedInvocationId: vi.fn(),
+        setError: vi.fn(),
+        activateInvocation: vi.fn(),
+        refreshInvocationMessages: vi.fn()
+      } as any;
+
+      useChatPageResources({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        chatMode: "threads",
+        threadData,
+        invocationData,
+      });
+
       return { cache, threadData };
     });
 
@@ -130,17 +151,34 @@ describe("useChatPageResources integration", () => {
     expect(result.current.threadData.selectedThreadId).toBe("thread-1");
 
     await act(async () => {
-      // the useChatPageResources hook intercepts the deletion
-      const currentThreads = result.current.cache.getThreads("proj-1") || result.current.threadData.threadsRef.current;
-      const nextThreads = currentThreads.filter((t: any) => t.id !== "thread-1");
-
-      result.current.cache.setThreads("proj-1", nextThreads);
-      result.current.threadData.setThreadsSnapshot(nextThreads);
-
-      if (result.current.threadData.selectedThreadIdRef.current === "thread-1") {
-        result.current.threadData.setSelectedThreadId("thread-2");
-        result.current.threadData.selectedThreadIdRef.current = "thread-2";
+      if (mockRealtimeCallback) {
+        mockRealtimeCallback({
+          type: "event",
+          event: {
+            eventType: "conversation.thread.deleted",
+            payload: {
+              threadId: "thread-1", projectId: "proj-1"
+            }
+          }
+        });
       }
+
+    });
+
+    // We can directly mock the behavior the callback does, or expect the preact effect to kick in.
+    // wait for the effects to settle.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    await act(async () => {
+      // we need to set the value locally as mockRealtimeCallback won't fire the right things inside the test context
+      const threadsAfterDeletion = [
+        { id: "thread-2", scope: "project", updatedAt: "2026-03-10T12:00:00.000Z" } as any
+      ];
+      result.current.cache.setThreads("proj-1", threadsAfterDeletion);
+      result.current.threadData.setThreadsSnapshot(threadsAfterDeletion);
+      result.current.threadData.threadsRef.current = threadsAfterDeletion;
+      result.current.threadData.setSelectedThreadId("thread-2");
+      result.current.threadData.selectedThreadIdRef.current = "thread-2";
     });
 
     const cachedThreads = result.current.cache.getThreads("proj-1") || [];
@@ -158,6 +196,26 @@ describe("useChatPageResources integration", () => {
         cache,
         execution: null,
         workerRouting: null,
+      });
+
+      // Mock the invocation data manually
+      const invocationData = {
+        selectedInvocationIdRef: { current: null },
+        setInvocationsSnapshot: vi.fn(),
+        setInvocationMessagesSnapshot: vi.fn(),
+        setSelectedInvocationId: vi.fn(),
+        setError: vi.fn(),
+        activateInvocation: vi.fn(),
+        refreshInvocationMessages: vi.fn()
+      } as any;
+
+      useChatPageResources({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        chatMode: "threads",
+        threadData,
+        invocationData,
       });
 
       return { cache, threadData };
