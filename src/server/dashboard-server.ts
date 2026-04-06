@@ -86,6 +86,11 @@ import { registerPlanningRoutes } from "./planning-routes.js";
 import { registerPreviewRoutes } from "./preview-routes.js";
 import { registerRuntimeRoutes } from "./runtime-routes.js";
 import { registerExecutionControlRoutes } from "./execution-control-routes.js";
+import { registerSettingsRoutes } from "./settings-routes.js";
+import { registerConnectionRoutes } from "./connection-routes.js";
+import { registerAgentPresetRoutes } from "./agent-preset-routes.js";
+import { registerExecutionInvocationRoutes } from "./execution-invocation-routes.js";
+import { registerQuicksprintRoutes } from "./quicksprint-routes.js";
 
 import { bootDashboardRealtimeWebSocketServer } from "./dashboard-realtime-websocket-server.js";
 import type { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
@@ -341,41 +346,10 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
     }
   });
 
-  app.get("/api/docker/containers", asyncRoute(async (req, res) => {
-    try {
-      const containers = await listDockerContainers();
-      res.json(containers);
-    } catch (error) {
-      res.json([]);
-    }
-  }));
 
-  app.get("/api/live-activities", asyncRoute(async (req, res) => {
-    try {
-      const activitiesBySession = await getLiveActivities();
-      res.json({
-        activitiesBySession,
-        polledAt: new Date().toISOString(),
-        cacheTtlMs: liveActivityCacheMs,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      res.status(500).json({ error: `Failed to fetch live activities: ${message}` });
-    }
-  }));
 
-  app.get("/api/system-settings", syncRoute((req, res) => {
-    res.json(getSystemSettings());
-  }));
 
-  app.put("/api/system-settings", syncRoute((req, res) => {
-    res.json(saveSystemSettings(req.body as SystemSettings));
-  }));
 
-  app.post("/api/system/reset-database", asyncRoute(async (req, res) => {
-    await resetDatabase();
-    res.json({ ok: true });
-  }));
 
 
   const deps: DashboardDependencies = options;
@@ -387,137 +361,12 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
   registerPreviewRoutes(app, deps);
   registerRuntimeRoutes(app, deps);
   registerExecutionControlRoutes(app, deps);
+  registerSettingsRoutes(app, deps, liveActivityCacheMs);
+  registerConnectionRoutes(app, deps);
+  registerAgentPresetRoutes(app, deps);
+  registerExecutionInvocationRoutes(app, deps);
+  registerQuicksprintRoutes(app, deps);
 
-  app.get("/api/projects/:projectId/connections", syncRoute((req, res) => {
-    res.json(options.listConnections(requireTrimmedString(req.params.projectId, "projectId")));
-  }));
-
-  app.get("/api/projects/:projectId/agent-presets", asyncRoute(async (req, res) => {
-    res.json(await options.listAgentPresets(requireTrimmedString(req.params.projectId, "projectId")));
-  }));
-
-  app.post("/api/projects/:projectId/agent-presets", asyncRoute(async (req, res) => {
-    res.status(201).json(await options.createAgentPreset(requireTrimmedString(req.params.projectId, "projectId"), req.body as CreateAgentPresetInput));
-  }));
-
-  app.patch("/api/agent-presets/:agentPresetId", asyncRoute(async (req, res) => {
-    res.json(await options.updateAgentPreset(requireTrimmedString(req.params.agentPresetId, "agentPresetId"), req.body as UpdateAgentPresetInput));
-  }));
-
-  app.delete("/api/agent-presets/:agentPresetId", asyncRoute(async (req, res) => {
-    await options.deleteAgentPreset(requireTrimmedString(req.params.agentPresetId, "agentPresetId"));
-    res.json({ ok: true });
-  }));
-
-  app.post("/api/agent-presets/:agentPresetId/import-markdown", asyncRoute(async (req, res) => {
-    if (!options.importAgentPresetFromMarkdown) {
-      res.status(404).json({ error: "Markdown import is not enabled for agents." });
-      return;
-    }
-    res.json(await options.importAgentPresetFromMarkdown(requireTrimmedString(req.params.agentPresetId, "agentPresetId")));
-  }));
-
-  app.post("/api/projects/:projectId/agent-presets/sync-markdown", asyncRoute(async (req, res) => {
-    if (!options.syncAllAgentPresetsFromMarkdown) {
-      res.status(404).json({ error: "Bulk markdown sync is not enabled for agents." });
-      return;
-    }
-    res.json(await options.syncAllAgentPresetsFromMarkdown(requireTrimmedString(req.params.projectId, "projectId")));
-  }));
-
-  app.patch("/api/connections/:connectionId", syncRoute((req, res) => {
-    res.json(options.updateConnection(requireTrimmedString(req.params.connectionId, "connectionId"), req.body as UpdateMcpConnectionInput));
-  }));
-
-  app.get("/api/projects/:projectId/execution/invocations", syncRoute((req, res) => {
-    res.json(options.listProjectInvocations(requireTrimmedString(req.params.projectId, "projectId")));
-  }));
-
-  app.get("/api/execution/invocations/:invocationId/messages", syncRoute((req, res) => {
-    res.json(options.listInvocationMessages(requireTrimmedString(req.params.invocationId, "invocationId")));
-  }));
-
-  app.get("/api/settings/import-sources", syncRoute((req, res) => {
-    res.json(getExternalSettingsHints());
-  }));
-
-  app.get("/api/git-status", asyncRoute(async (req, res) => {
-    try {
-      const status = await getGitStatus();
-      res.json(status);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      res.status(500).json({ error: `Failed to fetch git status: ${message}` });
-    }
-  }));
-
-  app.get("/api/projects/:projectId/quicksprints/templates", syncRoute((req, res) => {
-    const projectId = requireTrimmedString(req.params.projectId, "projectId");
-    if (!options.quicksprintService) {
-      res.status(404).json({ error: "Quicksprint service is not enabled." });
-      return;
-    }
-    res.json(options.quicksprintService.listTemplates(projectId));
-  }));
-
-  app.get("/api/projects/:projectId/quicksprints/templates/:templateId", syncRoute((req, res) => {
-    const projectId = requireTrimmedString(req.params.projectId, "projectId");
-    const templateId = requireTrimmedString(req.params.templateId, "templateId");
-    if (!options.quicksprintService) {
-      res.status(404).json({ error: "Quicksprint service is not enabled." });
-      return;
-    }
-    const template = options.quicksprintService.getTemplate(projectId, templateId);
-    if (!template) {
-      res.status(404).json({ error: "Template not found" });
-      return;
-    }
-    res.json(template);
-  }));
-
-  app.post("/api/projects/:projectId/quicksprints/templates", syncRoute((req, res) => {
-    const projectId = requireTrimmedString(req.params.projectId, "projectId");
-    if (!options.quicksprintService) {
-      res.status(404).json({ error: "Quicksprint service is not enabled." });
-      return;
-    }
-    const template = options.quicksprintService.createCustomTemplate(projectId, req.body as CreateQuicksprintTemplateInput);
-    res.status(201).json(template);
-  }));
-
-  app.patch("/api/projects/:projectId/quicksprints/templates/:templateId", syncRoute((req, res) => {
-    const projectId = requireTrimmedString(req.params.projectId, "projectId");
-    const templateId = requireTrimmedString(req.params.templateId, "templateId");
-    if (!options.quicksprintService) {
-      res.status(404).json({ error: "Quicksprint service is not enabled." });
-      return;
-    }
-    const template = options.quicksprintService.updateCustomTemplate(projectId, templateId, req.body as UpdateQuicksprintTemplateInput);
-    res.json(template);
-  }));
-
-  app.delete("/api/projects/:projectId/quicksprints/templates/:templateId", syncRoute((req, res) => {
-    const projectId = requireTrimmedString(req.params.projectId, "projectId");
-    const templateId = requireTrimmedString(req.params.templateId, "templateId");
-    if (!options.quicksprintService) {
-      res.status(404).json({ error: "Quicksprint service is not enabled." });
-      return;
-    }
-    options.quicksprintService.deleteCustomTemplate(projectId, templateId);
-    res.json({ ok: true });
-  }));
-
-  app.post("/api/projects/:projectId/quicksprints/execute", asyncRoute(async (req, res) => {
-    const projectId = requireTrimmedString(req.params.projectId, "projectId");
-    if (!options.quicksprintService) {
-      res.status(404).json({ error: "Quicksprint service is not enabled." });
-      return;
-    }
-    const ac = new AbortController();
-    res.on("close", () => { if (!res.writableFinished) ac.abort(); });
-    const sprint = await options.quicksprintService.executeQuicksprint(projectId, req.body as QuicksprintExecutionInput, ac.signal);
-    res.status(201).json(sprint);
-  }));
 
   app.get("/favicon.ico", (req, res) => res.status(204).end());
 
