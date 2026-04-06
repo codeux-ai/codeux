@@ -49,6 +49,19 @@ export interface ExecutionTaskDispatchSummaryRow {
   active_lease_expires_at: string | null;
 }
 
+export interface OverviewTelemetryProjectSummaryRow {
+  project_id: string;
+  project_name: string;
+  sprint_id: string;
+  sprint_name: string;
+  sprint_number: number | string | null;
+  sprint_run_id: string;
+  sprint_run_status: string;
+  active_dispatch_count: number | string;
+  running_dispatch_count: number | string;
+  updated_at: string | null;
+}
+
 export interface ExecutionRuntimeEventSummaryRow {
   id: string;
   scope_type: string;
