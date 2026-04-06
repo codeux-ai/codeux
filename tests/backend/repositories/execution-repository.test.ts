@@ -1077,6 +1077,79 @@ describe("ExecutionRepository", () => {
     expect(snapshot.sprintRuns[0]?.humanIntervention?.instructions).toContain("enable feature PR automerge");
   });
 
+
+  it("includes active projects and orders recent events in overview telemetry", async () => {
+    const { projectRepository, executionRepository } = await createRepositories();
+    const project = projectRepository.createProject({
+      name: "Active Telemetry Project",
+      sourceType: "local",
+      sourceRef: "/workspace/active-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Active Sprint",
+      number: 9,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+      triggerType: "dashboard",
+      executorMode: "mixed",
+    });
+
+    const task = projectRepository.createTask(project.id, { sprintId: sprint.id,
+      title: "Active Task",
+      taskKey: "TSK-1",
+      status: "running",
+      type: "feature",
+      promptMarkdown: "Do work",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      state: "RUNNING",
+      provider: "virtual",
+      workerBranch: "worker-branch",
+    });
+
+
+
+    // Add some events in order
+    executionRepository.appendSprintRunEvent(sprintRun.id, "sprint_run_started", "system", {
+      startedBy: "User",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 10)); // Ensure different timestamps
+
+    executionRepository.appendTaskRunEvent(taskRun.id, "task_run_started", "worker", {
+      workerId: "worker-1",
+    });
+
+    const telemetry = executionRepository.getOverviewTelemetrySnapshot();
+
+    expect(telemetry.activeProjects).toHaveLength(1);
+    expect(telemetry.activeProjects[0]).toMatchObject({
+      projectId: project.id,
+      sprintRunId: sprintRun.id,
+      sprintRunStatus: "running",
+    });
+
+    expect(telemetry.attentionProjects).toHaveLength(0);
+
+    // Recent events should be ordered DESC (newest first)
+    expect(telemetry.recentEvents.length).toBeGreaterThanOrEqual(2);
+    expect(telemetry.recentEvents[0]).toMatchObject({
+      scopeType: "task_run",
+      eventType: "task_run_started",
+    });
+    expect(telemetry.recentEvents[1]).toMatchObject({
+      scopeType: "sprint_run",
+      eventType: "sprint_run_started",
+    });
+  });
+
   it("includes paused intervention projects in overview telemetry", async () => {
     const { projectRepository, executionRepository } = await createRepositories();
     const project = projectRepository.createProject({
