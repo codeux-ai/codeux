@@ -17,6 +17,7 @@ import {
   systemSettingsToDashboardSettings,
   toProjectSettingsOverride,
   toSprintSettingsOverride,
+  invalidateSettingsCache,
 } from "../services/settings-resolution-service.js";
 import { DEFAULT_VIRTUAL_WORKER_MODELS } from "./settings-defaults.js";
 
@@ -46,6 +47,7 @@ export class SettingsRepository {
   saveSystemSettings(input: SystemSettings): SystemSettings {
     const normalized = sanitizeSystemSettings(input, this.externalHints);
     this.storage.writeSystemPayload(JSON.stringify(normalized));
+    invalidateSettingsCache();
     return normalized;
   }
 
@@ -101,11 +103,13 @@ export class SettingsRepository {
     const base = this.getSystemSettings().defaults;
     const normalized = toProjectSettingsOverride(base, patch, this.externalHints);
     this.storage.writeProjectPayload(projectId, JSON.stringify(normalized));
+    invalidateSettingsCache(projectId);
     return normalized;
   }
 
   resetProjectSettings(projectId: string): void {
     this.storage.deleteProjectPayload(projectId);
+    invalidateSettingsCache(projectId);
   }
 
   getSprintSettings(sprintId: string): SprintSettingsOverride {
@@ -125,21 +129,25 @@ export class SettingsRepository {
   saveSprintSettings(sprintId: string, baseProjectSettings: ProjectSettings, patch: SprintSettingsOverride): SprintSettingsOverride {
     const normalized = toSprintSettingsOverride(baseProjectSettings, patch, this.externalHints);
     this.storage.writeSprintPayload(sprintId, JSON.stringify(normalized));
+    invalidateSettingsCache(undefined, sprintId); // This relies on the fallback we added
     return normalized;
   }
 
   resetSprintSettings(sprintId: string): void {
     this.storage.deleteSprintPayload(sprintId);
+    invalidateSettingsCache(undefined, sprintId);
   }
 
   resetAllData(): void {
     this.storage.resetAllData();
+    invalidateSettingsCache();
   }
 
   resolveProjectDashboardSettings(projectId: string): EffectiveSettingsResponse {
     return resolveDashboardSettings({
       systemSettings: this.getSystemSettings(),
       projectOverride: this.getProjectSettings(projectId),
+      projectId,
     });
   }
 
@@ -148,6 +156,8 @@ export class SettingsRepository {
       systemSettings: this.getSystemSettings(),
       projectOverride: this.getProjectSettings(projectId),
       sprintOverride: this.getSprintSettings(sprintId),
+      projectId,
+      sprintId,
     });
   }
 

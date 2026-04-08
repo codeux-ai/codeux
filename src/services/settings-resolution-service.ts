@@ -475,11 +475,34 @@ export function resolveSprintProjectSettings(
   return sanitizeProjectSettings(deepMerge(projectSettings, sprintOverride || {}));
 }
 
+const MAX_CACHE_SIZE = 1000;
+const dashboardSettingsCache = new Map<string, EffectiveSettingsResponse>();
+
 export function resolveDashboardSettings(args: {
   systemSettings: SystemSettings;
   projectOverride?: ProjectSettingsOverride | null;
   sprintOverride?: SprintSettingsOverride | null;
+  projectId?: string;
+  sprintId?: string;
 }): EffectiveSettingsResponse {
+  let cacheKey = "system";
+  if (args.projectId && args.sprintId) {
+    cacheKey = `project:${args.projectId}:sprint:${args.sprintId}`;
+  } else if (args.projectId) {
+    cacheKey = `project:${args.projectId}`;
+  } else if (args.projectOverride || args.sprintOverride) {
+    // Cannot safely cache overrides without IDs under a shared 'system' key
+    cacheKey = `transient:${Math.random()}`;
+  }
+
+  const cached = dashboardSettingsCache.get(cacheKey);
+  if (cached && !cacheKey.startsWith("transient:")) {
+    // Basic LRU: move to end
+    dashboardSettingsCache.delete(cacheKey);
+    dashboardSettingsCache.set(cacheKey, cached);
+    return cached;
+  }
+
   const baseProject = args.systemSettings.defaults;
   const projectSettings = resolveProjectSettings(args.systemSettings, args.projectOverride);
   const sprintSettings = resolveSprintProjectSettings(args.systemSettings, args.projectOverride, args.sprintOverride);
@@ -514,10 +537,54 @@ export function resolveDashboardSettings(args: {
     Object.assign(sources, flattenSources(args.sprintOverride, "sprint"));
   }
 
-  return {
+  const result = {
     settings: dashboardSettings,
     sources,
   };
+
+  if (!cacheKey.startsWith("transient:")) {
+    dashboardSettingsCache.set(cacheKey, result);
+    if (dashboardSettingsCache.size > MAX_CACHE_SIZE) {
+      const firstKey = dashboardSettingsCache.keys().next().value;
+      if (firstKey) {
+        dashboardSettingsCache.delete(firstKey);
+      }
+    }
+  }
+
+  return result;
+}
+
+export function invalidateSettingsCache(projectId?: string, sprintId?: string): void {
+  if (!projectId && !sprintId) {
+    dashboardSettingsCache.clear();
+    return;
+  }
+
+  if (projectId && sprintId) {
+    dashboardSettingsCache.delete(`project:${projectId}:sprint:${sprintId}`);
+    return;
+  }
+
+  if (sprintId) {
+    // Fallback if only sprintId is provided (though we expect both for strict invalidation)
+    for (const key of dashboardSettingsCache.keys()) {
+      if (key.endsWith(`:sprint:${sprintId}`)) {
+        dashboardSettingsCache.delete(key);
+      }
+    }
+    return;
+  }
+
+  if (projectId) {
+    // Invalidate project settings and any dependent sprints that might have been loaded
+    dashboardSettingsCache.delete(`project:${projectId}`);
+    for (const key of dashboardSettingsCache.keys()) {
+      if (key.startsWith(`project:${projectId}:sprint:`)) {
+        dashboardSettingsCache.delete(key);
+      }
+    }
+  }
 }
 
 export function toProjectSettingsOverride(
