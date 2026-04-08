@@ -63,4 +63,25 @@ describe("WorkspaceManager", () => {
     expect(guidance).toContain("- src/index.ts: exists");
     expect(guidance).toContain("- ../outside: outside-workspace");
   });
+
+  it("runs workspace commands with an explicit container entrypoint", async () => {
+    vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: "", stderr: "" } as any);
+
+    await manager.runWorkspaceCommand("docker-volume://workspace-1", "git", ["status", "--short"]);
+
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      expect.arrayContaining([
+        "run",
+        "--entrypoint",
+        "git",
+        "alpine/git",
+        "status",
+        "--short",
+      ]),
+      expect.any(String),
+      expect.any(Object),
+      expect.any(Object),
+    );
+  });
 });

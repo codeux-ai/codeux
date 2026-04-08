@@ -168,10 +168,11 @@ export class WorkspaceManager implements IWorkspaceManager {
       CONTAINER_WORKSPACE_ROOT,
       "--mount",
       `type=volume,source=${volumeName},target=${CONTAINER_WORKSPACE_ROOT}`,
+      "--entrypoint",
+      command,
       "-e",
       `HOME=${CONTAINER_WORKSPACE_ROOT}/.sprint-os-home`,
       WORKSPACE_HELPER_IMAGE,
-      command,
       ...args,
     ];
     return await runCommandStrict("docker", dockerArgs, process.cwd(), options.env ?? process.env, { signal: options.signal });
@@ -234,7 +235,7 @@ export class WorkspaceManager implements IWorkspaceManager {
         "bash",
         [
           "-lc",
-          `cat ${shellQuote(bundlePath)} | docker run --rm -i --mount type=volume,source=${shellQuote(volumeName)},target=${shellQuote(CONTAINER_WORKSPACE_ROOT)} ${shellQuote(WORKSPACE_HELPER_IMAGE)} sh -lc ${shellQuote(initScript)}`,
+          `cat ${shellQuote(bundlePath)} | docker run --rm -i --mount type=volume,source=${shellQuote(volumeName)},target=${shellQuote(CONTAINER_WORKSPACE_ROOT)} --entrypoint sh ${shellQuote(WORKSPACE_HELPER_IMAGE)} -lc ${shellQuote(initScript)}`,
         ],
         repoPath,
       );
