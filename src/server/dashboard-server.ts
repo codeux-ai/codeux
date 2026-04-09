@@ -230,22 +230,52 @@ export interface DashboardServerHandle {
   server: Server;
 }
 
+const listenDashboardServer = async (
+  app: Express,
+  host: string,
+  port: number
+): Promise<DashboardServerHandle> => {
+  const server = await new Promise<Server>((resolve, reject) => {
+    const listeningServer = createServer(app);
+    if (typeof (listeningServer as Partial<Server>).once === "function") {
+      listeningServer.once("error", reject);
+    } else {
+      listeningServer.on("error", reject);
+    }
+    listeningServer.listen(port, host, () => resolve(listeningServer));
+  });
+
+  const address = typeof server.address === "function" ? server.address() : null;
+  if (!address || typeof address === "string") {
+    if (port === 0) {
+      throw new Error("Dashboard server did not bind to a TCP port.");
+    }
+    return { port, server };
+  }
+
+  return { port: address.port, server };
+};
+
 const bindDashboardServer = async (
   app: Express,
   startPort: number,
   logger: Logger
 ): Promise<DashboardServerHandle> => {
   const host = (process.env.DASHBOARD_HOST || "127.0.0.1").trim() || "127.0.0.1";
-  let port = Math.max(1, Math.min(65535, Math.round(startPort)));
+  const roundedPort = Math.round(startPort);
+  const initialPort = Number.isFinite(roundedPort)
+    ? Math.max(0, Math.min(65535, roundedPort))
+    : 1;
+
+  if (initialPort === 0) {
+    return await listenDashboardServer(app, host, 0);
+  }
+
+  let port = initialPort;
 
   while (port <= 65535) {
     try {
-      const server = await new Promise<Server>((resolve, reject) => {
-        const listeningServer = createServer(app);
-        listeningServer.listen(port, host, () => resolve(listeningServer));
-        listeningServer.on("error", reject);
-      });
-      return { port, server };
+      return await listenDashboardServer(app, host, port);
     } catch (error) {
       const message = error as NodeJS.ErrnoException;
       if (message.code !== "EADDRINUSE") {
@@ -445,4 +475,3 @@ export const setupDashboardServer = async (options: DashboardServerOptions): Pro
 
   return handle;
 };
-

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+// @vitest-environment happy-dom
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/preact";
 import { useSettingsPageState } from "../../../dashboard/src/v2/hooks/use-settings-page-state.js";

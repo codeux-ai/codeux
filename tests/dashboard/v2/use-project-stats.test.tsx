@@ -1,5 +1,5 @@
 /**
- * @vitest-environment jsdom
+ * @vitest-environment happy-dom
  */
 import { h } from "preact";
 import { render, cleanup, waitFor } from "@testing-library/preact";

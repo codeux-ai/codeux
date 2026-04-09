@@ -1,4 +1,4 @@
-/** @vitest-environment jsdom */
+/** @vitest-environment happy-dom */
 /** @jsx h */
 /** @jsxFrag Fragment */
 import { h, Fragment } from "preact";

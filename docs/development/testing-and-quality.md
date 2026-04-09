@@ -10,57 +10,58 @@ Test files are organized under `tests/`:
 
 - Run tests
 ```bash
-npm test
+pnpm test
 ```
 
 - Run backend tests only
 ```bash
-npm run test:backend
+pnpm run test:backend
 ```
 
 - Run dashboard tests only
 ```bash
-npm run test:dashboard
+pnpm run test:dashboard
 ```
 
 - Run coverage report (verifies 80% global thresholds)
 ```bash
-npm run test:coverage
+pnpm run test:coverage
 ```
 
 - Run backend coverage only
 ```bash
-npm run test:backend:coverage
+pnpm run test:backend:coverage
 ```
 
 - Run the local fast CI mirror (strict TS validation plus tests)
 ```bash
-npm run ci
+pnpm run ci
 ```
 
 GitHub Actions optimization notes:
 - the hosted CI workflow now uses a single `verify` job on the self-hosted runner so checkout, dependency installation, and cache restoration only happen once per run
-- the hosted CI workflow runs the same ordered validation path as the local `npm run ci` script, then finishes with `npm run audit`
+- the hosted CI workflow installs dependencies with `pnpm` and runs the same ordered validation path as the local `pnpm run ci` script, then finishes with `pnpm run audit`
 - the hosted CI workflow cancels superseded runs for the same branch or PR
 - CI avoids a second plain `vitest` pass because backend coverage already executes the backend suite while enforcing thresholds
 - dashboard tests still run as a separate Vitest invocation because coverage thresholds target `src/**/*.ts`, not the dashboard bundle under `dashboard/`
-- dependency installation uses the cached npm package store with `npm ci --prefer-offline --no-audit --ignore-scripts`
+- dependency installation uses `pnpm install --frozen-lockfile --ignore-scripts` with the pnpm store cached by `actions/setup-node`
 - Vite, Vitest, and TypeScript incremental metadata now write into repo-local `.cache/` directories so GitHub Actions can restore them across workflow runs and the `build` step can reuse prior typecheck work
 - the shared Vitest setup defaults `LOG_LEVEL` to `error` during tests and installs lightweight canvas stubs so dashboard-heavy suites avoid noisy server logs and repeated DOM warnings
 - prefer `happy-dom` for simple dashboard component and hook tests; reserve `jsdom` for cases that need stricter browser behavior
+- backend server tests that need a real listener should bind with `port: 0` and reuse `handle.port` instead of reserving a throwaway port first
 
 - Build backend and dashboard
 ```bash
-npm run build
+pnpm run build
 ```
-  - The build script intentionally runs toolchain commands directly (`tsc`, dashboard typecheck, `vite build`) instead of nested `npm run` calls to avoid npm env-config warning noise in child npm processes.
-  - TypeScript validation now uses incremental `.tsbuildinfo` files in `.cache/tsc/`, which lets `npm run build` reuse work from an earlier `npm run lint` or `npm run typecheck` in the same job.
+  - The build script intentionally runs toolchain commands directly (`tsc`, dashboard typecheck, `vite build`) instead of nested package-manager calls to keep child-process overhead and command noise down.
+  - TypeScript validation now uses incremental `.tsbuildinfo` files in `.cache/tsc/`, which lets `pnpm run build` reuse work from an earlier `pnpm run lint` or `pnpm run typecheck` in the same job.
   - The repo-root `vite.config.ts` sets `root: "dashboard"`, so `vite build` and `vite` must keep using that config to resolve `dashboard/index.html`.
   - The dashboard build now uses Vite 8's native `build.rolldownOptions` path instead of the Rollup compatibility key.
 
 - Run dashboard typecheck only
 ```bash
-npm run typecheck:dashboard
+pnpm run typecheck:dashboard
 ```
 
 ## Test Coverage Areas
@@ -72,6 +73,7 @@ npm run typecheck:dashboard
 - Task service prompt construction
 - Instruction template rendering and fallback behavior
 - Route-level server tests should prefer in-process `supertest` requests over binding ephemeral TCP listeners unless host routing or socket behavior is the thing under test
+- When socket behavior is under test, let `setupDashboardServer()` bind directly to `port: 0` so the OS assigns the ephemeral port in one step
 
 ### Dashboard
 - Settings default cloning

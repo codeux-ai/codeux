@@ -163,8 +163,8 @@ Checks:
 ## Useful Commands
 
 ```bash
-npm test
-npm run build
+pnpm test
+pnpm run build
 curl http://localhost:4444/api/status
 curl http://localhost:4444/api/git-status
 ```

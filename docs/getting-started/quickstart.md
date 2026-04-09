@@ -5,15 +5,15 @@ This guide gets the MCP server and dashboard running locally with minimal setup.
 ## Prerequisites
 
 - Node.js 20+
-- npm
+- pnpm
 - A valid Jules API key
 - Optional for remote git intelligence: GitHub CLI (`gh`) authenticated
 
 ## Install and Build
 
 ```bash
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 ## Configure API Key
@@ -28,7 +28,7 @@ node dist/index.js --api-key YOUR_KEY
 2. Environment variable
 ```bash
 export JULES_API_KEY=YOUR_KEY
-npm start
+pnpm start
 ```
 
 3. `.env` file in project root
@@ -46,7 +46,7 @@ JULES_API_KEY=YOUR_KEY
 ## Run in Development
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 This starts the server directly from TypeScript source through Node's `ts-node` ESM register hook, so local development uses the same `.js` import specifiers as the production build without requiring a precompile step.
@@ -54,8 +54,8 @@ This starts the server directly from TypeScript source through Node's `ts-node` 
 ## Run Compiled Server
 
 ```bash
-npm run build
-npm start
+pnpm run build
+pnpm start
 ```
 
 ## Open Dashboard

@@ -55,15 +55,6 @@ async function openRealtimeSocket(port: number): Promise<WebSocket> {
   return socket;
 }
 
-async function getAvailablePort(): Promise<number> {
-  const blocker = await new Promise<Server>((resolve) => {
-    const server = express().listen(0, "127.0.0.1", () => resolve(server));
-  });
-  const port = (blocker.address() as AddressInfo).port;
-  await closeServer(blocker);
-  return port;
-}
-
 async function makeHostRequest(args: {
   port: number;
   host: string;
@@ -213,7 +204,7 @@ describe("setupDashboardServer", () => {
     const handle = await setupDashboardServer({
       app,
       dashboardDir: dir,
-      port: await getAvailablePort(),
+      port: 0,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
 
@@ -381,7 +372,7 @@ describe("setupDashboardServer", () => {
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
-      port: await getAvailablePort(),
+      port: 0,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
       getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
@@ -532,7 +523,7 @@ describe("setupDashboardServer", () => {
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
-      port: await getAvailablePort(),
+      port: 0,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
       getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
@@ -643,7 +634,7 @@ describe("setupDashboardServer", () => {
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
-      port: await getAvailablePort(),
+      port: 0,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
       getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
@@ -787,7 +778,7 @@ describe("setupDashboardServer", () => {
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
-      port: await getAvailablePort(),
+      port: 0,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
       getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
@@ -877,7 +868,7 @@ describe("setupDashboardServer", () => {
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
-      port: 3001,
+      port: 0,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
       getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
@@ -920,11 +911,10 @@ describe("setupDashboardServer", () => {
 
     try {
       const app = express();
-      const port = await getAvailablePort();
       const handle = await setupDashboardServer({
         app,
         dashboardDir: "dashboard",
-        port,
+        port: 0,
         liveActivityCacheMs: 1000,
         getStatus: () => ({ ok: true }),
         getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
@@ -1015,7 +1005,7 @@ describe("setupDashboardServer", () => {
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
-      port: 4000,
+      port: 0,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
       getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
@@ -1053,7 +1043,7 @@ describe("setupDashboardServer", () => {
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
-      port: await getAvailablePort(),
+      port: 0,
       liveActivityCacheMs: 1000,
       getStatus: () => ({
         project_id: "project-1",
@@ -1146,7 +1136,7 @@ describe("setupDashboardServer", () => {
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
-      port: await getAvailablePort(),
+      port: 0,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
       getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
@@ -1217,7 +1207,7 @@ describe("setupDashboardServer", () => {
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
-      port: await getAvailablePort(),
+      port: 0,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
       getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
@@ -1303,7 +1293,6 @@ describe("setupDashboardServer", () => {
   it("streams and replays realtime events over /api/realtime", async () => {
     const app = express();
     const realtimeService = await createRealtimeService();
-    const port = await getAvailablePort();
     realtimeService.setSnapshotLoaders({
       getProjectsSnapshot: () => ({
         projects: [],
@@ -1338,7 +1327,7 @@ describe("setupDashboardServer", () => {
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
-      port,
+      port: 0,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
       getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
@@ -1421,7 +1410,6 @@ describe("setupDashboardServer", () => {
   it("requires a snapshot when websocket replay would truncate missed events", async () => {
     const app = express();
     const realtimeService = await createRealtimeService();
-    const port = await getAvailablePort();
     realtimeService.setSnapshotLoaders({
       getProjectsSnapshot: () => ({
         projects: [],
@@ -1456,7 +1444,7 @@ describe("setupDashboardServer", () => {
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
-      port,
+      port: 0,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
       getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
@@ -1520,7 +1508,6 @@ describe("setupDashboardServer", () => {
   it("requires a snapshot when a client misses a live-only project snapshot event", async () => {
     const app = express();
     const realtimeService = await createRealtimeService();
-    const port = await getAvailablePort();
     realtimeService.setSnapshotLoaders({
       getProjectsSnapshot: () => ({
         projects: [],
@@ -1555,7 +1542,7 @@ describe("setupDashboardServer", () => {
     const handle = await setupDashboardServer({
       app,
       dashboardDir: "dashboard",
-      port,
+      port: 0,
       liveActivityCacheMs: 1000,
       getStatus: () => ({ ok: true }),
       getExecutionSnapshot: () => ({ projectId: null, projectName: null, sprintRuns: [], taskDispatches: [], connections: [], primaryAssignedWorker: null, overflowAssignedWorkers: [], attentionItems: [], recentEvents: [], updatedAt: null }),
