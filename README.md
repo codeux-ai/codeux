@@ -284,6 +284,6 @@ If you want to contribute or run from source:
 
 ---
 
-## 📄 License
+## 📄 License 
 
 This project is licensed under the **ISC License**.
