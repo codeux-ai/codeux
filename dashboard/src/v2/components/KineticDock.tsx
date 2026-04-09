@@ -6,6 +6,7 @@ import gsap from "gsap";
 import { useProjectData } from "../context/project-data.js";
 import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
+import { MAGNETIC_RADIUS, HOVER_EASE, RELEASE_EASE } from "../lib/motion/interactions.js";
 
 /* Chat sits left of the divider — the rest are standard nav */
 const LEFT_ITEMS = [
@@ -70,7 +71,11 @@ export const KineticDock: FunctionComponent = () => {
 
     /* Active indicator — DOM-based so the divider doesn't break the math */
     useLayoutEffect(() => {
-        updateIndicatorPosition();
+        // Queue until after layout paint to ensure offsets are finalized without transformations affecting calculations.
+        const frame = requestAnimationFrame(() => {
+            updateIndicatorPosition();
+        });
+        return () => cancelAnimationFrame(frame);
     }, [updateIndicatorPosition]);
 
     useEffect(() => {
@@ -94,7 +99,7 @@ export const KineticDock: FunctionComponent = () => {
             const rect    = item.getBoundingClientRect();
             const centerX = rect.left + rect.width / 2;
             const dist    = Math.abs(mouseX - centerX);
-            const maxDist = 110;
+            const maxDist = MAGNETIC_RADIUS;
 
             if (dist < maxDist) {
                 const ratio = 1 - Math.pow(dist / maxDist, 1.5);
@@ -102,11 +107,11 @@ export const KineticDock: FunctionComponent = () => {
                     scale: 1 + 0.45 * ratio,
                     y: -18 * ratio,
                     duration: 0.35,
-                    ease: "power2.out",
+                    ease: RELEASE_EASE,
                     overwrite: "auto",
                 });
             } else {
-                gsap.to(item, { scale: 1, y: 0, duration: 0.35, ease: "power2.out", overwrite: "auto" });
+                gsap.to(item, { scale: 1, y: 0, duration: 0.35, ease: RELEASE_EASE, overwrite: "auto" });
             }
         });
     };
@@ -114,7 +119,7 @@ export const KineticDock: FunctionComponent = () => {
     const handleMouseLeave = () => {
         itemRefs.current.forEach(item => {
             if (!item) return;
-            gsap.to(item, { scale: 1, y: 0, duration: 0.55, ease: "elastic.out(1, 0.5)", overwrite: "auto" });
+            gsap.to(item, { scale: 1, y: 0, duration: 0.55, ease: HOVER_EASE, overwrite: "auto" });
         });
     };
 

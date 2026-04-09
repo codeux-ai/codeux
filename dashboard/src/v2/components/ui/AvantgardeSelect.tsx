@@ -4,6 +4,7 @@ import { createPortal } from "preact/compat";
 import { Check, ChevronDown } from "lucide-preact";
 import gsap from "gsap";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { HAPTIC_PRESS_SCALE, HOVER_EASE, RELEASE_EASE } from "../../lib/motion/interactions.js";
 
 export interface SelectOption {
   value: string;
@@ -61,6 +62,17 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
   const [open, setOpen] = useState(false);
   const [isRendered, setIsRendered] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const prefersReducedMotion = useReducedMotion();
+
+  const handlePointerDown = () => {
+    if (!triggerRef.current || prefersReducedMotion) return;
+    gsap.to(triggerRef.current, { scale: HAPTIC_PRESS_SCALE, duration: 0.15, ease: RELEASE_EASE, overwrite: "auto" });
+  };
+
+  const handlePointerUp = () => {
+    if (!triggerRef.current || prefersReducedMotion) return;
+    gsap.to(triggerRef.current, { scale: 1, duration: 0.35, ease: HOVER_EASE, overwrite: "auto" });
+  };
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -354,6 +366,10 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
       <button
         ref={triggerRef}
         type="button"
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onPointerLeave={handlePointerUp}
         onClick={() => !disabled && setOpen(!open)}
         onKeyDown={(e) => {
           if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === " ")) {

@@ -1,10 +1,15 @@
 import type { FunctionComponent, ComponentProps } from "preact";
 import { memo } from "preact/compat";
+import { useRef } from "preact/hooks";
+import gsap from "gsap";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { MAGNETIC_RADIUS, HAPTIC_PRESS_SCALE, HOVER_EASE, RELEASE_EASE } from "../../lib/motion/interactions.js";
 
 export interface ButtonProps extends ComponentProps<"button"> {
   pending?: boolean;
   variant?: "primary" | "secondary" | "danger" | "ghost" | "signal";
   size?: "sm" | "md" | "lg";
+  magnetic?: boolean;
 }
 
 const VARIANTS = {
@@ -28,15 +33,59 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   size = "md",
   pending = false,
   disabled,
+  magnetic = false,
   ...props
 }) => {
-  const baseClasses = "group/btn inline-flex items-center justify-center gap-2 font-bold transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:opacity-60 disabled:cursor-not-allowed hover:-translate-y-px disabled:hover:translate-y-0 active:scale-95 disabled:active:scale-100 touch-target";
+  const ref = useRef<HTMLButtonElement>(null);
+  const prefersReducedMotion = useReducedMotion();
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!magnetic || !ref.current || prefersReducedMotion) return;
+    const rect = ref.current.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const dist = Math.abs(e.clientX - centerX);
+
+    if (dist < MAGNETIC_RADIUS) {
+        const ratio = 1 - Math.pow(dist / MAGNETIC_RADIUS, 1.5);
+        gsap.to(ref.current, {
+            scale: 1 + 0.15 * ratio,
+            y: -4 * ratio,
+            duration: 0.35,
+            ease: RELEASE_EASE,
+            overwrite: "auto",
+        });
+    } else {
+        gsap.to(ref.current, { scale: 1, y: 0, duration: 0.35, ease: RELEASE_EASE, overwrite: "auto" });
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (!ref.current) return;
+    gsap.to(ref.current, { scale: 1, y: 0, duration: 0.55, ease: HOVER_EASE, overwrite: "auto" });
+  };
+
+  const handlePointerDown = () => {
+    if (!ref.current || prefersReducedMotion) return;
+    gsap.to(ref.current, { scale: HAPTIC_PRESS_SCALE, duration: 0.15, ease: RELEASE_EASE, overwrite: "auto" });
+  };
+
+  const handlePointerUp = () => {
+    if (!ref.current || prefersReducedMotion) return;
+    gsap.to(ref.current, { scale: 1, duration: 0.35, ease: HOVER_EASE, overwrite: "auto" });
+  };
+  const baseClasses = "group/btn inline-flex items-center justify-center gap-2 font-bold transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:opacity-60 disabled:cursor-not-allowed hover:-translate-y-px disabled:hover:translate-y-0 touch-target";
   const variantClasses = VARIANTS[variant];
   const sizeClasses = SIZES[size];
 
   return (
     <button
       {...props}
+      ref={ref}
+      onMouseMove={handleMouseMove as any}
+      onMouseLeave={handleMouseLeave}
+      onPointerDown={handlePointerDown}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       disabled={disabled || pending}
       className={`${baseClasses} ${variantClasses} ${sizeClasses} relative overflow-hidden ${className}`}
     >
