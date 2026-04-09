@@ -16,6 +16,8 @@ const createRepo = async (): Promise<{ repo: SettingsRepository; dbPath: string;
 
 afterEach(async () => {
   await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
+  const repo = new SettingsRepository();
+  repo.resetAllData();
 });
 
 describe("SettingsRepository", () => {
