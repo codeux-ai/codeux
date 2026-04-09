@@ -222,10 +222,6 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
       sprintPreviewInput.rebuildOnSprintCompletion,
       DEFAULT_DASHBOARD_SETTINGS.sprintPreview.rebuildOnSprintCompletion,
     ),
-    pullLatestOnRebuild: readBoolean(
-      sprintPreviewInput.pullLatestOnRebuild,
-      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.pullLatestOnRebuild,
-    ),
     autoStopOnTerminalSprint: readBoolean(
       sprintPreviewInput.autoStopOnTerminalSprint,
       DEFAULT_DASHBOARD_SETTINGS.sprintPreview.autoStopOnTerminalSprint,

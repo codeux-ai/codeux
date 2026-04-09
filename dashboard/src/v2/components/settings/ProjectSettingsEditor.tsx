@@ -440,7 +440,6 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
             ["autoStartOnRunningSprint", "Launch preview when sprint starts"],
             ["rebuildOnTaskCompletion", "Rebuild preview on task completion"],
             ["rebuildOnSprintCompletion", "Rebuild preview on sprint completion"],
-            ["pullLatestOnRebuild", "Pull latest Git changes before rebuild"],
             ["autoStopOnTerminalSprint", "Stop preview when sprint ends"],
           ].map(([field, label]) => (
             <Row key={field} label={label} description={`Enable ${label.toLowerCase()} for this scope.`} badge={getBadge(`sprintPreview.${field}`)}>

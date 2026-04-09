@@ -635,7 +635,6 @@ export interface SprintPreviewSettings {
   autoStartOnRunningSprint: boolean;
   rebuildOnTaskCompletion: boolean;
   rebuildOnSprintCompletion: boolean;
-  pullLatestOnRebuild: boolean;
   autoStopOnTerminalSprint: boolean;
   maxConcurrentContainers: number;
   hostPortRangeStart: number;

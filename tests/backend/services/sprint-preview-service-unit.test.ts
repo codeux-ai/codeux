@@ -5,6 +5,10 @@ vi.mock("../../../src/services/cli-process-runner.js", () => ({
   runCommandStrict: vi.fn(),
 }));
 
+vi.mock("../../../src/services/git-branch-sync-service.js", () => ({
+  fetchOriginIfAvailable: vi.fn(),
+}));
+
 vi.mock("../../../src/services/sprint-preview-utils.js", () => ({
   buildGeneratedSprintPreviewScript: vi.fn(() => "#!/bin/bash\necho generated"),
   detectSprintPreviewCommands: vi.fn(async () => ({
@@ -76,6 +80,7 @@ vi.mock("fs/promises", async () => {
 
 import { SprintPreviewService } from "../../../src/services/sprint-preview-service.js";
 import { runCommandStrict } from "../../../src/services/cli-process-runner.js";
+import { fetchOriginIfAvailable } from "../../../src/services/git-branch-sync-service.js";
 import { normalizePreviewPath, readOptionalSprintPreviewScript } from "../../../src/services/sprint-preview-utils.js";
 
 function makePreviewSettings(overrides: Record<string, unknown> = {}) {
@@ -85,7 +90,6 @@ function makePreviewSettings(overrides: Record<string, unknown> = {}) {
     autoStartOnRunningSprint: true,
     rebuildOnTaskCompletion: true,
     rebuildOnSprintCompletion: true,
-    pullLatestOnRebuild: true,
     autoStopOnTerminalSprint: false,
     maxConcurrentContainers: 5,
     hostPortRangeStart: 5555,
@@ -178,7 +182,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
       resolveSprintDashboardSettings: vi.fn(() => ({
         settings: {
           sprintPreview: makePreviewSettings(),
-          git: { defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
+          git: { githubMode: "REMOTE", defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
           cliWorkflow: {
             containerImage: "node:24-bookworm",
             containerCacheSetupScriptImage: false,
@@ -206,6 +210,7 @@ describe("SprintPreviewService unit tests", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(runCommandStrict).mockResolvedValue({ exitCode: 0, stdout: "", stderr: "", durationMs: 1 });
+    vi.mocked(fetchOriginIfAvailable).mockResolvedValue(true);
     deps = makeDeps();
   });
 
@@ -289,7 +294,7 @@ describe("SprintPreviewService unit tests", () => {
       deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
         settings: {
           sprintPreview: makePreviewSettings({ enabled: false }),
-          git: { defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
+          git: { githubMode: "REMOTE", defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
           cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
         },
       });
@@ -302,7 +307,7 @@ describe("SprintPreviewService unit tests", () => {
       deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
         settings: {
           sprintPreview: makePreviewSettings({ maxConcurrentContainers: 1 }),
-          git: { defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
+          git: { githubMode: "REMOTE", defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
           cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
         },
       });
@@ -316,6 +321,7 @@ describe("SprintPreviewService unit tests", () => {
       await service.startSession("proj-1", "sprint-1");
 
       expect(stopSessionSpy).toHaveBeenCalledWith("oldest");
+      expect(fetchOriginIfAvailable).toHaveBeenCalledWith("/repo");
     });
   });
 
@@ -1197,12 +1203,17 @@ describe("SprintPreviewService unit tests", () => {
       expect(ref).toBe("HEAD");
     });
 
-    it("fetchOriginIfAvailable skips fetch when no remote", async () => {
-      vi.mocked(runCommandStrict).mockRejectedValue(new Error("no remote"));
+    it("materializePreviewWorkspace skips remote refresh in LOCAL git mode", async () => {
+      deps.settingsRepository.resolveSprintDashboardSettings.mockReturnValue({
+        settings: {
+          sprintPreview: makePreviewSettings(),
+          git: { githubMode: "LOCAL", defaultBranch: "main", sprintBranchScheme: "feature/sprint-{number}" },
+          cliWorkflow: { containerImage: "", containerCacheSetupScriptImage: false, containerSetupScriptPath: "" },
+        },
+      });
       const service = new SprintPreviewService(deps as any);
-      await (service as any).fetchOriginIfAvailable("/repo");
-      // Should not throw, just return
-      expect(runCommandStrict).toHaveBeenCalledTimes(1);
+      await service.startSession("proj-1", "sprint-1");
+      expect(fetchOriginIfAvailable).not.toHaveBeenCalled();
     });
   });
 

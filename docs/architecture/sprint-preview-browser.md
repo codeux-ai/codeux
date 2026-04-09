@@ -115,7 +115,7 @@ It supports:
 - auto-stop when a sprint becomes terminal
 
 Rebuild behaviors:
-- A rebuild (whether triggered automatically or manually via `POST /api/browser/sessions/:sessionId/rebuild`) now synchronizes the sprint feature branch with `origin` before exporting the workspace. This ensures remote changes (such as those pushed by remote Jules workers) are reflected in rebuilt containers.
+- Preview start and rebuild now use the shared branch-sync rule. In `REMOTE` git mode, Sprint OS refreshes `origin` before exporting the preview workspace so remote changes (such as those pushed by Jules workers) are reflected in the container. In `LOCAL` git mode, preview export stays local-only.
 
 These behaviors are controlled through scoped settings under `sprintPreview`.
 
@@ -125,7 +125,6 @@ Current preview controls include:
 - `autoStartOnRunningSprint`
 - `rebuildOnTaskCompletion`
 - `rebuildOnSprintCompletion`
-- `pullLatestOnRebuild`
 - `autoStopOnTerminalSprint`
 - `maxConcurrentContainers`
 - `hostPortRangeStart`

@@ -300,7 +300,6 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
     autoStartOnRunningSprint: true,
     rebuildOnTaskCompletion: true,
     rebuildOnSprintCompletion: true,
-    pullLatestOnRebuild: true,
     autoStopOnTerminalSprint: false,
     maxConcurrentContainers: 5,
     hostPortRangeStart: 5555,

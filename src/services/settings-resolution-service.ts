@@ -272,9 +272,6 @@ function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintP
     rebuildOnSprintCompletion: typeof input.rebuildOnSprintCompletion === "boolean"
       ? input.rebuildOnSprintCompletion
       : defaults.rebuildOnSprintCompletion,
-    pullLatestOnRebuild: typeof input.pullLatestOnRebuild === "boolean"
-      ? input.pullLatestOnRebuild
-      : defaults.pullLatestOnRebuild,
     autoStopOnTerminalSprint: typeof input.autoStopOnTerminalSprint === "boolean"
       ? input.autoStopOnTerminalSprint
       : defaults.autoStopOnTerminalSprint,

@@ -66,15 +66,6 @@ export const SettingsBrowserPanel: FunctionComponent<{ state: SettingsPageState 
             },
           }))} />
         </Row>
-        <Row label="Pull latest Git changes before rebuild" description="Sync the latest remote branch state into rebuild exports so preview containers pick up newly pushed sprint changes." badge={getFieldBadge("sprintPreview.pullLatestOnRebuild")}>
-          <Toggle value={editableSettings.sprintPreview.pullLatestOnRebuild} onChange={() => updateEditableSettings((current) => ({
-            ...current,
-            sprintPreview: {
-              ...current.sprintPreview,
-              pullLatestOnRebuild: !current.sprintPreview.pullLatestOnRebuild,
-            },
-          }))} />
-        </Row>
         <Row label="Stop preview when sprint ends" description="Shut down the preview container automatically when the sprint finishes, fails, or is cancelled." badge={getFieldBadge("sprintPreview.autoStopOnTerminalSprint")} last>
           <Toggle value={editableSettings.sprintPreview.autoStopOnTerminalSprint} onChange={() => updateEditableSettings((current) => ({
             ...current,

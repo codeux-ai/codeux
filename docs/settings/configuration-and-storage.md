@@ -263,7 +263,6 @@ QA merge-gate notes:
 - `autoStartOnRunningSprint`
 - `rebuildOnTaskCompletion`
 - `rebuildOnSprintCompletion`
-- `pullLatestOnRebuild`
 - `autoStopOnTerminalSprint`
 - `maxConcurrentContainers`
 - `hostPortRangeStart`
@@ -278,7 +277,7 @@ Preview runtime notes:
 - preview host ports are allocated from the configured range and bound to `127.0.0.1`
 - `showInAppBrowser` controls whether Browser entry points stay visible in the dashboard shell for the selected project scope
 - `enabled` disables new preview launches and causes reconciliation to stop active previews for that scope
-- `pullLatestOnRebuild` controls whether rebuilds sync the latest remote branch state before the preview export is regenerated
+- preview workspace export now uses the shared remote-branch sync rule: in `REMOTE` git mode it refreshes `origin` before start/rebuild export, and in `LOCAL` git mode it stays local-only
 - `maxConcurrentContainers` caps active preview containers per project by stopping the oldest previews before starting another
 
 `agents` contains:
