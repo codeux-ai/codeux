@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { DashboardRealtimeServerMessage } from "../types.js";
 import { subscribeToDashboardRealtime, type TransportState } from "../lib/realtime/dashboard-realtime-client.js";
+import { isDeepEqual } from "../v2/lib/resource-equality.js";
 
 export interface RealtimeResourceOptions<T> {
   /** The initial, empty state for the resource */
@@ -13,8 +14,9 @@ export interface RealtimeResourceOptions<T> {
   /**
    * Defines whether two snapshots are semantically equal.
    * If they are equal, state will not update.
+   * Defaults to deep equality.
    */
-  isEqual: (prev: T, next: T) => boolean;
+  isEqual?: (prev: T, next: T) => boolean;
   /**
    * Defines how to stabilize the snapshot before checking equality.
    * This is useful for preserving stable references for unchanging nested properties.
@@ -68,7 +70,7 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
   const {
     initialData,
     fetchResource,
-    isEqual,
+    isEqual = isDeepEqual,
     stabilizeNext = (_prev, next) => next,
     realtime,
     pollIntervalMs = 0,
@@ -161,7 +163,8 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
       if (!abortController.signal.aborted && fetchIdRef.current === currentFetchId) {
         setData((prev) => {
           const stabilized = optionsRef.current.stabilizeNext ? optionsRef.current.stabilizeNext(prev, nextData) : nextData;
-          return optionsRef.current.isEqual(prev, stabilized) ? prev : stabilized;
+          const checkEqual = optionsRef.current.isEqual ?? isDeepEqual;
+          return checkEqual(prev, stabilized) ? prev : stabilized;
         });
         hasLoadedRef.current = true;
         setError(null);
@@ -201,6 +204,26 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
     };
   }, [options.fetchResource, options.isAlreadyLoaded, refreshInternal]);
 
+  const refreshTimeoutRef = useRef<number | null>(null);
+
+  const scheduleSilentRefresh = useCallback(() => {
+    if (refreshTimeoutRef.current !== null) {
+      window.clearTimeout(refreshTimeoutRef.current);
+    }
+    refreshTimeoutRef.current = window.setTimeout(() => {
+      refreshTimeoutRef.current = null;
+      void refreshInternal({ silent: true });
+    }, 150);
+  }, [refreshInternal]);
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimeoutRef.current !== null) {
+        window.clearTimeout(refreshTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // 2. Realtime WebSocket Subscription Effect
 
   // We extract scopes as a joined string to avoid referential equality triggers
@@ -219,7 +242,7 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
 
         if (shouldRefetch) {
           if (shouldRefetch(message)) {
-            void refreshInternal({ silent: true });
+            scheduleSilentRefresh();
           }
           return;
         }
@@ -229,7 +252,8 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
             const nextPayload = message.event.payload as T;
             setData((prev) => {
               const stabilized = optionsRef.current.stabilizeNext ? optionsRef.current.stabilizeNext(prev, nextPayload) : nextPayload;
-              return optionsRef.current.isEqual(prev, stabilized) ? prev : stabilized;
+              const checkEqual = optionsRef.current.isEqual ?? isDeepEqual;
+              return checkEqual(prev, stabilized) ? prev : stabilized;
             });
             setError(null);
             // Instead of directly depending on the reactive `loading` state here,
@@ -239,7 +263,7 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
             setLoading((prev) => (prev !== false ? false : prev));
           } else {
             // Received event but configured to refetch instead of direct update
-            void refreshInternal({ silent: true });
+            scheduleSilentRefresh();
           }
           return;
         }
@@ -247,7 +271,7 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
         // Always fallback to silent REST refetch on `snapshot_required`.
         // We only fallback for `event` types if it's explicitly our matching eventType AND we are not updating directly.
         if (message.type === "snapshot_required") {
-          void refreshInternal({ silent: true });
+          scheduleSilentRefresh();
         }
       },
       (newTransportState) => {
@@ -257,7 +281,7 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
     );
 
     return cleanupSubscription;
-  }, [scopesKey, options.realtime?.eventType, options.realtime?.updateDirectlyFromEvent, options.realtime?.onTransportState, refreshInternal]);
+  }, [scopesKey, options.realtime?.eventType, options.realtime?.updateDirectlyFromEvent, options.realtime?.onTransportState, scheduleSilentRefresh]);
 
   // 3. Fallback Polling Effect
   useEffect(() => {

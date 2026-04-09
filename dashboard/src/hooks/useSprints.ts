@@ -29,15 +29,9 @@ export function useSprints(projectId: string | null): UseSprintsResult {
     return resolvedCollection;
   }, [projectId]);
 
-  const isEqual = useCallback((current: SprintCollectionResponse | null, next: SprintCollectionResponse | null) => {
-    if (!current || !next) return current === next;
-    return areSprintCollectionsEqual(current, next);
-  }, []);
-
   const { data: collection, loading, error, refetch, updateDataLocally } = useRealtimeResource<SprintCollectionResponse | null>({
     initialData: cachedCollection,
     fetchResource,
-    isEqual,
     realtime: projectId ? {
       scopes: [`project:${projectId}`],
       eventType: "project.structure.updated",
