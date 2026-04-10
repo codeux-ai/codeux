@@ -13,72 +13,15 @@ import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/
 import { sanitizeCliWorkflow } from "../domain/settings/settings-sanitizers/cli-workflow-sanitizer.js";
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
 import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sanitizer.js";
+import { sanitizeSkills } from "../domain/settings/settings-sanitizers/skills-sanitizer.js";
+import { sanitizeSprintPreviewSettings } from "../domain/settings/settings-sanitizers/sprint-preview-sanitizer.js";
+import { sanitizeInstructionTemplates, sanitizeQualityAssuranceSettings } from "../domain/settings/settings-sanitizers/agents-sanitizer.js";
 import {
   DEFAULT_DASHBOARD_SETTINGS,
-  DEFAULT_SKILLS,
-  INTERNAL_SKILL_NAMES,
-  INTERNAL_SKILL_SET,
 } from "./settings-defaults.js";
-
-const enforceGitManagerSkillset = (skills: SkillToggle[], githubMode: "REMOTE" | "LOCAL"): SkillToggle[] => {
-  return skills.map((skill) => {
-    if (skill.name === "git_manager_remote") {
-      return { ...skill, enabled: githubMode === "REMOTE" };
-    }
-    if (skill.name === "git_manager_local") {
-      return { ...skill, enabled: githubMode === "LOCAL" };
-    }
-    if (skill.name === "git_manager") {
-      return { ...skill, enabled: true };
-    }
-    return skill;
-  });
-};
-
-const sanitizeSkills = (value: unknown): SkillToggle[] => {
-  if (!Array.isArray(value)) return DEFAULT_SKILLS.map((skill) => ({ ...skill }));
-  const validSkills = value
-    .filter((item): item is SkillToggle => {
-      if (!item || typeof item !== "object") return false;
-      const skill = item as Partial<SkillToggle>;
-      return typeof skill.name === "string" && typeof skill.enabled === "boolean";
-    })
-    .map((skill) => ({ name: skill.name.trim(), enabled: skill.enabled }))
-    .filter((skill) => skill.name.length > 0);
-  const enabledByName = new Map(validSkills.map((skill) => [skill.name, skill.enabled]));
-
-  const internalSkills: SkillToggle[] = INTERNAL_SKILL_NAMES.map((name) => ({
-    name,
-    enabled: enabledByName.get(name) ?? true,
-    isInternal: true,
-  }));
-
-  const customSkills: SkillToggle[] = validSkills
-    .filter((skill) => !INTERNAL_SKILL_SET.has(skill.name))
-    .map((skill) => ({
-      name: skill.name,
-      enabled: skill.enabled,
-      isInternal: false,
-    }))
-    .sort((left, right) => left.name.localeCompare(right.name));
-
-  return [...internalSkills, ...customSkills];
-};
 
 const sanitizeMcpTools = (value: unknown): McpToolToggle[] => {
   return sanitizeMcpToolToggles(value).map((tool) => ({ ...tool }));
-};
-
-const sanitizeQualityAssuranceTrigger = (
-  value: unknown,
-  defaults: DashboardSettings["agents"]["qualityAssurance"]["taskCompletion"],
-): DashboardSettings["agents"]["qualityAssurance"]["taskCompletion"] => {
-  const input = value && typeof value === "object" ? value as Partial<DashboardSettings["agents"]["qualityAssurance"]["taskCompletion"]> : {};
-
-  return {
-    enabled: readBoolean(input.enabled, defaults.enabled),
-    agentPresetId: readString(input.agentPresetId, "").trim() || null,
-  };
 };
 
 export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardSettings => ({
@@ -198,62 +141,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   const ciIntelligence = sanitizeCiIntelligence(input, git.githubMode);
   const sprintLoopSteps = sanitizeSprintLoopSteps(input);
   const cliWorkflow = sanitizeCliWorkflow(input);
-  const sprintPreviewInput = (input.sprintPreview && typeof input.sprintPreview === "object"
-    ? input.sprintPreview
-    : {}) as Partial<DashboardSettings["sprintPreview"]>;
-  const sprintPreview = {
-    enabled: readBoolean(
-      sprintPreviewInput.enabled,
-      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.enabled,
-    ),
-    showInAppBrowser: readBoolean(
-      sprintPreviewInput.showInAppBrowser,
-      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.showInAppBrowser,
-    ),
-    autoStartOnRunningSprint: readBoolean(
-      sprintPreviewInput.autoStartOnRunningSprint,
-      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.autoStartOnRunningSprint,
-    ),
-    rebuildOnTaskCompletion: readBoolean(
-      sprintPreviewInput.rebuildOnTaskCompletion,
-      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.rebuildOnTaskCompletion,
-    ),
-    rebuildOnSprintCompletion: readBoolean(
-      sprintPreviewInput.rebuildOnSprintCompletion,
-      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.rebuildOnSprintCompletion,
-    ),
-    autoStopOnTerminalSprint: readBoolean(
-      sprintPreviewInput.autoStopOnTerminalSprint,
-      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.autoStopOnTerminalSprint,
-    ),
-    maxConcurrentContainers: Math.max(1, Math.min(100,
-      typeof sprintPreviewInput.maxConcurrentContainers === "number" && Number.isFinite(sprintPreviewInput.maxConcurrentContainers)
-        ? Math.round(sprintPreviewInput.maxConcurrentContainers)
-        : DEFAULT_DASHBOARD_SETTINGS.sprintPreview.maxConcurrentContainers
-    )),
-    hostPortRangeStart: Math.max(1, Math.min(65535,
-      typeof sprintPreviewInput.hostPortRangeStart === "number" && Number.isFinite(sprintPreviewInput.hostPortRangeStart)
-        ? Math.round(sprintPreviewInput.hostPortRangeStart)
-        : DEFAULT_DASHBOARD_SETTINGS.sprintPreview.hostPortRangeStart
-    )),
-    hostPortRangeEnd: Math.max(1, Math.min(65535,
-      typeof sprintPreviewInput.hostPortRangeEnd === "number" && Number.isFinite(sprintPreviewInput.hostPortRangeEnd)
-        ? Math.round(sprintPreviewInput.hostPortRangeEnd)
-        : DEFAULT_DASHBOARD_SETTINGS.sprintPreview.hostPortRangeEnd
-    )),
-    containerAppPort: Math.max(1, Math.min(65535,
-      typeof sprintPreviewInput.containerAppPort === "number" && Number.isFinite(sprintPreviewInput.containerAppPort)
-        ? Math.round(sprintPreviewInput.containerAppPort)
-        : DEFAULT_DASHBOARD_SETTINGS.sprintPreview.containerAppPort
-    )),
-    startupScriptPath: readString(
-      sprintPreviewInput.startupScriptPath,
-      DEFAULT_DASHBOARD_SETTINGS.sprintPreview.startupScriptPath,
-    ).trim() || DEFAULT_DASHBOARD_SETTINGS.sprintPreview.startupScriptPath,
-  };
-  if (sprintPreview.hostPortRangeEnd < sprintPreview.hostPortRangeStart) {
-    sprintPreview.hostPortRangeEnd = sprintPreview.hostPortRangeStart;
-  }
+  const sprintPreview = sanitizeSprintPreviewSettings(input.sprintPreview);
   const workers = sanitizeWorkers(input);
   const agentsInput = (input.agents && typeof input.agents === "object")
     ? input.agents as Partial<DashboardSettings["agents"]>
@@ -263,41 +151,11 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
       agentsInput.saveToProjectDirectory,
       DEFAULT_DASHBOARD_SETTINGS.agents.saveToProjectDirectory,
     ),
-    instructionTemplates: {
-      ...DEFAULT_DASHBOARD_SETTINGS.agents.instructionTemplates,
-      ...(agentsInput.instructionTemplates && typeof agentsInput.instructionTemplates === "object"
-        ? Object.fromEntries(
-            Object.entries(agentsInput.instructionTemplates).filter(([, value]) => typeof value === "string"),
-          )
-        : {}),
-    },
-    qualityAssurance: {
-      enabled: readBoolean(
-        (agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.enabled,
-        DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.enabled,
-      ),
-      maxTaskReviewRuns: Math.max(1, Math.min(10,
-        typeof (agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.maxTaskReviewRuns === "number"
-          && Number.isFinite((agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.maxTaskReviewRuns)
-            ? Math.round((agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)!.maxTaskReviewRuns!)
-            : DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.maxTaskReviewRuns
-      )),
-      taskCompletion: sanitizeQualityAssuranceTrigger(
-        (agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.taskCompletion,
-        DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.taskCompletion,
-      ),
-      sprintCompletion: sanitizeQualityAssuranceTrigger(
-        (agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.sprintCompletion,
-        DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.sprintCompletion,
-      ),
-      completedTaskWithoutPr: sanitizeQualityAssuranceTrigger(
-        (agentsInput.qualityAssurance as Partial<DashboardSettings["agents"]["qualityAssurance"]> | undefined)?.completedTaskWithoutPr,
-        DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance.completedTaskWithoutPr,
-      ),
-    },
+    instructionTemplates: sanitizeInstructionTemplates(agentsInput.instructionTemplates),
+    qualityAssurance: sanitizeQualityAssuranceSettings(agentsInput.qualityAssurance),
   };
 
-  const normalizedSkills = enforceGitManagerSkillset(sanitizeSkills(input.skills), git.githubMode);
+  const normalizedSkills = sanitizeSkills(input.skills, git.githubMode);
   const mcpTools = sanitizeMcpTools(input.mcpTools);
   const memory = sanitizeMemory(input);
 

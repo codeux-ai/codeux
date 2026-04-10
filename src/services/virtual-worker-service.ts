@@ -24,6 +24,7 @@ import { WorkerTaskDispatchService } from "./worker-task-dispatch-service.js";
 import { CliWorkflowService } from "./cli-workflow-service.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
 import { resolveEffectiveDashboardSettings } from "./settings-resolution-service.js";
+import type { ScopedEffectiveSettingsResolver } from "../repositories/settings-repository.js";
 import type { WorkerInboxReplyService } from "./worker-inbox-reply-service.js";
 import type { InstructionService } from "../instructions/instruction-template-service.js";
 import type { SprintExecutionStateService } from "./sprint-execution-state-service.js";
@@ -169,38 +170,41 @@ export class VirtualWorkerService {
   }
 
   async reconcile(): Promise<void> {
+    const resolver = this.deps.settingsRepository.createScopedResolver();
     for (const project of this.deps.projectManagementRepository.listProjects().projects) {
-      if (this.projectNeedsVirtualWorker(project.id)) {
+      if (this.projectNeedsVirtualWorker(project.id, resolver)) {
         this.scheduleProject(project.id, "reconcile");
       }
     }
   }
 
-  private projectUsesVirtualWorkers(projectId: string, sprintId?: string | null): boolean {
-    return this.resolveWorkerExecutionMode(projectId, sprintId) === "VIRTUAL";
+  private projectUsesVirtualWorkers(projectId: string, sprintId?: string | null, resolver?: ScopedEffectiveSettingsResolver): boolean {
+    return this.resolveWorkerExecutionMode(projectId, sprintId, resolver) === "VIRTUAL";
   }
 
-  private resolveWorkerExecutionMode(projectId: string, sprintId?: string | null): WorkerExecutionMode {
-    return resolveEffectiveDashboardSettings(this.deps.settingsRepository, projectId, sprintId).settings.workers.executionMode;
+  private resolveWorkerExecutionMode(projectId: string, sprintId?: string | null, resolver?: ScopedEffectiveSettingsResolver): WorkerExecutionMode {
+    return this.resolveDashboardSettings(projectId, sprintId, resolver).workers.executionMode;
   }
 
-  private resolveDashboardSettings(projectId: string, sprintId?: string | null): DashboardSettings {
-    return resolveEffectiveDashboardSettings(this.deps.settingsRepository, projectId, sprintId).settings;
+  private resolveDashboardSettings(projectId: string, sprintId?: string | null, resolver?: ScopedEffectiveSettingsResolver): DashboardSettings {
+    const r = resolver || this.deps.settingsRepository.createScopedResolver();
+    return sprintId ? r.resolveSprintDashboardSettings(projectId, sprintId).settings : r.resolveProjectDashboardSettings(projectId).settings;
   }
 
-  private projectNeedsVirtualWorker(projectId: string): boolean {
-    if (!this.projectUsesVirtualWorkers(projectId)) {
+  private projectNeedsVirtualWorker(projectId: string, resolver?: ScopedEffectiveSettingsResolver): boolean {
+    if (!this.projectUsesVirtualWorkers(projectId, undefined, resolver)) {
       return false;
     }
     if (this.activeCycles.has(projectId)) {
       return false;
     }
 
-    return this.pickNextWorkerAttention(projectId) !== null;
+    return this.pickNextWorkerAttention(projectId, resolver) !== null;
   }
 
   private async runProjectCycle(projectId: string, reason: string): Promise<void> {
-    const cycleSettings = this.resolveCycleSettings(projectId);
+    const resolver = this.deps.settingsRepository.createScopedResolver();
+    const cycleSettings = this.resolveCycleSettings(projectId, resolver);
     const endpoint = this.deps.workerEndpointRepository.createVirtualEndpoint({
       endpointKey: `virtual:${projectId}:${Date.now().toString(36)}:${sanitizeToken(randomUUID().slice(0, 8))}`,
       displayName: `Virtual ${this.getProviderLabel(cycleSettings.workers.virtualWorkerProvider)} Worker`,
@@ -215,9 +219,18 @@ export class VirtualWorkerService {
     this.deps.projectWorkerAssignmentService.ensureWorkerAssignment(projectId, endpoint.id);
 
     try {
-      const attentionItem = this.pickNextWorkerAttention(projectId);
+      const attentionItem = this.pickNextWorkerAttention(projectId, resolver);
       if (attentionItem) {
-        await this.handleAttentionItem(endpoint.id, attentionItem, reason);
+        await this.handleAttentionItem(endpoint.id, attentionItem, reason, resolver);
+      } else {
+        const claim = this.deps.workerTaskDispatchService.claimNextDispatchForWorker({
+          workerEndpointId: endpoint.id,
+          projectId,
+          executionMode: "VIRTUAL",
+        });
+        if (claim) {
+          await this.handleTaskDispatch(endpoint.id, claim, resolver);
+        }
       }
     } finally {
       this.deps.projectWorkerAssignmentService.releaseWorkerAssignment(projectId, endpoint.id, "virtual_worker_cycle_complete");
@@ -225,7 +238,7 @@ export class VirtualWorkerService {
     }
   }
 
-  private pickNextWorkerAttention(projectId: string): ProjectAttentionItemRecord | null {
+  private pickNextWorkerAttention(projectId: string, resolver?: ScopedEffectiveSettingsResolver): ProjectAttentionItemRecord | null {
     return this.deps.projectAttentionService.listActiveProjectItems(projectId)
       .find((item) => {
         if (item.ownerType !== "worker") {
@@ -240,7 +253,7 @@ export class VirtualWorkerService {
           return false;
         }
 
-        const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
+        const settings = this.resolveDashboardSettings(item.projectId, item.sprintId, resolver);
 
         if (item.attentionType === "merge_required") {
           return false;
@@ -263,8 +276,8 @@ export class VirtualWorkerService {
       }) || null;
   }
 
-  private async handleTaskDispatch(workerEndpointId: string, claim: WorkerTaskDispatchClaim): Promise<void> {
-    const settings = this.resolveDashboardSettings(claim.project.id, claim.sprint.id);
+  private async handleTaskDispatch(workerEndpointId: string, claim: WorkerTaskDispatchClaim, resolver?: ScopedEffectiveSettingsResolver): Promise<void> {
+    const settings = this.resolveDashboardSettings(claim.project.id, claim.sprint.id, resolver);
     const provider = settings.workers.virtualWorkerProvider;
     const providerSettings = settings.aiProvider.providers[provider];
     const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(claim.dispatch.id);
@@ -365,17 +378,17 @@ export class VirtualWorkerService {
     ].filter(Boolean).join("\n");
   }
 
-  private resolveCycleSettings(projectId: string): DashboardSettings {
+  private resolveCycleSettings(projectId: string, resolver?: ScopedEffectiveSettingsResolver): DashboardSettings {
     const attentionItem = this.deps.projectAttentionService.listActiveProjectItems(projectId)
-      .find((item) => item.ownerType === "worker" && this.projectUsesVirtualWorkers(item.projectId, item.sprintId));
+      .find((item) => item.ownerType === "worker" && this.projectUsesVirtualWorkers(item.projectId, item.sprintId, resolver));
     if (attentionItem) {
-      return this.resolveDashboardSettings(projectId, attentionItem.sprintId);
+      return this.resolveDashboardSettings(projectId, attentionItem.sprintId, resolver);
     }
 
-    return this.resolveDashboardSettings(projectId);
+    return this.resolveDashboardSettings(projectId, undefined, resolver);
   }
 
-  private async handleAttentionItem(workerEndpointId: string, item: ProjectAttentionItemRecord, reason: string): Promise<void> {
+  private async handleAttentionItem(workerEndpointId: string, item: ProjectAttentionItemRecord, reason: string, resolver?: ScopedEffectiveSettingsResolver): Promise<void> {
     // Check if it's an orchestrator-managed clarification recovery item we somehow claimed anyway.
     if (this.isOrchestratorHandledClarificationItem(item)) {
       // Just release it, don't escalate. The orchestrator will handle it.
@@ -388,17 +401,17 @@ export class VirtualWorkerService {
     this.deps.workerEndpointRepository.touchWorkerEndpointHeartbeat(workerEndpointId, "connected");
 
     if (claimed.attentionType === "merge_conflict" || claimed.attentionType === "merge_required") {
-      await this.resolveMergeConflictAttention(workerEndpointId, claimed);
+      await this.resolveMergeConflictAttention(workerEndpointId, claimed, resolver);
       return;
     }
 
     if (claimed.attentionType === "ci_fix_required") {
-      await this.resolveCiFixAttention(workerEndpointId, claimed);
+      await this.resolveCiFixAttention(workerEndpointId, claimed, resolver);
       return;
     }
 
     if (claimed.attentionType === "action_required") {
-      await this.resolveActionRequiredAttention(workerEndpointId, claimed);
+      await this.resolveActionRequiredAttention(workerEndpointId, claimed, resolver);
       return;
     }
 
@@ -409,8 +422,8 @@ export class VirtualWorkerService {
     ].join("\n"));
   }
 
-  private async resolveActionRequiredAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
-    const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
+  private async resolveActionRequiredAttention(workerEndpointId: string, item: ProjectAttentionItemRecord, resolver?: ScopedEffectiveSettingsResolver): Promise<void> {
+    const settings = this.resolveDashboardSettings(item.projectId, item.sprintId, resolver);
     const payload = item.payload || {};
     const sessionId = typeof payload.sessionId === "string" ? payload.sessionId : null;
     const sessionState = typeof payload.sessionState === "string" ? payload.sessionState : null;
@@ -481,8 +494,8 @@ export class VirtualWorkerService {
     }
   }
 
-  private async resolveMergeConflictAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
-    const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
+  private async resolveMergeConflictAttention(workerEndpointId: string, item: ProjectAttentionItemRecord, resolver?: ScopedEffectiveSettingsResolver): Promise<void> {
+    const settings = this.resolveDashboardSettings(item.projectId, item.sprintId, resolver);
     const route = resolveProviderForInvocation(settings, {
       invocation: "merge_conflict",
       task: {
@@ -622,8 +635,8 @@ export class VirtualWorkerService {
     }
   }
 
-  private async resolveCiFixAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
-    const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
+  private async resolveCiFixAttention(workerEndpointId: string, item: ProjectAttentionItemRecord, resolver?: ScopedEffectiveSettingsResolver): Promise<void> {
+    const settings = this.resolveDashboardSettings(item.projectId, item.sprintId, resolver);
     const route = resolveProviderForInvocation(settings, {
       invocation: "ci_fix",
       task: {

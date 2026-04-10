@@ -22,34 +22,16 @@ import { sanitizeSprintLoopSteps } from "../domain/settings/settings-sanitizers/
 import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sanitizer.js";
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
 import { sanitizeMcpToolToggles } from "../mcp/mcp-tool-availability.js";
+import { cloneMcpTools } from "../domain/settings/settings-sanitizers/mcp-tools-sanitizer.js";
+import { cloneSkills, sanitizeSkills } from "../domain/settings/settings-sanitizers/skills-sanitizer.js";
+import { sanitizeSprintPreviewSettings } from "../domain/settings/settings-sanitizers/sprint-preview-sanitizer.js";
+import { cloneInstructionTemplates, cloneQualityAssuranceSettings, sanitizeInstructionTemplates, sanitizeQualityAssuranceSettings } from "../domain/settings/settings-sanitizers/agents-sanitizer.js";
 import { DEFAULT_INSTRUCTION_TEMPLATES, INSTRUCTION_TEMPLATE_IDS, type InstructionTemplateId } from "../instructions/instruction-template-catalog.js";
 import { DEFAULT_DASHBOARD_SETTINGS, DEFAULT_SKILLS, INTERNAL_SKILL_NAMES, INTERNAL_SKILL_SET } from "../repositories/settings-defaults.js";
 
-function cloneSkills(skills: SkillToggle[]): SkillToggle[] {
-  return skills.map((skill) => ({ ...skill }));
-}
 
-function cloneMcpTools(tools: McpToolToggle[]): McpToolToggle[] {
-  return tools.map((tool) => ({ ...tool }));
-}
 
-function cloneInstructionTemplates(
-  templates: Record<InstructionTemplateId, string>,
-): Record<InstructionTemplateId, string> {
-  return { ...templates };
-}
 
-function cloneQualityAssuranceSettings(
-  settings: ProjectSettings["agents"]["qualityAssurance"],
-): ProjectSettings["agents"]["qualityAssurance"] {
-  return {
-    enabled: settings.enabled,
-    maxTaskReviewRuns: settings.maxTaskReviewRuns,
-    taskCompletion: { ...settings.taskCompletion },
-    sprintCompletion: { ...settings.sprintCompletion },
-    completedTaskWithoutPr: { ...settings.completedTaskWithoutPr },
-  };
-}
 
 function cloneInvocationRouting(
   routing: ProjectSettings["aiProvider"]["invocationRouting"],
@@ -155,139 +137,10 @@ function flattenSources(
   return result;
 }
 
-function sanitizeSkills(value: unknown, githubMode: DashboardSettings["git"]["githubMode"]): SkillToggle[] {
-  const input = Array.isArray(value) ? value : DEFAULT_SKILLS;
-  const validSkills = input
-    .filter((item): item is SkillToggle => {
-      if (!item || typeof item !== "object") {
-        return false;
-      }
-      const skill = item as Partial<SkillToggle>;
-      return typeof skill.name === "string" && typeof skill.enabled === "boolean";
-    })
-    .map((skill) => ({
-      name: skill.name.trim(),
-      enabled: skill.enabled,
-      isInternal: Boolean(skill.isInternal),
-    }))
-    .filter((skill) => skill.name.length > 0);
 
-  const enabledByName = new Map(validSkills.map((skill) => [skill.name, skill.enabled]));
-  const internalSkills: SkillToggle[] = INTERNAL_SKILL_NAMES.map((name) => ({
-    name,
-    enabled: enabledByName.get(name) ?? true,
-    isInternal: true,
-  })).map((skill) => {
-    if (skill.name === "git_manager_remote") {
-      return { ...skill, enabled: githubMode === "REMOTE" };
-    }
-    if (skill.name === "git_manager_local") {
-      return { ...skill, enabled: githubMode === "LOCAL" };
-    }
-    if (skill.name === "git_manager") {
-      return { ...skill, enabled: true };
-    }
-    return skill;
-  });
 
-  const customSkills = validSkills
-    .filter((skill) => !INTERNAL_SKILL_SET.has(skill.name))
-    .sort((left, right) => left.name.localeCompare(right.name));
 
-  return [...internalSkills, ...customSkills];
-}
 
-function sanitizeInstructionTemplates(value: unknown): Record<InstructionTemplateId, string> {
-  const input = toRecord(value);
-  const nextTemplates = { ...DEFAULT_INSTRUCTION_TEMPLATES };
-
-  for (const templateId of INSTRUCTION_TEMPLATE_IDS) {
-    const candidate = input[templateId];
-    if (typeof candidate === "string") {
-      nextTemplates[templateId] = candidate;
-    }
-  }
-
-  return nextTemplates;
-}
-
-function sanitizeQualityAssuranceTriggerSettings(
-  value: unknown,
-  defaults: ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"],
-): ProjectSettings["agents"]["qualityAssurance"]["taskCompletion"] {
-  const input = toRecord(value);
-
-  return {
-    enabled: typeof input.enabled === "boolean"
-      ? input.enabled
-      : defaults.enabled,
-    agentPresetId: typeof input.agentPresetId === "string" && input.agentPresetId.trim().length > 0
-      ? input.agentPresetId.trim()
-      : null,
-  };
-}
-
-function sanitizeQualityAssuranceSettings(
-  value: unknown,
-): ProjectSettings["agents"]["qualityAssurance"] {
-  const input = toRecord(value);
-  const defaults = DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance;
-
-  return {
-    enabled: typeof input.enabled === "boolean"
-      ? input.enabled
-      : defaults.enabled,
-    maxTaskReviewRuns: typeof input.maxTaskReviewRuns === "number" && Number.isFinite(input.maxTaskReviewRuns)
-      ? Math.max(1, Math.min(10, Math.round(input.maxTaskReviewRuns)))
-      : defaults.maxTaskReviewRuns,
-    taskCompletion: sanitizeQualityAssuranceTriggerSettings(input.taskCompletion, defaults.taskCompletion),
-    sprintCompletion: sanitizeQualityAssuranceTriggerSettings(input.sprintCompletion, defaults.sprintCompletion),
-    completedTaskWithoutPr: sanitizeQualityAssuranceTriggerSettings(input.completedTaskWithoutPr, defaults.completedTaskWithoutPr),
-  };
-}
-
-function sanitizeSprintPreviewSettings(value: unknown): ProjectSettings["sprintPreview"] {
-  const input = toRecord(value);
-  const defaults = DEFAULT_DASHBOARD_SETTINGS.sprintPreview;
-  const hostPortRangeStart = typeof input.hostPortRangeStart === "number" && Number.isFinite(input.hostPortRangeStart)
-    ? Math.max(1, Math.min(65535, Math.round(input.hostPortRangeStart)))
-    : defaults.hostPortRangeStart;
-  const hostPortRangeEndCandidate = typeof input.hostPortRangeEnd === "number" && Number.isFinite(input.hostPortRangeEnd)
-    ? Math.max(1, Math.min(65535, Math.round(input.hostPortRangeEnd)))
-    : defaults.hostPortRangeEnd;
-
-  return {
-    enabled: typeof input.enabled === "boolean"
-      ? input.enabled
-      : defaults.enabled,
-    showInAppBrowser: typeof input.showInAppBrowser === "boolean"
-      ? input.showInAppBrowser
-      : defaults.showInAppBrowser,
-    autoStartOnRunningSprint: typeof input.autoStartOnRunningSprint === "boolean"
-      ? input.autoStartOnRunningSprint
-      : defaults.autoStartOnRunningSprint,
-    rebuildOnTaskCompletion: typeof input.rebuildOnTaskCompletion === "boolean"
-      ? input.rebuildOnTaskCompletion
-      : defaults.rebuildOnTaskCompletion,
-    rebuildOnSprintCompletion: typeof input.rebuildOnSprintCompletion === "boolean"
-      ? input.rebuildOnSprintCompletion
-      : defaults.rebuildOnSprintCompletion,
-    autoStopOnTerminalSprint: typeof input.autoStopOnTerminalSprint === "boolean"
-      ? input.autoStopOnTerminalSprint
-      : defaults.autoStopOnTerminalSprint,
-    maxConcurrentContainers: typeof input.maxConcurrentContainers === "number" && Number.isFinite(input.maxConcurrentContainers)
-      ? Math.max(1, Math.min(100, Math.round(input.maxConcurrentContainers)))
-      : defaults.maxConcurrentContainers,
-    hostPortRangeStart,
-    hostPortRangeEnd: Math.max(hostPortRangeStart, hostPortRangeEndCandidate),
-    containerAppPort: typeof input.containerAppPort === "number" && Number.isFinite(input.containerAppPort)
-      ? Math.max(1, Math.min(65535, Math.round(input.containerAppPort)))
-      : defaults.containerAppPort,
-    startupScriptPath: typeof input.startupScriptPath === "string" && input.startupScriptPath.trim().length > 0
-      ? input.startupScriptPath.trim()
-      : defaults.startupScriptPath,
-  };
-}
 
 export function buildDefaultProjectSettings(externalHints?: ExternalSettingsHints): ProjectSettings {
   const aiProvider = sanitizeAiProvider(DEFAULT_DASHBOARD_SETTINGS, externalHints);

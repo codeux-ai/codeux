@@ -44,13 +44,17 @@ export function createSprintDependencies(
     activeDispatchRegistry,
   } = coreDeps;
 
+  const scopedResolver = coreDeps.settingsRepository.createScopedResolver();
+
   const resolveDashboardSettings = (scope?: DashboardSettingsScope): DashboardSettings => {
     const projectId = scope?.projectId?.trim();
     const sprintId = scope?.sprintId?.trim();
 
     let effective: { settings: DashboardSettings; sources: Record<string, string> };
     if (projectId) {
-      effective = resolveEffectiveDashboardSettings(coreDeps.settingsRepository, projectId, sprintId);
+      effective = sprintId
+        ? scopedResolver.resolveSprintDashboardSettings(projectId, sprintId)
+        : scopedResolver.resolveProjectDashboardSettings(projectId);
     } else {
       effective = {
         settings: context.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
@@ -147,7 +151,10 @@ export function createSprintDependencies(
       projectAttentionService,
       resolveDashboardSettings,
       (projectId, sprintId) => (
-        resolveEffectiveDashboardSettings(coreDeps.settingsRepository, projectId, sprintId).settings.workers.executionMode
+        (sprintId
+          ? scopedResolver.resolveSprintDashboardSettings(projectId, sprintId)
+          : scopedResolver.resolveProjectDashboardSettings(projectId)
+        ).settings.workers.executionMode
       ),
       logger.child({ component: "virtual-worker-task-dispatch-service" }),
       coreDeps.memoryService,
