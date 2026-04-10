@@ -93,6 +93,7 @@ For planning flows, Sprint OS (`src/services/planning-agent-service.ts`):
 For merge conflicts, Sprint OS:
 
 - prepares an isolated Docker workspace on the PR source branch
+- runs the helper Git/inspection commands inside that workspace as the same UID:GID that owns the volume so Git does not reject the repo as an unsafe `root` checkout
 - merges the target branch into it
 - runs the selected CLI provider against the conflict context
 - accepts both the original merge-conflict prompt payload fields (`currentTaskPrompt`, `mergedTaskPrompts`) and the newer task-context payload fields (`currentTask`, `featureBranchTaskContexts`) when constructing that provider prompt

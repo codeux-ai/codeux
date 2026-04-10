@@ -169,6 +169,7 @@ export class WorkspaceManager implements IWorkspaceManager {
     options: WorkspaceCommandOptions = {},
   ): Promise<CommandResult> {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
+    const ownerSpec = getWorkspaceOwnerSpec();
     const dockerArgs = [
       "run",
       "--rm",
@@ -184,6 +185,9 @@ export class WorkspaceManager implements IWorkspaceManager {
       WORKSPACE_HELPER_IMAGE,
       ...args,
     ];
+    if (ownerSpec) {
+      dockerArgs.splice(dockerArgs.length - args.length - 1, 0, "--user", ownerSpec);
+    }
     return await runCommandStrict("docker", dockerArgs, process.cwd(), options.env ?? process.env, { signal: options.signal });
   }
 

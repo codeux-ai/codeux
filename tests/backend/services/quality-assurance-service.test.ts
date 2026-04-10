@@ -741,4 +741,149 @@ describe("QualityAssuranceService", () => {
 
     expect(fetchOriginIfAvailable).toHaveBeenCalledWith("/repo");
   });
+
+  it("keeps the sprint heartbeat and lease alive during long sprint QA reviews", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-10T12:00:00.000Z"));
+
+    try {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-keepalive-"));
+      tempDirs.push(dir);
+      const storage = new AppDbStorage(path.join(dir, "app.db"));
+      const projectRepository = new ProjectManagementRepository(storage);
+      const executionRepository = new ExecutionRepository(storage);
+      const qaReviewRepository = new QaReviewRepository(storage);
+      const agentPresetRepository = new AgentPresetRepository(storage);
+
+      const project = projectRepository.createProject({
+        name: "QA Keepalive Project",
+        sourceType: "local",
+        sourceRef: dir,
+      });
+      const sprint = projectRepository.createSprint(project.id, {
+        name: "Sprint 1",
+        goal: "Ship safely",
+        status: "running",
+        featureBranch: "feature/sprint-1",
+      });
+      const task = projectRepository.createTask(project.id, {
+        sprintId: sprint.id,
+        taskKey: "T1",
+        title: "Initial task",
+        promptMarkdown: "Implement the initial feature.",
+        status: "completed",
+        isIndependent: true,
+      });
+      const sprintRun = executionRepository.createSprintRun({
+        projectId: project.id,
+        sprintId: sprint.id,
+        status: "running",
+      });
+      executionRepository.updateSprintRun(sprintRun.id, {
+        status: "running",
+        startedAt: "2026-04-10T12:00:00.000Z",
+        lastHeartbeatAt: "2026-04-10T12:00:00.000Z",
+      });
+      executionRepository.acquireLease({
+        scopeType: "sprint",
+        scopeId: sprint.id,
+        ownerKey: "test-orchestrator",
+        leaseToken: "lease-1",
+        expiresAt: "2026-04-10T12:05:00.000Z",
+      });
+
+      const structuredAgentRequestService = {
+        executeRequest: vi.fn(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 65_000));
+          return {
+            parsed: {
+              verdict: "pass",
+              summary: "Looks good.",
+              findings: [],
+              fixInstructions: null,
+              targetTaskKey: null,
+              shouldHavePr: true,
+              followUpTasks: [],
+              raw: {},
+            },
+            sessionId: "qa-session-1",
+            invocationId: "xi_1",
+            nativeSessionId: "native-1",
+            bodyMarkdown: "{\"verdict\":\"pass\"}",
+          };
+        }),
+      };
+
+      const service = new QualityAssuranceService({
+        projectManagementRepository: projectRepository,
+        executionRepository,
+        sessionTracking: {} as any,
+        qaReviewRepository,
+        taskService: {
+          resolveInvocationProvider: () => ({
+            provider: "claude-code",
+            providers: { "claude-code": { model: "claude-3-5-sonnet", thinkingMode: false, apiKey: "test-key" } },
+          }),
+        } as any,
+        agentPresetSyncService: {
+          resolveTargetedQualityAssuranceAgent: async () => {
+            const preset = agentPresetRepository.createAgentPreset(project.id, {
+              name: "QA",
+              presetId: "QA-keepalive",
+              instructionMarkdown: "QA Agent",
+            });
+            return { id: preset.id, name: "QA", instructionMarkdown: "QA Agent" };
+          },
+        } as any,
+        providerRunner: {} as any,
+        structuredAgentRequestService: structuredAgentRequestService as any,
+        getDashboardSettings: () => ({
+          ...DEFAULT_DASHBOARD_SETTINGS,
+          agents: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents,
+            qualityAssurance: {
+              ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+              enabled: true,
+            },
+          },
+        }),
+        getGithubToken: () => undefined,
+        sendSessionMessage: async () => ({}),
+      });
+
+      const reviewPromise = service.reviewSprintCompletion({
+        projectId: project.id,
+        sprintId: sprint.id,
+        sprintRunId: sprintRun.id,
+        repoPath: dir,
+        subtasks: [
+          {
+            record_id: task.id,
+            project_id: project.id,
+            sprint_id: sprint.id,
+            id: "T1",
+            title: "Initial task",
+            prompt: "Implement the initial feature.",
+            depends_on: [],
+            is_independent: true,
+            status: "COMPLETED",
+          },
+        ] as any,
+      });
+
+      await vi.advanceTimersByTimeAsync(65_000);
+      const outcome = await reviewPromise;
+
+      expect(outcome).toMatchObject({
+        reviewed: true,
+        blockedCompletion: false,
+        mergeBlocked: false,
+      });
+      expect(structuredAgentRequestService.executeRequest).toHaveBeenCalledTimes(1);
+      expect(executionRepository.getSprintRun(sprintRun.id)?.lastHeartbeatAt).toBe("2026-04-10T12:01:05.000Z");
+      expect(executionRepository.getLease("sprint", sprint.id)?.expiresAt).toBe("2026-04-10T12:06:05.000Z");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

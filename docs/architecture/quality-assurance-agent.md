@@ -123,6 +123,7 @@ Behavior:
   - `maxTaskReviewRuns = 1` means sprint fixes are not re-checked by QA
 - if sprint QA passes, Sprint OS proceeds to main-merge evaluation and eventual completion
 - if sprint QA is still running, failed, or waiting on follow-up work, the main merge stays blocked
+- while a sprint QA review is running, Sprint OS now refreshes the parent sprint-run heartbeat and lease so long reviews are not mistaken for stalled orchestration and failed by runtime cleanup
 
 ## Session Continuation
 

@@ -76,19 +76,22 @@ describe("WorkspaceManager", () => {
 
     await manager.runWorkspaceCommand("docker-volume://workspace-1", "git", ["status", "--short"]);
 
-    expect(runCommandStrict).toHaveBeenCalledWith(
-      "docker",
-      expect.arrayContaining([
-        "run",
-        "--entrypoint",
-        "git",
-        "alpine/git",
-        "status",
-        "--short",
-      ]),
-      expect.any(String),
-      expect.any(Object),
-      expect.any(Object),
-    );
+    const call = vi.mocked(runCommandStrict).mock.calls[0];
+    expect(call?.[0]).toBe("docker");
+    expect(call?.[1]).toEqual(expect.arrayContaining([
+      "run",
+      "--entrypoint",
+      "git",
+      "alpine/git",
+      "status",
+      "--short",
+    ]));
+
+    if (typeof process.getuid === "function" && typeof process.getgid === "function") {
+      expect(call?.[1]).toEqual(expect.arrayContaining([
+        "--user",
+        `${process.getuid()}:${process.getgid()}`,
+      ]));
+    }
   });
 });
