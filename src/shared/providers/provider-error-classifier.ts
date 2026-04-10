@@ -195,6 +195,11 @@ function isGeminiRuntimeStorageError(text: string): boolean {
     && /\.sprint-os-home\/\.gemini\//i.test(text);
 }
 
+function isCodexTransportServerError(text: string): boolean {
+  return /responses_websocket/i.test(text)
+    && /HTTP error:\s*5\d\d/i.test(text);
+}
+
 function computeResetAtIso(resetAfter: string): string | null {
   const hours = parseInt(resetAfter.match(/(\d+)h/)?.[1] ?? "0", 10);
   const minutes = parseInt(resetAfter.match(/(\d+)m/)?.[1] ?? "0", 10);
@@ -234,6 +239,16 @@ export function classifyProviderError(
 ): ProviderErrorClassification {
   const combined = `${result.stdout}\n${result.stderr}`;
   const providerPatterns = PROVIDER_PATTERNS[provider] ?? [];
+
+  if (provider === "codex" && isCodexTransportServerError(combined)) {
+    return {
+      category: "UNKNOWN",
+      provider,
+      userMessage: buildUserMessage(provider, "UNKNOWN", null),
+      resetAfter: null,
+      resetAtIso: null,
+    };
+  }
 
   for (const entry of providerPatterns) {
     if (entry.patterns.some((pattern) => pattern.test(combined))) {

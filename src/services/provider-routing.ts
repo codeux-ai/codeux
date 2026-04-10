@@ -6,7 +6,7 @@ import type {
   ProviderStrategy,
   Subtask,
 } from "../contracts/app-types.js";
-import { DEFAULT_INVOCATION_ROUTING } from "../repositories/settings-defaults.js";
+import { AI_MODEL_CATALOG, DEFAULT_INVOCATION_ROUTING } from "../repositories/settings-defaults.js";
 
 const PROVIDER_ORDER: ProviderId[] = ["jules", "gemini", "codex", "claude-code"];
 
@@ -72,6 +72,20 @@ const resolveInvocationStrategy = (
   return route.strategy;
 };
 
+export const resolveWorkerModelForProvider = (
+  provider: Exclude<ProviderId, "jules">,
+  workerModel: string | null | undefined,
+  fallbackModel: string,
+): string => {
+  const normalizedModel = typeof workerModel === "string" ? workerModel.trim() : "";
+  if (!normalizedModel || normalizedModel === "default") {
+    return fallbackModel;
+  }
+
+  const catalog = AI_MODEL_CATALOG[provider] || [];
+  return catalog.includes(normalizedModel) ? normalizedModel : fallbackModel;
+};
+
 const buildRouteProviders = (
   settings: DashboardSettings,
   invocation: InvocationRoutingId,
@@ -92,9 +106,13 @@ const buildRouteProviders = (
     providers[manualProvider] = {
       ...providers[manualProvider],
       enabled: true,
-      model: settings.workers.model && settings.workers.model !== "default"
-        ? settings.workers.model
-        : providers[manualProvider].model,
+      model: manualProvider === "jules"
+        ? providers[manualProvider].model
+        : resolveWorkerModelForProvider(
+          manualProvider,
+          settings.workers.model,
+          providers[manualProvider].model,
+        ),
     };
   }
 

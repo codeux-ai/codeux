@@ -120,6 +120,15 @@ describe("classifyProviderError", () => {
       const classification = classifyProviderError("codex", result);
       expect(classification.category).toBe("QUOTA_EXHAUSTED");
     });
+
+    it("does not misclassify websocket 500 transport failures as auth errors", () => {
+      const result = makeResult(
+        "",
+        "2026-04-10T14:10:18.814616Z ERROR codex_api::endpoint::responses_websocket: failed to connect to websocket: HTTP error: 500 Internal Server Error, url: wss://api.openai.com/v1/responses",
+      );
+      const classification = classifyProviderError("codex", result);
+      expect(classification.category).toBe("UNKNOWN");
+    });
   });
 
   describe("generic", () => {

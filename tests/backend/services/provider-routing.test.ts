@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ManualRoutingStrategy,
   OrchestratedRoutingStrategy,
+  resolveWorkerModelForProvider,
   WeightedRoutingStrategy,
   chooseProviderForTask,
   resolveProviderForInvocation,
@@ -205,6 +206,21 @@ describe("Provider Routing Logic", () => {
       expect(result.providers.gemini.model).toBe("gemini-2.5-flash");
     });
 
+    it("falls back to the selected provider model when the worker model belongs to another provider", () => {
+      const settings = mockSettings("MANUAL", "jules");
+      settings.workers.virtualWorkerProvider = "gemini";
+      settings.workers.model = "gpt-5.3-codex";
+
+      const result = resolveProviderForInvocation(settings, {
+        invocation: "planning",
+        task: mockTask({ prompt: "Plan the next sprint" }),
+        providerPool: ["gemini", "codex", "claude-code"],
+      });
+
+      expect(result.provider).toBe("gemini");
+      expect(result.providers.gemini.model).toBe("gemini-2.5-pro");
+    });
+
     it("respects invocation-specific provider subsets and model overrides", () => {
       const settings = mockSettings("MANUAL", "jules");
       settings.aiProvider.invocationRouting.planning = {
@@ -275,6 +291,16 @@ describe("Provider Routing Logic", () => {
       settings.aiProvider.providers.jules.weight = 100;
       settings.aiProvider.providers.gemini.weight = 0;
       expect(chooseProviderForTask(settings, mockTask())).toBe("jules");
+    });
+  });
+
+  describe("resolveWorkerModelForProvider", () => {
+    it("keeps a valid worker override for the selected provider", () => {
+      expect(resolveWorkerModelForProvider("gemini", "gemini-2.5-flash", "gemini-2.5-pro")).toBe("gemini-2.5-flash");
+    });
+
+    it("ignores an incompatible worker override", () => {
+      expect(resolveWorkerModelForProvider("claude-code", "gpt-5.3-codex", "opus")).toBe("opus");
     });
   });
 });
