@@ -5,6 +5,7 @@ import { useMessageCache } from "../../../dashboard/src/v2/hooks/useMessageCache
 import { useChatThreadData } from "../../../dashboard/src/v2/hooks/use-chat-thread-data.js";
 import { useChatPageResources } from "../../../dashboard/src/v2/hooks/use-chat-page-resources.js";
 import { renderHook, act } from "@testing-library/preact";
+import * as apiConnection from "../../../dashboard/src/v2/lib/connection-api.js";
 
 // Mock connection-api calls to prevent external requests
 vi.mock("../../../dashboard/src/v2/lib/connection-api.js", () => ({
@@ -148,6 +149,101 @@ describe("useChatPageResources integration", () => {
     expect(cachedThreads[0].id).toBe("thread-2");
 
     expect(result.current.threadData.selectedThreadIdRef.current).toBe("thread-2");
+  });
+
+  it("handles race condition and request abort during refreshThreads", async () => {
+    const { result } = renderHook(() => {
+      const cache = useMessageCache();
+      const threadData = useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+
+      const invocationData = {
+        selectedInvocationIdRef: { current: null },
+        setInvocationsSnapshot: vi.fn(),
+        setInvocationMessagesSnapshot: vi.fn(),
+        setSelectedInvocationId: vi.fn(),
+        setError: vi.fn(),
+        activateInvocation: vi.fn(),
+        refreshInvocationMessages: vi.fn()
+      } as any;
+
+      const pageResources = useChatPageResources({
+        selectedProject: { id: "proj-1" },
+        cache,
+        chatMode: "threads",
+        threadData,
+        invocationData,
+      });
+
+      return { pageResources, threadData };
+    });
+
+    // Provide a mocked response that yields slightly later
+    let resolveFirst: any;
+    vi.mocked(apiConnection.fetchConversationThreads)
+      .mockReturnValueOnce(new Promise((r) => { resolveFirst = r; }))
+      .mockReturnValueOnce(Promise.resolve([{ id: "thread-fast", scope: "project" } as any]));
+
+    await act(async () => {
+      // Start the first slow request
+      void result.current.pageResources.refreshThreads({ mode: "threads" });
+    });
+
+    await act(async () => {
+      // Start the second fast request which supersedes the first
+      await result.current.pageResources.refreshThreads({ mode: "threads" });
+    });
+
+    // Resolve the first slow request
+    await act(async () => {
+      resolveFirst([{ id: "thread-slow-stale", scope: "project" } as any]);
+      await new Promise(r => setTimeout(r, 10)); // allow microtasks
+    });
+
+    // It should have ignored the slow stale response
+    expect(result.current.threadData.selectedThreadIdRef.current).toBe("thread-fast");
+  });
+
+  it("handles race condition and abort during refreshMessages in thread data", async () => {
+    const { result } = renderHook(() => {
+      const cache = useMessageCache();
+      const threadData = useChatThreadData({
+        selectedProject: { id: "proj-1" },
+        cache,
+        execution: null,
+        workerRouting: null,
+      });
+
+      return { threadData, cache };
+    });
+
+    let resolveSlow: any;
+    vi.mocked(apiConnection.fetchConversationMessages)
+      .mockReturnValueOnce(new Promise((r) => { resolveSlow = r; }))
+      .mockReturnValueOnce(Promise.resolve([{ id: "fast-msg" } as any]));
+
+    await act(async () => {
+      result.current.threadData.selectedThreadIdRef.current = "thread-1";
+      // First slow request
+      void result.current.threadData.refreshMessages("thread-1", { force: true });
+    });
+
+    await act(async () => {
+      // Second fast request
+      await result.current.threadData.refreshMessages("thread-1", { force: true });
+    });
+
+    await act(async () => {
+      resolveSlow([{ id: "stale-msg" } as any]);
+      await new Promise(r => setTimeout(r, 10));
+    });
+
+    expect(result.current.threadData.messages.length).toBe(1);
+    expect(result.current.threadData.messages[0].id).toBe("fast-msg");
   });
 
   it("optimistically updates messages upon handling send", async () => {

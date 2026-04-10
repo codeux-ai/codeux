@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "preact/hooks";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import type { MutableRef } from "preact/hooks";
 import type { AgentConnection, ChatThread, ExecutionInvocationRecord, ChatMessageRecord } from "../types.js";
 import type { DashboardRealtimeServerMessage, ExecutionDashboardSnapshot, ExecutionConnectionSummary } from "../../types.js";
@@ -84,12 +84,16 @@ export const useChatPageResources = (options: {
   const [connections, setConnections] = useState<AgentConnection[]>([]);
   const [loading, setLoading] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
+  const fetchIdRef = useRef(0);
 
   const setConnectionsSnapshot = useCallback((nextConnections: AgentConnection[]): void => {
     setConnections((current) => areConnectionsEqual(current, nextConnections) ? current : nextConnections);
   }, []);
 
   const refreshThreads = useCallback(async (refreshOptions?: { manual?: boolean; foreground?: boolean; mode?: "threads" | "invocations" | "both" }): Promise<void> => {
+    fetchIdRef.current += 1;
+    const currentFetchId = fetchIdRef.current;
+
     if (!selectedProject) {
       threadData.setThreadsSnapshot([]);
       invocationData.setInvocationsSnapshot([]);
@@ -132,6 +136,10 @@ export const useChatPageResources = (options: {
 
       const results = await Promise.all(fetchPromises);
 
+      if (currentFetchId !== fetchIdRef.current) {
+        return;
+      }
+
       if (fetchThreadsIndex !== -1 && fetchConnectionsIndex !== -1) {
         const nextThreads = results[fetchThreadsIndex] as ChatThread[];
         const nextConnections = results[fetchConnectionsIndex] as AgentConnection[];
@@ -168,14 +176,15 @@ export const useChatPageResources = (options: {
       threadData.setError(null);
       invocationData.setError(null);
     } catch (fetchError) {
+      if (currentFetchId !== fetchIdRef.current) {
+        return;
+      }
       const errorMsg = fetchError instanceof Error ? fetchError.message : String(fetchError);
       threadData.setError(errorMsg);
       invocationData.setError(errorMsg);
     } finally {
-      if (refreshOptions?.manual) {
+      if (currentFetchId === fetchIdRef.current) {
         setManualRefreshing(false);
-      }
-      if (refreshOptions?.foreground) {
         setLoading(false);
       }
     }

@@ -103,6 +103,7 @@ export const useChatThreadData = (options: {
   const threadsRef = useRef<ChatThread[]>([]);
   const inflightMessageFetchesRef = useRef(new Map<string, Promise<ChatMessageRecord[]>>());
   const activationTokenRef = useRef(0);
+  const refreshMessagesIdRef = useRef(0);
 
   const { feedback, setSuccess, clearFeedback } = useActionFeedback();
   const {
@@ -219,6 +220,9 @@ export const useChatThreadData = (options: {
     threadId: string | null,
     refreshOptions?: { foreground?: boolean; force?: boolean },
   ): Promise<void> => {
+    refreshMessagesIdRef.current += 1;
+    const currentFetchId = refreshMessagesIdRef.current;
+
     if (!threadId) {
       setMessagesSnapshot([]);
       setMessagesLoading(false);
@@ -236,14 +240,22 @@ export const useChatThreadData = (options: {
           return messagesResponse;
         })
         : await ensureMessagesLoaded(threadId);
+
+      if (currentFetchId !== refreshMessagesIdRef.current) {
+        return;
+      }
+
       if (selectedThreadIdRef.current === threadId) {
         setMessagesSnapshot(nextMessages);
       }
       setError(null);
     } catch (fetchError) {
+      if (currentFetchId !== refreshMessagesIdRef.current) {
+        return;
+      }
       setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
     } finally {
-      if (refreshOptions?.foreground) {
+      if (currentFetchId === refreshMessagesIdRef.current) {
         setMessagesLoading(false);
       }
     }
