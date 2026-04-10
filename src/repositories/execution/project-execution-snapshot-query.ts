@@ -4,9 +4,9 @@ import { queryExecutionSprintRuns } from "./execution-sprint-runs-query.js";
 import { queryExecutionTaskDispatches } from "./execution-task-dispatches-query.js";
 import { queryExecutionRuntimeEvents } from "./execution-runtime-events-query.js";
 import { buildHumanInterventionSummaryBySprintRun, listActiveAttentionRowsForProject } from "./execution-human-intervention-query.js";
-import { getUsageTotalsBySprintRunIds, getUsageTotalsByTaskIds, withWallTime } from "./execution-usage-query.js";
-import { getWallTimeTotalsBySprintRunIds, getWallTimeTotalsByTaskIds } from "./execution-wall-time-query.js";
-import { ExecutionDashboardSnapshot } from "../../contracts/app-types.js";
+import { withWallTime } from "./execution-usage-query.js";
+
+import { ExecutionDashboardSnapshot, ExecutionUsageTotals } from "../../contracts/app-types.js";
 import {
   mapProviderInvocationUsageRow,
   mapExecutionSprintRunSummaryRow,
@@ -18,6 +18,12 @@ export function queryProjectExecutionSnapshot(
   db: Database,
   storage: AppDbStorage,
   projectId: string,
+  deps: {
+    getWallTimeTotalsByTaskIds: (projectId: string, taskIds: string[], nowIso: string) => Map<string, number>,
+    getWallTimeTotalsBySprintRunIds: (projectId: string, sprintRunIds: string[], nowIso: string) => Map<string, number>,
+    getUsageTotalsByTaskIds: (projectId: string, taskIds: string[]) => Map<string, ExecutionUsageTotals>,
+    getUsageTotalsBySprintRunIds: (projectId: string, sprintRunIds: string[]) => Map<string, ExecutionUsageTotals>
+  }
 ): ExecutionDashboardSnapshot {
   const projectRow = db.prepare(`
     SELECT id, name
@@ -36,11 +42,11 @@ export function queryProjectExecutionSnapshot(
     runtimeEvents,
   );
 
-  const usageBySprintRunId = getUsageTotalsBySprintRunIds(storage, projectId, sprintRuns.map((row) => row.id), mapProviderInvocationUsageRow);
+  const usageBySprintRunId = deps.getUsageTotalsBySprintRunIds(projectId, sprintRuns.map((row) => row.id));
   const nowIso = new Date().toISOString();
-  const usageByTaskId = getUsageTotalsByTaskIds(storage, projectId, taskDispatches.map((row) => row.task_id), mapProviderInvocationUsageRow);
-  const wallTimeBySprintRunId = getWallTimeTotalsBySprintRunIds(storage, sprintRuns.map((row) => row.id), nowIso);
-  const wallTimeByTaskId = getWallTimeTotalsByTaskIds(storage, taskDispatches.map((row) => row.task_id), nowIso);
+  const usageByTaskId = deps.getUsageTotalsByTaskIds(projectId, taskDispatches.map((row) => row.task_id));
+  const wallTimeBySprintRunId = deps.getWallTimeTotalsBySprintRunIds(projectId, sprintRuns.map((row) => row.id), nowIso);
+  const wallTimeByTaskId = deps.getWallTimeTotalsByTaskIds(projectId, taskDispatches.map((row) => row.task_id), nowIso);
 
   return {
     projectId: projectRow?.id || null,
