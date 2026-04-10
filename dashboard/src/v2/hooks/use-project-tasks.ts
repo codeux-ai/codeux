@@ -79,10 +79,35 @@ export function useProjectTasks(
     });
   }, [enabled, projectId, refreshInternal]);
 
+  const sourcesByIdRef = useRef<Map<string, Source>>(new Map());
+  const sprintsByIdRef = useRef<Map<string, Sprint>>(new Map());
+  const prevTasksMapRef = useRef<Map<string, Task>>(new Map());
+
   const tasks = useMemo(() => {
-    const sourcesById = new Map(sources.map((source) => [source.id, source]));
-    const sprintsById = new Map(sprints.map((sprint) => [sprint.id, sprint]));
-    return taskRecords.map((task) => toTaskViewModel(task, sourcesById, sprintsById));
+    const sourcesById = sourcesByIdRef.current;
+    sourcesById.clear();
+    for (const source of sources) {
+      sourcesById.set(source.id, source);
+    }
+
+    const sprintsById = sprintsByIdRef.current;
+    sprintsById.clear();
+    for (const sprint of sprints) {
+      sprintsById.set(sprint.id, sprint);
+    }
+
+    const prevTasksMap = prevTasksMapRef.current;
+    const nextTasksMap = new Map<string, Task>();
+
+    const nextTasks = taskRecords.map((taskRecord) => {
+      const prevTask = prevTasksMap.get(taskRecord.id);
+      const nextTask = toTaskViewModel(taskRecord, sourcesById, sprintsById, prevTask);
+      nextTasksMap.set(taskRecord.id, nextTask);
+      return nextTask;
+    });
+
+    prevTasksMapRef.current = nextTasksMap;
+    return nextTasks;
   }, [sources, sprints, taskRecords]);
 
   const refresh = useCallback(async (): Promise<void> => {

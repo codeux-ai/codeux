@@ -4,6 +4,38 @@ import { ProviderInvocationUsageRow } from "./execution-repository-types.js";
 import { ProviderInvocationUsageRecord } from "../../contracts/execution-types.js";
 import { createEmptyUsageTotals } from "./stats-buckets.js";
 
+export const USAGE_AGGREGATION_SQL = `SELECT
+      %ID_COLUMN%,
+      COUNT(*) as invocation_count,
+      SUM(duration_ms) as duration_ms,
+      SUM(input_tokens) as input_tokens,
+      SUM(cached_input_tokens) as cached_input_tokens,
+      SUM(output_tokens) as output_tokens,
+      SUM(reasoning_output_tokens) as reasoning_output_tokens,
+      SUM(total_tokens) as total_tokens,
+      SUM(CASE WHEN usage_source = 'reported' THEN 1 ELSE 0 END) as reported_invocation_count,
+      SUM(CASE WHEN usage_source = 'estimated' THEN 1 ELSE 0 END) as estimated_invocation_count,
+      SUM(CASE WHEN usage_source = 'unsupported' THEN 1 ELSE 0 END) as unsupported_invocation_count,
+      SUM(CASE WHEN usage_source NOT IN ('reported', 'estimated', 'unsupported') THEN 1 ELSE 0 END) as unavailable_invocation_count
+    FROM provider_invocations WHERE project_id = ? AND %ID_COLUMN%`;
+
+export function mapUsageRowToTotals(row: any): ExecutionUsageTotals {
+  return {
+    invocationCount: Number(row.invocation_count) || 0,
+    activeTimeMs: Number(row.duration_ms) || 0,
+    wallTimeMs: 0,
+    inputTokens: Number(row.input_tokens) || 0,
+    cachedInputTokens: Number(row.cached_input_tokens) || 0,
+    outputTokens: Number(row.output_tokens) || 0,
+    reasoningOutputTokens: Number(row.reasoning_output_tokens) || 0,
+    totalTokens: Number(row.total_tokens) || 0,
+    reportedInvocationCount: Number(row.reported_invocation_count) || 0,
+    estimatedInvocationCount: Number(row.estimated_invocation_count) || 0,
+    unsupportedInvocationCount: Number(row.unsupported_invocation_count) || 0,
+    unavailableInvocationCount: Number(row.unavailable_invocation_count) || 0,
+  };
+}
+
 export function mergeUsageTotals(target: ExecutionUsageTotals, invocation: ProviderInvocationUsageRecord): void {
   target.invocationCount += 1;
   target.activeTimeMs += invocation.durationMs || 0;
@@ -67,12 +99,18 @@ export function getUsageTotalsByTaskIds(
   if (taskIds.length === 0) {
     return new Map();
   }
-  const rows = storage.executeChunkedInQuery<ProviderInvocationUsageRow>({
-    sqlPrefix: "SELECT * FROM provider_invocations WHERE project_id = ? AND task_id",
+  const rows = storage.executeChunkedInQuery<any>({
+    sqlPrefix: USAGE_AGGREGATION_SQL.replace(/%ID_COLUMN%/g, 'task_id'),
+    sqlSuffix: "GROUP BY task_id",
     items: taskIds,
     bindParamsBefore: [projectId],
   });
-  return groupUsageBy(rows.map((row) => mapProviderInvocationUsageRow(row)), (row) => row.taskId);
+
+  const map = new Map<string, ExecutionUsageTotals>();
+  for (const row of rows) {
+    map.set(row.task_id || row.sprint_run_id, mapUsageRowToTotals(row));
+  }
+  return map;
 }
 
 export function getUsageTotalsBySprintRunIds(
@@ -84,10 +122,16 @@ export function getUsageTotalsBySprintRunIds(
   if (sprintRunIds.length === 0) {
     return new Map();
   }
-  const rows = storage.executeChunkedInQuery<ProviderInvocationUsageRow>({
-    sqlPrefix: "SELECT * FROM provider_invocations WHERE project_id = ? AND sprint_run_id",
+  const rows = storage.executeChunkedInQuery<any>({
+    sqlPrefix: USAGE_AGGREGATION_SQL.replace(/%ID_COLUMN%/g, 'sprint_run_id'),
+    sqlSuffix: "GROUP BY sprint_run_id",
     items: sprintRunIds,
     bindParamsBefore: [projectId],
   });
-  return groupUsageBy(rows.map((row) => mapProviderInvocationUsageRow(row)), (row) => row.sprintRunId);
+
+  const map = new Map<string, ExecutionUsageTotals>();
+  for (const row of rows) {
+    map.set(row.task_id || row.sprint_run_id, mapUsageRowToTotals(row));
+  }
+  return map;
 }

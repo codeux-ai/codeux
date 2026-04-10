@@ -593,19 +593,24 @@ export function resolveDashboardSettings(args: {
     memory: { ...sprintSettings.memory },
   };
 
-  const sources = flattenSources(args.systemSettings.runtime, "system");
-  flattenSources(args.systemSettings.mcpTools, "system", "mcpTools", sources);
-  flattenSources(baseProject, "system", "", sources);
-  if (args.projectOverride) {
-    Object.assign(sources, flattenSources(args.projectOverride, "project"));
-  }
-  if (args.sprintOverride) {
-    Object.assign(sources, flattenSources(args.sprintOverride, "sprint"));
-  }
+  let sourcesCache: Record<string, SettingsValueSource> | undefined;
 
   return {
     settings: dashboardSettings,
-    sources,
+    get sources() {
+      if (!sourcesCache) {
+        sourcesCache = flattenSources(args.systemSettings.runtime, "system");
+        flattenSources(args.systemSettings.mcpTools, "system", "mcpTools", sourcesCache);
+        flattenSources(baseProject, "system", "", sourcesCache);
+        if (args.projectOverride) {
+          Object.assign(sourcesCache, flattenSources(args.projectOverride, "project"));
+        }
+        if (args.sprintOverride) {
+          Object.assign(sourcesCache, flattenSources(args.sprintOverride, "sprint"));
+        }
+      }
+      return sourcesCache;
+    },
   };
 }
 
