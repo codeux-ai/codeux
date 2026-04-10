@@ -144,6 +144,12 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
             style={{ clipPath: "inset(-10px)" }}
           />
         )}
+        {sprint.latestReview?.status === 'running' && (
+          <div
+            className="absolute inset-0 rounded-[1.75rem] border-2 border-signal-500/30 pointer-events-none animate-ping"
+            style={{ animationDuration: '2s' }}
+          />
+        )}
       </div>
 
       {isCompleted && (

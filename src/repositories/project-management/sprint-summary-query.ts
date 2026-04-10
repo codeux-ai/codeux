@@ -29,6 +29,7 @@ export const sprintSummaryQuery = {
             'status', q.status,
             'outcome', q.outcome,
             'summary', q.summary_markdown,
+            'findings', COALESCE(json_extract(q.payload_json, '$.findings'), json_array()),
             'reviewer', q.agent_name,
             'finishedAt', q.finished_at
           )

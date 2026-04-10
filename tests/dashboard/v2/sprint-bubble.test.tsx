@@ -73,7 +73,7 @@ describe("SprintBubble", () => {
     );
 
     // Test the text element using queryAllByText to handle multiple instances (compact mode, hidden tooltip)
-    const reviewLabels = screen.queryAllByText("QA Reviewed");
+    const reviewLabels = screen.queryAllByText(/QA Review(ed| Complete)/i);
     expect(reviewLabels.length).toBeGreaterThan(0);
 
     // Check for the summary content

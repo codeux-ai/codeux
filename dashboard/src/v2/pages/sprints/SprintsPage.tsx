@@ -316,7 +316,7 @@ export const SprintsPage: FunctionComponent = () => {
 
         {selectedProject ? (
           <>
-            <div ref={createStageRef} className="relative overflow-hidden">
+            <div ref={createStageRef} className="relative">
               <div
                 className={`transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                   showCreateComposer || editingSprint || showQuicksprint
@@ -388,10 +388,10 @@ export const SprintsPage: FunctionComponent = () => {
               </div>
 
               <div
-                className={`overflow-hidden transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                className={`transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                   showCreateComposer || editingSprint
-                    ? "mt-0 max-h-[220rem] translate-y-0 scale-100 opacity-100 blur-0"
-                    : "pointer-events-none max-h-0 translate-y-10 scale-[0.985] opacity-0 blur-[10px]"
+                    ? "mt-0 max-h-[220rem] overflow-visible translate-y-0 scale-100 opacity-100 blur-0"
+                    : "pointer-events-none max-h-0 overflow-hidden translate-y-10 scale-[0.985] opacity-0 blur-[10px]"
                 }`}
               >
                 <div className="relative">
@@ -415,10 +415,10 @@ export const SprintsPage: FunctionComponent = () => {
               </div>
 
               <div
-                className={`overflow-hidden transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
+                className={`transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] ${
                   showQuicksprint
-                    ? "mt-0 max-h-[220rem] translate-y-0 scale-100 opacity-100 blur-0"
-                    : "pointer-events-none max-h-0 translate-y-10 scale-[0.985] opacity-0 blur-[10px]"
+                    ? "mt-0 max-h-[220rem] overflow-visible translate-y-0 scale-100 opacity-100 blur-0"
+                    : "pointer-events-none max-h-0 overflow-hidden translate-y-10 scale-[0.985] opacity-0 blur-[10px]"
                 }`}
               >
                 <div className="relative">

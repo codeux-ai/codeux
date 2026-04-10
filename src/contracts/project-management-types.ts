@@ -38,6 +38,7 @@ export interface SprintReviewSummary {
   status: string;
   outcome: string | null;
   summary: string | null;
+  findings: string[];
   reviewer: string | null;
   finishedAt: string | null;
 }

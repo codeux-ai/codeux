@@ -791,7 +791,9 @@ export class ProjectManagementRepository {
     let latestReview: import("../contracts/project-management-types.js").SprintReviewSummary | undefined;
     if (row.latest_sprint_review_json) {
       try {
-        latestReview = JSON.parse(row.latest_sprint_review_json) as import("../contracts/project-management-types.js").SprintReviewSummary;
+        const parsed = JSON.parse(row.latest_sprint_review_json) as import("../contracts/project-management-types.js").SprintReviewSummary;
+        parsed.findings = Array.isArray(parsed.findings) ? parsed.findings : [];
+        latestReview = parsed;
       } catch {
         // Ignore JSON parse errors
       }
