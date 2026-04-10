@@ -89,6 +89,7 @@ describe("MCP Factory", () => {
 
     mockDashboardDeps = {
       executionControlService: {},
+      taskRerunService: {},
     };
   });
 

@@ -3,6 +3,7 @@ import type { ProjectManagementRepository } from "../../repositories/project-man
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
 import type { ExecutionRepository } from "../../repositories/execution-repository.js";
 import type { TaskRerunService } from "../../services/task-rerun-service.js";
+import type { LateBoundLink } from "../../app/dependency-factory/helpers/late-bound-link.js";
 import { randomUUID } from "crypto";
 
 export class TaskActions {
@@ -10,7 +11,7 @@ export class TaskActions {
     private readonly projectManagementRepository: ProjectManagementRepository,
     private readonly executionControlService: ExecutionControlService,
     private readonly executionRepository: ExecutionRepository,
-    private readonly taskRerunService: TaskRerunService,
+    private readonly taskRerunService: LateBoundLink<TaskRerunService>,
   ) {}
 
   async handleTaskAction(args: ManageSprintOsArgs): Promise<ManagementResponseEnvelope> {
@@ -142,7 +143,7 @@ export class TaskActions {
       throw new Error("taskId is required");
     }
 
-    const task = await this.taskRerunService.rerunTask(taskId, {
+    const task = await this.taskRerunService.get().rerunTask(taskId, {
         provider: typeof payload.provider === "string" ? payload.provider as any : undefined,
     });
     return { result: { task } };

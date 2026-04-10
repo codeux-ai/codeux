@@ -10,6 +10,7 @@ import type { AgentPresetSyncService } from "../services/agent-preset-sync-servi
 import type { MemoryService } from "../services/memory-service.js";
 import type { MemoryPromotionService } from "../services/memory-promotion-service.js";
 import type { EmbeddingModelManager } from "../services/embedding-model-manager.js";
+import type { LateBoundLink } from "../app/dependency-factory/helpers/late-bound-link.js";
 
 import { handlePreviewActions } from "./management/preview-actions.js";
 import { handleTelemetryActions } from "./management/telemetry-actions.js";
@@ -21,12 +22,12 @@ import { AgentActions } from "./management/agent-actions.js";
 import { MemoryActions } from "./management/memory-actions.js";
 
 export interface ManagementToolHandlerDeps {
-  sprintPreviewService: SprintPreviewService;
+  sprintPreviewService: LateBoundLink<SprintPreviewService>;
   executionRepository: ExecutionRepository;
   getDashboardSettings: () => DashboardSettings;
   projectManagementRepository: ProjectManagementRepository;
   executionControlService: ExecutionControlService;
-  taskRerunService: TaskRerunService;
+  taskRerunService: LateBoundLink<TaskRerunService>;
   settingsRepository: SettingsRepository;
   agentPresetSyncService: AgentPresetSyncService;
   memoryService: MemoryService;
@@ -84,7 +85,7 @@ export class ManagementToolHandler {
         envelope = await this.memoryActions.handleMemoryAction(args);
       } else if (args.domain === "preview") {
         const currentHost = null; // serverHost is not available on DashboardSettings, we'll fall back to localhost in preview-origin
-        envelope = await handlePreviewActions(args, this.deps.sprintPreviewService, currentHost);
+        envelope = await handlePreviewActions(args, this.deps.sprintPreviewService.get(), currentHost);
       } else if (args.domain === "telemetry") {
         envelope = await handleTelemetryActions(args, this.deps.executionRepository);
       } else {
@@ -119,5 +120,9 @@ export class ManagementToolHandler {
       };
       return { content: [{ type: "text", text: JSON.stringify(envelope, null, 2) }] };
     }
+  }
+
+  public bindSprintPreviewService(service: SprintPreviewService): void {
+    this.deps.sprintPreviewService.bind(service);
   }
 }

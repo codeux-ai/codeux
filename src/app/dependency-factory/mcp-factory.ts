@@ -7,6 +7,9 @@ import { ManagementToolHandler } from "../../mcp/management-tool-handler.js";
 import { type DashboardSettings, type DashboardSettingsScope } from "../../contracts/app-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
+import { LateBoundLink } from "./helpers/late-bound-link.js";
+import type { SprintPreviewService } from "../../services/sprint-preview-service.js";
+import type { TaskRerunService } from "../../services/task-rerun-service.js";
 
 import type { DashboardDependencies } from "./dashboard-factory.js";
 
@@ -86,13 +89,20 @@ export function createMcpDependencies(
     workerInboxReplyService: sprintDeps.workerInboxReplyService,
   });
 
+  const sprintPreviewServiceLink = new LateBoundLink<SprintPreviewService>("sprintPreviewService");
+  const taskRerunServiceLink = new LateBoundLink<TaskRerunService>("taskRerunService");
+  // taskRerunService is already created in dashboardDeps, so we can bind it immediately
+  if (dashboardDeps.taskRerunService) {
+    taskRerunServiceLink.bind(dashboardDeps.taskRerunService);
+  }
+
   const managementToolHandler = new ManagementToolHandler({
-    sprintPreviewService: (sprintDeps as any).sprintPreviewService || (null as any), // Re-injected at the top-level by jules-agent-server if needed
+    sprintPreviewService: sprintPreviewServiceLink,
     executionRepository: coreDeps.executionRepository,
     getDashboardSettings: () => getDashboardSettings(),
     projectManagementRepository: coreDeps.projectManagementRepository,
     executionControlService: dashboardDeps.executionControlService,
-    taskRerunService: dashboardDeps.taskRerunService,
+    taskRerunService: taskRerunServiceLink,
     settingsRepository: coreDeps.settingsRepository,
     agentPresetSyncService: coreDeps.agentPresetSyncService,
     memoryService: coreDeps.memoryService,

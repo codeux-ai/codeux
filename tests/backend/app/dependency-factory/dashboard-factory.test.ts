@@ -125,6 +125,7 @@ describe("Dashboard Factory", () => {
 
     expect(result.activityCacheService).toBeDefined();
     expect(result.taskRerunService).toBeDefined();
+    expect(result.executionControlService).toBeDefined();
 
     expect(ActivityCacheService).toHaveBeenCalledTimes(1);
     expect(TaskRerunService).toHaveBeenCalledTimes(1);

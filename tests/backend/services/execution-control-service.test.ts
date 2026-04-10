@@ -9,6 +9,7 @@ import { ProjectWorkerAssignmentRepository } from "../../../src/repositories/pro
 import { ProjectAttentionRepository } from "../../../src/repositories/project-attention-repository.js";
 import { ProjectAttentionService } from "../../../src/domain/workers/project-attention-service.js";
 import { ExecutionControlService } from "../../../src/services/execution-control-service.js";
+import { LateBoundLink } from "../../../src/app/dependency-factory/helpers/late-bound-link.js";
 
 const tempDirs: string[] = [];
 
@@ -33,6 +34,9 @@ async function createFixture(): Promise<{
   const requestStop = vi.fn().mockResolvedValue({ accepted: true });
   const sendSessionMessage = vi.fn().mockResolvedValue({ ok: true });
 
+  const taskRerunServiceLink = new LateBoundLink<any>("taskRerunService");
+  taskRerunServiceLink.bind({ rerunTask });
+
   const service = new ExecutionControlService({
     projectManagementRepository: projectRepository,
     executionRepository,
@@ -40,9 +44,7 @@ async function createFixture(): Promise<{
       projectAttentionRepository,
       new ProjectWorkerAssignmentRepository(storage),
     ),
-    taskRerunService: {
-      rerunTask,
-    } as any,
+    taskRerunService: taskRerunServiceLink,
     sprintOrchestrator: {
       execute: executeOrchestrator,
     } as any,

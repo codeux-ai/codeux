@@ -14,6 +14,8 @@ import { ManagementToolHandler } from "../../mcp/management-tool-handler.js";
 import { StructuredProviderResponseService } from "../../services/structured-provider-response-service.js";
 import { ChatManagementActionService } from "../../services/chat-management-action-service.js";
 import { ProviderExecutionService } from "../../services/provider-execution-service.js";
+import { LateBoundLink } from "./helpers/late-bound-link.js";
+import type { SprintPreviewService } from "../../services/sprint-preview-service.js";
 
 export interface DashboardDependencies {
   chatThreadRuntimeService: ChatThreadRuntimeService;
@@ -45,11 +47,14 @@ export function createDashboardDependencies(
   } = coreDeps;
   const { sprintTaskDispatchService, sprintOrchestrator, taskService } = sprintDeps;
 
+  const taskRerunServiceLink = new LateBoundLink<TaskRerunService>("taskRerunService");
+  const sprintPreviewServiceLink = new LateBoundLink<SprintPreviewService>("sprintPreviewService");
+
   const executionControlService = new ExecutionControlService({
     projectManagementRepository,
     executionRepository,
     projectAttentionService,
-    taskRerunService: {} as any, // Will link below
+    taskRerunService: taskRerunServiceLink,
     sprintOrchestrator,
     julesApi,
     activeDispatchRegistry,
@@ -57,12 +62,12 @@ export function createDashboardDependencies(
   });
 
   const managementToolHandler = new ManagementToolHandler({
-    sprintPreviewService: (sprintDeps as any).sprintPreviewService || (null as any), // Re-injected top-level later
+    sprintPreviewService: sprintPreviewServiceLink,
     executionRepository: coreDeps.executionRepository,
     getDashboardSettings: () => settingsRepository.getDefaultDashboardSettings(),
     projectManagementRepository: coreDeps.projectManagementRepository,
     executionControlService,
-    taskRerunService: {} as any, // Will link below
+    taskRerunService: taskRerunServiceLink,
     settingsRepository: coreDeps.settingsRepository,
     agentPresetSyncService: coreDeps.agentPresetSyncService,
     memoryService: coreDeps.memoryService,
@@ -298,9 +303,8 @@ export function createDashboardDependencies(
     logger: logger.child({ component: "task-rerun-service" }),
   });
 
-  // Link the taskRerunService to the executionControlService and managementToolHandler
-  (executionControlService as any).deps.taskRerunService = taskRerunService;
-  (managementToolHandler as any).deps.taskRerunService = taskRerunService;
+  // Bind the late-bound link for taskRerunService
+  taskRerunServiceLink.bind(taskRerunService);
 
   const planningAgentService = new PlanningAgentService({
     projectManagementRepository,

@@ -203,8 +203,8 @@ export class JulesAgentServer {
     this.coreToolHandler = deps.coreToolHandler;
     this.agentToolHandler = deps.agentToolHandler;
     this.managementToolHandler = deps.managementToolHandler;
-    // Re-inject dependencies since sprintPreviewService is created late
-    (this.managementToolHandler as any).deps.sprintPreviewService = this.sprintPreviewService;
+    // Bind dependencies since sprintPreviewService is created late
+    this.managementToolHandler.bindSprintPreviewService(this.sprintPreviewService);
     this.activityCacheService = deps.activityCacheService;
     this.taskRerunService = deps.taskRerunService;
     this.executionControlService = deps.executionControlService;

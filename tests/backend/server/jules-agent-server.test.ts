@@ -58,6 +58,17 @@ describe("JulesAgentServer", () => {
     expect(server).toBeDefined();
   });
 
+  describe("Dependencies Configuration", () => {
+    it("should successfully bind sprintPreviewService to managementToolHandler", () => {
+      const managementHandler = (server as any).managementToolHandler;
+      const sprintPreviewService = (server as any).sprintPreviewService;
+
+      expect(managementHandler).toBeDefined();
+      expect(sprintPreviewService).toBeDefined();
+      expect(managementHandler.deps.sprintPreviewService.get()).toBe(sprintPreviewService);
+    });
+  });
+
   it("should provide a correct context", () => {
     const context = (server as any).createContext();
     expect(context.getProjectRoot()).toBe(projectRoot);
