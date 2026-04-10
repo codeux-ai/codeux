@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   CheckSquare,
   Heart,
+  Loader2,
   Maximize2,
   MoreVertical,
   Play,
@@ -174,6 +175,14 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             <CheckCircle2 className="h-3.5 w-3.5 text-signal-500 transition-transform duration-300 group-hover/reviewed:scale-110" strokeWidth={2.2} />
             <span className="max-w-0 overflow-hidden opacity-0 transition-all duration-300 ease-out text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500 whitespace-nowrap group-hover/reviewed:max-w-[5rem] group-hover/reviewed:opacity-100">
               Reviewed
+            </span>
+          </div>
+        )}
+        {sprint.latestReview?.status === 'running' && (
+          <div className="mt-1.5 inline-flex items-center gap-1">
+            <Loader2 className="h-3.5 w-3.5 text-signal-500 animate-spin" strokeWidth={2.2} />
+            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500 animate-pulse">
+              Reviewing
             </span>
           </div>
         )}

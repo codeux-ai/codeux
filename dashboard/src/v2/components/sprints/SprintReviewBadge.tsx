@@ -1,5 +1,5 @@
 import type { FunctionComponent } from "preact";
-import { CheckCircle2, ListChecks, ChevronRight } from "lucide-preact";
+import { CheckCircle2, ListChecks, ChevronRight, Loader2  } from "lucide-preact";
 import type { SprintReviewSummary } from "../../types.js";
 
 interface SprintReviewBadgeProps {
@@ -13,6 +13,21 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
   compact = false,
   align = "center",
 }) => {
+  if (summary.status === 'running') {
+    return (
+      <div className="relative inline-flex animate-pulse">
+        <div
+          className={`inline-flex items-center gap-1.5 rounded-full border border-signal-500/20 bg-signal-500/8 text-signal-600 shadow-[0_10px_24px_rgba(0,224,160,0.12)] ${
+            compact ? "px-2.5 py-1 text-[10px]" : "px-3 py-1.5 text-[10px]"
+          } font-bold uppercase tracking-[0.14em] dark:text-signal-300`}
+        >
+          <Loader2 className={`animate-spin ${compact ? "h-3 w-3" : "h-3.5 w-3.5"}`} strokeWidth={2.5} />
+          {!compact && <span>Reviewing...</span>}
+        </div>
+      </div>
+    );
+  }
+
   const tooltipAlignment = align === "left"
     ? "left-0"
     : align === "right"
