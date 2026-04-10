@@ -6,6 +6,7 @@ import type { SettingsPageState, IntegrationId } from "../../../hooks/use-settin
 import { NoticePanel, ActionButton } from "../SettingsSurface.js";
 import { Row, TextInput, Toggle, PillChoiceGroup } from "../SettingsFormFields.js";
 import type { ProjectSettings } from "../../../../types.js";
+import { isProviderAvailable } from "../../../lib/settings-view-models.js";
 import { SectionCard, IntegrationConfigRow, getBadge as getBadgeHelper, getFieldBadge as getFieldBadgeHelper } from "./SharedPanelComponents.js";
 import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
 
@@ -100,29 +101,11 @@ import { InfoIconPopover } from "../../ui/InfoIconPopover.js";
       return null;
     }
 
-    const hasCliProviderConnection = (
-      providerId: "gemini" | "codex" | "claude-code",
-      mountEnabled: boolean,
-    ): boolean => {
-      const hasSystemKey = providerId === "gemini"
-        ? Boolean(systemSettings.integrations.geminiApiKey.trim() || externalHints?.resolved.geminiApiKey.trim())
-        : providerId === "codex"
-          ? Boolean(systemSettings.integrations.codexApiKey.trim() || externalHints?.resolved.codexApiKey.trim())
-          : Boolean(systemSettings.integrations.claudeCodeApiKey.trim() || externalHints?.resolved.claudeCodeApiKey.trim());
-      const hasLocalAuth = providerId === "gemini"
-        ? Boolean(externalHints?.providerAvailability.gemini?.hasLocalAuth)
-        : providerId === "codex"
-          ? Boolean(externalHints?.providerAvailability.codex?.hasLocalAuth)
-          : Boolean(externalHints?.providerAvailability.claudeCode?.hasLocalAuth);
-
-      return hasSystemKey || hasLocalAuth || mountEnabled;
-    };
-
     const connectedState: Record<IntegrationId, boolean> = {
       jules: Boolean(systemSettings.integrations.julesApiKey.trim() || externalHints?.resolved.julesApiKey.trim()),
-      gemini: hasCliProviderConnection("gemini", editableSettings.cliWorkflow.containerMountGeminiAuth),
-      codex: hasCliProviderConnection("codex", editableSettings.cliWorkflow.containerMountCodexAuth),
-      "claude-code": hasCliProviderConnection("claude-code", editableSettings.cliWorkflow.containerMountClaudeCodeAuth),
+      gemini: isProviderAvailable("gemini", systemSettings, externalHints, editableSettings.cliWorkflow.containerMountGeminiAuth),
+      codex: isProviderAvailable("codex", systemSettings, externalHints, editableSettings.cliWorkflow.containerMountCodexAuth),
+      "claude-code": isProviderAvailable("claude-code", systemSettings, externalHints, editableSettings.cliWorkflow.containerMountClaudeCodeAuth),
       github: Boolean(systemSettings.integrations.githubToken.trim() || externalHints?.resolved.githubToken.trim() || editableSettings.cliWorkflow.containerMountGithubAuth),
     };
     const dockerExecutionEnabled = editableSettings.cliWorkflow.executionMode === "DOCKER";

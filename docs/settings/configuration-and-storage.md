@@ -158,7 +158,7 @@ Dashboard behavior:
   - Gemini alias entries `pro`, `flash`, and `flash-lite` are labeled as recent aliases in selects so it is clear they track the latest model target.
   - Sprint OS performs startup availability checks for Gemini, Codex, and Claude Code, looking for API-key hints and stable local auth artifacts to prepare future onboarding decisions.
   - Enabling a provider auth mount in Integrations also marks that provider active in the dashboard so mount-based Docker setups show the expected connected state even without an API key.
-  - Note: `available` means detected credentials/auth presence or an enabled auth mount, whereas `enabled` means user-approved routing participation. CLI providers are opt-in on fresh installs and disabled by default.
+  - Note: `available` means an API key is present from saved settings/import hints or an auth-copy mount is enabled. Local host auth files alone do not mark a CLI provider active unless the matching Docker auth-copy mount is enabled. `enabled` means user-approved routing participation. CLI providers are opt-in on fresh installs and disabled by default.
   - `invocationRouting` map
   - route ids:
     - `task_coding`

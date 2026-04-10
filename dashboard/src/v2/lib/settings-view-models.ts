@@ -329,22 +329,6 @@ const hasProviderApiKey = (
   return false;
 };
 
-const hasProviderLocalAuth = (
-  providerId: ProviderId,
-  hints: ExternalSettingsHints | null,
-): boolean => {
-  if (providerId === "gemini") {
-    return Boolean(hints?.providerAvailability.gemini?.hasLocalAuth);
-  }
-  if (providerId === "codex") {
-    return Boolean(hints?.providerAvailability.codex?.hasLocalAuth);
-  }
-  if (providerId === "claude-code") {
-    return Boolean(hints?.providerAvailability.claudeCode?.hasLocalAuth);
-  }
-  return false;
-};
-
 export const providerSupportsModelSelection = (providerId: ProviderId): boolean => providerId !== "jules";
 
 export const providerSupportsThinkingMode = (providerId: ProviderId): boolean => providerId !== "jules";
@@ -356,7 +340,6 @@ export const isProviderAvailable = (
   mountAuthEnabled = false,
 ): boolean => (
   hasProviderApiKey(providerId, systemSettings, hints)
-  || hasProviderLocalAuth(providerId, hints)
   || (providerId !== "jules" && mountAuthEnabled)
 );
 
@@ -368,7 +351,6 @@ export const getProviderAuthLabel = (
   mountAuthEnabled: boolean,
 ): string | null => {
   const hasApiKey = hasProviderApiKey(providerId, systemSettings, hints);
-  const hasLocalAuth = hasProviderLocalAuth(providerId, hints);
   const hasMountedAuth = providerId !== "jules" && mountAuthEnabled && dockerExecutionEnabled;
 
   if (providerId === "jules") {
@@ -378,17 +360,8 @@ export const getProviderAuthLabel = (
   if (hasMountedAuth && hasApiKey) {
     return "Auth mount + API key";
   }
-  if (hasMountedAuth && hasLocalAuth) {
-    return "Auth mount + local auth";
-  }
   if (hasMountedAuth) {
     return "Auth mount enabled";
-  }
-  if (hasLocalAuth && hasApiKey) {
-    return "Local auth + API key";
-  }
-  if (hasLocalAuth) {
-    return "Local auth";
   }
   return hasApiKey ? "API key" : null;
 };
