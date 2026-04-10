@@ -90,9 +90,10 @@ Checks:
     - `codex`: `npm install -g @openai/codex`
     - `claude`: `curl -fsSL https://claude.ai/install.sh | bash`
   - Claude runner executes headless using `claude -p "<prompt>" --dangerously-skip-permissions`.
-  - For Claude auth mounts, ensure host has `~/.claude/.credentials.json`; if auth still stalls, also verify `~/.claude.json` exists (runtime mounts it automatically when present).
+  - For Claude auth mounts, ensure host has `~/.claude/.credentials.json`; if auth still stalls, also verify the sibling `~/.claude.json` exists when your local Claude login created it.
   - Runtime now syncs only those Claude auth files before launch, avoiding recursive copy of all `.claude` state.
   - For Gemini auth mounts, ensure host has `~/.gemini/settings.json` plus the expected auth files such as `oauth_creds.json`; runtime now syncs only those stable files and intentionally skips `.gemini/tmp`, `history`, and other mutable runtime trees.
+  - Runtime merges generated Gemini and Claude MCP config into the copied auth settings, and appends the Codex MCP stanza into `~/.codex/config.toml` only when it is not already present, so enabling Docker auth mounts does not wipe host-side provider config.
   - If auth is expected from host login state, is the relevant Docker auth mount enabled and is its mount path valid?
   - Docker mode requires daemon-visible workspace paths. Runtime now prefers repo-scoped worktree paths for Docker sessions.
   - Docker runtime state is stored under `~/.sprint-os/runtime/docker/<repo-hash>/` by default (override with `JULES_DOCKER_RUNTIME_ROOT`).

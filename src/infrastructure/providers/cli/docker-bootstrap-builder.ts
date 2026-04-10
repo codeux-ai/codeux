@@ -46,6 +46,8 @@ export class DockerBootstrapBuilder {
       "mkdir -p \"$HOME/.config\" \"$HOME/.codex\" \"$HOME/.claude\" \"$HOME/.gemini\"",
       "sync_dir_contents() { local source=\"$1\"; local destination=\"$2\"; local label=\"$3\"; mkdir -p \"$destination\"; if ! cp -r \"$source/.\" \"$destination/\"; then echo \"provider-runner: warning: failed to copy $label credentials\" >&2; fi; }",
       "copy_if_present() { local source=\"$1\"; local destination=\"$2\"; local label=\"$3\"; if [ -e \"$source\" ]; then mkdir -p \"$(dirname \"$destination\")\"; if ! cp -f \"$source\" \"$destination\"; then echo \"provider-runner: warning: failed to copy $label\" >&2; fi; fi; }",
+      "merge_json_file() { local source=\"$1\"; local destination=\"$2\"; local label=\"$3\"; if [ ! -e \"$source\" ]; then return 0; fi; mkdir -p \"$(dirname \"$destination\")\"; if ! node -e 'const fs=require(\"fs\"); const [source,destination]=process.argv.slice(1); const read=(file)=>{ try { return JSON.parse(fs.readFileSync(file,\"utf8\")); } catch { return {}; } }; const sourceJson=read(source); const destinationJson=read(destination); const merged={...destinationJson,...sourceJson}; if (destinationJson.mcpServers || sourceJson.mcpServers) merged.mcpServers={...(destinationJson.mcpServers||{}), ...(sourceJson.mcpServers||{})}; fs.writeFileSync(destination, `${JSON.stringify(merged, null, 2)}\\n`);' \"$source\" \"$destination\"; then echo \"provider-runner: warning: failed to merge $label\" >&2; fi; }",
+      "append_if_missing_literal() { local source=\"$1\"; local destination=\"$2\"; local literal=\"$3\"; local label=\"$4\"; if [ ! -e \"$source\" ]; then return 0; fi; mkdir -p \"$(dirname \"$destination\")\"; if [ -f \"$destination\" ] && grep -Fq \"$literal\" \"$destination\"; then return 0; fi; if [ -s \"$destination\" ]; then printf '\\n' >> \"$destination\"; fi; if ! cat \"$source\" >> \"$destination\"; then echo \"provider-runner: warning: failed to append $label\" >&2; fi; }",
       "ensure_json_file() { local destination=\"$1\"; local content=\"$2\"; mkdir -p \"$(dirname \"$destination\")\"; if [ ! -f \"$destination\" ]; then printf '%s\\n' \"$content\" > \"$destination\"; fi; }",
     ].join("\n");
   }
@@ -90,7 +92,7 @@ export class DockerBootstrapBuilder {
 
   private claudeAuth(): string {
     return [
-      `copy_if_present "${CLAUDE_CODE_MCP_CONFIG_MOUNT}" "$HOME/.mcp.json" "claude mcp config"`,
+      `merge_json_file "${CLAUDE_CODE_MCP_CONFIG_MOUNT}" "$HOME/.mcp.json" "claude mcp config"`,
       "if [ \"$1\" = \"gemini\" ]; then",
       "  mkdir -p \"$HOME/.gemini/tmp\" \"$HOME/.gemini/history\" \"$HOME/.gemini/memory\"",
       "  ensure_json_file \"$HOME/.gemini/projects.json\" '{\"projects\":{}}'",
@@ -100,13 +102,13 @@ export class DockerBootstrapBuilder {
       `  copy_if_present "${GEMINI_CREDENTIALS_MOUNT}/installation_id" "$HOME/.gemini/installation_id" "gemini installation_id"`,
       `  copy_if_present "${GEMINI_CREDENTIALS_MOUNT}/state.json" "$HOME/.gemini/state.json" "gemini state.json"`,
       `  copy_if_present "${GEMINI_CREDENTIALS_MOUNT}/trustedFolders.json" "$HOME/.gemini/trustedFolders.json" "gemini trustedFolders.json"`,
-      `  copy_if_present "${GEMINI_MCP_SETTINGS_MOUNT}" "$HOME/.gemini/settings.json" "gemini mcp settings.json"`,
+      `  merge_json_file "${GEMINI_MCP_SETTINGS_MOUNT}" "$HOME/.gemini/settings.json" "gemini mcp settings.json"`,
       "fi",
       "if [ \"$1\" = \"claude\" ]; then",
       `  if [ -f "${CLAUDE_CODE_CREDENTIALS_MOUNT}/.credentials.json" ]; then cp -f "${CLAUDE_CODE_CREDENTIALS_MOUNT}/.credentials.json" "$HOME/.claude/.credentials.json"; fi`,
       `  if [ -f "${CLAUDE_CODE_AUTH_JSON_MOUNT}" ]; then cp -f "${CLAUDE_CODE_AUTH_JSON_MOUNT}" "$HOME/.claude.json"; fi`,
       "fi",
-      `copy_if_present "${CODEX_MCP_CONFIG_MOUNT}" "$HOME/.codex/config.toml" "codex mcp config"`,
+      `append_if_missing_literal "${CODEX_MCP_CONFIG_MOUNT}" "$HOME/.codex/config.toml" "[mcp_servers.sprint-os]" "codex mcp config"`,
     ].join("\n");
   }
 
