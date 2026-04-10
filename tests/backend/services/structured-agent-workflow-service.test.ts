@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { StructuredAgentRequestService } from "../../../src/services/structured-agent-request-service.js";
+import { StructuredAgentWorkflowService } from "../../../src/services/structured-agent-workflow-service.js";
 import { StructuredProviderResponseService } from "../../../src/services/structured-provider-response-service.js";
 import type { ProviderExecutionService } from "../../../src/services/provider-execution-service.js";
 
-describe("StructuredAgentRequestService", () => {
-  it("parses valid JSON output successfully without retrying", async () => {
+describe("StructuredAgentWorkflowService", () => {
+  it("executes provider and parses valid JSON output successfully without retrying", async () => {
     const mockProviderExecutionService = {
       executeProvider: vi.fn().mockResolvedValue({
         ok: true,
@@ -13,10 +13,16 @@ describe("StructuredAgentRequestService", () => {
       }),
     } as unknown as ProviderExecutionService;
 
+    const mockExecutionRepository = {
+      createExecutionInvocation: vi.fn().mockReturnValue({ id: "inv-123" }),
+      updateExecutionInvocation: vi.fn(),
+    };
+
     const structuredProviderResponseService = new StructuredProviderResponseService({
       providerExecutionService: mockProviderExecutionService,
     });
-    const service = new StructuredAgentRequestService({
+    const service = new StructuredAgentWorkflowService({
+      executionRepository: mockExecutionRepository as any,
       structuredProviderResponseService,
     });
 
@@ -40,6 +46,9 @@ describe("StructuredAgentRequestService", () => {
     expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(1);
     expect(result.parsed).toEqual({ goal: "success", tasks: [] });
     expect(result.nativeSessionId).toBe("native-123");
+    expect(mockExecutionRepository.updateExecutionInvocation).toHaveBeenCalledWith("inv-123", expect.objectContaining({
+      status: "completed",
+    }));
   });
 
   it("retries on parse failure using the native session id and succeeds", async () => {
@@ -60,7 +69,7 @@ describe("StructuredAgentRequestService", () => {
     const structuredProviderResponseService = new StructuredProviderResponseService({
       providerExecutionService: mockProviderExecutionService,
     });
-    const service = new StructuredAgentRequestService({
+    const service = new StructuredAgentWorkflowService({
       structuredProviderResponseService,
     });
 
@@ -89,7 +98,7 @@ describe("StructuredAgentRequestService", () => {
     expect(result.parsed).toEqual({ fixed: true });
   });
 
-  it("exhausts retries and throws the final parse error", async () => {
+  it("exhausts retries and throws the final parse error, updating status to failed", async () => {
     const mockProviderExecutionService = {
       executeProvider: vi.fn().mockResolvedValue({
         ok: true,
@@ -98,10 +107,16 @@ describe("StructuredAgentRequestService", () => {
       }),
     } as unknown as ProviderExecutionService;
 
+    const mockExecutionRepository = {
+      createExecutionInvocation: vi.fn().mockReturnValue({ id: "inv-abc" }),
+      updateExecutionInvocation: vi.fn(),
+    };
+
     const structuredProviderResponseService = new StructuredProviderResponseService({
       providerExecutionService: mockProviderExecutionService,
     });
-    const service = new StructuredAgentRequestService({
+    const service = new StructuredAgentWorkflowService({
+      executionRepository: mockExecutionRepository as any,
       structuredProviderResponseService,
     });
 
@@ -125,6 +140,11 @@ describe("StructuredAgentRequestService", () => {
 
     // 1 initial + 2 retries = 3 calls
     expect(mockProviderExecutionService.executeProvider).toHaveBeenCalledTimes(3);
+
+    expect(mockExecutionRepository.updateExecutionInvocation).toHaveBeenCalledWith("inv-abc", expect.objectContaining({
+      status: "failed",
+      errorMessage: expect.stringMatching(/Unexpected token 'i'/),
+    }));
   });
 
 
@@ -147,7 +167,7 @@ describe("StructuredAgentRequestService", () => {
       providerExecutionService: mockProviderExecutionService as any,
     });
 
-    const service = new StructuredAgentRequestService({
+    const service = new StructuredAgentWorkflowService({
       executionRepository: mockExecutionRepository as any,
       structuredProviderResponseService,
     });
@@ -204,7 +224,7 @@ describe("StructuredAgentRequestService", () => {
       providerExecutionService: mockProviderExecutionService as any,
     });
 
-    const service = new StructuredAgentRequestService({
+    const service = new StructuredAgentWorkflowService({
       executionRepository: mockExecutionRepository as any,
       structuredProviderResponseService,
     });
@@ -258,7 +278,7 @@ describe("StructuredAgentRequestService", () => {
     const structuredProviderResponseService = new StructuredProviderResponseService({
       providerExecutionService: mockProviderExecutionService,
     });
-    const service = new StructuredAgentRequestService({
+    const service = new StructuredAgentWorkflowService({
       structuredProviderResponseService,
     });
 
@@ -287,5 +307,51 @@ describe("StructuredAgentRequestService", () => {
     const calls = vi.mocked(mockProviderExecutionService.executeProvider).mock.calls;
     expect(calls[1]?.[0].prompt).toBe("Fix schema: Missing goal property");
     expect(calls[1]?.[0].continueSessionId).toMatch(/test-claude-code-/); // Uses fallback generated session ID if no native session
+  });
+
+  it("calls captureMemory optionally on success", async () => {
+    const mockProviderExecutionService = {
+      executeProvider: vi.fn().mockResolvedValue({
+        ok: true,
+        text: '{"result": "ok"}',
+        nativeSessionId: "native-123",
+      }),
+    } as unknown as ProviderExecutionService;
+
+    const mockExecutionRepository = {
+      createExecutionInvocation: vi.fn().mockReturnValue({ id: "inv-abc" }),
+      updateExecutionInvocation: vi.fn(),
+    };
+
+    const captureMemory = vi.fn().mockResolvedValue(undefined);
+
+    const structuredProviderResponseService = new StructuredProviderResponseService({
+      providerExecutionService: mockProviderExecutionService,
+    });
+    const service = new StructuredAgentWorkflowService({
+      executionRepository: mockExecutionRepository as any,
+      structuredProviderResponseService,
+    });
+
+    await service.executeRequest<{ result: string }>({
+      projectId: "proj-1",
+      purpose: "planning",
+      type: "planning",
+      provider: "claude-code",
+      prompt: "prompt",
+      model: "model-1",
+      apiKey: "key",
+      sessionId: "session-1",
+      settings: {} as any,
+      providerPrompt: "prompt",
+      parseFn: (text) => JSON.parse(text),
+      buildRetryPrompt: () => "retry",
+      providerLabel: "Claude",
+      sessionIdPrefix: "test",
+      captureMemory,
+    });
+
+    expect(captureMemory).toHaveBeenCalledTimes(1);
+    expect(captureMemory).toHaveBeenCalledWith(expect.stringMatching(/^test-claude-code-/), "inv-abc");
   });
 });

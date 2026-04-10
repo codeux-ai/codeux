@@ -24,7 +24,7 @@ import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
 import { extractJsonLikeBlock } from "./planning-json-extractor.js";
 import { ProviderExecutionService } from "./provider-execution-service.js";
-import { StructuredAgentRequestService, type StructuredAgentRequestResult } from "./structured-agent-request-service.js";
+import { StructuredAgentWorkflowService, type StructuredAgentRequestResult } from "./structured-agent-workflow-service.js";
 import { StructuredProviderResponseService } from "./structured-provider-response-service.js";
 import { waitUntil } from "../shared/polling/wait-until.js";
 
@@ -39,7 +39,7 @@ interface PlanningAgentServiceDeps {
   providerRunner?: IProviderRunner;
   logger?: Logger;
   providerExecutionService?: ProviderExecutionService;
-  structuredAgentRequestService?: StructuredAgentRequestService;
+  structuredAgentWorkflowService?: StructuredAgentWorkflowService;
 }
 
 interface ImprovePromptResult {
@@ -82,7 +82,7 @@ interface PlanningResultContext {
 export class PlanningAgentService {
   private readonly providerRunner: IProviderRunner;
   private readonly providerExecutionService: ProviderExecutionService;
-  private readonly structuredAgentRequestService: StructuredAgentRequestService;
+  private readonly structuredAgentWorkflowService: StructuredAgentWorkflowService;
 
   constructor(private readonly deps: PlanningAgentServiceDeps) {
     this.providerRunner = deps.providerRunner || new ProviderRunner(new DockerRunner());
@@ -92,15 +92,15 @@ export class PlanningAgentService {
       logger: deps.logger,
     });
 
-    if (deps.structuredAgentRequestService) {
-      this.structuredAgentRequestService = deps.structuredAgentRequestService;
+    if (deps.structuredAgentWorkflowService) {
+      this.structuredAgentWorkflowService = deps.structuredAgentWorkflowService;
     } else {
       const structuredProviderResponseService = new StructuredProviderResponseService({
         providerExecutionService: this.providerExecutionService,
         executionRepository: deps.executionRepository,
         logger: deps.logger,
       });
-      this.structuredAgentRequestService = new StructuredAgentRequestService({
+      this.structuredAgentWorkflowService = new StructuredAgentWorkflowService({
         executionRepository: deps.executionRepository,
         structuredProviderResponseService,
         logger: deps.logger,
@@ -152,54 +152,34 @@ export class PlanningAgentService {
     }
 
     signal?.throwIfAborted();
-    let payload: { goal?: string };
-    try {
-      const virtualResult = await this.runVirtualPlanningRequest({
-        projectId,
-        sprintId: null,
-        invocationId: invocation?.id,
-        repoPath: project.baseDir,
-        settings: runtime.settings,
-        rawPrompt: prompt,
-        overrides: input.overrides,
-        signal,
-        parseFn: (bodyMarkdown) => this.parseJsonReply<{ goal?: string }>(bodyMarkdown),
-        buildRetryPrompt: (lastError) => [
-          "Your previous output could not be parsed as valid JSON.",
-          `Parse error: ${lastError.message}`,
-          "",
-          "Please output ONLY valid JSON.",
-          "- Output raw JSON only — no markdown fences, no commentary, no prose before or after."
-        ].join("\n"),
-      });
-      payload = virtualResult.parsed;
-
-      if (invocation) {
-        this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
-          status: "completed",
-          finishedAt: new Date().toISOString(),
-        });
-      }
-
-      if (isMemoryCaptureEnabled) {
+    const virtualResult = await this.runVirtualPlanningRequest({
+      projectId,
+      sprintId: null,
+      invocationId: invocation?.id,
+      repoPath: project.baseDir,
+      settings: runtime.settings,
+      rawPrompt: prompt,
+      overrides: input.overrides,
+      signal,
+      parseFn: (bodyMarkdown) => this.parseJsonReply<{ goal?: string }>(bodyMarkdown),
+      buildRetryPrompt: (lastError) => [
+        "Your previous output could not be parsed as valid JSON.",
+        `Parse error: ${lastError.message}`,
+        "",
+        "Please output ONLY valid JSON.",
+        "- Output raw JSON only — no markdown fences, no commentary, no prose before or after."
+      ].join("\n"),
+      captureMemory: isMemoryCaptureEnabled ? async (sessionId, invocationId) => {
         await this.deps.memoryService?.captureMemoriesFromWorktree(
           projectId,
           undefined,
           planningAgent.id,
           project.baseDir,
-          invocation?.id || ""
+          invocationId
         );
-      }
-    } catch (error) {
-      if (invocation) {
-        this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
-          status: "failed",
-          errorMessage: error instanceof Error ? error.message : String(error),
-          finishedAt: new Date().toISOString(),
-        });
-      }
-      throw error;
-    }
+      } : undefined,
+    });
+    const payload = virtualResult.parsed;
 
     const goal = String(payload.goal || "").trim();
     if (!goal) {
@@ -270,56 +250,36 @@ export class PlanningAgentService {
       });
     }
 
-    let payload: PlannedSprintPayload;
-    try {
-      const virtualResult = await this.runVirtualPlanningRequest({
-        projectId,
-        sprintId,
-        invocationId: invocation?.id,
-        repoPath: project.baseDir,
-        settings: runtime.settings,
-        rawPrompt: prompt,
-        overrides: options.overrides,
-        signal,
-        parseFn: (bodyMarkdown) => this.parsePlannedSprintReply(bodyMarkdown),
-        buildRetryPrompt: (lastError) => [
-          "Your previous output could not be parsed as valid JSON.",
-          `Parse error: ${lastError.message}`,
-          "",
-          "Please output ONLY the valid JSON sprint definition. Requirements:",
-          "- Output raw JSON only — no markdown fences, no commentary, no prose before or after.",
-          "- Ensure all string values are properly escaped (especially quotes and newlines inside promptMarkdown).",
-          "- Use the exact schema from the original instructions: {\"goal\":\"...\",\"tasks\":[...]}"
-        ].join("\n"),
-      });
-      payload = virtualResult.parsed;
-
-      if (invocation) {
-        this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
-          status: "completed",
-          finishedAt: new Date().toISOString(),
-        });
-      }
-
-      if (isMemoryCaptureEnabled) {
+    const virtualResult = await this.runVirtualPlanningRequest({
+      projectId,
+      sprintId,
+      invocationId: invocation?.id,
+      repoPath: project.baseDir,
+      settings: runtime.settings,
+      rawPrompt: prompt,
+      overrides: options.overrides,
+      signal,
+      parseFn: (bodyMarkdown) => this.parsePlannedSprintReply(bodyMarkdown),
+      buildRetryPrompt: (lastError) => [
+        "Your previous output could not be parsed as valid JSON.",
+        `Parse error: ${lastError.message}`,
+        "",
+        "Please output ONLY the valid JSON sprint definition. Requirements:",
+        "- Output raw JSON only — no markdown fences, no commentary, no prose before or after.",
+        "- Ensure all string values are properly escaped (especially quotes and newlines inside promptMarkdown).",
+        "- Use the exact schema from the original instructions: {\"goal\":\"...\",\"tasks\":[...]}"
+      ].join("\n"),
+      captureMemory: isMemoryCaptureEnabled ? async (sessionId, invocationId) => {
         await this.deps.memoryService?.captureMemoriesFromWorktree(
           projectId,
           sprintId,
           planningAgent.id,
           project.baseDir,
-          invocation?.id || ""
+          invocationId
         );
-      }
-    } catch (error) {
-      if (invocation) {
-        this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
-          status: "failed",
-          errorMessage: error instanceof Error ? error.message : String(error),
-          finishedAt: new Date().toISOString(),
-        });
-      }
-      throw error;
-    }
+      } : undefined,
+    });
+    const payload = virtualResult.parsed;
 
     if (options.replan) {
       this.deps.projectManagementRepository.deleteTasksBySprint(sprintId);
@@ -419,6 +379,7 @@ export class PlanningAgentService {
     signal?: AbortSignal;
     parseFn: (bodyMarkdown: string) => T;
     buildRetryPrompt: (lastError: Error) => string;
+    captureMemory?: (sessionId: string, invocationId: string) => Promise<void>;
   }): Promise<StructuredAgentRequestResult<T> & PlanningResultContext> {
     const routingTask: Subtask = {
       id: args.sprintId || "planning",
@@ -450,8 +411,7 @@ export class PlanningAgentService {
     const providerPrompt = buildProviderPrompt(args.rawPrompt, providerSettings.thinkingMode);
     const systemRoutingMessage = `Planning request routed through virtual ${this.getProviderLabel(provider)} worker (model: ${providerSettings.model}).`;
 
-    try {
-      const result = await this.structuredAgentRequestService.executeRequest<T>({
+    const result = await this.structuredAgentWorkflowService.executeRequest<T>({
         projectId: args.projectId,
         sprintId: args.sprintId,
         purpose: "planning",
@@ -473,6 +433,7 @@ export class PlanningAgentService {
         systemRoutingMessage,
         githubToken: args.settings.git.githubToken,
         signal: args.signal,
+        captureMemory: args.captureMemory,
         onActivity: (description, originator) => {
           this.deps.logger?.debug("Virtual planning worker activity", {
             projectId: args.projectId,
@@ -495,15 +456,6 @@ export class PlanningAgentService {
           thinkingMode: providerSettings.thinkingMode,
         },
       };
-    } catch (error) {
-      if (args.invocationId) {
-        this.deps.executionRepository?.updateExecutionInvocation(args.invocationId, {
-          status: "failed",
-          finishedAt: new Date().toISOString(),
-        });
-      }
-      throw error;
-    }
   }
 
 

@@ -1,7 +1,7 @@
 import * as fs from "fs/promises";
 import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workflow-utils.js";
 import { extractJsonLikeBlock } from "./planning-json-extractor.js";
-import { StructuredAgentRequestService } from "./structured-agent-request-service.js";
+import { StructuredAgentWorkflowService } from "./structured-agent-workflow-service.js";
 import { StructuredProviderResponseService } from "./structured-provider-response-service.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
 import { WorkspaceArtifactService } from "../infrastructure/providers/cli/workspace-artifact-service.js";
@@ -99,7 +99,7 @@ interface QualityAssuranceServiceDependencies {
   sendSessionMessage: (sessionId: string, prompt: string) => Promise<unknown>;
   logger?: Logger;
   memoryService?: MemoryService;
-  structuredAgentRequestService?: StructuredAgentRequestService;
+  structuredAgentWorkflowService?: StructuredAgentWorkflowService;
 }
 
 export class QualityAssuranceService {
@@ -109,7 +109,7 @@ export class QualityAssuranceService {
   private readonly prService = new PrService();
 
   private readonly providerExecutionService: ProviderExecutionService;
-  private readonly structuredAgentRequestService: StructuredAgentRequestService;
+  private readonly structuredAgentWorkflowService: StructuredAgentWorkflowService;
 
   constructor(private readonly deps: QualityAssuranceServiceDependencies) {
     this.providerExecutionService = new ProviderExecutionService({
@@ -120,15 +120,15 @@ export class QualityAssuranceService {
       getGithubToken: deps.getGithubToken,
     });
 
-    if (deps.structuredAgentRequestService) {
-      this.structuredAgentRequestService = deps.structuredAgentRequestService;
+    if (deps.structuredAgentWorkflowService) {
+      this.structuredAgentWorkflowService = deps.structuredAgentWorkflowService;
     } else {
       const structuredProviderResponseService = new StructuredProviderResponseService({
         providerExecutionService: this.providerExecutionService,
         executionRepository: deps.executionRepository,
         logger: deps.logger,
       });
-      this.structuredAgentRequestService = new StructuredAgentRequestService({
+      this.structuredAgentWorkflowService = new StructuredAgentWorkflowService({
         executionRepository: deps.executionRepository,
         structuredProviderResponseService,
         logger: deps.logger,
@@ -690,53 +690,49 @@ export class QualityAssuranceService {
     const providerPrompt = buildProviderPrompt(prompt, route.providers[provider].thinkingMode);
     const settings = this.deps.getDashboardSettings(args.scope);
 
-    let result;
-    try {
-      result = await this.structuredAgentRequestService.executeRequest<NormalizedQaReviewResult>({
-        projectId: args.scope.projectId!,
-        sprintId: args.scope.sprintId,
-        taskId: args.taskRun?.taskId,
-        sprintRunId: args.sprintRunId,
-        taskRunId: args.taskRun?.id,
-        purpose: "qa_review",
-        type: "qa_review",
-        provider,
-        model: route.providers[provider].model,
-        apiKey: route.providers[provider].apiKey,
-        providerPrompt,
-        repoPath: args.repoPath,
-        settings: {
-          ...settings,
-          cliWorkflow: {
-            ...DEFAULT_CLI_WORKFLOW_SETTINGS,
-            ...settings.cliWorkflow,
-          },
+    const result = await this.structuredAgentWorkflowService.executeRequest<NormalizedQaReviewResult>({
+      projectId: args.scope.projectId!,
+      sprintId: args.scope.sprintId,
+      taskId: args.taskRun?.taskId,
+      sprintRunId: args.sprintRunId,
+      taskRunId: args.taskRun?.id,
+      purpose: "qa_review",
+      type: "qa_review",
+      provider,
+      model: route.providers[provider].model,
+      apiKey: route.providers[provider].apiKey,
+      providerPrompt,
+      repoPath: args.repoPath,
+      settings: {
+        ...settings,
+        cliWorkflow: {
+          ...DEFAULT_CLI_WORKFLOW_SETTINGS,
+          ...settings.cliWorkflow,
         },
-        parseFn: (text) => normalizeQaReviewResult(text),
-        buildRetryPrompt: (error) => [
-          "Your previous response failed validation with this error:",
-          error.message,
-          "",
-          "Please provide a valid JSON object matching the requested schema exactly.",
-        ].join("\n"),
-        providerLabel: "QA",
-        sessionIdPrefix: "qa-review",
-        systemRoutingMessage: args.agentInstructions.trim(),
-        onActivity: () => undefined,
-      });
-    } finally {
-      if (settings.memory?.enabled && settings.memory.autoCaptureSprint && this.deps.memoryService && result) {
+      },
+      parseFn: (text) => normalizeQaReviewResult(text),
+      buildRetryPrompt: (error) => [
+        "Your previous response failed validation with this error:",
+        error.message,
+        "",
+        "Please provide a valid JSON object matching the requested schema exactly.",
+      ].join("\n"),
+      providerLabel: "QA",
+      sessionIdPrefix: "qa-review",
+      systemRoutingMessage: args.agentInstructions.trim(),
+      onActivity: () => undefined,
+      captureMemory: (settings.memory?.enabled && settings.memory.autoCaptureSprint && this.deps.memoryService) ? async (sessionId, invocationId) => {
         const worktreePath = await this.workspaceManager.resolveResumeWorktreePath(
           args.repoPath,
-          result.sessionId,
+          sessionId,
           settings.cliWorkflow.executionMode,
         ).catch(() => undefined);
 
         if (worktreePath) {
-          await this.deps.memoryService.captureMemoriesFromWorktree(args.scope.projectId!, args.scope.sprintId || undefined, args.agentPresetId || null, worktreePath, result.invocationId);
+          await this.deps.memoryService!.captureMemoriesFromWorktree(args.scope.projectId!, args.scope.sprintId || undefined, args.agentPresetId || null, worktreePath, invocationId);
         }
-      }
-    }
+      } : undefined,
+    });
 
     return result.parsed;
   }

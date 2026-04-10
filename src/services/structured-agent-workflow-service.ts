@@ -29,6 +29,7 @@ export interface StructuredRequestArgs<T> {
   githubToken?: string;
   signal?: AbortSignal;
   onActivity?: (description: string, originator?: string) => void;
+  captureMemory?: (sessionId: string, invocationId: string) => Promise<void>;
 }
 
 export interface StructuredAgentRequestResult<T> extends StructuredProviderResult<T> {
@@ -36,14 +37,14 @@ export interface StructuredAgentRequestResult<T> extends StructuredProviderResul
   invocationId: string;
 }
 
-export interface StructuredAgentRequestServiceDeps {
+export interface StructuredAgentWorkflowServiceDeps {
   executionRepository?: ExecutionRepository;
   structuredProviderResponseService: StructuredProviderResponseService;
   logger?: Logger;
 }
 
-export class StructuredAgentRequestService {
-  constructor(private readonly deps: StructuredAgentRequestServiceDeps) {}
+export class StructuredAgentWorkflowService {
+  constructor(private readonly deps: StructuredAgentWorkflowServiceDeps) {}
 
   async executeRequest<T>(args: StructuredRequestArgs<T>): Promise<StructuredAgentRequestResult<T>> {
     const sessionId = `${args.sessionIdPrefix}-${args.provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
@@ -93,36 +94,58 @@ export class StructuredAgentRequestService {
       }
     }
 
-    const result = await this.deps.structuredProviderResponseService.executeAndParse<T>({
-      projectId: args.projectId,
-      sprintId: args.sprintId || null,
-      taskId: args.taskId || null,
-      sprintRunId: args.sprintRunId || null,
-      taskRunId: args.taskRunId || null,
-      purpose: args.purpose,
-      type: args.type,
-      provider: args.provider as VirtualWorkerProvider,
-      prompt: args.providerPrompt,
-      model: args.model,
-      apiKey: args.apiKey,
-      sessionId,
-      workflowSettings: args.settings.cliWorkflow,
-      repoPath: args.repoPath,
-      githubToken: args.githubToken,
-      signal: args.signal,
-      invocationId,
-      onActivity: args.onActivity,
-      settings: args.settings,
-      maxRetries: args.maxRetries ?? args.settings.cliWorkflow?.maxPlanningJsonRetries ?? 3,
-      providerLabel: args.providerLabel,
-      parseFn: args.parseFn,
-      buildRetryPrompt: args.buildRetryPrompt,
-    });
+    try {
+      const result = await this.deps.structuredProviderResponseService.executeAndParse<T>({
+        projectId: args.projectId,
+        sprintId: args.sprintId || null,
+        taskId: args.taskId || null,
+        sprintRunId: args.sprintRunId || null,
+        taskRunId: args.taskRunId || null,
+        purpose: args.purpose,
+        type: args.type,
+        provider: args.provider as VirtualWorkerProvider,
+        prompt: args.providerPrompt,
+        model: args.model,
+        apiKey: args.apiKey,
+        sessionId,
+        workflowSettings: args.settings.cliWorkflow,
+        repoPath: args.repoPath,
+        githubToken: args.githubToken,
+        signal: args.signal,
+        invocationId,
+        onActivity: args.onActivity,
+        settings: args.settings,
+        maxRetries: args.maxRetries ?? args.settings.cliWorkflow?.maxPlanningJsonRetries ?? 3,
+        providerLabel: args.providerLabel,
+        parseFn: args.parseFn,
+        buildRetryPrompt: args.buildRetryPrompt,
+      });
 
-    return {
-      ...result,
-      sessionId,
-      invocationId: invocationId || "",
-    };
+      if (invocationId) {
+        this.deps.executionRepository?.updateExecutionInvocation(invocationId, {
+          status: "completed",
+          finishedAt: new Date().toISOString(),
+        });
+      }
+
+      if (args.captureMemory) {
+        await args.captureMemory(sessionId, invocationId || "");
+      }
+
+      return {
+        ...result,
+        sessionId,
+        invocationId: invocationId || "",
+      };
+    } catch (error) {
+      if (invocationId) {
+        this.deps.executionRepository?.updateExecutionInvocation(invocationId, {
+          status: "failed",
+          errorMessage: error instanceof Error ? error.message : String(error),
+          finishedAt: new Date().toISOString(),
+        });
+      }
+      throw error;
+    }
   }
 }

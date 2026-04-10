@@ -9,7 +9,7 @@ import { QaReviewRepository } from "../../../src/repositories/qa-review-reposito
 import { AgentPresetRepository } from "../../../src/repositories/agent-preset-repository.js";
 import { QualityAssuranceService } from "../../../src/services/quality-assurance-service.js";
 import { StructuredProviderResponseService } from "../../../src/services/structured-provider-response-service.js";
-import { StructuredAgentRequestService } from "../../../src/services/structured-agent-request-service.js";
+import { StructuredAgentWorkflowService } from "../../../src/services/structured-agent-workflow-service.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 vi.mock("../../../src/services/git-branch-sync-service.js", () => ({
@@ -460,7 +460,7 @@ describe("QualityAssuranceService", () => {
       executionRepository,
     });
 
-    const structuredAgentRequestService = new StructuredAgentRequestService({
+    const structuredAgentWorkflowService = new StructuredAgentWorkflowService({
       executionRepository,
       structuredProviderResponseService: structuredResponseService,
     });
@@ -487,7 +487,7 @@ describe("QualityAssuranceService", () => {
         },
       } as any,
       providerRunner: mockProviderRunner as any,
-      structuredAgentRequestService,
+      structuredAgentWorkflowService,
       getDashboardSettings: () => ({
         ...DEFAULT_DASHBOARD_SETTINGS,
         agents: {
@@ -573,7 +573,7 @@ describe("QualityAssuranceService", () => {
       executionRepository,
     });
 
-    const structuredAgentRequestService = new StructuredAgentRequestService({
+    const structuredAgentWorkflowService = new StructuredAgentWorkflowService({
       executionRepository,
       structuredProviderResponseService: structuredResponseService,
     });
@@ -601,7 +601,7 @@ describe("QualityAssuranceService", () => {
         getOptionalWorkerAgentForRepoPath: async () => undefined,
       } as any,
       providerRunner: mockProviderRunner as any,
-      structuredAgentRequestService,
+      structuredAgentWorkflowService,
       getDashboardSettings: () => ({
         ...DEFAULT_DASHBOARD_SETTINGS,
         agents: {
@@ -651,7 +651,7 @@ describe("QualityAssuranceService", () => {
       taskService: {} as any,
       agentPresetSyncService: {} as any,
       providerRunner: {} as any,
-      structuredAgentRequestService: {
+      structuredAgentWorkflowService: {
         executeRequest: vi.fn(),
       } as any,
       getDashboardSettings: () => ({
