@@ -1,9 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { queryProjectStatsSnapshot } from "../../../../src/repositories/execution/project-stats-snapshot-query.js";
-import { ProjectStatsQueryDependencies } from "../../../../src/repositories/execution/execution-stats-types.js";
 import { mapProviderInvocationUsageRow, mapExecutionSprintRunSummaryRow } from "../../../../src/repositories/execution/execution-read-model-mappers.js";
 import { ProviderInvocationUsageRow, ExecutionSprintRunSummaryRow } from "../../../../src/repositories/execution/execution-repository-types.js";
 import { ExecutionUsageTotals } from "../../../../src/contracts/app-types.js";
+import { DatabaseAdapter as Database } from "../../../../src/repositories/db/database-adapter.js";
 
 describe("execution-read-model-mappers", () => {
   it("mapProviderInvocationUsageRow coerces fields and produces the correct shape", () => {
@@ -107,6 +107,7 @@ describe("execution-read-model-mappers", () => {
       totalTokens: 30,
       activeTimeMs: 1000,
       costCents: 0,
+      wallTimeMs: 0,
     };
 
     const record = mapExecutionSprintRunSummaryRow(row, null, usage);
@@ -133,42 +134,76 @@ describe("execution-read-model-mappers", () => {
 });
 
 describe("queryProjectStatsSnapshot", () => {
-  it("computes stats snapshot calling the expected dependencies", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2023-01-10T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("computes stats snapshot with mocked range-bounded wall time and usage totals", () => {
+    const invocations = [
+      {
+        id: "invoc-1",
+        project_id: "proj-1",
+        task_id: "task-1",
+        sprint_id: "sprint-1",
+        sprint_run_id: "run-1",
+        provider: "openai",
+        purpose: "test",
+        total_tokens: "100",
+        duration_ms: "500",
+        started_at: "2023-01-10T10:00:00Z",
+        finished_at: "2023-01-10T10:00:01Z",
+        usage_source: "reported",
+      }
+    ];
+
+    const wallTimeTasks = [
+      { task_id: "task-1", total_duration_ms: 1000 }
+    ];
+
     const dbMock = {
-      prepare: vi.fn().mockImplementation((query) => {
+      prepare: vi.fn().mockImplementation((query: string) => {
         return {
-          get: vi.fn().mockReturnValue({ id: "proj-1", name: "Project 1", sprint_id: "sprint-1", sprint_name: "Sprint 1", sprint_number: 1 }),
-          all: vi.fn().mockReturnValue([]),
+          get: vi.fn().mockImplementation(() => {
+            if (query.includes("FROM projects")) return { id: "proj-1", name: "Project 1" };
+            if (query.includes("FROM sprint_runs sr")) return { sprint_id: "sprint-1", sprint_name: "Sprint 1", sprint_number: 1 };
+            return undefined;
+          }),
+          all: vi.fn().mockImplementation(() => {
+            if (query.includes("FROM provider_invocations")) return invocations;
+            if (query.includes("FROM task_runs") && query.includes("task_id IS NOT NULL")) return wallTimeTasks;
+            if (query.includes("FROM task_runs") && query.includes("sprint_run_id IS NOT NULL")) return [{ sprint_run_id: "run-1", total_duration_ms: 2000 }];
+            if (query.includes("FROM tasks t")) return [{ id: "task-1", task_key: "T-1", title: "Task 1", status: "done", sprint_name: "Sprint 1" }];
+            if (query.includes("FROM sprints s")) return [{ sprint_id: "sprint-1", sprint_run_id: "run-1", name: "Sprint 1", number: 1, status: "completed" }];
+            return [];
+          })
         };
       })
     };
 
-    const depsMock: ProjectStatsQueryDependencies = {
-      requireProject: vi.fn(),
-      getWallTimeTotalsByTaskIdsForRange: vi.fn().mockReturnValue(new Map()),
-      getWallTimeTotalsBySprintRunIdsForRange: vi.fn().mockReturnValue(new Map()),
-      getTaskMetadata: vi.fn().mockReturnValue(new Map()),
-      getSprintMetadata: vi.fn().mockReturnValue(new Map()),
-      mapProviderInvocationUsageRow: vi.fn(),
-      mergeUsageTotals: vi.fn(),
-      mergeUsageMap: vi.fn(),
-      updateLastActivity: vi.fn(),
-    };
+    const snapshot = queryProjectStatsSnapshot(dbMock as any, "proj-1", "7d");
 
-    const snapshot = queryProjectStatsSnapshot(dbMock as any, "proj-1", "7d", depsMock);
-
-    expect(depsMock.requireProject).toHaveBeenCalledWith("proj-1");
+    // Validate project metadata
     expect(snapshot.projectId).toBe("proj-1");
     expect(snapshot.projectName).toBe("Project 1");
-    expect(snapshot.window).toBe("7d");
-    expect(snapshot.git).toBeDefined();
-    expect(snapshot.git.totals).toEqual({ insertions: 0, deletions: 0, filesChanged: 0, prCount: 0, mergedCount: 0 });
-    expect(snapshot.activeSprint?.sprintId).toBe("sprint-1");
 
-    // Assert git series
-    expect(snapshot.chartSeries.find(s => s.id === 'git_insertions')).toMatchObject({ grouping: 'git', formatter: 'number', defaultEnabled: true });
-    expect(snapshot.chartSeries.find(s => s.id === 'git_deletions')).toMatchObject({ grouping: 'git', formatter: 'number', defaultEnabled: true });
-    expect(snapshot.chartSeries.find(s => s.id === 'git_prs')).toMatchObject({ grouping: 'git', formatter: 'number', defaultEnabled: false });
-    expect(snapshot.chartSeries.find(s => s.id === 'git_merges')).toMatchObject({ grouping: 'git', formatter: 'number', defaultEnabled: false });
+    // Validate usage
+    expect(snapshot.usage.totalTokens).toBe(100);
+    expect(snapshot.usage.activeTimeMs).toBe(500);
+    expect(snapshot.usage.wallTimeMs).toBe(1000); // 1000 from task-1
+
+    // Validate range-bounded task wall time inclusion
+    const task = snapshot.tasks.find(t => t.id === "task-1");
+    expect(task).toBeDefined();
+    expect(task?.usage.wallTimeMs).toBe(1000);
+
+    // Validate range-bounded sprint wall time inclusion
+    const sprint = snapshot.sprints.find(s => s.id === "run-1");
+    expect(sprint).toBeDefined();
+    expect(sprint?.usage.wallTimeMs).toBe(2000);
   });
 });

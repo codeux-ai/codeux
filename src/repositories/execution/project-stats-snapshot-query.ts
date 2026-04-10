@@ -9,21 +9,31 @@ import {
 } from "../../contracts/app-types.js";
 import { DatabaseAdapter as Database } from "../db/database-adapter.js";
 import { AppDbStorage } from "../app-db-storage.js";
-import {
-  ExecutionUsageTotals,
-} from "../../contracts/app-types.js";
+import { ExecutionUsageTotals } from "../../contracts/app-types.js";
 import { ProviderInvocationUsageRecord } from "../../contracts/execution-types.js";
 import { toNumber } from "./execution-utils.js";
 import { ProviderInvocationUsageRow } from "./execution-repository-types.js";
-import { StatsEntityMetadata, ProjectStatsQueryDependencies } from "./execution-stats-types.js";
+import { requireProject } from "./execution-validators.js";
+import {
+  getTaskMetadata,
+  getSprintMetadata,
+  updateLastActivity,
+  mergeUsageMap
+} from "./execution-stats-aggregation.js";
+import { StatsEntityMetadata } from "./execution-stats-types.js";
+import {
+  getWallTimeTotalsByTaskIdsForRange,
+  getWallTimeTotalsBySprintRunIdsForRange
+} from "./execution-wall-time-query.js";
+import { mapProviderInvocationUsageRow } from "./execution-read-model-mappers.js";
+import { mergeUsageTotals } from "./execution-usage-query.js";
 
 export function queryProjectStatsSnapshot(
   db: Database,
   projectId: string,
-  input: ProjectStatsQuery | ProjectStatsWindow = "7d",
-  deps: ProjectStatsQueryDependencies
+  input: ProjectStatsQuery | ProjectStatsWindow = "7d"
 ): ProjectExecutionStatsSnapshot {
-  deps.requireProject(projectId);
+  requireProject(db, projectId);
   const projectRow = db.prepare(`
     SELECT id, name
     FROM projects
@@ -39,14 +49,17 @@ export function queryProjectStatsSnapshot(
     WHERE project_id = ?
       AND started_at >= ?
       AND started_at < ?
-    ORDER BY started_at ASC, id ASC
+      ORDER BY started_at ASC, id ASC
   `).all(projectId, rangeStartIso, rangeEndIso) as unknown as ProviderInvocationUsageRow[];
-  const nowIso = now.toISOString();
-  const wallTimeByTaskId = deps.getWallTimeTotalsByTaskIdsForRange(projectId, rangeStartIso, rangeEndIso, nowIso);
-  const wallTimeBySprintRunId = deps.getWallTimeTotalsBySprintRunIdsForRange(projectId, rangeStartIso, rangeEndIso, nowIso);
+
   const buckets = createUsageBuckets(normalized.range, normalized.bucketSizeMs);
-  const taskMeta = deps.getTaskMetadata(projectId);
-  const sprintMeta = deps.getSprintMetadata(projectId);
+  const nowIso = now.toISOString();
+
+  const wallTimeByTaskId = getWallTimeTotalsByTaskIdsForRange(db, projectId, rangeStartIso, rangeEndIso, nowIso);
+  const wallTimeBySprintRunId = getWallTimeTotalsBySprintRunIdsForRange(db, projectId, rangeStartIso, rangeEndIso, nowIso);
+
+  const taskMeta = getTaskMetadata(db, projectId);
+  const sprintMeta = getSprintMetadata(db, projectId);
   const usage = createEmptyUsageTotals();
   const taskUsage = new Map<string, ExecutionUsageTotals>();
   const sprintUsage = new Map<string, ExecutionUsageTotals>();
@@ -58,7 +71,7 @@ export function queryProjectStatsSnapshot(
   const providerLastActivity = new Map<string, string>();
   const purposeLastActivity = new Map<string, string>();
 
-  const mappedInvocations = invocations.map(row => deps.mapProviderInvocationUsageRow(row));
+  const mappedInvocations = invocations.map(row => mapProviderInvocationUsageRow(row));
   const firstBucketStartMs = buckets.length > 0 ? buckets[0].bucketStartMs : 0;
 
   const { totals: gitTotals, buckets: gitBuckets, taskUsage: gitTaskUsage, sprintUsage: gitSprintUsage } = queryProjectGitStats(
@@ -72,23 +85,23 @@ export function queryProjectStatsSnapshot(
   );
 
   for (const invocation of mappedInvocations) {
-    deps.mergeUsageTotals(usage, invocation);
-    deps.mergeUsageMap(taskUsage, invocation.taskId, invocation);
-    deps.mergeUsageMap(sprintUsage, invocation.sprintRunId || invocation.sprintId, invocation);
-    deps.mergeUsageMap(providerUsage, invocation.provider, invocation);
-    deps.mergeUsageMap(purposeUsage, invocation.purpose, invocation);
+    mergeUsageTotals(usage, invocation);
+    mergeUsageMap(taskUsage, invocation.taskId, invocation);
+    mergeUsageMap(sprintUsage, invocation.sprintRunId || invocation.sprintId, invocation);
+    mergeUsageMap(providerUsage, invocation.provider, invocation);
+    mergeUsageMap(purposeUsage, invocation.purpose, invocation);
     const activityAt = invocation.finishedAt || invocation.startedAt;
-    deps.updateLastActivity(taskLastActivity, invocation.taskId, activityAt);
-    deps.updateLastActivity(sprintLastActivity, invocation.sprintRunId || invocation.sprintId, activityAt);
-    deps.updateLastActivity(providerLastActivity, invocation.provider, activityAt);
-    deps.updateLastActivity(purposeLastActivity, invocation.purpose, activityAt);
+    updateLastActivity(taskLastActivity, invocation.taskId, activityAt);
+    updateLastActivity(sprintLastActivity, invocation.sprintRunId || invocation.sprintId, activityAt);
+    updateLastActivity(providerLastActivity, invocation.provider, activityAt);
+    updateLastActivity(purposeLastActivity, invocation.purpose, activityAt);
     tokenSourceCounts.set(invocation.usageSource, (tokenSourceCounts.get(invocation.usageSource) || 0) + 1);
 
     if (buckets.length > 0) {
       const bucketIndex = Math.floor((new Date(invocation.startedAt).getTime() - firstBucketStartMs) / normalized.bucketSizeMs);
       if (bucketIndex >= 0 && bucketIndex < buckets.length) {
         const bucket = buckets[bucketIndex]!;
-        deps.mergeUsageTotals(bucket.usage, invocation);
+        mergeUsageTotals(bucket.usage, invocation);
         bucket.providerTokens.set(invocation.provider, (bucket.providerTokens.get(invocation.provider) || 0) + invocation.totalTokens);
         bucket.purposeTime.set(invocation.purpose, (bucket.purposeTime.get(invocation.purpose) || 0) + (invocation.durationMs || 0));
         bucket.purposeInvocations.set(invocation.purpose, (bucket.purposeInvocations.get(invocation.purpose) || 0) + 1);
