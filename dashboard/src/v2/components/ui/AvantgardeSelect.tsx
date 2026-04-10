@@ -266,18 +266,18 @@ export const AvantgardeSelect: FunctionComponent<AvantgardeSelectProps> = ({
 
   const triggerClass =
     variant === "compact"
-      ? `flex w-full items-center justify-between gap-2 bg-transparent py-1 text-[11px] font-bold uppercase tracking-[0.14em] outline-none focus-visible:ring-2 focus-visible:ring-signal-500/20 transition-colors ${
+      ? `flex w-full items-center justify-between gap-2 bg-transparent py-1 text-[11px] font-bold uppercase tracking-[0.14em] outline-none focus-visible:ring-2 focus-visible:ring-signal-500 motion-safe:active:scale-95 transition-colors ${
           disabled
             ? "cursor-not-allowed text-slate-400"
             : "cursor-pointer text-signal-600 hover:text-signal-500 dark:text-signal-300 dark:hover:text-signal-200"
         }`
       : variant === "card"
-        ? `flex w-full items-center justify-between gap-2 rounded-[1.2rem] border border-black/[0.06] bg-white/66 px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] outline-none focus-visible:ring-2 focus-visible:ring-signal-500/20 transition-all ${
+        ? `flex w-full items-center justify-between gap-2 rounded-[1.2rem] border border-black/[0.06] bg-white/66 px-4 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] outline-none focus-visible:ring-2 focus-visible:ring-signal-500 motion-safe:active:scale-95 transition-all ${
             disabled
               ? "cursor-not-allowed text-slate-400 opacity-60"
               : "cursor-pointer text-signal-600 hover:border-black/[0.1] dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-signal-300 dark:hover:border-white/[0.1]"
           }`
-        : `flex w-full items-center justify-between gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-signal-500/20 transition-all ${
+        : `flex w-full items-center justify-between gap-2.5 rounded-xl border px-3.5 py-2.5 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-signal-500 motion-safe:active:scale-95 transition-all ${
             disabled
               ? "cursor-not-allowed border-black/[0.04] bg-black/[0.02] text-slate-400 opacity-60 dark:border-white/[0.04] dark:bg-white/[0.02]"
               : "cursor-pointer border-black/[0.06] bg-white/52 text-slate-800 shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_10px_24px_rgba(15,23,42,0.04)] backdrop-blur-xl hover:border-black/[0.12] dark:border-white/[0.06] dark:bg-white/[0.045] dark:text-slate-100 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_10px_24px_rgba(0,0,0,0.18)] dark:hover:border-white/[0.12]"

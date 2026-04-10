@@ -2,6 +2,7 @@ import type { FunctionComponent, ComponentChildren } from "preact";
 import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface TooltipProps {
     children: ComponentChildren;
@@ -25,6 +26,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
     const hoverTimeout = useRef<number | null>(null);
 
     const [coords, setCoords] = useState({ top: 0, left: 0 });
+    const reducedMotion = useReducedMotion();
 
     const handleMouseEnter = () => {
         if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
@@ -89,24 +91,31 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
             gsap.fromTo(
                 tooltipRef.current,
                 { opacity: 0, scale: 0.9, y: position === "bottom" ? -5 : position === "top" ? 5 : 0, x: position === "right" ? -5 : position === "left" ? 5 : 0 },
-                { opacity: 1, scale: 1, y: 0, x: 0, duration: 0.4, ease: "back.out(1.7)" }
+                { opacity: 1, scale: 1, y: 0, x: 0, duration: reducedMotion ? 0 : 0.4, ease: "back.out(1.7)" }
             );
         } else if (isRendered) {
             gsap.to(tooltipRef.current, {
                 opacity: 0,
                 scale: 0.95,
-                duration: 0.15,
+                duration: reducedMotion ? 0 : 0.15,
                 ease: "power2.in",
                 onComplete: () => setIsRendered(false)
             });
         }
-    }, [isVisible, isRendered, position]);
+    }, [isVisible, isRendered, position, reducedMotion]);
 
     useEffect(() => {
         return () => {
             if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
         };
     }, []);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape" && isVisible) {
+            e.stopPropagation();
+            setIsVisible(false);
+        }
+    };
 
     // Return just the children if no content
     if (!content) return <>{children}</>;
@@ -119,6 +128,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
             onMouseLeave={handleMouseLeave}
             onFocusCapture={handleMouseEnter}
             onBlurCapture={handleMouseLeave}
+            onKeyDown={handleKeyDown}
         >
             {children}
             {isRendered && createPortal(

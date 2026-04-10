@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import { createPortal } from "preact/compat";
 import gsap from "gsap";
 import { Info, Copy, Check } from "lucide-preact";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 interface InfoIconPopoverProps {
     className?: string;
@@ -21,6 +22,7 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
 
     const [coords, setCoords] = useState({ top: 0, left: 0 });
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
+    const reducedMotion = useReducedMotion();
 
     const handleMouseEnter = () => {
         if (leaveTimeout.current) clearTimeout(leaveTimeout.current);
@@ -88,18 +90,18 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
             gsap.fromTo(
                 popoverRef.current,
                 { opacity: 0, scale: 0.9, y: 10 },
-                { opacity: 1, scale: 1, y: 0, duration: 0.4, ease: "back.out(1.7)" }
+                { opacity: 1, scale: 1, y: 0, duration: reducedMotion ? 0 : 0.4, ease: "back.out(1.7)" }
             );
         } else if (isRendered) {
             gsap.to(popoverRef.current, {
                 opacity: 0,
                 scale: 0.95,
-                duration: 0.15,
+                duration: reducedMotion ? 0 : 0.15,
                 ease: "power2.in",
                 onComplete: () => setIsRendered(false)
             });
         }
-    }, [isVisible, isRendered]);
+    }, [isVisible, isRendered, reducedMotion]);
 
     useEffect(() => {
         return () => {
@@ -107,6 +109,13 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
             if (leaveTimeout.current) clearTimeout(leaveTimeout.current);
         };
     }, []);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === "Escape" && isVisible) {
+            e.stopPropagation();
+            setIsVisible(false);
+        }
+    };
 
     return (
         <div
@@ -117,6 +126,8 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
             onClick={handleClick}
             onFocusCapture={handleMouseEnter}
             onBlurCapture={handleMouseLeave}
+            onKeyDown={handleKeyDown}
+            tabIndex={0}
         >
             <Info className="w-4 h-4 text-slate-400 hover:text-signal-500 transition-colors" strokeWidth={1.5} />
 

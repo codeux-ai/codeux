@@ -30,7 +30,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   disabled,
   ...props
 }) => {
-  const baseClasses = "group/btn inline-flex items-center justify-center gap-2 font-bold transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:opacity-60 disabled:cursor-not-allowed hover:-translate-y-px disabled:hover:translate-y-0 active:scale-95 disabled:active:scale-100 touch-target";
+  const baseClasses = "group/btn inline-flex items-center justify-center gap-2 font-bold transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:opacity-60 disabled:cursor-not-allowed motion-safe:hover:-translate-y-px motion-safe:disabled:hover:translate-y-0 motion-safe:active:scale-95 motion-safe:disabled:active:scale-100 touch-target";
   const variantClasses = VARIANTS[variant];
   const sizeClasses = SIZES[size];
 

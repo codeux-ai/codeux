@@ -79,6 +79,7 @@ describe("AvantgardeSelect", () => {
     await waitFor(() => {
       expect(screen.queryByRole("listbox")).toBeNull();
     });
+    expect(document.activeElement).toBe(trigger);
   });
 
   it("closes when clicking outside", async () => {
