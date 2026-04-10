@@ -15,7 +15,12 @@ export class DockerCredentialMountBuilder {
   async build(
     workflowSettings: CliWorkflowSettings,
     repoPath: string,
-    onActivity: (desc: string) => void
+    onActivity: (desc: string) => void,
+    providerAuthOverride?: {
+      provider: "gemini" | "codex" | "claude-code";
+      enabled: boolean;
+      path: string;
+    },
   ): Promise<ContainerMount[]> {
     const mounts: ContainerMount[] = [];
 
@@ -42,11 +47,27 @@ export class DockerCredentialMountBuilder {
 
     await addMount(workflowSettings.containerMountGitConfig, "~/.gitconfig", GITCONFIG_CREDENTIALS_MOUNT, "GitConfig");
     await addMount(workflowSettings.containerMountGithubAuth, workflowSettings.containerGithubAuthPath, GITHUB_CREDENTIALS_MOUNT, "GitHub");
-    await addMount(workflowSettings.containerMountGeminiAuth, workflowSettings.containerGeminiAuthPath, GEMINI_CREDENTIALS_MOUNT, "Gemini");
-    await addMount(workflowSettings.containerMountCodexAuth, workflowSettings.containerCodexAuthPath, CODEX_CREDENTIALS_MOUNT, "Codex");
-    await addMount(workflowSettings.containerMountClaudeCodeAuth, workflowSettings.containerClaudeCodeAuthPath, CLAUDE_CODE_CREDENTIALS_MOUNT, "Claude Code");
-    if (workflowSettings.containerMountClaudeCodeAuth && workflowSettings.containerClaudeCodeAuthPath.trim().length > 0) {
-      const claudeAuthDir = resolveConfiguredPath(repoPath, workflowSettings.containerClaudeCodeAuthPath);
+    await addMount(
+      providerAuthOverride?.provider === "gemini" ? providerAuthOverride.enabled : workflowSettings.containerMountGeminiAuth,
+      providerAuthOverride?.provider === "gemini" ? providerAuthOverride.path : workflowSettings.containerGeminiAuthPath,
+      GEMINI_CREDENTIALS_MOUNT,
+      "Gemini",
+    );
+    await addMount(
+      providerAuthOverride?.provider === "codex" ? providerAuthOverride.enabled : workflowSettings.containerMountCodexAuth,
+      providerAuthOverride?.provider === "codex" ? providerAuthOverride.path : workflowSettings.containerCodexAuthPath,
+      CODEX_CREDENTIALS_MOUNT,
+      "Codex",
+    );
+    const claudeMountEnabled = providerAuthOverride?.provider === "claude-code"
+      ? providerAuthOverride.enabled
+      : workflowSettings.containerMountClaudeCodeAuth;
+    const claudeMountPath = providerAuthOverride?.provider === "claude-code"
+      ? providerAuthOverride.path
+      : workflowSettings.containerClaudeCodeAuthPath;
+    await addMount(claudeMountEnabled, claudeMountPath, CLAUDE_CODE_CREDENTIALS_MOUNT, "Claude Code");
+    if (claudeMountEnabled && claudeMountPath.trim().length > 0) {
+      const claudeAuthDir = resolveConfiguredPath(repoPath, claudeMountPath);
       const claudeAuthJsonPath = path.join(path.dirname(claudeAuthDir), ".claude.json");
       try {
         await fs.access(claudeAuthJsonPath);

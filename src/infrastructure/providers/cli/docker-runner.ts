@@ -48,6 +48,8 @@ export interface IDockerRunner {
     providerLabel: "gemini" | "codex" | "claude-code";
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
+    providerMountAuth?: boolean;
+    providerAuthPath?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
     mcpConnection?: McpConnectionInfo | null;
@@ -89,6 +91,8 @@ export class DockerRunner implements IDockerRunner {
     providerLabel: "gemini" | "codex" | "claude-code";
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
+    providerMountAuth?: boolean;
+    providerAuthPath?: string;
     signal?: AbortSignal;
     onActivity: (desc: string, originator?: string) => void;
     mcpConnection?: McpConnectionInfo | null;
@@ -168,7 +172,16 @@ export class DockerRunner implements IDockerRunner {
         dockerArgs.push("--mount", toDockerMountArg({ source: setupScriptSource, destination: CONTAINER_SETUP_SCRIPT, readonly: true }));
       }
 
-      const credentialMounts = await new DockerCredentialMountBuilder().build(workflowSettings, repoPath, onActivity);
+      const credentialMounts = await new DockerCredentialMountBuilder().build(
+        workflowSettings,
+        repoPath,
+        onActivity,
+        {
+          provider: providerLabel,
+          enabled: Boolean(input.providerMountAuth),
+          path: input.providerAuthPath || "",
+        },
+      );
       const mcpMounts = input.mcpConnection
         ? await this.buildProviderMcpMounts(input.mcpConnection, providerLabel, tempRoot)
         : [];

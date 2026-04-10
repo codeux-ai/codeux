@@ -184,6 +184,13 @@ Legacy runtime:
 - Planning feedback is deterministic and staged, using an animated ship treatment (Wooden Ship for AI improvement, Container Ship for planning) that drifts across the composer based on elapsed time to make progress visible
 - The planning overlay includes a `Cancel` button that aborts the in-flight planning or improvement request via AbortController, safely clearing the dismissible overlay and returning the composer to its editable state without navigating away
 - Settings now expose separate CLI retry controls for quota resets and rate limits, including the rate-limit delay and a max rate-limit retry count (`5` by default).
+- The v2 settings workspace restores the full Git Flow and Git host controls:
+  - Git Flow lives in the Sprint tab with default branch, branch prefix, sprint branch scheme, remote/local mode, and auto-create PR
+  - Integrations exposes the system GitHub token plus per-scope GitHub auth-copy mounts and gitconfig sharing
+  - CLI provider credentials are managed per named instance, including optional local auth-copy mounts and custom auth paths for each Gemini, Codex, or Claude entry
+- GitLab support is currently partial:
+  - backend git host detection, `glab`, and GitLab CI queries are implemented
+  - dashboard token persistence is still GitHub-only, so GitLab tokens currently come from `GITLAB_TOKEN` / `GLAB_TOKEN`
 - Sprint data now hydrates cache-first when revisiting the page and refreshes in the background, so the showcase and ledger do not flash empty while the latest data loads. First-hydration uses skeleton placeholders while background refreshes continue, preserving existing data without reintroducing blocking loaders
 - Sprint and task list windows support selectable page size options (`10`, `20`, `50`, `100`, `All`) with a default of `20` (a frontend-only view change with no API contract change)
 - `Improve with AI` is worker-backed through the Planning agent and only rewrites the sprint prompt
@@ -283,6 +290,7 @@ Legacy runtime:
 - Thread assignment control is explicitly labeled as `Worker:` in the thread header to make routing intent clearer
 - Virtual-worker-routed tasks are created from the same task modal and appear in the same board; the executor badge shows whether work is automatic, CLI-backed, Jules-backed, or handled by the virtual worker lane
 - Settings page now exposes Browser Preview as its own primary left-rail category, covering preview enablement, in-app browser visibility, launch/rebuild automation, Git sync on rebuild, maximum active preview containers, port allocation, and the project-relative preview startup script path
+- The Integrations settings panel now returns the selected detail view to normal document flow after the slide animation completes, so tall forms like GitHub configuration can extend to full height instead of being clipped to the shorter integrations list.
 
 ### Dashboard view
 - Task statistics
@@ -382,7 +390,11 @@ Runtime scoping:
 - The `/config` page keeps the existing v2 settings shell and categories, but now binds them to real scoped settings instead of draft-only values
 - System scope only edits system-owned controls, while project scope only edits project-owned overrides for the selected project
 - The integrations view now owns provider API keys plus GitHub token and GitHub workflow settings, rather than splitting those across separate categories
-- The integrations view uses a registry-style list with per-integration `Configure` actions so additional integrations can be added without turning the page into one long form
+- The integrations view uses a registry-style list with per-integration `Add` and `Manage` actions so additional integrations can be added without turning the page into one long form
+- Provider integrations are now instance-based:
+  - each CLI type can have multiple named credentials
+  - the list shows connected counts per CLI type rather than a single connected/disconnected badge
+  - GitHub remains system-scoped and is edited as one configuration panel
 - Individual MCP tool toggles and skill toggles are intentionally not exposed in the current user-facing settings surface
 - CLI workflow settings now expose provider throttle controls in addition to workspace cleanup:
   - `Retry after quota reset`
@@ -452,21 +464,22 @@ Project management requests are centralized in:
 *(Note: `available` means detected credentials/auth presence, whereas `enabled` means user-approved routing participation.)*
 
 AI Provider settings now support:
-- Providers: `jules`, `gemini`, `codex`
+- Named provider instances grouped under `jules`, `gemini`, `codex`, and `claude-code`
 - Routing strategy:
-  - `MANUAL` (single default provider)
-  - `WEIGHTED` (weight-based distribution)
+  - `MANUAL` (single default provider instance)
+  - `WEIGHTED` (weight-based distribution across enabled instances)
   - `ORCHESTRATOR` (rule-based routing with weighted fallback)
-- Provider toggles (`enabled`)
+- Provider-instance toggles (`enabled`)
 - Model selection
   - Gemini: curated model list in UI
   - Codex/Jules: text model field
 - Thinking mode (`SMALL`, `MEDIUM`, `HIGH`)
-- Optional per-provider API key fields
+- Invocation routing at the provider-instance level, including instance pools and sparse per-instance overrides
 
 Behavior:
 - Empty provider key fields are valid.
 - Runtime falls back to system auth/environment where supported.
+- Multiple instances of the same CLI type are routed independently, so operators can weight several Codex or Gemini credentials differently inside one route pool.
 
 ## CI Intelligence Settings
 

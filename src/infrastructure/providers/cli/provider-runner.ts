@@ -43,6 +43,8 @@ export interface ProviderRunInput {
   cwd: string;
   model: string;
   apiKey: string;
+  providerMountAuth?: boolean;
+  providerAuthPath?: string;
   sessionId: string;
   workflowSettings: CliWorkflowSettings;
   repoPath: string;
@@ -135,6 +137,8 @@ export class ProviderRunner implements IProviderRunner {
     cwd: string;
     model: string;
     apiKey: string;
+    providerMountAuth?: boolean;
+    providerAuthPath?: string;
     sessionId: string;
     workflowSettings: CliWorkflowSettings;
     repoPath: string;
@@ -145,8 +149,8 @@ export class ProviderRunner implements IProviderRunner {
     continueSessionId?: string | null;
     mcpConnection?: McpConnectionInfo | null;
   }): Promise<ProviderRunResult> {
-    const { provider, prompt, cwd, model, apiKey, sessionId, workflowSettings, repoPath, githubToken, signal, onActivity } = input;
-    const providerEnv = this.withProviderEnv(provider, model, apiKey, workflowSettings, githubToken);
+    const { provider, prompt, cwd, model, apiKey, providerMountAuth, providerAuthPath, sessionId, workflowSettings, repoPath, githubToken, signal, onActivity } = input;
+    const providerEnv = this.withProviderEnv(provider, model, apiKey, workflowSettings, githubToken, providerMountAuth);
     const nativeSessionId = input.continueSessionId || (provider === "claude-code" ? randomUUID() : null);
 
     const continueSession = !!input.continueSessionId;
@@ -164,6 +168,8 @@ export class ProviderRunner implements IProviderRunner {
         const result = await this.dockerRunner.runProviderInDocker({
           command, args, cwd, providerEnv, sessionId,
           providerLabel: provider, workflowSettings, repoPath, signal, onActivity,
+          providerMountAuth,
+          providerAuthPath,
           mcpConnection: input.mcpConnection
         });
         if (!result.ok && isDockerWorkspaceMountError(result)) {
@@ -280,15 +286,13 @@ export class ProviderRunner implements IProviderRunner {
     model: string,
     apiKey: string,
     workflowSettings: CliWorkflowSettings,
-    githubToken?: string
+    githubToken?: string,
+    providerMountAuth?: boolean,
   ): NodeJS.ProcessEnv {
     const env: NodeJS.ProcessEnv = { ...process.env };
     const useContainerMounts = workflowSettings.executionMode === "DOCKER";
     const useGithubMount = useContainerMounts && workflowSettings.containerMountGithubAuth;
-    const useProviderMount = useContainerMounts
-      && ((provider === "gemini" && workflowSettings.containerMountGeminiAuth)
-        || (provider === "claude-code" && workflowSettings.containerMountClaudeCodeAuth)
-        || (provider === "codex" && workflowSettings.containerMountCodexAuth));
+    const useProviderMount = useContainerMounts && Boolean(providerMountAuth);
 
     if (githubToken && !useGithubMount) {
       env.GH_TOKEN = githubToken;

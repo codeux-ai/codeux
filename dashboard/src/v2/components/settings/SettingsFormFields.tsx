@@ -1,7 +1,7 @@
 import type { ComponentChildren, FunctionComponent } from "preact";
 import { AvantgardeSelect } from "../ui/AvantgardeSelect.js";
 import { PROVIDER_CARD_TOKENS } from "../../lib/settings-view-models.js";
-import type { ProjectSettings } from "../../../types.js";
+import type { ProviderId } from "../../../types.js";
 
 export const Toggle: FunctionComponent<{
   value: boolean;
@@ -100,10 +100,10 @@ export const PillChoiceGroup: FunctionComponent<{
 );
 
 export const ProviderLogo: FunctionComponent<{
-  providerId: keyof ProjectSettings["aiProvider"]["providers"];
+  providerId: ProviderId | string;
   disabled?: boolean;
 }> = ({ providerId, disabled = false }) => {
-  const token = PROVIDER_CARD_TOKENS[providerId];
+  const token = PROVIDER_CARD_TOKENS[(providerId in PROVIDER_CARD_TOKENS ? providerId : "jules") as ProviderId];
 
   return (
     <div

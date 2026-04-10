@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { DashboardSettings, JulesSession, WorkerExecutionMode, Subtask } from "../contracts/app-types.js";
+import type { DashboardSettings, JulesSession, ProviderId, WorkerExecutionMode, Subtask } from "../contracts/app-types.js";
 import type { WorkerTaskDispatchClaim } from "../contracts/execution-types.js";
 import type { ProjectAttentionItemRecord } from "../contracts/project-attention-types.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
@@ -201,9 +201,10 @@ export class VirtualWorkerService {
 
   private async runProjectCycle(projectId: string, reason: string): Promise<void> {
     const cycleSettings = this.resolveCycleSettings(projectId);
+    const cycleProviderType = cycleSettings.aiProvider.providers[cycleSettings.workers.virtualWorkerProvider]?.provider || "codex";
     const endpoint = this.deps.workerEndpointRepository.createVirtualEndpoint({
       endpointKey: `virtual:${projectId}:${Date.now().toString(36)}:${sanitizeToken(randomUUID().slice(0, 8))}`,
-      displayName: `Virtual ${this.getProviderLabel(cycleSettings.workers.virtualWorkerProvider)} Worker`,
+      displayName: `Virtual ${this.getProviderLabel(cycleProviderType)} Worker`,
       status: "connected",
       transport: "internal",
       capabilities: {
@@ -265,8 +266,9 @@ export class VirtualWorkerService {
 
   private async handleTaskDispatch(workerEndpointId: string, claim: WorkerTaskDispatchClaim): Promise<void> {
     const settings = this.resolveDashboardSettings(claim.project.id, claim.sprint.id);
-    const provider = settings.workers.virtualWorkerProvider;
-    const providerSettings = settings.aiProvider.providers[provider];
+    const providerConfigId = settings.workers.virtualWorkerProvider;
+    const providerSettings = settings.aiProvider.providers[providerConfigId];
+    const provider = providerSettings.provider as Exclude<ProviderId, "jules">;
     const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(claim.dispatch.id);
     if (!taskRun) {
       throw new Error(`Task run not found for dispatch ${claim.dispatch.id}`);
@@ -282,6 +284,8 @@ export class VirtualWorkerService {
         ),
         thinkingMode: providerSettings.thinkingMode,
         apiKey: providerSettings.apiKey,
+        providerMountAuth: providerSettings.mountAuth,
+        providerAuthPath: providerSettings.authPath,
       },
       task: {
         record_id: claim.task.id,
@@ -497,8 +501,9 @@ export class VirtualWorkerService {
       },
       providerPool: ["gemini", "codex", "claude-code"],
     });
-    const provider = route.provider as DashboardSettings["workers"]["virtualWorkerProvider"];
-    const providerSettings = route.providers[provider];
+    const provider = route.provider as Exclude<ProviderId, "jules">;
+    const providerConfigId = route.providerConfigId || route.provider;
+    const providerSettings = route.providers[providerConfigId];
     const workflowSettings = {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...settings.cliWorkflow,
@@ -546,13 +551,15 @@ export class VirtualWorkerService {
           workflowSettings,
           repoPath,
           worktreePath: finalWorktreePath,
-        sessionId,
-        attentionItem: item,
-        purpose: "merge_conflict",
-        model: providerSettings.model,
-        apiKey: providerSettings.apiKey,
-        githubToken: settings.git.githubToken,
-      });
+          sessionId,
+          attentionItem: item,
+          purpose: "merge_conflict",
+          model: providerSettings.model,
+          apiKey: providerSettings.apiKey,
+          providerMountAuth: providerSettings.mountAuth,
+          providerAuthPath: providerSettings.authPath,
+          githubToken: settings.git.githubToken,
+        });
       }
       await this.ensureMergeConflictResolved(finalWorktreePath);
       await this.finalizeMergeCommit(finalWorktreePath, sourceBranch, targetBranch);
@@ -638,8 +645,9 @@ export class VirtualWorkerService {
       },
       providerPool: ["gemini", "codex", "claude-code"],
     });
-    const provider = route.provider as DashboardSettings["workers"]["virtualWorkerProvider"];
-    const providerSettings = route.providers[provider];
+    const provider = route.provider as Exclude<ProviderId, "jules">;
+    const providerConfigId = route.providerConfigId || route.provider;
+    const providerSettings = route.providers[providerConfigId];
     const workflowSettings = {
       ...DEFAULT_CLI_WORKFLOW_SETTINGS,
       ...settings.cliWorkflow,
@@ -702,6 +710,8 @@ export class VirtualWorkerService {
         purpose: "ci_fix",
         model: providerSettings.model,
         apiKey: providerSettings.apiKey,
+        providerMountAuth: providerSettings.mountAuth,
+        providerAuthPath: providerSettings.authPath,
         githubToken: settings.git.githubToken,
       });
 
@@ -835,7 +845,7 @@ export class VirtualWorkerService {
   }
 
   private async runProviderWithRetry(args: {
-    provider: DashboardSettings["workers"]["virtualWorkerProvider"];
+    provider: Exclude<ProviderId, "jules">;
     providerPrompt: string;
     workflowSettings: DashboardSettings["cliWorkflow"];
     repoPath: string;
@@ -845,6 +855,8 @@ export class VirtualWorkerService {
     purpose: "ci_fix" | "merge_conflict";
     model: string;
     apiKey: string;
+    providerMountAuth?: boolean;
+    providerAuthPath?: string;
     githubToken: string;
   }): Promise<void> {
     const result = await this.providerExecutionService.executeProvider({
@@ -861,6 +873,8 @@ export class VirtualWorkerService {
       cwd: args.worktreePath,
       model: args.model,
       apiKey: args.apiKey,
+      providerMountAuth: args.providerMountAuth,
+      providerAuthPath: args.providerAuthPath,
       sessionId: args.sessionId,
       workflowSettings: args.workflowSettings,
       repoPath: args.repoPath,
@@ -1034,7 +1048,7 @@ export class VirtualWorkerService {
     }
   }
 
-  private getProviderLabel(provider: DashboardSettings["workers"]["virtualWorkerProvider"]): string {
+  private getProviderLabel(provider: ProviderId): string {
     switch (provider) {
       case "claude-code":
         return "Claude Code";

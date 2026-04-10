@@ -32,6 +32,8 @@ export interface PipelineContext {
     model: string;
     thinkingMode: ThinkingMode;
     apiKey: string;
+    providerMountAuth?: boolean;
+    providerAuthPath?: string;
   };
   title: string;
   repoPath: string;

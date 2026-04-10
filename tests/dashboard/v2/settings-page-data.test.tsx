@@ -10,6 +10,7 @@ import { useProjectData } from "../../../dashboard/src/v2/context/project-data.j
 import { fetchSystemSettings, saveSystemSettings, saveProjectSettings, resetProjectSettings, fetchProjectEffectiveSettings } from "../../../dashboard/src/v2/lib/settings-api.js";
 import { fetchAgentPresets } from "../../../dashboard/src/v2/lib/agent-preset-api.js";
 import { fetchExternalSettingsHints } from "../../../dashboard/src/lib/api/dashboard-api.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 
 expect.extend(matchers);
 
@@ -119,35 +120,42 @@ vi.mock("../../../dashboard/src/lib/api/dashboard-api.js", () => ({
   fetchExternalSettingsHints: vi.fn(),
 }));
 
-const mockRouting = {
-  task_coding: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
-  planning: { provider: "gemini", allowedProviders: ["jules", "gemini"], providers: {} },
-  dashboard_reply: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
-  clarification_reply: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
-  qa_review: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
-  ci_fix: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} },
-  merge_conflict: { provider: "jules", allowedProviders: ["jules", "gemini"], providers: {} }
+const cloneDashboardSettings = () => JSON.parse(JSON.stringify(DEFAULT_DASHBOARD_SETTINGS));
+
+const createDashboardSettings = () => {
+  const settings = cloneDashboardSettings();
+  settings.automationLevel = "FULL";
+  settings.aiProvider.provider = "gemini";
+  settings.aiProvider.providers.gemini.model = "gemini-2.5-pro";
+  settings.aiProvider.providers.codex.enabled = false;
+  settings.aiProvider.providers["claude-code"].enabled = false;
+  settings.git.featureBranchPrefix = "feat";
+  settings.git.sprintBranchScheme = "short";
+  settings.agents.qualityAssurance.enabled = false;
+  settings.agents.qualityAssurance.maxTaskReviewRuns = 1;
+  settings.agents.qualityAssurance.taskCompletion.enabled = true;
+  settings.agents.qualityAssurance.sprintCompletion.enabled = true;
+  settings.agents.qualityAssurance.completedTaskWithoutPr.enabled = true;
+  return settings;
 };
 
 const mockSystemSettings = {
-  runtime: { nodeEnvironment: "development" },
-  integrations: { julesApiKey: "sys-key", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
-  defaults: {
-    automationLevel: "high",
-    aiProvider: { providers: { gemini: { enabled: true, model: "pro", weight: 1, thinkingMode: "MEDIUM" }, jules: { enabled: true, model: "auto", weight: 1, thinkingMode: "SMALL" }, codex: { enabled: false, model: "gpt-4", weight: 1, thinkingMode: "SMALL" }, "claude-code": { enabled: false, model: "claude-3-5", weight: 1, thinkingMode: "SMALL" } }, provider: "gemini", strategy: "single", invocationRouting: mockRouting },
-    git: { githubMode: "oauth", defaultBranch: "main", autoCreatePr: true, featureBranchPrefix: "feat", sprintBranchScheme: "short" },
-    ciIntelligence: {}, sprintLoopSteps: {}, cliWorkflow: {}, sprintPreview: {}, workers: {}, agents: { saveToProjectDirectory: true, instructionTemplates: {}, qualityAssurance: { enabled: false, maxTaskReviewRuns: 1, taskCompletion: { enabled: true, agentPresetId: null }, sprintCompletion: { enabled: true, agentPresetId: null }, completedTaskWithoutPr: { enabled: true, agentPresetId: null } } }, skills: [], memory: {}
+  runtime: { dashboardPort: 4444, enableDebugLogFile: false },
+  integrations: {
+    providers: {
+      jules: { provider: "jules", name: "Jules Primary", apiKey: "sys-key" },
+      gemini: { provider: "gemini", name: "Gemini Primary", apiKey: "" },
+      codex: { provider: "codex", name: "Codex Primary", apiKey: "" },
+      "claude-code": { provider: "claude-code", name: "Claude Primary", apiKey: "" },
+    },
+    githubToken: "",
   },
+  defaults: createDashboardSettings(),
   mcpTools: [],
 };
 
 const mockEffectiveSettingsData = {
-  settings: {
-    automationLevel: "high",
-    aiProvider: { providers: { gemini: { enabled: true, model: "pro", weight: 1, thinkingMode: "MEDIUM" }, jules: { enabled: true, model: "auto", weight: 1, thinkingMode: "SMALL" }, codex: { enabled: false, model: "gpt-4", weight: 1, thinkingMode: "SMALL" }, "claude-code": { enabled: false, model: "claude-3-5", weight: 1, thinkingMode: "SMALL" } }, provider: "gemini", strategy: "single", invocationRouting: mockRouting },
-    git: { githubMode: "oauth", defaultBranch: "main", autoCreatePr: true, featureBranchPrefix: "feat", sprintBranchScheme: "short" },
-    ciIntelligence: {}, sprintLoopSteps: {}, cliWorkflow: {}, sprintPreview: {}, workers: {}, agents: { saveToProjectDirectory: true, instructionTemplates: {}, qualityAssurance: { enabled: false, maxTaskReviewRuns: 1, taskCompletion: { enabled: true, agentPresetId: null }, sprintCompletion: { enabled: true, agentPresetId: null }, completedTaskWithoutPr: { enabled: true, agentPresetId: null } } }, skills: [], memory: {}
-  },
+  settings: createDashboardSettings(),
   sources: { "automationLevel": "project" }
 };
 

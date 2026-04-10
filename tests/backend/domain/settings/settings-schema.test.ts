@@ -225,7 +225,6 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("aiProvider.provider");
     expect(paths).toContain("aiProvider.providers.jules.apiKey");
     expect(paths).toContain("aiProvider.providers.gemini");
-    expect(paths).toContain("aiProvider.providers.codex");
     expect(paths).toContain("git.githubMode");
     expect(paths).toContain("ciIntelligence.featurePrAutoMergeMode");
     expect(paths).toContain("sprintLoopSteps.watchLoopOutputIntervalSeconds");

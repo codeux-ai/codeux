@@ -430,13 +430,18 @@ export class JulesAgentServer {
 
   private getEffectiveJulesApiKey(): string | undefined {
     const settings = this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
-    const uiProviderKey = settings.aiProvider?.providers?.jules?.apiKey?.trim();
+    const providerEntries = Object.entries(settings.aiProvider?.providers || {});
+    const uiProviderKey = providerEntries
+      .find(([providerConfigId, provider]) => {
+        const providerType = provider.provider
+          || (providerConfigId === "jules" || providerConfigId.startsWith("jules-") ? "jules" : null);
+        return providerType === "jules" && provider.apiKey.trim().length > 0;
+      })
+      ?.[1]
+      ?.apiKey
+      ?.trim();
     if (uiProviderKey && uiProviderKey.length > 0) {
       return uiProviderKey;
-    }
-    const uiKey = settings.aiProvider?.julesApiKey?.trim();
-    if (uiKey && uiKey.length > 0) {
-      return uiKey;
     }
     const liveEnvKey = process.env.JULES_API_KEY?.trim() || process.env.JULES_KEY?.trim();
     if (liveEnvKey && liveEnvKey.length > 0) {

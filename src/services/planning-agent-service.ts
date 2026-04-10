@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import type { AgentPresetRecord } from "../contracts/agent-preset-types.js";
 import type { MemoryService } from "./memory-service.js";
-import type { CliWorkflowSettings, DashboardSettings, Subtask } from "../contracts/app-types.js";
+import type { CliWorkflowSettings, DashboardSettings, ProviderId, Subtask } from "../contracts/app-types.js";
 import type {
   TaskExecutorType,
   TaskPriority,
@@ -73,7 +73,7 @@ interface PlannedSprintPayload {
 }
 
 interface PlanningResultContext {
-  provider: DashboardSettings["workers"]["virtualWorkerProvider"];
+  provider: Exclude<ProviderId, "jules">;
   sessionId: string;
   workflowSettings: CliWorkflowSettings;
   providerSettings: { model: string; apiKey: string; thinkingMode?: unknown };
@@ -433,11 +433,15 @@ export class PlanningAgentService {
       task: routingTask,
       providerPool: ["gemini", "codex", "claude-code"],
     });
-    const provider = (args.overrides?.virtualProvider || route.provider) as DashboardSettings["workers"]["virtualWorkerProvider"];
-    const providerSettings = { ...route.providers[provider] };
-    if (!providerSettings) {
-      throw new Error(`Virtual worker provider "${provider}" is not configured. Check AI Provider settings.`);
+    const providerConfigId = args.overrides?.virtualProvider
+      ? Object.entries(route.providers).find(([, candidate]) => candidate.provider === args.overrides?.virtualProvider)?.[0] || route.providerConfigId
+      : route.providerConfigId;
+    const baseProviderSettings = route.providers[providerConfigId];
+    if (!baseProviderSettings) {
+      throw new Error(`Virtual worker provider "${providerConfigId}" is not configured. Check AI Provider settings.`);
     }
+    const providerSettings = { ...baseProviderSettings };
+    const provider = providerSettings.provider as Exclude<ProviderId, "jules">;
 
     if (args.overrides?.virtualModel) {
       providerSettings.model = args.overrides.virtualModel;
@@ -459,6 +463,8 @@ export class PlanningAgentService {
         provider,
         model: providerSettings.model,
         apiKey: providerSettings.apiKey,
+        providerMountAuth: providerSettings.mountAuth,
+        providerAuthPath: providerSettings.authPath,
         providerPrompt: args.rawPrompt,
         repoPath: args.repoPath,
         settings: {
@@ -743,7 +749,7 @@ export class PlanningAgentService {
     return "auto";
   }
 
-  private getProviderLabel(provider: DashboardSettings["workers"]["virtualWorkerProvider"]): string {
+  private getProviderLabel(provider: ProviderId): string {
     switch (provider) {
       case "gemini":
         return "Gemini";

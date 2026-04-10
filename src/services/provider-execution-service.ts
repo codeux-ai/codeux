@@ -36,6 +36,8 @@ export interface ExecutionProviderRunArgs {
   cwd?: string;
   model: string;
   apiKey: string;
+  providerMountAuth?: boolean;
+  providerAuthPath?: string;
   sessionId: string;
   workflowSettings: DashboardSettings["cliWorkflow"];
   repoPath: string;
@@ -123,6 +125,8 @@ export class ProviderExecutionService {
         cwd: args.cwd || args.repoPath,
         model: args.model,
         apiKey: args.apiKey,
+        providerMountAuth: args.providerMountAuth,
+        providerAuthPath: args.providerAuthPath,
         sessionId: args.sessionId,
         workflowSettings: args.workflowSettings,
         repoPath: args.repoPath,

@@ -23,6 +23,7 @@ import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import type { Logger } from "../shared/logging/logger.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
 import { fetchOriginIfAvailable } from "./git-branch-sync-service.js";
+import type { ResolvedProviderRoute } from "./provider-routing.js";
 
 export interface GenerateDashboardReplyInput {
   projectId: string;
@@ -97,13 +98,15 @@ export class WorkerInboxReplyService {
         isDashboardReply: true,
       });
     }
-    const prompt = buildProviderPrompt(rawPrompt, route.providers[route.provider].thinkingMode);
+    const providerConfigId = route.providerConfigId || route.provider;
+    const providerSettings = route.providers[providerConfigId];
+    const prompt = buildProviderPrompt(rawPrompt, providerSettings.thinkingMode);
 
     const execInvocation = this.deps.executionRepository.createExecutionInvocation({
       projectId: input.projectId,
       type: input.mode === "compact_thread" ? "chat_compaction" : "worker_reply",
       provider: route.provider,
-      model: route.providers[route.provider].model,
+      model: providerSettings.model,
       startedAt: new Date().toISOString(),
       attentionItemId: null,
       dispatchId: null,
@@ -125,8 +128,10 @@ export class WorkerInboxReplyService {
         provider: route.provider,
         prompt,
         repoPath: project.baseDir,
-        model: route.providers[route.provider].model,
-        apiKey: route.providers[route.provider].apiKey,
+        model: providerSettings.model,
+        apiKey: providerSettings.apiKey,
+        providerMountAuth: providerSettings.mountAuth,
+        providerAuthPath: providerSettings.authPath,
         githubToken: this.deps.getGithubToken(),
       });
       output = result.text;
@@ -166,7 +171,7 @@ export class WorkerInboxReplyService {
     return {
       bodyMarkdown,
       provider: route.provider,
-      model: route.providers[route.provider].model,
+      model: providerSettings.model,
     };
   }
 
@@ -226,7 +231,9 @@ export class WorkerInboxReplyService {
       "Answer the agent so they can continue implementation immediately.",
     ].filter(Boolean).join("\n");
 
-    const prompt = buildProviderPrompt(fullContextPrompt, route.providers[route.provider].thinkingMode);
+    const providerConfigId = route.providerConfigId || route.provider;
+    const providerSettings = route.providers[providerConfigId];
+    const prompt = buildProviderPrompt(fullContextPrompt, providerSettings.thinkingMode);
 
     const startedAt = new Date().toISOString();
 
@@ -240,7 +247,7 @@ export class WorkerInboxReplyService {
       provider: route.provider,
       purpose: "clarification_reply",
       status: "running",
-      model: route.providers[route.provider].model,
+      model: providerSettings.model,
       startedAt,
       promptChars: fullContextPrompt.length,
     });
@@ -249,7 +256,7 @@ export class WorkerInboxReplyService {
       projectId: args.projectId,
       type: "worker_reply",
       provider: route.provider,
-      model: route.providers[route.provider].model,
+      model: providerSettings.model,
       startedAt,
       attentionItemId: null,
       dispatchId: null,
@@ -272,8 +279,10 @@ export class WorkerInboxReplyService {
         provider: route.provider,
         prompt,
         repoPath: project.baseDir,
-        model: route.providers[route.provider].model,
-        apiKey: route.providers[route.provider].apiKey,
+        model: providerSettings.model,
+        apiKey: providerSettings.apiKey,
+        providerMountAuth: providerSettings.mountAuth,
+        providerAuthPath: providerSettings.authPath,
         githubToken: this.deps.getGithubToken(),
       });
       output = providerResult.text;
@@ -336,10 +345,7 @@ export class WorkerInboxReplyService {
   private resolveProviderRoute(
     invocation: "dashboard_reply" | "clarification_reply",
     bodyMarkdown: string,
-  ): {
-    provider: Extract<ProviderId, "gemini" | "codex" | "claude-code">;
-    providers: Record<ProviderId, DashboardSettings["aiProvider"]["providers"][ProviderId]>;
-  } {
+  ): ResolvedProviderRoute & { provider: Extract<ProviderId, "gemini" | "codex" | "claude-code"> } {
     const pseudoTask: Subtask = {
       id: "dashboard-reply",
       title: "Dashboard reply",
@@ -355,11 +361,13 @@ export class WorkerInboxReplyService {
     if (!route.provider) {
       throw new Error(`Invocation ${invocation} requires an enabled CLI provider, but none was resolved.`);
     }
-    if (!route.providers[route.provider]) {
-      throw new Error(`Invocation ${invocation} resolved provider ${route.provider}, but no provider settings were available.`);
+    const providerConfigId = route.providerConfigId || route.provider;
+    if (!route.providers[providerConfigId]) {
+      throw new Error(`Invocation ${invocation} resolved provider ${providerConfigId}, but no provider settings were available.`);
     }
     return {
       ...route,
+      providerConfigId,
       provider: route.provider as Extract<ProviderId, "gemini" | "codex" | "claude-code">,
     };
   }
@@ -370,6 +378,8 @@ export class WorkerInboxReplyService {
     repoPath: string;
     model: string;
     apiKey: string;
+    providerMountAuth?: boolean;
+    providerAuthPath?: string;
     githubToken?: string;
   }): Promise<ProviderRunResult & { text: string }> {
     const workflowSettings = this.deps.getDashboardSettings().cliWorkflow;
@@ -380,6 +390,8 @@ export class WorkerInboxReplyService {
       cwd: input.repoPath,
       model: input.model,
       apiKey: input.apiKey,
+      providerMountAuth: input.providerMountAuth,
+      providerAuthPath: input.providerAuthPath,
       sessionId: "worker-reply-" + randomUUID(),
       workflowSettings,
       repoPath: input.repoPath,

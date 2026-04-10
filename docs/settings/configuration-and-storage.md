@@ -101,9 +101,14 @@ Runtime resolution:
 - used only for sprint-local deviations from the resolved project baseline
 
 System-level integrations are injected into effective dashboard settings at resolution time:
-- provider API keys are system-scoped
+- provider credentials are system-scoped under `integrations.providers`
+  - each entry is a named provider instance with `{ provider, name, apiKey, mountAuth, authPath }`
+  - default instance ids intentionally match the base provider ids (`jules`, `gemini`, `codex`, `claude-code`) for compatibility with older settings payloads
+  - additional instances can coexist under the same CLI type
+  - for CLI providers, `mountAuth` and `authPath` are instance-specific Docker auth-copy settings, so multiple Codex/Gemini/Claude entries can each point at different local credential directories
 - `git.githubToken` is system-scoped
 - runtime fields like `dashboardPort` and `enableDebugLogFile` are system-scoped
+- project and sprint scopes still own `cliWorkflow.containerMountGithubAuth`, `cliWorkflow.containerGithubAuthPath`, and `cliWorkflow.containerMountGitConfig`
 
 Backend contract:
 - `src/contracts/app-types.ts`
@@ -148,17 +153,22 @@ Dashboard behavior:
   - one provider is edited at a time in the provider deck detail panel
   - invocation routing is edited in a split-pane route workspace with resolved default, provider-pool, and override summaries
 - common 2-3 option settings such as routing strategy, worker execution mode, execution runtime, and merge mode use pill controls for faster scanning than dropdown-heavy forms
+- the Integrations panel restores the Git host workspace:
+  - system scope edits the GitHub token and per-instance CLI auth sources
+  - project and sprint scopes edit GitHub auth-copy mounts and gitconfig sharing for Docker runs
 
 `aiProvider` contains:
-- `provider` (`jules|gemini|codex|claude-code`)
+- `provider` (`ProviderConfigId|null`)
 - `strategy` (`MANUAL|WEIGHTED|ORCHESTRATOR`)
-- `providers` map (enabled/model/weight/thinkingMode)
+- `providers` map keyed by provider config id
+  - each provider config stores `provider`, `name`, `enabled`, `model`, `weight`, `thinkingMode`, and `maxConcurrentTasks`
+  - multiple entries may share the same underlying provider type, so weighted/manual routing can target separate Codex, Gemini, Claude, or Jules instances independently
   - Jules remains routable with `enabled` and `weight`, but the current Jules REST API does not expose model-selection or thinking controls.
   - Dashboard settings editors therefore hide `model` and `thinkingMode` for Jules and show an informational note instead.
   - Gemini alias entries `pro`, `flash`, and `flash-lite` are labeled as recent aliases in selects so it is clear they track the latest model target.
   - Sprint OS performs startup availability checks for Gemini, Codex, and Claude Code, looking for API-key hints and stable local auth artifacts to prepare future onboarding decisions.
-  - Enabling a provider auth mount in Integrations also marks that provider active in the dashboard so mount-based Docker setups show the expected connected state even without an API key.
-  - Note: `available` means detected credentials/auth presence or an enabled auth mount, whereas `enabled` means user-approved routing participation. CLI providers are opt-in on fresh installs and disabled by default.
+  - Enabling local auth on a named provider instance in Integrations also marks that instance active in the dashboard so mount-based Docker setups show the expected connected state even without an API key.
+  - Note: `available` means an API key is present from saved settings/import hints or that specific provider instance has `mountAuth = true`. Local host auth files alone do not mark a CLI provider or provider instance active unless the matching named instance has local auth enabled. `enabled` means user-approved routing participation. CLI providers are opt-in on fresh installs and disabled by default.
   - `invocationRouting` map
   - route ids:
     - `task_coding`
@@ -173,11 +183,11 @@ Dashboard behavior:
       - `GLOBAL`: inherit the top-level `aiProvider.provider`, `aiProvider.strategy`, and per-provider defaults
       - `WORKER`: inherit the worker runtime preference (`workers.virtualWorkerProvider`) and worker model override (`workers.model`) as the default baseline for that invocation
     - `strategy` (`MANUAL|WEIGHTED|ORCHESTRATOR`)
-    - `provider` (`ProviderId|null`)
+    - `provider` (`ProviderConfigId|null`)
       - `null` means "inherit the profile default provider"
-    - `allowedProviders` (`ProviderId[]`)
-      - empty means "all enabled providers remain eligible"
-    - `providers` sparse override map
+    - `allowedProviders` (`ProviderConfigId[]`)
+      - empty means "all enabled provider instances remain eligible"
+    - `providers` sparse override map keyed by provider config id
       - supports per-invocation overrides for `enabled`, `model`, `weight`, and `thinkingMode`
   - default profiles:
     - `task_coding`: `GLOBAL`

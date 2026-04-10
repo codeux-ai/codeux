@@ -16,6 +16,8 @@ export interface StructuredRequestArgs<T> {
   provider: ProviderId;
   model: string;
   apiKey: string;
+  providerMountAuth?: boolean;
+  providerAuthPath?: string;
   providerPrompt: string;
   repoPath: string;
   settings: DashboardSettings;
@@ -105,6 +107,8 @@ export class StructuredAgentRequestService {
       prompt: args.providerPrompt,
       model: args.model,
       apiKey: args.apiKey,
+      providerMountAuth: args.providerMountAuth,
+      providerAuthPath: args.providerAuthPath,
       sessionId,
       workflowSettings: args.settings.cliWorkflow,
       repoPath: args.repoPath,

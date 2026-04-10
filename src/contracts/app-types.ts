@@ -49,6 +49,7 @@ export interface JulesActivity {
 export type SubtaskStatus = "PENDING" | "RUNNING" | "CODING_COMPLETED" | "COMPLETED" | "FAILED" | "BLOCKED" | "QUOTA";
 export type SubtaskMergeIndicator = "CI" | "AUTOMERGE" | "MERGED" | "MERGE_BLOCKED" | "MERGE_CONFLICT" | "PR_ONLY" | "QA_PENDING";
 export type ProviderId = "jules" | "gemini" | "codex" | "claude-code";
+export type ProviderConfigId = string;
 export type ProviderStrategy = "MANUAL" | "WEIGHTED" | "ORCHESTRATOR";
 export type ThinkingMode = "SMALL" | "MEDIUM" | "HIGH";
 export type InvocationRoutingProfile = "GLOBAL" | "WORKER";
@@ -533,11 +534,15 @@ export interface AutomationInterventionsSettings {
 }
 
 export interface ProviderSettings {
+  provider: ProviderId;
+  name: string;
   enabled: boolean;
   model: string;
   weight: number;
   thinkingMode: ThinkingMode;
   apiKey: string;
+  mountAuth: boolean;
+  authPath: string;
   maxConcurrentTasks: number;
 }
 
@@ -551,17 +556,16 @@ export interface InvocationProviderOverrideSettings {
 export interface InvocationRoutingSettings {
   profile: InvocationRoutingProfile;
   strategy: ProviderStrategy;
-  provider: ProviderId | null;
-  allowedProviders: ProviderId[];
-  providers: Partial<Record<ProviderId, InvocationProviderOverrideSettings>>;
+  provider: ProviderConfigId | null;
+  allowedProviders: ProviderConfigId[];
+  providers: Record<ProviderConfigId, InvocationProviderOverrideSettings>;
 }
 
 export interface AiProviderSettings {
-  provider: ProviderId;
+  provider: ProviderConfigId | null;
   strategy: ProviderStrategy;
-  providers: Record<ProviderId, ProviderSettings>;
+  providers: Record<ProviderConfigId, ProviderSettings>;
   invocationRouting: Record<InvocationRoutingId, InvocationRoutingSettings>;
-  julesApiKey: string;
 }
 
 export interface GitSettings {
@@ -645,7 +649,7 @@ export interface SprintPreviewSettings {
 
 export interface WorkerSettings {
   executionMode: WorkerExecutionMode;
-  virtualWorkerProvider: VirtualWorkerProvider;
+  virtualWorkerProvider: ProviderConfigId;
   model: string;
   maxConcurrency: number;
   timeoutSeconds: number;

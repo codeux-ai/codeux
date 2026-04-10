@@ -5,6 +5,7 @@ import type {
   AutomationLevel,
   CiIntelligenceSettings,
   CliWorkflowSettings,
+  ProviderConfigId,
   DashboardSettings,
   InvocationProviderOverrideSettings,
   InvocationRoutingId,
@@ -23,6 +24,8 @@ import type { WorkerRuntimeSettings } from "./worker-types.js";
 export type { WorkerRuntimeSettings };
 
 export interface ProjectProviderSettings {
+  provider: ProviderId;
+  name: string;
   enabled: boolean;
   model: string;
   weight: number;
@@ -31,18 +34,18 @@ export interface ProjectProviderSettings {
 }
 
 export interface ProjectAiProviderSettings {
-  provider: ProviderId;
+  provider: ProviderConfigId | null;
   strategy: ProviderStrategy;
-  providers: Record<ProviderId, ProjectProviderSettings>;
+  providers: Record<ProviderConfigId, ProjectProviderSettings>;
   invocationRouting: Record<InvocationRoutingId, ProjectInvocationRoutingSettings>;
 }
 
 export interface ProjectInvocationRoutingSettings {
   profile: InvocationRoutingProfile;
   strategy: ProviderStrategy;
-  provider: ProviderId | null;
-  allowedProviders: ProviderId[];
-  providers: Partial<Record<ProviderId, InvocationProviderOverrideSettings>>;
+  provider: ProviderConfigId | null;
+  allowedProviders: ProviderConfigId[];
+  providers: Record<ProviderConfigId, InvocationProviderOverrideSettings>;
 }
 
 export interface ProjectGitSettings {
@@ -74,11 +77,16 @@ export interface SystemRuntimeSettings {
   enableDebugLogFile: boolean;
 }
 
+export interface SystemProviderCredentialSettings {
+  provider: ProviderId;
+  name: string;
+  apiKey: string;
+  mountAuth: boolean;
+  authPath: string;
+}
+
 export interface SystemIntegrationSettings {
-  julesApiKey: string;
-  geminiApiKey: string;
-  codexApiKey: string;
-  claudeCodeApiKey: string;
+  providers: Record<ProviderConfigId, SystemProviderCredentialSettings>;
   githubToken: string;
 }
 

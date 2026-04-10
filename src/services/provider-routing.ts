@@ -1,6 +1,7 @@
 import type {
   DashboardSettings,
   InvocationRoutingId,
+  ProviderConfigId,
   ProviderId,
   ProviderSettings,
   ProviderStrategy,
@@ -8,18 +9,17 @@ import type {
 } from "../contracts/app-types.js";
 import { AI_MODEL_CATALOG, DEFAULT_INVOCATION_ROUTING } from "../repositories/settings-defaults.js";
 
-const PROVIDER_ORDER: ProviderId[] = ["jules", "gemini", "codex", "claude-code"];
-
 interface RoutingDecisionContext {
   strategy: ProviderStrategy;
-  manualProvider: ProviderId | null;
-  providers: Record<ProviderId, ProviderSettings>;
-  enabledProviders: ProviderId[];
+  manualProvider: ProviderConfigId | null;
+  providers: Record<ProviderConfigId, ProviderSettings>;
+  enabledProviders: ProviderConfigId[];
 }
 
 export interface ResolvedProviderRoute extends RoutingDecisionContext {
   invocation: InvocationRoutingId;
   provider: ProviderId;
+  providerConfigId: ProviderConfigId;
 }
 
 export interface ResolveProviderForInvocationInput {
@@ -29,7 +29,7 @@ export interface ResolveProviderForInvocationInput {
 }
 
 export interface ProviderRoutingStrategy {
-  choose(context: RoutingDecisionContext, task: Subtask): ProviderId;
+  choose(context: RoutingDecisionContext, task: Subtask): ProviderConfigId;
 }
 
 const hashString = (value: string): number => {
@@ -72,6 +72,66 @@ const resolveInvocationStrategy = (
   return route.strategy;
 };
 
+const inferProviderTypeFromConfigId = (providerConfigId: ProviderConfigId): ProviderId | null => {
+  if (providerConfigId === "jules" || providerConfigId.startsWith("jules-")) {
+    return "jules";
+  }
+  if (providerConfigId === "gemini" || providerConfigId.startsWith("gemini-")) {
+    return "gemini";
+  }
+  if (providerConfigId === "codex" || providerConfigId.startsWith("codex-")) {
+    return "codex";
+  }
+  if (providerConfigId === "claude-code" || providerConfigId.startsWith("claude-code-") || providerConfigId.startsWith("claude-")) {
+    return "claude-code";
+  }
+  return null;
+};
+
+const getProviderType = (
+  providers: Record<ProviderConfigId, ProviderSettings>,
+  providerConfigId: ProviderConfigId | null | undefined,
+): ProviderId | null => (
+  providerConfigId
+    ? (providers[providerConfigId]?.provider || inferProviderTypeFromConfigId(providerConfigId))
+    : null
+);
+
+const chooseWeightedConfig = (
+  providers: Record<ProviderConfigId, ProviderSettings>,
+  enabledProviderIds: ProviderConfigId[],
+  task: Subtask,
+): ProviderConfigId => {
+  const weighted = enabledProviderIds.map((providerConfigId) => ({
+    providerConfigId,
+    weight: Math.max(0, providers[providerConfigId]?.weight || 0),
+  }));
+  const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
+  if (totalWeight <= 0) {
+    return enabledProviderIds[0]!;
+  }
+
+  let cursor = hashString(resolveWeightedSeed(task)) % totalWeight;
+  for (const entry of weighted) {
+    cursor -= entry.weight;
+    if (cursor < 0) {
+      return entry.providerConfigId;
+    }
+  }
+  return weighted[weighted.length - 1]!.providerConfigId;
+};
+
+const getEmergencyFallbackProvider = (
+  context: RoutingDecisionContext,
+): ProviderConfigId => (
+  context.enabledProviders.find((providerConfigId) => getProviderType(context.providers, providerConfigId) === "jules")
+  || Object.keys(context.providers).find((providerConfigId) => getProviderType(context.providers, providerConfigId) === "jules")
+  || context.manualProvider
+  || context.enabledProviders[0]
+  || Object.keys(context.providers)[0]
+  || "jules"
+);
+
 export const resolveWorkerModelForProvider = (
   provider: Exclude<ProviderId, "jules">,
   workerModel: string | null | undefined,
@@ -89,40 +149,43 @@ export const resolveWorkerModelForProvider = (
 const buildRouteProviders = (
   settings: DashboardSettings,
   invocation: InvocationRoutingId,
-): { manualProvider: ProviderId; providers: Record<ProviderId, ProviderSettings> } => {
+): { manualProvider: ProviderConfigId | null; providers: Record<ProviderConfigId, ProviderSettings> } => {
   const route = settings.aiProvider.invocationRouting?.[invocation] || DEFAULT_INVOCATION_ROUTING[invocation];
-  const providers: Record<ProviderId, ProviderSettings> = {
-    jules: { ...settings.aiProvider.providers.jules },
-    gemini: { ...settings.aiProvider.providers.gemini },
-    codex: { ...settings.aiProvider.providers.codex },
-    "claude-code": { ...settings.aiProvider.providers["claude-code"] },
-  };
+  const providers: Record<ProviderConfigId, ProviderSettings> = Object.fromEntries(
+    Object.entries(settings.aiProvider.providers).map(([providerConfigId, provider]) => [
+      providerConfigId,
+      {
+        ...provider,
+        provider: provider.provider || inferProviderTypeFromConfigId(providerConfigId) || "jules",
+      },
+    ]),
+  );
 
   const manualProvider = route.profile === "WORKER"
     ? settings.workers.virtualWorkerProvider
     : settings.aiProvider.provider;
 
-  if (route.profile === "WORKER") {
+  if (route.profile === "WORKER" && manualProvider && providers[manualProvider]) {
+    const workerProviderType = providers[manualProvider].provider;
     providers[manualProvider] = {
       ...providers[manualProvider],
       enabled: true,
-      model: manualProvider === "jules"
+      model: workerProviderType === "jules"
         ? providers[manualProvider].model
         : resolveWorkerModelForProvider(
-          manualProvider,
+          workerProviderType,
           settings.workers.model,
           providers[manualProvider].model,
         ),
     };
   }
 
-  for (const providerId of PROVIDER_ORDER) {
-    const overrides = route.providers[providerId];
-    if (!overrides) {
+  for (const [providerConfigId, overrides] of Object.entries(route.providers)) {
+    if (!providers[providerConfigId]) {
       continue;
     }
-    providers[providerId] = {
-      ...providers[providerId],
+    providers[providerConfigId] = {
+      ...providers[providerConfigId],
       ...(typeof overrides.enabled === "boolean" ? { enabled: overrides.enabled } : {}),
       ...(typeof overrides.model === "string" ? { model: overrides.model } : {}),
       ...(typeof overrides.weight === "number" ? { weight: overrides.weight } : {}),
@@ -136,74 +199,59 @@ const buildRouteProviders = (
 const getEnabledProviders = (
   settings: DashboardSettings,
   input: ResolveProviderForInvocationInput,
-  providers: Record<ProviderId, ProviderSettings>,
-): ProviderId[] => {
+  providers: Record<ProviderConfigId, ProviderSettings>,
+): ProviderConfigId[] => {
   const route = settings.aiProvider.invocationRouting?.[input.invocation] || DEFAULT_INVOCATION_ROUTING[input.invocation];
   const allowedProviders = route.allowedProviders.length > 0
     ? new Set(route.allowedProviders)
     : null;
   const providerPool = input.providerPool ? new Set(input.providerPool) : null;
 
-  return PROVIDER_ORDER.filter((provider) => {
-    if (!providers[provider]?.enabled) {
-      return false;
-    }
-    if (settings.git.githubMode === "LOCAL" && provider === "jules") {
-      return false;
-    }
-    if (allowedProviders && !allowedProviders.has(provider)) {
-      return false;
-    }
-    if (providerPool && !providerPool.has(provider)) {
-      return false;
-    }
-    return true;
-  });
+  return Object.entries(providers)
+    .filter(([providerConfigId, provider]) => {
+      if (!provider.enabled) {
+        return false;
+      }
+      if (settings.git.githubMode === "LOCAL" && provider.provider === "jules") {
+        return false;
+      }
+      if (allowedProviders && !allowedProviders.has(providerConfigId)) {
+        return false;
+      }
+      if (providerPool && !providerPool.has(provider.provider)) {
+        return false;
+      }
+      return true;
+    })
+    .map(([providerConfigId]) => providerConfigId);
 };
 
 export class ManualRoutingStrategy implements ProviderRoutingStrategy {
-  choose(context: RoutingDecisionContext, _task: Subtask): ProviderId {
+  choose(context: RoutingDecisionContext, _task: Subtask): ProviderConfigId {
     if (context.enabledProviders.length === 0) {
-      return "jules";
+      return getEmergencyFallbackProvider(context);
     }
     return context.manualProvider && context.enabledProviders.includes(context.manualProvider)
       ? context.manualProvider
-      : context.enabledProviders[0];
+      : context.enabledProviders[0]!;
   }
 }
 
 export class WeightedRoutingStrategy implements ProviderRoutingStrategy {
-  choose(context: RoutingDecisionContext, task: Subtask): ProviderId {
+  choose(context: RoutingDecisionContext, task: Subtask): ProviderConfigId {
     if (context.enabledProviders.length === 0) {
-      return "jules";
+      return getEmergencyFallbackProvider(context);
     }
-
-    const weighted = context.enabledProviders.map((provider) => ({
-      provider,
-      weight: Math.max(0, context.providers[provider].weight),
-    }));
-    const totalWeight = weighted.reduce((sum, entry) => sum + entry.weight, 0);
-    if (totalWeight <= 0) {
-      return context.enabledProviders[0];
-    }
-
-    let cursor = hashString(resolveWeightedSeed(task)) % totalWeight;
-    for (const entry of weighted) {
-      cursor -= entry.weight;
-      if (cursor < 0) {
-        return entry.provider;
-      }
-    }
-    return weighted[weighted.length - 1].provider;
+    return chooseWeightedConfig(context.providers, context.enabledProviders, task);
   }
 }
 
 export class OrchestratedRoutingStrategy implements ProviderRoutingStrategy {
   private readonly weightedFallback = new WeightedRoutingStrategy();
 
-  choose(context: RoutingDecisionContext, task: Subtask): ProviderId {
+  choose(context: RoutingDecisionContext, task: Subtask): ProviderConfigId {
     if (context.enabledProviders.length === 0) {
-      return "jules";
+      return getEmergencyFallbackProvider(context);
     }
 
     const promptText = typeof task.prompt === "string" ? task.prompt : "";
@@ -213,20 +261,28 @@ export class OrchestratedRoutingStrategy implements ProviderRoutingStrategy {
     const longPrompt = promptText.length > 800;
     const simplePrompt = promptText.length < 260;
 
-    if ((complexKeyword || longPrompt || dependencyCount > 1) && context.enabledProviders.includes("claude-code")) {
-      return "claude-code";
-    }
-    if ((complexKeyword || longPrompt || dependencyCount > 1) && context.enabledProviders.includes("codex")) {
-      return "codex";
-    }
-    if (simplePrompt && dependencyCount === 0 && context.enabledProviders.includes("gemini")) {
-      return "gemini";
-    }
-    if (context.enabledProviders.includes("jules")) {
-      return "jules";
+    const chooseByType = (providerId: ProviderId): ProviderConfigId | null => {
+      const matchingProviders = context.enabledProviders.filter((providerConfigId) => getProviderType(context.providers, providerConfigId) === providerId);
+      if (matchingProviders.length === 0) {
+        return null;
+      }
+      return chooseWeightedConfig(context.providers, matchingProviders, task);
+    };
+
+    if (complexKeyword || longPrompt || dependencyCount > 1) {
+      return chooseByType("claude-code")
+        || chooseByType("codex")
+        || chooseByType("jules")
+        || this.weightedFallback.choose(context, task);
     }
 
-    return this.weightedFallback.choose(context, task);
+    if (simplePrompt && dependencyCount === 0) {
+      return chooseByType("gemini")
+        || chooseByType("jules")
+        || this.weightedFallback.choose(context, task);
+    }
+
+    return chooseByType("jules") || this.weightedFallback.choose(context, task);
   }
 }
 
@@ -258,11 +314,13 @@ export const resolveProviderForInvocation = (
     enabledProviders,
   };
 
-  const provider = resolveStrategy(strategy).choose(context, input.task);
+  const providerConfigId = resolveStrategy(strategy).choose(context, input.task);
+  const provider = getProviderType(base.providers, providerConfigId) || "jules";
 
   return {
     invocation: input.invocation,
     provider,
+    providerConfigId,
     ...context,
   };
 };

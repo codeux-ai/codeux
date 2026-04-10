@@ -18,6 +18,7 @@ import {
 } from "../lib/settings-view-models.js";
 import type {
   InvocationRoutingId,
+  ProviderConfigId,
   ProjectSettings,
   ProviderId,
   SettingsValueSource,
@@ -43,7 +44,7 @@ interface Category {
 
 
 
-const providerLabels: Record<keyof ProjectSettings["aiProvider"]["providers"], string> = {
+const providerLabels: Record<ProviderId, string> = {
   jules: "Jules",
   gemini: "Gemini",
   codex: "Codex",
@@ -172,7 +173,7 @@ export const useSettingsPageState = (
   const [selectedIntegration, setSelectedIntegration] = useState<IntegrationId | null>(null);
   const [selectedAgentTemplate, setSelectedAgentTemplate] = useState<AgentInstructionTemplateId>("planningMissing");
   const [activeInvocationRoute, setActiveInvocationRoute] = useState<InvocationRoutingId>("task_coding");
-  const [activeProviderPanel, setActiveProviderPanel] = useState<ProviderId>("gemini");
+  const [activeProviderPanel, setActiveProviderPanel] = useState<ProviderConfigId | null>(null);
   const [settingsSearch, setSettingsSearch] = useState("");
   const [systemSettings, setSystemSettings] = useState<SystemSettings | null>(null);
   const [savedSystemSettings, setSavedSystemSettings] = useState<SystemSettings | null>(null);

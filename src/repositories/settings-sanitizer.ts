@@ -14,6 +14,10 @@ import { sanitizeCliWorkflow } from "../domain/settings/settings-sanitizers/cli-
 import { sanitizeWorkers } from "../domain/settings/settings-sanitizers/worker-sanitizer.js";
 import { sanitizeMemory } from "../domain/settings/settings-sanitizers/memory-sanitizer.js";
 import {
+  buildDashboardProviderSettings,
+  buildDefaultIntegrationProviders,
+} from "../domain/settings/provider-config-utils.js";
+import {
   DEFAULT_DASHBOARD_SETTINGS,
   DEFAULT_SKILLS,
   INTERNAL_SKILL_NAMES,
@@ -91,25 +95,10 @@ export const cloneDefaults = (externalHints?: ExternalSettingsHints): DashboardS
   },
   aiProvider: {
     ...DEFAULT_DASHBOARD_SETTINGS.aiProvider,
-    providers: {
-      jules: {
-        ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.jules,
-        apiKey: externalHints?.resolved.julesApiKey || DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.jules.apiKey,
-      },
-      gemini: {
-        ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.gemini,
-        apiKey: externalHints?.resolved.geminiApiKey || DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.gemini.apiKey,
-      },
-      codex: {
-        ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.codex,
-        apiKey: externalHints?.resolved.codexApiKey || DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers.codex.apiKey,
-      },
-      "claude-code": {
-        ...DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["claude-code"],
-        apiKey: externalHints?.resolved.claudeCodeApiKey || DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers["claude-code"].apiKey,
-      },
-    },
-    julesApiKey: externalHints?.resolved.julesApiKey || DEFAULT_DASHBOARD_SETTINGS.aiProvider.julesApiKey,
+    providers: buildDashboardProviderSettings(
+      DEFAULT_DASHBOARD_SETTINGS.aiProvider.providers,
+      buildDefaultIntegrationProviders(externalHints),
+    ),
   },
   git: {
     ...DEFAULT_DASHBOARD_SETTINGS.git,
@@ -193,7 +182,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     ),
   };
 
-  const aiProvider = sanitizeAiProvider(input, externalHints);
+  const aiProvider = sanitizeAiProvider(input, { externalHints });
   const git = sanitizeGit(input, externalHints);
   const ciIntelligence = sanitizeCiIntelligence(input, git.githubMode);
   const sprintLoopSteps = sanitizeSprintLoopSteps(input);
@@ -254,7 +243,7 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
   if (sprintPreview.hostPortRangeEnd < sprintPreview.hostPortRangeStart) {
     sprintPreview.hostPortRangeEnd = sprintPreview.hostPortRangeStart;
   }
-  const workers = sanitizeWorkers(input);
+  const workers = sanitizeWorkers(input, { providers: aiProvider.providers });
   const agentsInput = (input.agents && typeof input.agents === "object")
     ? input.agents as Partial<DashboardSettings["agents"]>
     : {};
@@ -307,7 +296,15 @@ export const sanitizeSettings = (value: unknown, externalHints?: ExternalSetting
     appearance,
     automationLevel: validAutomationLevel,
     automationInterventions,
-    aiProvider,
+    aiProvider: {
+      provider: aiProvider.provider,
+      strategy: aiProvider.strategy,
+      providers: buildDashboardProviderSettings(
+        aiProvider.providers,
+        buildDefaultIntegrationProviders(externalHints),
+      ),
+      invocationRouting: aiProvider.invocationRouting,
+    },
     git,
     ciIntelligence,
     sprintLoopSteps,

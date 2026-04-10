@@ -33,7 +33,7 @@ describe("settings-sanitizer", () => {
       },
     });
 
-    expect(settings.aiProvider.julesApiKey).toBe("resolved-jules");
+    expect(settings.aiProvider.providers.jules.apiKey).toBe("resolved-jules");
     expect(settings.aiProvider.providers.gemini.apiKey).toBe("resolved-gemini");
     expect(settings.aiProvider.providers.codex.apiKey).toBe("resolved-codex");
     expect(settings.aiProvider.providers["claude-code"].apiKey).toBe("resolved-claude");

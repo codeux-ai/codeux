@@ -61,6 +61,8 @@ interface StartCliTaskInput {
     model: string;
     thinkingMode: ThinkingMode;
     apiKey: string;
+    providerMountAuth?: boolean;
+    providerAuthPath?: string;
   };
   task: Subtask;
   repoPath: string;

@@ -689,9 +689,11 @@ export class QualityAssuranceService {
         cliOnly: true,
       });
       const provider = route.provider as CliQaProvider;
+      const providerConfigId = route.providerConfigId || route.provider;
+      const providerSettings = route.providers[providerConfigId];
 
       const prompt = this.buildReviewPrompt(args);
-      const providerPrompt = buildProviderPrompt(prompt, route.providers[provider].thinkingMode);
+      const providerPrompt = buildProviderPrompt(prompt, providerSettings.thinkingMode);
       const settings = this.deps.getDashboardSettings(args.scope);
 
       let result;
@@ -705,8 +707,10 @@ export class QualityAssuranceService {
           purpose: "qa_review",
           type: "qa_review",
           provider,
-          model: route.providers[provider].model,
-          apiKey: route.providers[provider].apiKey,
+          model: providerSettings.model,
+          apiKey: providerSettings.apiKey,
+          providerMountAuth: providerSettings.mountAuth,
+          providerAuthPath: providerSettings.authPath,
           providerPrompt,
           repoPath: args.repoPath,
           settings: {

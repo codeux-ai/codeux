@@ -63,6 +63,12 @@ const validateProviderSettings = (
     issues.push({ path, message: "Expected an object" });
     return;
   }
+  if (typeof value.provider !== "string" || !PROVIDER_IDS.includes(value.provider as ProviderId)) {
+    issues.push({ path: `${path}.provider`, message: `Expected one of: ${PROVIDER_IDS.join(", ")}` });
+  }
+  if (typeof value.name !== "string") {
+    issues.push({ path: `${path}.name`, message: "Expected a string" });
+  }
   if (typeof value.enabled !== "boolean") {
     issues.push({ path: `${path}.enabled`, message: "Expected a boolean" });
   }
@@ -78,6 +84,12 @@ const validateProviderSettings = (
   if (typeof value.apiKey !== "string") {
     issues.push({ path: `${path}.apiKey`, message: "Expected a string" });
   }
+  if (typeof value.mountAuth !== "boolean") {
+    issues.push({ path: `${path}.mountAuth`, message: "Expected a boolean" });
+  }
+  if (typeof value.authPath !== "string") {
+    issues.push({ path: `${path}.authPath`, message: "Expected a string" });
+  }
   if (typeof value.maxConcurrentTasks !== "number") {
     issues.push({ path: `${path}.maxConcurrentTasks`, message: "Expected a number" });
   }
@@ -92,26 +104,26 @@ const validateAiProvider = (
     issues.push({ path, message: "Expected an object" });
     return;
   }
-  if (typeof value.provider !== "string" || !PROVIDER_IDS.includes(value.provider as ProviderId)) {
-    issues.push({ path: `${path}.provider`, message: `Expected one of: ${PROVIDER_IDS.join(", ")}` });
+  if (value.provider !== null && typeof value.provider !== "string") {
+    issues.push({ path: `${path}.provider`, message: "Expected null or a provider config id string" });
   }
   if (typeof value.strategy !== "string" || !PROVIDER_STRATEGIES.includes(value.strategy as ProviderStrategy)) {
     issues.push({ path: `${path}.strategy`, message: `Expected one of: ${PROVIDER_STRATEGIES.join(", ")}` });
   }
-  if (typeof value.julesApiKey !== "string") {
-    issues.push({ path: `${path}.julesApiKey`, message: "Expected a string" });
-  }
 
   const providers = value.providers;
+  const providerConfigIds = isRecord(providers) ? new Set(Object.keys(providers)) : new Set<string>();
+  if (value.provider !== null && typeof value.provider === "string" && providerConfigIds.size > 0 && !providerConfigIds.has(value.provider)) {
+    issues.push({ path: `${path}.provider`, message: "Expected an existing provider config id" });
+  }
   if (!isRecord(providers)) {
     issues.push({ path: `${path}.providers`, message: "Expected an object" });
   } else {
-    for (const id of PROVIDER_IDS) {
-      if (id in providers) {
-        validateProviderSettings(providers[id], `${path}.providers.${id}`, issues);
-      } else {
-        issues.push({ path: `${path}.providers.${id}`, message: "Missing provider settings" });
-      }
+    if (Object.keys(providers).length === 0) {
+      issues.push({ path: `${path}.providers`, message: "Expected at least one provider config" });
+    }
+    for (const [providerConfigId, providerSettings] of Object.entries(providers)) {
+      validateProviderSettings(providerSettings, `${path}.providers.${providerConfigId}`, issues);
     }
   }
 
@@ -132,15 +144,19 @@ const validateAiProvider = (
       if (typeof route.strategy !== "string" || !PROVIDER_STRATEGIES.includes(route.strategy as ProviderStrategy)) {
         issues.push({ path: `${routePath}.strategy`, message: `Expected one of: ${PROVIDER_STRATEGIES.join(", ")}` });
       }
-      if (route.provider !== null && (typeof route.provider !== "string" || !PROVIDER_IDS.includes(route.provider as ProviderId))) {
-        issues.push({ path: `${routePath}.provider`, message: `Expected null or one of: ${PROVIDER_IDS.join(", ")}` });
+      if (route.provider !== null && typeof route.provider !== "string") {
+        issues.push({ path: `${routePath}.provider`, message: "Expected null or a provider config id string" });
+      } else if (typeof route.provider === "string" && providerConfigIds.size > 0 && !providerConfigIds.has(route.provider)) {
+        issues.push({ path: `${routePath}.provider`, message: "Expected an existing provider config id" });
       }
       if (!Array.isArray(route.allowedProviders)) {
         issues.push({ path: `${routePath}.allowedProviders`, message: "Expected an array" });
       } else {
         route.allowedProviders.forEach((provider, index) => {
-          if (typeof provider !== "string" || !PROVIDER_IDS.includes(provider as ProviderId)) {
-            issues.push({ path: `${routePath}.allowedProviders[${index}]`, message: `Expected one of: ${PROVIDER_IDS.join(", ")}` });
+          if (typeof provider !== "string") {
+            issues.push({ path: `${routePath}.allowedProviders[${index}]`, message: "Expected a provider config id string" });
+          } else if (providerConfigIds.size > 0 && !providerConfigIds.has(provider)) {
+            issues.push({ path: `${routePath}.allowedProviders[${index}]`, message: "Expected an existing provider config id" });
           }
         });
       }
@@ -149,10 +165,6 @@ const validateAiProvider = (
         continue;
       }
       for (const [providerId, override] of Object.entries(route.providers)) {
-        if (!PROVIDER_IDS.includes(providerId as ProviderId)) {
-          issues.push({ path: `${routePath}.providers.${providerId}`, message: `Expected provider id to be one of: ${PROVIDER_IDS.join(", ")}` });
-          continue;
-        }
         if (!isRecord(override)) {
           issues.push({ path: `${routePath}.providers.${providerId}`, message: "Expected an object" });
           continue;

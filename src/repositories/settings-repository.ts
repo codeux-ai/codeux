@@ -208,7 +208,7 @@ export class SettingsRepository {
           enableDebugLogFile: legacySettings.enableDebugLogFile,
         },
         integrations: {
-          julesApiKey: legacySettings.aiProvider?.providers?.jules?.apiKey || legacySettings.aiProvider?.julesApiKey || "",
+          julesApiKey: legacySettings.aiProvider?.providers?.jules?.apiKey || "",
           geminiApiKey: legacySettings.aiProvider?.providers?.gemini?.apiKey || "",
           codexApiKey: legacySettings.aiProvider?.providers?.codex?.apiKey || "",
           claudeCodeApiKey: legacySettings.aiProvider?.providers?.["claude-code"]?.apiKey || "",
