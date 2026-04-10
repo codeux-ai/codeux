@@ -123,33 +123,40 @@ function deepDiff(base: unknown, value: unknown): unknown {
 }
 
 function flattenSources(
-  value: unknown,
+  initialValue: unknown,
   source: SettingsValueSource,
-  prefix = "",
+  initialPrefix = "",
   result: Record<string, SettingsValueSource> = {},
 ): Record<string, SettingsValueSource> {
-  if (Array.isArray(value)) {
-    result[prefix] = source;
+  if (Array.isArray(initialValue)) {
+    result[initialPrefix] = source;
     return result;
   }
-  if (!value || typeof value !== "object") {
-    if (prefix) {
-      result[prefix] = source;
+  if (!initialValue || typeof initialValue !== "object") {
+    if (initialPrefix) {
+      result[initialPrefix] = source;
     }
     return result;
   }
 
-  for (const [key, nested] of Object.entries(toRecord(value))) {
-    const nextPrefix = prefix ? `${prefix}.${key}` : key;
-    if (Array.isArray(nested)) {
-      result[nextPrefix] = source;
-      continue;
+  const stack: { prefix: string; obj: Record<string, unknown> }[] = [
+    { prefix: initialPrefix, obj: toRecord(initialValue) },
+  ];
+
+  while (stack.length > 0) {
+    const { prefix, obj } = stack.pop()!;
+
+    for (const [key, nested] of Object.entries(obj)) {
+      const nextPrefix = prefix ? `${prefix}.${key}` : key;
+
+      if (Array.isArray(nested)) {
+        result[nextPrefix] = source;
+      } else if (nested && typeof nested === "object") {
+        stack.push({ prefix: nextPrefix, obj: toRecord(nested) });
+      } else {
+        result[nextPrefix] = source;
+      }
     }
-    if (nested && typeof nested === "object") {
-      flattenSources(nested, source, nextPrefix, result);
-      continue;
-    }
-    result[nextPrefix] = source;
   }
 
   return result;
@@ -562,11 +569,32 @@ export function resolveEffectiveDashboardSettings(
     : settingsRepository.resolveProjectDashboardSettings(projectId);
 }
 
+const resolveDashboardSettingsCache = new WeakMap<
+  SystemSettings,
+  Map<string, EffectiveSettingsResponse>
+>();
+
 export function resolveDashboardSettings(args: {
   systemSettings: SystemSettings;
   projectOverride?: ProjectSettingsOverride | null;
   sprintOverride?: SprintSettingsOverride | null;
 }): EffectiveSettingsResponse {
+  let systemMap = resolveDashboardSettingsCache.get(args.systemSettings);
+  if (!systemMap) {
+    systemMap = new Map();
+    resolveDashboardSettingsCache.set(args.systemSettings, systemMap);
+  }
+
+  // Use a stable JSON string or direct object reference if performance dictates.
+  // Object references for overrides are fine assuming the repository returns exactly the same object for unchanged payload,
+  // but to be absolutely safe (and since these objects are very small patches), stringify them as a composite key.
+  const overrideKey = (args.projectOverride ? JSON.stringify(args.projectOverride) : "null") + "|" +
+                      (args.sprintOverride ? JSON.stringify(args.sprintOverride) : "null");
+
+  if (systemMap.has(overrideKey)) {
+    return systemMap.get(overrideKey)!;
+  }
+
   const baseProject = args.systemSettings.defaults;
   const projectSettings = resolveProjectSettings(args.systemSettings, args.projectOverride);
   const sprintSettings = resolveSprintProjectSettings(args.systemSettings, args.projectOverride, args.sprintOverride);
@@ -606,10 +634,12 @@ export function resolveDashboardSettings(args: {
     Object.assign(sources, flattenSources(args.sprintOverride, "sprint"));
   }
 
-  return {
+  const result = {
     settings: dashboardSettings,
     sources,
   };
+  systemMap.set(overrideKey, result);
+  return result;
 }
 
 export function toProjectSettingsOverride(

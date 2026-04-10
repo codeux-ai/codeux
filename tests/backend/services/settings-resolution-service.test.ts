@@ -194,3 +194,28 @@ describe("Settings Resolution Service", () => {
     });
   });
 });
+
+  describe("Resolution Benchmarks & Caching", () => {
+    it("should resolve dashboard settings significantly faster on identical subsequent calls due to cache", () => {
+      const systemSettings = {
+        runtime: { dashboardPort: 4444, enableDebugLogFile: false },
+        integrations: { julesApiKey: "", geminiApiKey: "", codexApiKey: "", claudeCodeApiKey: "", githubToken: "" },
+        defaults: buildDefaultProjectSettings(),
+        mcpTools: [],
+      };
+
+      const projectOverride = { automationLevel: "FULL" as const };
+
+      const start1 = performance.now();
+      const result1 = resolveDashboardSettings({ systemSettings, projectOverride });
+      const duration1 = performance.now() - start1;
+
+      const start2 = performance.now();
+      const result2 = resolveDashboardSettings({ systemSettings, projectOverride });
+      const duration2 = performance.now() - start2;
+
+      expect(result1).toBe(result2); // Should be exact reference
+      // duration2 should be near 0
+      expect(duration2).toBeLessThan(duration1);
+    });
+  });
