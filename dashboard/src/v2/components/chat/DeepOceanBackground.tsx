@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "preact/hooks";
-import * as THREE from "three";
+import * as THREE from "../../../lib/three-lite.js";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * DeepOceanBackground
