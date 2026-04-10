@@ -63,6 +63,9 @@ interface NormalizedQaReviewResult {
   raw: Record<string, unknown>;
 }
 
+const SPRINT_RUN_KEEPALIVE_MS = 30_000;
+const SPRINT_LEASE_EXTENSION_MS = 5 * 60 * 1000;
+
 export interface TaskQaReviewOutcome {
   reviewed: boolean;
   reopenedTask: boolean;
@@ -665,80 +668,153 @@ export class QualityAssuranceService {
     sprintRunId: string | null;
     agentPresetId: string | null;
   }): Promise<NormalizedQaReviewResult> {
-    await this.syncRemoteBranchesIfNeeded(
-      args.repoPath,
-      args.currentTask?.worker_branch || args.taskRun?.workerBranch || undefined,
-      args.scope,
-      "running QA review",
-    );
+    return await this.withSprintRunKeepAlive(args.sprintRunId, args.scope.sprintId, async () => {
+      await this.syncRemoteBranchesIfNeeded(
+        args.repoPath,
+        args.currentTask?.worker_branch || args.taskRun?.workerBranch || undefined,
+        args.scope,
+        "running QA review",
+      );
 
-    const pseudoTask: Subtask = args.currentTask || {
-      id: "SPRINT",
-      title: "Sprint completion review",
-      prompt: args.sprintGoal,
-      depends_on: [],
-      is_independent: true,
-      status: "COMPLETED",
-    };
-    const route = this.deps.taskService.resolveInvocationProvider("qa_review", pseudoTask, {
-      scope: args.scope,
-      cliOnly: true,
-    });
-    const provider = route.provider as CliQaProvider;
-
-    const prompt = this.buildReviewPrompt(args);
-    const providerPrompt = buildProviderPrompt(prompt, route.providers[provider].thinkingMode);
-    const settings = this.deps.getDashboardSettings(args.scope);
-
-    let result;
-    try {
-      result = await this.structuredAgentRequestService.executeRequest<NormalizedQaReviewResult>({
-        projectId: args.scope.projectId!,
-        sprintId: args.scope.sprintId,
-        taskId: args.taskRun?.taskId,
-        sprintRunId: args.sprintRunId,
-        taskRunId: args.taskRun?.id,
-        purpose: "qa_review",
-        type: "qa_review",
-        provider,
-        model: route.providers[provider].model,
-        apiKey: route.providers[provider].apiKey,
-        providerPrompt,
-        repoPath: args.repoPath,
-        settings: {
-          ...settings,
-          cliWorkflow: {
-            ...DEFAULT_CLI_WORKFLOW_SETTINGS,
-            ...settings.cliWorkflow,
-          },
-        },
-        parseFn: (text) => normalizeQaReviewResult(text),
-        buildRetryPrompt: (error) => [
-          "Your previous response failed validation with this error:",
-          error.message,
-          "",
-          "Please provide a valid JSON object matching the requested schema exactly.",
-        ].join("\n"),
-        providerLabel: "QA",
-        sessionIdPrefix: "qa-review",
-        systemRoutingMessage: args.agentInstructions.trim(),
-        onActivity: () => undefined,
+      const pseudoTask: Subtask = args.currentTask || {
+        id: "SPRINT",
+        title: "Sprint completion review",
+        prompt: args.sprintGoal,
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+      };
+      const route = this.deps.taskService.resolveInvocationProvider("qa_review", pseudoTask, {
+        scope: args.scope,
+        cliOnly: true,
       });
-    } finally {
-      if (settings.memory?.enabled && settings.memory.autoCaptureSprint && this.deps.memoryService && result) {
-        const worktreePath = await this.workspaceManager.resolveResumeWorktreePath(
-          args.repoPath,
-          result.sessionId,
-          settings.cliWorkflow.executionMode,
-        ).catch(() => undefined);
+      const provider = route.provider as CliQaProvider;
 
-        if (worktreePath) {
-          await this.deps.memoryService.captureMemoriesFromWorktree(args.scope.projectId!, args.scope.sprintId || undefined, args.agentPresetId || null, worktreePath, result.invocationId);
+      const prompt = this.buildReviewPrompt(args);
+      const providerPrompt = buildProviderPrompt(prompt, route.providers[provider].thinkingMode);
+      const settings = this.deps.getDashboardSettings(args.scope);
+
+      let result;
+      try {
+        result = await this.structuredAgentRequestService.executeRequest<NormalizedQaReviewResult>({
+          projectId: args.scope.projectId!,
+          sprintId: args.scope.sprintId,
+          taskId: args.taskRun?.taskId,
+          sprintRunId: args.sprintRunId,
+          taskRunId: args.taskRun?.id,
+          purpose: "qa_review",
+          type: "qa_review",
+          provider,
+          model: route.providers[provider].model,
+          apiKey: route.providers[provider].apiKey,
+          providerPrompt,
+          repoPath: args.repoPath,
+          settings: {
+            ...settings,
+            cliWorkflow: {
+              ...DEFAULT_CLI_WORKFLOW_SETTINGS,
+              ...settings.cliWorkflow,
+            },
+          },
+          parseFn: (text) => normalizeQaReviewResult(text),
+          buildRetryPrompt: (error) => [
+            "Your previous response failed validation with this error:",
+            error.message,
+            "",
+            "Please provide a valid JSON object matching the requested schema exactly.",
+          ].join("\n"),
+          providerLabel: "QA",
+          sessionIdPrefix: "qa-review",
+          systemRoutingMessage: args.agentInstructions.trim(),
+          onActivity: () => {
+            this.touchSprintRunHeartbeat(args.sprintRunId, args.scope.sprintId);
+          },
+        });
+      } finally {
+        if (settings.memory?.enabled && settings.memory.autoCaptureSprint && this.deps.memoryService && result) {
+          const worktreePath = await this.workspaceManager.resolveResumeWorktreePath(
+            args.repoPath,
+            result.sessionId,
+            settings.cliWorkflow.executionMode,
+          ).catch(() => undefined);
+
+          if (worktreePath) {
+            await this.deps.memoryService.captureMemoriesFromWorktree(args.scope.projectId!, args.scope.sprintId || undefined, args.agentPresetId || null, worktreePath, result.invocationId);
+          }
         }
       }
+
+      return result.parsed;
+    });
+  }
+
+  private async withSprintRunKeepAlive<T>(
+    sprintRunId: string | null,
+    sprintId: string | null | undefined,
+    action: () => Promise<T>,
+  ): Promise<T> {
+    if (!sprintRunId || !sprintId) {
+      return await action();
     }
 
-    return result.parsed;
+    this.touchSprintRunHeartbeat(sprintRunId, sprintId);
+    const timer = setInterval(() => {
+      this.touchSprintRunHeartbeat(sprintRunId, sprintId);
+    }, SPRINT_RUN_KEEPALIVE_MS);
+    timer.unref?.();
+
+    try {
+      return await action();
+    } finally {
+      clearInterval(timer);
+      this.touchSprintRunHeartbeat(sprintRunId, sprintId);
+    }
+  }
+
+  private touchSprintRunHeartbeat(sprintRunId: string | null, sprintId: string | null | undefined): void {
+    if (!sprintRunId || !sprintId) {
+      return;
+    }
+
+    const executionRepository = this.deps.executionRepository as Partial<ExecutionRepository>;
+    if (
+      typeof executionRepository.getSprintRun !== "function"
+      || typeof executionRepository.updateSprintRun !== "function"
+      || typeof executionRepository.getLease !== "function"
+      || typeof executionRepository.renewLease !== "function"
+    ) {
+      return;
+    }
+
+    const sprintRun = executionRepository.getSprintRun(sprintRunId);
+    if (!sprintRun || sprintRun.status !== "running") {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    executionRepository.updateSprintRun(sprintRunId, {
+      lastHeartbeatAt: now,
+    });
+
+    const lease = executionRepository.getLease("sprint", sprintId);
+    if (!lease) {
+      return;
+    }
+
+    try {
+      executionRepository.renewLease({
+        scopeType: "sprint",
+        scopeId: sprintId,
+        leaseToken: lease.leaseToken,
+        expiresAt: new Date(Date.now() + SPRINT_LEASE_EXTENSION_MS).toISOString(),
+      });
+    } catch (error) {
+      this.deps.logger?.warn("Failed to renew sprint lease during QA review", {
+        sprintRunId,
+        sprintId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   private buildReviewPrompt(args: {
