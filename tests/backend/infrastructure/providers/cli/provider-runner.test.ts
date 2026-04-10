@@ -79,7 +79,7 @@ describe("ProviderRunner", () => {
 
     expect(dockerRunner.readWorkspaceFile).toHaveBeenCalledWith(
       "docker-volume://workspace-1",
-      "/workspace/.sprint-os/tmp/provider-last-message-session-1.txt",
+      "/workspace/provider-last-message-session-1.txt",
     );
     expect(result.text).toBe("captured text");
   });

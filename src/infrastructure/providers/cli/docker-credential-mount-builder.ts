@@ -1,4 +1,5 @@
 import * as fs from "fs/promises";
+import * as path from "path";
 import { resolveConfiguredPath, ContainerMount } from "../../../services/cli-docker-utils.js";
 import { CliWorkflowSettings } from "../../../contracts/app-types.js";
 import {
@@ -6,6 +7,7 @@ import {
   GITHUB_CREDENTIALS_MOUNT,
   GEMINI_CREDENTIALS_MOUNT,
   CLAUDE_CODE_CREDENTIALS_MOUNT,
+  CLAUDE_CODE_AUTH_JSON_MOUNT,
   GITCONFIG_CREDENTIALS_MOUNT,
 } from "./docker-bootstrap-builder.js";
 
@@ -43,6 +45,17 @@ export class DockerCredentialMountBuilder {
     await addMount(workflowSettings.containerMountGeminiAuth, workflowSettings.containerGeminiAuthPath, GEMINI_CREDENTIALS_MOUNT, "Gemini");
     await addMount(workflowSettings.containerMountCodexAuth, workflowSettings.containerCodexAuthPath, CODEX_CREDENTIALS_MOUNT, "Codex");
     await addMount(workflowSettings.containerMountClaudeCodeAuth, workflowSettings.containerClaudeCodeAuthPath, CLAUDE_CODE_CREDENTIALS_MOUNT, "Claude Code");
+    if (workflowSettings.containerMountClaudeCodeAuth && workflowSettings.containerClaudeCodeAuthPath.trim().length > 0) {
+      const claudeAuthDir = resolveConfiguredPath(repoPath, workflowSettings.containerClaudeCodeAuthPath);
+      const claudeAuthJsonPath = path.join(path.dirname(claudeAuthDir), ".claude.json");
+      try {
+        await fs.access(claudeAuthJsonPath);
+        mounts.push({ source: claudeAuthJsonPath, destination: CLAUDE_CODE_AUTH_JSON_MOUNT, readonly: true });
+        onActivity(`Resolved credential mount for Claude Code auth JSON: ${claudeAuthJsonPath} -> ${CLAUDE_CODE_AUTH_JSON_MOUNT}`);
+      } catch {
+        onActivity(`Optional credential mount for Claude Code auth JSON not found: ${claudeAuthJsonPath}`);
+      }
+    }
 
     if (mounts.length === 0) {
       onActivity("No container credential mounts were enabled or resolved.");

@@ -31,6 +31,7 @@ Each `aiProvider.invocationRouting.<routeId>` entry contains:
 - `profile`
   - `GLOBAL`: baseline comes from top-level `aiProvider`
   - `WORKER`: baseline comes from `workers.virtualWorkerProvider` and `workers.model`
+    - the worker model override is only applied when it is valid for the selected provider; otherwise Sprint OS falls back to that provider's own configured/default model instead of leaking a Codex/Gemini/Claude model across providers
 - `strategy`
   - `MANUAL`, `WEIGHTED`, or `ORCHESTRATOR`
 - `provider`
@@ -54,7 +55,7 @@ Each `aiProvider.invocationRouting.<routeId>` entry contains:
 
 1. Start from the selected route.
 2. Build the baseline provider config from the route profile.
-3. Apply worker-profile defaults when `profile = WORKER`. (WORKER-profile routes no longer silently re-enable disabled CLI providers).
+3. Apply worker-profile defaults when `profile = WORKER`. (WORKER-profile routes no longer silently re-enable disabled CLI providers, and incompatible worker model overrides are ignored instead of being forwarded to a different provider.)
 4. If a `GLOBAL` route is still using its untouched default routing block, inherit the top-level `aiProvider.strategy`.
 5. Apply invocation-specific per-provider overrides.
 6. Filter by `allowedProviders`, then by any runtime provider pool restriction.

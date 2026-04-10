@@ -94,7 +94,7 @@ export class ProviderRunner implements IProviderRunner {
 
     const outputPath = input.provider === "codex"
       ? input.workflowSettings.executionMode === "DOCKER"
-        ? pathPosix.join("/workspace", ".sprint-os", "tmp", `provider-last-message-${input.sessionId}.txt`)
+        ? pathPosix.join("/workspace", `provider-last-message-${input.sessionId}.txt`)
         : path.join(getRepoSprintOsPath(input.repoPath, "tmp"), `provider-last-message-${input.sessionId}.txt`)
       : null;
 

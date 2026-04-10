@@ -22,7 +22,7 @@ import { ProjectAttentionService } from "../domain/workers/project-attention-ser
 import { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
 import { WorkerTaskDispatchService } from "./worker-task-dispatch-service.js";
 import { CliWorkflowService } from "./cli-workflow-service.js";
-import { resolveProviderForInvocation } from "./provider-routing.js";
+import { resolveProviderForInvocation, resolveWorkerModelForProvider } from "./provider-routing.js";
 import { resolveEffectiveDashboardSettings } from "./settings-resolution-service.js";
 import type { WorkerInboxReplyService } from "./worker-inbox-reply-service.js";
 import type { InstructionService } from "../instructions/instruction-template-service.js";
@@ -275,9 +275,11 @@ export class VirtualWorkerService {
     const session = await this.deps.cliWorkflowService.startTask({
       provider,
       providerSettingsOverride: {
-        model: settings.workers.model && settings.workers.model !== "default"
-          ? settings.workers.model
-          : providerSettings.model,
+        model: resolveWorkerModelForProvider(
+          provider,
+          settings.workers.model,
+          providerSettings.model,
+        ),
         thinkingMode: providerSettings.thinkingMode,
         apiKey: providerSettings.apiKey,
       },
