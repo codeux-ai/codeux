@@ -18,7 +18,14 @@ export class WorkspaceArtifactService {
   constructor(private readonly workspaceManager: IWorkspaceManager) {}
 
   async exportBinaryPatch(workspaceRef: string, baseRef: string): Promise<string> {
-    const result = await this.workspaceManager.runWorkspaceCommand(workspaceRef, "git", ["diff", "--binary", baseRef]);
+    // Git patch payloads are whitespace-sensitive. Preserve raw command output so
+    // EOF-only whitespace lines and no-newline markers survive host-side apply.
+    const result = await this.workspaceManager.runWorkspaceCommand(
+      workspaceRef,
+      "git",
+      ["diff", "--binary", baseRef],
+      { trimOutput: false },
+    );
     return result.stdout;
   }
 

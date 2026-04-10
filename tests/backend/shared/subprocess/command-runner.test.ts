@@ -84,6 +84,14 @@ describe("CommandRunner", () => {
     expect(stdoutLines).toEqual(["no_newline_at_end"]);
   });
 
+  it("should preserve raw stdout when trimOutput is disabled", async () => {
+    const result = await runner.run("node", ["-e", "process.stdout.write('hello\\n   \\n')"], {
+      trimOutput: false,
+    });
+
+    expect(result.stdout).toBe("hello\n   \n");
+  });
+
   it("should clip stderr if too long", async () => {
     // Generate 100 'a's on stderr
     const result = await runner.run("sh", ["-c", "for i in $(seq 1 100); do printf 'a' >&2; done"], {

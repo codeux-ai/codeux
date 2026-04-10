@@ -15,6 +15,7 @@ const WORKSPACE_HELPER_IMAGE = "alpine/git";
 export interface WorkspaceCommandOptions {
   env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
+  trimOutput?: boolean;
 }
 
 export interface IWorkspaceManager {
@@ -188,7 +189,10 @@ export class WorkspaceManager implements IWorkspaceManager {
     if (ownerSpec) {
       dockerArgs.splice(dockerArgs.length - args.length - 1, 0, "--user", ownerSpec);
     }
-    return await runCommandStrict("docker", dockerArgs, process.cwd(), options.env ?? process.env, { signal: options.signal });
+    return await runCommandStrict("docker", dockerArgs, process.cwd(), options.env ?? process.env, {
+      signal: options.signal,
+      trimOutput: options.trimOutput,
+    });
   }
 
   async readWorkspaceFile(worktreePath: string, relativePath: string): Promise<string | null> {

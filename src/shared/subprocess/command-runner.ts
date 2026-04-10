@@ -12,6 +12,7 @@ export interface CommandOptions {
   env?: NodeJS.ProcessEnv;
   timeout?: number;
   signal?: AbortSignal;
+  trimOutput?: boolean;
   onStdoutLine?: (line: string) => void;
   onStderrLine?: (line: string) => void;
   maxStderrChars?: number;
@@ -33,6 +34,7 @@ export class CommandRunner {
       env = process.env,
       timeout,
       signal,
+      trimOutput = true,
       onStdoutLine,
       onStderrLine,
       maxStderrChars = CommandRunner.DEFAULT_MAX_STDERR_CHARS,
@@ -70,9 +72,10 @@ export class CommandRunner {
           signal.removeEventListener("abort", abortHandler);
         }
 
-        let finalStderr = stderr.trim();
+        let finalStderr = trimOutput ? stderr.trim() : stderr;
         if (extraStderr) {
-          finalStderr = finalStderr ? `${finalStderr}\n${extraStderr}` : extraStderr;
+          const separator = finalStderr.length > 0 && !finalStderr.endsWith("\n") ? "\n" : "";
+          finalStderr = `${finalStderr}${separator}${extraStderr}`;
         }
 
         const clippedStderr = finalStderr.length > maxStderrChars
@@ -82,7 +85,7 @@ export class CommandRunner {
         resolve({
           ok,
           code,
-          stdout: stdout.trim(),
+          stdout: trimOutput ? stdout.trim() : stdout,
           stderr: clippedStderr,
         });
       };

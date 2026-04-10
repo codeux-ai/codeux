@@ -340,6 +340,7 @@ Repository demo script:
 - Docker CLI execution now uses isolated Docker volumes as the workspace backing store instead of repo-local worktrees or persistent host-side runtime homes.
   - container `HOME` lives inside the isolated workspace at `/workspace/.sprint-os-home`
   - write-back happens via Git patch artifacts applied on the host, not direct file sync from the container
+  - patch export preserves raw `git diff --binary` output byte-for-byte so whitespace-only EOF hunks and `\ No newline at end of file` markers still apply cleanly on the host branch
   - the remaining persistent Docker-side cache is the optional setup-image cache, not per-session provider home directories under `~/.sprint-os/runtime/docker`
 - If setup script is missing or does not provide the requested provider CLI, the runner attempts a provider-specific fallback install (`gemini`, `codex`, or `claude`) before failing.
   - CLI model settings continue to flow into Docker-backed providers:
