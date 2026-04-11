@@ -1,6 +1,8 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { useEffect, useRef } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef } from "preact/hooks";
+import gsap from "gsap";
+import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 import { Terminal } from "lucide-preact";
 import type { ExecutionRuntimeEventSummary } from "../../types.js";
 import { getOriginatorCfg, getExecutionEventText } from "../lib/live-session-config.js";
@@ -8,6 +10,29 @@ import { formatTime } from "../../lib/time.js";
 
 const RuntimeEventFeed: FunctionComponent<{ events?: ExecutionRuntimeEventSummary[] }> = memo(({ events }) => {
     const feedRef = useRef<HTMLDivElement>(null);
+    const prevCountRef = useRef<number>(0);
+    const reducedMotion = useReducedMotion();
+
+    useLayoutEffect(() => {
+        if (!feedRef.current || reducedMotion || !events) {
+            prevCountRef.current = events?.length || 0;
+            return;
+        }
+
+        const currentCount = events.length;
+        if (currentCount > prevCountRef.current) {
+            const newElements = Array.from(feedRef.current.children).filter(el => !el.hasAttribute('data-entered'));
+
+            if (newElements.length > 0) {
+                gsap.fromTo(newElements,
+                    { opacity: 0, x: 10 },
+                    { opacity: 1, x: 0, duration: 0.3, stagger: 0.04, ease: "power2.out" }
+                );
+                newElements.forEach(el => el.setAttribute('data-entered', 'true'));
+            }
+        }
+        prevCountRef.current = currentCount;
+    }, [events?.length, reducedMotion]);
 
     useEffect(() => {
         const el = feedRef.current;
