@@ -6,6 +6,7 @@ import gsap from "gsap";
 import { useProjectData } from "../context/project-data.js";
 import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
 import { useReducedMotion } from "../hooks/use-reduced-motion.js";
+import { useMagnetic } from "../hooks/use-magnetic.js";
 
 /* Chat sits left of the divider — the rest are standard nav */
 const LEFT_ITEMS = [
@@ -26,6 +27,28 @@ const RIGHT_ITEMS = [
 
 type DockItem = (typeof LEFT_ITEMS)[number] | (typeof RIGHT_ITEMS)[number];
 
+const DockItemIcon: FunctionComponent<{ item: DockItem; isActive: boolean }> = ({ item, isActive }) => {
+    const triggerRef = useRef<HTMLDivElement>(null);
+    const targetRef = useRef<HTMLDivElement>(null);
+
+    useMagnetic(triggerRef, targetRef);
+
+    return (
+        <div ref={triggerRef} className="relative w-full h-full flex items-center justify-center">
+            <div ref={targetRef}>
+                <item.icon
+                    className={`w-5 h-5 relative z-10 transition-all duration-300
+                        ${isActive
+                            ? item.color
+                            : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-200'
+                        }`}
+                    strokeWidth={isActive ? 2 : 1.5}
+                />
+            </div>
+        </div>
+    );
+};
+
 export const KineticDock: FunctionComponent = () => {
     const dockRef    = useRef<HTMLDivElement>(null);
     const itemRefs   = useRef<(HTMLAnchorElement | null)[]>([]);
@@ -41,7 +64,7 @@ export const KineticDock: FunctionComponent = () => {
     const prefersReducedMotion = useReducedMotion();
 
     const matches     = useRouterState({ select: (s) => s.matches });
-    const currentPath = matches[matches.length - 1]?.pathname || "/";
+    const currentPath = (matches && matches.length > 0) ? (matches[matches.length - 1]?.pathname || "/") : "/";
     const activeIndex = Math.max(0, allItems.findIndex(i => i.path === currentPath));
 
     /* Active indicator position update */
@@ -129,14 +152,7 @@ export const KineticDock: FunctionComponent = () => {
             >
                 <div className="absolute inset-0 bg-transparent group-hover:bg-black/[0.04] dark:group-hover:bg-white/[0.05] rounded-[1.4rem] pointer-events-none transition-colors duration-300" />
 
-                <item.icon
-                    className={`w-5 h-5 relative z-10 transition-all duration-300
-                        ${isActive
-                            ? item.color
-                            : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-200'
-                        }`}
-                    strokeWidth={isActive ? 2 : 1.5}
-                />
+                <DockItemIcon item={item} isActive={isActive} />
 
                 {/* Tooltip */}
                 <span className="absolute -top-11 px-2.5 py-1

@@ -43,7 +43,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
     const prefersReducedMotion = useReducedMotion();
 
     const matches = useRouterState({ select: (s) => s.matches });
-    const currentPath = matches[matches.length - 1]?.pathname || "/";
+    const currentPath = (matches && matches.length > 0) ? (matches[matches.length - 1]?.pathname || "/") : "/";
     const activeIndex = Math.max(0, navItems.findIndex(i => i.path === currentPath));
 
     useEffect(() => {
