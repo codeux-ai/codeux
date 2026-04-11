@@ -1,8 +1,9 @@
 import type { FunctionComponent, ComponentProps } from "preact";
 import { memo } from "preact/compat";
-import { useCallback } from "preact/hooks";
+import { useCallback, useRef } from "preact/hooks";
 import { Check, X } from "lucide-preact";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
+import { useMagnetic } from "../../hooks/use-magnetic.js";
 
 export interface ButtonProps extends ComponentProps<"button"> {
   pending?: boolean;
@@ -35,6 +36,10 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   ...props
 }) => {
   const { feedback, setPending, setSuccess, setError } = useActionFeedback(1500);
+
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  useMagnetic(buttonRef, contentRef, { enabled: variant === "primary" || variant === "signal" });
 
   const handleClick = useCallback(
     (e: any) => {
@@ -72,11 +77,12 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   return (
     <button
       {...props}
+      ref={buttonRef}
       onClick={handleClick}
       disabled={disabled || isPending}
       className={`${baseClasses} ${variantClasses} ${sizeClasses} ${overrideClasses} relative overflow-hidden ${className}`}
     >
-      <div className={`flex items-center justify-center gap-2 transition-opacity duration-200 ${childrenOpacity}`}>
+      <div ref={contentRef} className={`flex items-center justify-center gap-2 transition-opacity duration-200 ${childrenOpacity}`}>
         {children}
       </div>
 
