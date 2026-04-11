@@ -1,6 +1,9 @@
 import type { FunctionComponent } from "preact";
 import { useLayoutEffect, useMemo, useRef, useState } from "preact/hooks";
 import gsap from "gsap";
+import { Flip } from "gsap/Flip";
+
+gsap.registerPlugin(Flip);
 import { TaskRow } from "./ui/TaskRow.js";
 import { FilterStrip } from "./ui/FilterStrip.js";
 import { SkeletonRow } from "./ui/ListSkeletons.js";
@@ -13,22 +16,25 @@ const FILTER_OPTIONS = ["All Tasks", "Running", "Queued", "Completed"] as const;
 export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("../hooks/use-overview-page-data.js").useOverviewPageData> }> = ({ pageData }) => {
     const listRef = useRef<HTMLDivElement>(null);
     const [activeFilter, setActiveFilter] = useState<TaskFilter>("All Tasks");
+    const flipStateRef = useRef<any>(null);
+
+    const handleFilterChange = (newFilter: TaskFilter) => {
+        if (listRef.current) {
+            flipStateRef.current = Flip.getState(listRef.current.children);
+        }
+        setActiveFilter(newFilter);
+    };
+
+    const handleClearFilter = () => {
+        if (listRef.current) {
+            flipStateRef.current = Flip.getState(listRef.current.children);
+        }
+        setActiveFilter("All Tasks");
+    };
     const reducedMotion = useReducedMotion();
     const { sprints, tasks, isLoading } = pageData;
 
-    useLayoutEffect(() => {
-        if (listRef.current) {
-            if (reducedMotion) {
-                gsap.set(listRef.current.children, { y: 0, opacity: 1, scale: 1 });
-            } else {
-                gsap.fromTo(
-                    listRef.current.children,
-                    { y: 15, opacity: 0, scale: 0.99 },
-                    { y: 0, opacity: 1, scale: 1, duration: 0.25, stagger: 0.04, ease: "power2.out", delay: 0.05 }
-                );
-            }
-        }
-    }, [activeFilter, reducedMotion]);
+
 
     const activeSprintIds = useMemo(() => deriveActiveSprintIds(sprints), [sprints]);
     const activeTasks = useMemo(() => filterTasksToActiveSprints(tasks, activeSprintIds), [tasks, activeSprintIds]);
@@ -41,6 +47,35 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
         return true;
     }), [activeTasks, activeFilter]);
 
+    const initialMountRef = useRef(true);
+
+    useLayoutEffect(() => {
+        if (listRef.current) {
+            if (reducedMotion) {
+                gsap.set(listRef.current.children, { y: 0, opacity: 1, scale: 1 });
+            } else if (flipStateRef.current) {
+                Flip.from(flipStateRef.current, {
+                    targets: listRef.current.children,
+                    duration: 0.3,
+                    ease: "power2.out",
+                    stagger: 0.02,
+                    scale: true,
+                    absolute: true,
+                    onEnter: (elements: Element[]) => gsap.fromTo(elements, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.3, stagger: 0.02 }),
+                    onLeave: (elements: Element[]) => gsap.to(elements, { opacity: 0, duration: 0.2 })
+                });
+                flipStateRef.current = null;
+            } else if (initialMountRef.current) {
+                initialMountRef.current = false;
+                gsap.fromTo(
+                    listRef.current.children,
+                    { y: 15, opacity: 0, scale: 0.99 },
+                    { y: 0, opacity: 1, scale: 1, duration: 0.25, stagger: 0.04, ease: "power2.out", delay: 0.05 }
+                );
+            }
+        }
+    }, [activeFilter, reducedMotion, filteredTasks]);
+
     return (
         <div className="w-full relative z-10 px-2">
             {/* Section Header */}
@@ -51,9 +86,9 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                         <FilterStrip
                             options={FILTER_OPTIONS}
                             active={activeFilter}
-                            onChange={setActiveFilter}
+                            onChange={handleFilterChange}
                             showClear={activeFilter !== "All Tasks"}
-                            onClear={() => setActiveFilter("All Tasks")}
+                            onClear={handleClearFilter}
                         />
                     </div>
                 </div>
@@ -74,7 +109,7 @@ export const TasksList: FunctionComponent<{ pageData: ReturnType<typeof import("
                     </>
                 ) : filteredTasks.length > 0 ? (
                     filteredTasks.map((task) => (
-                        <TaskRow key={task.id} task={task} />
+                        <div key={task.id} data-flip-id={task.id} className="task-flip-item"><TaskRow task={task} /></div>
                     ))
                 ) : (
                     <div className="flex flex-col items-center justify-center py-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-700">
