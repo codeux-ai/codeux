@@ -215,6 +215,7 @@ describe("QualityAssuranceService", () => {
           qualityAssurance: {
             ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
             enabled: true,
+            maxTaskReviewRuns: 2,
           },
         },
       }),
@@ -408,6 +409,246 @@ describe("QualityAssuranceService", () => {
       reportText: "",
     });
     expect(providerRunner.runProviderForText).not.toHaveBeenCalled();
+  });
+
+  it("recovers stale running task QA rows when the backing invocation already finished", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-stale-task-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const qaReviewRepository = new QaReviewRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "QA Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Ship safely",
+      status: "running",
+      featureBranch: "feature/sprint-1",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Initial task",
+      promptMarkdown: "Implement the initial feature.",
+      status: "completed",
+      isIndependent: true,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      state: "COMPLETED",
+      provider: "jules",
+      sessionId: "session-1",
+      startedAt: "2026-04-11T09:00:00.000Z",
+      finishedAt: "2026-04-11T09:10:00.000Z",
+    });
+
+    const staleRun = qaReviewRepository.createRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      triggerType: "task_completion",
+      runIndex: 1,
+      startedAt: "2026-04-11T09:11:00.000Z",
+    });
+    executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      type: "qa_review",
+      status: "completed",
+      provider: "gemini",
+      model: "auto",
+      startedAt: "2026-04-11T09:11:01.000Z",
+      finishedAt: "2026-04-11T09:16:00.000Z",
+    });
+
+    const service = new QualityAssuranceService({
+      projectManagementRepository: projectRepository,
+      executionRepository,
+      sessionTracking: {} as any,
+      qaReviewRepository,
+      taskService: {} as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            maxTaskReviewRuns: 2,
+          },
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+
+    const gate = service.getTaskMergeGateStatus({
+      projectId: project.id,
+      sprintId: sprint.id,
+      task: {
+        record_id: task.id,
+        id: "T1",
+        title: "Initial task",
+        prompt: "Implement the initial feature.",
+        depends_on: [],
+        is_independent: true,
+        status: "COMPLETED",
+        pr_url: "https://example.com/pr/1",
+      },
+    });
+
+    expect(gate.reason).toBe("review_failed");
+    expect(gate.latestRun?.status).toBe("failed");
+    expect(gate.latestRun?.summaryMarkdown).toContain("Recovered stale QA review run");
+    expect(qaReviewRepository.getRun(staleRun.id)?.status).toBe("failed");
+  });
+
+  it("reruns sprint QA after recovering a stale running review row", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "qa-service-stale-sprint-"));
+    tempDirs.push(dir);
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+    const qaReviewRepository = new QaReviewRepository(storage);
+    const agentPresetRepository = new AgentPresetRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "QA Project",
+      sourceType: "local",
+      sourceRef: dir,
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      goal: "Ship safely",
+      status: "running",
+      featureBranch: "feature/sprint-1",
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      taskKey: "T1",
+      title: "Initial task",
+      promptMarkdown: "Implement the initial feature.",
+      status: "completed",
+      isIndependent: true,
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const qaPreset = agentPresetRepository.createAgentPreset(project.id, {
+      name: "QA",
+      presetId: "QA-stale-sprint",
+      instructionMarkdown: "QA Agent",
+    });
+
+    const staleRun = qaReviewRepository.createRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      triggerType: "sprint_completion",
+      runIndex: 1,
+      startedAt: "2026-04-11T09:20:00.000Z",
+    });
+    executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      type: "qa_review",
+      status: "completed",
+      provider: "gemini",
+      model: "auto",
+      startedAt: "2026-04-11T09:20:01.000Z",
+      finishedAt: "2026-04-11T09:25:00.000Z",
+    });
+
+    const service = new QualityAssuranceService({
+      projectManagementRepository: projectRepository,
+      executionRepository,
+      sessionTracking: {} as any,
+      qaReviewRepository,
+      taskService: {} as any,
+      agentPresetSyncService: {
+        resolveTargetedQualityAssuranceAgent: async () => ({
+          id: qaPreset.id,
+          name: qaPreset.name,
+          instructionMarkdown: qaPreset.instructionMarkdown,
+        }),
+      } as any,
+      providerRunner: {} as any,
+      getDashboardSettings: () => ({
+        ...DEFAULT_DASHBOARD_SETTINGS,
+        agents: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents,
+          qualityAssurance: {
+            ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+            enabled: true,
+            maxTaskReviewRuns: 2,
+          },
+        },
+      }),
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+
+    vi.spyOn(service as any, "runReview").mockResolvedValue({
+      verdict: "pass",
+      summary: "Sprint QA recovered and passed.",
+      findings: [],
+      fixInstructions: null,
+      targetTaskKey: null,
+      shouldHavePr: null,
+      followUpTasks: [],
+      raw: {},
+    });
+
+    const outcome = await service.reviewSprintCompletion({
+      projectId: project.id,
+      sprintId: sprint.id,
+      sprintRunId: sprintRun.id,
+      repoPath: dir,
+      subtasks: [
+        {
+          record_id: task.id,
+          project_id: project.id,
+          sprint_id: sprint.id,
+          id: "T1",
+          title: "Initial task",
+          prompt: "Implement the initial feature.",
+          depends_on: [],
+          is_independent: true,
+          status: "COMPLETED",
+        },
+      ] as any,
+    });
+
+    expect(outcome).toMatchObject({
+      reviewed: true,
+      blockedCompletion: false,
+      mergeBlocked: false,
+    });
+    expect(qaReviewRepository.getRun(staleRun.id)?.status).toBe("failed");
+    expect(qaReviewRepository.getLatestSprintRun(sprint.id)?.outcome).toBe("pass");
   });
 
   it("retries when the provider returns malformed JSON", async () => {

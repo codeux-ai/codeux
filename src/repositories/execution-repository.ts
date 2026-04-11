@@ -1,11 +1,13 @@
 import {
   queryExecutionInvocation,
   queryProviderInvocationUsage,
-  queryLatestProviderInvocationUsageBySession
+  queryLatestProviderInvocationUsageBySession,
+  queryRunningProviderInvocationUsages,
 } from "./execution/execution-invocation-query.js";
 import {
   queryExecutionInvocations,
-  queryExecutionInvocationMessages
+  queryExecutionInvocationMessages,
+  queryExecutionInvocationsByProviderInvocationId,
 } from "./execution/execution-invocations-query.js";
 import { randomUUID } from "crypto";
 import { DatabaseAdapter } from "./db/database-adapter.js";
@@ -833,10 +835,10 @@ export class ExecutionRepository {
     this.db.prepare(`
       INSERT INTO provider_invocations (
         id, project_id, sprint_id, task_id, sprint_run_id, dispatch_id, task_run_id, attention_item_id,
-        session_id, provider, purpose, status, model, native_session_id, started_at, finished_at, duration_ms,
+        session_id, provider, purpose, status, model, execution_mode, native_session_id, started_at, finished_at, duration_ms,
         prompt_chars, transcript_chars, input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens,
         total_tokens, usage_source, raw_usage_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       input.projectId,
@@ -851,6 +853,7 @@ export class ExecutionRepository {
       input.purpose,
       input.status || "running",
       input.model ?? null,
+      input.executionMode ?? null,
       input.nativeSessionId ?? null,
       input.startedAt || now,
       null,
@@ -880,13 +883,14 @@ export class ExecutionRepository {
     const now = new Date().toISOString();
     this.db.prepare(`
       UPDATE provider_invocations
-      SET status = ?, model = ?, native_session_id = ?, finished_at = ?, duration_ms = ?, transcript_chars = ?,
+      SET status = ?, model = ?, execution_mode = ?, native_session_id = ?, finished_at = ?, duration_ms = ?, transcript_chars = ?,
         input_tokens = ?, cached_input_tokens = ?, output_tokens = ?, reasoning_output_tokens = ?, total_tokens = ?,
         usage_source = ?, raw_usage_json = ?, updated_at = ?
       WHERE id = ?
     `).run(
       input.status || current.status,
       input.model === undefined ? current.model : input.model,
+      input.executionMode === undefined ? current.executionMode : input.executionMode,
       input.nativeSessionId === undefined ? current.nativeSessionId : input.nativeSessionId,
       input.finishedAt === undefined ? current.finishedAt : input.finishedAt,
       input.durationMs === undefined ? current.durationMs : input.durationMs,
@@ -929,6 +933,14 @@ export class ExecutionRepository {
     purpose?: ProviderInvocationUsageRecord["purpose"],
   ): ProviderInvocationUsageRecord | null {
     return queryLatestProviderInvocationUsageBySession(this.db, sessionId, purpose);
+  }
+
+  listRunningProviderInvocationUsages(providers?: string[]): ProviderInvocationUsageRecord[] {
+    return queryRunningProviderInvocationUsages(this.db, providers);
+  }
+
+  listExecutionInvocationsByProviderInvocationId(providerInvocationId: string): ExecutionInvocationRecord[] {
+    return queryExecutionInvocationsByProviderInvocationId(this.db, providerInvocationId);
   }
 
   getLatestTaskRunBySessionId(sessionId: string): TaskRunRecord | null {

@@ -1,3 +1,5 @@
+import type { CliExecutionMode } from "./app-types.js";
+
 export type SprintRunStatus = "queued" | "running" | "paused" | "cancel_requested" | "completed" | "failed" | "cancelled";
 export type SprintRunTriggerType = "manual" | "dashboard" | "mcp" | "system";
 export type SprintRunExecutorMode = "mixed" | "docker_cli" | "jules";
@@ -83,6 +85,7 @@ export interface ProviderInvocationUsageRecord {
   purpose: ProviderInvocationPurpose;
   status: ProviderInvocationStatus;
   model: string | null;
+  executionMode: CliExecutionMode | null;
   nativeSessionId: string | null;
   startedAt: string;
   finishedAt: string | null;
@@ -203,6 +206,7 @@ export interface CreateProviderInvocationUsageInput {
   purpose: ProviderInvocationPurpose;
   status?: ProviderInvocationStatus;
   model?: string | null;
+  executionMode?: CliExecutionMode | null;
   nativeSessionId?: string | null;
   startedAt?: string;
   promptChars?: number;
@@ -225,6 +229,7 @@ export interface UpdateTaskRunInput {
 export interface UpdateProviderInvocationUsageInput {
   status?: ProviderInvocationStatus;
   model?: string | null;
+  executionMode?: CliExecutionMode | null;
   nativeSessionId?: string | null;
   finishedAt?: string | null;
   durationMs?: number | null;

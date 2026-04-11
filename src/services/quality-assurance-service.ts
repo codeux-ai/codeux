@@ -10,6 +10,7 @@ import type { IProviderRunner } from "../infrastructure/providers/cli/provider-r
 import { ProviderExecutionService } from "./provider-execution-service.js";
 import type { DashboardSettings, DashboardSettingsScope, ProviderId, Subtask } from "../contracts/app-types.js";
 import type { TaskRunRecord } from "../contracts/execution-types.js";
+import type { ExecutionInvocationRecord } from "../contracts/invocation-types.js";
 import type { TaskPriority } from "../contracts/project-management-types.js";
 import type { ProjectManagementRepository } from "../repositories/project-management-repository.js";
 import type { ExecutionRepository } from "../repositories/execution-repository.js";
@@ -65,6 +66,8 @@ interface NormalizedQaReviewResult {
 
 const SPRINT_RUN_KEEPALIVE_MS = 30_000;
 const SPRINT_LEASE_EXTENSION_MS = 5 * 60 * 1000;
+const QA_RUN_START_TIMEOUT_MS = 60_000;
+const RECOVERED_STALE_QA_SUMMARY_PREFIX = "Recovered stale QA review run";
 
 export interface TaskQaReviewOutcome {
   reviewed: boolean;
@@ -375,7 +378,7 @@ export class QualityAssuranceService {
       return { reviewed: false, blockedCompletion: false, mergeBlocked: false, reportText: "" };
     }
 
-    const latestRun = this.deps.qaReviewRepository.getLatestSprintRun(args.sprintId);
+    const latestRun = this.reconcileRunningQaRun(this.deps.qaReviewRepository.getLatestSprintRun(args.sprintId));
     const maxRuns = qaSettings.maxTaskReviewRuns;
     const latestTaskSnapshot = readSprintQaSnapshot(latestRun);
     const currentTaskSnapshot = buildSprintQaSnapshot(args.subtasks);
@@ -389,6 +392,7 @@ export class QualityAssuranceService {
         ? latestTaskSnapshot !== currentTaskSnapshot
         : hasTaskUpdatesSinceLatestRun)
       : true;
+    const recoveredStaleLatestRun = this.isRecoveredStaleQaRun(latestRun);
     const retriesExhausted = typeof latestRun?.runIndex === "number" && latestRun.runIndex >= maxRuns;
 
     if (latestRun?.status === "running") {
@@ -405,7 +409,11 @@ export class QualityAssuranceService {
     if (retriesExhausted) {
       return { reviewed: false, blockedCompletion: false, mergeBlocked: false, reportText: "" };
     }
-    if ((latestRun?.outcome === "changes_requested" || latestRun?.status === "failed") && !hasMeaningfulChangesSinceLatestRun) {
+    if (
+      (latestRun?.outcome === "changes_requested" || latestRun?.status === "failed")
+      && !hasMeaningfulChangesSinceLatestRun
+      && !recoveredStaleLatestRun
+    ) {
       return {
         reviewed: false,
         blockedCompletion: true,
@@ -586,7 +594,7 @@ export class QualityAssuranceService {
       };
     }
 
-    const latestRun = this.deps.qaReviewRepository.getLatestTaskRun(taskId);
+    const latestRun = this.reconcileRunningQaRun(this.deps.qaReviewRepository.getLatestTaskRun(taskId));
     const runsUsed = this.deps.qaReviewRepository.countTaskRuns(taskId);
     const maxRuns = qaSettings.maxTaskReviewRuns;
 
@@ -750,6 +758,61 @@ export class QualityAssuranceService {
 
       return result.parsed;
     });
+  }
+
+  private reconcileRunningQaRun(run: QaReviewRunRecord | null): QaReviewRunRecord | null {
+    if (!run || run.status !== "running") {
+      return run;
+    }
+
+    const latestInvocation = this.findLatestQaExecutionInvocation(run);
+    if (latestInvocation?.status === "running" || latestInvocation?.status === "paused") {
+      return run;
+    }
+
+    const runStartedAtMs = Date.parse(run.startedAt);
+    const ageMs = Number.isFinite(runStartedAtMs) ? Date.now() - runStartedAtMs : 0;
+    if (!latestInvocation && ageMs < QA_RUN_START_TIMEOUT_MS) {
+      return run;
+    }
+
+    return this.deps.qaReviewRepository.updateRun(run.id, {
+      status: "failed",
+      summaryMarkdown: latestInvocation
+        ? `${RECOVERED_STALE_QA_SUMMARY_PREFIX} after the backing invocation ${latestInvocation.status}. Sprint OS will retry the review.`
+        : `${RECOVERED_STALE_QA_SUMMARY_PREFIX} that never started its backing invocation. Sprint OS will retry the review.`,
+      finishedAt: latestInvocation?.finishedAt || new Date().toISOString(),
+    });
+  }
+
+  private isRecoveredStaleQaRun(run: QaReviewRunRecord | null): boolean {
+    return typeof run?.summaryMarkdown === "string" && run.summaryMarkdown.startsWith(RECOVERED_STALE_QA_SUMMARY_PREFIX);
+  }
+
+  private findLatestQaExecutionInvocation(run: QaReviewRunRecord): ExecutionInvocationRecord | null {
+    const executionRepository = this.deps.executionRepository as Partial<ExecutionRepository>;
+    if (typeof executionRepository.listExecutionInvocations !== "function") {
+      return null;
+    }
+
+    const invocations = run.taskRunId
+      ? executionRepository.listExecutionInvocations({
+          projectId: run.projectId,
+          taskRunId: run.taskRunId,
+          limit: 20,
+        })
+      : run.sprintRunId
+        ? executionRepository.listExecutionInvocations({
+            projectId: run.projectId,
+            sprintRunId: run.sprintRunId,
+            limit: 20,
+          })
+        : [];
+
+    return invocations.find((invocation) => (
+      invocation.type === "qa_review"
+      && Date.parse(invocation.startedAt) >= Date.parse(run.startedAt)
+    )) || null;
   }
 
   private async withSprintRunKeepAlive<T>(

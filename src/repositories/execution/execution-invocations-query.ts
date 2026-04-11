@@ -63,3 +63,17 @@ export function queryExecutionInvocationMessages(
   const rows = db.prepare(sql).all(invocationId) as ExecutionInvocationMessageRow[];
   return rows.map(mapExecutionInvocationMessageRow);
 }
+
+export function queryExecutionInvocationsByProviderInvocationId(
+  db: Database,
+  providerInvocationId: string,
+): ExecutionInvocationRecord[] {
+  const rows = db.prepare(`
+    SELECT *
+    FROM execution_invocations
+    WHERE provider_invocation_id = ?
+    ORDER BY started_at DESC, rowid DESC
+  `).all(providerInvocationId) as ExecutionInvocationRow[];
+
+  return rows.map(mapExecutionInvocationRow);
+}

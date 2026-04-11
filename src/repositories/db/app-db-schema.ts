@@ -222,6 +222,7 @@ CREATE TABLE IF NOT EXISTS provider_invocations (
         purpose TEXT NOT NULL,
         status TEXT NOT NULL,
         model TEXT,
+        execution_mode TEXT,
         native_session_id TEXT,
         started_at TEXT NOT NULL,
         finished_at TEXT,

@@ -83,6 +83,7 @@ export class CycleRunner {
           args.sprintRunId,
         )
       : [];
+    const cycleEntryStates = new Map(subtasks.map((task) => [task.id, task.status]));
     const activeProjectAttentionItems = typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
       ? this.deps.projectAttentionService.listActiveProjectItems(args.executionContext.project.id)
       : [];
@@ -132,13 +133,12 @@ export class CycleRunner {
     }
 
     if (args.loopSteps.statusDerivation && subtasks.length > 0) {
-      const preDerivationStates = new Map(subtasks.map((t) => [t.id, t.status]));
       subtasks = runStatusDerivationStep(subtasks, {
         retryFailed: args.retryFailed,
         isActionRequiredState: this.deps.isActionRequiredState,
       });
-      await this.captureTaskCompletionMemories(subtasks, preDerivationStates, args, dashboardSettings);
-      await this.reviewCompletedTasks(subtasks, preDerivationStates, args, dashboardSettings);
+      await this.captureTaskCompletionMemories(subtasks, cycleEntryStates, args, dashboardSettings);
+      await this.reviewCompletedTasks(subtasks, cycleEntryStates, args, dashboardSettings);
     }
 
     let reportText = "";
@@ -529,7 +529,7 @@ export class CycleRunner {
 
   private async reviewCompletedTasks(
     subtasks: Subtask[],
-    preDerivationStates: Map<string, Subtask["status"]>,
+    previousStates: Map<string, Subtask["status"]>,
     args: CycleRunnerArgs,
     settings: ReturnType<SprintOrchestratorDependencies["getDashboardSettings"]>,
   ): Promise<void> {
@@ -538,21 +538,22 @@ export class CycleRunner {
     }
 
     for (const task of subtasks) {
-      const prev = preDerivationStates.get(task.id);
+      const prev = previousStates.get(task.id);
       const qaGate = this.deps.qualityAssuranceService.getTaskMergeGateStatus({
         projectId: args.executionContext.project.id,
         sprintId: args.executionContext.sprint.id,
         task,
       });
-      const newlyCodeComplete = isTaskCodeComplete(task) && !isTaskCodeComplete({ status: prev });
-      const shouldRunQaReview = newlyCodeComplete
+      const taskIsCodeComplete = isTaskCodeComplete(task);
+      const newlyCodeComplete = taskIsCodeComplete && !isTaskCodeComplete({ status: prev });
+      const shouldRunQaReview = taskIsCodeComplete
         && (
           qaGate.reason === "pending_review"
-          || qaGate.reason === "changes_requested"
           || qaGate.reason === "review_failed"
+          || (qaGate.reason === "changes_requested" && newlyCodeComplete)
         );
 
-      if (!shouldRunQaReview || !isTaskCodeComplete(task)) {
+      if (!shouldRunQaReview) {
         continue;
       }
 

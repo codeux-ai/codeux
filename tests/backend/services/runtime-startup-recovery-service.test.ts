@@ -6,6 +6,7 @@ import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
 import { ExecutionRepository } from "../../../src/repositories/execution-repository.js";
 import { SessionTrackingRepository } from "../../../src/repositories/session-tracking-repository.js";
+import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-defaults.js";
 import { RuntimeStartupRecoveryService } from "../../../src/services/runtime-startup-recovery-service.js";
 import type { SprintOrchestrator } from "../../../src/sprint/sprint-orchestrator.js";
 import type { Logger } from "../../../src/shared/logging/logger.js";
@@ -15,6 +16,7 @@ const tempDirs: string[] = [];
 async function createFixture(options?: {
   recoverSprintRun?: SprintOrchestrator["recoverSprintRun"];
   logger?: Pick<Logger, "info" | "error">;
+  dockerService?: { listContainers: () => Promise<Array<{ labels?: Record<string, string> }>> };
 }) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-startup-recovery-"));
   tempDirs.push(dir);
@@ -31,6 +33,8 @@ async function createFixture(options?: {
     sprintOrchestrator: {
       recoverSprintRun,
     } as SprintOrchestrator,
+    dockerService: options?.dockerService,
+    getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
     logger: options?.logger,
   });
 
@@ -333,6 +337,88 @@ describe("RuntimeStartupRecoveryService", () => {
     expect(projectRepository.getTask(task.id)?.status).toBe("pending");
   });
 
+  it("fails orphaned running Docker-backed invocations with no active session container", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture({
+      dockerService: {
+        listContainers: vi.fn().mockResolvedValue([]),
+      },
+    });
+
+    const project = projectRepository.createProject({
+      name: "Orphaned Invocation Project",
+      sourceType: "local",
+      sourceRef: "/workspace/orphaned-invocation-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Orphaned Invocation Sprint",
+      number: 55,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Reviewable task",
+      executorType: "docker_cli",
+      status: "completed",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      provider: "gemini",
+      mode: "docker_cli",
+      state: "COMPLETED",
+      startedAt: "2026-04-11T08:00:00.000Z",
+      finishedAt: "2026-04-11T08:05:00.000Z",
+    });
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      sessionId: "qa-review-gemini-stale",
+      provider: "gemini",
+      purpose: "qa_review",
+      executionMode: "DOCKER",
+      startedAt: "2026-04-11T08:06:00.000Z",
+    });
+    const executionInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      providerInvocationId: providerInvocation.id,
+      type: "qa_review",
+      status: "running",
+      provider: "gemini",
+      model: "gemini-2.5-pro",
+      startedAt: "2026-04-11T08:06:01.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledContainerInvocationIds).toEqual([providerInvocation.id]);
+    expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)).toMatchObject({
+      id: providerInvocation.id,
+      status: "failed",
+    });
+    expect(executionRepository.getExecutionInvocation(executionInvocation.id)).toMatchObject({
+      id: executionInvocation.id,
+      status: "failed",
+      errorMessage: expect.stringContaining("No active Docker container remained"),
+    });
+    expect(executionRepository.listExecutionInvocationMessages(executionInvocation.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "system",
+          contentMarkdown: expect.stringContaining("No active Docker container remained"),
+        }),
+      ]),
+    );
+  });
+
   it("logs startup recovery activity and surfaces recoverSprintRun errors without aborting recovery", async () => {
     const logger = {
       info: vi.fn(),
@@ -371,6 +457,7 @@ describe("RuntimeStartupRecoveryService", () => {
     expect(logger.info).toHaveBeenCalledWith("Recovered runtime state on startup", {
       recoveredCliSessions: 0,
       reconciledLocalDispatches: 0,
+      reconciledContainerInvocations: 0,
       resumedSprintRuns: 1,
       supersededSprintRuns: 0,
     });

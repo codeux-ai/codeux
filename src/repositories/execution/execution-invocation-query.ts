@@ -67,3 +67,25 @@ export function queryLatestProviderInvocationUsageBySession(
 
   return row ? mapProviderInvocationUsageRow(row) : null;
 }
+
+export function queryRunningProviderInvocationUsages(
+  db: Database,
+  providers?: string[],
+): ProviderInvocationUsageRecord[] {
+  const clauses = ["status = 'running'"];
+  const values: string[] = [];
+
+  if (providers && providers.length > 0) {
+    clauses.push(`provider IN (${providers.map(() => "?").join(", ")})`);
+    values.push(...providers);
+  }
+
+  const rows = db.prepare(`
+    SELECT *
+    FROM provider_invocations
+    WHERE ${clauses.join(" AND ")}
+    ORDER BY started_at DESC, rowid DESC
+  `).all(...values) as ProviderInvocationUsageRow[];
+
+  return rows.map(mapProviderInvocationUsageRow);
+}

@@ -66,6 +66,7 @@ import { VirtualWorkerService } from "../services/virtual-worker-service.js";
 import type { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
 import { SprintPreviewRepository } from "../repositories/sprint-preview-repository.js";
 import { SprintPreviewService } from "../services/sprint-preview-service.js";
+import { resolveEffectiveDashboardSettings } from "../services/settings-resolution-service.js";
 
 function detectMergeConflictMessage(message: string | null | undefined): boolean {
   const normalized = String(message || "").trim().toLowerCase();
@@ -217,6 +218,17 @@ export class JulesAgentServer {
       executionRepository: this.executionRepository,
       projectManagementRepository: this.projectManagementRepository,
       sprintOrchestrator: this.sprintOrchestrator,
+      dockerService: this.dockerService,
+      getDashboardSettings: (scope) => {
+        if (!scope?.projectId) {
+          return this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS;
+        }
+        return resolveEffectiveDashboardSettings(
+          this.settingsRepository,
+          scope.projectId,
+          scope.sprintId,
+        ).settings;
+      },
       logger: this.logger.child({ component: "runtime-startup-recovery-service" }),
     });
     this.dashboardRealtimeService = deps.dashboardRealtimeService;

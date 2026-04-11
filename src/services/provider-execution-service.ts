@@ -107,6 +107,7 @@ export class ProviderExecutionService {
         provider: args.provider,
         purpose: args.purpose,
         model: args.model,
+        executionMode: args.workflowSettings.executionMode,
         startedAt,
         promptChars: p.length,
       });

@@ -1282,17 +1282,28 @@ describe("CycleRunner attention sync", () => {
     }));
   });
 
-  it("runs QA review only for tasks that newly transition to COMPLETED", async () => {
+  it("runs task QA for code-complete tasks that still need an initial review", async () => {
     const deps = buildDeps();
     deps.qualityAssuranceService = {
-      getTaskMergeGateStatus: vi.fn().mockReturnValue({
-        mergeAllowed: false,
-        reason: "pending_review",
-        summary: "QA review is required before merge.",
-        latestRun: null,
-        runsUsed: 0,
-        maxRuns: 1,
-      }),
+      getTaskMergeGateStatus: vi.fn((args: { task: { id: string } }) => (
+        args.task.id === "T1"
+          ? {
+              mergeAllowed: false,
+              reason: "pending_review",
+              summary: "QA review is required before merge.",
+              latestRun: null,
+              runsUsed: 0,
+              maxRuns: 1,
+            }
+          : {
+              mergeAllowed: true,
+              reason: "passed",
+              summary: "QA review passed.",
+              latestRun: { id: "qa-run-1" },
+              runsUsed: 1,
+              maxRuns: 1,
+            }
+      )),
       reviewCompletedTask: vi.fn().mockResolvedValue({
         reviewed: true,
         reopenedTask: true,
@@ -1430,5 +1441,95 @@ describe("CycleRunner attention sync", () => {
     );
 
     expect(deps.qualityAssuranceService.reviewCompletedTask).not.toHaveBeenCalled();
+  });
+
+  it("reruns missing task QA for already code-complete tasks, but only reruns changes-requested QA after a fresh completion", async () => {
+    const deps = buildDeps();
+    deps.qualityAssuranceService = {
+      getTaskMergeGateStatus: vi.fn((args: { task: { id: string } }) => {
+        if (args.task.id === "T1") {
+          return {
+            mergeAllowed: false,
+            reason: "pending_review",
+            summary: "QA review is required before merge.",
+            latestRun: null,
+            runsUsed: 0,
+            maxRuns: 2,
+          };
+        }
+        return {
+          mergeAllowed: false,
+          reason: "changes_requested",
+          summary: "QA requested follow-up fixes.",
+          latestRun: { id: "qa-run-2" },
+          runsUsed: 1,
+          maxRuns: 2,
+        };
+      }),
+      reviewCompletedTask: vi.fn().mockResolvedValue({
+        reviewed: true,
+        reopenedTask: false,
+        mergeBlocked: false,
+        reportText: "QA passed",
+      }),
+    } as any;
+    deps.getDashboardSettings = vi.fn().mockReturnValue({
+      ...DEFAULT_DASHBOARD_SETTINGS,
+      agents: {
+        ...DEFAULT_DASHBOARD_SETTINGS.agents,
+        qualityAssurance: {
+          ...DEFAULT_DASHBOARD_SETTINGS.agents.qualityAssurance,
+          enabled: true,
+        },
+      },
+    });
+
+    const runner = new CycleRunner(deps);
+    await (runner as any).reviewCompletedTasks(
+      [
+        {
+          id: "T1",
+          record_id: "task-1",
+          title: "Awaiting first QA run",
+          prompt: "finish implementation",
+          depends_on: [],
+          is_independent: true,
+          status: "COMPLETED",
+          provider: "codex",
+        },
+        {
+          id: "T2",
+          record_id: "task-2",
+          title: "Waiting for QA re-check after fixes",
+          prompt: "finish implementation",
+          depends_on: [],
+          is_independent: true,
+          status: "COMPLETED",
+          provider: "codex",
+        },
+      ],
+      new Map([
+        ["T1", "CODING_COMPLETED"],
+        ["T2", "CODING_COMPLETED"],
+      ]),
+      {
+        executionContext: {
+          project: { id: "project-1", name: "Project 1" } as any,
+          sprint: { id: "sprint-1", name: "Sprint 1" } as any,
+          sprintNumber: 1,
+          repoPath: "/repo/project-1",
+          featureBranch: "feature/sprint-1",
+          defaultBranch: "main",
+        },
+        repoPath: "/repo/project-1",
+        sprintRunId: "run-1",
+      } as any,
+      deps.getDashboardSettings(),
+    );
+
+    expect(deps.qualityAssuranceService.reviewCompletedTask).toHaveBeenCalledTimes(1);
+    expect(deps.qualityAssuranceService.reviewCompletedTask).toHaveBeenCalledWith(expect.objectContaining({
+      task: expect.objectContaining({ id: "T1" }),
+    }));
   });
 });

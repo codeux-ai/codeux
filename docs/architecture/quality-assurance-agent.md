@@ -94,6 +94,11 @@ Behavior:
 
 If task QA is still pending, running, or has failed without exhausting `maxTaskReviewRuns`, Sprint OS marks the task merge state as `QA_PENDING` and keeps the sprint active instead of auto-merging.
 
+Recovery guarantees:
+
+- task QA no longer depends only on catching a single in-cycle transition edge; if a task is already code-complete and still has no successful QA run, Sprint OS will enqueue the missing review on the next orchestration cycle instead of leaving the task parked in `QA_PENDING`
+- if a QA run row is left behind in `running` state after its backing execution invocation has already finished, Sprint OS now automatically converts that stale row into a retryable failed run so the gate can recover instead of blocking indefinitely
+
 Run budgeting:
 
 - the initial completed task review always counts as run `1`
@@ -124,6 +129,7 @@ Behavior:
 - if sprint QA passes, Sprint OS proceeds to main-merge evaluation and eventual completion
 - if sprint QA is still running, failed, or waiting on follow-up work, the main merge stays blocked
 - while a sprint QA review is running, Sprint OS now refreshes the parent sprint-run heartbeat and lease so long reviews are not mistaken for stalled orchestration and failed by runtime cleanup
+- stale sprint-level `running` QA rows are also reconciled against execution invocation state before gating; if the backing invocation already ended, Sprint OS reclassifies the stale row and immediately allows a retry instead of keeping sprint completion blocked forever
 
 ## Session Continuation
 
