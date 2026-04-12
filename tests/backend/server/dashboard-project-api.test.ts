@@ -445,6 +445,47 @@ async function createServerHandle(): Promise<{
 
 describe("dashboard project management API", () => {
 
+  it("should default showcasePinned to true when creating a sprint if omitted, but honor explicit false", async () => {
+    const { fetch, repository } = await createServerHandle();
+    const baseUrl = "http://127.0.0.1";
+    const project = repository.createProject({
+      name: "Test Pinning",
+      sourceType: "local",
+      sourceRef: "/tmp/pinning-test"
+    });
+
+    // 1. Omitted showcasePinned -> defaults to true
+    const sprintTrueResponse = await fetch(`${baseUrl}/api/projects/${project.id}/sprints`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Sprint Implicit True", goal: "Test 1" }),
+    });
+    expect(sprintTrueResponse.status).toBe(201);
+    const sprintTrue = await sprintTrueResponse.json();
+    expect(sprintTrue.showcasePinned).toBe(true);
+
+    // 2. Explicitly false showcasePinned -> stays false
+    const sprintFalseResponse = await fetch(`${baseUrl}/api/projects/${project.id}/sprints`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Sprint Explicit False", goal: "Test 2", showcasePinned: false }),
+    });
+    expect(sprintFalseResponse.status).toBe(201);
+    const sprintFalse = await sprintFalseResponse.json();
+    expect(sprintFalse.showcasePinned).toBe(false);
+
+    // 3. Explicitly true showcasePinned -> stays true
+    const sprintExplicitTrueResponse = await fetch(`${baseUrl}/api/projects/${project.id}/sprints`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Sprint Explicit True", goal: "Test 3", showcasePinned: true }),
+    });
+    expect(sprintExplicitTrueResponse.status).toBe(201);
+    const sprintExplicitTrue = await sprintExplicitTrueResponse.json();
+    expect(sprintExplicitTrue.showcasePinned).toBe(true);
+  });
+
+
   it("supports optional sprint review summaries in API listSprints", async () => {
     const { fetch, storage } = await createServerHandle();
     const baseUrl = "http://127.0.0.1";
