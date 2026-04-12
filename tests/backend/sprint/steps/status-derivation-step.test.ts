@@ -10,7 +10,7 @@ describe("runStatusDerivationStep", () => {
       { id: "task-1", title: "Task 1", prompt: "", depends_on: [], is_independent: true, is_merged: true, status: "COMPLETED" },
       { id: "task-2", title: "Task 2", prompt: "", depends_on: ["task-1"], is_independent: false, is_merged: false, status: "BLOCKED" },
     ];
-    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState });
+    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState , tasksById: new Map(subtasks.map(t => [t.id, t]))});
     expect(result[1].status).toBe("PENDING");
   });
 
@@ -33,7 +33,7 @@ describe("runStatusDerivationStep", () => {
         merge_indicator: "MERGED",
       },
     ];
-    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState });
+    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState , tasksById: new Map(subtasks.map(t => [t.id, t]))});
     expect(result[0].status).toBe("PENDING");
     expect(result[0].session_id).toBeUndefined();
     expect(result[0].session_name).toBeUndefined();
@@ -49,7 +49,7 @@ describe("runStatusDerivationStep", () => {
     const subtasks: Subtask[] = [
       { id: "task-1", title: "Task 1", prompt: "", depends_on: ["missing"], is_independent: false, is_merged: false, status: "FAILED", session_state: "FAILED" },
     ];
-    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState });
+    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState , tasksById: new Map(subtasks.map(t => [t.id, t]))});
     expect(result[0].status).toBe("BLOCKED");
   });
 
@@ -57,7 +57,7 @@ describe("runStatusDerivationStep", () => {
     const subtasks: Subtask[] = [
       { id: "task-1", title: "Task 1", prompt: "", depends_on: [], is_independent: true, is_merged: false, status: "PENDING", session_state: "ACTION_REQUIRED" },
     ];
-    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState });
+    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState , tasksById: new Map(subtasks.map(t => [t.id, t]))});
     expect(result[0].status).toBe("BLOCKED");
   });
 
@@ -67,7 +67,7 @@ describe("runStatusDerivationStep", () => {
       { id: "task-2", title: "Task 2", prompt: "", depends_on: [], is_independent: true, is_merged: false, status: "COMPLETED" },
       { id: "task-3", title: "Task 3", prompt: "", depends_on: [], is_independent: true, is_merged: false, status: "FAILED" },
     ];
-    const result = runStatusDerivationStep(subtasks, { retryFailed: false, isActionRequiredState });
+    const result = runStatusDerivationStep(subtasks, { retryFailed: false, isActionRequiredState , tasksById: new Map(subtasks.map(t => [t.id, t]))});
     expect(result[0].status).toBe("RUNNING");
     expect(result[1].status).toBe("COMPLETED");
     expect(result[2].status).toBe("FAILED");
@@ -87,7 +87,7 @@ describe("runStatusDerivationStep", () => {
       },
       { id: "task-2", title: "Task 2", prompt: "", depends_on: ["task-1"], is_independent: false, is_merged: false, status: "PENDING" },
     ];
-    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState });
+    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState , tasksById: new Map(subtasks.map(t => [t.id, t]))});
     expect(result[1].status).toBe("BLOCKED");
   });
 
@@ -97,7 +97,7 @@ describe("runStatusDerivationStep", () => {
       { id: "task-2", title: "Task 2", prompt: "", depends_on: ["task-1"], is_independent: false, is_merged: false, status: "BLOCKED" },
     ];
 
-    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState });
+    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState , tasksById: new Map(subtasks.map(t => [t.id, t]))});
     expect(result[1].status).toBe("PENDING");
   });
 
@@ -105,7 +105,7 @@ describe("runStatusDerivationStep", () => {
     const subtasks: Subtask[] = [
       { id: "task-1", title: "Task 1", prompt: "", depends_on: [], is_independent: false, is_merged: false, status: "PENDING" },
     ];
-    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState });
+    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState , tasksById: new Map(subtasks.map(t => [t.id, t]))});
     expect(result[0].status).toBe("BLOCKED");
   });
 });

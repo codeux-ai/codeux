@@ -46,7 +46,8 @@ const buildFeatureCommentsLine = (settings: CiIntelligenceSettings): string => {
 export const runProtocolStep = async (subtasks: Subtask[], options: ProtocolStepOptions): Promise<ProtocolStepResult> => {
   const awaitingMerge = subtasks.filter((task) => isCompletedTaskAwaitingMerge(task));
   const workerEscalatedMergeConflictTasks = awaitingMerge.filter((task) => options.isWorkerEscalatedMergeConflictTask?.(task) === true);
-  const manualMergeTasks = awaitingMerge.filter((task) => !workerEscalatedMergeConflictTasks.includes(task));
+  const workerEscalatedTaskSet = new Set(workerEscalatedMergeConflictTasks);
+  const manualMergeTasks = awaitingMerge.filter((task) => !workerEscalatedTaskSet.has(task));
   const actionRequiredTasks = subtasks.filter(
     (task) => task.status === "BLOCKED" && (options.isActionRequiredState(task.session_state) || !!task.intervention_owner)
   );

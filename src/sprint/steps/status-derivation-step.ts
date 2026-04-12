@@ -5,11 +5,12 @@ import { applyPendingTaskRuntimeReset } from "../../domain/sprint/task-reset-sta
 interface DeriveStatusOptions {
   retryFailed: boolean;
   isActionRequiredState: (state?: string) => boolean;
+  tasksById: Map<string, Subtask>;
 }
 
-const areDependenciesMet = (subtasks: Subtask[], task: Subtask): boolean => {
+const areDependenciesMet = (tasksById: Map<string, Subtask>, task: Subtask): boolean => {
   return task.depends_on.every((depId) => {
-    const dep = subtasks.find((candidate) => candidate.id === depId);
+    const dep = tasksById.get(depId);
     return dep ? isCompletedTaskSettled(dep) : false;
   });
 };
@@ -25,7 +26,7 @@ export const runStatusDerivationStep = (subtasks: Subtask[], options: DeriveStat
       applyPendingTaskRuntimeReset(task, {
         preserveProvider: true,
       });
-      task.status = areDependenciesMet(subtasks, task) ? "PENDING" : "BLOCKED";
+      task.status = areDependenciesMet(options.tasksById, task) ? "PENDING" : "BLOCKED";
       continue;
     }
 
@@ -43,7 +44,7 @@ export const runStatusDerivationStep = (subtasks: Subtask[], options: DeriveStat
       continue;
     }
 
-    task.status = areDependenciesMet(subtasks, task) ? "PENDING" : "BLOCKED";
+    task.status = areDependenciesMet(options.tasksById, task) ? "PENDING" : "BLOCKED";
   }
 
   return subtasks;
