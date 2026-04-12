@@ -706,7 +706,7 @@ describe("VirtualWorkerService", () => {
   it("buildCiFixPrompt formats correctly", async () => {
     const { virtualWorkerService } = await setupService();
 
-    const prompt = (virtualWorkerService as any).buildCiFixPrompt(
+    const prompt = (virtualWorkerService as any).ciAutofixManager.buildCiFixPrompt(
       {
         summaryMarkdown: "Fix CI",
         payload: {
@@ -745,7 +745,7 @@ describe("VirtualWorkerService", () => {
       outputs: [{ pullRequest: { url: "url", workerBranch: "branch" } }]
     };
 
-    const summary = (virtualWorkerService as any).buildDispatchSummary(claim as any, session as any);
+    const summary = (virtualWorkerService as any).taskReconciliationService.buildDispatchSummary(claim as any, session as any);
     expect(summary).toContain("Project A");
     expect(summary).toContain("Sprint 1");
     expect(summary).toContain("T1 Task 1");
