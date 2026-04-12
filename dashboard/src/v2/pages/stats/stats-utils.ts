@@ -193,3 +193,30 @@ export function createStatsSegments(stats: ProjectExecutionStatsSnapshot | null,
 
   return { providerSegments, sourceSegments, tokenSegments };
 }
+
+export function normalizePurposeLanes(items: ExecutionStatsEntitySummary[]): ExecutionStatsEntitySummary[] {
+  const laneIds = ["planning", "task_coding", "clarification_reply", "merge_recovery", "qa_review"];
+  const map = new Map<string, ExecutionStatsEntitySummary>();
+
+  for (const item of items) {
+    if (item.id === "merge_conflict") {
+      map.set("merge_recovery", { ...item, id: "merge_recovery", label: "merge_recovery" });
+    } else {
+      map.set(item.id, item);
+    }
+  }
+
+  return laneIds.map(id => {
+    return map.get(id) || {
+      id,
+      label: id,
+      usage: { ...EMPTY_USAGE },
+      lastActivityAt: null,
+      type: 'purpose',
+      secondaryLabel: null,
+      status: null,
+      purpose: null,
+      provider: null
+    };
+  });
+}
