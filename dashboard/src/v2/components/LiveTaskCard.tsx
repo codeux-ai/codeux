@@ -24,6 +24,7 @@ import {
 } from "../lib/live-duration-display.js";
 import { RerunTaskModal } from "./ui/RerunTaskModal.js";
 import { Button } from "./ui/Button.js";
+import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
@@ -157,6 +158,8 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
     const promptRef = useRef<HTMLDivElement>(null);
     const feedRef = useRef<HTMLDivElement>(null);
     const chevronRef = useRef<SVGSVGElement>(null);
+    const flareRef = useRef<HTMLDivElement>(null);
+    const prefersReducedMotion = useReducedMotion();
     const isMounted = useRef(false);
 
     const isPreviewVisible = !expanded && !showFeed;
@@ -199,6 +202,38 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
         setExpanded(prev => !prev);
         setShowFeed(false);
     }, []);
+
+    const previousTaskPhase = useRef(taskPhase);
+
+    // Flare effect
+    useEffect(() => {
+        if (isMounted.current && previousTaskPhase.current !== "COMPLETED" && taskPhase === "COMPLETED" && flareRef.current) {
+            if (!prefersReducedMotion) {
+                gsap.fromTo(flareRef.current,
+                    { scale: 0.9, opacity: 0 },
+                    {
+                        scale: 1.05,
+                        opacity: 0.6,
+                        duration: 0.4,
+                        ease: "power2.out",
+                        onComplete: () => {
+                            gsap.to(flareRef.current, {
+                                opacity: 0,
+                                duration: 0.2,
+                                ease: "power2.in",
+                                clearProps: "all"
+                            });
+                        }
+                    }
+                );
+            }
+        }
+    }, [taskPhase, prefersReducedMotion]);
+
+    // Track previous phase
+    useEffect(() => {
+        previousTaskPhase.current = taskPhase;
+    }, [taskPhase]);
 
     useLayoutEffect(() => {
         if (!isMounted.current) {
@@ -246,8 +281,14 @@ const LiveTaskCard: FunctionComponent<LiveTaskCardProps> = memo(({
                        shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]
                        transition-[border-color] duration-300"
         >
-            <WaveFluid accentHex={cfg.hex} />
+            <WaveFluid accentHex={cfg.hex} isActive={taskPhase === "RUNNING"} />
             <BorderTrace accentHex={cfg.hex} />
+
+            <div
+                ref={flareRef}
+                className="absolute inset-0 rounded-[1.75rem] pointer-events-none opacity-0 mix-blend-screen"
+                style={{ backgroundColor: cfg.hex, filter: 'blur(20px)' }}
+            />
 
             {/* Hover tint */}
             <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-black/[0.01] dark:group-hover:bg-white/[0.01] group-focus-within:bg-black/[0.01] dark:group-focus-within:bg-white/[0.01]" />

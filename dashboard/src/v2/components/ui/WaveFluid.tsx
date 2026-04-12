@@ -1,4 +1,7 @@
 import type { FunctionComponent } from "preact";
+import { useLayoutEffect, useRef } from "preact/hooks";
+import gsap from "gsap";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 
 /**
  * Fluid wave at bottom of card.
@@ -6,8 +9,43 @@ import type { FunctionComponent } from "preact";
  * translateX(-50%) = one exact cycle → zero-jump seamless loop.
  * Layer 2 counter-drifts via reverse + negative delay (no second keyframe needed).
  */
-export const WaveFluid: FunctionComponent<{ accentHex: string }> = ({ accentHex }) => (
-    <div className="absolute bottom-0 left-0 right-0 h-16 overflow-hidden pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-700 ease-out">
+export const WaveFluid: FunctionComponent<{ accentHex: string; isActive?: boolean }> = ({ accentHex, isActive }) => {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const prefersReducedMotion = useReducedMotion();
+
+    useLayoutEffect(() => {
+        if (!containerRef.current) return;
+
+        if (prefersReducedMotion) return;
+
+        let ctx = gsap.context(() => {
+            if (isActive) {
+                gsap.to(containerRef.current, {
+                    opacity: 0.8,
+                    duration: 2,
+                    yoyo: true,
+                    repeat: -1,
+                    ease: "sine.inOut"
+                });
+            } else {
+                gsap.killTweensOf(containerRef.current);
+                gsap.to(containerRef.current, {
+                    opacity: "",
+                    duration: 0.5,
+                    ease: "power2.out",
+                    clearProps: "opacity"
+                });
+            }
+        });
+
+        return () => ctx.revert();
+    }, [isActive]);
+
+    return (
+    <div
+        ref={containerRef}
+        className="absolute bottom-0 left-0 right-0 h-16 overflow-hidden pointer-events-none opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-700 ease-out"
+    >
         {/* Primary wave — 2 cycles, drifts left */}
         <svg
             style={{
@@ -42,4 +80,5 @@ export const WaveFluid: FunctionComponent<{ accentHex: string }> = ({ accentHex 
             />
         </svg>
     </div>
-);
+    );
+};
