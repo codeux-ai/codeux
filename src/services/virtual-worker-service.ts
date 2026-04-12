@@ -22,49 +22,15 @@ import { ProjectAttentionService } from "../domain/workers/project-attention-ser
 import { ProjectWorkerAssignmentService } from "../domain/workers/project-worker-assignment-service.js";
 import { WorkerTaskDispatchService } from "./worker-task-dispatch-service.js";
 import { CliWorkflowService } from "./cli-workflow-service.js";
-import { resolveProviderForInvocation, resolveWorkerModelForProvider } from "./provider-routing.js";
+import { resolveProviderForInvocation } from "./provider-routing.js";
+import { CiAutofixManager } from "./worker/ci-autofix-manager.js";
+import { TaskReconciliationService } from "./worker/task-reconciliation-service.js";
 import { resolveEffectiveDashboardSettings } from "./settings-resolution-service.js";
 import type { WorkerInboxReplyService } from "./worker-inbox-reply-service.js";
 import type { InstructionService } from "../instructions/instruction-template-service.js";
 import type { SprintExecutionStateService } from "./sprint-execution-state-service.js";
 
 const VIRTUAL_WORKER_RECONCILE_MS = 3_000;
-const VIRTUAL_WORKER_SESSION_POLL_MS = 2_000;
-
-function sleep(ms: number): Promise<void> {
-  if (ms <= 0) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function isTerminalSessionState(state: string | undefined): boolean {
-  return state === "COMPLETED" || state === "FAILED" || state === "CANCELLED" || state === "QUOTA" || state === "RATE_LIMITED";
-}
-
-function extractPullRequest(session: JulesSession): { url?: string; workerBranch?: string } | null {
-  const output = (session.outputs || [])
-    .map((entry) => entry.pullRequest)
-    .find((entry): entry is { url?: string; workerBranch?: string } => Boolean(entry));
-  return output || null;
-}
-
-function resolveTerminalDispatchState(session: JulesSession): "COMPLETED" | "FAILED" | "QUOTA" | null {
-  if (session.state === "QUOTA") {
-    return "QUOTA";
-  }
-  if (session.state === "RATE_LIMITED") {
-    return "QUOTA";
-  }
-  if (session.state === "FAILED" || session.state === "CANCELLED") {
-    return "FAILED";
-  }
-  if (extractPullRequest(session) || session.state === "COMPLETED") {
-    return "COMPLETED";
-  }
-  return null;
-}
-
 export interface VirtualWorkerServiceDependencies {
   settingsRepository: SettingsRepository;
   sessionTracking: SessionTrackingRepository;
@@ -96,10 +62,12 @@ export class VirtualWorkerService {
 
   private reconcileTimer: ReturnType<typeof setInterval> | null = null;
 
-  private readonly ciAutofixRetryCounts = new Map<string, number>();
   private readonly clarificationRetryCounts = new Map<string, number>();
 
   private readonly providerExecutionService: ProviderExecutionService;
+
+  private readonly ciAutofixManager: CiAutofixManager;
+  public readonly taskReconciliationService: TaskReconciliationService;
 
   constructor(private readonly deps: VirtualWorkerServiceDependencies) {
     this.providerExecutionService = new ProviderExecutionService({
@@ -107,6 +75,31 @@ export class VirtualWorkerService {
       providerRunner: this.providerRunner,
       logger: deps.logger,
       sessionTracking: deps.sessionTracking,
+    });
+
+    this.ciAutofixManager = new CiAutofixManager({
+      workspaceManager: this.workspaceManager,
+      workspaceArtifactService: this.workspaceArtifactService,
+      sessionTracking: deps.sessionTracking,
+      projectAttentionService: deps.projectAttentionService,
+      escalateAttentionToHuman: this.escalateAttentionToHuman.bind(this),
+      getProviderLabel: this.getProviderLabel.bind(this),
+      resolveDashboardSettings: this.resolveDashboardSettings.bind(this),
+      runProviderWithRetry: this.runProviderWithRetry.bind(this),
+      runWorkspaceCommand: this.runWorkspaceCommand.bind(this),
+      readRequiredString: this.readRequiredString.bind(this),
+    });
+
+    this.taskReconciliationService = new TaskReconciliationService({
+      executionRepository: deps.executionRepository,
+      cliWorkflowService: deps.cliWorkflowService,
+      workerEndpointRepository: deps.workerEndpointRepository,
+      workerTaskDispatchService: deps.workerTaskDispatchService,
+      sessionTracking: deps.sessionTracking,
+      resolveDashboardSettings: this.resolveDashboardSettings.bind(this),
+      projectManagementRepository: deps.projectManagementRepository,
+      projectWorkerAssignmentService: deps.projectWorkerAssignmentService,
+      logger: deps.logger,
     });
   }
 
@@ -117,6 +110,7 @@ export class VirtualWorkerService {
   }
 
   start(): void {
+    this.taskReconciliationService.start();
     if (this.reconcileTimer) {
       return;
     }
@@ -132,6 +126,7 @@ export class VirtualWorkerService {
   }
 
   stop(): void {
+    this.taskReconciliationService.stop();
     if (this.reconcileTimer) {
       clearInterval(this.reconcileTimer);
       this.reconcileTimer = null;
@@ -264,114 +259,7 @@ export class VirtualWorkerService {
       }) || null;
   }
 
-  private async handleTaskDispatch(workerEndpointId: string, claim: WorkerTaskDispatchClaim): Promise<void> {
-    const settings = this.resolveDashboardSettings(claim.project.id, claim.sprint.id);
-    const providerConfigId = settings.workers.virtualWorkerProvider;
-    const providerSettings = settings.aiProvider.providers[providerConfigId];
-    const provider = providerSettings.provider as Exclude<ProviderId, "jules">;
-    const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(claim.dispatch.id);
-    if (!taskRun) {
-      throw new Error(`Task run not found for dispatch ${claim.dispatch.id}`);
-    }
-
-    const session = await this.deps.cliWorkflowService.startTask({
-      provider,
-      providerSettingsOverride: {
-        model: resolveWorkerModelForProvider(
-          provider,
-          settings.workers.model,
-          providerSettings.model,
-        ),
-        thinkingMode: providerSettings.thinkingMode,
-        apiKey: providerSettings.apiKey,
-        providerMountAuth: providerSettings.mountAuth,
-        providerAuthPath: providerSettings.authPath,
-      },
-      task: {
-        record_id: claim.task.id,
-        project_id: claim.project.id,
-        sprint_id: claim.sprint.id,
-        id: claim.task.taskKey,
-        title: claim.task.title,
-        prompt: claim.task.promptMarkdown,
-        depends_on: [...claim.task.dependsOnTaskIds],
-        is_independent: true,
-        status: "PENDING",
-      },
-      repoPath: claim.executionContext.repoPath,
-      featureBranch: claim.executionContext.featureBranch,
-      sprintNumber: claim.sprint.number ?? 0,
-      dispatchId: claim.dispatch.id,
-      taskRunId: taskRun.id,
-    });
-    const pullRequest = extractPullRequest(session);
-
-    this.deps.workerEndpointRepository.touchWorkerEndpointHeartbeat(workerEndpointId, "connected");
-    this.deps.workerTaskDispatchService.updateDispatchForWorker({
-      workerEndpointId,
-      dispatchId: claim.dispatch.id,
-      leaseToken: claim.leaseToken,
-      state: "RUNNING",
-      provider,
-      sessionId: session.id,
-      sessionName: session.name,
-      workerBranch: pullRequest?.workerBranch || claim.executionContext.featureBranch,
-      prUrl: pullRequest?.url,
-    });
-
-    while (true) {
-      await sleep(VIRTUAL_WORKER_SESSION_POLL_MS);
-      this.deps.workerEndpointRepository.touchWorkerEndpointHeartbeat(workerEndpointId, "connected");
-
-      const currentSession = this.deps.sessionTracking.getSession(session.id) || session;
-      const persistedTaskRun = this.deps.executionRepository.getTaskRunByDispatchId(claim.dispatch.id);
-      const terminalState = persistedTaskRun?.state === "COMPLETED"
-        ? "COMPLETED"
-        : persistedTaskRun?.state === "FAILED"
-          ? "FAILED"
-          : persistedTaskRun?.state === "QUOTA"
-            ? "QUOTA"
-            : persistedTaskRun?.state === "BLOCKED"
-              ? "BLOCKED"
-              : resolveTerminalDispatchState(currentSession);
-      const currentPullRequest = extractPullRequest(currentSession);
-      const update = this.deps.workerTaskDispatchService.updateDispatchForWorker({
-        workerEndpointId,
-        dispatchId: claim.dispatch.id,
-        leaseToken: claim.leaseToken,
-        state: terminalState || "RUNNING",
-        provider,
-        sessionId: currentSession.id,
-        sessionName: currentSession.name,
-        workerBranch: currentPullRequest?.workerBranch || claim.executionContext.featureBranch,
-        prUrl: currentPullRequest?.url,
-        summaryMarkdown: terminalState ? this.buildDispatchSummary(claim, currentSession) : undefined,
-        errorMessage: terminalState === "FAILED"
-          ? `Virtual worker session ended in state ${currentSession.state || "FAILED"}`
-          : undefined,
-      });
-
-      if (terminalState || update.controlAction === "cancel" || isTerminalSessionState(currentSession.state)) {
-        return;
-      }
-    }
-  }
-
-  private buildDispatchSummary(claim: WorkerTaskDispatchClaim, session: JulesSession): string {
-    const pullRequest = extractPullRequest(session);
-    return [
-      `Project: ${claim.project.name}`,
-      `Sprint: ${claim.sprint.name}`,
-      `Task: ${claim.task.taskKey} ${claim.task.title}`,
-      `Worker mode: virtual`,
-      `Provider: ${session.provider || "unknown"}`,
-      `State: ${session.state || "UNKNOWN"}`,
-      pullRequest?.workerBranch ? `Worker branch: ${pullRequest.workerBranch}` : null,
-      pullRequest?.url ? `Pull request: ${pullRequest.url}` : null,
-    ].filter(Boolean).join("\n");
-  }
-
-  private resolveCycleSettings(projectId: string): DashboardSettings {
+private resolveCycleSettings(projectId: string): DashboardSettings {
     const attentionItem = this.deps.projectAttentionService.listActiveProjectItems(projectId)
       .find((item) => item.ownerType === "worker" && this.projectUsesVirtualWorkers(item.projectId, item.sprintId));
     if (attentionItem) {
@@ -399,7 +287,7 @@ export class VirtualWorkerService {
     }
 
     if (claimed.attentionType === "ci_fix_required") {
-      await this.resolveCiFixAttention(workerEndpointId, claimed);
+      await this.ciAutofixManager.resolveCiFixAttention(workerEndpointId, claimed);
       return;
     }
 
@@ -631,160 +519,7 @@ export class VirtualWorkerService {
     }
   }
 
-  private async resolveCiFixAttention(workerEndpointId: string, item: ProjectAttentionItemRecord): Promise<void> {
-    const settings = this.resolveDashboardSettings(item.projectId, item.sprintId);
-    const route = resolveProviderForInvocation(settings, {
-      invocation: "ci_fix",
-      task: {
-        id: item.taskId || item.id,
-        title: item.title,
-        prompt: item.summaryMarkdown,
-        depends_on: [],
-        is_independent: true,
-        status: "PENDING",
-      },
-      providerPool: ["gemini", "codex", "claude-code"],
-    });
-    const provider = route.provider as Exclude<ProviderId, "jules">;
-    const providerConfigId = route.providerConfigId || route.provider;
-    const providerSettings = route.providers[providerConfigId];
-    const workflowSettings = {
-      ...DEFAULT_CLI_WORKFLOW_SETTINGS,
-      ...settings.cliWorkflow,
-    };
-    const payload = item.payload || {};
-    const repoPath = this.readRequiredString(payload.repoPath, "repoPath");
-    const branchName = this.readRequiredString(
-      payload.workerBranch ?? payload.branchName,
-      "branchName",
-    );
-
-    const retryKey = item.taskId || item.id;
-    const retryCount = this.ciAutofixRetryCounts.get(retryKey) || 0;
-    const maxRetries = settings.ciIntelligence.julesCiAutofixMaxRetries || 3;
-
-    if (retryCount >= maxRetries) {
-      this.escalateAttentionToHuman(workerEndpointId, item, `Virtual worker reached maximum CI autofix retries (${maxRetries}). Escalating to human.`);
-      return;
-    }
-
-    const sessionId = `virtual-cifix-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
-    let worktreePath = this.workspaceManager.buildWorktreePath(repoPath, sessionId, workflowSettings.executionMode);
-    const title = item.title;
-    let succeeded = false;
-    let initialHead = "";
-
-    this.deps.sessionTracking.createSession({
-      id: sessionId,
-      provider,
-      taskId: buildTaskRunKey(repoPath, 0, `attention-${item.id}`),
-      title,
-      prompt: item.summaryMarkdown,
-      state: "RUNNING",
-      featureBranch: branchName,
-      workerBranch: branchName,
-      repoPath,
-    });
-    this.deps.sessionTracking.appendActivity(sessionId, {
-      originator: "system",
-      description: `Virtual worker claimed CI fix for branch ${branchName} (Attempt ${retryCount + 1}/${maxRetries}).`,
-    });
-
-    let cleanedUp = false;
-    try {
-      const prepared = await this.workspaceManager.prepareWorktree(repoPath, worktreePath, branchName, branchName);
-      const finalWorktreePath = prepared.worktreePath;
-      worktreePath = finalWorktreePath;
-      initialHead = (await this.runWorkspaceCommand(finalWorktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
-
-      const workspaceGuidance = await this.workspaceManager.buildWorkspaceGuidance(item.summaryMarkdown, finalWorktreePath);
-      const providerPrompt = buildProviderPrompt(this.buildCiFixPrompt(item, branchName, workspaceGuidance), providerSettings.thinkingMode);
-      await this.runProviderWithRetry({
-        provider,
-        providerPrompt,
-        workflowSettings,
-        repoPath,
-        worktreePath: finalWorktreePath,
-        sessionId,
-        attentionItem: item,
-        purpose: "ci_fix",
-        model: providerSettings.model,
-        apiKey: providerSettings.apiKey,
-        providerMountAuth: providerSettings.mountAuth,
-        providerAuthPath: providerSettings.authPath,
-        githubToken: settings.git.githubToken,
-      });
-
-      const patchText = await this.workspaceArtifactService.exportBinaryPatch(finalWorktreePath, initialHead);
-      const applyResult = await this.workspaceArtifactService.applyPatchToBranch({
-        repoPath,
-        baseRef: initialHead,
-        workerBranch: branchName,
-        patchText,
-        commitMessage: `fix(ci): resolve failing checks on ${branchName}`,
-      });
-      const headSha = applyResult.commitSha || initialHead;
-      this.deps.sessionTracking.updateSession(sessionId, { state: "COMPLETED" });
-      this.deps.sessionTracking.appendActivity(sessionId, {
-        originator: "system",
-        description: `Pushed CI fix to ${branchName} at ${headSha}.`,
-      });
-
-      this.ciAutofixRetryCounts.set(retryKey, retryCount + 1);
-
-      this.deps.projectAttentionService.resolveItem(item.id, {
-        status: "resolved",
-        reason: "virtual_worker_ci_fix_resolved",
-        resolutionSummaryMarkdown: [
-          item.summaryMarkdown.trim(),
-          "",
-          `Virtual ${this.getProviderLabel(provider)} worker fixed CI issues and pushed the updated branch.`,
-          `Branch: ${branchName}`,
-          `Head SHA: ${headSha}`,
-          `Attempt: ${retryCount + 1}/${maxRetries}`,
-        ].join("\n"),
-        workerEndpointId,
-        payloadPatch: {
-          handledBy: "virtual_worker",
-          provider,
-          branchName,
-          headSha,
-          attempt: retryCount + 1,
-        },
-      });
-      succeeded = true;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.deps.sessionTracking.updateSession(sessionId, { state: "FAILED" });
-      this.deps.sessionTracking.appendActivity(sessionId, {
-        originator: "system",
-        description: `Virtual worker failed to fix CI issues: ${message}`,
-      });
-      this.escalateAttentionToHuman(workerEndpointId, item, [
-        `Virtual ${this.getProviderLabel(provider)} worker failed to fix CI issues automatically.`,
-        "",
-        `Error: ${message}`,
-        "",
-        item.summaryMarkdown.trim(),
-      ].join("\n"));
-    } finally {
-      const shouldCleanup = succeeded
-        ? workflowSettings.cleanupWorktreeOnSuccess
-        : true;
-      if (shouldCleanup) {
-        await this.workspaceManager.removeWorktree(repoPath, worktreePath).catch(() => undefined);
-        cleanedUp = true;
-      }
-      if (!cleanedUp) {
-        this.deps.sessionTracking.appendActivity(sessionId, {
-          originator: "system",
-          description: `Preserved CI-fix worktree at ${worktreePath}.`,
-        });
-      }
-    }
-  }
-
-  private buildCiFixPrompt(
+private buildCiFixPrompt(
     item: ProjectAttentionItemRecord,
     branchName: string,
     workspaceGuidance: string,

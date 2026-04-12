@@ -65,7 +65,7 @@ describe("VirtualWorkerService Extra Coverage", () => {
 
   it("extractPullRequest handles empty or null outputs", async () => {
     const { service } = await createFixture();
-    const extractPullRequest = (service as any).constructor.__proto__.extractPullRequest; 
+    const extractPullRequest = (await import("../../../src/services/worker/task-reconciliation-service.js")).extractPullRequest;
     // Wait, it's a top-level function, not exported.
     // I can't test it directly unless I use rewire or similar, but I can't.
     // I'll test it via handleTaskDispatch.
