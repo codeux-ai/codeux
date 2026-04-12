@@ -1,2 +1,2 @@
-1. **Initiate Memory Recording:** Record the learnings from this task regarding `useComputed` reactivity and the need for explicit signal assignments inside `useEffect` (with `batch()`) when dependencies are not signals themselves.
-2. **Submit:** Submit the changes with a clear commit message and description about consolidating side-effects and reducing rendering overhead.
+1. **Update `pnpm-lock.yaml`:** The GitHub Action failed with `ERR_PNPM_OUTDATED_LOCKFILE Cannot install with "frozen-lockfile" because pnpm-lock.yaml is not up to date with <ROOT>/package.json`. This is because I added `@preact/signals` to `package.json` and generated `package-lock.json`, but the project uses `pnpm` and `pnpm-lock.yaml`. I need to run `pnpm install` and commit the updated `pnpm-lock.yaml`.
+2. **Submit changes:** Push the updated `pnpm-lock.yaml` to fix the CI failure.
