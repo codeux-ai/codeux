@@ -23,7 +23,10 @@ import {
   DEFAULT_LEDGER_FILTERS,
   type LedgerSort,
   type SprintTableSortKey,
+  type SprintShowcaseFilter,
+  type SprintQaFilter,
 } from "../../lib/sprint-ledger-state.js";
+import type { SprintStatus } from "../../types.js";
 
 import { SprintLedgerHeader } from "./SprintLedgerHeader.js";
 import { SprintLedgerBulkActions } from "./SprintLedgerBulkActions.js";
@@ -66,9 +69,18 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
   const [sort, setSort] = useState<LedgerSort>({ key: "createdAt", direction: "desc" });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  const [statusFilter, setStatusFilter] = useState<Set<SprintStatus> | "all">(DEFAULT_LEDGER_FILTERS.status);
+  const [showcaseFilter, setShowcaseFilter] = useState<SprintShowcaseFilter>(DEFAULT_LEDGER_FILTERS.showcase);
+  const [qaFilter, setQaFilter] = useState<SprintQaFilter>(DEFAULT_LEDGER_FILTERS.qa);
+
   const filteredSprints = useMemo(
-    () => filterSprints(sprints, { ...DEFAULT_LEDGER_FILTERS, query: searchQuery }),
-    [sprints, searchQuery],
+    () => filterSprints(sprints, {
+      query: searchQuery,
+      status: statusFilter,
+      showcase: showcaseFilter,
+      qa: qaFilter,
+    }),
+    [sprints, searchQuery, statusFilter, showcaseFilter, qaFilter],
   );
 
   const ledgerSprints = useMemo(
@@ -186,6 +198,12 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
         onListWindowChange={onListWindowChange}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        showcaseFilter={showcaseFilter}
+        onShowcaseFilterChange={setShowcaseFilter}
+        qaFilter={qaFilter}
+        onQaFilterChange={setQaFilter}
       />
 
       <SprintLedgerBulkActions

@@ -5,6 +5,7 @@
 import { h } from "preact";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/preact";
+import userEvent from "@testing-library/user-event";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { SprintLedger } from "../../../dashboard/src/v2/components/sprints/SprintLedger.js";
 import type { Sprint } from "../../../dashboard/src/types.js";
@@ -112,6 +113,42 @@ describe("SprintLedger Component", () => {
       expect(screen.getByText("Alpha Design")).toBeInTheDocument();
       expect(screen.queryByText("Beta API")).not.toBeInTheDocument();
     });
+  });
+
+  it("filters visibility and restricts bulk selection to visible rows", async () => {
+    render(<SprintLedger {...defaultProps} listWindow="all" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Alpha Design")).toBeInTheDocument();
+      expect(screen.getByText("Beta API")).toBeInTheDocument();
+    });
+
+    // Check status filter.
+    const statusDropdown = document.getElementById("status-filter") as HTMLSelectElement;
+
+    await userEvent.selectOptions(statusDropdown, "running");
+
+    // When the status is running, we expect only sprint-1 ("Alpha Design", which is running) to show
+    // Wait for SprintLedger to update filtered rows and hide Beta API.
+    await waitFor(() => {
+      expect(screen.queryByText("Beta API")).not.toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Alpha Design")).toBeInTheDocument();
+
+    // Bulk select all visible
+    const checkboxes = screen.getAllByRole("button").filter(b => b.innerHTML.includes("lucide-square") || b.innerHTML.includes("lucide-check-square"));
+    // First checkbox is the select all header
+    fireEvent.click(checkboxes[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText("1 selected")).toBeInTheDocument();
+    });
+
+    // Bulk delete should only fire for Alpha
+    const bulkDeleteBtn = screen.getAllByText("Delete")[0];
+    fireEvent.click(bulkDeleteBtn);
+    expect(defaultProps.onBulkDelete).toHaveBeenCalledWith(["sprint-1"]);
   });
 
   it("selects, deselects, and performs bulk actions", async () => {
