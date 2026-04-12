@@ -1,6 +1,8 @@
 import type { FunctionComponent } from "preact";
 import { memo } from "preact/compat";
-import { useMemo } from "preact/hooks";
+import { useMemo, useLayoutEffect, useRef } from "preact/hooks";
+import gsap from "gsap";
+import { useReducedMotion } from "../hooks/use-reduced-motion.js";
 import { Bot, CheckCircle2, XCircle } from "lucide-preact";
 import { renderMarkdown } from "../../lib/markdown.js";
 import { formatTime } from "../../lib/time.js";
@@ -26,6 +28,37 @@ export const AttentionLedger: FunctionComponent = memo(() => {
         return new Map(pairs);
     }, [snapshot.overflowAssignedWorkers, snapshot.primaryAssignedWorker]);
 
+    const listRef = useRef<HTMLDivElement>(null);
+    const prevCountRef = useRef<number>(0);
+    const reducedMotion = useReducedMotion();
+
+    useLayoutEffect(() => {
+        if (!listRef.current || reducedMotion) {
+            prevCountRef.current = snapshot.attentionItems.length;
+            return;
+        }
+
+        const currentCount = snapshot.attentionItems.length;
+        if (currentCount > prevCountRef.current) {
+            // New items were added, animate them
+            const newCount = currentCount - prevCountRef.current;
+            const elements = Array.from(listRef.current.children).slice(0, newCount); // Assuming new items are at the top (or we just animate all if we don't know exactly)
+            // Wait, snapshot.attentionItems is mapped directly. If new items are added, they usually appear at the top or bottom.
+            // Let's just animate any elements that don't have a 'data-animated' attribute, or we can just stagger all if count changes, but the constraint says "animate the entry ... when they first mount".
+            // A simple way is to use a class or attribute.
+            const newElements = Array.from(listRef.current.children).filter(el => !el.hasAttribute('data-entered'));
+
+            if (newElements.length > 0) {
+                gsap.fromTo(newElements,
+                    { opacity: 0, x: -10 },
+                    { opacity: 1, x: 0, duration: 0.25, stagger: 0.04, ease: "power2.out" }
+                );
+                newElements.forEach(el => el.setAttribute('data-entered', 'true'));
+            }
+        }
+        prevCountRef.current = currentCount;
+    }, [snapshot.attentionItems.length, reducedMotion]);
+
     const openCount = snapshot.attentionItems.filter((item) => item.status === "open").length;
     const claimedCount = snapshot.attentionItems.filter((item) => item.status === "claimed").length;
     const canAutoClaim = Boolean(snapshot.primaryAssignedWorker || snapshot.overflowAssignedWorkers.length > 0);
@@ -49,7 +82,7 @@ export const AttentionLedger: FunctionComponent = memo(() => {
                     No active blockers are waiting in the project attention queue.
                 </p>
             ) : (
-                <div className="space-y-2 max-h-80 overflow-y-auto dashboard-scrollbar pr-1">
+                <div ref={listRef} className="space-y-2 max-h-80 overflow-y-auto dashboard-scrollbar pr-1">
                     {snapshot.attentionItems.slice(0, 8).map((item) => {
                         const assignedWorkerLabel = item.assignedWorkerEndpointId
                             ? workersByEndpointId.get(item.assignedWorkerEndpointId) || item.assignedWorkerEndpointId

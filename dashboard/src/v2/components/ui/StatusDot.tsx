@@ -10,11 +10,11 @@ export const StatusDot: FunctionComponent<StatusDotProps> = ({ status, className
     switch (status) {
         case "running":
             return (
-                <span
-                    role="status"
-                    aria-label={`Status: ${status}`}
-                    className={`shrink-0 ${className} rounded-full bg-status-green shadow-[0_0_10px_rgba(0,171,132,0.7)] animate-pulse-slow`}
-                />
+                <div role="status" aria-label={`Status: ${status}`} className={`shrink-0 relative ${className}`}>
+                    <div className="w-full h-full rounded-full bg-status-green shadow-[0_0_10px_rgba(0,171,132,0.7)] z-10 relative" />
+                    <div className="absolute inset-[-4px] bg-status-green rounded-full motion-safe:animate-ping opacity-30 pointer-events-none" />
+                    <div className="absolute inset-[-2px] bg-status-green rounded-full motion-safe:animate-pulse opacity-50 pointer-events-none" />
+                </div>
             );
         case "failed":
             return (
