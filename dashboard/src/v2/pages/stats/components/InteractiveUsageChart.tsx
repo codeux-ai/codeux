@@ -187,7 +187,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                 </button>
               ) : null}
             </div>
-            <div className="flex w-full overflow-x-auto gap-8 pb-4 mb-2 usage-filter-scrollbar">
+            <div className="flex flex-wrap max-h-36 overflow-y-auto dropdown-scrollbar pr-2 gap-x-6 gap-y-4 pb-4 mb-2">
                 {Object.entries(seriesGroups).map(([grouping, groupSeries]) => (
                   <div key={grouping} className="flex flex-col gap-2 shrink-0">
                     <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400 pl-1">{grouping}</div>

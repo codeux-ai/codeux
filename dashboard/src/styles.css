@@ -498,30 +498,3 @@
   animation-delay: -5s;
   animation-duration: 12s;
 }
-
-/* Usage Filter Scrollbar Styles */
-.usage-filter-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(15, 23, 42, 0.1) transparent;
-}
-
-.dark .usage-filter-scrollbar {
-  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
-}
-
-.usage-filter-scrollbar::-webkit-scrollbar {
-  height: 6px;
-}
-
-.usage-filter-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.usage-filter-scrollbar::-webkit-scrollbar-thumb {
-  background-color: rgba(15, 23, 42, 0.1);
-  border-radius: 20px;
-}
-
-.dark .usage-filter-scrollbar::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.1);
-}

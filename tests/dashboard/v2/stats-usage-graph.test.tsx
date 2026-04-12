@@ -170,7 +170,7 @@ describe("InteractiveUsageChart", () => {
     expect(screen.getAllByText("task coding Time").length).toBeGreaterThan(0);
 
     // Ensure the new scrollable container is rendered
-    expect(document.querySelector('.usage-filter-scrollbar')).toBeInTheDocument();
+    expect(document.querySelector('.dropdown-scrollbar')).toBeInTheDocument();
   });
 
   it("preserves state when rendering with the same stats context", () => {
