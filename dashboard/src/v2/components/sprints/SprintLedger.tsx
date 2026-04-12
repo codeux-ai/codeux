@@ -20,6 +20,7 @@ import {
   pruneSelection,
   getSelectedFilteredSprints,
   nextSort,
+  DEFAULT_LEDGER_FILTERS,
   type LedgerSort,
   type SprintTableSortKey,
 } from "../../lib/sprint-ledger-state.js";
@@ -66,7 +67,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const filteredSprints = useMemo(
-    () => filterSprints(sprints, searchQuery),
+    () => filterSprints(sprints, { ...DEFAULT_LEDGER_FILTERS, query: searchQuery }),
     [sprints, searchQuery],
   );
 
