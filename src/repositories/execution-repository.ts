@@ -351,7 +351,7 @@ export class ExecutionRepository {
 
     const now = new Date().toISOString();
     const updates: string[] = [];
-    const values: any[] = [];
+    const values: unknown[] = [];
 
     if (input.status !== undefined) {
       updates.push("status = ?");
@@ -1019,7 +1019,7 @@ export class ExecutionRepository {
       getWallTimeTotalsBySprintRunIdsForRange: (id, start, end, now) => this.getWallTimeTotalsBySprintRunIdsForRange(id, start, end, now),
       getTaskMetadata: (id) => this.getTaskMetadata(id),
       getSprintMetadata: (id) => this.getSprintMetadata(id),
-      mapProviderInvocationUsageRow: (row: any) => mapProviderInvocationUsageRow(row as any),
+      mapProviderInvocationUsageRow: (row: ProviderInvocationUsageRow) => mapProviderInvocationUsageRow(row),
       mergeUsageTotals: (target, source) => this.mergeUsageTotals(target, source),
       mergeUsageMap: (map, key, source) => this.mergeUsageMap(map, key, source),
       updateLastActivity: (map, key, date) => this.updateLastActivity(map, key, date),

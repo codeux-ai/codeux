@@ -3,7 +3,42 @@ import type { ProjectManagementRepository } from "../../repositories/project-man
 import type { ExecutionControlService } from "../../services/execution-control-service.js";
 import type { ExecutionRepository } from "../../repositories/execution-repository.js";
 import type { TaskRerunService } from "../../services/task-rerun-service.js";
-import { randomUUID } from "crypto";
+import type { ProviderId } from "../../contracts/app-types.js";
+import type { TaskPriority } from "../../contracts/project-management-types.js";
+import { z } from "zod";
+
+const listTasksSchema = z.object({
+  projectId: z.string(),
+  sprintId: z.string(),
+});
+
+const getTaskSchema = z.object({
+  taskId: z.string(),
+});
+
+const createTaskSchema = z.object({
+  projectId: z.string(),
+  sprintId: z.string(),
+  title: z.string().optional().default("New Task"),
+  promptMarkdown: z.string().optional().default(""),
+  description: z.string().optional().default(""),
+  priority: z.enum(["critical", "high", "medium", "low"]).optional().default("medium"),
+  dependsOnTaskIds: z.array(z.string()).optional().default([]),
+});
+
+const updateTaskSchema = z.object({
+  taskId: z.string(),
+  title: z.string().optional(),
+  promptMarkdown: z.string().optional(),
+  description: z.string().optional(),
+  priority: z.enum(["critical", "high", "medium", "low"]).optional(),
+  dependsOnTaskIds: z.array(z.string()).optional(),
+});
+
+const startTaskSchema = z.object({
+  taskId: z.string(),
+  provider: z.string().optional(),
+});
 
 export class TaskActions {
   constructor(
@@ -43,52 +78,29 @@ export class TaskActions {
   }
 
   private listTasks(payload: Record<string, unknown>): ManagementResponseEnvelope {
-    const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
-    const sprintId = typeof payload.sprintId === "string" ? payload.sprintId : undefined;
-
-    if (!projectId || !sprintId) {
-      throw new Error("projectId and sprintId are required for listing tasks");
-    }
-
-    const tasks = this.projectManagementRepository.listTasks(projectId, sprintId);
+    const parsed = listTasksSchema.parse(payload);
+    const tasks = this.projectManagementRepository.listTasks(parsed.projectId, parsed.sprintId);
     return { result: { tasks } };
   }
 
   private getTask(payload: Record<string, unknown>): ManagementResponseEnvelope {
-    const taskId = typeof payload.taskId === "string" ? payload.taskId : undefined;
-
-    if (!taskId) {
-      throw new Error("taskId is required");
-    }
-
-    const task = this.projectManagementRepository.getTask(taskId);
+    const parsed = getTaskSchema.parse(payload);
+    const task = this.projectManagementRepository.getTask(parsed.taskId);
     if (!task) {
-      throw new Error(`Task not found: ${taskId}`);
+      throw new Error(`Task not found: ${parsed.taskId}`);
     }
-
     return { result: { task } };
   }
 
   private createTask(payload: Record<string, unknown>): ManagementResponseEnvelope {
-    const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
-    const sprintId = typeof payload.sprintId === "string" ? payload.sprintId : undefined;
-
-    if (!projectId || !sprintId) {
-      throw new Error("projectId and sprintId are required for creating tasks");
-    }
-
-    const title = typeof payload.title === "string" ? payload.title : "New Task";
-    const promptMarkdown = typeof payload.promptMarkdown === "string" ? payload.promptMarkdown : "";
-    const description = typeof payload.description === "string" ? payload.description : "";
-    const priority = typeof payload.priority === "string" ? payload.priority : "P2";
-
-    const task = this.projectManagementRepository.createTask(projectId, {
-      sprintId,
-      title,
-      promptMarkdown,
-      description,
-      priority: priority as any,
-      dependsOnTaskIds: Array.isArray(payload.dependsOnTaskIds) ? payload.dependsOnTaskIds.filter(id => typeof id === 'string') : [],
+    const parsed = createTaskSchema.parse(payload);
+    const task = this.projectManagementRepository.createTask(parsed.projectId, {
+      sprintId: parsed.sprintId,
+      title: parsed.title,
+      promptMarkdown: parsed.promptMarkdown,
+      description: parsed.description,
+      priority: parsed.priority as TaskPriority,
+      dependsOnTaskIds: parsed.dependsOnTaskIds,
       executorType: "auto",
       status: "pending"
     });
@@ -97,73 +109,59 @@ export class TaskActions {
   }
 
   private updateTask(payload: Record<string, unknown>): ManagementResponseEnvelope {
-    const taskId = typeof payload.taskId === "string" ? payload.taskId : undefined;
-    if (!taskId) {
-      throw new Error("taskId is required");
-    }
+    const parsed = updateTaskSchema.parse(payload);
 
-    const updateInput: Record<string, any> = {};
-    if (typeof payload.title === "string") updateInput.title = payload.title;
-    if (typeof payload.promptMarkdown === "string") updateInput.promptMarkdown = payload.promptMarkdown;
-    if (typeof payload.description === "string") updateInput.description = payload.description;
-    if (typeof payload.priority === "string") updateInput.priority = payload.priority;
-    if (Array.isArray(payload.dependsOnTaskIds)) {
-        updateInput.dependsOnTaskIds = payload.dependsOnTaskIds.filter(id => typeof id === "string");
-    }
+    const updateInput: Record<string, unknown> = {};
+    if (parsed.title !== undefined) updateInput.title = parsed.title;
+    if (parsed.promptMarkdown !== undefined) updateInput.promptMarkdown = parsed.promptMarkdown;
+    if (parsed.description !== undefined) updateInput.description = parsed.description;
+    if (parsed.priority !== undefined) updateInput.priority = parsed.priority as TaskPriority;
+    if (parsed.dependsOnTaskIds !== undefined) updateInput.dependsOnTaskIds = parsed.dependsOnTaskIds;
 
-    const task = this.projectManagementRepository.updateTask(taskId, updateInput);
+    const task = this.projectManagementRepository.updateTask(parsed.taskId, updateInput);
     if (!task) {
-        throw new Error(`Task not found: ${taskId}`);
+        throw new Error(`Task not found: ${parsed.taskId}`);
     }
 
     return { result: { task } };
   }
 
   private deleteTask(args: ManageSprintOsArgs): ManagementResponseEnvelope {
-    const taskId = typeof args.payload.taskId === "string" ? args.payload.taskId : undefined;
-    if (!taskId) {
-      throw new Error("taskId is required");
-    }
+    const parsed = getTaskSchema.parse(args.payload);
 
     if (args.approval?.confirmed !== true) {
       return {
         approvalRequired: true,
-        approvalMessage: `Are you sure you want to delete task ${taskId}?`,
+        approvalMessage: `Are you sure you want to delete task ${parsed.taskId}?`,
       };
     }
 
-    this.projectManagementRepository.deleteTask(taskId);
+    this.projectManagementRepository.deleteTask(parsed.taskId);
     return { result: { success: true } };
   }
 
   private async startTask(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const taskId = typeof payload.taskId === "string" ? payload.taskId : undefined;
-    if (!taskId) {
-      throw new Error("taskId is required");
-    }
+    const parsed = startTaskSchema.parse(payload);
 
-    const task = await this.taskRerunService.rerunTask(taskId, {
-        provider: typeof payload.provider === "string" ? payload.provider as any : undefined,
+    const task = await this.taskRerunService.rerunTask(parsed.taskId, {
+        provider: parsed.provider as ProviderId | undefined,
     });
     return { result: { task } };
   }
 
   private async stopTask(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const taskId = typeof payload.taskId === "string" ? payload.taskId : undefined;
-    if (!taskId) {
-      throw new Error("taskId is required");
-    }
+    const parsed = getTaskSchema.parse(payload);
 
-    const task = this.projectManagementRepository.getTask(taskId);
+    const task = this.projectManagementRepository.getTask(parsed.taskId);
     if (!task) {
-        throw new Error(`Task not found: ${taskId}`);
+        throw new Error(`Task not found: ${parsed.taskId}`);
     }
 
     const dispatches = this.executionRepository.listTaskDispatches({ projectId: task.projectId });
-    const latestDispatch = dispatches.filter(d => d.taskId === taskId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    const latestDispatch = dispatches.filter(d => d.taskId === parsed.taskId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
 
     if (!latestDispatch) {
-        throw new Error(`No dispatch found for task: ${taskId}`);
+        throw new Error(`No dispatch found for task: ${parsed.taskId}`);
     }
 
     const dispatch = await this.executionControlService.cancelTaskDispatch(latestDispatch.id);
@@ -171,21 +169,18 @@ export class TaskActions {
   }
 
   private async forceStopTask(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const taskId = typeof payload.taskId === "string" ? payload.taskId : undefined;
-    if (!taskId) {
-      throw new Error("taskId is required");
-    }
+    const parsed = getTaskSchema.parse(payload);
 
-    const task = this.projectManagementRepository.getTask(taskId);
+    const task = this.projectManagementRepository.getTask(parsed.taskId);
     if (!task) {
-        throw new Error(`Task not found: ${taskId}`);
+        throw new Error(`Task not found: ${parsed.taskId}`);
     }
 
     const dispatches = this.executionRepository.listTaskDispatches({ projectId: task.projectId });
-    const latestDispatch = dispatches.filter(d => d.taskId === taskId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    const latestDispatch = dispatches.filter(d => d.taskId === parsed.taskId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
 
     if (!latestDispatch) {
-        throw new Error(`No dispatch found for task: ${taskId}`);
+        throw new Error(`No dispatch found for task: ${parsed.taskId}`);
     }
 
     const dispatch = await this.executionControlService.forceCancelTaskDispatch(latestDispatch.id);
@@ -193,21 +188,18 @@ export class TaskActions {
   }
 
   private async pauseTask(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const taskId = typeof payload.taskId === "string" ? payload.taskId : undefined;
-    if (!taskId) {
-      throw new Error("taskId is required");
-    }
+    const parsed = getTaskSchema.parse(payload);
 
-    const task = this.projectManagementRepository.getTask(taskId);
+    const task = this.projectManagementRepository.getTask(parsed.taskId);
     if (!task) {
-        throw new Error(`Task not found: ${taskId}`);
+        throw new Error(`Task not found: ${parsed.taskId}`);
     }
 
     const dispatches = this.executionRepository.listTaskDispatches({ projectId: task.projectId });
-    const latestDispatch = dispatches.filter(d => d.taskId === taskId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    const latestDispatch = dispatches.filter(d => d.taskId === parsed.taskId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
 
     if (!latestDispatch) {
-        throw new Error(`No dispatch found for task: ${taskId}`);
+        throw new Error(`No dispatch found for task: ${parsed.taskId}`);
     }
 
     const dispatch = await this.executionControlService.pauseTaskDispatch(latestDispatch.id);
@@ -215,18 +207,15 @@ export class TaskActions {
   }
 
   private inspectRun(payload: Record<string, unknown>): ManagementResponseEnvelope {
-    const taskId = typeof payload.taskId === "string" ? payload.taskId : undefined;
-    if (!taskId) {
-      throw new Error("taskId is required");
-    }
+    const parsed = getTaskSchema.parse(payload);
 
-    const task = this.projectManagementRepository.getTask(taskId);
+    const task = this.projectManagementRepository.getTask(parsed.taskId);
     if (!task) {
-        throw new Error(`Task not found: ${taskId}`);
+        throw new Error(`Task not found: ${parsed.taskId}`);
     }
 
     const dispatches = this.executionRepository.listTaskDispatches({ projectId: task.projectId });
-    const latestDispatch = dispatches.filter(d => d.taskId === taskId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+    const latestDispatch = dispatches.filter(d => d.taskId === parsed.taskId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
 
     if (!latestDispatch) {
         return { result: { task, dispatch: null, taskRun: null } };

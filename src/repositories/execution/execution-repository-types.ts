@@ -121,9 +121,9 @@ export interface ProviderInvocationUsageRow {
   usage_source: string;
   cost_cents: number | string | null;
   connection_id: string | null;
-  raw_usage_json?: string | null;
+  raw_usage_json: string | null;
   created_at: string;
-  updated_at?: string;
+  updated_at: string;
 }
 
 export interface ProjectAttentionSummaryRow {

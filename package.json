@@ -44,7 +44,8 @@
     "marked": "^17.0.3",
     "onnxruntime-node": "^1.24.3",
     "preact": "^10.29.0",
-    "three": "^0.183.2"
+    "three": "^0.183.2",
+    "zod": "^4.3.6"
   },
   "pnpm": {
     "overrides": {

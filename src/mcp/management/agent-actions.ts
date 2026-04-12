@@ -1,5 +1,45 @@
 import type { ManageSprintOsArgs, ManagementResponseEnvelope } from "../../contracts/internal-management-types.js";
 import type { AgentPresetSyncService } from "../../services/agent-preset-sync-service.js";
+import { z } from "zod";
+
+const listAgentsSchema = z.object({
+  projectId: z.string(),
+});
+
+const getAgentSchema = z.object({
+  projectId: z.string(),
+  presetId: z.string(),
+});
+
+const syncAgentsSchema = z.object({
+  projectId: z.string(),
+});
+
+const createAgentSchema = z.object({
+  projectId: z.string(),
+  name: z.string().optional().default("New Agent"),
+  instructionMarkdown: z.string().optional().default(""),
+  labels: z.array(z.string()).optional().default([]),
+  avatarConfig: z.record(z.string(), z.unknown()).optional(),
+  memoryTemplateOverrideEnabled: z.boolean().optional(),
+  memoryTemplateMarkdown: z.string().optional(),
+});
+
+const updateAgentSchema = z.object({
+  projectId: z.string(),
+  presetId: z.string(),
+  name: z.string().optional(),
+  instructionMarkdown: z.string().optional(),
+  labels: z.array(z.string()).optional(),
+  avatarConfig: z.record(z.string(), z.unknown()).optional(),
+  memoryTemplateOverrideEnabled: z.boolean().optional(),
+  memoryTemplateMarkdown: z.string().optional(),
+});
+
+const deleteAgentSchema = z.object({
+  projectId: z.string(),
+  presetId: z.string(),
+});
 
 export class AgentActions {
   constructor(private readonly agentPresetSyncService: AgentPresetSyncService) {}
@@ -26,15 +66,13 @@ export class AgentActions {
   }
 
   private async listAgents(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
-    if (!projectId) throw new Error("projectId is required");
-    const agents = await this.agentPresetSyncService.listAgentPresets(projectId);
+    const parsed = listAgentsSchema.parse(payload);
+    const agents = await this.agentPresetSyncService.listAgentPresets(parsed.projectId);
     return { result: { agents } };
   }
 
   private async getAgent(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const presetId = typeof payload.presetId === "string" ? payload.presetId : undefined;
-    if (!presetId) throw new Error("presetId is required");
+    const parsed = getAgentSchema.parse(payload);
 
     // We get the specific preset ID directly through the sync service to make sure it exists and gets decorated properly if possible.
     // However, the service doesn't have a direct `getAgentPresetById` that we can access publicly except via specific flows.
@@ -42,77 +80,64 @@ export class AgentActions {
     // Since this is management, we might just list and filter if there's no direct getter, but wait, `AgentPresetRepository` has `getAgentPreset`.
     // Actually, `AgentPresetSyncService` has methods like `resolveTargetedQualityAssuranceAgent` but that's specific.
     // Let's use `listAgentPresets` to find it, which is fully decorated.
-    const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
-    if (!projectId) throw new Error("projectId is required");
-
-    const agents = await this.agentPresetSyncService.listAgentPresets(projectId);
-    const agent = agents.find((a: any) => a.id === presetId);
+    const agents = await this.agentPresetSyncService.listAgentPresets(parsed.projectId);
+    const agent = agents.find((a: any) => a.id === parsed.presetId);
 
     if (!agent) {
-      throw new Error(`Agent not found: ${presetId}`);
+      throw new Error(`Agent not found: ${parsed.presetId}`);
     }
 
     return { result: { agent } };
   }
 
   private async syncAgents(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
-    if (!projectId) throw new Error("projectId is required");
+    const parsed = syncAgentsSchema.parse(payload);
 
     // The service supports full project sync via `syncProjectAgents`
     // Explicit preset sync can be handled by just syncing the whole project
-    await this.agentPresetSyncService.syncProjectAgents(projectId);
+    await this.agentPresetSyncService.syncProjectAgents(parsed.projectId);
 
     return { result: { success: true } };
   }
 
   private async createAgent(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
-    if (!projectId) throw new Error("projectId is required");
+    const parsed = createAgentSchema.parse(payload);
 
-    const name = typeof payload.name === "string" ? payload.name : "New Agent";
-    const instructionMarkdown = typeof payload.instructionMarkdown === "string" ? payload.instructionMarkdown : "";
-    const avatarConfig = payload.avatarConfig as any;
-
-    const agent = await this.agentPresetSyncService.createAgentPreset(projectId, {
-      name,
-      instructionMarkdown,
-      labels: Array.isArray(payload.labels) ? payload.labels.filter((l: any) => typeof l === "string") : [],
-      avatarConfig,
-      memoryTemplateOverrideEnabled: typeof payload.memoryTemplateOverrideEnabled === "boolean" ? payload.memoryTemplateOverrideEnabled : undefined,
-      memoryTemplateMarkdown: typeof payload.memoryTemplateMarkdown === "string" ? payload.memoryTemplateMarkdown : undefined,
+    const agent = await this.agentPresetSyncService.createAgentPreset(parsed.projectId, {
+      name: parsed.name,
+      instructionMarkdown: parsed.instructionMarkdown,
+      labels: parsed.labels,
+      avatarConfig: parsed.avatarConfig,
+      memoryTemplateOverrideEnabled: parsed.memoryTemplateOverrideEnabled,
+      memoryTemplateMarkdown: parsed.memoryTemplateMarkdown,
     });
 
     return { result: { agent } };
   }
 
   private async updateAgent(payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
-    const presetId = typeof payload.presetId === "string" ? payload.presetId : undefined;
-    if (!projectId || !presetId) throw new Error("projectId and presetId are required");
+    const parsed = updateAgentSchema.parse(payload);
 
-    const updateInput: Record<string, any> = {};
-    if (typeof payload.name === "string") updateInput.name = payload.name;
-    if (typeof payload.instructionMarkdown === "string") updateInput.instructionMarkdown = payload.instructionMarkdown;
-    if (Array.isArray(payload.labels)) updateInput.labels = payload.labels.filter((l: any) => typeof l === "string");
-    if (payload.avatarConfig !== undefined) updateInput.avatarConfig = payload.avatarConfig;
-    if (typeof payload.memoryTemplateOverrideEnabled === "boolean") updateInput.memoryTemplateOverrideEnabled = payload.memoryTemplateOverrideEnabled;
-    if (typeof payload.memoryTemplateMarkdown === "string") updateInput.memoryTemplateMarkdown = payload.memoryTemplateMarkdown;
+    const updateInput: Record<string, unknown> = {};
+    if (parsed.name !== undefined) updateInput.name = parsed.name;
+    if (parsed.instructionMarkdown !== undefined) updateInput.instructionMarkdown = parsed.instructionMarkdown;
+    if (parsed.labels !== undefined) updateInput.labels = parsed.labels;
+    if (parsed.avatarConfig !== undefined) updateInput.avatarConfig = parsed.avatarConfig;
+    if (parsed.memoryTemplateOverrideEnabled !== undefined) updateInput.memoryTemplateOverrideEnabled = parsed.memoryTemplateOverrideEnabled;
+    if (parsed.memoryTemplateMarkdown !== undefined) updateInput.memoryTemplateMarkdown = parsed.memoryTemplateMarkdown;
 
-    const agent = await this.agentPresetSyncService.updateAgentPreset(presetId, updateInput);
+    const agent = await this.agentPresetSyncService.updateAgentPreset(parsed.presetId, updateInput);
     return { result: { agent } };
   }
 
   private async deleteAgent(args: ManageSprintOsArgs, payload: Record<string, unknown>): Promise<ManagementResponseEnvelope> {
-    const projectId = typeof payload.projectId === "string" ? payload.projectId : undefined;
-    const presetId = typeof payload.presetId === "string" ? payload.presetId : undefined;
-    if (!projectId || !presetId) throw new Error("projectId and presetId are required");
+    const parsed = deleteAgentSchema.parse(payload);
 
     if (args.approval?.confirmed !== true) {
-      return { approvalRequired: true, approvalMessage: `Are you sure you want to delete agent ${presetId}?` };
+      return { approvalRequired: true, approvalMessage: `Are you sure you want to delete agent ${parsed.presetId}?` };
     }
 
-    await this.agentPresetSyncService.deleteAgentPreset(presetId);
+    await this.agentPresetSyncService.deleteAgentPreset(parsed.presetId);
     return { result: { success: true } };
   }
 }
