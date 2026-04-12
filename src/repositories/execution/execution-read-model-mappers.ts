@@ -7,7 +7,8 @@ import {
   OverviewTelemetryProjectSummary,
 } from "../../contracts/app-types.js";
 import { ProviderInvocationUsageRecord } from "../../contracts/execution-types.js";
-import { ExecutionInvocationRecord, ExecutionInvocationMessageRecord } from "../../contracts/invocation-types.js";
+import { ExecutionInvocationRecord, ExecutionInvocationMessageRecord, ExecutionInvocationStatus } from "../../contracts/invocation-types.js";
+import { ProviderErrorCategory } from "../../shared/providers/provider-error-classifier.js";
 import { toNumber, parsePayloadJson } from "./execution-utils.js";
 import {
   ExecutionSprintRunSummaryRow,
@@ -183,12 +184,12 @@ export function mapExecutionInvocationRow(row: ExecutionInvocationRow): Executio
     attentionItemId: row.attention_item_id,
     providerInvocationId: row.provider_invocation_id,
     type: row.type,
-    status: row.status as ExecutionInvocationRecord["status"],
+    status: row.status as ExecutionInvocationStatus,
     provider: row.provider,
     model: row.model,
     systemPrompt: row.system_prompt,
     errorMessage: row.error_message,
-    lastErrorCategory: row.last_error_category as ExecutionInvocationRecord["lastErrorCategory"],
+    lastErrorCategory: row.last_error_category as ProviderErrorCategory,
     lastErrorMessage: row.last_error_message,
     lastRetryAfterIso: row.last_retry_after_iso,
     messageCount: toNumber(row.message_count),

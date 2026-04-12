@@ -1,3 +1,4 @@
+import { useComputed } from "@preact/signals";
 import type { FunctionComponent } from "preact";
 import { lazy, Suspense } from "preact/compat";
 import { useLayoutEffect, useRef, useState, useEffect, useMemo } from "preact/hooks";
@@ -200,15 +201,16 @@ export const LiveSessionPage: FunctionComponent = () => {
             : execution.sprintRuns;
     }, [execution.sprintRuns, sprintScopeId, sprintScopeReady]);
 
-    const visibleTasksWithLiveActivities = useMemo(() => (
+    const visibleTasksWithLiveActivitiesSignal = useComputed(() => (
         tasksWithLiveActivities.map((task) => projectLiveTask(task, sprintDispatches, sprintEvents))
-    ), [sprintDispatches, sprintEvents, tasksWithLiveActivities]);
+    ));
+    const visibleTasksWithLiveActivities = visibleTasksWithLiveActivitiesSignal.value;
 
     const hasSprintContext = rawHasSprintContext || visibleTasksWithLiveActivities.length > 0;
 
     const [nowIso, setNowIso] = useState(() => new Date().toISOString());
 
-    const visibleStats = useMemo(() => {
+    const visibleStatsSignal = useComputed(() => {
         if (!hasSprintContext) return EMPTY_RUNTIME_STATS;
         return {
             total: visibleTasksWithLiveActivities.length,
@@ -222,7 +224,8 @@ export const LiveSessionPage: FunctionComponent = () => {
             mergeBlocked: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "MERGE_BLOCKED").length,
             mergeConflicts: visibleTasksWithLiveActivities.filter((task) => task.merge_indicator === "MERGE_CONFLICT").length,
         };
-    }, [hasSprintContext, visibleTasksWithLiveActivities]);
+    });
+    const visibleStats = visibleStatsSignal.value;
 
     const { sprintTiming, taskTimings, taskTimingMap } = useLiveTaskTimingSummaries({
         tasks: visibleTasksWithLiveActivities,
