@@ -27,9 +27,11 @@ describe("runStatusDerivationStep", () => {
       },
     ];
 
+    const tasksById = new Map(subtasks.map((t) => [t.id, t]));
     const result = runStatusDerivationStep(subtasks, {
       retryFailed: true,
       isActionRequiredState,
+      tasksById,
     });
 
     expect(result[1].status).toBe("PENDING");

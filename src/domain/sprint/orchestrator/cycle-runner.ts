@@ -84,6 +84,7 @@ export class CycleRunner {
         )
       : [];
     const cycleEntryStates = new Map(subtasks.map((task) => [task.id, task.status]));
+    const tasksById = new Map(subtasks.map((task) => [task.id, task]));
     const activeProjectAttentionItems = typeof this.deps.projectAttentionService?.listActiveProjectItems === "function"
       ? this.deps.projectAttentionService.listActiveProjectItems(args.executionContext.project.id)
       : [];
@@ -136,6 +137,7 @@ export class CycleRunner {
       subtasks = runStatusDerivationStep(subtasks, {
         retryFailed: args.retryFailed,
         isActionRequiredState: this.deps.isActionRequiredState,
+        tasksById,
       });
       await this.captureTaskCompletionMemories(subtasks, cycleEntryStates, args, dashboardSettings);
       await this.reviewCompletedTasks(subtasks, cycleEntryStates, args, dashboardSettings);
@@ -276,6 +278,7 @@ export class CycleRunner {
         subtasks = runStatusDerivationStep(subtasks, {
           retryFailed: args.retryFailed,
           isActionRequiredState: this.deps.isActionRequiredState,
+          tasksById,
         });
       }
 
