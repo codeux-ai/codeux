@@ -171,9 +171,6 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
 
         {(humanIntervention || sprint.latestReview) && (
           <div className="absolute right-6 top-6 flex items-center gap-2">
-            {sprint.latestReview && (
-              <SprintReviewBadge summary={sprint.latestReview} compact align="right" />
-            )}
             {humanIntervention && (
               <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="right" />
             )}
@@ -185,9 +182,14 @@ export const SprintBubble: FunctionComponent<SprintBubbleProps> = ({
           {formatSprintKey(sprint)}
         </div>
 
-        <h3 className="mt-4 w-full px-4 font-display text-2xl font-black leading-tight tracking-tight text-slate-900 transition-transform duration-300 group-hover:-translate-y-3 dark:text-white">
-          {sprint.name}
-        </h3>
+        <div className="mt-4 flex w-full flex-col items-center justify-center gap-3 px-4 transition-transform duration-300 group-hover:-translate-y-3">
+          <h3 className="font-display text-2xl font-black leading-tight tracking-tight text-slate-900 dark:text-white">
+            {sprint.name}
+          </h3>
+          {sprint.latestReview && (
+            <SprintReviewBadge summary={sprint.latestReview} compact align="center" />
+          )}
+        </div>
 
         <div className="mt-6 flex items-center justify-center gap-7 text-center transition-transform duration-300 group-hover:-translate-y-3">
           <div className="flex flex-col items-center">

@@ -75,14 +75,14 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
 
   // Polished stripe depth
   const rowBg = isSelected
-    ? "bg-signal-jade/[0.1] dark:bg-slate-500/[0.08]"
+    ? "bg-black/[0.04] dark:bg-white/[0.04]"
     : isEven
       ? "bg-white/80 dark:bg-slate-900/40"
       : "bg-slate-50/80 dark:bg-slate-800/40";
 
   return (
     <tr
-      className={`group border-b border-black/[0.06] transition-colors hover:bg-gradient-to-r hover:from-transparent hover:via-slate-500/[0.04] hover:to-transparent focus-within:bg-white/[0.03] dark:border-white/[0.06] dark:hover:via-slate-500/[0.06] ${rowBg} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""}`}
+      className={`group border-b border-black/[0.06] transition-colors hover:bg-gradient-to-r hover:from-transparent hover:to-transparent focus-within:bg-white/[0.03] dark:border-white/[0.06] ${rowBg} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""}`}
     >
       <td className="px-4 py-3 pl-6 align-middle">
         <button
@@ -117,7 +117,12 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
         </div>
       </td>
       <td className="px-4 py-3 min-w-0 max-w-full align-middle">
-        <div className={`font-display text-lg font-black tracking-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-slate-900 dark:text-white"}`}>{sprint.name}</div>
+        <div className="flex items-center gap-3">
+          <div className={`font-display text-lg font-black tracking-tight break-words ${isCompleted ? "text-slate-700 dark:text-slate-300" : "text-slate-900 dark:text-white"}`}>{sprint.name}</div>
+          {sprint.latestReview && (
+            <SprintReviewBadge summary={sprint.latestReview} compact align="left" />
+          )}
+        </div>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-mono text-slate-400">
           <span>Updated {formatMetaDate(sprint.updatedAt)}</span>
           <span>·</span>
@@ -126,11 +131,6 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
         {humanIntervention && (
           <div className="mt-3">
             <HumanInterventionBadge summary={humanIntervention} label="Needs you" compact align="left" />
-          </div>
-        )}
-        {sprint.latestReview && (
-          <div className="mt-3">
-            <SprintReviewBadge summary={sprint.latestReview} compact align="left" />
           </div>
         )}
         {sprint.goal ? (
@@ -170,22 +170,21 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
       <td className="px-4 py-3 align-middle">
         <div className="font-medium text-slate-700 dark:text-slate-200">{formatTableDate(sprint.createdAt)}</div>
         <div className="mt-1 text-[10px] uppercase tracking-[0.14em] text-slate-400">created</div>
-        {sprint.latestReview?.status === 'completed' && (
-          <div className="group/reviewed mt-1.5 inline-flex items-center gap-1 cursor-default">
-            <CheckCircle2 className="h-3.5 w-3.5 text-signal-500 transition-transform duration-300 group-hover/reviewed:scale-110" strokeWidth={2.2} />
-            <span className="max-w-0 overflow-hidden opacity-0 transition-all duration-300 ease-out text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500 whitespace-nowrap group-hover/reviewed:max-w-[5rem] group-hover/reviewed:opacity-100">
-              Reviewed
-            </span>
-          </div>
-        )}
-        {sprint.latestReview?.status === 'running' && (
-          <div className="mt-1.5 inline-flex items-center gap-1">
-            <Loader2 className="h-3.5 w-3.5 text-signal-500 animate-spin" strokeWidth={2.2} />
-            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500 animate-pulse">
-              Reviewing
-            </span>
-          </div>
-        )}
+        <div className="mt-1.5 inline-flex items-center gap-1">
+          {sprint.latestReview?.status === 'running' ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 text-signal-500 animate-spin" strokeWidth={2.2} />
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500 animate-pulse">Reviewing</span>
+            </>
+          ) : sprint.latestReview?.status === 'completed' || sprint.latestReview?.status === 'reviewed' ? (
+            <>
+              <CheckCircle2 className="h-3.5 w-3.5 text-signal-500" strokeWidth={2.2} />
+              <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-signal-500">Reviewed</span>
+            </>
+          ) : (
+            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400">Not reviewed</span>
+          )}
+        </div>
       </td>
       <td className="px-4 py-3 pr-6 align-middle">
         <div className="flex items-center justify-end gap-2 whitespace-nowrap">

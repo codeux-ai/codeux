@@ -100,6 +100,7 @@ describe("SprintLedger Component", () => {
       // Check rows render
       expect(screen.getByText("Alpha Design")).toBeInTheDocument();
       expect(screen.getByText("Beta API")).toBeInTheDocument();
+      expect(screen.getAllByText("Not reviewed").length).toBeGreaterThan(0);
     });
 
     // Type in search
