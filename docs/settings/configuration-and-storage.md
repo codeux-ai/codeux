@@ -312,6 +312,7 @@ Container execution notes:
 - repo-local `.sprint-os/worktrees/*` are no longer used for Docker execution
 - `~/.sprint-os/runtime/docker/` should now contain only cache-like artifacts such as reusable setup-image state, not per-session workspaces
 - write-back from isolated CLI runs uses a Git patch artifact applied on the host branch, not direct file syncing from the container
+- merge-conflict preparation and CI-fix Git commands must execute through the isolated workspace runner; host-path Git invocations against `docker-volume://...` workspace handles are not valid
 
 `sprintLoopSteps` also includes:
 - `watchLoopIntervalSeconds` (default `120`, clamped to `1..3600`)
