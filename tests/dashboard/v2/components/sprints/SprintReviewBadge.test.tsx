@@ -40,7 +40,7 @@ describe("SprintReviewBadge", () => {
     expect(screen.queryByText(/View \d+ Findings/)).toBeNull();
   });
 
-  it("renders completed review with findings and handles toggle interaction", async () => {
+  it("renders completed review with findings in a two-column layout", () => {
     const summary = {
       status: "completed",
       outcome: "passed",
@@ -51,25 +51,11 @@ describe("SprintReviewBadge", () => {
     };
     render(<SprintReviewBadge summary={summary} />);
 
-    // Ensure the toggle button is rendered
-    const toggleButton = screen.getByText("View 2 Findings");
-    expect(toggleButton).toBeDefined();
+    // Ensure the header for findings is rendered
+    expect(screen.getByText("2 Findings")).toBeDefined();
 
-    // Verify findings are present in the DOM (right column content inside collapsible section)
+    // Verify findings are present in the DOM (right column content)
     expect(screen.getByText("Fix spacing")).toBeDefined();
     expect(screen.getByText("Rename variable")).toBeDefined();
-
-    // Verify initial closed state (no "open" class on the collapsible section)
-    // The closest wrapper to the list with class collapsible-section
-    const listWrapper = screen.getByText("Fix spacing").closest(".collapsible-section");
-    expect(listWrapper?.className).not.toContain("open");
-
-    // Test interaction: click toggle
-    fireEvent.click(toggleButton);
-
-    // Verify state updates by checking if "open" class is added to the collapsible section
-    await waitFor(() => {
-        expect(listWrapper?.className).toContain("open");
-    });
   });
 });

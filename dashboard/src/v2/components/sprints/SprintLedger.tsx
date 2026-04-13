@@ -22,6 +22,7 @@ import {
   nextSort,
   DEFAULT_LEDGER_FILTERS,
   type LedgerSort,
+  type LedgerFilters,
   type SprintTableSortKey,
 } from "../../lib/sprint-ledger-state.js";
 
@@ -62,13 +63,13 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
   onBulkShowcaseEnable,
   onBulkShowcaseDisable,
 }) => {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [filters, setFilters] = useState<LedgerFilters>(DEFAULT_LEDGER_FILTERS);
   const [sort, setSort] = useState<LedgerSort>({ key: "createdAt", direction: "desc" });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const filteredSprints = useMemo(
-    () => filterSprints(sprints, { ...DEFAULT_LEDGER_FILTERS, query: searchQuery }),
-    [sprints, searchQuery],
+    () => filterSprints(sprints, filters),
+    [sprints, filters],
   );
 
   const ledgerSprints = useMemo(
@@ -184,8 +185,8 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
         ledgerSprintsCount={ledgerSprints.length}
         listWindow={listWindow}
         onListWindowChange={onListWindowChange}
-        searchQuery={searchQuery}
-        onSearchQueryChange={setSearchQuery}
+        filters={filters}
+        onFiltersChange={setFilters}
       />
 
       <SprintLedgerBulkActions
@@ -302,8 +303,8 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
               <tr>
                 <td colSpan={9}>
                   <div className="px-6 py-8 text-sm text-slate-400">
-                    {searchQuery
-                      ? `No sprints match "${searchQuery}".`
+                    {filters.query || filters.qa !== "all" || filters.showcase !== "all" || filters.status !== "all"
+                      ? "No sprints match the current filters."
                       : "No sprints exist yet. Create one above and it will appear in the showcase and in the ledger below."}
                   </div>
                 </td>

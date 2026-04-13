@@ -90,34 +90,22 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
         </div>
 
         {summary.findings && summary.findings.length > 0 && (
-          <div className="flex flex-col gap-2 border-l border-black/[0.08] pl-4 dark:border-white/[0.08]">
-            <button
-              type="button"
-              onClick={() => setFindingsOpen((prev) => !prev)}
-              className="flex w-full items-center justify-between rounded-xl border border-black/[0.06] bg-black/[0.02] p-3 text-left transition-colors hover:bg-black/[0.04] dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
-            >
+          <div className="flex flex-col gap-2 border-l border-black/[0.08] pl-4 dark:border-white/[0.08] min-h-0">
+            <div className="flex w-full items-center justify-between rounded-xl border border-black/[0.06] bg-black/[0.02] p-3 text-left dark:border-white/[0.06] dark:bg-white/[0.02]">
               <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-slate-600 dark:text-slate-300">
                 <ListChecks className="h-3.5 w-3.5 text-signal-500" />
-                View {summary.findings.length} Findings
-              </div>
-              <ChevronRight
-                className={`h-4 w-4 text-slate-400 transition-transform duration-300 ${findingsOpen ? "rotate-90" : ""}`}
-                strokeWidth={2.5}
-              />
-            </button>
-
-            <div className={`collapsible-section ${findingsOpen ? "open" : ""}`}>
-              <div className="collapsible-content">
-                <ul className="flex max-h-[16rem] flex-col gap-1 overflow-y-auto pr-2 dropdown-scrollbar">
-                  {summary.findings.map((finding, idx) => (
-                    <li key={idx} className="flex items-start gap-1.5 rounded-lg p-1.5 even:bg-slate-50/50 dark:even:bg-void-700/30">
-                      <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-signal-500" strokeWidth={3} />
-                      <span className="text-xs leading-snug text-slate-600 break-words dark:text-slate-400">{finding}</span>
-                    </li>
-                  ))}
-                </ul>
+                {summary.findings.length} Findings
               </div>
             </div>
+
+            <ul className="flex max-h-[16rem] flex-col gap-1 overflow-y-auto pr-2 dropdown-scrollbar">
+              {summary.findings.map((finding, idx) => (
+                <li key={idx} className="flex items-start gap-1.5 rounded-lg p-1.5 even:bg-slate-50/50 dark:even:bg-void-700/30">
+                  <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-signal-500" strokeWidth={3} />
+                  <span className="text-xs leading-snug text-slate-600 break-words dark:text-slate-400">{finding}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
       </div>

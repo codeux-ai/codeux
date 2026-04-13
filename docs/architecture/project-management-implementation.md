@@ -129,7 +129,7 @@ Current behavior:
 - planning flows include interactive, background-safe, and dismissible planning overlays with cancellation support
 - quicksprint execution flows are now mutually exclusive with composer create/edit states to maintain focus
 - quicksprint built-ins are now grouped by purpose in the dashboard, with `Fullstack JS App` as the initial default template set
-- the sprint ledger uses a refreshed visual treatment with alternating striped rows and real-time client-side search/filtering
+- the sprint ledger uses a refreshed glass ledger row treatment with explicit filter controls for status, showcase, and QA alongside real-time client-side search
 - internal sprint orchestration resolves project/sprint scope from sqlite instead of markdown task directories
 - orchestrate executions now create `sprint_runs`, `task_dispatches`, and `task_runs`
 - orchestrate executions now hold a sprint-scoped execution lease while the loop is active

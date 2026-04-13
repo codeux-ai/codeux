@@ -171,7 +171,7 @@ Legacy runtime:
 - Sprint cells and ledger rows now surface a dedicated human-intervention badge when a paused sprint needs merge work, planning, or another operator action, and the hover card explains what to do before resuming
 - Sprints page now also starts and stops sprint orchestration directly from sprint cards, with optimistic visual state updates tied to project-scoped execution data
 - The organic sprint bubble cells use the same live start/stop control path as the registry list, so the hover play/stop action is now functional instead of decorative
-- Sprint cells now surface a QA-reviewed indicator with a hover summary and allow marking sprints completed directly from the cell menu
+- Sprint cells now surface a QA-reviewed indicator with an expandable overlay section inside the created column, and allow marking sprints completed directly from the cell menu
 - Sprint creation no longer asks for start/end dates
 - Sprint creation now uses an in-page composer that replaces the showcase while writing, instead of opening a detached modal
 - The sprint composer supports `Plan & Start`, `Plan Only`, and `Save Draft`.
@@ -200,18 +200,18 @@ Legacy runtime:
   - the `tasks` array is returned in DAG order
   - each task prompt is standardized to `Objective`, `Scope`, `Implementation Requirements`, `Constraints`, and `Verification`
 - The sprint page now routes planning through the configured virtual worker provider instead of waiting on a connected worker
-- New sprints are showcased by default, showcased sprints are controlled by the heart toggle, and the showcase gallery is no longer capped to 3 sprint cells
+- New sprints and quicksprints are showcased by default, showcased sprints are controlled by the heart toggle, and the showcase gallery is no longer capped to 3 sprint cells
 - Showcase pinning is now fully operator-controlled; pinned sprints remain in the gallery until explicitly unpinned, surviving transitions like sprint start, pause, and completion
 - Showcase heart controls in the sprint ledger remain available for completed sprints, so completed work can stay pinned in or be removed from the gallery manually
 - The sprint gallery selection is now the full set of showcased sprints, ordered newest-first by sprint creation time
 - Completed sprint cells now use a static finished treatment and fade slightly instead of continuing animated motion
 - Sprint cell settings now open an animated menu with showcase toggle, `Edit`, `Export`, `Delete`, and live `Overrides`
 - The showcase wrappers now leave enough vertical breathing room for hover expansion, so bubble motion is no longer clipped top or bottom
-- Sprint cells now use created-date metadata on the accent rail and move the visible sprint key into the card body instead of surfacing the UUID there
+- Sprint cells now use the created column for both created-date metadata and QA review badges, and move the visible sprint key into the card body instead of surfacing the UUID there
 - Sprint markdown export now includes direct download actions and per-section copy-to-clipboard buttons (with brief `Copied` confirmation) in the export modal
 - The in-page sprint composer collapses into a stacked single-column layout on smaller screens, and both create and edit now use that same inline flow. The Quicksprint panel and the Sprint Composer are mutually exclusive; opening one automatically dismisses the other to maintain focus.
 - The Quicksprint panel now separates `Default Templates` from custom templates and includes a purpose selector for built-in template sets. The first shipped built-in purpose is `Fullstack JS App`, which groups six project-agnostic engineering and UI quicksprint templates. See [Quicksprint Templates](./quicksprint-templates.md).
-- The refreshed sprint ledger below the showcase renders contiguous striped rows (alternating light backgrounds) with a real-time search field that filters by sprint key, name, status, or goal text; a live result counter shows filtered vs total counts and a clear button resets the query
+- The refreshed sprint ledger below the showcase renders a glass ledger row treatment with a real-time search field and dedicated filters for status, showcase, and QA state; a live result counter shows filtered vs total counts and a clear button resets the query
 - Ledger search integrates with selection: the header select-all checkbox operates on the currently filtered set only, and the selection is automatically pruned when the filter changes so stale hidden selections cannot accumulate
 - When one or more ledger rows are selected, a bulk action bar appears with `Start` and `Delete` controls that operate on all selected sprints, plus a `Clear` button to deselect
 - Sortable column headers cycle through unsorted, ascending, and descending for showcasePinned, sprintKey, name, status, tasksCount, completion, and createdAt (default: newest-first)
