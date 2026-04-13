@@ -848,6 +848,31 @@ describe("VirtualWorkerService", () => {
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
   });
 
+  it("routes merge preparation through the workspace runner for docker-volume workspaces", async () => {
+    const { virtualWorkerService, sessionTracking } = await setupServiceWithProject();
+
+    const runWorkspaceCommand = vi.spyOn((virtualWorkerService as any).workspaceManager, "runWorkspaceCommand")
+      .mockResolvedValue({ ok: true, stdout: "", stderr: "", code: 0 } as any);
+    const activitySpy = vi.spyOn(sessionTracking, "appendActivity");
+
+    const hasConflicts = await (virtualWorkerService as any).runMergeIntoSource(
+      "docker-volume://merge-workspace",
+      "main",
+      "session-1",
+    );
+
+    expect(hasConflicts).toBe(false);
+    expect(runWorkspaceCommand).toHaveBeenCalledWith(
+      "docker-volume://merge-workspace",
+      "git",
+      ["merge", "--no-ff", "--no-commit", "origin/main"],
+    );
+    expect(activitySpy).toHaveBeenCalledWith("session-1", expect.objectContaining({
+      originator: "system",
+      description: "Prepared merge of origin/main into the source branch without conflicts.",
+    }));
+  });
+
   it("escalates to human when provider execution fails during handleAttentionItem", async () => {
     const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
 

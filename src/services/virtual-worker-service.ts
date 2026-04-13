@@ -825,7 +825,7 @@ export class VirtualWorkerService {
 
   private async runMergeIntoSource(worktreePath: string, targetBranch: string, sessionId: string): Promise<boolean> {
     try {
-      await runCommandStrict("git", ["merge", "--no-ff", "--no-commit", `origin/${targetBranch}`], worktreePath);
+      await this.runWorkspaceCommand(worktreePath, "git", ["merge", "--no-ff", "--no-commit", `origin/${targetBranch}`]);
       this.deps.sessionTracking.appendActivity(sessionId, {
         originator: "system",
         description: `Prepared merge of origin/${targetBranch} into the source branch without conflicts.`,
