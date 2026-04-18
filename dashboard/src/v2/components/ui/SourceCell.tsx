@@ -55,6 +55,7 @@ export const SourceCell: FunctionComponent<SourceCellProps> = ({ source, isEven,
             onBlur={handleHoverLeave}
             role="group"
             tabIndex={0}
+            data-flip-id={source.id}
             className="relative group cursor-pointer w-56 h-56 flex items-center justify-center shrink-0 perspective-1000 focus-visible:ring-2 focus-visible:ring-signal-500/50 focus-visible:rounded-[2rem] focus:outline-none"
             style={{ animationDelay: `${animDelay}s` }}
         >
