@@ -14,14 +14,13 @@ export function toTaskViewModel(task: TaskRecord, sourcesById: Map<string, Sourc
   const sprint = sprintsById.get(task.sprintId);
   const source = sourcesById.get(task.projectId);
 
-  const assignee = inferAssignee(task);
-  const time = inferTime(task);
   const sourceName = source?.name || "Unassigned";
   const sprintName = sprint?.name || "Sprint";
 
   if (
     prevTask &&
     prevTask.recordId === task.id &&
+    prevTask.updatedAt === task.updatedAt &&
     prevTask.id === task.taskKey &&
     prevTask.source === sourceName &&
     prevTask.sprint === sprintName &&
@@ -30,10 +29,7 @@ export function toTaskViewModel(task: TaskRecord, sourcesById: Map<string, Sourc
     prevTask.status === task.status &&
     prevTask.priority === task.priority &&
     prevTask.executorType === task.executorType &&
-    prevTask.assignee === assignee &&
-    prevTask.time === time &&
     prevTask.createdAt === task.createdAt &&
-    prevTask.updatedAt === task.updatedAt &&
     prevTask.promptMarkdown === task.promptMarkdown &&
     prevTask.description === task.description &&
     prevTask.isIndependent === task.isIndependent &&
@@ -44,6 +40,9 @@ export function toTaskViewModel(task: TaskRecord, sourcesById: Map<string, Sourc
   ) {
     return prevTask;
   }
+
+  const assignee = inferAssignee(task);
+  const time = inferTime(task);
 
   return {
     recordId: task.id,

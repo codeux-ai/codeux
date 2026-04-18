@@ -16,8 +16,21 @@ export function areSprintListsEqual(current: Sprint[], next: Sprint[]): boolean 
   for (let index = 0; index < current.length; index += 1) {
     const left = current[index];
     const right = next[index];
+    
+    if (left.id !== right.id) {
+      return false;
+    }
+
+    // If both have updatedAt, we can use it for a fast comparison
+    if (left.updatedAt && right.updatedAt) {
+      if (left.updatedAt !== right.updatedAt) {
+        return false;
+      }
+      continue;
+    }
+
+    // Fallback for missing updatedAt
     if (
-      left.id !== right.id ||
       left.projectId !== right.projectId ||
       left.number !== right.number ||
       left.slug !== right.slug ||
@@ -31,7 +44,6 @@ export function areSprintListsEqual(current: Sprint[], next: Sprint[]): boolean 
       left.tasksCount !== right.tasksCount ||
       left.completion !== right.completion ||
       left.createdAt !== right.createdAt ||
-      left.updatedAt !== right.updatedAt ||
       left.date !== right.date
     ) {
       return false;
@@ -53,8 +65,21 @@ export function areTaskRecordListsEqual(current: TaskRecord[], next: TaskRecord[
   for (let index = 0; index < current.length; index += 1) {
     const left = current[index];
     const right = next[index];
+    
+    if (left.id !== right.id) {
+      return false;
+    }
+
+    // If both have updatedAt, we can use it for a fast comparison
+    if (left.updatedAt && right.updatedAt) {
+      if (left.updatedAt !== right.updatedAt) {
+        return false;
+      }
+      continue;
+    }
+
+    // Fallback for missing updatedAt
     if (
-      left.id !== right.id ||
       left.projectId !== right.projectId ||
       left.sprintId !== right.sprintId ||
       left.taskKey !== right.taskKey ||
@@ -70,8 +95,7 @@ export function areTaskRecordListsEqual(current: TaskRecord[], next: TaskRecord[
       left.mergeIndicator !== right.mergeIndicator ||
       left.sourceType !== right.sourceType ||
       left.sourcePath !== right.sourcePath ||
-      left.createdAt !== right.createdAt ||
-      left.updatedAt !== right.updatedAt
+      left.createdAt !== right.createdAt
     ) {
       return false;
     }

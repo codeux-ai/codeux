@@ -79,36 +79,40 @@ export function useProjectTasks(
     });
   }, [enabled, projectId, refreshInternal]);
 
-  const sourcesByIdRef = useRef<Map<string, Source>>(new Map());
-  const sprintsByIdRef = useRef<Map<string, Sprint>>(new Map());
+  const sourcesById = useMemo(() => {
+    const map = new Map<string, Source>();
+    for (const source of sources) {
+      map.set(source.id, source);
+    }
+    return map;
+  }, [sources]);
+
+  const sprintsById = useMemo(() => {
+    const map = new Map<string, Sprint>();
+    for (const sprint of sprints) {
+      map.set(sprint.id, sprint);
+    }
+    return map;
+  }, [sprints]);
+
   const prevTasksMapRef = useRef<Map<string, Task>>(new Map());
 
   const tasks = useMemo(() => {
-    const sourcesById = sourcesByIdRef.current;
-    sourcesById.clear();
-    for (const source of sources) {
-      sourcesById.set(source.id, source);
-    }
-
-    const sprintsById = sprintsByIdRef.current;
-    sprintsById.clear();
-    for (const sprint of sprints) {
-      sprintsById.set(sprint.id, sprint);
-    }
-
     const prevTasksMap = prevTasksMapRef.current;
-    const nextTasksMap = new Map<string, Task>();
 
-    const nextTasks = taskRecords.map((taskRecord) => {
+    return taskRecords.map((taskRecord) => {
       const prevTask = prevTasksMap.get(taskRecord.id);
-      const nextTask = toTaskViewModel(taskRecord, sourcesById, sprintsById, prevTask);
-      nextTasksMap.set(taskRecord.id, nextTask);
-      return nextTask;
+      return toTaskViewModel(taskRecord, sourcesById, sprintsById, prevTask);
     });
+  }, [sourcesById, sprintsById, taskRecords]);
 
+  useEffect(() => {
+    const nextTasksMap = new Map<string, Task>();
+    for (const task of tasks) {
+      nextTasksMap.set(task.recordId, task);
+    }
     prevTasksMapRef.current = nextTasksMap;
-    return nextTasks;
-  }, [sources, sprints, taskRecords]);
+  }, [tasks]);
 
   const refresh = useCallback(async (): Promise<void> => {
     await refreshInternal({ silent: true });
