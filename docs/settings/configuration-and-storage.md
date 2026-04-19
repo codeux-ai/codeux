@@ -65,9 +65,11 @@ Runtime resolution:
 - In remote git mode, Sprint OS also refreshes `origin` before branch-sensitive recovery flows such as QA review, QA follow-up continuation, clarification auto-replies, CI fix runs, and merge-conflict resolution.
 - QA review execution uses an isolated snapshot workspace in Docker so review inspection does not mutate the task workspace directly.
 - QA-requested CLI follow-up work continues in the original task workspace when that workspace is still available.
-- CI autofix follow-up work reuses the existing task workspace for the same worker branch when available instead of always creating a fresh Docker volume.
+- CI autofix follow-up work reuses the existing task workspace for the same worker branch when available instead of always creating a fresh workspace.
+- if Docker is unavailable during a CI autofix follow-up, Sprint OS falls back to a host-backed git worktree for that repair run instead of escalating immediately or creating another doomed Docker attempt.
 - Merge-conflict resolution remains isolated in its own Docker workspace even when the underlying task already has a reusable task workspace.
 - On startup, Sprint OS prunes stale Sprint OS Docker workspace volumes and cached setup-script images so finished, failed, unrecoverable, and outdated Docker assets do not accumulate across restarts.
+- restart recovery also treats interrupted Docker sessions without a live backing container as failed, so abandoned workspaces are reclaimed instead of waiting forever for a callback that cannot arrive.
 - When Sprint OS has to create a missing feature branch, it prefers `origin/<defaultBranch>` over the local `<defaultBranch>` ref when the remote-tracking base branch exists.
 - `main` is only the final fallback when no sprint, project, or system base branch is configured. Normal sprint and task flows use the resolved `git.defaultBranch` value from settings and project metadata.
 - the old global `/api/settings` contract is removed in favor of explicit scoped endpoints
@@ -312,12 +314,16 @@ Preview runtime notes:
 - In the dashboard, these controls are exposed in the active v2 settings page under `Sprint Engine -> Worker Runtime`
 
 Container execution notes:
-- `cliWorkflow.executionMode` is now always `DOCKER`
-- task, planning, QA, chat, CI-fix, and merge-conflict CLI runs execute inside isolated Docker-volume workspaces
+- `cliWorkflow.executionMode` defaults to `DOCKER`, but Sprint OS still supports `HOST` worktrees for controlled fallback and legacy-safe paths
+- task, planning, chat, and normal CI-fix flows execute inside isolated Docker-volume workspaces when Docker execution is available
+- QA review execution uses a fresh snapshot workspace instead of the mutable task workspace
+- QA-requested follow-up coding and CI autofix continue in the existing task workspace when that workspace is still reusable
+- CI autofix falls back to a host-backed worktree only when Docker is unavailable for that follow-up repair attempt
+- merge-conflict resolution remains Docker-only because it must run in an isolated throwaway workspace
 - repo-local `.sprint-os/worktrees/*` are no longer used for Docker execution
 - `~/.sprint-os/runtime/docker/` should now contain only cache-like artifacts such as reusable setup-image state, not per-session workspaces
 - write-back from isolated CLI runs uses a Git patch artifact applied on the host branch, not direct file syncing from the container
-- merge-conflict preparation and CI-fix Git commands must execute through the isolated workspace runner; host-path Git invocations against `docker-volume://...` workspace handles are not valid
+- merge-conflict preparation and CI-fix Git commands must execute through the workspace runner; host-path Git invocations against `docker-volume://...` workspace handles are not valid
 
 `sprintLoopSteps` also includes:
 - `watchLoopIntervalSeconds` (default `120`, clamped to `1..3600`)
@@ -386,6 +392,8 @@ Runtime cleanup notes:
 - cleanup treats expired sprint leases as stale, not active ownership
 - when a stale `running` sprint run has no active dispatches and its heartbeat is older than the cleanup cutoff, Sprint OS fails that run and releases the expired sprint lease in the same sweep
 - startup now prunes orphaned virtual worker endpoints before new virtual cycles begin
+- startup prunes stale Docker workspaces and cached setup images for failed, finished, unrecoverable, and outdated sessions
+- terminal sprint completion/failure/cancellation also removes resumable CLI task workspaces immediately instead of waiting for the next restart sweep
 - sprint planning and prompt improvement also honor worker mode, so `VIRTUAL` projects can plan without any live MCP listener
 
 ## Default Values

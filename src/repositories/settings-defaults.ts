@@ -45,7 +45,7 @@ export const INVOCATION_ROUTING_IDS: InvocationRoutingId[] = [
   "ci_fix",
   "merge_conflict",
 ];
-export const CLI_EXECUTION_MODES: CliExecutionMode[] = ["DOCKER"];
+export const CLI_EXECUTION_MODES: CliExecutionMode[] = ["DOCKER", "HOST"];
 export const FEATURE_PR_AUTOMERGE_MODES: FeaturePrAutoMergeMode[] = ["OFF", "CREATE_PR", "WHEN_GREEN", "ALWAYS"];
 export const WORKER_EXECUTION_MODES: WorkerExecutionMode[] = ["VIRTUAL"];
 export const VIRTUAL_WORKER_PROVIDERS: VirtualWorkerProvider[] = ["gemini", "codex", "claude-code"];

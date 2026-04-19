@@ -75,6 +75,8 @@ export const buildDeps = () => {
       finalizeSprintRunCancellationIfIdle: vi.fn().mockReturnValue(null),
       findActiveSprintRun: vi.fn().mockReturnValue(null),
       getSprintRun: vi.fn().mockReturnValue({ id: "run-1", status: "running" }),
+      listTaskDispatches: vi.fn().mockReturnValue([]),
+      getTaskRunByDispatchId: vi.fn().mockReturnValue(null),
       getLatestTaskRun: vi.fn().mockReturnValue(null),
       releaseLease: vi.fn(),
       releaseStaleSprintLease: vi.fn().mockReturnValue(false),

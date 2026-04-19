@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import type { DashboardSettings, JulesSession, ProviderId, WorkerExecutionMode, Subtask } from "../contracts/app-types.js";
+import type { CliWorkflowSettings, DashboardSettings, JulesSession, ProviderId, WorkerExecutionMode, Subtask } from "../contracts/app-types.js";
 import type { WorkerTaskDispatchClaim } from "../contracts/execution-types.js";
 import type { ProjectAttentionItemRecord } from "../contracts/project-attention-types.js";
 import type { SettingsRepository } from "../repositories/settings-repository.js";
@@ -31,6 +31,7 @@ import type { MemoryService } from "./memory-service.js";
 import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
+import { DockerService } from "./docker-service.js";
 
 const VIRTUAL_WORKER_RECONCILE_MS = 3_000;
 const VIRTUAL_WORKER_SESSION_POLL_MS = 2_000;
@@ -93,6 +94,7 @@ export interface VirtualWorkerServiceDependencies {
 export class VirtualWorkerService {
   private readonly workspaceManager = new WorkspaceManager();
   private readonly workspaceArtifactService = new WorkspaceArtifactService(this.workspaceManager);
+  private readonly dockerService = new DockerService();
 
   private readonly providerRunner = new ProviderRunner(new DockerRunner());
 
@@ -550,7 +552,18 @@ export class VirtualWorkerService {
 
     let cleanedUp = false;
     try {
-      const prepared = await this.workspaceManager.prepareWorktree(repoPath, worktreePath, sourceBranch, sourceBranch);
+      const effectiveWorkflowSettings = await this.resolveVirtualWorkerWorkflowSettings({
+        workflowSettings,
+        sessionId,
+        repoPath,
+        purpose: "merge_conflict",
+      });
+      const prepared = await this.workspaceManager.prepareWorktree(
+        repoPath,
+        this.workspaceManager.buildWorktreePath(repoPath, sessionId, effectiveWorkflowSettings.executionMode),
+        sourceBranch,
+        sourceBranch,
+      );
       const finalWorktreePath = prepared.worktreePath;
       worktreePath = finalWorktreePath;
       initialHead = (await this.runWorkspaceCommand(finalWorktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
@@ -571,7 +584,7 @@ export class VirtualWorkerService {
         await this.runProviderWithRetry({
           provider,
           providerPrompt,
-          workflowSettings,
+          workflowSettings: effectiveWorkflowSettings,
           repoPath,
           worktreePath: finalWorktreePath,
           sessionId,
@@ -737,9 +750,15 @@ export class VirtualWorkerService {
 
     let cleanedUp = false;
     try {
+      const effectiveWorkflowSettings = await this.resolveVirtualWorkerWorkflowSettings({
+        workflowSettings,
+        sessionId,
+        repoPath,
+        purpose: "ci_fix",
+      });
       const prepared = await this.workspaceManager.prepareWorktree(
         repoPath,
-        worktreePath,
+        this.workspaceManager.buildWorkspaceRef(repoPath, workspaceOwnerSessionId, effectiveWorkflowSettings.executionMode),
         branchName,
         branchName,
         resumeTarget?.sessionId,
@@ -762,7 +781,7 @@ export class VirtualWorkerService {
       await this.runProviderWithRetry({
         provider,
         providerPrompt,
-        workflowSettings,
+        workflowSettings: effectiveWorkflowSettings,
         repoPath,
         worktreePath: finalWorktreePath,
         sessionId,
@@ -852,6 +871,37 @@ export class VirtualWorkerService {
         });
       }
     }
+  }
+
+  private async resolveVirtualWorkerWorkflowSettings(args: {
+    workflowSettings: CliWorkflowSettings;
+    sessionId: string;
+    repoPath: string;
+    purpose: "ci_fix" | "merge_conflict";
+  }): Promise<CliWorkflowSettings> {
+    if (args.workflowSettings.executionMode !== "DOCKER") {
+      return args.workflowSettings;
+    }
+
+    const dockerAvailable = await this.dockerService.isAvailable();
+    if (dockerAvailable) {
+      return args.workflowSettings;
+    }
+
+    if (args.purpose === "merge_conflict") {
+      throw new Error(
+        "Docker is unavailable, and merge-conflict resolution requires isolated container execution. Fix Docker availability and retry.",
+      );
+    }
+
+    this.deps.sessionTracking.appendActivity(args.sessionId, {
+      originator: "system",
+      description: "Docker is unavailable. Falling back to HOST execution mode for virtual worker CI autofix.",
+    });
+    return {
+      ...args.workflowSettings,
+      executionMode: "HOST",
+    };
   }
 
   private buildCiFixPrompt(

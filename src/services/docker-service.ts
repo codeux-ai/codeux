@@ -2,6 +2,15 @@ import { runCommandStrict } from "./cli-process-runner.js";
 import type { DockerContainer } from "../contracts/app-types.js";
 
 export class DockerService {
+  async isAvailable(): Promise<boolean> {
+    try {
+      await runCommandStrict("docker", ["ps", "-q"], process.cwd());
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async listContainers(): Promise<DockerContainer[]> {
     try {
       const result = await runCommandStrict("docker", ["ps", "--format", "{{json .}}"], process.cwd());

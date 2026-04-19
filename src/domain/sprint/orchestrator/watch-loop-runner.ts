@@ -16,6 +16,7 @@ import { isCompletedTaskSettled } from "../task-merge-state.js";
 import { transitionSprintRun } from "./sprint-run-transitions.js";
 import { buildTaskAttentionPayload } from "./attention-payload-builder.js";
 import { buildConflictSummaryMarkdown, selectMergedTaskContexts } from "./conflict-summary-utils.js";
+import { WorkspaceManager } from "../../../infrastructure/providers/cli/workspace-manager.js";
 
 export interface WatchLoopRunnerArgs {
   args: SprintAgentArgs;
@@ -36,6 +37,8 @@ export interface WatchLoopRunnerArgs {
 }
 
 export class WatchLoopRunner {
+  private readonly workspaceManager = new WorkspaceManager();
+
   constructor(
     private readonly deps: SprintOrchestratorDependencies,
     private readonly cycleRunner: CycleRunner,
@@ -559,6 +562,12 @@ export class WatchLoopRunner {
           `sprint-completed:${sprintRunId}`
         );
         this.triggerAutoPromote(scopedExecutionContext.project.id, scopedExecutionContext.sprint.id);
+        await this.cleanupTerminalSprintCliWorkspaces({
+          projectId: scopedExecutionContext.project.id,
+          sprintId: scopedExecutionContext.sprint.id,
+          sprintRunId,
+          repoPath,
+        });
         report += await this.deps.renderInstruction("cleanupAllMerged", { planning_target: scopedExecutionContext.sprint.name }, repoPath);
         report += completionGuidance;
         report += mergeFeedback.text;
@@ -580,6 +589,12 @@ export class WatchLoopRunner {
           { failedTaskCount },
           `sprint-failed:${sprintRunId}`
         );
+        await this.cleanupTerminalSprintCliWorkspaces({
+          projectId: scopedExecutionContext.project.id,
+          sprintId: scopedExecutionContext.sprint.id,
+          sprintRunId,
+          repoPath,
+        });
         report += await this.deps.renderInstruction("cleanupFailed", { planning_target: scopedExecutionContext.sprint.name }, repoPath);
       } else if (manualMergeTasks.length > 0) {
         transitionSprintRun(
@@ -603,6 +618,12 @@ export class WatchLoopRunner {
           { reason: "empty" },
           `sprint-cancelled:${sprintRunId}:empty`
         );
+        await this.cleanupTerminalSprintCliWorkspaces({
+          projectId: scopedExecutionContext.project.id,
+          sprintId: scopedExecutionContext.sprint.id,
+          sprintRunId,
+          repoPath,
+        });
         report += await this.renderInstruction("cleanupEmpty", {}, repoPath);
       } else {
         transitionSprintRun(
@@ -636,6 +657,47 @@ export class WatchLoopRunner {
     }
 
     return { status: "continue", report };
+  }
+
+  private async cleanupTerminalSprintCliWorkspaces(args: {
+    projectId: string;
+    sprintId: string;
+    sprintRunId: string;
+    repoPath: string;
+  }): Promise<void> {
+    const settings = this.deps.getDashboardSettings({
+      projectId: args.projectId,
+      sprintId: args.sprintId,
+    });
+    const executionMode = settings.cliWorkflow.executionMode;
+    const dispatches = this.deps.executionRepository.listTaskDispatches({
+      projectId: args.projectId,
+      sprintId: args.sprintId,
+      sprintRunId: args.sprintRunId,
+    });
+    const cleanedSessionIds = new Set<string>();
+
+    for (const dispatch of dispatches) {
+      if (dispatch.executorType !== "docker_cli") {
+        continue;
+      }
+      const taskRun = this.deps.executionRepository.getTaskRunByDispatchId(dispatch.id);
+      const sessionId = taskRun?.sessionId?.trim();
+      if (!sessionId || cleanedSessionIds.has(sessionId)) {
+        continue;
+      }
+      cleanedSessionIds.add(sessionId);
+
+      const worktreePath = await this.workspaceManager.resolveResumeWorktreePath(
+        args.repoPath,
+        sessionId,
+        executionMode,
+      ).catch(() => undefined);
+      if (!worktreePath) {
+        continue;
+      }
+      await this.workspaceManager.removeWorktree(args.repoPath, worktreePath).catch(() => undefined);
+    }
   }
 }
 function resolveMainMergeConflictAttentionItems(
