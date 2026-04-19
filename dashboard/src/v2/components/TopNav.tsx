@@ -422,7 +422,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                         className="flex items-center gap-2.5 px-3.5 py-2 bg-black/[0.04] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.06] hover:border-black/[0.08] dark:hover:border-white/[0.08] rounded-xl transition-all group focus-visible:ring-2 focus-visible:ring-signal-500/30"
                     >
                         <StatusDot status={selectedProject?.status || "idle"} />
-                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">
+                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-sans">
                             {projectSwitchBusy ? "Switching..." : (selectedProject?.name || (loading ? "Loading..." : "Select Project"))}
                         </span>
                         <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${dropdownOpen ? 'rotate-180' : ''}`} />
@@ -515,7 +515,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                             {selectedSprint && (
                                 <StatusDot status={selectedSprint.status as any} />
                             )}
-                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono truncate max-w-[180px]">
+                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-sans truncate max-w-[180px]">
                                 {sprintSwitchBusy ? "Switching..." : (sprintsLoading ? "Loading..." : formatSprintDisplay(selectedSprint))}
                             </span>
                             {sprints.length > 0 && (
@@ -605,7 +605,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                             <div className="flex items-center justify-center w-4 h-4 rounded-md bg-signal-500/10 text-signal-500">
                                 <Cpu aria-hidden="true" className="w-3 h-3" strokeWidth={2.5} />
                             </div>
-                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-mono">
+                            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200 font-sans">
                                 {workerSwitchBusy ? "Switching..." : (selectedWorker?.label || (executionLoading ? "Loading..." : "Select Worker"))}
                             </span>
                             <ChevronDown aria-hidden="true" className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${workerDropdownOpen ? 'rotate-180' : ''}`} />

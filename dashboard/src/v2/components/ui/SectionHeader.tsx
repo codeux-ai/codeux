@@ -22,7 +22,7 @@ export const SectionHeader: FunctionComponent<SectionHeaderProps> = ({
             <h2 className="text-[6rem] font-black tracking-[0.2em] text-black/[0.04] dark:text-white/[0.04] absolute -top-8 -left-3 pointer-events-none select-none font-display leading-none overflow-hidden">
                 {watermark}
             </h2>
-            <h3 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white relative z-10 flex items-center gap-2.5">
+            <h3 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white relative z-10 flex items-center gap-2.5 font-sans">
                 {icon}
                 {title}
             </h3>

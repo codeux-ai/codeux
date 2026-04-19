@@ -124,7 +124,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
         <aside
             aria-label="Primary Navigation"
             ref={sidebarRef}
-            className={`w-[260px] h-screen shrink-0 border-r border-black/[0.05] dark:border-white/[0.04] bg-[#F5F3EF]/60 dark:bg-void-900 flex flex-col justify-between py-8 z-50 ${isMobile ? 'fixed left-0 top-0 -translate-x-full opacity-0 shadow-2xl bg-[#F5F3EF] dark:bg-void-900' : 'relative'}`}
+            className={`w-[260px] h-screen shrink-0 border-r border-black/[0.05] dark:border-white/[0.04] bg-[#F9F8F4]/70 dark:bg-void-900/70 backdrop-blur-3xl flex flex-col justify-between py-8 z-50 ${isMobile ? 'fixed left-0 top-0 -translate-x-full opacity-0 shadow-2xl bg-[#F9F8F4] dark:bg-void-900' : 'relative'}`}
         >
             {/* Animated SVG Spline — signal jade to warm ember */}
             <svg
@@ -168,7 +168,7 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
 
             {/* Navigation */}
             <nav ref={navRef} className="flex-1 px-4 flex flex-col relative z-10">
-                <h2 className="px-4 text-[9px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.16em] mb-3">Workspace</h2>
+                <h2 className="px-4 text-[9px] font-bold text-slate-400 dark:text-slate-600 uppercase tracking-[0.16em] mb-3 font-sans">Workspace</h2>
                 {navItems.map((item, idx) => {
                     const isActive = activeIndex === idx;
                     return (
@@ -176,19 +176,19 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
                             key={item.label}
                             to={item.path}
                             aria-current={isActive ? "page" : undefined}
-                            className="relative flex items-center gap-3.5 px-5 py-3 min-h-[44px] rounded-2xl transition-colors duration-200 w-full text-left group overflow-hidden mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10 decoration-none"
+                            className="relative flex items-center gap-3.5 px-5 py-3 min-h-[44px] rounded-2xl transition-all duration-300 w-full text-left group overflow-hidden mb-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10 decoration-none"
                         >
-                            <div className={`absolute inset-0 rounded-2xl transition-all duration-300 pointer-events-none origin-left ${isActive ? 'bg-signal-500/[0.10] dark:bg-signal-500/[0.10] opacity-100 translate-x-0' : 'bg-black/[0.05] dark:bg-white/[0.05] opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100'}`} />
-                            <div className={`absolute inset-0 rounded-2xl pointer-events-none transition-all duration-300 ${isActive ? 'shadow-[inset_0_0_0_1px_rgba(0,224,160,0.12)] dark:shadow-[inset_0_0_0_1px_rgba(0,224,160,0.1)]' : 'shadow-none'}`} />
+                            <div className={`absolute inset-0 rounded-2xl transition-all duration-300 pointer-events-none origin-left ${isActive ? 'bg-signal-500/[0.12] dark:bg-signal-500/[0.10] opacity-100 translate-x-0' : 'bg-black/[0.05] dark:bg-white/[0.05] opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100'}`} />
+                            <div className={`absolute inset-0 rounded-2xl pointer-events-none transition-all duration-300 ${isActive ? 'shadow-[inset_0_0_0_1px_rgba(0,224,160,0.15)] dark:shadow-[inset_0_0_0_1px_rgba(0,224,160,0.12)]' : 'shadow-none'}`} />
 
                             {/* Vertical Accent Indicator */}
                             {isActive && (
-                                <div className="absolute left-0 top-1/2 -translate-y-1/2 h-2/3 w-1 bg-signal-500 rounded-r-full shadow-[0_0_8px_rgba(0,224,160,0.6)]" />
+                                <div className="absolute left-0 top-1/2 -translate-y-1/2 h-2/3 w-1 bg-signal-500 rounded-r-full shadow-[0_0_12px_rgba(0,224,160,0.4)]" />
                             )}
 
                             <item.icon aria-hidden="true" className={`relative z-10 w-4 h-4 transition-all duration-300 ${isActive ? 'text-signal-600 dark:text-signal-400 drop-shadow-[0_0_8px_rgba(0,224,160,0.5)]' : 'text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`} strokeWidth={isActive ? 2 : 1.5} />
 
-                            <span className={`relative z-10 font-medium text-sm tracking-wide transition-colors duration-300 ${isActive ? 'text-slate-900 dark:text-white font-semibold' : 'text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`}>
+                            <span className={`relative z-10 font-medium text-sm tracking-wide transition-colors duration-300 font-sans ${isActive ? 'text-slate-900 dark:text-white font-semibold' : 'text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300'}`}>
                                 {item.label}
                             </span>
                         </Link>
@@ -198,14 +198,14 @@ export const Sidebar: FunctionComponent<SidebarProps> = ({ isMobile, isOpen, onC
 
             {/* Settings */}
             <div className="px-4 relative z-10">
-                <Link to="/config" aria-label="Settings" className="relative w-full flex items-center gap-3.5 px-5 py-3 min-h-[44px] rounded-2xl transition-colors duration-200 text-left group overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10 decoration-none">
+                <Link to="/config" aria-label="Settings" className="relative w-full flex items-center gap-3.5 px-5 py-3 min-h-[44px] rounded-2xl transition-all duration-300 text-left group overflow-hidden focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/40 focus-visible:rounded-2xl focus-visible:z-10 decoration-none">
                     <div className="absolute inset-0 rounded-2xl bg-black/[0.05] dark:bg-white/[0.05] transition-all duration-300 pointer-events-none origin-left opacity-0 -translate-x-full group-hover:translate-x-0 group-hover:opacity-100" />
                     <Settings aria-hidden="true" className="relative z-10 w-4 h-4 text-slate-400 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 group-hover:rotate-90 transition-all duration-700 ease-in-out" strokeWidth={1.5} />
-                    <span className="relative z-10 font-medium text-sm tracking-wide text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-300">Settings</span>
+                    <span className="relative z-10 font-medium text-sm tracking-wide text-slate-500 dark:text-slate-500 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors duration-300 font-sans">Settings</span>
                 </Link>
             </div>
 
-            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#F5F3EF] dark:from-void-900 to-transparent pointer-events-none z-0" />
+            <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#F9F8F4] dark:from-void-900/70 to-transparent pointer-events-none z-0" />
         </aside>
         </>
     );
