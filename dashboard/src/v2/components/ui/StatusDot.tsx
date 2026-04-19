@@ -37,7 +37,7 @@ export const StatusDot: FunctionComponent<StatusDotProps> = ({ status, className
                 <span
                     role="status"
                     aria-label={`Status: ${status}`}
-                    className={`shrink-0 ${className} rounded-full bg-slate-400 dark:bg-slate-600`}
+                    className={`shrink-0 ${className} rounded-full bg-void-500 shadow-[0_0_8px_rgba(61,55,48,0.3)]`}
                 />
             );
     }

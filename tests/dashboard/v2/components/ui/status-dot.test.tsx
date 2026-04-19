@@ -23,6 +23,6 @@ describe("StatusDot", () => {
 
   it("renders idle state", () => {
     const { container } = render(<StatusDot status="idle" />);
-    expect(container.innerHTML).toContain("bg-slate-400");
+    expect(container.innerHTML).toContain("bg-void-500");
   });
 });
