@@ -61,6 +61,14 @@ describe("runStatusDerivationStep", () => {
     expect(result[0].status).toBe("BLOCKED");
   });
 
+  it("preserves explicitly blocked sessions instead of requeueing them", () => {
+    const subtasks: Subtask[] = [
+      { id: "task-1", title: "Task 1", prompt: "", depends_on: [], is_independent: true, is_merged: false, status: "BLOCKED", session_state: "BLOCKED" },
+    ];
+    const result = runStatusDerivationStep(subtasks, { retryFailed: true, isActionRequiredState });
+    expect(result[0].status).toBe("BLOCKED");
+  });
+
   it("ignores running or completed or failed tasks if not retrying", () => {
     const subtasks: Subtask[] = [
       { id: "task-1", title: "Task 1", prompt: "", depends_on: [], is_independent: true, is_merged: false, status: "RUNNING" },

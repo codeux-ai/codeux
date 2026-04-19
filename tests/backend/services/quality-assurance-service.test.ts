@@ -30,6 +30,71 @@ beforeEach(() => {
 });
 
 describe("QualityAssuranceService", () => {
+  it("runs QA reviews against a snapshot workspace and cleans it up afterwards", async () => {
+    const executeRequest = vi.fn().mockResolvedValue({
+      parsed: {
+        verdict: "pass",
+        summary: "Looks good.",
+        findings: [],
+        fixInstructions: null,
+        targetTaskKey: null,
+        shouldHavePr: true,
+        followUpTasks: [],
+        raw: {},
+      },
+      sessionId: "qa-session-1",
+      invocationId: "inv-1",
+    });
+
+    const service = new QualityAssuranceService({
+      projectManagementRepository: {} as any,
+      executionRepository: {} as any,
+      sessionTracking: {} as any,
+      qaReviewRepository: {} as any,
+      taskService: {
+        resolveInvocationProvider: () => ({
+          provider: "codex",
+          providerConfigId: "codex",
+          providers: { codex: { model: "gpt-5.3-codex", apiKey: "key", thinkingMode: "HIGH" } },
+        }),
+      } as any,
+      agentPresetSyncService: {} as any,
+      providerRunner: {} as any,
+      structuredAgentRequestService: {
+        executeRequest,
+      } as any,
+      getDashboardSettings: () => DEFAULT_DASHBOARD_SETTINGS,
+      getGithubToken: () => undefined,
+      sendSessionMessage: async () => ({}),
+    });
+
+    const createSnapshotWorkspace = vi.spyOn((service as any).workspaceManager, "createSnapshotWorkspace")
+      .mockResolvedValue("docker-volume://qa-snapshot");
+    const removeWorktree = vi.spyOn((service as any).workspaceManager, "removeWorktree")
+      .mockResolvedValue(undefined);
+
+    const result = await (service as any).runReview({
+      triggerType: "sprint_completion",
+      scope: { projectId: "project-1", sprintId: "sprint-1" },
+      projectName: "QA Project",
+      sprintGoal: "Ship safely",
+      repoPath: "/repo/project",
+      agentInstructions: "Review carefully.",
+      subtasks: [],
+      currentTask: null,
+      taskRun: null,
+      sprintRunId: null,
+      agentPresetId: null,
+    });
+
+    expect(result.verdict).toBe("pass");
+    expect(createSnapshotWorkspace).toHaveBeenCalled();
+    expect(executeRequest).toHaveBeenCalledWith(expect.objectContaining({
+      cwd: "docker-volume://qa-snapshot",
+    }));
+    expect(removeWorktree).toHaveBeenCalledWith("/repo/project", "docker-volume://qa-snapshot");
+  });
+
   it("builds sprint review prompts with the full task instructions", async () => {
     const service = new QualityAssuranceService({
       projectManagementRepository: {} as any,
@@ -1091,6 +1156,8 @@ describe("QualityAssuranceService", () => {
         getGithubToken: () => undefined,
         sendSessionMessage: async () => ({}),
       });
+      vi.spyOn((service as any).workspaceManager, "createSnapshotWorkspace").mockResolvedValue("docker-volume://qa-snapshot");
+      vi.spyOn((service as any).workspaceManager, "removeWorktree").mockResolvedValue(undefined);
 
       const reviewPromise = service.reviewSprintCompletion({
         projectId: project.id,

@@ -4,6 +4,7 @@ import { PlanningAgentService } from "../../../src/services/planning-agent-servi
 import { QualityAssuranceService } from "../../../src/services/quality-assurance-service.js";
 import { executeMemoryCaptureStage } from "../../../src/services/cli-workflow/pipeline/memory-capture-stage.js";
 import { LEARNINGS_FILENAME } from "../../../src/contracts/memory-types.js";
+import { WorkspaceManager } from "../../../src/infrastructure/providers/cli/workspace-manager.js";
 import { AppDbStorage } from "../../../src/repositories/app-db-storage.js";
 import { MemoryRepository } from "../../../src/repositories/memory-repository.js";
 import { ProjectManagementRepository } from "../../../src/repositories/project-management-repository.js";
@@ -38,9 +39,16 @@ describe("Memory Capture Integration", () => {
       sourceType: "local",
       sourceRef: tmpDir
     }).id;
+    vi.spyOn(WorkspaceManager.prototype, "createSnapshotWorkspace")
+      .mockResolvedValue("docker-volume://planning-test");
+    vi.spyOn(WorkspaceManager.prototype, "removeWorktree")
+      .mockResolvedValue(undefined);
+    vi.spyOn(WorkspaceManager.prototype, "readWorkspaceFile")
+      .mockResolvedValue("## Category: Patterns\n- plan carefully again\n");
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true }).catch(() => {})));
   });
 

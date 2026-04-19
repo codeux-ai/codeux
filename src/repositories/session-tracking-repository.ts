@@ -46,6 +46,12 @@ interface FailedCliSessionResumeTarget {
   workerBranch: string;
 }
 
+interface CliSessionWorkspaceTarget {
+  sessionId: string;
+  workerBranch: string;
+  state: string;
+}
+
 export interface CreateTrackedSessionInput {
   id: string;
   provider: ProviderId;
@@ -290,6 +296,41 @@ export class SessionTrackingRepository {
     return {
       sessionId: row.id,
       workerBranch: row.worker_branch,
+    };
+  }
+
+  findLatestCliSessionForBranch(args: {
+    repoPath: string;
+    workerBranch: string;
+    providers?: Array<Extract<ProviderId, "gemini" | "codex" | "claude-code">>;
+  }): CliSessionWorkspaceTarget | null {
+    const providers = (args.providers && args.providers.length > 0)
+      ? args.providers
+      : ["gemini", "codex", "claude-code"];
+    const placeholders = providers.map(() => "?").join(", ");
+    const row = this.db.prepare(`
+      SELECT id, worker_branch, state
+      FROM provider_sessions
+      WHERE repo_path = ?
+        AND worker_branch = ?
+        AND provider IN (${placeholders})
+        AND id LIKE 'cli-%'
+      ORDER BY create_time DESC, update_time DESC, id DESC
+      LIMIT 1
+    `).get(
+      args.repoPath,
+      args.workerBranch,
+      ...providers,
+    ) as { id?: string; worker_branch?: string; state?: string } | undefined;
+
+    if (!row?.id || !row.worker_branch) {
+      return null;
+    }
+
+    return {
+      sessionId: row.id,
+      workerBranch: row.worker_branch,
+      state: row.state || "",
     };
   }
 

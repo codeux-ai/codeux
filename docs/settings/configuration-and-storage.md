@@ -63,6 +63,11 @@ Runtime resolution:
   5. Hardcoded default (`main`)
 - In remote git mode, Sprint OS refreshes `origin` before sprint branch preflight and before each task start so branch resolution is based on current remote state instead of stale local refs.
 - In remote git mode, Sprint OS also refreshes `origin` before branch-sensitive recovery flows such as QA review, QA follow-up continuation, clarification auto-replies, CI fix runs, and merge-conflict resolution.
+- QA review execution uses an isolated snapshot workspace in Docker so review inspection does not mutate the task workspace directly.
+- QA-requested CLI follow-up work continues in the original task workspace when that workspace is still available.
+- CI autofix follow-up work reuses the existing task workspace for the same worker branch when available instead of always creating a fresh Docker volume.
+- Merge-conflict resolution remains isolated in its own Docker workspace even when the underlying task already has a reusable task workspace.
+- On startup, Sprint OS prunes stale Sprint OS Docker workspace volumes and cached setup-script images so finished, failed, unrecoverable, and outdated Docker assets do not accumulate across restarts.
 - When Sprint OS has to create a missing feature branch, it prefers `origin/<defaultBranch>` over the local `<defaultBranch>` ref when the remote-tracking base branch exists.
 - `main` is only the final fallback when no sprint, project, or system base branch is configured. Normal sprint and task flows use the resolved `git.defaultBranch` value from settings and project metadata.
 - the old global `/api/settings` contract is removed in favor of explicit scoped endpoints
@@ -347,7 +352,9 @@ Container execution notes:
 
 Repository demo script:
 - `.sprint-os/container/setup.sh` is included as a baseline bootstrap script.
-- It installs/updates `npm`, ensures `git` + `gh`, installs `pnpm`, `@google/gemini-cli`, `@openai/codex`, and Playwright Chromium (+ deps when root/apt is available).
+- It verifies `npm`, ensures `git` + `gh`, installs `pnpm` when needed, and leaves provider CLI installation to the runtime's provider-specific fallback.
+- `npm` refresh is now opt-in via `SPRINT_OS_REFRESH_NPM=1` instead of happening on every container start.
+- Playwright bootstrap is now opt-in via `SPRINT_OS_INSTALL_PLAYWRIGHT=1` instead of downloading Chromium during every fresh container bootstrap.
 - Docker CLI execution now uses isolated Docker volumes as the workspace backing store instead of repo-local worktrees or persistent host-side runtime homes.
   - container `HOME` lives inside the isolated workspace at `/workspace/.sprint-os-home`
   - write-back happens via Git patch artifacts applied on the host, not direct file sync from the container

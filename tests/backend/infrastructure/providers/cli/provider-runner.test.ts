@@ -28,6 +28,7 @@ describe("ProviderRunner", () => {
       model: "gemini-2.5-pro",
       apiKey: "key",
       sessionId: "session-1",
+      workspaceSessionId: "workspace-1",
       workflowSettings: { executionMode: "DOCKER" } as any,
       repoPath: "/repo",
       onActivity: vi.fn(),
@@ -36,7 +37,7 @@ describe("ProviderRunner", () => {
     expect(dockerRunner.ensureWorkspace).toHaveBeenCalledWith({
       cwd: "/repo",
       repoPath: "/repo",
-      sessionId: "session-1",
+      sessionId: "workspace-1",
     });
     expect(dockerRunner.runProviderInDocker).toHaveBeenCalledWith(expect.objectContaining({
       cwd: "docker-volume://workspace-1",

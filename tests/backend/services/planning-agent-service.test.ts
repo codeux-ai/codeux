@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -11,6 +11,7 @@ import { SettingsRepository } from "../../../src/repositories/settings-repositor
 import { AgentPresetSyncService } from "../../../src/services/agent-preset-sync-service.js";
 import { PlanningAgentService } from "../../../src/services/planning-agent-service.js";
 import type { IProviderRunner } from "../../../src/infrastructure/providers/cli/provider-runner.js";
+import { WorkspaceManager } from "../../../src/infrastructure/providers/cli/workspace-manager.js";
 import * as providerRetryPolicy from "../../../src/shared/providers/provider-retry-policy.js";
 
 const tempDirs: string[] = [];
@@ -24,6 +25,14 @@ afterEach(async () => {
 
 
 describe("PlanningAgentService", () => {
+  beforeEach(() => {
+    vi.spyOn(WorkspaceManager.prototype, "createSnapshotWorkspace")
+      .mockResolvedValue("docker-volume://planning-test");
+    vi.spyOn(WorkspaceManager.prototype, "removeWorktree")
+      .mockResolvedValue(undefined);
+    vi.spyOn(WorkspaceManager.prototype, "readWorkspaceFile")
+      .mockResolvedValue("## Category: Patterns\n- prefer consistent planning context\n");
+  });
 
   it("uses the Planning agent reply to improve prompts and create tasks", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-agent-"));

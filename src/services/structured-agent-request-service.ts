@@ -20,6 +20,8 @@ export interface StructuredRequestArgs<T> {
   providerAuthPath?: string;
   providerPrompt: string;
   repoPath: string;
+  cwd?: string;
+  workspaceSessionId?: string;
   settings: DashboardSettings;
   parseFn: (text: string) => T;
   buildRetryPrompt: (error: Error) => string;
@@ -105,11 +107,13 @@ export class StructuredAgentRequestService {
       type: args.type,
       provider: args.provider as VirtualWorkerProvider,
       prompt: args.providerPrompt,
+      cwd: args.cwd,
       model: args.model,
       apiKey: args.apiKey,
       providerMountAuth: args.providerMountAuth,
       providerAuthPath: args.providerAuthPath,
       sessionId,
+      workspaceSessionId: args.workspaceSessionId,
       workflowSettings: args.settings.cliWorkflow,
       repoPath: args.repoPath,
       githubToken: args.githubToken,

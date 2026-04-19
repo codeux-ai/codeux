@@ -39,6 +39,7 @@ export interface ExecutionProviderRunArgs {
   providerMountAuth?: boolean;
   providerAuthPath?: string;
   sessionId: string;
+  workspaceSessionId?: string;
   workflowSettings: DashboardSettings["cliWorkflow"];
   repoPath: string;
   githubToken?: string;
@@ -129,6 +130,7 @@ export class ProviderExecutionService {
         providerMountAuth: args.providerMountAuth,
         providerAuthPath: args.providerAuthPath,
         sessionId: args.sessionId,
+        workspaceSessionId: args.workspaceSessionId,
         workflowSettings: args.workflowSettings,
         repoPath: args.repoPath,
         githubToken: args.githubToken ?? this.deps.getGithubToken?.(),

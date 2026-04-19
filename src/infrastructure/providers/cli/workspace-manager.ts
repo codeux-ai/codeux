@@ -11,6 +11,8 @@ import { extractPathHints } from "../../../services/cli-workflow-text-utils.js";
 const WORKSPACE_HANDLE_PREFIX = "docker-volume://";
 const CONTAINER_WORKSPACE_ROOT = "/workspace";
 const WORKSPACE_HELPER_IMAGE = "alpine/git";
+const WORKSPACE_VOLUME_LABEL = "sprint-os.workspace=true";
+const WORKSPACE_SESSION_LABEL_PREFIX = "sprint-os.workspace-session=";
 
 export interface WorkspaceCommandOptions {
   env?: NodeJS.ProcessEnv;
@@ -20,6 +22,7 @@ export interface WorkspaceCommandOptions {
 
 export interface IWorkspaceManager {
   buildWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): string;
+  buildWorkspaceRef(repoPath: string, workspaceKey: string, executionMode: CliWorkflowSettings["executionMode"]): string;
   createSnapshotWorkspace(repoPath: string, sessionId: string): Promise<string>;
   resolveResumeWorktreePath(repoPath: string, sessionId: string, executionMode: CliWorkflowSettings["executionMode"]): Promise<string | undefined>;
   prepareWorktree(repoPath: string, worktreePath: string, workerBranch: string, featureBranch: string, resumeSessionId?: string): Promise<{ worktreePath: string; resumed: boolean }>;
@@ -59,10 +62,14 @@ export class WorkspaceManager implements IWorkspaceManager {
   private readonly repoLocks = new Map<string, Promise<void>>();
 
   buildWorktreePath(repoPath: string, sessionId: string, _executionMode: CliWorkflowSettings["executionMode"]): string {
+    return this.buildWorkspaceRef(repoPath, sessionId, _executionMode);
+  }
+
+  buildWorkspaceRef(repoPath: string, workspaceKey: string, _executionMode: CliWorkflowSettings["executionMode"]): string {
     const normalizedRepoPath = path.resolve(repoPath);
     const repoName = sanitizeToken(path.basename(normalizedRepoPath)) || "repo";
     const repoHash = createHash("sha256").update(normalizedRepoPath).digest("hex").slice(0, 12);
-    const volumeName = `sprint-os-${repoName}-${repoHash}-${sanitizeToken(sessionId)}`;
+    const volumeName = `sprint-os-${repoName}-${repoHash}-${sanitizeToken(workspaceKey)}`;
     return `${WORKSPACE_HANDLE_PREFIX}${volumeName}`;
   }
 
@@ -224,7 +231,20 @@ export class WorkspaceManager implements IWorkspaceManager {
 
   private async createVolume(worktreePath: string): Promise<void> {
     const { volumeName } = parseWorkspaceHandle(worktreePath);
-    await runCommandStrict("docker", ["volume", "create", volumeName], process.cwd());
+    const sessionKey = volumeName.match(/^sprint-os-.+-([a-f0-9]{12})-(.+)$/)?.[2] || volumeName;
+    await runCommandStrict(
+      "docker",
+      [
+        "volume",
+        "create",
+        "--label",
+        WORKSPACE_VOLUME_LABEL,
+        "--label",
+        `${WORKSPACE_SESSION_LABEL_PREFIX}${sessionKey}`,
+        volumeName,
+      ],
+      process.cwd(),
+    );
   }
 
   private async seedWorkspaceFromBundle(repoPath: string, worktreePath: string): Promise<void> {
@@ -326,4 +346,8 @@ export class WorkspaceManager implements IWorkspaceManager {
       }
     }
   }
+}
+
+export function isDockerWorkspaceRef(value: string): boolean {
+  return isWorkspaceHandle(value);
 }

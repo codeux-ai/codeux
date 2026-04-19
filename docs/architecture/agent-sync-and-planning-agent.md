@@ -113,6 +113,14 @@ Behavior:
 5. the worker (or virtual provider) processes the request and generates the reply.
 6. Sprint OS captures the reply in the invocation, parses the payload, and applies the result. During parsing, Sprint OS utilizes a shared `src/services/structured-provider-response-service.ts` to execute virtual provider runs and automatically retry parsing using corrective prompts if the shape is malformed. The payload extraction leverages `src/services/planning-json-extractor.ts` to recursively search noisy, markdown-wrapped, or nested provider responses for the canonical JSON payload.
 
+When memory is enabled, planning prompts also include:
+
+- the planning agent's current long-term memory for the project
+- the current sprint's short-term learnings for that same planning agent when a sprint scope exists
+- the effective learnings-capture instruction, using the agent-specific memory template override when configured
+
+In Docker execution mode, planning runs against a snapshot workspace and captures `.task-learnings.md` back out of that snapshot volume so memory capture still works even though the provider never writes directly into the host repo path.
+
 ### Prompt Lineage
 
 Sprint OS stores the complete lineage of a sprint's evolution:

@@ -129,6 +129,9 @@ Checks:
 - Are dependencies in final `completed`, or in `coding_completed` with no remaining merge work?
 - Any action-required session states (`AWAITING_*`, `PAUSED`)?
 - Is merge protocol disabled in step toggles?
+- For CLI-backed tasks, inspect the latest dispatch error. Sprint OS now treats unrecoverable Git auth/config failures as hard blockers instead of retryable failures.
+  - Examples: unset GitHub token, `fatal: could not read Username for 'https://github.com'`, `Authentication failed`, or similar remote permission/auth errors during push/PR flow.
+  - Expected behavior: the task run moves to `BLOCKED`, the sprint pauses, and the watch loop stops consuming tokens until credentials are fixed and the task or sprint is resumed manually.
 
 ### 7. Tasks completed but pipeline not progressing
 Checks:

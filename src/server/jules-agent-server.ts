@@ -44,6 +44,7 @@ import { ExecutionControlService } from "../services/execution-control-service.j
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import { RuntimeCleanupService } from "../services/runtime-cleanup-service.js";
 import { RuntimeStartupRecoveryService } from "../services/runtime-startup-recovery-service.js";
+import { DockerAssetPruneService } from "../services/docker-asset-prune-service.js";
 import { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
 import { AgentPresetSyncService } from "../services/agent-preset-sync-service.js";
 import { PlanningAgentService } from "../services/planning-agent-service.js";
@@ -894,6 +895,14 @@ export class JulesAgentServer {
       recoveredSprintRunIds = recoveryResult.resumedSprintRunIds;
     } catch (error) {
       this.logger.error("Failed to recover runtime state on startup", { error });
+    }
+    try {
+      await new DockerAssetPruneService(
+        this.sessionTracking,
+        this.logger.child({ component: "docker-asset-prune-service" }),
+      ).cleanupOnStartup();
+    } catch (error) {
+      this.logger.error("Failed to prune stale Docker assets on startup", { error });
     }
 
     if (this.isDashboardEnabled()) {

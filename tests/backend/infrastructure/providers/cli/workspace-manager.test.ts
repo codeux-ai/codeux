@@ -50,7 +50,11 @@ describe("WorkspaceManager", () => {
     const workspace = await manager.createSnapshotWorkspace("/repo/project", "session-1");
 
     expect(workspace).toMatch(/^docker-volume:\/\/sprint-os-project-[a-f0-9]{12}-session-1-snapshot$/);
-    expect(runCommandStrict).toHaveBeenCalledWith("docker", expect.arrayContaining(["volume", "create"]), expect.any(String));
+    expect(runCommandStrict).toHaveBeenCalledWith(
+      "docker",
+      expect.arrayContaining(["volume", "create", "--label", "sprint-os.workspace=true"]),
+      expect.any(String),
+    );
     expect(runCommandStrict).toHaveBeenCalledWith("git", ["bundle", "create", "/tmp/sprint-os-bundle-123/repo.bundle", "--all"], "/repo/project");
     const bootstrapCall = vi.mocked(runCommandStrict).mock.calls.find((call) => call[0] === "bash");
     const bootstrapCommand = bootstrapCall?.[1]?.join(" ") || "";

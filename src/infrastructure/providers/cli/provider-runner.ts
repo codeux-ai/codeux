@@ -46,6 +46,7 @@ export interface ProviderRunInput {
   providerMountAuth?: boolean;
   providerAuthPath?: string;
   sessionId: string;
+  workspaceSessionId?: string;
   workflowSettings: CliWorkflowSettings;
   repoPath: string;
   githubToken?: string;
@@ -71,7 +72,7 @@ export class ProviderRunner implements IProviderRunner {
       ? await this.dockerRunner.ensureWorkspace({
         cwd: input.cwd,
         repoPath: input.repoPath,
-        sessionId: input.sessionId,
+        sessionId: input.workspaceSessionId || input.sessionId,
       })
       : { cwd: input.cwd, cleanup: async () => undefined };
 
@@ -90,7 +91,7 @@ export class ProviderRunner implements IProviderRunner {
       ? await this.dockerRunner.ensureWorkspace({
         cwd: input.cwd,
         repoPath: input.repoPath,
-        sessionId: input.sessionId,
+        sessionId: input.workspaceSessionId || input.sessionId,
       })
       : { cwd: input.cwd, cleanup: async () => undefined };
 

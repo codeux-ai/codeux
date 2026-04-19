@@ -150,6 +150,7 @@ When all sprint tasks are settled, the same completion path now also handles the
 - Sprint OS now emits `sprint_completed` only after an enabled main auto-merge flow actually settles, including the case where the `feature -> default` PR has already been merged
 - while main auto-merge is still pending, waiting on CI, ready to merge, or armed in GitHub, the sprint stays active instead of completing early
 - if the main merge gate is `DIRTY`, has failed checks, is review-blocked, or an open main-merge conflict handoff item for the same sprint run still exists, the sprint run pauses instead of completing
+- if a CLI task hits an unrecoverable Git push/auth/configuration error, Sprint OS now records that task run as `BLOCKED` rather than retryable `FAILED`, so the watch loop pauses the sprint instead of requeueing the same token-burning failure forever
 
 ## Active Ownership
 

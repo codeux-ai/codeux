@@ -73,6 +73,28 @@ interface StartCliTaskInput {
   taskRunId?: string;
 }
 
+function isNonRecoverableGitWorkflowError(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return [
+    "could not read username for",
+    "authentication failed",
+    "repository not found",
+    "permission denied to",
+    "could not authenticate to github",
+    "gh auth login",
+    "gh auth status",
+    "gh token",
+    "github token",
+    "no git credentials",
+    "remote: invalid username or token",
+    "support for password authentication was removed",
+  ].some((pattern) => normalized.includes(pattern));
+}
+
 export class CliWorkflowService {
   private readonly workspaceManager: IWorkspaceManager;
   private readonly workspaceArtifactService: WorkspaceArtifactService;
@@ -373,6 +395,28 @@ export class CliWorkflowService {
           retryAfterIso: error.retryAfterIso,
           message,
         });
+      } else if (isNonRecoverableGitWorkflowError(message)) {
+        this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
+        this.deps.sessionTracking.appendActivity(args.sessionId, {
+          originator: "system",
+          description: `Workflow blocked by unrecoverable git configuration/authentication error: ${message}`,
+        });
+        this.updateExecutionState(args, {
+          state: "BLOCKED",
+          finishedAt,
+          dispatchStatus: "blocked",
+          errorMessage: message,
+        });
+        this.appendExecutionEvent(args, "cli_workflow_blocked", {
+          provider: args.provider,
+          category: "git_configuration",
+          errorMessage: message,
+        });
+        this.deps.logger?.error("CLI workflow blocked by unrecoverable git configuration/authentication error", {
+          sessionId: args.sessionId,
+          provider: args.provider,
+          message,
+        });
       } else {
         this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
         this.deps.sessionTracking.appendActivity(args.sessionId, {
@@ -450,7 +494,7 @@ export class CliWorkflowService {
   private updateExecutionState(
     args: { taskRunId?: string; sessionId: string; workerBranch: string },
     input: {
-      state: "COMPLETED" | "FAILED" | "QUOTA";
+      state: "COMPLETED" | "FAILED" | "QUOTA" | "BLOCKED";
       finishedAt: string;
       prUrl?: string;
       workerBranch?: string;
@@ -474,7 +518,11 @@ export class CliWorkflowService {
     };
     this.deps.executionRepository.updateTaskRun(taskRun.id, taskRunUpdate);
     this.deps.projectManagementRepository?.updateTask(taskRun.taskId, {
-      status: input.state === "COMPLETED" ? "coding_completed" : input.state === "FAILED" ? "pending" : "in_progress",
+      status: input.state === "COMPLETED"
+        ? "coding_completed"
+        : input.state === "QUOTA"
+          ? "in_progress"
+          : "pending",
     });
 
     if (taskRun.dispatchId) {

@@ -27,6 +27,10 @@ import { resolveEffectiveDashboardSettings } from "./settings-resolution-service
 import type { WorkerInboxReplyService } from "./worker-inbox-reply-service.js";
 import type { InstructionService } from "../instructions/instruction-template-service.js";
 import type { SprintExecutionStateService } from "./sprint-execution-state-service.js";
+import type { MemoryService } from "./memory-service.js";
+import type { AgentPresetSyncService } from "./agent-preset-sync-service.js";
+import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
+import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
 
 const VIRTUAL_WORKER_RECONCILE_MS = 3_000;
 const VIRTUAL_WORKER_SESSION_POLL_MS = 2_000;
@@ -81,6 +85,8 @@ export interface VirtualWorkerServiceDependencies {
   instructionService: InstructionService;
   approveSessionPlan: (sessionId: string) => Promise<unknown>;
   sendSessionMessage: (sessionId: string, prompt: string) => Promise<unknown>;
+  memoryService?: MemoryService;
+  agentPresetSyncService?: Pick<AgentPresetSyncService, "getOptionalWorkerAgentForRepoPath">;
   logger?: Logger;
 }
 
@@ -518,6 +524,13 @@ export class VirtualWorkerService {
     const title = item.title;
     let succeeded = false;
     let initialHead = "";
+    const workerAgent = await this.deps.agentPresetSyncService?.getOptionalWorkerAgentForRepoPath(repoPath).catch(() => null);
+    const memoryContext = workerAgent?.id
+      ? this.buildMemoryContext(item.projectId, item.sprintId || null, workerAgent.id)
+      : undefined;
+    const memoryInstructions = settings.memory?.enabled && settings.memory.autoCaptureSprint
+      ? resolveAgentMemoryInstructions(workerAgent || {}, settings.memory?.workerLearningsInstruction)
+      : "";
 
     this.deps.sessionTracking.createSession({
       id: sessionId,
@@ -544,7 +557,17 @@ export class VirtualWorkerService {
       const hasConflicts = await this.runMergeIntoSource(finalWorktreePath, targetBranch, sessionId);
       if (hasConflicts) {
         const workspaceGuidance = await this.workspaceManager.buildWorkspaceGuidance(item.summaryMarkdown, finalWorktreePath);
-        const providerPrompt = buildProviderPrompt(this.buildMergeConflictPrompt(item, sourceBranch, targetBranch, workspaceGuidance), providerSettings.thinkingMode);
+        const providerPrompt = buildProviderPrompt(
+          this.buildMergeConflictPrompt(
+            item,
+            sourceBranch,
+            targetBranch,
+            workspaceGuidance,
+            memoryContext,
+            memoryInstructions,
+          ),
+          providerSettings.thinkingMode,
+        );
         await this.runProviderWithRetry({
           provider,
           providerPrompt,
@@ -563,6 +586,15 @@ export class VirtualWorkerService {
       }
       await this.ensureMergeConflictResolved(finalWorktreePath);
       await this.finalizeMergeCommit(finalWorktreePath, sourceBranch, targetBranch);
+      if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
+        await this.captureMemoriesFromWorkspace(
+          item.projectId,
+          item.sprintId || undefined,
+          workerAgent?.id || null,
+          finalWorktreePath,
+          item.id,
+        );
+      }
       const patchText = await this.workspaceArtifactService.exportBinaryPatch(finalWorktreePath, initialHead);
       const applyResult = await this.workspaceArtifactService.applyPatchToBranch({
         repoPath,
@@ -669,10 +701,23 @@ export class VirtualWorkerService {
     }
 
     const sessionId = `virtual-cifix-${provider}-${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
-    let worktreePath = this.workspaceManager.buildWorktreePath(repoPath, sessionId, workflowSettings.executionMode);
+    const resumeTarget = this.deps.sessionTracking.findLatestCliSessionForBranch({
+      repoPath,
+      workerBranch: branchName,
+      providers: [provider],
+    });
+    const workspaceOwnerSessionId = resumeTarget?.sessionId || sessionId;
+    let worktreePath = this.workspaceManager.buildWorkspaceRef(repoPath, workspaceOwnerSessionId, workflowSettings.executionMode);
     const title = item.title;
     let succeeded = false;
     let initialHead = "";
+    const workerAgent = await this.deps.agentPresetSyncService?.getOptionalWorkerAgentForRepoPath(repoPath).catch(() => null);
+    const memoryContext = workerAgent?.id
+      ? this.buildMemoryContext(item.projectId, item.sprintId || null, workerAgent.id)
+      : undefined;
+    const memoryInstructions = settings.memory?.enabled && settings.memory.autoCaptureSprint
+      ? resolveAgentMemoryInstructions(workerAgent || {}, settings.memory?.workerLearningsInstruction)
+      : "";
 
     this.deps.sessionTracking.createSession({
       id: sessionId,
@@ -692,13 +737,28 @@ export class VirtualWorkerService {
 
     let cleanedUp = false;
     try {
-      const prepared = await this.workspaceManager.prepareWorktree(repoPath, worktreePath, branchName, branchName);
+      const prepared = await this.workspaceManager.prepareWorktree(
+        repoPath,
+        worktreePath,
+        branchName,
+        branchName,
+        resumeTarget?.sessionId,
+      );
       const finalWorktreePath = prepared.worktreePath;
       worktreePath = finalWorktreePath;
       initialHead = (await this.runWorkspaceCommand(finalWorktreePath, "git", ["rev-parse", "HEAD"])).stdout.trim();
 
       const workspaceGuidance = await this.workspaceManager.buildWorkspaceGuidance(item.summaryMarkdown, finalWorktreePath);
-      const providerPrompt = buildProviderPrompt(this.buildCiFixPrompt(item, branchName, workspaceGuidance), providerSettings.thinkingMode);
+      const providerPrompt = buildProviderPrompt(
+        this.buildCiFixPrompt(
+          item,
+          branchName,
+          workspaceGuidance,
+          memoryContext,
+          memoryInstructions,
+        ),
+        providerSettings.thinkingMode,
+      );
       await this.runProviderWithRetry({
         provider,
         providerPrompt,
@@ -714,6 +774,16 @@ export class VirtualWorkerService {
         providerAuthPath: providerSettings.authPath,
         githubToken: settings.git.githubToken,
       });
+
+      if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
+        await this.captureMemoriesFromWorkspace(
+          item.projectId,
+          item.sprintId || undefined,
+          workerAgent?.id || null,
+          finalWorktreePath,
+          item.id,
+        );
+      }
 
       const patchText = await this.workspaceArtifactService.exportBinaryPatch(finalWorktreePath, initialHead);
       const applyResult = await this.workspaceArtifactService.applyPatchToBranch({
@@ -788,6 +858,8 @@ export class VirtualWorkerService {
     item: ProjectAttentionItemRecord,
     branchName: string,
     workspaceGuidance: string,
+    memoryContext?: string,
+    memoryInstructions?: string,
   ): string {
     const payload = item.payload || {};
     const failedChecks = Array.isArray(payload.failedChecks) ? payload.failedChecks as string[] : [];
@@ -800,6 +872,8 @@ export class VirtualWorkerService {
     return [
       `CI checks have failed for PR #${prNumber} on branch \`${branchName}\`.`,
       prUrl ? `PR URL: ${prUrl}` : null,
+      "",
+      memoryContext?.trim() || null,
       "",
       "Failed checks: " + (failedChecks.length > 0 ? failedChecks.join(", ") : "unknown"),
       failedJobLabels.length > 0 ? "Failed jobs: " + failedJobLabels.join(", ") : null,
@@ -815,6 +889,10 @@ export class VirtualWorkerService {
         : "Failed job logs were not available from CI metadata. Use `gh run view <run-id> --log-failed` to fetch logs.",
       "",
       taskPrompt ? "Original task prompt:\n" + taskPrompt : null,
+      "",
+      "## LEARNINGS CAPTURE (Required)",
+      memoryInstructions?.trim()
+        || `Before you finish, write key durable learnings and pitfalls from this CI fix to \`${LEARNINGS_FILENAME}\`.`,
       "",
       "Original attention summary:",
       item.summaryMarkdown.trim(),
@@ -934,6 +1012,8 @@ export class VirtualWorkerService {
     sourceBranch: string,
     targetBranch: string,
     workspaceGuidance: string,
+    memoryContext?: string,
+    memoryInstructions?: string,
   ): string {
     const payload = item.payload || {};
     const mergedTaskPrompts = this.extractMergeConflictTaskPrompts(
@@ -950,6 +1030,8 @@ export class VirtualWorkerService {
       `Source branch: ${sourceBranch}`,
       `Target branch: ${targetBranch}`,
       "",
+      memoryContext?.trim() || null,
+      "",
       "Requirements:",
       "- Preserve the intended work from both branches.",
       "- Resolve only the conflict and any directly related fallout.",
@@ -960,6 +1042,10 @@ export class VirtualWorkerService {
       currentTaskPrompt || null,
       mergedTaskPrompts.length > 0 ? "\nMerged task prompts already present on the target branch:" : null,
       mergedTaskPrompts.length > 0 ? mergedTaskPrompts.join("\n\n") : null,
+      "",
+      "## LEARNINGS CAPTURE (Required)",
+      memoryInstructions?.trim()
+        || `Before you finish, write key durable learnings and pitfalls from this merge-conflict resolution to \`${LEARNINGS_FILENAME}\`.`,
       "",
       "Original attention summary:",
       item.summaryMarkdown.trim(),
@@ -1072,6 +1158,73 @@ export class VirtualWorkerService {
     return value && typeof value === "object" && !Array.isArray(value)
       ? value as Record<string, unknown>
       : null;
+  }
+
+  private buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string): string | undefined {
+    const memoryService = this.deps.memoryService;
+    if (!memoryService) {
+      return undefined;
+    }
+
+    try {
+      const longTerm = memoryService.listLongTermByAgent(projectId, agentPresetId, 10);
+      const shortTerm = sprintId
+        ? memoryService.listBySprintAndAgent(projectId, sprintId, agentPresetId, 10)
+        : [];
+
+      if (longTerm.length === 0 && shortTerm.length === 0) {
+        return undefined;
+      }
+
+      const sections: string[] = ["## PROJECT CONTEXT FROM MEMORY"];
+      if (longTerm.length > 0) {
+        sections.push("### Long-Term Knowledge");
+        for (const memory of longTerm) {
+          sections.push(`- [${memory.category}] ${memory.content.slice(0, 300)}`);
+        }
+      }
+      if (shortTerm.length > 0) {
+        sections.push("### Recent Sprint Learnings");
+        for (const memory of shortTerm) {
+          sections.push(`- [${memory.category}] ${memory.content.slice(0, 300)}`);
+        }
+      }
+      return sections.join("\n");
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async captureMemoriesFromWorkspace(
+    projectId: string,
+    sprintId: string | undefined,
+    agentPresetId: string | null,
+    worktreePath: string,
+    originId: string,
+  ): Promise<number> {
+    if (!this.deps.memoryService) {
+      return 0;
+    }
+    if (worktreePath.startsWith("docker-volume://")) {
+      const raw = await this.workspaceManager.readWorkspaceFile(worktreePath, LEARNINGS_FILENAME);
+      if (!raw) {
+        return 0;
+      }
+      return await this.deps.memoryService.captureMemoriesFromContent(
+        projectId,
+        sprintId,
+        agentPresetId,
+        raw,
+        originId,
+      );
+    }
+    return await this.deps.memoryService.captureMemoriesFromWorktree(
+      projectId,
+      sprintId,
+      agentPresetId,
+      worktreePath,
+      originId,
+    );
   }
 
   private async runWorkspaceCommand(worktreePath: string, command: string, args: string[]) {
