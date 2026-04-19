@@ -231,62 +231,61 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
   const { title, body, confirmLabel = "Confirm", cancelLabel = "Cancel", destructive = false } = options;
 
   return (
+  <div
+    ref={backdropRef}
+    className="fixed inset-0 z-[300] flex items-center justify-center bg-void-900/60 backdrop-blur-3xl p-6"
+  >
     <div
-      ref={backdropRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-void-900/50 backdrop-blur-sm p-4"
+      ref={(el) => {
+        if (el) {
+          trapRef.current = el;
+          cardRef.current = el;
+        }
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-dialog-title"
+      aria-describedby="confirm-dialog-body"
+      className="bg-white/98 dark:bg-void-800/98 w-full max-w-md rounded-3xl shadow-[0_64px_128px_rgba(0,0,0,0.4)] overflow-hidden border border-black/[0.04] dark:border-white/[0.08] flex flex-col backdrop-blur-3xl"
     >
-      <div
-        ref={(el) => {
-          if (el) {
-            trapRef.current = el;
-            cardRef.current = el;
-          }
-        }}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="confirm-dialog-title"
-        aria-describedby="confirm-dialog-body"
-        className="bg-white dark:bg-void-800 w-full max-w-md rounded-[1.75rem] shadow-2xl overflow-hidden border border-black/[0.06] dark:border-white/[0.06] flex flex-col"
-      >
-        <div className="p-6 pb-4">
-          <h2 id="confirm-dialog-title" className="text-xl font-semibold text-void-900 dark:text-white">
-            {title}
-          </h2>
-          <p id="confirm-dialog-body" className="mt-3 text-sm text-void-600 dark:text-void-300">
-            {body}
-          </p>
-          {destructive && (
-            <div className="mt-4 p-3 bg-status-red/10 border border-status-red/20 rounded-lg">
-              <p className="text-xs font-medium text-status-red">
-                ⚠️ This action is permanent and cannot be undone.
-              </p>
-            </div>
-          )}
-        </div>
-        <div className="flex items-center justify-end gap-3 p-4 bg-void-50 dark:bg-void-900/30 border-t border-black/[0.06] dark:border-white/[0.06]">
+      <div className="p-8 pb-6">
+        <h2 id="confirm-dialog-title" className="text-2xl font-black text-void-900 dark:text-white tracking-tight leading-tight">
+          {title}
+        </h2>
+        <p id="confirm-dialog-body" className="mt-4 text-[13px] font-medium text-void-500 dark:text-void-400 leading-relaxed">
+          {body}
+        </p>
+        {destructive && (
+          <div className="mt-6 p-4 bg-status-red/[0.03] border border-status-red/10 rounded-2xl">
+            <p className="text-[11px] font-black uppercase tracking-widest text-status-red flex items-center gap-2">
+              <AlertTriangle className="w-3.5 h-3.5" /> This action is permanent.
+            </p>
+          </div>
+        )}
+      </div>
+      <div className="flex items-center justify-end gap-3 p-6 bg-void-50/50 dark:bg-void-950/30 border-t border-black/[0.04] dark:border-white/[0.04]">
+        <button
+          type="button"
+          onClick={() => handleClose(onCancel)}
+          className="px-6 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl text-void-500 dark:text-void-400 hover:text-void-900 dark:hover:text-white transition-all active:scale-95"
+        >
+          {cancelLabel}
+        </button>
+        {destructive ? (
+          <DestructiveConfirmButton
+            onConfirm={() => handleClose(onConfirm)}
+            label={confirmLabel}
+            className="px-8 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red focus-visible:ring-offset-2 active:scale-95 bg-status-red text-white hover:bg-status-red/90 shadow-[0_8px_24px_rgba(211,47,47,0.3)] transition-all"
+          />
+        ) : (
           <button
             type="button"
-            onClick={() => handleClose(onCancel)}
-            className="px-4 py-2 text-sm font-medium rounded-[1rem] border border-black/[0.06] dark:border-white/[0.06] hover:bg-black/5 dark:hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 transition-all duration-200"
+            onClick={() => handleClose(onConfirm)}
+            className="px-8 py-3 text-[11px] font-black uppercase tracking-widest rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 bg-signal-500 text-void-900 hover:bg-signal-400 shadow-[0_8px_24px_rgba(0,224,160,0.3)] transition-all"
           >
-            {cancelLabel}
+            {confirmLabel}
           </button>
-          {destructive ? (
-            <DestructiveConfirmButton
-              onConfirm={() => handleClose(onConfirm)}
-              label={confirmLabel}
-              className="px-4 py-2 text-sm font-medium rounded-[1rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 bg-status-red text-white hover:opacity-90 shadow-[0_4px_12px_rgba(211,47,47,0.25)]"
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => handleClose(onConfirm)}
-              className="px-4 py-2 text-sm font-medium rounded-[1rem] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 focus-visible:ring-offset-2 active:scale-95 bg-signal-500 text-white hover:bg-signal-600 dark:hover:bg-signal-400 shadow-[0_4px_12px_rgba(0,224,160,0.25)]"
-            >
-              {confirmLabel}
-            </button>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
