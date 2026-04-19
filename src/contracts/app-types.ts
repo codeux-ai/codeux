@@ -61,7 +61,7 @@ export type InvocationRoutingId =
   | "qa_review"
   | "ci_fix"
   | "merge_conflict";
-export type CliExecutionMode = "DOCKER";
+export type CliExecutionMode = "DOCKER" | "HOST";
 export type FeaturePrAutoMergeMode = "OFF" | "CREATE_PR" | "WHEN_GREEN" | "ALWAYS";
 export type WorkerExecutionMode = "VIRTUAL";
 export type VirtualWorkerProvider = Exclude<ProviderId, "jules">;

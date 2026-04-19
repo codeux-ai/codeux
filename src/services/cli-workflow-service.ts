@@ -95,6 +95,20 @@ function isNonRecoverableGitWorkflowError(message: string): boolean {
   ].some((pattern) => normalized.includes(pattern));
 }
 
+function isNonRecoverableExecutionEnvironmentError(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return [
+    "the command 'docker' could not be found in this wsl 2 distro",
+    "cannot connect to the docker daemon",
+    "docker: command not found",
+    "failed to create shim task",
+  ].some((pattern) => normalized.includes(pattern));
+}
+
 export class CliWorkflowService {
   private readonly workspaceManager: IWorkspaceManager;
   private readonly workspaceArtifactService: WorkspaceArtifactService;
@@ -395,11 +409,11 @@ export class CliWorkflowService {
           retryAfterIso: error.retryAfterIso,
           message,
         });
-      } else if (isNonRecoverableGitWorkflowError(message)) {
+      } else if (isNonRecoverableGitWorkflowError(message) || isNonRecoverableExecutionEnvironmentError(message)) {
         this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
         this.deps.sessionTracking.appendActivity(args.sessionId, {
           originator: "system",
-          description: `Workflow blocked by unrecoverable git configuration/authentication error: ${message}`,
+          description: `Workflow blocked by unrecoverable execution environment error: ${message}`,
         });
         this.updateExecutionState(args, {
           state: "BLOCKED",
@@ -409,10 +423,10 @@ export class CliWorkflowService {
         });
         this.appendExecutionEvent(args, "cli_workflow_blocked", {
           provider: args.provider,
-          category: "git_configuration",
+          category: isNonRecoverableGitWorkflowError(message) ? "git_configuration" : "execution_environment",
           errorMessage: message,
         });
-        this.deps.logger?.error("CLI workflow blocked by unrecoverable git configuration/authentication error", {
+        this.deps.logger?.error("CLI workflow blocked by unrecoverable execution environment error", {
           sessionId: args.sessionId,
           provider: args.provider,
           message,

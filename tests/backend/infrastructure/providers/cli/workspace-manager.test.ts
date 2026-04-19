@@ -27,6 +27,11 @@ describe("WorkspaceManager", () => {
     expect(result).toMatch(/^docker-volume:\/\/sprint-os-project-[a-f0-9]{12}-session-1$/);
   });
 
+  it("builds host worktree paths when host execution mode is selected", () => {
+    const result = manager.buildWorktreePath("/repo/project", "session-1", "HOST");
+    expect(result).toBe("/repo/project/.worktrees/session-1");
+  });
+
   it("resolves a resumable workspace when the Docker volume exists", async () => {
     vi.mocked(runCommandStrict).mockResolvedValue({ ok: true, stdout: "[]", stderr: "", code: 0, signal: null } as any);
 
@@ -34,6 +39,14 @@ describe("WorkspaceManager", () => {
 
     expect(result).toMatch(/^docker-volume:\/\/sprint-os-project-[a-f0-9]{12}-session-1$/);
     expect(runCommandStrict).toHaveBeenCalledWith("docker", expect.arrayContaining(["volume", "inspect"]), expect.any(String));
+  });
+
+  it("resolves a resumable host workspace when the directory exists", async () => {
+    vi.mocked(fs.access).mockResolvedValue(undefined);
+
+    const result = await manager.resolveResumeWorktreePath("/repo/project", "session-1", "HOST");
+
+    expect(result).toBe("/repo/project/.worktrees/session-1");
   });
 
   it("creates a fresh snapshot workspace volume", async () => {

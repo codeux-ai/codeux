@@ -866,6 +866,38 @@ describe("VirtualWorkerService", () => {
     expect(prepareWorktree).toHaveBeenCalledWith("/test", "/tmp/reused-worktree", "fix/branch", "fix/branch", "cli-codex-existing");
   });
 
+  it("falls back to HOST mode for CI autofix when docker is unavailable", async () => {
+    const { virtualWorkerService } = await setupService();
+
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(false);
+
+    await expect((virtualWorkerService as any).resolveVirtualWorkerWorkflowSettings({
+      workflowSettings: {
+        ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow,
+        executionMode: "DOCKER",
+      },
+      sessionId: "sess-1",
+      repoPath: "/test",
+      purpose: "ci_fix",
+    })).resolves.toEqual(expect.objectContaining({ executionMode: "HOST" }));
+  });
+
+  it("keeps merge conflict resolution Docker-only when docker is unavailable", async () => {
+    const { virtualWorkerService } = await setupService();
+
+    vi.spyOn((virtualWorkerService as any).dockerService, "isAvailable").mockResolvedValue(false);
+
+    await expect((virtualWorkerService as any).resolveVirtualWorkerWorkflowSettings({
+      workflowSettings: {
+        ...DEFAULT_DASHBOARD_SETTINGS.cliWorkflow,
+        executionMode: "DOCKER",
+      },
+      sessionId: "sess-1",
+      repoPath: "/test",
+      purpose: "merge_conflict",
+    })).rejects.toThrow("Docker is unavailable");
+  });
+
   it("resolveMergeConflictAttention covers execution path", async () => {
     const { virtualWorkerService, projectAttentionService, project, workerEndpointRepository } = await setupServiceWithProject();
 

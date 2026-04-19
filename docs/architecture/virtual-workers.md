@@ -108,6 +108,8 @@ Merge-conflict handling intentionally stays isolated from the original task work
 
 For CI autofix, Sprint OS now prefers reusing the existing task workspace when one is still available for the same worker branch. That allows follow-up CI fixes to continue in the same workspace context instead of creating an unnecessary new Docker volume for every CI rerun. The CI-fix prompt also receives the worker agent's current memory context and writes new durable learnings back into memory from the reused workspace.
 
+If Docker is unavailable when the CI autofix flow starts, Sprint OS degrades that specific repair run to a host-backed worktree instead of looping on an unrecoverable Docker failure. Merge-conflict resolution does not use this fallback: it remains Docker-only so conflict repair stays isolated from the reusable task workspace.
+
 For QA review execution, Sprint OS now runs the review itself against a fresh snapshot workspace rather than the mutable task workspace. This keeps review inspection isolated while still allowing QA-requested coding follow-ups to continue in the original task workspace when appropriate. Both the review agent and QA-requested coding follow-ups now receive their current memory context, and QA follow-up edits capture fresh learnings back into memory from the actual workspace used for the fix.
 
 Unsupported worker-owned attention types are escalated back to human attention with a summary.
@@ -122,6 +124,8 @@ Startup cleanup also aggressively removes stale Sprint OS Docker assets:
 - cached setup-script Docker images from previous runs
 
 Interrupted Docker-backed sessions that were running before restart are treated as failed during recovery unless a live backing container is still present. This keeps restart recovery deterministic and prevents dead sessions from holding disk space or waiting forever for callbacks that will never arrive.
+
+When a sprint reaches a terminal state, Sprint OS also removes the resumable CLI workspaces tied to that sprint immediately instead of relying only on the next startup cleanup pass.
 
 If a virtual cycle dies mid-attention:
 

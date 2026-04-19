@@ -19,6 +19,8 @@ const buildDeps = () => ({
     appendSprintRunEvent: vi.fn(),
     finalizeSprintRunCancellationIfIdle: vi.fn().mockReturnValue(null),
     getSprintRun: vi.fn().mockReturnValue({ status: "running" }),
+    listTaskDispatches: vi.fn().mockReturnValue([]),
+    getTaskRunByDispatchId: vi.fn().mockReturnValue(null),
     updateSprintRun: vi.fn(),
     renewLease: vi.fn(),
   },
@@ -182,6 +184,75 @@ describe("WatchLoopRunner", () => {
 
     expect(result).toContain("Sprint Execution Finished");
     nowSpy.mockRestore();
+  });
+
+  it("cleans up terminal sprint CLI workspaces on completion", async () => {
+    const deps = buildDeps();
+    const cycleRunner = buildCycleRunner();
+    const resolveResumeWorktreePath = vi.spyOn(
+      (await import("../../../src/infrastructure/providers/cli/workspace-manager.js")).WorkspaceManager.prototype,
+      "resolveResumeWorktreePath",
+    ).mockResolvedValue("/tmp/repo/.worktrees/session-1");
+    const removeWorktree = vi.spyOn(
+      (await import("../../../src/infrastructure/providers/cli/workspace-manager.js")).WorkspaceManager.prototype,
+      "removeWorktree",
+    ).mockResolvedValue(undefined);
+
+    deps.executionRepository.listTaskDispatches.mockReturnValue([
+      { id: "dispatch-1", executorType: "docker_cli" },
+    ]);
+    deps.executionRepository.getTaskRunByDispatchId.mockReturnValue({
+      sessionId: "session-1",
+    });
+
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "INST",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn().mockResolvedValue({
+      text: "",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    }));
+
+    await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp/repo",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp/repo",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+    });
+
+    expect(resolveResumeWorktreePath).toHaveBeenCalledWith("/tmp/repo", "session-1", expect.anything());
+    expect(removeWorktree).toHaveBeenCalledWith("/tmp/repo", "/tmp/repo/.worktrees/session-1");
   });
 
   it("handles RUNNING transition properly by waiting and continuing the loop", async () => {
