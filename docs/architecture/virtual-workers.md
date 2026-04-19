@@ -83,11 +83,13 @@ Today virtual workers handle:
 For planning flows, Sprint OS (`src/services/planning-agent-service.ts`):
 
 - runs the Planning agent prompt through the configured virtual worker CLI
+- injects the Planning agent's current long-term memory plus the current sprint's short-term learnings into the prompt when memory is enabled
 - honors per-request planning overrides for virtual provider selection, so choosing `codex` in the sprint composer actually launches the Codex CLI and credentials even if the project default is `gemini`
 - creates the same planning thread record in the dashboard, but stores the request/response as system messages instead of waiting on an MCP reply
 - executes a retry loop up to `cliWorkflow.maxPlanningJsonRetries` (default 3) times if the initial response cannot be parsed as valid JSON
 - maintains same-session continuation semantics during retries (`src/infrastructure/providers/cli/provider-runner.ts`); subsequent JSON retry requests continue the same underlying provider session using `continueSessionId` (falling back from `nativeSessionId` to the logical `sessionId`)
 - records execution and provider invocation trails during retries, so operators will see an initial system message indicating the retry followed by a new provider invocation recording the follow-up prompt and reply
+- when Docker execution mode is active, planning runs inside a snapshot workspace volume and captures `.task-learnings.md` back out of that snapshot instead of trying to read host files directly
 - allows sprint compose, improve, and `Plan & Start` to work even when no live MCP listener is attached
 
 For merge conflicts, Sprint OS:
@@ -95,17 +97,18 @@ For merge conflicts, Sprint OS:
 - prepares an isolated Docker workspace on the PR source branch
 - runs the helper Git/inspection commands inside that workspace as the same UID:GID that owns the volume so Git does not reject the repo as an unsafe `root` checkout
 - merges the target branch into it
-- runs the selected CLI provider against the conflict context
+- runs the selected CLI provider against the conflict context plus the worker agent's current long-term and sprint memory context when available
 - accepts both the original merge-conflict prompt payload fields (`currentTaskPrompt`, `mergedTaskPrompts`) and the newer task-context payload fields (`currentTask`, `featureBranchTaskContexts`) when constructing that provider prompt
+- requires the worker to write durable learnings to `.task-learnings.md`, which Sprint OS captures back into memory after the conflict is resolved
 - verifies conflicts are resolved
 - exports a Git patch artifact from the isolated workspace
 - applies that patch back onto the host branch and pushes it
 
 Merge-conflict handling intentionally stays isolated from the original task workspace. It always runs in a dedicated ephemeral Docker workspace so conflict resolution cannot pollute the task's normal follow-up workspace.
 
-For CI autofix, Sprint OS now prefers reusing the existing task workspace when one is still available for the same worker branch. That allows follow-up CI fixes to continue in the same workspace context instead of creating an unnecessary new Docker volume for every CI rerun.
+For CI autofix, Sprint OS now prefers reusing the existing task workspace when one is still available for the same worker branch. That allows follow-up CI fixes to continue in the same workspace context instead of creating an unnecessary new Docker volume for every CI rerun. The CI-fix prompt also receives the worker agent's current memory context and writes new durable learnings back into memory from the reused workspace.
 
-For QA review execution, Sprint OS now runs the review itself against a fresh snapshot workspace rather than the mutable task workspace. This keeps review inspection isolated while still allowing QA-requested coding follow-ups to continue in the original task workspace when appropriate.
+For QA review execution, Sprint OS now runs the review itself against a fresh snapshot workspace rather than the mutable task workspace. This keeps review inspection isolated while still allowing QA-requested coding follow-ups to continue in the original task workspace when appropriate. Both the review agent and QA-requested coding follow-ups now receive their current memory context, and QA follow-up edits capture fresh learnings back into memory from the actual workspace used for the fix.
 
 Unsupported worker-owned attention types are escalated back to human attention with a summary.
 

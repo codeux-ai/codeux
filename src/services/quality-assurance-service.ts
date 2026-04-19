@@ -700,7 +700,13 @@ export class QualityAssuranceService {
       const providerConfigId = route.providerConfigId || route.provider;
       const providerSettings = route.providers[providerConfigId];
 
-      const prompt = this.buildReviewPrompt(args);
+      const memoryContext = args.agentPresetId
+        ? this.buildMemoryContext(args.scope.projectId!, args.scope.sprintId || null, args.agentPresetId)
+        : undefined;
+      const prompt = this.buildReviewPrompt({
+        ...args,
+        memoryContext,
+      });
       const providerPrompt = buildProviderPrompt(prompt, providerSettings.thinkingMode);
       const settings = this.deps.getDashboardSettings(args.scope);
       const workflowSettings = {
@@ -915,6 +921,7 @@ export class QualityAssuranceService {
     projectName: string;
     sprintGoal: string;
     agentInstructions: string;
+    memoryContext?: string;
     subtasks: Subtask[];
     currentTask: Subtask | null;
   }): string {
@@ -956,6 +963,7 @@ export class QualityAssuranceService {
     return [
       "## QUALITY ASSURANCE AGENT INSTRUCTIONS",
       args.agentInstructions.trim(),
+      args.memoryContext?.trim() || "",
       "",
       "## REVIEW MODE",
       `Trigger: ${args.triggerType}`,
@@ -1116,18 +1124,28 @@ export class QualityAssuranceService {
       await this.workspaceManager.prepareWorktree(args.repoPath, worktreePath, workerBranch, args.featureBranch);
     }
 
-    const workerInstructions = (await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath))
-      ?.instructionMarkdown
-      ?.trim() || "";
+    const workerAgent = await this.deps.agentPresetSyncService.getOptionalWorkerAgentForRepoPath(args.repoPath);
+    const workerInstructions = workerAgent?.instructionMarkdown?.trim() || "";
+    const workerMemoryInstructions = resolveAgentMemoryInstructions(
+      workerAgent || {},
+      settings.memory?.workerLearningsInstruction,
+    );
+    const workerMemoryContext = workerAgent?.id
+      ? this.buildMemoryContext(args.scope.projectId!, args.scope.sprintId || null, workerAgent.id)
+      : undefined;
     const promptBody = [
       workerInstructions
         ? `## SYSTEM INSTRUCTIONS & ENGINEERING STANDARDS\n\n${workerInstructions}`
         : "",
+      workerMemoryContext?.trim() || "",
       "## ORIGINAL SUBTASK",
       args.task.prompt,
       "",
       "## QA FOLLOW-UP",
       args.followUpPrompt,
+      workerMemoryInstructions
+        ? `## LEARNINGS CAPTURE (Required)\n\n${workerMemoryInstructions}`
+        : "",
     ].filter(Boolean).join("\n\n");
     const workspaceGuidance = await this.workspaceManager.buildWorkspaceGuidance(args.followUpPrompt, worktreePath);
     const providerPrompt = buildProviderPrompt(`${promptBody}\n\n${workspaceGuidance}`, settings.aiProvider.providers[args.provider].thinkingMode);
@@ -1165,6 +1183,16 @@ export class QualityAssuranceService {
       });
       this.deps.sessionTracking.updateSession(args.sessionId, { state: "FAILED" });
       throw new Error(result.stderr || result.stdout || "CLI QA follow-up failed.");
+    }
+
+    if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
+      await this.captureMemoriesFromWorkspace(
+        args.scope.projectId!,
+        args.scope.sprintId || undefined,
+        workerAgent?.id || null,
+        worktreePath,
+        args.taskRun?.id || args.sessionId,
+      );
     }
 
     const patchText = await this.workspaceArtifactService.exportBinaryPatch(worktreePath, initialHead);
@@ -1249,6 +1277,73 @@ export class QualityAssuranceService {
       return this.workspaceManager.runWorkspaceCommand(worktreePath, command, args);
     }
     return runCommandStrict(command, args, worktreePath);
+  }
+
+  private async captureMemoriesFromWorkspace(
+    projectId: string,
+    sprintId: string | undefined,
+    agentPresetId: string | null,
+    worktreePath: string,
+    originId: string,
+  ): Promise<number> {
+    if (!this.deps.memoryService) {
+      return 0;
+    }
+    if (worktreePath.startsWith("docker-volume://")) {
+      const raw = await this.workspaceManager.readWorkspaceFile(worktreePath, ".task-learnings.md");
+      if (!raw) {
+        return 0;
+      }
+      return await this.deps.memoryService.captureMemoriesFromContent(
+        projectId,
+        sprintId,
+        agentPresetId,
+        raw,
+        originId,
+      );
+    }
+    return await this.deps.memoryService.captureMemoriesFromWorktree(
+      projectId,
+      sprintId,
+      agentPresetId,
+      worktreePath,
+      originId,
+    );
+  }
+
+  private buildMemoryContext(projectId: string, sprintId: string | null, agentPresetId: string): string | undefined {
+    const memoryService = this.deps.memoryService;
+    if (!memoryService) {
+      return undefined;
+    }
+
+    try {
+      const longTerm = memoryService.listLongTermByAgent(projectId, agentPresetId, 10);
+      const shortTerm = sprintId
+        ? memoryService.listBySprintAndAgent(projectId, sprintId, agentPresetId, 10)
+        : [];
+
+      if (longTerm.length === 0 && shortTerm.length === 0) {
+        return undefined;
+      }
+
+      const sections: string[] = ["## PROJECT CONTEXT FROM MEMORY"];
+      if (longTerm.length > 0) {
+        sections.push("### Long-Term Knowledge");
+        for (const memory of longTerm) {
+          sections.push(`- [${memory.category}] ${memory.content.slice(0, 300)}`);
+        }
+      }
+      if (shortTerm.length > 0) {
+        sections.push("### Recent Sprint Learnings");
+        for (const memory of shortTerm) {
+          sections.push(`- [${memory.category}] ${memory.content.slice(0, 300)}`);
+        }
+      }
+      return sections.join("\n");
+    } catch {
+      return undefined;
+    }
   }
 
   private resolveTaskTriggerType(

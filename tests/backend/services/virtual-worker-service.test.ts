@@ -695,11 +695,15 @@ describe("VirtualWorkerService", () => {
       "task/branch",
       "feature/branch",
       "Workspace guidance",
+      "## PROJECT CONTEXT FROM MEMORY\n- [patterns] Prefer preserving both branch intents.",
+      "Record durable merge learnings in .task-learnings.md",
     );
 
     expect(prompt).toContain("Preserve the current task change.");
     expect(prompt).toContain("T01 Earlier merge");
     expect(prompt).toContain("Keep the earlier merged edit.");
+    expect(prompt).toContain("## PROJECT CONTEXT FROM MEMORY");
+    expect(prompt).toContain("Record durable merge learnings in .task-learnings.md");
     expect(prompt).toContain("Workspace guidance");
   });
 
@@ -719,14 +723,18 @@ describe("VirtualWorkerService", () => {
         }
       },
       "fix/branch",
-      "Workspace guidance context"
+      "Workspace guidance context",
+      "## PROJECT CONTEXT FROM MEMORY\n- [error] This suite flakes when env vars are missing.",
+      "Record durable CI learnings in .task-learnings.md",
     );
 
     expect(prompt).toContain("CI checks have failed for PR #1 on branch `fix/branch`");
+    expect(prompt).toContain("## PROJECT CONTEXT FROM MEMORY");
     expect(prompt).toContain("lint, test");
     expect(prompt).toContain("Lint Job");
     expect(prompt).toContain("Error: lint failed");
     expect(prompt).toContain("Do the task");
+    expect(prompt).toContain("Record durable CI learnings in .task-learnings.md");
     expect(prompt).toContain("Fix CI");
     expect(prompt).toContain("Workspace guidance context");
   });

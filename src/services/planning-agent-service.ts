@@ -20,6 +20,7 @@ import { buildProviderPrompt, DEFAULT_CLI_WORKFLOW_SETTINGS } from "./cli-workfl
 import { buildReadFileRetryPrompt, isReadFileNotFoundToolError } from "./cli-workflow-text-utils.js";
 import { ProviderRunner, type IProviderRunner } from "../infrastructure/providers/cli/provider-runner.js";
 import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
+import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
 import { extractJsonLikeBlock } from "./planning-json-extractor.js";
@@ -27,6 +28,7 @@ import { ProviderExecutionService } from "./provider-execution-service.js";
 import { StructuredAgentRequestService, type StructuredAgentRequestResult } from "./structured-agent-request-service.js";
 import { StructuredProviderResponseService } from "./structured-provider-response-service.js";
 import { waitUntil } from "../shared/polling/wait-until.js";
+import { LEARNINGS_FILENAME } from "../contracts/memory-types.js";
 
 interface PlanningAgentServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
@@ -77,12 +79,15 @@ interface PlanningResultContext {
   sessionId: string;
   workflowSettings: CliWorkflowSettings;
   providerSettings: { model: string; apiKey: string; thinkingMode?: unknown };
+  memoryCaptureWorkspacePath: string;
+  cleanupWorkspace?: () => Promise<void>;
 }
 
 export class PlanningAgentService {
   private readonly providerRunner: IProviderRunner;
   private readonly providerExecutionService: ProviderExecutionService;
   private readonly structuredAgentRequestService: StructuredAgentRequestService;
+  private readonly workspaceManager = new WorkspaceManager();
 
   constructor(private readonly deps: PlanningAgentServiceDeps) {
     this.providerRunner = deps.providerRunner || new ProviderRunner(new DockerRunner());
@@ -153,6 +158,7 @@ export class PlanningAgentService {
 
     signal?.throwIfAborted();
     let payload: { goal?: string };
+    let cleanupWorkspace: (() => Promise<void>) | undefined;
     try {
       const virtualResult = await this.runVirtualPlanningRequest({
         projectId,
@@ -173,6 +179,7 @@ export class PlanningAgentService {
         ].join("\n"),
       });
       payload = virtualResult.parsed;
+      cleanupWorkspace = virtualResult.cleanupWorkspace;
 
       if (invocation) {
         this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
@@ -182,11 +189,11 @@ export class PlanningAgentService {
       }
 
       if (isMemoryCaptureEnabled) {
-        await this.deps.memoryService?.captureMemoriesFromWorktree(
+        await this.captureMemoriesFromWorkspace(
           projectId,
           undefined,
           planningAgent.id,
-          project.baseDir,
+          virtualResult.memoryCaptureWorkspacePath,
           invocation?.id || ""
         );
       }
@@ -199,6 +206,8 @@ export class PlanningAgentService {
         });
       }
       throw error;
+    } finally {
+      await cleanupWorkspace?.().catch(() => undefined);
     }
 
     const goal = String(payload.goal || "").trim();
@@ -271,6 +280,7 @@ export class PlanningAgentService {
     }
 
     let payload: PlannedSprintPayload;
+    let cleanupWorkspace: (() => Promise<void>) | undefined;
     try {
       const virtualResult = await this.runVirtualPlanningRequest({
         projectId,
@@ -293,6 +303,7 @@ export class PlanningAgentService {
         ].join("\n"),
       });
       payload = virtualResult.parsed;
+      cleanupWorkspace = virtualResult.cleanupWorkspace;
 
       if (invocation) {
         this.deps.executionRepository?.updateExecutionInvocation(invocation.id, {
@@ -302,11 +313,11 @@ export class PlanningAgentService {
       }
 
       if (isMemoryCaptureEnabled) {
-        await this.deps.memoryService?.captureMemoriesFromWorktree(
+        await this.captureMemoriesFromWorkspace(
           projectId,
           sprintId,
           planningAgent.id,
-          project.baseDir,
+          virtualResult.memoryCaptureWorkspacePath,
           invocation?.id || ""
         );
       }
@@ -319,6 +330,8 @@ export class PlanningAgentService {
         });
       }
       throw error;
+    } finally {
+      await cleanupWorkspace?.().catch(() => undefined);
     }
 
     if (options.replan) {
@@ -453,6 +466,17 @@ export class PlanningAgentService {
     };
     const providerPrompt = buildProviderPrompt(args.rawPrompt, providerSettings.thinkingMode);
     const systemRoutingMessage = `Planning request routed through virtual ${this.getProviderLabel(provider)} worker (model: ${providerSettings.model}).`;
+    let snapshotWorkspace = args.repoPath;
+    let cleanupWorkspace: (() => Promise<void>) | undefined;
+    if (workflowSettings.executionMode === "DOCKER") {
+      snapshotWorkspace = await this.workspaceManager.createSnapshotWorkspace(
+        args.repoPath,
+        `planning-${provider}-${Date.now().toString(36)}`,
+      );
+      cleanupWorkspace = async () => {
+        await this.workspaceManager.removeWorktree(args.repoPath, snapshotWorkspace).catch(() => undefined);
+      };
+    }
 
     try {
       const result = await this.structuredAgentRequestService.executeRequest<T>({
@@ -467,6 +491,8 @@ export class PlanningAgentService {
         providerAuthPath: providerSettings.authPath,
         providerPrompt: args.rawPrompt,
         repoPath: args.repoPath,
+        cwd: snapshotWorkspace,
+        workspaceSessionId: `${args.projectId}-planning-snapshot`,
         settings: {
           ...args.settings,
           cliWorkflow: workflowSettings,
@@ -495,6 +521,8 @@ export class PlanningAgentService {
         provider,
         sessionId: result.sessionId,
         workflowSettings,
+        memoryCaptureWorkspacePath: snapshotWorkspace,
+        cleanupWorkspace,
         providerSettings: {
           model: providerSettings.model,
           apiKey: providerSettings.apiKey,
@@ -508,6 +536,7 @@ export class PlanningAgentService {
           finishedAt: new Date().toISOString(),
         });
       }
+      await cleanupWorkspace?.().catch(() => undefined);
       throw error;
     }
   }
@@ -786,6 +815,38 @@ export class PlanningAgentService {
     } catch {
       return undefined;
     }
+  }
+
+  private async captureMemoriesFromWorkspace(
+    projectId: string,
+    sprintId: string | undefined,
+    agentPresetId: string | null,
+    worktreePath: string,
+    originId: string,
+  ): Promise<number> {
+    if (!this.deps.memoryService) {
+      return 0;
+    }
+    if (worktreePath.startsWith("docker-volume://")) {
+      const raw = await this.workspaceManager.readWorkspaceFile(worktreePath, LEARNINGS_FILENAME);
+      if (!raw) {
+        return 0;
+      }
+      return await this.deps.memoryService.captureMemoriesFromContent(
+        projectId,
+        sprintId,
+        agentPresetId,
+        raw,
+        originId,
+      );
+    }
+    return await this.deps.memoryService.captureMemoriesFromWorktree(
+      projectId,
+      sprintId,
+      agentPresetId,
+      worktreePath,
+      originId,
+    );
   }
 
   private captureDecisionMemory(
