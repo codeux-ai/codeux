@@ -25,6 +25,8 @@ import {
 import { setProjectPreferredWorker } from "../lib/project-api.js";
 import { saveProjectSettings } from "../lib/settings-api.js";
 import { useProjectEffectiveSettings } from "../hooks/use-project-effective-settings.js";
+import { useReducedMotion } from "../hooks/use-reduced-motion.js";
+import { useMagnetic } from "../hooks/use-magnetic.js";
 
 export function useDropdownKeyboard(
     isOpen: boolean,
@@ -112,6 +114,12 @@ interface TopNavProps {
 
 export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, onMenuToggle, isMobile }) => {
     const navRef = useRef<HTMLElement>(null);
+    const logoRef = useRef<HTMLAnchorElement>(null);
+    const logoIconRef = useRef<HTMLDivElement>(null);
+    const searchRef = useRef<HTMLDivElement>(null);
+    const searchInnerRef = useRef<HTMLDivElement>(null);
+    const mobileMenuRef = useRef<HTMLButtonElement>(null);
+
     const dropdownRef = useRef<HTMLDivElement>(null);
     const workerDropdownRef = useRef<HTMLDivElement>(null);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -264,6 +272,11 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
     }, [debouncedQuery, sprints, tasks, selectedProject, sessions]);
 
     const { data: effectiveSettings, refresh: refreshEffectiveSettings } = useProjectEffectiveSettings(selectedProject?.id || null);
+    const prefersReducedMotion = useReducedMotion();
+
+    useMagnetic(logoRef, logoIconRef, { maxDisplacement: 4 });
+    useMagnetic(searchRef, searchInnerRef, { maxDisplacement: 3 });
+
     const browserVisible = !selectedProject || (
         (effectiveSettings?.settings.sprintPreview.enabled ?? true)
         && (effectiveSettings?.settings.sprintPreview.showInAppBrowser ?? true)
@@ -292,9 +305,30 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
 
     useLayoutEffect(() => {
         if (navRef.current) {
-            gsap.fromTo(navRef.current, { y: -20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.9, ease: "power3.out" });
+            if (prefersReducedMotion) {
+                gsap.set(navRef.current, { y: 0, opacity: 1 });
+            } else {
+                gsap.fromTo(navRef.current, { y: -30, opacity: 0 }, { y: 0, opacity: 1, duration: 1.2, ease: "expo.out" });
+            }
         }
-    }, []);
+    }, [prefersReducedMotion]);
+
+    // Coordinated Layout Shift for Mobile/Desktop toggle
+    useLayoutEffect(() => {
+        if (prefersReducedMotion) return;
+
+        const ctx = gsap.context(() => {
+            if (isMobile) {
+                gsap.from(mobileMenuRef.current, {
+                    x: -20,
+                    opacity: 0,
+                    duration: 0.5,
+                    ease: "back.out(1.7)"
+                });
+            }
+        });
+        return () => ctx.revert();
+    }, [isMobile, prefersReducedMotion]);
 
     // Close dropdowns on outside click
     useEffect(() => {
@@ -370,6 +404,7 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
             <div className="flex items-center gap-4 md:gap-10 flex-1">
                 {isMobile && (
                     <button
+                        ref={mobileMenuRef}
                         type="button"
                         onClick={onMenuToggle}
                         aria-label="Toggle Navigation Menu"
@@ -379,8 +414,12 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                     </button>
                 )}
                 {/* Logo */}
-                <Link to="/" className="flex items-center gap-3 cursor-pointer group shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-xl">
-                    <div className="relative w-8 h-8 flex items-center justify-center bg-void-900 dark:bg-white rounded-xl overflow-hidden shadow-[0_0_20px_rgba(0,224,160,0.25)]">
+                <Link
+                    to="/"
+                    ref={logoRef}
+                    className="flex items-center gap-3 cursor-pointer group shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/50 rounded-xl"
+                >
+                    <div ref={logoIconRef} className="relative w-8 h-8 flex items-center justify-center bg-void-900 dark:bg-white rounded-xl overflow-hidden shadow-[0_0_20px_rgba(0,224,160,0.25)]">
                         <div className="absolute inset-0 bg-signal-500 opacity-0 group-hover:opacity-20 transition-opacity duration-500" />
                         <Activity aria-hidden="true" className="w-4 h-4 text-signal-500 dark:text-void-900 relative z-10 group-hover:scale-110 transition-transform duration-500" strokeWidth={2.5} />
                     </div>
@@ -390,22 +429,24 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
                 </Link>
 
                 {/* Search Bar */}
-                <div className="relative group w-full max-w-[140px] sm:max-w-xs hidden sm:block">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                        <Search aria-hidden="true" className="w-3.5 h-3.5 text-slate-400 group-focus-within:text-signal-500 transition-colors" strokeWidth={2} />
-                    </div>
-                    <input
-                        type="text"
-                        placeholder="Search..."
-                        value={searchQuery}
-                        onInput={(e) => setSearchQuery(e.currentTarget.value)}
-                        onFocus={() => setIsSearchOpen(true)}
-                        className="w-full h-9 pl-10 pr-4 sm:pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] focus:border-signal-500/40 dark:focus:border-signal-500/40 rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-signal-500/10 transition-all"
-                    />
-                    <div className="absolute inset-y-0 right-0 pr-3 hidden sm:flex items-center pointer-events-none">
-                        <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-mono font-medium text-slate-400 border border-black/10 dark:border-white/10 rounded-md">
-                            <Command aria-hidden="true" className="w-2.5 h-2.5" /> K
-                        </kbd>
+                <div ref={searchRef} className="relative group w-full max-w-[140px] sm:max-w-xs hidden sm:block">
+                    <div ref={searchInnerRef} className="relative w-full">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <Search aria-hidden="true" className="w-3.5 h-3.5 text-slate-400 group-focus-within:text-signal-500 transition-colors" strokeWidth={2} />
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="Search..."
+                            value={searchQuery}
+                            onInput={(e) => setSearchQuery(e.currentTarget.value)}
+                            onFocus={() => setIsSearchOpen(true)}
+                            className="w-full h-9 pl-10 pr-4 sm:pr-12 bg-black/[0.04] dark:bg-white/[0.04] border border-transparent hover:border-black/[0.08] dark:hover:border-white/[0.08] focus:border-signal-500/40 dark:focus:border-signal-500/40 rounded-xl text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-signal-500/10 transition-all"
+                        />
+                        <div className="absolute inset-y-0 right-0 pr-3 hidden sm:flex items-center pointer-events-none">
+                            <kbd className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[9px] font-mono font-medium text-slate-400 border border-black/10 dark:border-white/10 rounded-md">
+                                <Command aria-hidden="true" className="w-2.5 h-2.5" /> K
+                            </kbd>
+                        </div>
                     </div>
                 </div>
             </div>
