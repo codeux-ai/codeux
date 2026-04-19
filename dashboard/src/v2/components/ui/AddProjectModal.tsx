@@ -105,38 +105,37 @@ export const AddProjectModal: FunctionComponent<AddProjectModalProps> = ({ onClo
             role="dialog"
             aria-modal="true"
             aria-labelledby="add-project-modal-title"
-            className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-black/50 dark:bg-black/70 backdrop-blur-xl"
+            className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-void-900/40 backdrop-blur-3xl"
         >
             <div
                 ref={cardRef}
-                className="relative w-full max-w-2xl overflow-hidden rounded-[2.5rem] shadow-[0_48px_96px_rgba(0,0,0,0.25)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.7)] flex"
+                className="relative w-full max-w-2xl overflow-hidden rounded-3xl shadow-[0_48px_96px_rgba(0,0,0,0.4)] dark:shadow-[0_48px_96px_rgba(0,0,0,0.8)] border border-white/[0.05] flex"
                 style={{ minHeight: '520px' }}
             >
                 {/* ── Left decorative panel ── */}
-                <div className="relative w-52 shrink-0 bg-void-900 dark:bg-void-950 flex flex-col justify-between p-8 overflow-hidden">
+                <div className="relative w-52 shrink-0 bg-void-900 dark:bg-void-950 flex flex-col justify-between p-8 overflow-hidden border-r border-white/[0.03]">
                     <span className="absolute -top-2 -left-4 text-[7.5rem] font-black text-white/[0.035] font-display leading-none pointer-events-none select-none tracking-tighter">
                         ADD
                     </span>
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div className="w-44 h-44 bg-ember-500/[0.08] animate-organic" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%' }} />
-                        <div className="absolute w-32 h-32 bg-ember-500/[0.12] animate-organic-reverse" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%' }} />
-                        <div className="absolute w-20 h-20 bg-ember-500/[0.18] animate-organic" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%' }} />
+                        <div className="w-44 h-44 bg-ember-500/[0.06] animate-organic" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%' }} />
+                        <div className="absolute w-32 h-32 bg-ember-500/[0.1] animate-organic-reverse" style={{ borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%' }} />
                     </div>
                     <div className="relative z-10 flex items-center gap-2 text-ember-500 font-mono font-bold text-[10px] tracking-[0.2em] uppercase">
                         <FolderOpen className="w-3.5 h-3.5" strokeWidth={2.5} />
                         New Project
                     </div>
                     <div className="relative z-10">
-                        <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/25 font-mono mb-1.5">Source</div>
+                        <div className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/20 font-mono mb-1.5">Source</div>
                         <div className="text-lg font-black text-white font-mono tracking-tight leading-snug">
                             {sourceType === 'git' ? 'Git Repo' : 'Local Path'}
                         </div>
-                        <div className="mt-3 w-8 h-[2px] bg-ember-500/50" />
+                        <div className="mt-3 w-8 h-[2px] bg-ember-500/40" />
                     </div>
                 </div>
 
                 {/* ── Right form panel ── */}
-                <div className="flex-1 bg-white/98 dark:bg-void-800/98 p-8 flex flex-col">
+                <div className="flex-1 bg-white/95 dark:bg-void-900/95 backdrop-blur-3xl p-8 flex flex-col">
                     {/* Header */}
                     <div className="flex items-start justify-between mb-8">
                         <div>

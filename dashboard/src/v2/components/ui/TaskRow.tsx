@@ -5,7 +5,7 @@ import type { Task } from "../../types.js";
 
 export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
     <div
-        className="group relative flex items-center justify-between py-5 cursor-pointer border-b border-black/[0.06] dark:border-white/[0.06] last:border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 focus-visible:z-10 focus-visible:rounded-xl"
+        className="group relative flex items-center justify-between py-5 cursor-pointer border-b border-black/[0.04] dark:border-white/[0.04] last:border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 focus-visible:z-10 focus-visible:rounded-xl active:scale-[0.99] transition-all duration-200"
         tabIndex={0}
         role="button"
         onKeyDown={(e) => {
@@ -14,26 +14,26 @@ export const TaskRow: FunctionComponent<{ task: Task }> = memo(({ task }) => (
             }
         }}
     >
-        {/* Hover backdrop */}
-        <div className="absolute inset-0 bg-gradient-to-r from-signal-500/0 via-signal-500/[0.03] to-signal-500/0 dark:via-signal-500/[0.05] opacity-0 group-hover:opacity-100 transition-opacity duration-400 -z-10 rounded-xl" />
-        <div className="absolute inset-y-1 inset-x-0 bg-white/50 dark:bg-void-700/40 opacity-0 group-hover:opacity-100 transition-all duration-300 -z-10 rounded-xl" />
+        {/* Hover backdrop & Shimmer */}
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-signal-500/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10 rounded-xl" />
+        <div className="absolute inset-0 bg-white/40 dark:bg-void-800/40 opacity-0 group-hover:opacity-100 transition-all duration-300 -z-10 rounded-xl border border-black/[0.03] dark:border-white/[0.03] scale-[0.98] group-hover:scale-100" />
 
-        <div className="flex-1 grid grid-cols-12 gap-3 md:gap-5 items-center min-w-0">
+        <div className="flex-1 grid grid-cols-12 gap-4 md:gap-8 items-center min-w-0 px-2">
             {/* ID */}
-            <div className="hidden md:block col-span-1 font-mono text-[10px] font-bold text-slate-500 dark:text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">
+            <div className="hidden md:block col-span-1 font-mono text-[10px] font-black text-ember-500/40 group-hover:text-ember-500/80 transition-colors tracking-tighter">
                 #{task.id.split('-')[0].substring(0, 4)}
             </div>
 
             {/* Title */}
             <div className="col-span-8 md:col-span-5 flex items-center min-w-0">
-                <span className={`text-base md:text-lg font-bold tracking-tight text-slate-900 dark:text-white truncate group-hover:translate-x-1.5 transition-transform duration-300 ease-out ${task.status === 'completed' ? 'opacity-50' : task.status === 'coding_completed' ? 'opacity-80' : ''}`}>
+                <span className={`text-base md:text-lg font-bold tracking-tight text-slate-900 dark:text-white truncate group-hover:translate-x-1 transition-transform duration-300 ease-out ${task.status === 'completed' ? 'opacity-40' : task.status === 'coding_completed' ? 'opacity-70' : ''}`}>
                     {task.title}
                 </span>
             </div>
 
             {/* Source */}
-            <div className="hidden lg:flex col-span-2 items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-400 min-w-0">
-                <FolderGit2 className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500 group-hover:text-signal-600 dark:group-hover:text-signal-400 transition-colors shrink-0" strokeWidth={2} />
+            <div className="hidden lg:flex col-span-2 items-center gap-2.5 text-[11px] font-bold text-slate-400 dark:text-void-400 min-w-0 uppercase tracking-wider">
+                <FolderGit2 className="w-3.5 h-3.5 text-ember-500/30 group-hover:text-ember-500 transition-colors shrink-0" strokeWidth={2.5} />
                 <span className="truncate group-hover:text-slate-800 dark:group-hover:text-slate-200 transition-colors font-mono">{task.source}</span>
             </div>
 
