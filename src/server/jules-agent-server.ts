@@ -43,6 +43,7 @@ import { TaskRerunService } from "../services/task-rerun-service.js";
 import { ExecutionControlService } from "../services/execution-control-service.js";
 import { JulesSourceResolver } from "../services/jules-source-resolver.js";
 import { RuntimeCleanupService } from "../services/runtime-cleanup-service.js";
+import { BackgroundTaskManager } from "../services/background-task-manager.js";
 import { RuntimeStartupRecoveryService } from "../services/runtime-startup-recovery-service.js";
 import { DockerAssetPruneService } from "../services/docker-asset-prune-service.js";
 import { DashboardRealtimeService } from "../services/dashboard-realtime-service.js";
@@ -155,9 +156,7 @@ export class JulesAgentServer {
   private embeddingModelManager: import("../services/embedding-model-manager.js").EmbeddingModelManager;
   private embeddingService: import("../services/embedding-service.js").EmbeddingService;
   private memoryRepository: import("../repositories/memory-repository.js").MemoryRepository;
-  private runtimeCleanupInterval: ReturnType<typeof setInterval> | null = null;
-  private sprintPreviewInterval: ReturnType<typeof setInterval> | null = null;
-  private liveSnapshotInterval: ReturnType<typeof setInterval> | null = null;
+  private readonly backgroundTaskManager: BackgroundTaskManager;
   private mcpHttpHandle: McpHttpTransportHandle | null = null;
   private mcpServiceBound = false;
   private readonly mcpApprovalTracker = new McpApprovalTracker();
@@ -238,6 +237,7 @@ export class JulesAgentServer {
     this.embeddingModelManager = deps.embeddingModelManager;
     this.embeddingService = deps.embeddingService;
     this.memoryRepository = deps.memoryRepository;
+    this.backgroundTaskManager = new BackgroundTaskManager(this.logger.child({ component: "background-task-manager" }));
 
     this.configureMcpServer(this.server, this.appConfig.runtimeRole);
 
@@ -253,18 +253,7 @@ export class JulesAgentServer {
   }
 
   private async handleSigint(): Promise<void> {
-    if (this.runtimeCleanupInterval) {
-      clearInterval(this.runtimeCleanupInterval);
-      this.runtimeCleanupInterval = null;
-    }
-    if (this.sprintPreviewInterval) {
-      clearInterval(this.sprintPreviewInterval);
-      this.sprintPreviewInterval = null;
-    }
-    if (this.liveSnapshotInterval) {
-      clearInterval(this.liveSnapshotInterval);
-      this.liveSnapshotInterval = null;
-    }
+    this.backgroundTaskManager.stopAll();
     if (this.mcpHttpHandle) {
       await this.mcpHttpHandle.close().catch(() => undefined);
       this.mcpHttpHandle = null;
@@ -311,59 +300,48 @@ export class JulesAgentServer {
   }
 
   private startRuntimeCleanupLoop(): void {
-    if (this.appConfig.runtimeRole !== "project_manager" || this.runtimeCleanupInterval) {
+    if (this.appConfig.runtimeRole !== "project_manager") {
       return;
     }
 
-    const runCleanup = (): void => {
-      try {
+    this.backgroundTaskManager.registerTask({
+      name: "runtime-cleanup",
+      intervalMs: JulesAgentServer.RUNTIME_CLEANUP_INTERVAL_MS,
+      task: () => {
         this.runtimeCleanupService.cleanup();
-      } catch (error) {
-        this.logger.error("Runtime cleanup sweep failed", { error });
-      }
-    };
-
-    const initialTimer = setTimeout(runCleanup, 0);
-    initialTimer.unref?.();
-    this.runtimeCleanupInterval = setInterval(runCleanup, JulesAgentServer.RUNTIME_CLEANUP_INTERVAL_MS);
-    this.runtimeCleanupInterval.unref?.();
+      },
+    });
   }
 
   private startSprintPreviewLoop(): void {
-    if (this.appConfig.runtimeRole !== "project_manager" || this.sprintPreviewInterval) {
+    if (this.appConfig.runtimeRole !== "project_manager") {
       return;
     }
 
-    const reconcile = (): void => {
-      void this.sprintPreviewService.reconcileSessions().catch((error) => {
-        this.logger.error("Sprint preview reconciliation failed", { error });
-      });
-    };
-
-    const initialTimer = setTimeout(reconcile, 0);
-    initialTimer.unref?.();
-    this.sprintPreviewInterval = setInterval(reconcile, JulesAgentServer.RUNTIME_CLEANUP_INTERVAL_MS);
-    this.sprintPreviewInterval.unref?.();
+    this.backgroundTaskManager.registerTask({
+      name: "sprint-preview-reconciliation",
+      intervalMs: JulesAgentServer.RUNTIME_CLEANUP_INTERVAL_MS,
+      task: async () => {
+        await this.sprintPreviewService.reconcileSessions();
+      },
+    });
   }
 
   private startLiveSnapshotLoop(): void {
-    if (this.appConfig.runtimeRole !== "project_manager" || this.liveSnapshotInterval) {
+    if (this.appConfig.runtimeRole !== "project_manager") {
       return;
     }
 
-    const refreshLiveSnapshot = (): void => {
-      const projectId = this.projectManagementRepository.getSelectedProjectId();
-      if (!projectId) {
-        return;
-      }
-
-      this.dashboardRealtimeService.scheduleProjectLiveRefresh(projectId);
-    };
-
-    const initialTimer = setTimeout(refreshLiveSnapshot, 0);
-    initialTimer.unref?.();
-    this.liveSnapshotInterval = setInterval(refreshLiveSnapshot, JulesAgentServer.LIVE_SNAPSHOT_REFRESH_INTERVAL_MS);
-    this.liveSnapshotInterval.unref?.();
+    this.backgroundTaskManager.registerTask({
+      name: "live-snapshot-refresh",
+      intervalMs: JulesAgentServer.LIVE_SNAPSHOT_REFRESH_INTERVAL_MS,
+      task: () => {
+        const projectId = this.projectManagementRepository.getSelectedProjectId();
+        if (projectId) {
+          this.dashboardRealtimeService.scheduleProjectLiveRefresh(projectId);
+        }
+      },
+    });
   }
 
   private createContext(): ServerContext {
