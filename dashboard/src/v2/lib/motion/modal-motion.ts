@@ -20,7 +20,30 @@ export const MODAL_MOTION = {
     filterEnd: "blur(14px)"
   },
   backdrop: {
-    duration: 0.3,
-    ease: "power2.out"
+    duration: 0.4,
+    ease: "expo.out"
+  }
+};
+
+export const DIALOG_MOTION = {
+  entry: {
+    duration: 0.5,
+    ease: "expo.out",
+    yStart: 0,
+    yEnd: 0,
+    opacityStart: 0,
+    opacityEnd: 1,
+    scaleStart: 0.9,
+    scaleEnd: 1,
+    filterStart: "blur(20px)",
+    filterEnd: "blur(0px)"
+  },
+  exit: {
+    duration: 0.35,
+    ease: "expo.in",
+    yEnd: 0,
+    opacityEnd: 0,
+    scaleEnd: 0.95,
+    filterEnd: "blur(20px)"
   }
 };

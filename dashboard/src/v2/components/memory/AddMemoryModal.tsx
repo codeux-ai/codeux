@@ -32,7 +32,7 @@ export const AddMemoryModal: FunctionComponent<{
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 dark:bg-black/50 backdrop-blur-sm"
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-void-900/70 backdrop-blur-md"
             onClick={onClose}>
             <div className="w-full max-w-md bg-white dark:bg-void-800 rounded-[1.5rem] p-6 flex flex-col gap-4
                            border border-black/[0.06] dark:border-white/[0.06]

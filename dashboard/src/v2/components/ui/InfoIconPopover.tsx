@@ -82,24 +82,51 @@ export const InfoIconPopover: FunctionComponent<InfoIconPopoverProps> = ({ class
     }, [isVisible]);
 
     useLayoutEffect(() => {
-        if (!popoverRef.current) return;
+        if (!popoverRef.current || !wrapperRef.current) return;
 
         if (isVisible) {
-            gsap.fromTo(
+            const wrapperRect = wrapperRef.current.getBoundingClientRect();
+            const isBelow = coords.top > wrapperRect.bottom;
+
+            const tl = gsap.timeline();
+            
+            tl.fromTo(
                 popoverRef.current,
-                { opacity: 0, scale: 0.9, y: 10 },
-                { opacity: 1, scale: 1, y: 0, duration: 0.4, ease: "back.out(1.7)" }
+                { 
+                    opacity: 0, 
+                    scale: 0.85, 
+                    y: isBelow ? -12 : 12,
+                    filter: "blur(10px)",
+                    transformOrigin: isBelow ? "top center" : "bottom center"
+                },
+                { 
+                    opacity: 1, 
+                    scale: 1, 
+                    y: 0, 
+                    filter: "blur(0px)",
+                    duration: 0.5, 
+                    ease: "expo.out" 
+                }
+            );
+
+            tl.fromTo(
+                popoverRef.current.querySelectorAll("li"),
+                { opacity: 0, x: -8 },
+                { opacity: 1, x: 0, duration: 0.4, stagger: 0.04, ease: "power2.out" },
+                "-=0.35"
             );
         } else if (isRendered) {
             gsap.to(popoverRef.current, {
                 opacity: 0,
-                scale: 0.95,
-                duration: 0.15,
+                scale: 0.92,
+                y: 8,
+                filter: "blur(10px)",
+                duration: 0.25,
                 ease: "power2.in",
                 onComplete: () => setIsRendered(false)
             });
         }
-    }, [isVisible, isRendered]);
+    }, [isVisible, isRendered, coords.top]);
 
     useEffect(() => {
         return () => {

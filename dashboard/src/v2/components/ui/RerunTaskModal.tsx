@@ -82,9 +82,12 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
     const taskAlreadyMerged = Boolean(task.is_merged) || MERGED_TASK_INDICATORS.has(task.merge_indicator || "");
 
     useLayoutEffect(() => {
-        const d_backdrop = reducedMotion ? 0 : 0.3;
+        const d_backdrop = reducedMotion ? 0 : 0.4;
         const d_card = reducedMotion ? 0 : 0.45;
-        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: "power2.out" });
+        gsap.fromTo(backdropRef.current, 
+            { opacity: 0, backdropFilter: "blur(0px)" }, 
+            { opacity: 1, backdropFilter: "blur(12px)", duration: d_backdrop, ease: "expo.out" }
+        );
         gsap.fromTo(cardRef.current,
             { y: reducedMotion ? 0 : 36, opacity: 0, scale: reducedMotion ? 1 : 0.96 },
             { y: 0, opacity: 1, scale: 1, duration: d_card, ease: "power4.out", delay: reducedMotion ? 0 : 0.04 },
@@ -95,7 +98,13 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
         if (isSubmitting.current) return;
         const duration = reducedMotion ? 0 : 0.22;
         gsap.to(cardRef.current, { y: 18, opacity: 0, scale: 0.97, duration, ease: "power3.in" });
-        gsap.to(backdropRef.current, { opacity: 0, duration, delay: reducedMotion ? 0 : 0.04, onComplete: onClose });
+        gsap.to(backdropRef.current, { 
+            opacity: 0, 
+            backdropFilter: "blur(0px)",
+            duration, 
+            delay: reducedMotion ? 0 : 0.04, 
+            onComplete: onClose 
+        });
     };
 
     const backdropRef = useFocusTrap(true, { onClose: handleClose, restoreFocus: true });
@@ -120,7 +129,7 @@ export const RerunTaskModal: FunctionComponent<RerunTaskModalProps> = ({
         <div
             ref={backdropRef}
             onClick={(e) => { if (e.target === backdropRef.current) handleClose(); }}
-            className="fixed inset-0 z-[250] flex items-center justify-center bg-black/50 px-6 py-8 backdrop-blur-md dark:bg-black/70"
+            className="fixed inset-0 z-[250] flex items-center justify-center bg-void-900/70 px-6 py-8"
         >
             <div
                 ref={cardRef}

@@ -58,7 +58,10 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
   };
 
   useLayoutEffect(() => {
-    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" });
+    gsap.fromTo(backdropRef.current, 
+      { opacity: 0, backdropFilter: "blur(0px)" }, 
+      { opacity: 1, backdropFilter: "blur(12px)", duration: 0.4, ease: "expo.out" }
+    );
     gsap.fromTo(cardRef.current, { y: 42, opacity: 0, scale: 0.96 }, { y: 0, opacity: 1, scale: 1, duration: 0.45, ease: "power4.out" });
   }, []);
 
@@ -66,15 +69,27 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
     void loadSettings();
   }, [projectId, sprint.id]);
 
+  const handleClose = () => {
+    const d = 0.3;
+    gsap.to(cardRef.current, { y: 24, opacity: 0, scale: 0.98, duration: d, ease: "power3.in" });
+    gsap.to(backdropRef.current, { 
+      opacity: 0, 
+      backdropFilter: "blur(0px)",
+      duration: d, 
+      delay: 0.04, 
+      onComplete: onClose 
+    });
+  };
+
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onClose();
+        handleClose();
       }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, []);
 
   useEffect(() => {
     if (!message) {
@@ -126,10 +141,10 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
       ref={backdropRef}
       onClick={(event) => {
         if (event.target === backdropRef.current) {
-          onClose();
+          handleClose();
         }
       }}
-      className="fixed inset-0 z-[240] flex items-center justify-center bg-black/55 px-6 py-8 backdrop-blur-xl dark:bg-black/75"
+      className="fixed inset-0 z-[240] flex items-center justify-center bg-void-900/70 px-6 py-8"
     >
       <div
         ref={cardRef}
@@ -182,7 +197,7 @@ export const SprintSettingsOverrideModal: FunctionComponent<SprintSettingsOverri
               </button>
               <button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/[0.05] text-slate-500 transition-colors hover:text-slate-900 dark:bg-white/[0.05] dark:text-slate-400 dark:hover:text-white"
               >
                 <X className="h-4 w-4" strokeWidth={2.1} />

@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef, useState, useEffect, useCallback } from "preac
 import gsap from "gsap";
 import { useFocusTrap } from "../../hooks/use-focus-trap.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
-import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
+import { MODAL_MOTION, DIALOG_MOTION } from "../../lib/motion/modal-motion.js";
 import type { ConfirmDialogOptions } from "../../hooks/use-confirm-dialog.js";
 
 function DestructiveConfirmButton({
@@ -169,17 +169,32 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
 
   useLayoutEffect(() => {
     if (shouldRender && !isClosing) {
-      const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
-      const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
+      const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.backdrop.duration || 0.4;
+      const d_card = reducedMotion ? 0 : DIALOG_MOTION.entry.duration;
 
       if (backdropRef.current) {
-        gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
+        gsap.fromTo(backdropRef.current, 
+          { opacity: 0, backdropFilter: "blur(0px)" }, 
+          { opacity: 1, backdropFilter: "blur(12px)", duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease }
+        );
       }
 
       if (cardRef.current) {
         gsap.fromTo(cardRef.current,
-          { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
-          { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: MODAL_MOTION.entry.ease }
+          { 
+            y: reducedMotion ? 0 : DIALOG_MOTION.entry.yStart, 
+            opacity: DIALOG_MOTION.entry.opacityStart, 
+            scale: reducedMotion ? 1 : DIALOG_MOTION.entry.scaleStart, 
+            filter: reducedMotion ? DIALOG_MOTION.entry.filterEnd : DIALOG_MOTION.entry.filterStart 
+          },
+          { 
+            y: DIALOG_MOTION.entry.yEnd, 
+            opacity: DIALOG_MOTION.entry.opacityEnd, 
+            scale: DIALOG_MOTION.entry.scaleEnd, 
+            filter: DIALOG_MOTION.entry.filterEnd, 
+            duration: d_card, 
+            ease: DIALOG_MOTION.entry.ease 
+          }
         );
       }
     }
@@ -195,15 +210,23 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
 
   useEffect(() => {
     if (isClosing) {
-      const d = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
+      const d = reducedMotion ? 0 : DIALOG_MOTION.exit.duration;
 
       if (cardRef.current) {
-        gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration: d, ease: MODAL_MOTION.exit.ease });
+        gsap.to(cardRef.current, { 
+          y: DIALOG_MOTION.exit.yEnd, 
+          opacity: DIALOG_MOTION.exit.opacityEnd, 
+          scale: DIALOG_MOTION.exit.scaleEnd, 
+          filter: DIALOG_MOTION.exit.filterEnd, 
+          duration: d, 
+          ease: DIALOG_MOTION.exit.ease 
+        });
       }
 
       if (backdropRef.current) {
         gsap.to(backdropRef.current, {
           opacity: 0,
+          backdropFilter: "blur(0px)",
           duration: d,
           delay: reducedMotion ? 0 : 0.05,
           onComplete: () => {
@@ -233,7 +256,7 @@ export function ConfirmDialog({ isOpen, options, onConfirm, onCancel }: ConfirmD
   return (
     <div
       ref={backdropRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-void-900/50 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-void-900/70 p-4"
     >
       <div
         ref={(el) => {

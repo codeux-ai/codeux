@@ -32,10 +32,13 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
   const isSubmitting = useRef(false);
 
   useLayoutEffect(() => {
-    const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
+    const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.backdrop.duration || 0.4;
     const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
 
-    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
+    gsap.fromTo(backdropRef.current, 
+      { opacity: 0, backdropFilter: "blur(0px)" }, 
+      { opacity: 1, backdropFilter: "blur(12px)", duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease }
+    );
     gsap.fromTo(cardRef.current,
       { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
       { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: MODAL_MOTION.entry.ease }
@@ -47,7 +50,13 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
     const d = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
 
     if (cardRef.current) gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration: d, ease: MODAL_MOTION.exit.ease });
-    if (backdropRef.current) gsap.to(backdropRef.current, { opacity: 0, duration: d, delay: reducedMotion ? 0 : 0.05, onComplete: onClose });
+    if (backdropRef.current) gsap.to(backdropRef.current, { 
+      opacity: 0, 
+      backdropFilter: "blur(0px)",
+      duration: d, 
+      delay: reducedMotion ? 0 : 0.05, 
+      onComplete: onClose 
+    });
     else onClose();
   };
 
@@ -107,7 +116,7 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
     <div
       ref={backdropRef}
       onClick={handleBackdropClick}
-      className="fixed inset-0 z-[220] flex items-center justify-center px-6 bg-black/55 dark:bg-black/75 backdrop-blur-xl"
+      className="fixed inset-0 z-[220] flex items-center justify-center px-6 bg-void-900/70"
     >
       <div
         ref={cardRef}

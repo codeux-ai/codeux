@@ -70,9 +70,12 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   }, [sprintId, title]);
 
   useLayoutEffect(() => {
-    const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
+    const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.backdrop.duration || 0.4;
     const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
-    gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
+    gsap.fromTo(backdropRef.current, 
+      { opacity: 0, backdropFilter: "blur(0px)" }, 
+      { opacity: 1, backdropFilter: "blur(12px)", duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease }
+    );
     gsap.fromTo(cardRef.current,
       { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
       { y: MODAL_MOTION.entry.yEnd, opacity: MODAL_MOTION.entry.opacityEnd, scale: MODAL_MOTION.entry.scaleEnd, filter: MODAL_MOTION.entry.filterEnd, duration: d_card, ease: MODAL_MOTION.entry.ease }
@@ -83,7 +86,13 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
     if (isSubmitting) return;
     const d = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
     gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration: d, ease: MODAL_MOTION.exit.ease });
-    gsap.to(backdropRef.current, { opacity: 0, duration: d, delay: reducedMotion ? 0 : 0.05, onComplete: onClose });
+    gsap.to(backdropRef.current, { 
+      opacity: 0, 
+      backdropFilter: "blur(0px)",
+      duration: d, 
+      delay: reducedMotion ? 0 : 0.05, 
+      onComplete: onClose 
+    });
   };
 
   const dependencyOptions = useMemo(() => {
@@ -147,7 +156,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-task-modal-title"
-      className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-black/55 dark:bg-black/75 backdrop-blur-xl"
+      className="fixed inset-0 z-[200] flex items-center justify-center px-6 bg-void-900/70"
     >
       <div
         ref={cardRef}
