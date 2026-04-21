@@ -1,6 +1,4 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import axios from "axios";
-import type { AxiosError } from "axios";
 import express from "express";
 import type { AppConfig } from "../config/app-config.js";
 import { JulesApiClient } from "../integrations/jules-api-client.js";
@@ -49,6 +47,8 @@ import { DashboardRealtimeService } from "../services/dashboard-realtime-service
 import { AgentPresetSyncService } from "../services/agent-preset-sync-service.js";
 import { PlanningAgentService } from "../services/planning-agent-service.js";
 import { createRuntimeDependencies, ServerContext } from "../app/dependency-factory.js";
+import { McpServerConfigurer } from "./mcp-server-configurer.js";
+import { RuntimeLoopOrchestrator } from "../app/lifecycle/runtime-loop-orchestrator.js";
 import { generateCorrelationId, runWithCorrelationId } from "../shared/logging/correlation-id.js";
 import { createLogger, type Logger } from "../shared/logging/logger.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../repositories/settings-defaults.js";
@@ -103,8 +103,6 @@ export class JulesAgentServer {
   private static readonly DASHBOARD_ACTIVITY_PAGE_SIZE = 20;
   private static readonly LIVE_ACTIVITY_CACHE_MS = 10_000;
   private static readonly GIT_STATUS_CACHE_MS = 10_000;
-  private static readonly RUNTIME_CLEANUP_INTERVAL_MS = 15_000;
-  private static readonly LIVE_SNAPSHOT_REFRESH_INTERVAL_MS = 30_000;
   private static activeSigintHandler: (() => void) | null = null;
   private readonly projectRoot: string;
   private readonly appConfig: AppConfig;
@@ -154,12 +152,12 @@ export class JulesAgentServer {
   private memoryPromotionService: import("../services/memory-promotion-service.js").MemoryPromotionService;
   private embeddingModelManager: import("../services/embedding-model-manager.js").EmbeddingModelManager;
   private embeddingService: import("../services/embedding-service.js").EmbeddingService;
-  private memoryRepository: import("../repositories/memory-repository.js").MemoryRepository;
-  private runtimeCleanupInterval: ReturnType<typeof setInterval> | null = null;
-  private sprintPreviewInterval: ReturnType<typeof setInterval> | null = null;
-  private liveSnapshotInterval: ReturnType<typeof setInterval> | null = null;
+  private readonly memoryRepository: import("../repositories/memory-repository.js").MemoryRepository;
+  private readonly mcpServerConfigurer: McpServerConfigurer;
+  private readonly runtimeLoopOrchestrator: RuntimeLoopOrchestrator;
   private mcpHttpHandle: McpHttpTransportHandle | null = null;
   private mcpServiceBound = false;
+
   private readonly mcpApprovalTracker = new McpApprovalTracker();
   private readonly sigintHandler: () => void;
 
@@ -189,13 +187,7 @@ export class JulesAgentServer {
     this.agentPresetSyncService = deps.agentPresetSyncService;
     this.executionRepository = deps.executionRepository;
     this.sprintPreviewRepository = new SprintPreviewRepository(this.appDbStorage);
-    this.sprintPreviewService = new SprintPreviewService({
-      sprintPreviewRepository: this.sprintPreviewRepository,
-      projectManagementRepository: this.projectManagementRepository,
-      executionRepository: this.executionRepository,
-      settingsRepository: this.settingsRepository,
-      logger: this.logger.child({ component: "sprint-preview-service" }),
-    });
+    this.sprintPreviewService = deps.sprintPreviewService;
     this.sprintMarkdownService = deps.sprintMarkdownService;
     this.virtualWorkerService = deps.virtualWorkerService;
     this.externalSettingsHints = deps.externalSettingsHints;
@@ -205,8 +197,7 @@ export class JulesAgentServer {
     this.coreToolHandler = deps.coreToolHandler;
     this.agentToolHandler = deps.agentToolHandler;
     this.managementToolHandler = deps.managementToolHandler;
-    // Re-inject dependencies since sprintPreviewService is created late
-    (this.managementToolHandler as any).deps.sprintPreviewService = this.sprintPreviewService;
+
     this.activityCacheService = deps.activityCacheService;
     this.taskRerunService = deps.taskRerunService;
     this.executionControlService = deps.executionControlService;
@@ -239,7 +230,24 @@ export class JulesAgentServer {
     this.embeddingService = deps.embeddingService;
     this.memoryRepository = deps.memoryRepository;
 
-    this.configureMcpServer(this.server, this.appConfig.runtimeRole);
+    this.mcpServerConfigurer = new McpServerConfigurer({
+      coreToolHandler: this.coreToolHandler,
+      agentToolHandler: this.agentToolHandler,
+      managementToolHandler: this.managementToolHandler,
+      getDashboardSettings: () => this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
+      logger: this.logger,
+    });
+
+    this.runtimeLoopOrchestrator = new RuntimeLoopOrchestrator({
+      runtimeCleanupService: this.runtimeCleanupService,
+      sprintPreviewService: this.sprintPreviewService,
+      dashboardRealtimeService: this.dashboardRealtimeService,
+      projectManagementRepository: this.projectManagementRepository,
+      logger: this.logger,
+      runtimeRole: this.appConfig.runtimeRole,
+    });
+
+    this.mcpServerConfigurer.configure(this.server, this.appConfig.runtimeRole);
 
     this.sigintHandler = () => {
       void this.handleSigint();
@@ -253,18 +261,7 @@ export class JulesAgentServer {
   }
 
   private async handleSigint(): Promise<void> {
-    if (this.runtimeCleanupInterval) {
-      clearInterval(this.runtimeCleanupInterval);
-      this.runtimeCleanupInterval = null;
-    }
-    if (this.sprintPreviewInterval) {
-      clearInterval(this.sprintPreviewInterval);
-      this.sprintPreviewInterval = null;
-    }
-    if (this.liveSnapshotInterval) {
-      clearInterval(this.liveSnapshotInterval);
-      this.liveSnapshotInterval = null;
-    }
+    this.runtimeLoopOrchestrator.stop();
     if (this.mcpHttpHandle) {
       await this.mcpHttpHandle.close().catch(() => undefined);
       this.mcpHttpHandle = null;
@@ -272,98 +269,6 @@ export class JulesAgentServer {
     this.virtualWorkerService.stop();
     await this.server.close();
     process.exit(0);
-  }
-
-  private configureMcpServer(server: Server, runtimeRole: "project_manager"): void {
-    registerMcpRequestHandlers({
-      server,
-      coreToolHandler: this.coreToolHandler,
-      agentToolHandler: this.agentToolHandler,
-      managementToolHandler: this.managementToolHandler,
-      getDashboardSettings: () => this.runtimeContext.dashboardSettings || DEFAULT_DASHBOARD_SETTINGS,
-      getRuntimeRole: () => runtimeRole,
-      formatError: (error: unknown) => this.formatError(error),
-      logger: this.logger.child({ component: "mcp-request-router", runtimeRole }),
-      withCorrelationContext: (request, operation) => this.runWithMcpCorrelationContext(request, operation),
-    });
-
-    server.onerror = (error) => {
-      this.logger.error("MCP server error", { error, runtimeRole });
-    };
-  }
-
-  private createMcpServerInstance(runtimeRole: "project_manager"): Server {
-    const server = new Server(
-      {
-        name: SPRINT_OS_SERVICE_NAME,
-        version: "1.2.0",
-      },
-      {
-        capabilities: {
-          tools: {},
-          resources: {},
-          prompts: {},
-        },
-      },
-    );
-    this.configureMcpServer(server, runtimeRole);
-    return server;
-  }
-
-  private startRuntimeCleanupLoop(): void {
-    if (this.appConfig.runtimeRole !== "project_manager" || this.runtimeCleanupInterval) {
-      return;
-    }
-
-    const runCleanup = (): void => {
-      try {
-        this.runtimeCleanupService.cleanup();
-      } catch (error) {
-        this.logger.error("Runtime cleanup sweep failed", { error });
-      }
-    };
-
-    const initialTimer = setTimeout(runCleanup, 0);
-    initialTimer.unref?.();
-    this.runtimeCleanupInterval = setInterval(runCleanup, JulesAgentServer.RUNTIME_CLEANUP_INTERVAL_MS);
-    this.runtimeCleanupInterval.unref?.();
-  }
-
-  private startSprintPreviewLoop(): void {
-    if (this.appConfig.runtimeRole !== "project_manager" || this.sprintPreviewInterval) {
-      return;
-    }
-
-    const reconcile = (): void => {
-      void this.sprintPreviewService.reconcileSessions().catch((error) => {
-        this.logger.error("Sprint preview reconciliation failed", { error });
-      });
-    };
-
-    const initialTimer = setTimeout(reconcile, 0);
-    initialTimer.unref?.();
-    this.sprintPreviewInterval = setInterval(reconcile, JulesAgentServer.RUNTIME_CLEANUP_INTERVAL_MS);
-    this.sprintPreviewInterval.unref?.();
-  }
-
-  private startLiveSnapshotLoop(): void {
-    if (this.appConfig.runtimeRole !== "project_manager" || this.liveSnapshotInterval) {
-      return;
-    }
-
-    const refreshLiveSnapshot = (): void => {
-      const projectId = this.projectManagementRepository.getSelectedProjectId();
-      if (!projectId) {
-        return;
-      }
-
-      this.dashboardRealtimeService.scheduleProjectLiveRefresh(projectId);
-    };
-
-    const initialTimer = setTimeout(refreshLiveSnapshot, 0);
-    initialTimer.unref?.();
-    this.liveSnapshotInterval = setInterval(refreshLiveSnapshot, JulesAgentServer.LIVE_SNAPSHOT_REFRESH_INTERVAL_MS);
-    this.liveSnapshotInterval.unref?.();
   }
 
   private createContext(): ServerContext {
@@ -399,46 +304,6 @@ export class JulesAgentServer {
         : null,
       getMcpApprovalTracker: () => this.mcpApprovalTracker,
     };
-  }
-
-  private runWithMcpCorrelationContext<T>(request: unknown, operation: () => Promise<T>): Promise<T> {
-    const correlationId = this.extractMcpCorrelationId(request) ?? generateCorrelationId();
-    return runWithCorrelationId(correlationId, operation);
-  }
-
-  private extractMcpCorrelationId(request: unknown): string | undefined {
-    const requestRecord = request as { id?: unknown; params?: Record<string, unknown> };
-    const params = requestRecord.params && typeof requestRecord.params === "object"
-      ? requestRecord.params
-      : undefined;
-    const meta = params?._meta && typeof params._meta === "object"
-      ? (params._meta as Record<string, unknown>)
-      : undefined;
-    const argumentsRecord = params?.arguments && typeof params.arguments === "object"
-      ? (params.arguments as Record<string, unknown>)
-      : undefined;
-
-    const candidates: unknown[] = [
-      meta?.correlationId,
-      meta?.["x-correlation-id"],
-      meta?.requestId,
-      argumentsRecord?.correlationId,
-      requestRecord.id,
-    ];
-
-    for (const candidate of candidates) {
-      if (typeof candidate === "string") {
-        const trimmed = candidate.trim();
-        if (trimmed.length > 0) {
-          return trimmed;
-        }
-      }
-      if (typeof candidate === "number" && Number.isFinite(candidate)) {
-        return `mcp-${candidate}`;
-      }
-    }
-
-    return undefined;
   }
 
   private getEffectiveJulesApiKey(): string | undefined {
@@ -591,19 +456,6 @@ export class JulesAgentServer {
   private async persistTaskMergedFlag(args: PersistTaskMergedFlagArgs): Promise<void> {
     const subtasksDir = getSprintSubtasksDir(args.repoPath, args.sprintNumber);
     await this.subtaskRepository.setMerged(subtasksDir, args.taskId, args.merged);
-  }
-
-  private formatError(error: unknown): { content: Array<{ type: string; text: string }>; isError: true } {
-    const maybeError = error as { message?: string };
-    let message = maybeError?.message || "An unknown error occurred";
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError<{ error?: { message?: string } }>;
-      message = axiosError.response?.data?.error?.message || axiosError.message;
-    }
-    return {
-      content: [{ type: "text", text: `Error: ${message}` }],
-      isError: true,
-    };
   }
 
   private normalizeName(type: string, id: string): string {
@@ -979,6 +831,7 @@ export class JulesAgentServer {
       isJulesApiConfigured: () => this.isJulesApiConfigured(),
       getMissingJulesApiKeyInstruction: () => this.getMissingJulesApiKeyInstruction(),
     });
+
     this.mcpHttpHandle = await bootMcpHttpTransport({
       enabled: this.appConfig.mcpHttpEnabled,
       host: this.appConfig.mcpHttpHost,
@@ -986,12 +839,14 @@ export class JulesAgentServer {
       path: this.appConfig.mcpHttpPath,
       authToken: this.appConfig.mcpHttpAuthToken,
       logger: this.logger.child({ component: "mcp-http-transport" }),
-      createServer: () => this.createMcpServerInstance("project_manager"),
+      createServer: () => this.mcpServerConfigurer.createInstance("project_manager"),
     });
     this.mcpServiceBound = true;
-    this.startRuntimeCleanupLoop();
-    this.startSprintPreviewLoop();
-    this.startLiveSnapshotLoop();
+    this.runtimeLoopOrchestrator.start();
     this.virtualWorkerService.start();
+  }
+
+  public formatError(error: unknown): { content: Array<{ type: string; text: string }>; isError: true } {
+    return this.mcpServerConfigurer.formatError(error);
   }
 }

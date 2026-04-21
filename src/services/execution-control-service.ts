@@ -13,7 +13,7 @@ interface ExecutionControlServiceDeps {
   projectManagementRepository: ProjectManagementRepository;
   executionRepository: ExecutionRepository;
   projectAttentionService: ProjectAttentionService;
-  taskRerunService: TaskRerunService;
+  taskRerunService?: TaskRerunService;
   sprintOrchestrator: SprintOrchestrator;
   julesApi: JulesApiClient;
   activeDispatchRegistry: ActiveDispatchRegistry;
@@ -22,6 +22,10 @@ interface ExecutionControlServiceDeps {
 
 export class ExecutionControlService {
   constructor(private readonly deps: ExecutionControlServiceDeps) {}
+
+  setTaskRerunService(taskRerunService: TaskRerunService): void {
+    this.deps.taskRerunService = taskRerunService;
+  }
 
   async orchestrateSprint(projectId: string, sprintId: string): Promise<{ ok: true }> {
     const project = this.deps.projectManagementRepository.getProject(projectId);
@@ -276,6 +280,10 @@ export class ExecutionControlService {
     );
 
     this.deps.projectAttentionService.resolveItemsForDispatch(dispatchId, "dispatch_retry_requested");
+
+    if (!this.deps.taskRerunService) {
+      throw new Error("taskRerunService not initialized");
+    }
 
     return await this.deps.taskRerunService.rerunTask(task.id);
   }

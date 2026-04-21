@@ -1,4 +1,10 @@
 import type { AppConfig } from "../config/app-config.js";
+import { createCoreDependencies, type CoreDependencies } from "./dependency-factory/core-factory.js";
+import { createSprintDependencies, type SprintDependencies } from "./dependency-factory/sprint-factory.js";
+import { createMcpDependencies, type McpDependencies } from "./dependency-factory/mcp-factory.js";
+import { createDashboardDependencies, type DashboardDependencies } from "./dependency-factory/dashboard-factory.js";
+import type { RuntimeContext } from "./runtime-context.js";
+import type { SprintPreviewService } from "../services/sprint-preview-service.js";
 import type { McpConnectionInfo } from "../contracts/mcp-connection-types.js";
 import type { McpApprovalTracker } from "../services/mcp-approval-tracker.js";
 import type {
@@ -6,22 +12,17 @@ import type {
   JulesActivity,
   JulesSession,
   Subtask,
-  Settings,
   GitTrackingStatus,
-  DashboardStatus,
   GetCiStatusForScopeArgs,
   AutoMergeFeaturePrArgs,
   AutoMergeFeaturePrResult,
   PersistTaskMergedFlagArgs,
 } from "../contracts/app-types.js";
 import type { ResolvePullRequestResult } from "../services/git-status-service.js";
-import { createCoreDependencies, type CoreDependencies } from "./dependency-factory/core-factory.js";
-import { createSprintDependencies, type SprintDependencies } from "./dependency-factory/sprint-factory.js";
-import { createMcpDependencies, type McpDependencies } from "./dependency-factory/mcp-factory.js";
-import { createDashboardDependencies, type DashboardDependencies } from "./dependency-factory/dashboard-factory.js";
-import type { RuntimeContext } from "./runtime-context.js";
 
-export interface RuntimeDependencies extends CoreDependencies, SprintDependencies, McpDependencies, DashboardDependencies {}
+export interface RuntimeDependencies extends CoreDependencies, SprintDependencies, McpDependencies, DashboardDependencies {
+  sprintPreviewService: SprintPreviewService;
+}
 
 export interface ServerContext {
   runtimeContext: RuntimeContext;
@@ -66,5 +67,11 @@ export function createRuntimeDependencies(
   const dashDeps = createDashboardDependencies(context, coreDeps, sprintDeps);
   const mcpDeps = createMcpDependencies(context, coreDeps, sprintDeps, dashDeps);
 
-  return { ...coreDeps, ...sprintDeps, ...mcpDeps, ...dashDeps };
+  return { 
+    ...coreDeps, 
+    ...sprintDeps, 
+    ...mcpDeps, 
+    ...dashDeps,
+    sprintPreviewService: sprintDeps.sprintPreviewService 
+  };
 }

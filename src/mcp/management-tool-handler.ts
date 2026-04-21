@@ -21,12 +21,12 @@ import { AgentActions } from "./management/agent-actions.js";
 import { MemoryActions } from "./management/memory-actions.js";
 
 export interface ManagementToolHandlerDeps {
-  sprintPreviewService: SprintPreviewService;
+  sprintPreviewService?: SprintPreviewService;
   executionRepository: ExecutionRepository;
   getDashboardSettings: () => DashboardSettings;
   projectManagementRepository: ProjectManagementRepository;
   executionControlService: ExecutionControlService;
-  taskRerunService: TaskRerunService;
+  taskRerunService?: TaskRerunService;
   settingsRepository: SettingsRepository;
   agentPresetSyncService: AgentPresetSyncService;
   memoryService: MemoryService;
@@ -45,11 +45,21 @@ export class ManagementToolHandler {
       deps.projectManagementRepository,
       deps.executionControlService,
       deps.executionRepository,
-      deps.taskRerunService
+      deps.taskRerunService!
     );
     this.settingsActions = new SettingsActions(deps.settingsRepository);
     this.agentActions = new AgentActions(deps.agentPresetSyncService);
     this.memoryActions = new MemoryActions(deps.memoryService, deps.memoryPromotionService, deps.embeddingModelManager);
+  }
+
+  setTaskRerunService(taskRerunService: TaskRerunService): void {
+    this.deps.taskRerunService = taskRerunService;
+    // Update taskActions since it holds a reference to the service via deps.taskRerunService
+    this.taskActions.setTaskRerunService(taskRerunService);
+  }
+
+  setSprintPreviewService(sprintPreviewService: SprintPreviewService): void {
+    this.deps.sprintPreviewService = sprintPreviewService;
   }
 
   async handleManageSprintOs(args: ManageSprintOsArgs): Promise<{ content: Array<{ type: string; text: string }> }> {
@@ -83,6 +93,9 @@ export class ManagementToolHandler {
       } else if (args.domain === "memory") {
         envelope = await this.memoryActions.handleMemoryAction(args);
       } else if (args.domain === "preview") {
+        if (!this.deps.sprintPreviewService) {
+          throw new Error("sprintPreviewService not initialized");
+        }
         const currentHost = null; // serverHost is not available on DashboardSettings, we'll fall back to localhost in preview-origin
         envelope = await handlePreviewActions(args, this.deps.sprintPreviewService, currentHost);
       } else if (args.domain === "telemetry") {

@@ -10,6 +10,8 @@ import { VirtualWorkerService } from "../../services/virtual-worker-service.js";
 import { SprintOrchestrator } from "../../sprint/sprint-orchestrator.js";
 import { WorkerInboxReplyService } from "../../services/worker-inbox-reply-service.js";
 import { QualityAssuranceService } from "../../services/quality-assurance-service.js";
+import { SprintPreviewRepository } from "../../repositories/sprint-preview-repository.js";
+import { SprintPreviewService } from "../../services/sprint-preview-service.js";
 import { resolveEffectiveDashboardSettings } from "../../services/settings-resolution-service.js";
 import type { DashboardSettings, DashboardSettingsScope } from "../../contracts/app-types.js";
 import { DEFAULT_DASHBOARD_SETTINGS } from "../../repositories/settings-defaults.js";
@@ -23,6 +25,7 @@ export interface SprintDependencies {
   workerInboxReplyService: WorkerInboxReplyService;
   qualityAssuranceService: QualityAssuranceService;
   sprintOrchestrator: SprintOrchestrator;
+  sprintPreviewService: SprintPreviewService;
 }
 
 export function createSprintDependencies(
@@ -70,6 +73,15 @@ export function createSprintDependencies(
 
     return settings;
   };
+
+  const sprintPreviewRepository = new SprintPreviewRepository(coreDeps.appDbStorage);
+  const sprintPreviewService = new SprintPreviewService({
+    sprintPreviewRepository,
+    projectManagementRepository,
+    executionRepository,
+    settingsRepository: coreDeps.settingsRepository,
+    logger: logger.child({ component: "sprint-preview-service" }),
+  });
 
   const cliWorkflowService = new CliWorkflowService({
     sessionTracking,
@@ -244,5 +256,6 @@ export function createSprintDependencies(
     workerInboxReplyService,
     qualityAssuranceService,
     sprintOrchestrator,
+    sprintPreviewService,
   };
 }

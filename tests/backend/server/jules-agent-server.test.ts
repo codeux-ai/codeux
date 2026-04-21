@@ -261,7 +261,7 @@ describe("JulesAgentServer", () => {
   describe("formatError", () => {
     it("should format a standard error", () => {
       const error = new Error("something went wrong");
-      const formatted = (server as any).formatError(error);
+      const formatted = server.formatError(error);
       expect(formatted.content[0].text).toBe("Error: something went wrong");
       expect(formatted.isError).toBe(true);
     });
@@ -275,7 +275,7 @@ describe("JulesAgentServer", () => {
 
       vi.spyOn(axios, "isAxiosError").mockImplementation((error): error is any => error?.isAxiosError === true);
 
-      const formatted = (server as any).formatError(axiosError);
+      const formatted = server.formatError(axiosError);
       expect(formatted.content[0].text).toBe("Error: api error");
     });
   });

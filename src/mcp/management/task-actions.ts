@@ -6,12 +6,20 @@ import type { TaskRerunService } from "../../services/task-rerun-service.js";
 import { randomUUID } from "crypto";
 
 export class TaskActions {
+  private taskRerunService: TaskRerunService;
+
   constructor(
     private readonly projectManagementRepository: ProjectManagementRepository,
     private readonly executionControlService: ExecutionControlService,
     private readonly executionRepository: ExecutionRepository,
-    private readonly taskRerunService: TaskRerunService,
-  ) {}
+    taskRerunService: TaskRerunService,
+  ) {
+    this.taskRerunService = taskRerunService;
+  }
+
+  setTaskRerunService(taskRerunService: TaskRerunService): void {
+    this.taskRerunService = taskRerunService;
+  }
 
   async handleTaskAction(args: ManageSprintOsArgs): Promise<ManagementResponseEnvelope> {
     const payload = args.payload || {};
