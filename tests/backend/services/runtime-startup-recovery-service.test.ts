@@ -419,6 +419,106 @@ describe("RuntimeStartupRecoveryService", () => {
     );
   });
 
+  it("requeues QA follow-up task executions when restart recovery finds the fix container is gone", async () => {
+    const {
+      projectRepository,
+      executionRepository,
+      service,
+    } = await createFixture({
+      dockerService: {
+        listContainers: vi.fn().mockResolvedValue([]),
+      },
+    });
+
+    const project = projectRepository.createProject({
+      name: "Recovered Fix Follow-Up Project",
+      sourceType: "local",
+      sourceRef: "/workspace/recovered-fix-follow-up-project",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Recovered Fix Follow-Up Sprint",
+      number: 56,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Resume QA-requested fixes after restart",
+      executorType: "docker_cli",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      executorMode: "docker_cli",
+      status: "running",
+    });
+    const taskRun = executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      provider: "codex",
+      mode: "docker_cli",
+      sessionId: "cli-codex-fix-followup",
+      sessionName: "sessions/cli-codex-fix-followup",
+      state: "COMPLETED",
+      startedAt: "2026-04-11T08:00:00.000Z",
+      finishedAt: "2026-04-11T08:05:00.000Z",
+    });
+    const providerInvocation = executionRepository.createProviderInvocationUsage({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      sprintRunId: sprintRun.id,
+      sessionId: "cli-codex-fix-followup",
+      provider: "codex",
+      purpose: "task_coding",
+      executionMode: "DOCKER",
+      startedAt: "2026-04-11T08:06:00.000Z",
+    });
+    const executionInvocation = executionRepository.createExecutionInvocation({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      taskRunId: taskRun.id,
+      sprintRunId: sprintRun.id,
+      providerInvocationId: providerInvocation.id,
+      type: "cli_task_followup",
+      status: "running",
+      provider: "codex",
+      model: "gpt-5.4",
+      startedAt: "2026-04-11T08:06:01.000Z",
+    });
+
+    const result = await service.recover();
+
+    expect(result.reconciledContainerInvocationIds).toEqual([providerInvocation.id]);
+    expect(projectRepository.getTask(task.id)?.status).toBe("pending");
+    expect(executionRepository.getProviderInvocationUsage(providerInvocation.id)).toMatchObject({
+      id: providerInvocation.id,
+      status: "failed",
+    });
+    expect(executionRepository.getExecutionInvocation(executionInvocation.id)).toMatchObject({
+      id: executionInvocation.id,
+      status: "failed",
+    });
+    expect(executionRepository.getTaskRun(taskRun.id)).toMatchObject({
+      id: taskRun.id,
+      state: "COMPLETED",
+    });
+    expect(executionRepository.listTaskRunEvents(taskRun.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          eventType: "cli_workflow_failed",
+          payload: expect.objectContaining({
+            providerInvocationId: providerInvocation.id,
+            reason: "runtime_restart_interrupted",
+          }),
+        }),
+      ]),
+    );
+  });
+
   it("logs startup recovery activity and surfaces recoverSprintRun errors without aborting recovery", async () => {
     const logger = {
       info: vi.fn(),

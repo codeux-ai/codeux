@@ -118,6 +118,8 @@ export class RuntimeStartupRecoveryService {
         });
       }
 
+      this.reconcileInterruptedTaskExecution(invocation, failureReason, reconciledAt);
+
       reconciledInvocationIds.push(invocation.id);
     }
 
@@ -261,6 +263,66 @@ export class RuntimeStartupRecoveryService {
     }
 
     return null;
+  }
+
+  private reconcileInterruptedTaskExecution(
+    invocation: ProviderInvocationUsageRecord,
+    failureReason: string,
+    reconciledAt: string,
+  ): void {
+    if (invocation.purpose !== "task_coding" || !invocation.taskId) {
+      return;
+    }
+
+    const task = this.deps.projectManagementRepository.getTask(invocation.taskId);
+    if (!task || task.status !== "in_progress") {
+      return;
+    }
+
+    if (invocation.dispatchId) {
+      const dispatch = this.deps.executionRepository.getTaskDispatch(invocation.dispatchId);
+      if (dispatch && ACTIVE_DISPATCH_STATUSES.includes(dispatch.status as (typeof ACTIVE_DISPATCH_STATUSES)[number])) {
+        this.deps.executionRepository.releaseLease("task_dispatch", dispatch.id);
+        this.deps.executionRepository.updateTaskDispatch(dispatch.id, {
+          connectionId: null,
+          status: "failed",
+          finishedAt: reconciledAt,
+          lastHeartbeatAt: reconciledAt,
+          errorMessage: failureReason,
+        });
+      }
+    }
+
+    if (invocation.taskRunId) {
+      const taskRun = this.deps.executionRepository.getTaskRun(invocation.taskRunId);
+      if (taskRun && !isTerminalTaskRunState(taskRun)) {
+        this.deps.executionRepository.updateTaskRun(taskRun.id, {
+          connectionId: null,
+          state: "FAILED",
+          finishedAt: reconciledAt,
+          durationMs: calculateDurationMs(taskRun, reconciledAt),
+        });
+      }
+      if (taskRun) {
+        this.deps.executionRepository.appendTaskRunEvent(taskRun.id, "cli_workflow_failed", "system", {
+          dispatchId: invocation.dispatchId || null,
+          providerInvocationId: invocation.id,
+          reason: "runtime_restart_interrupted",
+          recoveredSessionId: invocation.sessionId,
+          errorMessage: failureReason,
+        }, {
+          sourceEventKey: `startup-recovery:cli-invocation:${invocation.id}:${taskRun.id}`,
+        });
+      }
+    }
+
+    this.deps.projectManagementRepository.updateTask(invocation.taskId, {
+      status: "pending",
+    });
+
+    if (invocation.sprintRunId) {
+      this.deps.executionRepository.finalizeSprintRunCancellationIfIdle(invocation.sprintRunId);
+    }
   }
 
   private resolveInvocationExecutionMode(invocation: ProviderInvocationUsageRecord): ProviderInvocationUsageRecord["executionMode"] {
