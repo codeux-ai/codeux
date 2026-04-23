@@ -158,21 +158,21 @@ Existing sprints can be explicitly replanned. When the `replan` flag is set, Spr
 
 ### Planning Contracts
 
-The planning contract is now intentionally strict so the planner emits database-ready tasks without improvising formatting:
+The planning contract is now strictly enforced by the `PlanningPayloadValidator` during ingestion. The validator ensures that the planner emits database-ready tasks without improvising formatting, and triggers automatic JSON retries with explicit error guidance if the contract is violated:
 
 - task keys should use `T01`, `T02`, `T03`, ... in topological order
 - the `tasks` array itself is the DAG order
-- dependencies may only point backward to earlier task keys
+- dependencies must only reference keys defined earlier in the task list (forward references are rejected)
 - every task must include `title`, `description`, `promptMarkdown`, `priority`, `executorType`, and `dependsOn`
-- `promptMarkdown` is standardized to five sections in this order:
+- `priority` and `executorType` are validated against allowed enum values
+- `promptMarkdown` is standardized to five sections in this exact order:
   - `## Objective`
   - `## Scope`
   - `## Implementation Requirements`
   - `## Constraints`
   - `## Verification`
-- the default built-in Planning agent instructions now include canonical multi-task JSON examples so virtual and connected planning workers follow the same output shape more reliably
 
-This keeps planning quality deterministic across providers and reduces executor ambiguity when Sprint OS converts the plan into DB task records.
+This strict validation occurs before any tasks are written to the repository, ensuring that partial or malformed plans never reach the database. This keeps planning quality deterministic across providers and reduces executor ambiguity.
 
 ### Provider Throttling And Quota Recovery
 
