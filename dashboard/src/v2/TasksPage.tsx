@@ -19,9 +19,8 @@ import {
   X,
   ArrowUpRight,
 } from "lucide-preact";
-import { WaveFluid } from "./components/ui/WaveFluid.js";
-import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { TaskComposer } from "./components/ui/TaskComposer.js";
+import { PremiumSurface } from "./components/ui/PremiumSurface.js";
 import { buildDependentTasksMap, type DependentTaskMetadata } from "./lib/task-relations.js";
 import type { Sprint, Task, TaskPriority, TaskStatus } from "./types.js";
 import { useProjectData } from "./context/project-data.js";
@@ -75,52 +74,16 @@ const TaskCard: FunctionComponent<{
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
 }> = memo(({ task, dependents, onEdit, onDelete }) => {
-  const cardRef = useRef<HTMLDivElement>(null);
   const pri = PRIORITY_CFG[task.priority];
-
-  const handleMouseMove = (event: MouseEvent) => {
-    const element = cardRef.current;
-    if (!element) return;
-    const bounds = element.getBoundingClientRect();
-    const x = (event.clientX - bounds.left) / bounds.width - 0.5;
-    const y = (event.clientY - bounds.top) / bounds.height - 0.5;
-    gsap.to(element, {
-      rotationY: x * 10,
-      rotationX: -y * 8,
-      z: 12,
-      transformPerspective: 800,
-      duration: 0.4,
-      ease: "power2.out",
-      overwrite: "auto",
-    });
-  };
-
-  const handleMouseLeave = () => {
-    if (!cardRef.current) return;
-    gsap.to(cardRef.current, {
-      rotationY: 0,
-      rotationX: 0,
-      z: 0,
-      transformPerspective: 800,
-      duration: 0.8,
-      ease: "elastic.out(1, 0.5)",
-      overwrite: "auto",
-    });
-  };
+  const accentHex = STATUS_CFG[task.status].hex;
 
   return (
-    <div
-      ref={cardRef}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
+    <PremiumSurface
+      accentHex={accentHex}
+      isOptimistic={task.isOptimistic}
       tabIndex={0}
-      className={`group relative flex flex-col bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)] overflow-hidden cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2 ${task.isOptimistic ? "border-dashed border-2 border-slate-300 dark:border-slate-600 opacity-60 pointer-events-none" : "border border-black/[0.06] dark:border-white/[0.06]"}`}
-      style={{ transformStyle: "preserve-3d", willChange: "transform" }}
+      className="task-card-entry"
     >
-      <div className="absolute inset-0 pointer-events-none transition-colors duration-300 group-hover:bg-signal-500/[0.03] dark:group-hover:bg-signal-500/[0.05]" />
-      <WaveFluid accentHex={STATUS_CFG[task.status].hex} />
-      <BorderTrace accentHex={STATUS_CFG[task.status].hex} />
-
       <div className="flex items-center justify-between mb-3 relative z-10">
         <span className="font-mono text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-[0.1em]">
           {task.id.toUpperCase()}
@@ -200,7 +163,10 @@ const TaskCard: FunctionComponent<{
           type="button"
           className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-signal-600 dark:hover:text-signal-400 rounded-full transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30"
           title="Edit task"
-          onClick={() => onEdit(task)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit(task);
+          }}
         >
           <Settings className="w-3 h-3" />
         </button>
@@ -208,12 +174,15 @@ const TaskCard: FunctionComponent<{
           type="button"
           className="p-1.5 text-slate-500 dark:text-slate-400 hover:text-status-red rounded-full transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-status-red/30"
           title="Delete task"
-          onClick={() => onDelete(task)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(task);
+          }}
         >
           <Trash2 className="w-3 h-3" />
         </button>
       </div>
-    </div>
+    </PremiumSurface>
   );
 }, (prev, next) => {
   return prev.task.recordId === next.task.recordId &&
@@ -335,7 +304,11 @@ const SprintProgressCard: FunctionComponent<{
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   return (
-    <div className="relative overflow-hidden bg-white/70 dark:bg-void-800/60 backdrop-blur-2xl border border-black/[0.06] dark:border-white/[0.06] rounded-[1.75rem] p-7 shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]">
+    <PremiumSurface
+      accentHex="#FFB800"
+      showWave={false}
+      showBorder={false}
+    >
       <div aria-hidden className="absolute -right-4 -bottom-6 text-[6rem] font-black tracking-tighter text-black/[0.025] dark:text-white/[0.02] pointer-events-none select-none font-display leading-none">
         {pct}%
       </div>
@@ -383,7 +356,7 @@ const SprintProgressCard: FunctionComponent<{
         <ArrowUpRight className="w-3 h-3 group-hover/link:translate-x-0.5 group-hover/link:-translate-y-0.5 transition-transform duration-200" strokeWidth={2.5} />
         View Sprint
       </Link>
-    </div>
+    </PremiumSurface>
   );
 });
 
