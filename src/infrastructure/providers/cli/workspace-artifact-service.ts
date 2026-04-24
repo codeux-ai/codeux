@@ -1,6 +1,7 @@
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
+import { LEARNINGS_FILENAME } from "../../../contracts/memory-types.js";
 import { runCommandStrict } from "../../../services/cli-process-runner.js";
 import type { IWorkspaceManager } from "./workspace-manager.js";
 
@@ -18,15 +19,62 @@ export class WorkspaceArtifactService {
   constructor(private readonly workspaceManager: IWorkspaceManager) {}
 
   async exportBinaryPatch(workspaceRef: string, baseRef: string): Promise<string> {
-    // Git patch payloads are whitespace-sensitive. Preserve raw command output so
-    // EOF-only whitespace lines and no-newline markers survive host-side apply.
-    const result = await this.workspaceManager.runWorkspaceCommand(
+    const diffArgs = ["diff", "--binary", baseRef, "--", ".", `:(exclude)${LEARNINGS_FILENAME}`];
+    const untrackedResult = await this.workspaceManager.runWorkspaceCommand(
       workspaceRef,
       "git",
-      ["diff", "--binary", baseRef],
+      ["ls-files", "--others", "--exclude-standard", "-z"],
       { trimOutput: false },
     );
-    return result.stdout;
+    const untrackedPaths = untrackedResult.stdout
+      .split("\0")
+      .filter((candidate) => candidate.length > 0 && candidate !== LEARNINGS_FILENAME);
+
+    // Git patch payloads are whitespace-sensitive. Preserve raw command output so
+    // EOF-only whitespace lines and no-newline markers survive host-side apply.
+    if (untrackedPaths.length === 0) {
+      const result = await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "git",
+        diffArgs,
+        { trimOutput: false },
+      );
+      return result.stdout;
+    }
+
+    const tempIndexPath = `.sprint-os-export-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.index`;
+    const tempIndexEnv = {
+      ...process.env,
+      GIT_INDEX_FILE: tempIndexPath,
+    };
+
+    try {
+      await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "git",
+        ["read-tree", "HEAD"],
+        { env: tempIndexEnv },
+      );
+      await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "git",
+        ["add", "--intent-to-add", "--", ...untrackedPaths],
+        { env: tempIndexEnv },
+      );
+      const result = await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "git",
+        diffArgs,
+        { env: tempIndexEnv, trimOutput: false },
+      );
+      return result.stdout;
+    } finally {
+      await this.workspaceManager.runWorkspaceCommand(
+        workspaceRef,
+        "rm",
+        ["-f", tempIndexPath],
+      ).catch(() => undefined);
+    }
   }
 
   async applyPatchToBranch(args: {

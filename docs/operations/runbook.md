@@ -104,6 +104,7 @@ Checks:
 - GitHub credential sync still copies mount contents into a fixed dir (`~/.config/gh`); Gemini sync is now auth-only to avoid concurrent Docker sessions racing on shared `.gemini/tmp/tool-outputs`.
 - If provider output says "No file changes produced", runtime now still checks for unpushed worker-branch commits and will push/create (or reuse) the feature PR when commits exist.
 - CI autofix and merge-conflict virtual-worker runs now perform the same unpublished-commit check before they mark the attention item resolved, so provider-created local commits are pushed to GitHub even when the workspace diff is empty by the end of the run.
+- Workspace patch export includes newly created untracked files by marking them in a temporary Git index before diffing. The transient `.task-learnings.md` memory file is excluded from the exported patch so it can be captured without being committed.
 - For Docker-in-Docker or remote daemon path mismatches, configure:
     - `JULES_DOCKER_HOST_WORKSPACE_ROOT=<host-visible-repo-root>`
     - `JULES_DOCKER_HOST_HOME_ROOT=<host-visible-home-root>` (optional, for auth mounts)

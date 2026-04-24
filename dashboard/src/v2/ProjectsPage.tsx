@@ -5,10 +5,9 @@ import { FolderOpen, Plus, ExternalLink, Settings, Trash2 } from "lucide-preact"
 import type { Source, SourceStatus } from "./types.js";
 import { AddProjectModal } from "./components/ui/AddProjectModal.js";
 import { StatusDot } from "./components/ui/StatusDot.js";
-import { WaveFluid } from "./components/ui/WaveFluid.js";
-import { BorderTrace } from "./components/ui/BorderTrace.js";
 import { useProjectData } from "./context/project-data.js";
 import { SkeletonPanel } from "./components/ui/ListSkeletons.js";
+import { PremiumSurface } from "./components/ui/PremiumSurface.js";
 
 const EMBER_HEX = '#FFB800';
 
@@ -45,69 +44,20 @@ const ProjectCard: FunctionComponent<{
     onSelect: () => void;
     onDelete: () => void;
 }> = ({ source, isSelected, onSelect, onDelete }) => {
-    const cardRef  = useRef<HTMLDivElement>(null);
     const label    = statusLabel[source.status];
     const color    = statusColor[source.status];
     const watermark = source.name.slice(0, 3).toUpperCase();
     const total     = source.completedTasks + source.openTasks;
     const completion = total > 0 ? Math.round((source.completedTasks / total) * 100) : 0;
 
-    const onEnter = () => {
-        if (!cardRef.current) return;
-        gsap.to(cardRef.current, {
-            y: -6,
-            scale: 1.022,
-            duration: 0.5,
-            ease: "back.out(2)",
-            overwrite: "auto",
-        });
-    };
-
-    const onLeave = () => {
-        if (!cardRef.current) return;
-        gsap.to(cardRef.current, {
-            y: 0,
-            scale: 1,
-            duration: 0.8,
-            ease: "elastic.out(1, 0.5)",
-            overwrite: "auto",
-        });
-    };
-
     return (
-        <div
-            ref={cardRef}
+        <PremiumSurface
             onClick={onSelect}
-            onMouseEnter={onEnter}
-            onMouseLeave={onLeave}
-            className={`group relative flex flex-col
-                       bg-white/70 dark:bg-void-800/60
-                       backdrop-blur-2xl
-                       rounded-[1.75rem]
-                       p-7
-                       overflow-hidden cursor-pointer
-                       ${isSelected
-                         ? "border border-ember-500/45 shadow-[0_8px_30px_rgba(255,184,0,0.08)] ring-1 ring-ember-500/18"
-                         : "border border-black/[0.06] dark:border-white/[0.06] shadow-[0_2px_20px_rgba(0,0,0,0.04)] dark:shadow-[0_4px_24px_rgba(0,0,0,0.2)]"
-                       }`}
+            isSelected={isSelected}
+            accentHex={EMBER_HEX}
+            watermark={watermark}
+            className="project-card-entry"
         >
-            {/* Ghost watermark */}
-            <div
-                aria-hidden="true"
-                className="absolute -bottom-5 -right-2 text-[7rem] font-black tracking-tighter
-                           text-black/[0.03] dark:text-white/[0.025]
-                           pointer-events-none select-none font-display leading-none"
-            >
-                {watermark}
-            </div>
-
-            {/* Hover tint */}
-            <div className="absolute inset-0 bg-signal-500/0 group-hover:bg-signal-500/[0.03] dark:group-hover:bg-signal-500/[0.05] transition-colors duration-300 pointer-events-none" />
-
-            {/* Wave + border trace */}
-            <WaveFluid accentHex={EMBER_HEX} />
-            <BorderTrace accentHex={EMBER_HEX} />
-
             {/* ── Header ────────────────────────────────────────────── */}
             <div className="flex items-start justify-between mb-6 relative z-10">
                 <div className="flex items-center gap-3 min-w-0">
@@ -218,7 +168,7 @@ const ProjectCard: FunctionComponent<{
                     </button>
                 </div>
             </div>
-        </div>
+        </PremiumSurface>
     );
 };
 

@@ -70,7 +70,7 @@ describe("WorkspaceArtifactService", () => {
     const service = new WorkspaceArtifactService(workspaceManager);
     const patchText = await service.exportBinaryPatch("workspace", baseRef);
 
-    expect(seenOptions).toEqual([{ trimOutput: false }]);
+    expect(seenOptions).toEqual([{ trimOutput: false }, { trimOutput: false }]);
     expect(patchText).toContain("+   \n");
 
     const result = await service.applyPatchToBranch({
@@ -90,5 +90,66 @@ describe("WorkspaceArtifactService", () => {
       { trimOutput: false },
     );
     expect(branchFile).toBe("hello\n   \n");
+  });
+
+  it("exports untracked workspace files while excluding transient task learnings", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-service-"));
+    cleanupPaths.push(tempRoot);
+
+    const originPath = path.join(tempRoot, "origin.git");
+    const hostRepoPath = path.join(tempRoot, "host-repo");
+    const workspaceRepoPath = path.join(tempRoot, "workspace-repo");
+
+    await runCommandStrict("git", ["init", "--bare", originPath], tempRoot);
+    await runCommandStrict("git", ["clone", originPath, hostRepoPath], tempRoot);
+
+    await runGit(hostRepoPath, ["config", "user.name", "Sprint OS Test"]);
+    await runGit(hostRepoPath, ["config", "user.email", "sprint-os@example.com"]);
+    await runGit(hostRepoPath, ["checkout", "-b", "main"]);
+    await fs.writeFile(path.join(hostRepoPath, "existing.txt"), "hello\n", "utf8");
+    await runGit(hostRepoPath, ["add", "existing.txt"]);
+    await runGit(hostRepoPath, ["commit", "-m", "base"]);
+    await runGit(hostRepoPath, ["push", "-u", "origin", "main"]);
+
+    const baseRef = (await runGit(hostRepoPath, ["rev-parse", "HEAD"])).trim();
+
+    await runCommandStrict("git", ["clone", originPath, workspaceRepoPath], tempRoot);
+    await runGit(workspaceRepoPath, ["config", "user.name", "Sprint OS Test"]);
+    await runGit(workspaceRepoPath, ["config", "user.email", "sprint-os@example.com"]);
+    await runGit(workspaceRepoPath, ["checkout", "-b", "worker/test", "origin/main"]);
+    await fs.writeFile(path.join(workspaceRepoPath, "new-component.tsx"), "export const value = 1;\n", "utf8");
+    await fs.writeFile(path.join(workspaceRepoPath, ".task-learnings.md"), "## Category: learning\n- Do not commit this file.\n", "utf8");
+
+    const workspaceManager = {
+      runWorkspaceCommand: async (
+        _worktreePath: string,
+        command: string,
+        args: string[],
+        options: WorkspaceCommandOptions = {},
+      ) => await runCommandStrict(command, args, workspaceRepoPath, options.env ?? process.env, {
+        trimOutput: options.trimOutput,
+        signal: options.signal,
+      }),
+    } as IWorkspaceManager;
+
+    const service = new WorkspaceArtifactService(workspaceManager);
+    const patchText = await service.exportBinaryPatch("workspace", baseRef);
+
+    expect(patchText).toContain("diff --git a/new-component.tsx b/new-component.tsx");
+    expect(patchText).not.toContain(".task-learnings.md");
+
+    const result = await service.applyPatchToBranch({
+      repoPath: hostRepoPath,
+      baseRef,
+      workerBranch: "worker/test",
+      patchText,
+      commitMessage: "test untracked export",
+    });
+
+    expect(result.hasChanges).toBe(true);
+    expect(await runGit(hostRepoPath, ["show", "refs/heads/worker/test:new-component.tsx"], { trimOutput: false }))
+      .toBe("export const value = 1;\n");
+    await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:.task-learnings.md"]))
+      .rejects.toThrow();
   });
 });
