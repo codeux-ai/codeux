@@ -51,6 +51,7 @@ export const pickContainerEnv = (env: NodeJS.ProcessEnv): Array<{ key: string; v
   const allowed = new Set<string>([
     "GEMINI_MODEL",
     "GEMINI_API_KEY",
+    "GEMINI_CLI_TRUST_WORKSPACE",
     "CODEX_MODEL",
     "OPENAI_API_KEY",
     "OPENAI_BASE_URL",

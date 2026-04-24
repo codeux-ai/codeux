@@ -6,11 +6,12 @@
     "face": "style2",
     "shirt": "style3",
     "bottom": "style4",
-    "chassis": "capsule",
-    "eyes": "pixel",
+    "chassis": "egg",
+    "eyes": "cyclops",
     "antenna": "none",
     "wings": "propeller",
-    "accent": "violet"
+    "accent": "sky",
+    "baseColor": "midnight"
   },
   "memoryTemplateOverrideEnabled": false
 }

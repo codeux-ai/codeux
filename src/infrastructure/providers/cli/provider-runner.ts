@@ -302,6 +302,7 @@ export class ProviderRunner implements IProviderRunner {
     if (provider === "gemini") {
       if (model && model !== "default") env.GEMINI_MODEL = model;
       if (apiKey && !useProviderMount) env.GEMINI_API_KEY = apiKey;
+      env.GEMINI_CLI_TRUST_WORKSPACE = "true";
     } else if (provider === "claude-code") {
       if (apiKey && !useProviderMount) env.ANTHROPIC_API_KEY = apiKey;
     } else if (provider === "codex") {

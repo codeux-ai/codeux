@@ -162,3 +162,7 @@ The QA provider is prompted to return JSON only with:
 That contract keeps the follow-up automation deterministic instead of scraping prose heuristically.
 
 QA agent responses are processed using the shared structured response helper (`StructuredProviderResponseService`). This ensures that if the agent returns malformed JSON or omits required fields, Sprint OS automatically triggers an in-session retry to correct the output shape before failing the review.
+
+## Gemini Workspace Trust
+
+Gemini CLI can reject headless automation in untrusted folders before the QA prompt executes. Sprint OS sets `GEMINI_CLI_TRUST_WORKSPACE=true` for Gemini provider runs and passes it through Docker execution so task and sprint QA reviews can run in isolated snapshot containers without requiring an interactive trust prompt.

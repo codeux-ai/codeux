@@ -43,6 +43,9 @@ describe("ProviderRunner", () => {
       cwd: "docker-volume://workspace-1",
       command: "gemini",
       args: ["--yolo", "--output-format", "json", "--p", "hello"],
+      providerEnv: expect.objectContaining({
+        GEMINI_CLI_TRUST_WORKSPACE: "true",
+      }),
     }));
   });
 
