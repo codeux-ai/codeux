@@ -8,17 +8,31 @@ import { act } from "preact/test-utils";
 import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
 
-// Mock GSAP to avoid tricky animation timings in tests
-vi.mock("gsap", () => ({
-  default: {
+vi.mock("gsap", () => {
+  const gsapMock = {
+    to: vi.fn(),
     fromTo: vi.fn(),
     set: vi.fn(),
-    context: (fn: () => void) => {
-      fn();
-      return { revert: vi.fn() };
-    },
-  },
-}));
+    killTweensOf: vi.fn(),
+    registerPlugin: vi.fn(),
+    context: vi.fn((cb) => {
+      if (typeof cb === "function") cb();
+      return { revert: vi.fn(), add: vi.fn() };
+    }),
+    timeline: vi.fn(() => ({
+      to: vi.fn().mockReturnThis(),
+      fromTo: vi.fn().mockReturnThis(),
+      set: vi.fn().mockReturnThis(),
+      add: vi.fn().mockReturnThis(),
+      kill: vi.fn().mockReturnThis(),
+      clear: vi.fn().mockReturnThis(),
+    })),
+  };
+  return {
+    gsap: gsapMock,
+    default: gsapMock,
+  };
+});
 
 import * as agentPresetApi from "../../../dashboard/src/v2/lib/agent-preset-api.js";
 import * as settingsApi from "../../../dashboard/src/v2/lib/settings-api.js";

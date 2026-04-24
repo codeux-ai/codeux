@@ -16,11 +16,29 @@ vi.mock("../../../dashboard/src/hooks/ExecutionTimelineContext.js", () => ({
     useExecutionTimeline: vi.fn()
 }));
 
-vi.mock("gsap", () => ({
-    default: {
-        fromTo: vi.fn()
-    }
-}));
+vi.mock("gsap", () => {
+  const gsapMock = {
+    to: vi.fn(),
+    fromTo: vi.fn(),
+    set: vi.fn(),
+    killTweensOf: vi.fn(),
+    context: vi.fn((cb) => {
+      if (typeof cb === "function") cb();
+      return { revert: vi.fn(), add: vi.fn() };
+    }),
+    registerPlugin: vi.fn(),
+    timeline: vi.fn(() => ({
+      to: vi.fn().mockReturnThis(),
+      fromTo: vi.fn().mockReturnThis(),
+      set: vi.fn().mockReturnThis(),
+      add: vi.fn().mockReturnThis(),
+    })),
+  };
+  return {
+    gsap: gsapMock,
+    default: gsapMock,
+  };
+});
 
 describe("AttentionLedger", () => {
     beforeEach(() => {

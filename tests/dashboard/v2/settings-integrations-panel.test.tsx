@@ -7,29 +7,54 @@ import { render, waitFor } from "@testing-library/preact";
 import { SettingsIntegrationsPanel } from "../../../dashboard/src/v2/components/settings/panels/SettingsIntegrationsPanel.js";
 
 vi.mock("gsap", () => {
-  const applyStyles = (target: unknown, props: Record<string, unknown>) => {
-    if (!(target instanceof HTMLElement)) return;
-    for (const [key, value] of Object.entries(props)) {
-      (target.style as CSSStyleDeclaration & Record<string, string>)[key] = String(value);
-    }
+  const applyStyles = (targets: any, vars: any) => {
+    const elements = Array.isArray(targets) ? targets : [targets];
+    elements.forEach((el) => {
+      if (el && el.style) {
+        Object.entries(vars).forEach(([key, value]) => {
+          if (key !== "onComplete" && key !== "duration" && key !== "ease" && key !== "overwrite" && key !== "delay" && key !== "stagger") {
+            el.style[key] = value;
+          }
+        });
+      }
+    });
+    if (vars.onComplete) vars.onComplete();
   };
 
+  const gsapMock = {
+    to: vi.fn((targets, vars) => applyStyles(targets, vars)),
+    fromTo: vi.fn((targets, fromVars, toVars) => applyStyles(targets, toVars)),
+    set: vi.fn((targets, vars) => applyStyles(targets, vars)),
+    killTweensOf: vi.fn(),
+    context: vi.fn((cb) => {
+      if (typeof cb === "function") cb();
+      return { revert: vi.fn(), add: vi.fn() };
+    }),
+    registerPlugin: vi.fn(),
+    timeline: vi.fn(() => {
+      const tl = {
+        to: vi.fn((targets, vars) => {
+          applyStyles(targets, vars);
+          return tl;
+        }),
+        fromTo: vi.fn((targets, fromVars, toVars) => {
+          applyStyles(targets, toVars);
+          return tl;
+        }),
+        set: vi.fn((targets, vars) => {
+          applyStyles(targets, vars);
+          return tl;
+        }),
+        add: vi.fn(() => tl),
+        kill: vi.fn(() => tl),
+        clear: vi.fn(() => tl),
+      };
+      return tl;
+    }),
+  };
   return {
-    default: {
-      set: vi.fn((target: unknown, props: Record<string, unknown>) => applyStyles(target, props)),
-      timeline: vi.fn(() => {
-        const timeline = {
-          to: (target: unknown, props: Record<string, unknown>) => {
-            applyStyles(target, props);
-            if (typeof props.onComplete === "function") {
-              props.onComplete();
-            }
-            return timeline;
-          },
-        };
-        return timeline;
-      }),
-    },
+    gsap: gsapMock,
+    default: gsapMock,
   };
 });
 

@@ -14,19 +14,33 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-d
 
 expect.extend(matchers);
 
-vi.mock("gsap", () => ({
-  default: {
-    context: (callback: () => void) => {
-      callback();
-      return { revert: vi.fn() };
-    },
-    fromTo: vi.fn(),
-    set: vi.fn(),
-    to: vi.fn((_: unknown, options?: { onComplete?: () => void }) => {
+vi.mock("gsap", () => {
+  const gsapMock = {
+    to: vi.fn((_, options?: { onComplete?: () => void }) => {
       options?.onComplete?.();
     }),
-  },
-}));
+    fromTo: vi.fn(),
+    set: vi.fn(),
+    killTweensOf: vi.fn(),
+    registerPlugin: vi.fn(),
+    context: vi.fn((cb) => {
+      if (typeof cb === "function") cb();
+      return { revert: vi.fn(), add: vi.fn() };
+    }),
+    timeline: vi.fn(() => ({
+      to: vi.fn().mockReturnThis(),
+      fromTo: vi.fn().mockReturnThis(),
+      set: vi.fn().mockReturnThis(),
+      add: vi.fn().mockReturnThis(),
+      kill: vi.fn().mockReturnThis(),
+      clear: vi.fn().mockReturnThis(),
+    })),
+  };
+  return {
+    gsap: gsapMock,
+    default: gsapMock,
+  };
+});
 
 vi.mock("../../../dashboard/src/v2/hooks/use-reduced-motion.js", () => ({
   useReducedMotion: () => true,
