@@ -24,6 +24,7 @@ import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-mana
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
 import { extractJsonLikeBlock } from "./planning-json-extractor.js";
+import { PlanningPayloadValidator, type PlannedSprintPayload, type PlannedTaskDraft } from "./planning-payload-validator.js";
 import { ProviderExecutionService } from "./provider-execution-service.js";
 import { StructuredAgentRequestService, type StructuredAgentRequestResult } from "./structured-agent-request-service.js";
 import { StructuredProviderResponseService } from "./structured-provider-response-service.js";
@@ -59,21 +60,6 @@ interface PlanSprintResult {
   started: boolean;
 }
 
-interface PlannedTaskDraft {
-  key: string;
-  title: string;
-  description: string;
-  promptMarkdown: string;
-  priority?: TaskPriority;
-  executorType?: TaskExecutorType;
-  dependsOn?: string[];
-}
-
-interface PlannedSprintPayload {
-  goal?: string;
-  tasks: PlannedTaskDraft[];
-}
-
 interface PlanningResultContext {
   provider: Exclude<ProviderId, "jules">;
   sessionId: string;
@@ -88,6 +74,7 @@ export class PlanningAgentService {
   private readonly providerExecutionService: ProviderExecutionService;
   private readonly structuredAgentRequestService: StructuredAgentRequestService;
   private readonly workspaceManager = new WorkspaceManager();
+  private readonly validator = new PlanningPayloadValidator();
 
   constructor(private readonly deps: PlanningAgentServiceDeps) {
     this.providerRunner = deps.providerRunner || new ProviderRunner(new DockerRunner());
@@ -348,22 +335,23 @@ export class PlanningAgentService {
     const taskIdsByKey = new Map<string, string>();
     for (let index = 0; index < payload.tasks.length; index += 1) {
       const task = payload.tasks[index]!;
-      const dependsOnTaskIds = (task.dependsOn || []).map((dependencyKey) => {
+      const dependsOnTaskIds: string[] = [];
+      for (const dependencyKey of (task.dependsOn || [])) {
         const dependencyId = taskIdsByKey.get(dependencyKey);
         if (!dependencyId) {
           throw new Error(`Planning agent returned dependency "${dependencyKey}" before defining it.`);
         }
-        return dependencyId;
-      });
+        dependsOnTaskIds.push(dependencyId);
+      }
 
       const created = this.deps.projectManagementRepository.createTask(projectId, {
         sprintId,
         taskKey: task.key,
-        title: task.title.trim(),
-        description: task.description.trim(),
-        promptMarkdown: task.promptMarkdown.trim(),
-        priority: this.normalizePriority(task.priority),
-        executorType: this.normalizeExecutor(task.executorType),
+        title: task.title,
+        description: task.description,
+        promptMarkdown: task.promptMarkdown,
+        priority: task.priority || "medium",
+        executorType: task.executorType || "auto",
         dependsOnTaskIds,
         sortOrder: index,
         status: "pending",
@@ -373,7 +361,11 @@ export class PlanningAgentService {
       taskIdsByKey.set(task.key, created.id);
     }
 
-    const taskTitles = payload.tasks.map(t => t.title).join(", ");
+    const titles: string[] = [];
+    for (const t of payload.tasks) {
+      titles.push(t.title);
+    }
+    const taskTitles = titles.join(", ");
     this.captureDecisionMemory(projectId, sprintId, planningAgent.id,
       `Sprint planned with ${payload.tasks.length} tasks: ${taskTitles.slice(0, 200)}. Goal: ${(sprint.goal || "").slice(0, 100)}`,
       0.8,
@@ -692,59 +684,20 @@ export class PlanningAgentService {
   }
 
   private parsePlannedSprintReply(bodyMarkdown: string): PlannedSprintPayload {
-    const payload = this.parseJsonReply<PlannedSprintPayload & { subtasks?: unknown[] }>(bodyMarkdown);
-    const rawTasks = Array.isArray(payload.tasks)
-      ? payload.tasks
-      : Array.isArray(payload.subtasks)
-        ? payload.subtasks
-        : [];
-    if (rawTasks.length === 0) {
-      throw new Error("Planning agent reply did not include any tasks.");
+    const rawJson = extractJsonLikeBlock(bodyMarkdown);
+    let payload: any;
+    try {
+      payload = JSON.parse(rawJson);
+    } catch (error) {
+      this.deps.logger?.warn("Failed to parse Planning agent reply JSON", {
+        bodyMarkdown,
+        rawJson,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new Error("Planning agent reply was not valid JSON.");
     }
 
-    const seenKeys = new Set<string>();
-    const tasks = rawTasks.map((task, index) => {
-      const draft = task as PlannedTaskDraft & {
-        id?: string;
-        name?: string;
-        prompt?: string;
-        instructions?: string;
-        depends_on?: string[];
-        dependencies?: string[];
-      };
-      const key = String(draft.key || draft.id || "").trim() || `T${String(index + 1).padStart(2, "0")}`;
-      if (seenKeys.has(key)) {
-        throw new Error(`Planning agent returned duplicate task key: ${key}.`);
-      }
-      seenKeys.add(key);
-
-      const title = String(draft.title || draft.name || "").trim();
-      const description = String(draft.description || "").trim();
-      const promptMarkdown = String(draft.promptMarkdown || draft.prompt || draft.instructions || draft.description || "").trim();
-      if (!title || !promptMarkdown) {
-        throw new Error(`Planning agent returned an incomplete task for key ${key}.`);
-      }
-      return {
-        key,
-        title,
-        description,
-        promptMarkdown,
-        priority: draft.priority,
-        executorType: draft.executorType,
-        dependsOn: Array.isArray(draft.dependsOn)
-          ? draft.dependsOn.map((dependency) => String(dependency || "").trim()).filter(Boolean)
-          : Array.isArray(draft.depends_on)
-            ? draft.depends_on.map((dependency) => String(dependency || "").trim()).filter(Boolean)
-            : Array.isArray(draft.dependencies)
-              ? draft.dependencies.map((dependency) => String(dependency || "").trim()).filter(Boolean)
-          : [],
-      };
-    });
-
-    return {
-      goal: typeof payload.goal === "string" ? payload.goal : undefined,
-      tasks,
-    };
+    return this.validator.validate(payload);
   }
 
   private parseJsonReply<T>(bodyMarkdown: string): T {
@@ -760,22 +713,6 @@ export class PlanningAgentService {
       });
       throw new Error("Planning agent reply was not valid JSON.");
     }
-  }
-
-  private normalizePriority(value: string | undefined): TaskPriority {
-    const normalized = String(value || "").trim().toLowerCase();
-    if (normalized === "critical" || normalized === "high" || normalized === "medium" || normalized === "low") {
-      return normalized;
-    }
-    return "medium";
-  }
-
-  private normalizeExecutor(value: string | undefined): TaskExecutorType {
-    const normalized = String(value || "").trim().toLowerCase();
-    if (normalized === "auto" || normalized === "docker_cli" || normalized === "jules") {
-      return normalized;
-    }
-    return "auto";
   }
 
   private getProviderLabel(provider: ProviderId): string {
