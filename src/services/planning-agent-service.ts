@@ -335,13 +335,14 @@ export class PlanningAgentService {
     const taskIdsByKey = new Map<string, string>();
     for (let index = 0; index < payload.tasks.length; index += 1) {
       const task = payload.tasks[index]!;
-      const dependsOnTaskIds = (task.dependsOn || []).map((dependencyKey) => {
+      const dependsOnTaskIds: string[] = [];
+      for (const dependencyKey of (task.dependsOn || [])) {
         const dependencyId = taskIdsByKey.get(dependencyKey);
         if (!dependencyId) {
           throw new Error(`Planning agent returned dependency "${dependencyKey}" before defining it.`);
         }
-        return dependencyId;
-      });
+        dependsOnTaskIds.push(dependencyId);
+      }
 
       const created = this.deps.projectManagementRepository.createTask(projectId, {
         sprintId,
@@ -360,7 +361,11 @@ export class PlanningAgentService {
       taskIdsByKey.set(task.key, created.id);
     }
 
-    const taskTitles = payload.tasks.map(t => t.title).join(", ");
+    const titles: string[] = [];
+    for (const t of payload.tasks) {
+      titles.push(t.title);
+    }
+    const taskTitles = titles.join(", ");
     this.captureDecisionMemory(projectId, sprintId, planningAgent.id,
       `Sprint planned with ${payload.tasks.length} tasks: ${taskTitles.slice(0, 200)}. Goal: ${(sprint.goal || "").slice(0, 100)}`,
       0.8,
