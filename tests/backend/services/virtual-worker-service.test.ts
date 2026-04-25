@@ -861,6 +861,8 @@ describe("VirtualWorkerService", () => {
       .mockResolvedValue({ worktreePath: "/tmp/reused-worktree", resumed: true });
     vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("guidance");
     vi.spyOn((virtualWorkerService as any).workspaceManager, "removeWorktree").mockResolvedValue(undefined);
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("");
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "applyPatchToBranch").mockResolvedValue({ hasChanges: false });
     vi.spyOn((virtualWorkerService as any), "runProviderWithRetry").mockResolvedValue(undefined);
 
     const execRepo = (virtualWorkerService as any).deps.executionRepository;
@@ -935,7 +937,16 @@ describe("VirtualWorkerService", () => {
     vi.spyOn((virtualWorkerService as any).workspaceManager, "prepareWorktree").mockResolvedValue({ worktreePath: "/tmp/wt" });
     vi.spyOn((virtualWorkerService as any).workspaceManager, "buildWorkspaceGuidance").mockResolvedValue("guidance");
     vi.spyOn((virtualWorkerService as any).workspaceManager, "removeWorktree").mockResolvedValue(undefined);
+    vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "exportBinaryPatch").mockResolvedValue("diff --git a/file.txt b/file.txt");
+    const applyPatchSpy = vi.spyOn((virtualWorkerService as any).workspaceArtifactService, "applyPatchToBranch")
+      .mockResolvedValue({ hasChanges: true, commitSha: "merge-fix-sha" });
     vi.spyOn((virtualWorkerService as any), "runProviderWithRetry").mockResolvedValue(undefined);
+    vi.spyOn((virtualWorkerService as any), "runWorkspaceCommand").mockResolvedValue({
+      ok: true,
+      stdout: "initial-head\n",
+      stderr: "",
+      code: 0,
+    });
 
     const execRepo = (virtualWorkerService as any).deps.executionRepository;
     vi.spyOn(execRepo, "createExecutionInvocation").mockReturnValue({ id: "exec-inv-2" });
@@ -948,6 +959,10 @@ describe("VirtualWorkerService", () => {
     vi.spyOn((virtualWorkerService as any), "ensureTargetMergedIntoSource").mockResolvedValue(undefined);
 
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
+
+    expect(applyPatchSpy).toHaveBeenCalledWith(expect.objectContaining({
+      parentRefs: ["origin/tgt"],
+    }));
   });
 
   it("routes merge preparation through the workspace runner for docker-volume workspaces", async () => {
