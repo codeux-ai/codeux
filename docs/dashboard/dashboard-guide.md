@@ -183,7 +183,7 @@ Legacy runtime:
 - The sprint composer now features a visible, animated planning feedback overlay that replaces the generic spinner during `Plan ahead with AI`, `Plan Only`, `Plan & Start`, and `Replan` actions.
 - Planning feedback is deterministic and staged, using an animated ship treatment (Wooden Ship for AI improvement, Container Ship for planning) that drifts across the composer based on elapsed time to make progress visible
 - The planning overlay includes a `Cancel` button that aborts the in-flight planning or improvement request via AbortController, safely clearing the dismissible overlay and returning the composer to its editable state without navigating away
-- Settings now expose separate CLI retry controls for quota resets and rate limits, including the rate-limit delay and a max rate-limit retry count (`5` by default).
+- Settings now expose separate CLI retry controls for quota resets and rate limits, including the rate-limit delay and a max rate-limit retry count (`5` by default). Session sync preserves quota/rate-limit dispatch errors so active retry timers remain visible, while expired or missing cooldown metadata requeues the task instead of leaving it stuck in `QUOTA`.
 - The v2 settings workspace restores the full Git Flow and Git host controls:
   - Git Flow lives in the Sprint tab with default branch, branch prefix, sprint branch scheme, remote/local mode, and auto-create PR
   - Integrations exposes the system GitHub token plus per-scope GitHub auth-copy mounts and gitconfig sharing

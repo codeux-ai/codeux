@@ -96,6 +96,23 @@ const mergeDispatchStatus = (
   return mapTaskRunStateToDispatchStatus(nextRunState);
 };
 
+const resolveDispatchErrorMessage = (
+  currentErrorMessage: string | null | undefined,
+  nextRunState: TaskRunState,
+  sessionState: string | undefined,
+): string | null => {
+  if (nextRunState === "FAILED") {
+    return `Provider session ${sessionState || "FAILED"}`;
+  }
+  if (nextRunState === "BLOCKED") {
+    return `Provider session requires attention: ${sessionState || "ACTION_REQUIRED"}`;
+  }
+  if (nextRunState === "QUOTA") {
+    return currentErrorMessage || `Provider session ${sessionState || "QUOTA"}`;
+  }
+  return null;
+};
+
 const getActivityPreview = (activity: JulesActivity): string => {
   if (typeof activity.agentMessaged?.agentMessage === "string" && activity.agentMessaged.agentMessage.trim()) {
     return activity.agentMessaged.agentMessage.trim();
@@ -219,11 +236,7 @@ const syncExecutionRunState = async (
       startedAt: taskRun.startedAt || now,
       finishedAt: nextRunState === "RUNNING" ? null : (currentDispatch?.finishedAt || nextFinishedAt),
       lastHeartbeatAt: now,
-      errorMessage: nextRunState === "FAILED"
-        ? `Provider session ${session.state || "FAILED"}`
-        : nextRunState === "BLOCKED"
-          ? `Provider session requires attention: ${session.state || "ACTION_REQUIRED"}`
-          : null,
+      errorMessage: resolveDispatchErrorMessage(currentDispatch?.errorMessage, nextRunState, session.state),
     });
     if (nextRunState !== "RUNNING" && taskRun.sprintRunId) {
       deps.executionRepository.finalizeSprintRunCancellationIfIdle(taskRun.sprintRunId);
@@ -490,7 +503,7 @@ export const runSessionSyncStep = async (
     const dispatchesWithError = taskDispatches ? taskDispatches.filter((d) => d.errorMessage) : null;
 
     if (match.state === "RATE_LIMITED") {
-      let retryDelayActive = true;
+      let retryDelayActive = false;
       let rateLimitRetriesWithoutDelay = 0;
       if (taskDispatches && dispatchesWithError) {
         const latestError = dispatchesWithError.length > 0 ? dispatchesWithError[dispatchesWithError.length - 1].errorMessage : null;
@@ -516,7 +529,9 @@ export const runSessionSyncStep = async (
       } else if (retryDelayActive) {
         task.status = "QUOTA";
       } else if (retryFailed && rateLimitRetriesWithoutDelay <= maxRetries) {
-        task.status = "PENDING";
+        applyPendingTaskRuntimeReset(task, {
+          preserveProvider: true,
+        });
       } else {
         task.status = "FAILED";
       }
@@ -525,7 +540,7 @@ export const runSessionSyncStep = async (
 
     if (match.state === "QUOTA") {
       // Check if the quota cooldown has expired by looking at the latest dispatch error
-      let cooldownActive = true;
+      let cooldownActive = false;
       let quotaRetriesWithoutTimer = 0;
       if (taskDispatches && dispatchesWithError) {
         const latestError = dispatchesWithError.length > 0 ? dispatchesWithError[dispatchesWithError.length - 1].errorMessage : null;
@@ -547,7 +562,9 @@ export const runSessionSyncStep = async (
       if (cooldownActive) {
         task.status = "QUOTA";
       } else if (retryFailed && quotaRetriesWithoutTimer < maxRetries) {
-        task.status = "PENDING";
+        applyPendingTaskRuntimeReset(task, {
+          preserveProvider: true,
+        });
       } else {
         task.status = "FAILED";
       }
