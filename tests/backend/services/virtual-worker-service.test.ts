@@ -945,6 +945,7 @@ describe("VirtualWorkerService", () => {
     vi.spyOn((virtualWorkerService as any), "runMergeIntoSource").mockResolvedValue(true);
     vi.spyOn((virtualWorkerService as any), "ensureMergeConflictResolved").mockResolvedValue(undefined);
     vi.spyOn((virtualWorkerService as any), "finalizeMergeCommit").mockResolvedValue(undefined);
+    vi.spyOn((virtualWorkerService as any), "ensureTargetMergedIntoSource").mockResolvedValue(undefined);
 
     await (virtualWorkerService as any).handleAttentionItem(endpoint.id, item, "test");
   });
@@ -972,6 +973,24 @@ describe("VirtualWorkerService", () => {
       originator: "system",
       description: "Prepared merge of origin/main into the source branch without conflicts.",
     }));
+  });
+
+  it("rejects merge conflict resolution when the target branch is not in HEAD", async () => {
+    const { virtualWorkerService } = await setupServiceWithProject();
+
+    const runWorkspaceCommand = vi.spyOn((virtualWorkerService as any).workspaceManager, "runWorkspaceCommand")
+      .mockRejectedValue(new Error("not ancestor"));
+
+    await expect((virtualWorkerService as any).ensureTargetMergedIntoSource(
+      "docker-volume://merge-workspace",
+      "main",
+    )).rejects.toThrow("origin/main is not contained");
+
+    expect(runWorkspaceCommand).toHaveBeenCalledWith(
+      "docker-volume://merge-workspace",
+      "git",
+      ["merge-base", "--is-ancestor", "origin/main", "HEAD"],
+    );
   });
 
   it("escalates to human when provider execution fails during handleAttentionItem", async () => {

@@ -72,6 +72,10 @@ describe("WorkspaceManager", () => {
     const bootstrapCall = vi.mocked(runCommandStrict).mock.calls.find((call) => call[0] === "bash");
     const bootstrapCommand = bootstrapCall?.[1]?.join(" ") || "";
     expect(bootstrapCommand).toContain("--entrypoint sh");
+    expect(bootstrapCommand).toContain("git init /workspace");
+    expect(bootstrapCommand).toContain("git -C /workspace fetch origin");
+    expect(bootstrapCommand).toContain("+refs/*:refs/*");
+    expect(bootstrapCommand).not.toContain("git clone");
     if (typeof process.getuid === "function" && typeof process.getgid === "function") {
       expect(bootstrapCommand).toContain("chown -R");
       expect(bootstrapCommand).toContain(`${process.getuid()}:${process.getgid()}`);

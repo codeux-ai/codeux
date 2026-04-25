@@ -320,7 +320,9 @@ export class WorkspaceManager implements IWorkspaceManager {
         "tmp=$(mktemp)",
         "cat > \"$tmp\"",
         "rm -rf /workspace/* /workspace/.[!.]* /workspace/..?* 2>/dev/null || true",
-        "git clone \"$tmp\" /workspace >/dev/null",
+        "git init /workspace >/dev/null",
+        "git -C /workspace remote add origin \"$tmp\"",
+        "git -C /workspace fetch origin '+refs/*:refs/*' >/dev/null",
         "rm -f \"$tmp\"",
         originUrl
           ? `git -C /workspace remote set-url origin ${shellQuote(originUrl)}`

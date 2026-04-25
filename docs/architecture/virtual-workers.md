@@ -95,12 +95,14 @@ For planning flows, Sprint OS (`src/services/planning-agent-service.ts`):
 For merge conflicts, Sprint OS:
 
 - prepares an isolated Docker workspace on the PR source branch
+- seeds that Docker workspace from an exact-ref Git bundle fetch instead of cloning the bundle, so stale local branches cannot shadow newer `origin/*` target refs during merge preparation
 - runs the helper Git/inspection commands inside that workspace as the same UID:GID that owns the volume so Git does not reject the repo as an unsafe `root` checkout
 - merges the target branch into it
 - runs the selected CLI provider against the conflict context plus the worker agent's current long-term and sprint memory context when available
 - accepts both the original merge-conflict prompt payload fields (`currentTaskPrompt`, `mergedTaskPrompts`) and the newer task-context payload fields (`currentTask`, `featureBranchTaskContexts`) when constructing that provider prompt
 - requires the worker to write durable learnings to `.task-learnings.md`, which Sprint OS captures back into memory after the conflict is resolved
 - verifies conflicts are resolved
+- verifies the resolved source branch actually contains `origin/<targetBranch>` before clearing the merge-conflict attention item
 - exports a Git patch artifact from the isolated workspace
 - applies that patch back onto the host branch and pushes it
 

@@ -601,6 +601,7 @@ export class VirtualWorkerService {
       }
       await this.ensureMergeConflictResolved(finalWorktreePath);
       await this.finalizeMergeCommit(finalWorktreePath, sourceBranch, targetBranch);
+      await this.ensureTargetMergedIntoSource(finalWorktreePath, targetBranch);
       if (settings.memory?.enabled && settings.memory.autoCaptureSprint) {
         await this.captureMemoriesFromWorkspace(
           item.projectId,
@@ -1086,6 +1087,14 @@ export class VirtualWorkerService {
       if (nextStatus.length > 0 || await this.hasMergeHead(worktreePath)) {
         throw error;
       }
+    }
+  }
+
+  private async ensureTargetMergedIntoSource(worktreePath: string, targetBranch: string): Promise<void> {
+    try {
+      await this.runWorkspaceCommand(worktreePath, "git", ["merge-base", "--is-ancestor", `origin/${targetBranch}`, "HEAD"]);
+    } catch {
+      throw new Error(`Merge verification failed: origin/${targetBranch} is not contained in the resolved source branch.`);
     }
   }
 
