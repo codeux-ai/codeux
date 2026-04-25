@@ -76,6 +76,8 @@ describe("WorkspaceManager", () => {
     expect(bootstrapCommand).toContain("git -C /workspace symbolic-ref HEAD refs/heads/sprint-os-bootstrap-$$");
     expect(bootstrapCommand).toContain("git -C /workspace fetch origin");
     expect(bootstrapCommand).toContain("+refs/*:refs/*");
+    expect(bootstrapCommand).toContain("git -C /workspace config user.name");
+    expect(bootstrapCommand).toContain("git -C /workspace config user.email");
     expect(bootstrapCommand).not.toContain("git clone");
     if (typeof process.getuid === "function" && typeof process.getgid === "function") {
       expect(bootstrapCommand).toContain("chown -R");

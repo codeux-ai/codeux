@@ -96,6 +96,7 @@ For merge conflicts, Sprint OS:
 
 - prepares an isolated Docker workspace on the PR source branch
 - seeds that Docker workspace from an exact-ref Git bundle fetch instead of cloning the bundle, using a private bootstrap `HEAD` ref so checked-out default branches cannot block the fetch; this prevents stale local branches from shadowing newer `origin/*` target refs during merge preparation
+- configures a workspace-local Git identity so merge preparation and final merge commits do not depend on global container config
 - runs the helper Git/inspection commands inside that workspace as the same UID:GID that owns the volume so Git does not reject the repo as an unsafe `root` checkout
 - merges the target branch into it
 - runs the selected CLI provider against the conflict context plus the worker agent's current long-term and sprint memory context when available

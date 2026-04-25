@@ -328,6 +328,8 @@ export class WorkspaceManager implements IWorkspaceManager {
         originUrl
           ? `git -C /workspace remote set-url origin ${shellQuote(originUrl)}`
           : "git -C /workspace remote remove origin >/dev/null 2>&1 || true",
+        "git -C /workspace config user.name \"Sprint OS\"",
+        "git -C /workspace config user.email \"sprint-os@local\"",
         "mkdir -p /workspace/.sprint-os-home",
         ownerSpec ? `chown -R ${shellQuote(ownerSpec)} /workspace` : null,
       ].filter((step): step is string => Boolean(step)).join(" && ");
