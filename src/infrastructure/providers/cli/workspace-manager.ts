@@ -321,6 +321,7 @@ export class WorkspaceManager implements IWorkspaceManager {
         "cat > \"$tmp\"",
         "rm -rf /workspace/* /workspace/.[!.]* /workspace/..?* 2>/dev/null || true",
         "git init /workspace >/dev/null",
+        "git -C /workspace symbolic-ref HEAD refs/heads/sprint-os-bootstrap-$$",
         "git -C /workspace remote add origin \"$tmp\"",
         "git -C /workspace fetch origin '+refs/*:refs/*' >/dev/null",
         "rm -f \"$tmp\"",

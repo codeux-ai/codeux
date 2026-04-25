@@ -73,6 +73,7 @@ describe("WorkspaceManager", () => {
     const bootstrapCommand = bootstrapCall?.[1]?.join(" ") || "";
     expect(bootstrapCommand).toContain("--entrypoint sh");
     expect(bootstrapCommand).toContain("git init /workspace");
+    expect(bootstrapCommand).toContain("git -C /workspace symbolic-ref HEAD refs/heads/sprint-os-bootstrap-$$");
     expect(bootstrapCommand).toContain("git -C /workspace fetch origin");
     expect(bootstrapCommand).toContain("+refs/*:refs/*");
     expect(bootstrapCommand).not.toContain("git clone");
