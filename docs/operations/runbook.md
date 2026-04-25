@@ -134,6 +134,7 @@ Checks:
 - For CLI-backed tasks, inspect the latest dispatch error. Sprint OS now treats unrecoverable Git auth/config failures as hard blockers instead of retryable failures.
   - Examples: unset GitHub token, `fatal: could not read Username for 'https://github.com'`, `Authentication failed`, or similar remote permission/auth errors during push/PR flow.
   - Expected behavior: the task run moves to `BLOCKED`, the sprint pauses, and the watch loop stops consuming tokens until credentials are fixed and the task or sprint is resumed manually.
+- For tasks shown as `QUOTA`, inspect the dispatch error and retry-after metadata. Sprint OS preserves quota/rate-limit dispatch errors during session sync; if no active retry timestamp remains, the task is requeued instead of staying in `QUOTA`. Repeated quota failures without a reset timer are still bounded by `cliWorkflow.maxQuotaRetriesWithoutTimer`.
 
 ### 7. Tasks completed but pipeline not progressing
 Checks:

@@ -764,6 +764,150 @@ describe("runSessionSyncStep", () => {
     expect(requeued.subtasks[0]?.status).toBe("PENDING");
   });
 
+  it("requeues quota sessions without an active cooldown instead of leaving them stuck", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-session-sync-quota-"));
+    tempDirs.push(dir);
+
+    const storage = new AppDbStorage(path.join(dir, "app.db"));
+    const projectRepository = new ProjectManagementRepository(storage);
+    const executionRepository = new ExecutionRepository(storage);
+
+    const project = projectRepository.createProject({
+      name: "Session Sync Quota",
+      sourceType: "local",
+      sourceRef: "/tmp/my-repo",
+    });
+    const sprint = projectRepository.createSprint(project.id, {
+      name: "Sprint 1",
+      number: 1,
+    });
+    const task = projectRepository.createTask(project.id, {
+      sprintId: sprint.id,
+      title: "Quota retry",
+      status: "in_progress",
+    });
+    const sprintRun = executionRepository.createSprintRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      status: "running",
+    });
+    const dispatch = executionRepository.createTaskDispatch({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      executorType: "docker_cli",
+      status: "quota",
+      startedAt: "2026-03-09T10:00:00.000Z",
+      finishedAt: "2026-03-09T10:02:00.000Z",
+    });
+    executionRepository.createTaskRun({
+      projectId: project.id,
+      sprintId: sprint.id,
+      taskId: task.id,
+      sprintRunId: sprintRun.id,
+      dispatchId: dispatch.id,
+      provider: "gemini",
+      sessionId: "quota-session",
+      sessionName: "sessions/quota-session",
+      state: "QUOTA",
+      startedAt: "2026-03-09T10:00:00.000Z",
+    });
+
+    const subtasks: Subtask[] = [
+      {
+        id: task.taskKey,
+        record_id: task.id,
+        project_id: project.id,
+        title: task.title,
+        prompt: task.promptMarkdown,
+        depends_on: [],
+        is_independent: true,
+        status: "QUOTA",
+      },
+    ];
+
+    const result = await runSessionSyncStep(
+      subtasks,
+      {
+        listSessions: vi.fn().mockResolvedValue({
+          sessions: [
+            {
+              id: "quota-session",
+              name: "sessions/quota-session",
+              title: "Sprint 1: [run:my-repo/s1/t01] [T01] Quota retry",
+              state: "QUOTA",
+              provider: "gemini",
+            },
+          ],
+        }),
+        resolveSessionName: (session: { name?: string }) => session.name,
+        extractSessionId: (session: { id?: string }) => session.id,
+        fetchRecentActivities: vi.fn().mockResolvedValue([]),
+        isActionRequiredState: vi.fn().mockReturnValue(false),
+        projectManagementRepository: projectRepository,
+        executionRepository,
+        sprintRunId: sprintRun.id,
+        logger: { warn: vi.fn() },
+      } as any,
+      true,
+      { repoPath: "/tmp/my-repo", sprintNumber: 1 },
+    );
+
+    expect(result.subtasks[0]?.status).toBe("PENDING");
+    expect(result.subtasks[0]?.session_state).toBeUndefined();
+    expect(executionRepository.getTaskDispatch(dispatch.id)?.errorMessage).toBe("Provider session QUOTA");
+  });
+
+  it("keeps quota sessions in QUOTA while a retry-after cooldown is active", async () => {
+    const subtasks: Subtask[] = [
+      {
+        id: "task-quota",
+        record_id: "task-rec-1",
+        project_id: "project-1",
+        title: "Quota task",
+        prompt: "",
+        depends_on: [],
+        is_independent: true,
+        status: "RUNNING",
+      },
+    ];
+
+    const deps = {
+      listSessions: vi.fn().mockResolvedValue({
+        sessions: [
+          {
+            id: "quota-session",
+            name: "sessions/quota-session",
+            title: "Sprint 1: [run:my-repo/s1/task-quota] [task-quota] Quota task",
+            state: "QUOTA",
+          },
+        ],
+      }),
+      resolveSessionName: (session: { name?: string }) => session.name,
+      extractSessionId: (session: { id?: string }) => session.id,
+      fetchRecentActivities: vi.fn().mockResolvedValue([]),
+      isActionRequiredState: vi.fn().mockReturnValue(false),
+      executionRepository: {
+        listTaskDispatches: vi.fn().mockReturnValue([
+          {
+            errorMessage: "Gemini quota exhausted. [ERROR_CATEGORY:QUOTA_EXHAUSTED] [RETRY_AFTER:2999-01-01T00:00:00.000Z]",
+          },
+        ]),
+      },
+      logger: { warn: vi.fn() },
+    };
+
+    const result = await runSessionSyncStep(
+      subtasks.map((task) => ({ ...task })),
+      deps as any,
+      true,
+      { repoPath: "/tmp/my-repo", sprintNumber: 1 },
+    );
+
+    expect(result.subtasks[0]?.status).toBe("QUOTA");
+  });
+
   it("fails a rate-limited task after the configured max retry count is exceeded", async () => {
     const subtasks: Subtask[] = [
       {
