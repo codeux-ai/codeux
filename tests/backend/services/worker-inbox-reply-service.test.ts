@@ -3,9 +3,10 @@ import { WorkerInboxReplyService } from "../../../src/services/worker-inbox-repl
 
 vi.mock("../../../src/services/git-branch-sync-service.js", () => ({
   fetchOriginIfAvailable: vi.fn(),
+  syncRemoteBranchIfAvailable: vi.fn(),
 }));
 
-import { fetchOriginIfAvailable } from "../../../src/services/git-branch-sync-service.js";
+import { syncRemoteBranchIfAvailable } from "../../../src/services/git-branch-sync-service.js";
 
 describe("WorkerInboxReplyService", () => {
   const mockRunProviderForText = vi.fn();
@@ -35,7 +36,7 @@ describe("WorkerInboxReplyService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRunProviderForText.mockReset();
-    vi.mocked(fetchOriginIfAvailable).mockResolvedValue(true);
+    vi.mocked(syncRemoteBranchIfAvailable).mockResolvedValue(true);
   });
 
   it("generates a markdown reply with worker agent context", async () => {
@@ -448,7 +449,7 @@ describe("WorkerInboxReplyService", () => {
         type: "worker_reply",
       }),
     );
-    expect(fetchOriginIfAvailable).toHaveBeenCalledWith("/repo");
+    expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/repo", undefined);
   });
 
   it("falls back to the latest activity summary when Jules did not emit an explicit clarification message", async () => {
@@ -594,6 +595,6 @@ describe("WorkerInboxReplyService", () => {
       },
     });
 
-    expect(fetchOriginIfAvailable).not.toHaveBeenCalled();
+    expect(syncRemoteBranchIfAvailable).not.toHaveBeenCalled();
   });
 });

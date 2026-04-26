@@ -14,9 +14,10 @@ import { DEFAULT_DASHBOARD_SETTINGS } from "../../../src/repositories/settings-d
 
 vi.mock("../../../src/services/git-branch-sync-service.js", () => ({
   fetchOriginIfAvailable: vi.fn(),
+  syncRemoteBranchIfAvailable: vi.fn(),
 }));
 
-import { fetchOriginIfAvailable } from "../../../src/services/git-branch-sync-service.js";
+import { syncRemoteBranchIfAvailable } from "../../../src/services/git-branch-sync-service.js";
 
 const tempDirs: string[] = [];
 
@@ -26,7 +27,7 @@ afterEach(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(fetchOriginIfAvailable).mockResolvedValue(true);
+  vi.mocked(syncRemoteBranchIfAvailable).mockResolvedValue(true);
 });
 
 describe("QualityAssuranceService", () => {
@@ -947,7 +948,7 @@ describe("QualityAssuranceService", () => {
   });
 
   it("refreshes origin before running QA review in REMOTE git mode", async () => {
-    vi.mocked(fetchOriginIfAvailable).mockRejectedValueOnce(new Error("fetch failed"));
+    vi.mocked(syncRemoteBranchIfAvailable).mockRejectedValueOnce(new Error("fetch failed"));
 
     const service = new QualityAssuranceService({
       projectManagementRepository: {} as any,
@@ -997,11 +998,11 @@ describe("QualityAssuranceService", () => {
       agentPresetId: null,
     })).rejects.toThrow("Failed to refresh origin before running QA review on feature/task-1: fetch failed");
 
-    expect(fetchOriginIfAvailable).toHaveBeenCalledWith("/repo");
+    expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/repo", "feature/task-1");
   });
 
   it("refreshes origin before continuing QA follow-up in REMOTE git mode", async () => {
-    vi.mocked(fetchOriginIfAvailable).mockRejectedValueOnce(new Error("fetch failed"));
+    vi.mocked(syncRemoteBranchIfAvailable).mockRejectedValueOnce(new Error("fetch failed"));
 
     const service = new QualityAssuranceService({
       projectManagementRepository: {} as any,
@@ -1045,7 +1046,7 @@ describe("QualityAssuranceService", () => {
       followUpPrompt: "Address QA findings",
     })).rejects.toThrow("Failed to refresh origin before continuing QA follow-up on feature/task-1: fetch failed");
 
-    expect(fetchOriginIfAvailable).toHaveBeenCalledWith("/repo");
+    expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/repo", "feature/task-1");
   });
 
   it("keeps the sprint heartbeat and lease alive during long sprint QA reviews", async () => {

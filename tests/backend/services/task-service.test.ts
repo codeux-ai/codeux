@@ -3,9 +3,10 @@ import { TaskService } from "../../../src/services/task-service.js";
 
 vi.mock("../../../src/services/git-branch-sync-service.js", () => ({
   fetchOriginIfAvailable: vi.fn(),
+  syncRemoteBranchIfAvailable: vi.fn(),
 }));
 
-import { fetchOriginIfAvailable } from "../../../src/services/git-branch-sync-service.js";
+import { syncRemoteBranchIfAvailable } from "../../../src/services/git-branch-sync-service.js";
 
 describe("TaskService", () => {
   const createSession = vi.fn();
@@ -36,7 +37,7 @@ describe("TaskService", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(fetchOriginIfAvailable).mockResolvedValue(true);
+    vi.mocked(syncRemoteBranchIfAvailable).mockResolvedValue(true);
     resolveJulesSourceId.mockImplementation(async ({ sourceId }: { sourceId?: string }) =>
       sourceId?.startsWith("sources/") ? sourceId : `sources/${sourceId || "auto"}`
     );
@@ -121,7 +122,7 @@ describe("TaskService", () => {
     expect(payload.sourceContext.source).toBe("sources/999");
     expect(payload.sourceContext.githubRepoContext.startingBranch).toBe("feature/sprint1");
     expect(payload.prompt).toContain("SUBTASK TO EXECUTE");
-    expect(fetchOriginIfAvailable).toHaveBeenCalledWith("/tmp/repo");
+    expect(syncRemoteBranchIfAvailable).toHaveBeenCalledWith("/tmp/repo", "feature/sprint1");
   });
 
   it("falls back to cli provider when jules is unavailable", async () => {
@@ -291,11 +292,11 @@ describe("TaskService", () => {
       1,
     );
 
-    expect(fetchOriginIfAvailable).not.toHaveBeenCalled();
+    expect(syncRemoteBranchIfAvailable).not.toHaveBeenCalled();
   });
 
   it("surfaces a clear error when remote origin refresh fails before starting a sprint task", async () => {
-    vi.mocked(fetchOriginIfAvailable).mockRejectedValueOnce(new Error("fetch failed"));
+    vi.mocked(syncRemoteBranchIfAvailable).mockRejectedValueOnce(new Error("fetch failed"));
 
     await expect(service.startSprintTask(
       {

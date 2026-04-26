@@ -22,7 +22,7 @@ import type { Logger } from "../shared/logging/logger.js";
 import { runCommandStrict } from "./cli-process-runner.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import type { MemoryService } from "./memory-service.js";
-import { fetchOriginIfAvailable } from "./git-branch-sync-service.js";
+import { syncRemoteBranchIfAvailable } from "./git-branch-sync-service.js";
 
 type CliQaProvider = Extract<ProviderId, "gemini" | "codex" | "claude-code">;
 
@@ -154,7 +154,7 @@ export class QualityAssuranceService {
     }
 
     try {
-      await fetchOriginIfAvailable(repoPath);
+      await syncRemoteBranchIfAvailable(repoPath, branch);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const branchLabel = branch?.trim() || settings.git.defaultBranch || "the requested branch";

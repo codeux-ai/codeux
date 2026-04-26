@@ -143,6 +143,8 @@ Instead:
 For CLI follow-up runs, Sprint OS:
 
 - preserves the successful worktree after completion when QA is enabled for task completion
+- refreshes `origin` and starts follow-up work from the latest remote feature branch when remote GitHub mode is enabled
+- creates a missing local feature branch from `origin/<feature>` instead of recreating it from the default branch when the remote feature branch already exists
 - resumes the worker branch
 - records the follow-up invocation in execution tracking
 - pushes/publishes any resulting PR updates when needed
