@@ -38,15 +38,13 @@ describe("FeaturePrGateService", () => {
       ciIntelligence: {
         enabled: true,
         enableLivePrMonitoring: true,
-        waitForCiBeforeMainMerge: true,
         resolveAllCommentsBeforeMainMerge: true,
         resolveMainMergeConflicts: false,
-        waitForCiBeforeFeatureMerge: true,
         resolveAllCommentsBeforeFeatureMerge: true,
         resolveMergeConflicts: false,
         waitForJulesCiAutofix: true,
         julesCiAutofixMaxRetries: 3,
-        featurePrAutoMergeMode: "OFF",
+        featurePrAutoMergeMode: "WHEN_GREEN",
         mainBranchAutoMergeMode: "OFF",
       },
       githubMode: "REMOTE",
@@ -258,9 +256,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: echo ok
-`);
+    `);
     context.repoPath = repoPath;
     context.gitStatus.openPullRequests[0].checks = [];
+    context.autoMergeFeaturePr = undefined;
 
     try {
       const result = await service.evaluateCiGate(subtasks, context);
@@ -275,7 +274,7 @@ jobs:
     }
   });
 
-  it("does not auto-merge in always mode while CI waiting is enabled and checks are pending", async () => {
+  it("auto-merges in always mode even while checks are pending", async () => {
     context.ciIntelligence.featurePrAutoMergeMode = "ALWAYS";
     context.gitStatus.openPullRequests[0].checks = [
       { name: "build", status: "in_progress", conclusion: null }
@@ -283,11 +282,11 @@ jobs:
 
     const result = await service.evaluateCiGate(subtasks, context);
 
-    expect(result.subtasks[0].status).toBe("RUNNING");
-    expect(result.subtasks[0].is_merged).toBeFalsy();
-    expect(result.subtasks[0].merge_indicator).toBe("CI");
-    expect(context.autoMergeFeaturePr).not.toHaveBeenCalled();
-    expect(result.reportText).toContain("CI Status: `PENDING`");
+    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].is_merged).toBe(true);
+    expect(result.subtasks[0].merge_indicator).toBe("AUTOMERGE");
+    expect(context.autoMergeFeaturePr).toHaveBeenCalledWith({ repoPath: "/repo", prNumber: 101 });
+    expect(result.reportText).toContain("Auto-Merged");
   });
 
   it("triggers CI autofix when checks fail", async () => {

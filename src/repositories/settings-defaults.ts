@@ -289,10 +289,8 @@ export const DEFAULT_DASHBOARD_SETTINGS: DashboardSettings = {
   ciIntelligence: {
     enabled: true,
     enableLivePrMonitoring: true,
-    waitForCiBeforeMainMerge: true,
     resolveAllCommentsBeforeMainMerge: true,
     resolveMainMergeConflicts: false,
-    waitForCiBeforeFeatureMerge: true,
     resolveAllCommentsBeforeFeatureMerge: true,
     resolveMergeConflicts: false,
     waitForJulesCiAutofix: false,

@@ -101,10 +101,8 @@ describe("SettingsRepository", () => {
         ciIntelligence: {
           enabled: true,
           enableLivePrMonitoring: true,
-          waitForCiBeforeMainMerge: true,
           resolveAllCommentsBeforeMainMerge: true,
           resolveMainMergeConflicts: false,
-          waitForCiBeforeFeatureMerge: true,
           resolveAllCommentsBeforeFeatureMerge: true,
           resolveMergeConflicts: false,
           waitForJulesCiAutofix: false,
@@ -329,10 +327,8 @@ describe("SettingsRepository", () => {
       ciIntelligence: {
         enabled: true,
         enableLivePrMonitoring: true,
-        waitForCiBeforeMainMerge: false,
         resolveAllCommentsBeforeMainMerge: false,
         resolveMainMergeConflicts: false,
-        waitForCiBeforeFeatureMerge: false,
         resolveAllCommentsBeforeFeatureMerge: false,
         resolveMergeConflicts: false,
         waitForJulesCiAutofix: true,

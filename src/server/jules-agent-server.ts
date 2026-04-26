@@ -520,7 +520,7 @@ export class JulesAgentServer {
     const featureBranchPrefix = settings.git.featureBranchPrefix?.trim() || "feature/";
 
     const hasRunningTasks = subtasks.some((task) => task.status === "RUNNING");
-    if (ci.enabled && ci.waitForCiBeforeFeatureMerge && hasRunningTasks && featureBranch) {
+    if (ci.enabled && ci.featurePrAutoMergeMode === "WHEN_GREEN" && hasRunningTasks && featureBranch) {
       return {
         scope: "FEATURE_PR_CI",
         featureBranch,

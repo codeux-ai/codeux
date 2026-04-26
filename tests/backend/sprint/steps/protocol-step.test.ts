@@ -6,15 +6,13 @@ describe("protocol-step", () => {
     const ciIntelligence: CiIntelligenceSettings = {
         enabled: true,
         enableLivePrMonitoring: false,
-        waitForCiBeforeMainMerge: false,
         resolveAllCommentsBeforeMainMerge: false,
         resolveMainMergeConflicts: false,
-        waitForCiBeforeFeatureMerge: true,
         resolveAllCommentsBeforeFeatureMerge: true,
         resolveMergeConflicts: false,
         waitForJulesCiAutofix: false,
         julesCiAutofixMaxRetries: 0,
-        featurePrAutoMergeMode: "OFF",
+        featurePrAutoMergeMode: "WHEN_GREEN",
         mainBranchAutoMergeMode: "OFF",
     };
 

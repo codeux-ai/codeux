@@ -140,15 +140,14 @@ describe("validateSettingsPayload", () => {
       ciIntelligence: {
         enabled: "bad",
         enableLivePrMonitoring: "bad",
-        waitForCiBeforeMainMerge: "bad",
         resolveAllCommentsBeforeMainMerge: "bad",
         resolveMainMergeConflicts: "bad",
-        waitForCiBeforeFeatureMerge: "bad",
         resolveAllCommentsBeforeFeatureMerge: "bad",
         resolveMergeConflicts: "bad",
         waitForJulesCiAutofix: "bad",
         julesCiAutofixMaxRetries: "bad",
         featurePrAutoMergeMode: "invalid",
+        mainBranchAutoMergeMode: "invalid",
       },
       sprintLoopSteps: {
         branchPreflight: "bad",
@@ -227,6 +226,7 @@ describe("validateSettingsPayload", () => {
     expect(paths).toContain("aiProvider.providers.gemini");
     expect(paths).toContain("git.githubMode");
     expect(paths).toContain("ciIntelligence.featurePrAutoMergeMode");
+    expect(paths).toContain("ciIntelligence.mainBranchAutoMergeMode");
     expect(paths).toContain("sprintLoopSteps.watchLoopOutputIntervalSeconds");
     expect(paths).toContain("cliWorkflow.executionMode");
     expect(paths).toContain("cliWorkflow.containerCacheSetupScriptImage");

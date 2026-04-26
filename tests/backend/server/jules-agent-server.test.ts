@@ -175,7 +175,7 @@ describe("JulesAgentServer", () => {
       const runtimeContext = (server as any).runtimeContext;
       runtimeContext.dashboardSettings = {
         ...DEFAULT_DASHBOARD_SETTINGS,
-        ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence, enabled: true, waitForCiBeforeFeatureMerge: true }
+        ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence, enabled: true, featurePrAutoMergeMode: "WHEN_GREEN" }
       };
       vi.spyOn((server as any).projectManagementRepository, "getSelectedProjectId").mockReturnValue(null);
       vi.spyOn((server as any).projectRuntimeRepository, "getSelectedProjectLiveStatus").mockReturnValue({
@@ -192,7 +192,7 @@ describe("JulesAgentServer", () => {
       const runtimeContext = (server as any).runtimeContext;
       runtimeContext.dashboardSettings = {
         ...DEFAULT_DASHBOARD_SETTINGS,
-        ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence, enabled: true, waitForCiBeforeFeatureMerge: true }
+        ciIntelligence: { ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence, enabled: true, featurePrAutoMergeMode: "WHEN_GREEN" }
       };
       vi.spyOn((server as any).projectManagementRepository, "getSelectedProjectId").mockReturnValue("project-1");
       vi.spyOn((server as any).settingsRepository, "resolveProjectDashboardSettings").mockReturnValue({
@@ -201,7 +201,6 @@ describe("JulesAgentServer", () => {
           ciIntelligence: {
             ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
             enabled: true,
-            waitForCiBeforeFeatureMerge: false,
           },
         },
         sources: {},

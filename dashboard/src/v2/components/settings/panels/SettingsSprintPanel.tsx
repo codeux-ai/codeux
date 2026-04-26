@@ -128,18 +128,6 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
               }))}
             />
           </Row>
-          <Row label="Wait for CI before main merge" description="Hold main-branch merge completion until CI is green." badge={getFieldBadge("ciIntelligence.waitForCiBeforeMainMerge")}>
-            <Toggle
-              value={editableSettings.ciIntelligence.waitForCiBeforeMainMerge}
-              onChange={() => updateEditableSettings((current) => ({
-                ...current,
-                ciIntelligence: {
-                  ...current.ciIntelligence,
-                  waitForCiBeforeMainMerge: !current.ciIntelligence.waitForCiBeforeMainMerge,
-                },
-              }))}
-            />
-          </Row>
           <Row label="Resolve comments before main merge" description="Require review comments to be resolved before finishing the main merge." badge={getFieldBadge("ciIntelligence.resolveAllCommentsBeforeMainMerge")}>
             <Toggle
               value={editableSettings.ciIntelligence.resolveAllCommentsBeforeMainMerge}
@@ -160,18 +148,6 @@ export const SettingsSprintPanel: FunctionComponent<{ state: SettingsPageState }
                 ciIntelligence: {
                   ...current.ciIntelligence,
                   resolveMainMergeConflicts: !current.ciIntelligence.resolveMainMergeConflicts,
-                },
-              }))}
-            />
-          </Row>
-          <Row label="Wait for CI before feature merge" description="Require green CI before merging feature branches back into sprint or main flow." badge={getFieldBadge("ciIntelligence.waitForCiBeforeFeatureMerge")}>
-            <Toggle
-              value={editableSettings.ciIntelligence.waitForCiBeforeFeatureMerge}
-              onChange={() => updateEditableSettings((current) => ({
-                ...current,
-                ciIntelligence: {
-                  ...current.ciIntelligence,
-                  waitForCiBeforeFeatureMerge: !current.ciIntelligence.waitForCiBeforeFeatureMerge,
                 },
               }))}
             />

@@ -145,8 +145,8 @@ When all sprint tasks are settled, the same completion path now also handles the
 - if `ciIntelligence.mainBranchAutoMergeMode != OFF` and no main PR exists yet, Sprint OS opens or resolves the `feature -> default` PR automatically
 - it then re-checks the main merge gate and applies the configured auto-merge policy
 - `CREATE_PR` stops after PR creation/resolution and does not auto-merge
-- `WHEN_GREEN` waits for green checks when main-CI waiting is enabled
-- `ALWAYS` can proceed without CI waiting when `waitForCiBeforeMainMerge = false`
+- `WHEN_GREEN` waits for green checks before merging
+- `ALWAYS` attempts the final main PR merge without waiting for CI
 - Sprint OS now emits `sprint_completed` only after an enabled main auto-merge flow actually settles, including the case where the `feature -> default` PR has already been merged
 - while main auto-merge is still pending, waiting on CI, ready to merge, or armed in GitHub, the sprint stays active instead of completing early
 - if the main merge gate is `DIRTY`, has failed checks, is review-blocked, or an open main-merge conflict handoff item for the same sprint run still exists, the sprint run pauses instead of completing

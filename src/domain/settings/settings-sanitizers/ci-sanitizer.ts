@@ -28,10 +28,6 @@ export const sanitizeCiIntelligence = (
       ciInput.enableLivePrMonitoring,
       DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.enableLivePrMonitoring
     ),
-    waitForCiBeforeMainMerge: readBoolean(
-      ciInput.waitForCiBeforeMainMerge,
-      DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.waitForCiBeforeMainMerge
-    ),
     resolveAllCommentsBeforeMainMerge: readBoolean(
       ciInput.resolveAllCommentsBeforeMainMerge,
       DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.resolveAllCommentsBeforeMainMerge
@@ -39,10 +35,6 @@ export const sanitizeCiIntelligence = (
     resolveMainMergeConflicts: readBoolean(
       ciInput.resolveMainMergeConflicts,
       DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.resolveMainMergeConflicts
-    ),
-    waitForCiBeforeFeatureMerge: readBoolean(
-      ciInput.waitForCiBeforeFeatureMerge,
-      DEFAULT_DASHBOARD_SETTINGS.ciIntelligence.waitForCiBeforeFeatureMerge
     ),
     resolveAllCommentsBeforeFeatureMerge: readBoolean(
       ciInput.resolveAllCommentsBeforeFeatureMerge,
@@ -83,6 +75,9 @@ export const sanitizeCiIntelligence = (
 
   if (githubMode === "LOCAL") {
     ciIntelligence.enableLivePrMonitoring = false;
+    ciIntelligence.waitForJulesCiAutofix = false;
+  }
+  if (ciIntelligence.featurePrAutoMergeMode !== "WHEN_GREEN") {
     ciIntelligence.waitForJulesCiAutofix = false;
   }
 

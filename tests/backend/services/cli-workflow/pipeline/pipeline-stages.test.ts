@@ -111,10 +111,8 @@ const createMockContext = (): PipelineContext => {
       ciIntelligence: {
         enabled: true,
         enableLivePrMonitoring: false,
-        waitForCiBeforeMainMerge: false,
         resolveAllCommentsBeforeMainMerge: false,
         resolveMainMergeConflicts: false,
-        waitForCiBeforeFeatureMerge: false,
         resolveAllCommentsBeforeFeatureMerge: false,
         resolveMergeConflicts: false,
         waitForJulesCiAutofix: false,

@@ -11,7 +11,7 @@ interface CompletionStepOptions {
 }
 
 const buildMainCiWaitLine = (settings: CiIntelligenceSettings): string => {
-  if (!settings.enabled || !settings.waitForCiBeforeMainMerge) {
+  if (!settings.enabled || settings.mainBranchAutoMergeMode !== "WHEN_GREEN") {
     return "";
   }
   return "2. **Wait for CI on main**: merge only after required checks are green.\n";

@@ -30,7 +30,7 @@ export interface ProtocolStepResult {
 }
 
 const buildFeatureCiWaitLine = (settings: CiIntelligenceSettings): string => {
-  if (!settings.enabled || !settings.waitForCiBeforeFeatureMerge) {
+  if (!settings.enabled || settings.featurePrAutoMergeMode !== "WHEN_GREEN") {
     return "";
   }
   return "- Wait for CI checks before merging into the feature branch.\n";

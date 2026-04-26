@@ -22,10 +22,8 @@ export const DEFAULT_SPRINT_LOOP_STEP_SETTINGS: SprintLoopStepSettings = {
 export const DEFAULT_CI_INTELLIGENCE_SETTINGS: CiIntelligenceSettings = {
   enabled: true,
   enableLivePrMonitoring: true,
-  waitForCiBeforeMainMerge: true,
   resolveAllCommentsBeforeMainMerge: true,
   resolveMainMergeConflicts: false,
-  waitForCiBeforeFeatureMerge: true,
   resolveAllCommentsBeforeFeatureMerge: true,
   resolveMergeConflicts: false,
   waitForJulesCiAutofix: false,

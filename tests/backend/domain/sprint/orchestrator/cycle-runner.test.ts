@@ -582,7 +582,6 @@ describe("CycleRunner attention sync", () => {
       ciIntelligence: {
         enabled: true,
         enableLivePrMonitoring: true,
-        waitForCiBeforeFeatureMerge: true,
         resolveAllCommentsBeforeFeatureMerge: true,
         waitForJulesCiAutofix: true,
         julesCiAutofixMaxRetries: 3,
@@ -757,7 +756,7 @@ describe("CycleRunner attention sync", () => {
       ciIntelligence: {
         ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
         enabled: true,
-        waitForCiBeforeFeatureMerge: true,
+        featurePrAutoMergeMode: "WHEN_GREEN",
       },
       githubMode: "REMOTE",
       defaultBranch: "main",

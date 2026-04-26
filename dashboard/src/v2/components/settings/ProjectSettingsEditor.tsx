@@ -163,10 +163,8 @@ export const ProjectSettingsEditor: FunctionComponent<ProjectSettingsEditorProps
         {[
           ["enabled", "Enable CI intelligence", "Turn CI and PR gate reasoning on for this scope."],
           ["enableLivePrMonitoring", "Live PR monitoring", "Track PR and CI updates while runs are active."],
-          ["waitForCiBeforeMainMerge", "Wait before main merge", "Hold main branch merges until required checks finish."],
           ["resolveAllCommentsBeforeMainMerge", "Resolve comments before main merge", "Require review comment resolution before main branch merge."],
           ["resolveMainMergeConflicts", "Resolve main merge conflicts", "Escalate main-branch merge conflicts to the virtual worker with branch and sprint context."],
-          ["waitForCiBeforeFeatureMerge", "Wait before feature merge", "Hold feature branch merge until checks finish."],
           ["resolveAllCommentsBeforeFeatureMerge", "Resolve comments before feature merge", "Require review comment resolution before feature branch merge."],
           ["resolveMergeConflicts", "Resolve feature merge conflicts", "Escalate feature-branch merge conflicts to the virtual worker with branch and prompt context."],
           ["waitForJulesCiAutofix", "Wait for Jules autofix", "Allow Jules to attempt CI autofix before escalating."],

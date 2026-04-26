@@ -180,7 +180,8 @@ export class FeaturePrGateService {
       }
 
       const checks = Array.isArray(pr.checks) ? pr.checks : [];
-      const waitForFeatureCi = context.ciIntelligence.waitForCiBeforeFeatureMerge;
+      const autoMergeMode = context.ciIntelligence.featurePrAutoMergeMode;
+      const waitForFeatureCi = autoMergeMode === "WHEN_GREEN";
       const resolveAllCommentsBeforeFeatureMerge = context.ciIntelligence.resolveAllCommentsBeforeFeatureMerge;
       const sourceBranch = workerBranch || pr.headRefName || "the task worker branch";
       const qaGate = context.evaluateTaskQaGate?.(task);
@@ -213,8 +214,6 @@ export class FeaturePrGateService {
         pr.comments
       );
 
-      const autoMergeMode = context.ciIntelligence.featurePrAutoMergeMode;
-
       if (autoMergeMode === "CREATE_PR" && isTaskCodeComplete(task)) {
         task.status = "COMPLETED";
         task.merge_indicator = "PR_ONLY";
@@ -242,8 +241,8 @@ export class FeaturePrGateService {
         return { reportText, events, attentionItem };
       }
 
-      const shouldAutoMergeAlways = autoMergeMode === "ALWAYS" && !waitForFeatureCi;
-      const shouldAutoMergeWhenGreen = autoMergeMode === "WHEN_GREEN" || (autoMergeMode === "ALWAYS" && waitForFeatureCi);
+      const shouldAutoMergeAlways = autoMergeMode === "ALWAYS";
+      const shouldAutoMergeWhenGreen = autoMergeMode === "WHEN_GREEN";
 
       if (shouldAutoMergeAlways && !hasReviewBlockers && context.autoMergeFeaturePr) {
         const mergeAttempt = await attemptAutoMerge({

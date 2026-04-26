@@ -14,7 +14,7 @@ describe("SprintOrchestrator CI logic", () => {
       ...DEFAULT_DASHBOARD_SETTINGS,
       ciIntelligence: {
         ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
-        waitForCiBeforeFeatureMerge: true,
+        featurePrAutoMergeMode: "WHEN_GREEN",
         waitForJulesCiAutofix: true,
       },
     });
@@ -134,7 +134,7 @@ describe("SprintOrchestrator CI logic", () => {
       automationLevel: "FULL",
       ciIntelligence: {
         ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
-        waitForCiBeforeFeatureMerge: true,
+        featurePrAutoMergeMode: "WHEN_GREEN",
         waitForJulesCiAutofix: true,
         julesCiAutofixMaxRetries: 0,
       },
@@ -216,7 +216,6 @@ describe("SprintOrchestrator CI logic", () => {
       ...DEFAULT_DASHBOARD_SETTINGS,
       ciIntelligence: {
         ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
-        waitForCiBeforeFeatureMerge: true,
         resolveAllCommentsBeforeFeatureMerge: true,
         featurePrAutoMergeMode: "WHEN_GREEN",
       },
@@ -303,13 +302,12 @@ describe("SprintOrchestrator CI logic", () => {
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });
 
-  it("keeps waiting in always mode when feature CI wait is enabled and checks are pending", async () => {
+  it("auto merges in always mode even when checks are pending", async () => {
     const { deps, listSessions, subtaskRepository } = buildDeps();
     deps.getDashboardSettings = () => ({
       ...DEFAULT_DASHBOARD_SETTINGS,
       ciIntelligence: {
         ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
-        waitForCiBeforeFeatureMerge: true,
         resolveAllCommentsBeforeFeatureMerge: true,
         featurePrAutoMergeMode: "ALWAYS",
       },
@@ -387,25 +385,23 @@ describe("SprintOrchestrator CI logic", () => {
     });
 
     const text = result.content[0].text as string;
-    expect(text).toContain("CI/Review Merge Gate");
-    expect(text).toContain("CI Status: `PENDING`");
-    expect(deps.autoMergeFeaturePr).not.toHaveBeenCalled();
+    expect(text).toContain("Auto-Merged");
+    expect(deps.autoMergeFeaturePr).toHaveBeenCalledWith({ repoPath: tmpRoot, prNumber: 22 });
     expect(deps.projectManagementRepository.updateTask).toHaveBeenCalledWith(
       "task-record-1",
-      expect.objectContaining({ status: "in_progress", isMerged: false, mergeIndicator: "CI" }),
+      expect.objectContaining({ isMerged: true, mergeIndicator: "AUTOMERGE" }),
     );
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });
 
-  it("auto merges feature PR without waiting for CI when feature CI wait is disabled", async () => {
+  it("auto merges feature PR without waiting for CI in always mode", async () => {
     const { deps, listSessions, subtaskRepository } = buildDeps();
     deps.getDashboardSettings = () => ({
       ...DEFAULT_DASHBOARD_SETTINGS,
       ciIntelligence: {
         ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
-        waitForCiBeforeFeatureMerge: false,
         resolveAllCommentsBeforeFeatureMerge: true,
-        featurePrAutoMergeMode: "WHEN_GREEN",
+        featurePrAutoMergeMode: "ALWAYS",
       },
     });
     deps.getCiStatusForScope = vi.fn().mockResolvedValue({
@@ -480,7 +476,7 @@ describe("SprintOrchestrator CI logic", () => {
     await fs.rm(tmpRoot, { recursive: true, force: true });
   });
 
-  it("respects project-scoped CI wait overrides during orchestration", async () => {
+  it("respects project-scoped merge mode overrides during orchestration", async () => {
     const { deps, listSessions, subtaskRepository } = buildDeps();
     const getDashboardSettings = vi.fn((scope?: { projectId?: string; sprintId?: string }) => (
       scope?.projectId === "project-1"
@@ -488,16 +484,14 @@ describe("SprintOrchestrator CI logic", () => {
             ...DEFAULT_DASHBOARD_SETTINGS,
             ciIntelligence: {
               ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
-              waitForCiBeforeFeatureMerge: false,
               resolveAllCommentsBeforeFeatureMerge: true,
-              featurePrAutoMergeMode: "WHEN_GREEN",
+              featurePrAutoMergeMode: "ALWAYS",
             },
           }
         : {
             ...DEFAULT_DASHBOARD_SETTINGS,
             ciIntelligence: {
               ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
-              waitForCiBeforeFeatureMerge: true,
               resolveAllCommentsBeforeFeatureMerge: true,
               featurePrAutoMergeMode: "WHEN_GREEN",
             },
@@ -587,7 +581,7 @@ describe("SprintOrchestrator CI logic", () => {
       ...DEFAULT_DASHBOARD_SETTINGS,
       ciIntelligence: {
         ...DEFAULT_DASHBOARD_SETTINGS.ciIntelligence,
-        waitForCiBeforeFeatureMerge: true,
+        featurePrAutoMergeMode: "WHEN_GREEN",
       },
     });
     deps.getCiStatusForScope = vi.fn().mockResolvedValue({
