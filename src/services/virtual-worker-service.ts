@@ -618,6 +618,7 @@ export class VirtualWorkerService {
         workerBranch: sourceBranch,
         patchText,
         commitMessage: `fix(merge): resolve ${targetBranch} into ${sourceBranch}`,
+        parentRefs: [`origin/${targetBranch}`],
       });
       let hasUnpushed = applyResult.hasChanges;
       let hasAhead = applyResult.hasChanges;

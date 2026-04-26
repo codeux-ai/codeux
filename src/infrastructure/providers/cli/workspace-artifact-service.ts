@@ -106,6 +106,7 @@ export class WorkspaceArtifactService {
     workerBranch: string;
     patchText: string;
     commitMessage: string;
+    parentRefs?: string[];
   }): Promise<AppliedWorkspacePatchResult> {
     if (!args.patchText.trim()) {
       return { hasChanges: false };
@@ -133,9 +134,14 @@ export class WorkspaceArtifactService {
         return { hasChanges: false };
       }
 
+      const parentArgs = [
+        "-p",
+        args.baseRef,
+        ...(args.parentRefs || []).flatMap((parentRef) => ["-p", parentRef]),
+      ];
       const commitSha = (await runCommandStrict(
         "git",
-        ["commit-tree", treeSha, "-p", args.baseRef, "-m", args.commitMessage],
+        ["commit-tree", treeSha, ...parentArgs, "-m", args.commitMessage],
         args.repoPath,
       )).stdout.trim();
 

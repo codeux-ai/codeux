@@ -167,4 +167,66 @@ describe("WorkspaceArtifactService", () => {
     await expect(runGit(hostRepoPath, ["show", "refs/heads/worker/test:.sprint-os-home/.cache/node-gyp/header.h"]))
       .rejects.toThrow();
   });
+
+  it("can preserve an additional merge parent when applying a resolved merge patch", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "workspace-artifact-service-"));
+    cleanupPaths.push(tempRoot);
+
+    const originPath = path.join(tempRoot, "origin.git");
+    const hostRepoPath = path.join(tempRoot, "host-repo");
+    const workspaceRepoPath = path.join(tempRoot, "workspace-repo");
+
+    await runCommandStrict("git", ["init", "--bare", originPath], tempRoot);
+    await runCommandStrict("git", ["clone", originPath, hostRepoPath], tempRoot);
+
+    await runGit(hostRepoPath, ["config", "user.name", "Sprint OS Test"]);
+    await runGit(hostRepoPath, ["config", "user.email", "sprint-os@example.com"]);
+    await runGit(hostRepoPath, ["checkout", "-b", "main"]);
+    await fs.writeFile(path.join(hostRepoPath, "file.txt"), "base\n", "utf8");
+    await runGit(hostRepoPath, ["add", "file.txt"]);
+    await runGit(hostRepoPath, ["commit", "-m", "base"]);
+    await runGit(hostRepoPath, ["push", "-u", "origin", "main"]);
+
+    const baseRef = (await runGit(hostRepoPath, ["rev-parse", "HEAD"])).trim();
+
+    await runGit(hostRepoPath, ["checkout", "-b", "target", baseRef]);
+    await fs.writeFile(path.join(hostRepoPath, "target.txt"), "target\n", "utf8");
+    await runGit(hostRepoPath, ["add", "target.txt"]);
+    await runGit(hostRepoPath, ["commit", "-m", "target"]);
+    await runGit(hostRepoPath, ["push", "-u", "origin", "target"]);
+    const targetRef = (await runGit(hostRepoPath, ["rev-parse", "origin/target"])).trim();
+
+    await runCommandStrict("git", ["clone", originPath, workspaceRepoPath], tempRoot);
+    await runGit(workspaceRepoPath, ["config", "user.name", "Sprint OS Test"]);
+    await runGit(workspaceRepoPath, ["config", "user.email", "sprint-os@example.com"]);
+    await runGit(workspaceRepoPath, ["checkout", "-b", "worker/test", baseRef]);
+    await fs.writeFile(path.join(workspaceRepoPath, "file.txt"), "base\nworker\n", "utf8");
+
+    const workspaceManager = {
+      runWorkspaceCommand: async (
+        _worktreePath: string,
+        command: string,
+        args: string[],
+        options: WorkspaceCommandOptions = {},
+      ) => await runCommandStrict(command, args, workspaceRepoPath, options.env ?? process.env, {
+        trimOutput: options.trimOutput,
+        signal: options.signal,
+      }),
+    } as IWorkspaceManager;
+
+    const service = new WorkspaceArtifactService(workspaceManager);
+    const patchText = await service.exportBinaryPatch("workspace", baseRef);
+    const result = await service.applyPatchToBranch({
+      repoPath: hostRepoPath,
+      baseRef,
+      workerBranch: "worker/test",
+      patchText,
+      commitMessage: "test merge parent",
+      parentRefs: ["origin/target"],
+    });
+
+    expect(result.hasChanges).toBe(true);
+    const parents = (await runGit(hostRepoPath, ["show", "-s", "--format=%P", result.commitSha!])).trim().split(" ");
+    expect(parents).toEqual([baseRef, targetRef]);
+  });
 });
