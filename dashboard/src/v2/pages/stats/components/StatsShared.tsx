@@ -679,75 +679,34 @@ export const TrendStudio: FunctionComponent<{
   onApplyCustom,
 }) => (
   <section className="space-y-6">
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-      <StatsCard
-        title="Sprint Focus"
-        value={stats.activeSprint ? stats.activeSprint.sprintName : "Historical view"}
-        icon={Layers3}
-        accent="amber"
-      >
-        <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 flex-1">
-          {stats.activeSprint
-              ? `Sprint ${stats.activeSprint.sprintNumber ?? "?"} is the live telemetry anchor for this project.`
-              : "No live sprint is active, so the dashboard is reading the selected historical window only."}
-        </div>
-        <div className="mt-6 grid grid-cols-2 gap-4">
-          <div className={SUBPANEL_CLASS}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Planning</div>
-            <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{planningUsage ? formatTokens(planningUsage.usage.totalTokens) : "0"}</div>
-            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{planningUsage ? formatDuration(planningUsage.usage.activeTimeMs) : "No data yet"}</div>
-          </div>
-          <div className={SUBPANEL_CLASS}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Providers</div>
-            <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{stats.providers.length}</div>
-            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Active inside</div>
-          </div>
-        </div>
-      </StatsCard>
-
-      <StatsCard
-        title="Window Discipline"
-        value="Time framing"
-        icon={Clock3}
-        accent="cyan"
-      >
-        <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 flex-1">
-          Granular control over how telemetry is chunked and visualized across the selected operational window.
-        </div>
-        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className={SUBPANEL_CLASS}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Buckets</div>
-            <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{stats.buckets.length}</div>
-          </div>
-          <div className={SUBPANEL_CLASS}>
-            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Window</div>
-            <div className="mt-2 text-[13px] font-black leading-tight text-slate-900 dark:text-white">{stats.range.label}</div>
-          </div>
-        </div>
-      </StatsCard>
-    </div>
-
-    <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
-      <div className="flex flex-col gap-6">
-        <StudioHeader
-          icon={Activity}
-          eyebrow="Analysis Studio"
-          title="Trend analysis"
-          description="A single interactive telemetry surface for flow, peaks, and pacing across the selected window."
-        />
-        <InteractiveUsageChart
-          stats={stats}
-          chartState={chartState}
-          activeWindow={activeWindow}
-          customFrom={customFrom}
-          customTo={customTo}
-          onSelectPreset={onSelectPreset}
-          onCustomFromChange={onCustomFromChange}
-          onCustomToChange={onCustomToChange}
-          onApplyCustom={onApplyCustom}
-        />
+    {stats.purposes.length > 0 ? (
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+        {stats.purposes.slice(0, 4).map((purpose) => (
+          <SignalMetricCard
+            key={purpose.id}
+            label={purpose.label.replace(/_/g, " ")}
+            value={formatTokens(purpose.usage.totalTokens)}
+            detail={`${formatDuration(purpose.usage.activeTimeMs)} active time`}
+            accentHex="#10B981"
+            hoverTint="group-hover:bg-emerald-500/[0.03]"
+            sparkline={createSeries(stats.buckets, (bucket) => bucket.usage.totalTokens)}
+            signalLabel="Purpose"
+          />
+        ))}
       </div>
-    </div>
+    ) : null}
+
+    <InteractiveUsageChart
+      stats={stats}
+      chartState={chartState}
+      activeWindow={activeWindow}
+      customFrom={customFrom}
+      customTo={customTo}
+      onSelectPreset={onSelectPreset}
+      onCustomFromChange={onCustomFromChange}
+      onCustomToChange={onCustomToChange}
+      onApplyCustom={onApplyCustom}
+    />
   </section>
 );
 
@@ -757,33 +716,23 @@ export const CompositionStudio: FunctionComponent<{
   tokenSegments: SegmentDefinition[];
 }> = ({ stats, providerSegments, tokenSegments }) => (
   <section className="space-y-6">
-    <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
-      <div className="flex flex-col gap-6">
-        <StudioHeader
-          icon={PieChart}
-          eyebrow="Analysis Studio"
-          title="Composition analysis"
-          description="Read provider distribution, token anatomy, and execution purpose concentration inside one focused composition workspace."
-        />
-        <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1.05fr_0.95fr]">
-          <DonutCard
-            title="Provider Share"
-            eyebrow="Composition"
-            description="Provider token split grouped into visible lanes for faster reading at high volume."
-            centerValue={String(stats.providers.length)}
-            centerLabel="providers"
-            segments={providerSegments}
-          />
-          <DonutCard
-            title="Token Anatomy"
-            eyebrow="Flow Mix"
-            description="Input, cached, output, and reasoning balance across the selected telemetry window."
-            centerValue={formatTokens(stats.usage.totalTokens)}
-            centerLabel="token mix"
-            segments={tokenSegments}
-          />
-        </div>
-      </div>
+    <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1.05fr_0.95fr]">
+      <DonutCard
+        title="Provider Share"
+        eyebrow="Composition"
+        description="Provider token split grouped into visible lanes for faster reading at high volume."
+        centerValue={String(stats.providers.length)}
+        centerLabel="providers"
+        segments={providerSegments}
+      />
+      <DonutCard
+        title="Token Anatomy"
+        eyebrow="Flow Mix"
+        description="Input, cached, output, and reasoning balance across the selected telemetry window."
+        centerValue={formatTokens(stats.usage.totalTokens)}
+        centerLabel="token mix"
+        segments={tokenSegments}
+      />
     </div>
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
       <PurposeRibbon purposes={stats.purposes} />
@@ -833,33 +782,23 @@ export const ReliabilityStudio: FunctionComponent<{
   sourceSegments: SegmentDefinition[];
 }> = ({ stats, providerSegments, sourceSegments }) => (
   <section className="space-y-6">
-    <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
-      <div className="flex flex-col gap-6">
-        <StudioHeader
-          icon={ShieldCheck}
-          eyebrow="Analysis Studio"
-          title="Reliability analysis"
-          description="Read confidence, fallback pressure, and provider contribution inside one audit-focused telemetry workspace."
-        />
-        <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1.05fr_0.95fr]">
-          <DonutCard
-            title="Telemetry Source Mix"
-            eyebrow="Reliability"
-            description="Provider-reported versus estimated, unavailable, and unsupported usage across the selected window."
-            centerValue={String(stats.tokenSources.reduce((sum, entry) => sum + entry.count, 0))}
-            centerLabel="invocations"
-            segments={sourceSegments}
-          />
-          <DonutCard
-            title="Provider Share"
-            eyebrow="Signal Integrity"
-            description="Provider leaders over the selected period, grouped for a cleaner read under high volume."
-            centerValue={formatTokens(stats.usage.totalTokens)}
-            centerLabel="token volume"
-            segments={providerSegments}
-          />
-        </div>
-      </div>
+    <div className="grid grid-cols-1 gap-6 2xl:grid-cols-[1.05fr_0.95fr]">
+      <DonutCard
+        title="Telemetry Source Mix"
+        eyebrow="Reliability"
+        description="Provider-reported versus estimated, unavailable, and unsupported usage across the selected window."
+        centerValue={String(stats.tokenSources.reduce((sum, entry) => sum + entry.count, 0))}
+        centerLabel="invocations"
+        segments={sourceSegments}
+      />
+      <DonutCard
+        title="Provider Share"
+        eyebrow="Signal Integrity"
+        description="Provider leaders over the selected period, grouped for a cleaner read under high volume."
+        centerValue={formatTokens(stats.usage.totalTokens)}
+        centerLabel="token volume"
+        segments={providerSegments}
+      />
     </div>
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_1fr]">
       <div className={`${PANEL_CLASS} p-6`}>

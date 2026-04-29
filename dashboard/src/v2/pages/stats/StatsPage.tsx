@@ -120,30 +120,7 @@ export const StatsPage: FunctionComponent = () => {
           </section>
 
           <section className={styles.telemetryStack}>
-            {visualMode === "trend" && stats.purposes.length > 0 ? (
-              <section className={styles.purposeSection}>
-                <div className={styles.purposeHeader}>
-                  <h2 className={styles.purposeTitle}>Execution Purposes</h2>
-                  <p className={styles.purposeDescription}>
-                    Purpose-level telemetry is surfaced as standalone cards to keep execution intent visible alongside the usage graph and filters.
-                  </p>
-                </div>
-                <div className={styles.purposeCards}>
-                  {stats.purposes.slice(0, 4).map((purpose) => (
-                    <SignalMetricCard
-                      key={purpose.id}
-                      label={purpose.label.replace(/_/g, " ")}
-                      value={formatTokens(purpose.usage.totalTokens)}
-                      detail={`${formatDuration(purpose.usage.activeTimeMs)} active time`}
-                      accentHex="#10B981"
-                      hoverTint="group-hover:bg-emerald-500/[0.03]"
-                      sparkline={createSeries(stats.buckets, (bucket) => bucket.usage.totalTokens)}
-                      signalLabel="Purpose"
-                    />
-                  ))}
-                </div>
-              </section>
-            ) : null}
+
 
             <AnalysisStudioSection
               stats={stats}
