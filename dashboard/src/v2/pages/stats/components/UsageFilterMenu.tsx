@@ -149,7 +149,7 @@ export const UsageFilterMenu: FunctionComponent<UsageFilterMenuProps> = ({
         {stats && (
           <div className={styles.section}>
             <label className={styles.label}>Metric Series</label>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 max-h-[280px] overflow-y-auto pr-2">
               {stats.chartSeries.map((s) => {
                 const active = enabledSeries[s.id] || false;
                 const disabled = activeSeriesCount === 1 && active;
