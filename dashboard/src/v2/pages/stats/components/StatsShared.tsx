@@ -678,21 +678,7 @@ export const TrendStudio: FunctionComponent<{
   onApplyCustom,
 }) => (
   <section className="space-y-6">
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-      <StatsCard
-        title="Execution Lanes"
-        value="Purpose mix"
-        icon={Workflow}
-        accent="signal"
-      >
-        <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 flex-1">
-          Planning, coding, merge recovery, and CI repair are now visible as a unified telemetry system rather than separate operational silos.
-        </div>
-        <div className="mt-6 pt-4">
-          <PurposeRibbon purposes={stats.purposes} />
-        </div>
-      </StatsCard>
-
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
       <StatsCard
         title="Sprint Focus"
         value={stats.activeSprint ? stats.activeSprint.sprintName : "Historical view"}
@@ -952,4 +938,3 @@ export const SortButton: FunctionComponent<{
     {label}
   </button>
 );
-
