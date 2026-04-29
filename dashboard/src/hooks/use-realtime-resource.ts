@@ -48,6 +48,12 @@ export interface RealtimeResourceOptions<T> {
    * If true, foreground loading state (and skeleton flash) is suppressed entirely.
    */
   isAlreadyLoaded?: boolean;
+
+  /**
+   * If false, a resource that starts from already-loaded data will not immediately
+   * refetch on mount. Uncached resources still fetch on mount.
+   */
+  refreshOnMount?: boolean;
 }
 
 export interface RealtimeResourceResult<T> {
@@ -75,6 +81,7 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
     realtime,
     pollIntervalMs = 0,
     isAlreadyLoaded = false,
+    refreshOnMount = true,
   } = options;
 
   const [dataState, setDataState] = useState<T>(initialData);
@@ -196,13 +203,15 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
       hasLoadedRef.current = true;
     }
 
-    void refreshInternal();
+    if (!options.isAlreadyLoaded || options.refreshOnMount !== false) {
+      void refreshInternal();
+    }
     return () => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
     };
-  }, [options.fetchResource, options.isAlreadyLoaded, refreshInternal]);
+  }, [options.fetchResource, options.isAlreadyLoaded, options.refreshOnMount, refreshInternal]);
 
   const refreshTimeoutRef = useRef<number | null>(null);
 
@@ -299,6 +308,8 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
     setData(updater);
   }, []);
 
+  const refetch = useCallback((opts?: { silent?: boolean }) => refreshInternal(opts), [refreshInternal]);
+
   return useMemo(
     () => ({
       data,
@@ -307,9 +318,9 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
       initialLoadComplete: hasLoadedRef.current,
       transportState,
       isRecovering,
-      refetch: (opts) => refreshInternal(opts),
+      refetch,
       updateDataLocally,
     }),
-    [data, loading, error, transportState, isRecovering, refreshInternal, updateDataLocally]
+    [data, loading, error, transportState, isRecovering, refetch, updateDataLocally]
   );
 }

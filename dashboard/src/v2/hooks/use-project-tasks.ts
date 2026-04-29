@@ -17,6 +17,13 @@ interface UseProjectTasksOptions {
   enabled?: boolean;
 }
 
+const taskRecordsCache = new Map<string, TaskRecord[]>();
+const taskRecordsInflightRequests = new Map<string, Promise<TaskRecord[]>>();
+
+const getTaskRecordsKey = (projectId: string, sprintId?: string | null): string => (
+  `${projectId}:${sprintId || "all"}`
+);
+
 export function useProjectTasks(
   projectId: string | null,
   sources: Source[],
@@ -29,6 +36,7 @@ export function useProjectTasks(
   const [error, setError] = useState<string | null>(null);
   const hasLoadedRef = useRef(false);
   const enabled = options?.enabled ?? true;
+  const resourceKey = projectId ? getTaskRecordsKey(projectId, sprintId) : null;
 
   const refreshInternal = useCallback(async (options?: { silent?: boolean }): Promise<void> => {
     if (!projectId || !enabled) {
@@ -44,7 +52,20 @@ export function useProjectTasks(
       setLoading(true);
     }
     try {
-      const nextTaskRecords = await fetchTasks(projectId, sprintId || undefined);
+      const key = getTaskRecordsKey(projectId, sprintId);
+      let request = taskRecordsInflightRequests.get(key);
+      if (!request) {
+        request = fetchTasks(projectId, sprintId || undefined).finally(() => {
+          taskRecordsInflightRequests.delete(key);
+        });
+        taskRecordsInflightRequests.set(key, request);
+      }
+      const fetchedTaskRecords = await request;
+      const cached = taskRecordsCache.get(key) || [];
+      const nextTaskRecords = areTaskRecordListsEqual(cached, fetchedTaskRecords)
+        ? cached
+        : fetchedTaskRecords;
+      taskRecordsCache.set(key, nextTaskRecords);
       setTaskRecords((current) => (areTaskRecordListsEqual(current, nextTaskRecords) ? current : nextTaskRecords));
       hasLoadedRef.current = true;
       setError(null);
@@ -59,8 +80,12 @@ export function useProjectTasks(
 
   useEffect(() => {
     hasLoadedRef.current = false;
+    if (resourceKey && taskRecordsCache.has(resourceKey)) {
+      setTaskRecords(taskRecordsCache.get(resourceKey)!);
+      hasLoadedRef.current = true;
+    }
     void refreshInternal();
-  }, [enabled, projectId, sprintId, refreshInternal]);
+  }, [enabled, projectId, resourceKey, sprintId, refreshInternal]);
 
   useEffect(() => {
     if (!projectId || !enabled) {
