@@ -16,8 +16,8 @@ import {
   TimerReset,
   Workflow,
 } from "lucide-preact";
-import { MetricCard } from "../../../components/ui/MetricCard.js";
 import { Sparkline } from "../../../components/ui/Sparkline.js";
+import { StatsCard, type StatsCardAccent } from "./StatsCard.js";
 import { useProjectData } from "../../../context/project-data.js";
 import { useProgressiveList } from "../../../../hooks/use-progressive-list.js";
 import type {
@@ -34,6 +34,7 @@ import {
   formatDateTime,
   sumUsage,
   createSeries,
+  getPurposeConfig,
 } from "../stats-utils.js";
 import { useStatsPageData } from "../use-stats-page-data.js";
 import type { UsageChartState } from "../use-usage-chart-state.js";
@@ -411,22 +412,21 @@ export const SignalMetricCard: FunctionComponent<{
   hoverTint: string;
   sparkline: number[];
   signalLabel: string;
-}> = ({ label, value, detail, accentHex, hoverTint, sparkline, signalLabel }) => (
-  <MetricCard hoverTint={hoverTint} accentHex={accentHex}>
-    <Sparkline points={sparkline} color={accentHex} />
-    <div className="relative z-10 flex items-center justify-between gap-4">
-      <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{label}</div>
+}> = ({ label, value, detail, accentHex, sparkline, signalLabel }) => (
+  <StatsCard
+    title={label}
+    value={value}
+    description={detail}
+    trend={
       <div className={`px-3 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400 ${CHIP_CLASS}`}>
         {signalLabel}
       </div>
-    </div>
-    <div className="relative z-10 mt-6 text-[2.35rem] font-semibold tracking-tighter text-slate-900 dark:text-white">
-      {value}
-    </div>
-    <div className="relative z-10 mt-3 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
-      {detail}
-    </div>
-  </MetricCard>
+    }
+    // We map hex to known accent if possible, or just pass children
+    accent={accentHex === "#00E0A0" ? "signal" : accentHex === "#FFB800" ? "amber" : "cyan"}
+  >
+    <Sparkline points={sparkline} color={accentHex} />
+  </StatsCard>
 );
 
 export const TokenChip: FunctionComponent<{
@@ -618,34 +618,22 @@ export const PurposeRibbon: FunctionComponent<{
   purposes: ExecutionStatsEntitySummary[];
 }> = ({ purposes }) => (
   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-    {purposes.slice(0, 4).map((purpose, index) => {
-      const tones = [
-        "bg-signal-500/10 text-signal-600 dark:text-signal-400",
-        "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-        "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-        "bg-slate-500/10 text-slate-600 dark:text-slate-300",
-      ];
+    {purposes.slice(0, 4).map((purpose) => {
+      const config = getPurposeConfig(purpose.id);
       return (
-        <div key={purpose.id} className={`${SUBPANEL_CLASS} p-5`}>
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">
-              {purpose.label.replace(/_/g, " ")}
-            </div>
-            <div className={`inline-flex h-8 w-8 items-center justify-center rounded-2xl ${tones[index % tones.length]!}`}>
-              <Sparkles className="h-3.5 w-3.5" strokeWidth={2} />
-            </div>
-          </div>
-          <div className="mt-4 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-            {formatTokens(purpose.usage.totalTokens)}
-          </div>
-          <div className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {formatDuration(purpose.usage.activeTimeMs)} active time
-          </div>
+        <StatsCard
+          key={purpose.id}
+          title={purpose.label.replace(/_/g, " ")}
+          value={formatTokens(purpose.usage.totalTokens)}
+          description={`${formatDuration(purpose.usage.activeTimeMs)} active time`}
+          icon={config.icon}
+          accent={config.accent}
+        >
           <div className="mt-4 flex flex-wrap gap-2">
             <TokenChip icon={ArrowDownRight} label="In" value={purpose.usage.inputTokens} tone="border-black/[0.06] bg-white/72 text-slate-600 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300" />
             <TokenChip icon={ArrowUpRight} label="Out" value={purpose.usage.outputTokens} tone="border-black/[0.06] bg-white/72 text-slate-600 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300" />
           </div>
-        </div>
+        </StatsCard>
       );
     })}
   </div>
@@ -671,76 +659,72 @@ export const TrendStudio: FunctionComponent<{
   stats: ProjectExecutionStatsSnapshot;
   planningUsage: ExecutionStatsEntitySummary | null;
   chartState: UsageChartState;
-}> = ({ stats, planningUsage, chartState }) => (
+  activeWindow: ProjectStatsWindow | string;
+  customFrom: string;
+  customTo: string;
+  onSelectPreset: (value: Exclude<ProjectStatsWindow, "custom">) => void;
+  onCustomFromChange: (value: string) => void;
+  onCustomToChange: (value: string) => void;
+  onApplyCustom: () => void;
+}> = ({
+  stats,
+  planningUsage,
+  chartState,
+  activeWindow,
+  customFrom,
+  customTo,
+  onSelectPreset,
+  onCustomFromChange,
+  onCustomToChange,
+  onApplyCustom,
+}) => (
   <section className="space-y-6">
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-      <MetricCard hoverTint="group-hover:bg-signal-500/[0.03]" accentHex="#00E0A0">
-        <div className="relative z-10 flex flex-col h-full">
-          <div className="flex items-center gap-3">
-            <Workflow className="h-4 w-4 text-signal-500" strokeWidth={2} />
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Execution Lanes</div>
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <StatsCard
+        title="Sprint Focus"
+        value={stats.activeSprint ? stats.activeSprint.sprintName : "Historical view"}
+        icon={Layers3}
+        accent="amber"
+      >
+        <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 flex-1">
+          {stats.activeSprint
+              ? `Sprint ${stats.activeSprint.sprintNumber ?? "?"} is the live telemetry anchor for this project.`
+              : "No live sprint is active, so the dashboard is reading the selected historical window only."}
+        </div>
+        <div className="mt-6 grid grid-cols-2 gap-4">
+          <div className={SUBPANEL_CLASS}>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Planning</div>
+            <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{planningUsage ? formatTokens(planningUsage.usage.totalTokens) : "0"}</div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{planningUsage ? formatDuration(planningUsage.usage.activeTimeMs) : "No data yet"}</div>
           </div>
-          <div className="mt-4 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Purpose mix</div>
-          <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 flex-1">
-            Planning, coding, merge recovery, and CI repair are now visible as a unified telemetry system rather than separate operational silos.
-          </div>
-          <div className="mt-6 pt-4">
-            <PurposeRibbon purposes={stats.purposes} />
+          <div className={SUBPANEL_CLASS}>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Providers</div>
+            <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{stats.providers.length}</div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Active inside</div>
           </div>
         </div>
-      </MetricCard>
+      </StatsCard>
 
-      <MetricCard hoverTint="group-hover:bg-amber-500/[0.03]" accentHex="#FFB800">
-        <div className="relative z-10 flex flex-col h-full">
-          <div className="flex items-center gap-3">
-            <Layers3 className="h-4 w-4 text-amber-500" strokeWidth={2} />
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Sprint Focus</div>
+      <StatsCard
+        title="Window Discipline"
+        value="Time framing"
+        icon={Clock3}
+        accent="cyan"
+      >
+        <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 flex-1">
+          Granular control over how telemetry is chunked and visualized across the selected operational window.
+        </div>
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className={SUBPANEL_CLASS}>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Buckets</div>
+            <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{stats.buckets.length}</div>
           </div>
-          <div className="mt-4 text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-            {stats.activeSprint ? stats.activeSprint.sprintName : "Historical view"}
-          </div>
-          <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 flex-1">
-            {stats.activeSprint
-                ? `Sprint ${stats.activeSprint.sprintNumber ?? "?"} is the live telemetry anchor for this project.`
-                : "No live sprint is active, so the dashboard is reading the selected historical window only."}
-          </div>
-          <div className="mt-6 grid grid-cols-2 gap-4">
-            <div className={SUBPANEL_CLASS}>
-              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Planning</div>
-              <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{planningUsage ? formatTokens(planningUsage.usage.totalTokens) : "0"}</div>
-              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{planningUsage ? formatDuration(planningUsage.usage.activeTimeMs) : "No data yet"}</div>
-            </div>
-            <div className={SUBPANEL_CLASS}>
-              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Providers</div>
-              <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{stats.providers.length}</div>
-              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">Active inside</div>
-            </div>
+          <div className={SUBPANEL_CLASS}>
+            <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Window</div>
+            <div className="mt-2 text-[13px] font-black leading-tight text-slate-900 dark:text-white">{stats.range.label}</div>
           </div>
         </div>
-      </MetricCard>
-
-      <MetricCard hoverTint="group-hover:bg-cyan-500/[0.03]" accentHex="#0EA5E9">
-        <div className="relative z-10 flex flex-col h-full">
-          <div className="flex items-center gap-3">
-            <Clock3 className="h-4 w-4 text-cyan-500" strokeWidth={2} />
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Window Discipline</div>
-          </div>
-          <div className="mt-4 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Time framing</div>
-          <div className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 flex-1">
-            Granular control over how telemetry is chunked and visualized across the selected operational window.
-          </div>
-          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className={SUBPANEL_CLASS}>
-              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Buckets</div>
-              <div className="mt-2 text-xl font-black text-slate-900 dark:text-white">{stats.buckets.length}</div>
-            </div>
-            <div className={SUBPANEL_CLASS}>
-              <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Window</div>
-              <div className="mt-2 text-[13px] font-black leading-tight text-slate-900 dark:text-white">{stats.range.label}</div>
-            </div>
-          </div>
-        </div>
-      </MetricCard>
+      </StatsCard>
     </div>
 
     <div className={`${PANEL_CLASS} rounded-[2.2rem] p-6 md:p-7`}>
@@ -751,7 +735,17 @@ export const TrendStudio: FunctionComponent<{
           title="Trend analysis"
           description="A single interactive telemetry surface for flow, peaks, and pacing across the selected window."
         />
-        <InteractiveUsageChart stats={stats} chartState={chartState} />
+        <InteractiveUsageChart
+          stats={stats}
+          chartState={chartState}
+          activeWindow={activeWindow}
+          customFrom={customFrom}
+          customTo={customTo}
+          onSelectPreset={onSelectPreset}
+          onCustomFromChange={onCustomFromChange}
+          onCustomToChange={onCustomToChange}
+          onApplyCustom={onApplyCustom}
+        />
       </div>
     </div>
   </section>
@@ -792,19 +786,7 @@ export const CompositionStudio: FunctionComponent<{
       </div>
     </div>
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-      <div className={`${PANEL_CLASS} p-6`}>
-        <div className="flex items-center gap-3">
-          <Workflow className="h-4 w-4 text-signal-500" strokeWidth={2} />
-          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Purpose Architecture</div>
-        </div>
-        <div className="mt-4 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Execution purposes</div>
-        <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-          Composition mode emphasizes where effort is going, not just how much of it happened.
-        </div>
-        <div className="mt-5">
-          <PurposeRibbon purposes={stats.purposes} />
-        </div>
-      </div>
+      <PurposeRibbon purposes={stats.purposes} />
       <div className={`${PANEL_CLASS} p-6`}>
         <div className="flex items-center gap-3">
           <TimerReset className="h-4 w-4 text-amber-500" strokeWidth={2} />
@@ -945,4 +927,3 @@ export const SortButton: FunctionComponent<{
     {label}
   </button>
 );
-

@@ -113,7 +113,10 @@ const baseStats = {
       chartSeries: [{ id: "tokens", label: "Tokens", grouping: "Usage", defaultEnabled: true, data: [10] }],
   buckets: [{ bucketStart: "2023-01-01", bucketEnd: "2023-01-01", label: "B1", usage: { invocationCount: 1, activeTimeMs: 1, reportedInvocationCount: 1, totalTokens: 1, inputTokens: 1, outputTokens: 1, cachedInputTokens: 1, reasoningOutputTokens: 1, wallTimeMs: 1, unparseableInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0, executionCount: 1, successCount: 1, failureCount: 1 } }],
   sources: [],
-  purposes: [],
+  purposes: [
+    { id: "p1", label: "task_coding", usage: { invocationCount: 1, totalTokens: 200, inputTokens: 120, outputTokens: 80, cachedInputTokens: 0, reasoningOutputTokens: 0, activeTimeMs: 4000, wallTimeMs: 5000, reportedInvocationCount: 1, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 }, lastActivityAt: "2023" },
+    { id: "p2", label: "planning", usage: { invocationCount: 1, totalTokens: 120, inputTokens: 70, outputTokens: 50, cachedInputTokens: 0, reasoningOutputTokens: 0, activeTimeMs: 2500, wallTimeMs: 3100, reportedInvocationCount: 1, estimatedInvocationCount: 0, unavailableInvocationCount: 0, unsupportedInvocationCount: 0 }, lastActivityAt: "2023" },
+  ],
   providers: [],
   tokenSources: [],
   usage: { totalTokens: 1000, activeTimeMs: 5000, invocationCount: 12, reportedInvocationCount: 10, estimatedInvocationCount: 2, wallTimeMs: 60000, unavailableInvocationCount: 0, unsupportedInvocationCount: 0, inputTokens: 500, outputTokens: 500, cachedInputTokens: 0, reasoningOutputTokens: 0 },
@@ -186,6 +189,13 @@ describe("StatsPage Shell", () => {
     expect(screen.getByText("Total Tokens")).toBeInTheDocument();
     expect(screen.getByText("Active AI Time")).toBeInTheDocument();
     expect(screen.getByText("Wall Runtime")).toBeInTheDocument();
+  });
+
+  it("renders standalone execution purpose cards in trend mode", () => {
+    render(<StatsPage />);
+    expect(screen.getByText("Execution Purposes")).toBeInTheDocument();
+    expect(screen.getByText("task coding")).toBeInTheDocument();
+    expect(screen.getByText("planning")).toBeInTheDocument();
   });
 
   it("renders the analysis studio section with view toggle above it", () => {

@@ -51,15 +51,7 @@ export const StatsPageHero: FunctionComponent<any> = ({
           </div>
         </div>
         <div className="flex flex-col items-start gap-4 xl:items-end">
-          <RangeToggle
-            activeWindow={activeQuery.window}
-            customFrom={customFrom}
-            customTo={customTo}
-            onSelectPreset={applyPresetWindow}
-            onCustomFromChange={setCustomFrom}
-            onCustomToChange={setCustomTo}
-            onApplyCustom={applyCustomRange}
-          />
+          {/* Range filters are now managed within the Analysis Studio filter menu below */}
         </div>
       </div>
     </section>

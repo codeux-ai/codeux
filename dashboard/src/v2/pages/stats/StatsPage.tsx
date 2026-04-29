@@ -11,6 +11,7 @@ import { useStatsPageData } from "./use-stats-page-data.js";
 import { StatsPageHero } from "./components/StatsPageHero.js";
 import { AnalysisStudioSection } from "./components/AnalysisStudioSection.js";
 import { SignalMetricCard } from "./components/StatsShared.js";
+import styles from "./StatsPage.module.css";
 
 export const StatsPage: FunctionComponent = () => {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -52,7 +53,7 @@ export const StatsPage: FunctionComponent = () => {
   }, []);
 
   return (
-    <div ref={rootRef} className="mx-auto flex max-w-[2400px] flex-col gap-16 px-8 py-20 md:px-20">
+    <div ref={rootRef} className={`mx-auto flex max-w-[2400px] flex-col gap-16 px-8 py-20 md:px-20 ${styles.pageRoot}`}>
       <StatsPageHero
         selectedProject={selectedProject}
         stats={stats}
@@ -108,19 +109,6 @@ export const StatsPage: FunctionComponent = () => {
               signalLabel="Task Scope"
             />
             <SignalMetricCard
-              label="Planning Usage"
-              value={formatTokens((planningUsage?.usage?.totalTokens || 0))}
-              detail={
-                (planningUsage?.usage?.totalTokens || 0) > 0
-                  ? `${formatDuration((planningUsage?.usage?.activeTimeMs || 0))} spent in sprint planning`
-                  : "Planning usage will land here once virtual planning runs execute."
-              }
-              accentHex="#F43F5E"
-              hoverTint="group-hover:bg-rose-500/[0.03]"
-              sparkline={createSeries(stats.buckets, (bucket) => bucket.usage.invocationCount)}
-              signalLabel="Planning"
-            />
-            <SignalMetricCard
               label="Telemetry Confidence"
               value={completionConfidence}
               detail={`${usage.unavailableInvocationCount + usage.unsupportedInvocationCount} invocations could not expose authoritative counts`}
@@ -131,16 +119,50 @@ export const StatsPage: FunctionComponent = () => {
             />
           </section>
 
-          <AnalysisStudioSection
-            stats={stats}
-            planningUsage={planningUsage}
-            providerSegments={providerSegments}
-            tokenSegments={tokenSegments}
-            sourceSegments={sourceSegments}
-            visualMode={visualMode}
-            setVisualMode={setVisualMode}
-            chartState={chartState}
-          />
+          <section className={styles.telemetryStack}>
+            {visualMode === "trend" && stats.purposes.length > 0 ? (
+              <section className={styles.purposeSection}>
+                <div className={styles.purposeHeader}>
+                  <h2 className={styles.purposeTitle}>Execution Purposes</h2>
+                  <p className={styles.purposeDescription}>
+                    Purpose-level telemetry is surfaced as standalone cards to keep execution intent visible alongside the usage graph and filters.
+                  </p>
+                </div>
+                <div className={styles.purposeCards}>
+                  {stats.purposes.slice(0, 4).map((purpose) => (
+                    <SignalMetricCard
+                      key={purpose.id}
+                      label={purpose.label.replace(/_/g, " ")}
+                      value={formatTokens(purpose.usage.totalTokens)}
+                      detail={`${formatDuration(purpose.usage.activeTimeMs)} active time`}
+                      accentHex="#10B981"
+                      hoverTint="group-hover:bg-emerald-500/[0.03]"
+                      sparkline={createSeries(stats.buckets, (bucket) => bucket.usage.totalTokens)}
+                      signalLabel="Purpose"
+                    />
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            <AnalysisStudioSection
+              stats={stats}
+              planningUsage={planningUsage}
+              providerSegments={providerSegments}
+              tokenSegments={tokenSegments}
+              sourceSegments={sourceSegments}
+              visualMode={visualMode}
+              setVisualMode={setVisualMode}
+              chartState={chartState}
+              activeWindow={activeQuery.window}
+              customFrom={customFrom}
+              customTo={customTo}
+              applyPresetWindow={applyPresetWindow}
+              setCustomFrom={setCustomFrom}
+              setCustomTo={setCustomTo}
+              applyCustomRange={applyCustomRange}
+            />
+          </section>
 
                   </>
       ) : null}

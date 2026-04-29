@@ -1,0 +1,83 @@
+@import "tailwindcss";
+
+.card {
+  @apply relative overflow-hidden flex flex-col justify-between transition-all duration-300;
+  background: var(--stats-card-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--stats-card-border);
+  border-radius: var(--stats-card-radius);
+  padding: var(--stats-card-padding);
+  box-shadow: var(--stats-card-shadow);
+}
+
+.card:hover {
+  @apply -translate-y-0.5;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+}
+
+.dark .card:hover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.header {
+  @apply relative z-10 flex items-center justify-between gap-4;
+}
+
+.title {
+  @apply text-[10px] font-bold uppercase tracking-[0.2em];
+  color: var(--stats-label-color);
+}
+
+.iconContainer {
+  @apply flex items-center justify-center w-8 h-8 rounded-xl transition-colors duration-300;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.dark .iconContainer {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.valueContainer {
+  @apply relative z-10 mt-6;
+}
+
+.value {
+  @apply text-[2.35rem] font-semibold tracking-tight leading-none;
+  color: var(--stats-value-color);
+}
+
+.footer {
+  @apply relative z-10 mt-3 flex items-center gap-2;
+}
+
+.description {
+  @apply text-sm leading-relaxed;
+  color: var(--stats-detail-color);
+}
+
+.trendContainer {
+  @apply flex items-center;
+}
+
+/* Accent Tints */
+.tint {
+  @apply absolute inset-0 opacity-0 transition-opacity duration-500 pointer-events-none;
+}
+
+.card:hover .tint {
+  @apply opacity-[0.03];
+}
+
+/* Variants */
+.accentSignal .tint { background-color: var(--stats-accent-signal); }
+.accentAmber .tint { background-color: var(--stats-accent-amber); }
+.accentCyan .tint { background-color: var(--stats-accent-cyan); }
+.accentRose .tint { background-color: var(--stats-accent-rose); }
+.accentEmerald .tint { background-color: var(--stats-accent-emerald); }
+
+.accentSignal .iconContainer { color: var(--stats-accent-signal); }
+.accentAmber .iconContainer { color: var(--stats-accent-amber); }
+.accentCyan .iconContainer { color: var(--stats-accent-cyan); }
+.accentRose .iconContainer { color: var(--stats-accent-rose); }
+.accentEmerald .iconContainer { color: var(--stats-accent-emerald); }
