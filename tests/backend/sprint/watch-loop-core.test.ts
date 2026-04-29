@@ -1580,6 +1580,200 @@ describe("Watch Loop Policies", () => {
   });
 });
 
+describe("Sprint Run Heartbeat", () => {
+  it("renews heartbeat and lease in RUNNING branch when state is active", async () => {
+    const deps = buildDeps();
+    deps.executionRepository.getSprintRun.mockReturnValue({ status: "running" });
+    const cycleRunner = buildCycleRunner();
+    cycleRunner.run
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "RUNNING" })],
+        reportText: "REPORT",
+        statusTable: "TABLE",
+        instructions: "INST",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      })
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],
+        reportText: "REPORT",
+        statusTable: "TABLE",
+        instructions: "INST",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      });
+
+    const renderMainMergeFeedback = vi.fn().mockResolvedValue({
+      text: "",
+      state: "ready_for_merge",
+      prNumber: null,
+      prUrl: null,
+      hasMergeConflict: false,
+      mergeStateStatus: null,
+      hasFailedChecks: false,
+      hasPendingChecks: false,
+      hasReviewBlockers: false,
+      failedChecks: [],
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, renderMainMergeFeedback);
+    await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+      leaseToken: "test-token",
+    });
+
+    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({ status: "running", lastHeartbeatAt: expect.any(String) })
+    );
+    expect(deps.executionRepository.renewLease).toHaveBeenCalledWith(
+      expect.objectContaining({ scopeId: "sprint-1", leaseToken: "test-token" })
+    );
+  });
+
+  it("renews heartbeat and lease in CHECKPOINT branch when output interval is reached but not all finished", async () => {
+    const deps = buildDeps();
+    deps.executionRepository.getSprintRun.mockReturnValue({ status: "running" });
+    const cycleRunner = buildCycleRunner();
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "RUNNING" })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "INST",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    const nowSpy = vi.spyOn(Date, "now");
+    // Start at 0, handleCycle transition at 1000, then checkpoint check is true (elapsed >= 60000)
+    // so it enters CHECKPOINT, calls sleep, then in sleep it returns so Date.now() happens.
+    nowSpy.mockReturnValueOnce(0).mockReturnValueOnce(1000).mockReturnValueOnce(61000).mockReturnValueOnce(62000);
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn());
+
+    // We expect it to run and loop, we'll just check if updateSprintRun and renewLease were called
+    // But since loop is infinite if it doesn't exit, we need a terminal condition in cycleRunner
+    cycleRunner.run
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "RUNNING" })],
+        reportText: "REPORT",
+        statusTable: "TABLE",
+        instructions: "INST",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      })
+      .mockResolvedValueOnce({
+        subtasks: [buildMockSubtask({ status: "COMPLETED", is_merged: true })],
+        reportText: "REPORT",
+        statusTable: "TABLE",
+        instructions: "INST",
+        awaitingMerge: [],
+        manualMergeTasks: [],
+        workerEscalatedMergeConflictTasks: [],
+      });
+
+    await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+      leaseToken: "test-token",
+    });
+
+    nowSpy.mockRestore();
+
+    expect(deps.executionRepository.updateSprintRun).toHaveBeenCalledWith(
+      "run-1",
+      expect.objectContaining({ status: "running", lastHeartbeatAt: expect.any(String) })
+    );
+    expect(deps.executionRepository.renewLease).toHaveBeenCalledWith(
+      expect.objectContaining({ scopeId: "sprint-1", leaseToken: "test-token" })
+    );
+  });
+
+  it("skips renewal when run state is terminal", async () => {
+    const deps = buildDeps();
+    deps.executionRepository.getSprintRun.mockReturnValue({ status: "paused" });
+    const cycleRunner = buildCycleRunner();
+    cycleRunner.run.mockResolvedValue({
+      subtasks: [buildMockSubtask({ status: "RUNNING" })],
+      reportText: "REPORT",
+      statusTable: "TABLE",
+      instructions: "INST",
+      awaitingMerge: [],
+      manualMergeTasks: [],
+      workerEscalatedMergeConflictTasks: [],
+    });
+
+    const runner = new WatchLoopRunner(deps as any, cycleRunner as any, vi.fn());
+    await runner.run({
+      args: { sprint_number: 1, action: "orchestrate" } as any,
+      executionContext: {
+        project: { id: "project-1", name: "Test Project" },
+        sprint: { id: "sprint-1", name: "Sprint 1" },
+        sprintNumber: 1,
+        repoPath: "/tmp",
+        featureBranch: "feat",
+        defaultBranch: "main",
+      },
+      repoPath: "/tmp",
+      defaultFeatureBranch: "feat",
+      defaultBranch: "main",
+      githubMode: "LOCAL",
+      retryFailed: false,
+      loopSteps: { watchLoopOutputIntervalSeconds: 60, watchLoopIntervalSeconds: 1 } as any,
+      ciIntelligence: {} as any,
+      automationLevel: "SEMI_AUTO",
+      automationInterventions: {} as any,
+      dashboardPort: 4444,
+      sprintRunId: "run-1",
+      leaseToken: "test-token",
+    });
+
+    expect(deps.executionRepository.updateSprintRun).not.toHaveBeenCalled();
+    expect(deps.executionRepository.renewLease).not.toHaveBeenCalled();
+  });
+});
+
 describe("evaluateSprintRunState", () => {
   it("identifies when all tasks are terminal", () => {
     const result = evaluateSprintRunState({

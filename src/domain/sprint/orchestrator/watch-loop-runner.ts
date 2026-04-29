@@ -19,6 +19,7 @@ import { decideMainMergeWaitOrPause, decideTerminalCompletion } from "./watch-lo
 import { decideFinalizationTransition } from "./watch-loop-finalization-policy.js";
 import { buildConflictSummaryMarkdown, selectMergedTaskContexts } from "./conflict-summary-utils.js";
 import { WorkspaceManager } from "../../../infrastructure/providers/cli/workspace-manager.js";
+import { renewSprintRunHeartbeat } from "./sprint-run-heartbeat.js";
 
 export interface WatchLoopRunnerArgs {
   args: SprintAgentArgs;
@@ -217,7 +218,7 @@ export class WatchLoopRunner {
             return fullReport;
           }
           if (finalizationResult.status === "wait") {
-            this.renewSprintRunHeartbeat({
+            renewSprintRunHeartbeat(this.deps.executionRepository, {
               sprintRunId,
               sprintId: scopedExecutionContext.sprint.id,
               leaseToken,
@@ -232,7 +233,7 @@ export class WatchLoopRunner {
         }
 
         case WatchLoopState.CHECKPOINT: {
-          this.renewSprintRunHeartbeat({
+          renewSprintRunHeartbeat(this.deps.executionRepository, {
             sprintRunId,
             sprintId: scopedExecutionContext.sprint.id,
             leaseToken,
@@ -243,15 +244,14 @@ export class WatchLoopRunner {
         }
 
         case WatchLoopState.RUNNING: {
-          const latestRun = this.deps.executionRepository.getSprintRun(sprintRunId);
-          if (latestRun?.status === "paused" || latestRun?.status === "cancelled" || latestRun?.status === "cancel_requested") {
-            continue;
-          }
-          this.renewSprintRunHeartbeat({
+          const renewed = renewSprintRunHeartbeat(this.deps.executionRepository, {
             sprintRunId,
             sprintId: scopedExecutionContext.sprint.id,
             leaseToken,
           });
+          if (!renewed) {
+            continue;
+          }
           await this.sleep(watchLoopIntervalMs);
           break;
         }
@@ -283,26 +283,6 @@ export class WatchLoopRunner {
     repoPath?: string
   ): Promise<string> {
     return await this.deps.renderInstruction(templateId, variables, repoPath);
-  }
-
-  private renewSprintRunHeartbeat(args: {
-    sprintRunId: string;
-    sprintId: string;
-    leaseToken?: string;
-  }): void {
-    const now = new Date().toISOString();
-    this.deps.executionRepository.updateSprintRun(args.sprintRunId, {
-      status: "running",
-      lastHeartbeatAt: now,
-    });
-    if (args.leaseToken) {
-      this.deps.executionRepository.renewLease({
-        scopeType: "sprint",
-        scopeId: args.sprintId,
-        leaseToken: args.leaseToken,
-        expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-      });
-    }
   }
 
   private evaluateControlIntervention(sprintRunId: string): { status: "continue" } | { status: "exit", report: string } {
