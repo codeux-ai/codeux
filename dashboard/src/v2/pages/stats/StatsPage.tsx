@@ -109,19 +109,6 @@ export const StatsPage: FunctionComponent = () => {
               signalLabel="Task Scope"
             />
             <SignalMetricCard
-              label="Planning Usage"
-              value={formatTokens((planningUsage?.usage?.totalTokens || 0))}
-              detail={
-                (planningUsage?.usage?.totalTokens || 0) > 0
-                  ? `${formatDuration((planningUsage?.usage?.activeTimeMs || 0))} spent in sprint planning`
-                  : "Planning usage will land here once virtual planning runs execute."
-              }
-              accentHex="#F43F5E"
-              hoverTint="group-hover:bg-rose-500/[0.03]"
-              sparkline={createSeries(stats.buckets, (bucket) => bucket.usage.invocationCount)}
-              signalLabel="Planning"
-            />
-            <SignalMetricCard
               label="Telemetry Confidence"
               value={completionConfidence}
               detail={`${usage.unavailableInvocationCount + usage.unsupportedInvocationCount} invocations could not expose authoritative counts`}

@@ -34,6 +34,7 @@ import {
   formatDateTime,
   sumUsage,
   createSeries,
+  getPurposeConfig,
 } from "../stats-utils.js";
 import { useStatsPageData } from "../use-stats-page-data.js";
 import type { UsageChartState } from "../use-usage-chart-state.js";
@@ -617,16 +618,16 @@ export const PurposeRibbon: FunctionComponent<{
   purposes: ExecutionStatsEntitySummary[];
 }> = ({ purposes }) => (
   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-    {purposes.slice(0, 4).map((purpose, index) => {
-      const accents: StatsCardAccent[] = ["signal", "amber", "emerald", "default"];
+    {purposes.slice(0, 4).map((purpose) => {
+      const config = getPurposeConfig(purpose.id);
       return (
         <StatsCard
           key={purpose.id}
           title={purpose.label.replace(/_/g, " ")}
           value={formatTokens(purpose.usage.totalTokens)}
           description={`${formatDuration(purpose.usage.activeTimeMs)} active time`}
-          icon={Sparkles}
-          accent={accents[index % accents.length]}
+          icon={config.icon}
+          accent={config.accent}
         >
           <div className="mt-4 flex flex-wrap gap-2">
             <TokenChip icon={ArrowDownRight} label="In" value={purpose.usage.inputTokens} tone="border-black/[0.06] bg-white/72 text-slate-600 dark:border-white/[0.06] dark:bg-void-900/55 dark:text-slate-300" />
@@ -785,19 +786,7 @@ export const CompositionStudio: FunctionComponent<{
       </div>
     </div>
     <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-      <div className={`${PANEL_CLASS} p-6`}>
-        <div className="flex items-center gap-3">
-          <Workflow className="h-4 w-4 text-signal-500" strokeWidth={2} />
-          <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">Purpose Architecture</div>
-        </div>
-        <div className="mt-4 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Execution purposes</div>
-        <div className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-          Composition mode emphasizes where effort is going, not just how much of it happened.
-        </div>
-        <div className="mt-5">
-          <PurposeRibbon purposes={stats.purposes} />
-        </div>
-      </div>
+      <PurposeRibbon purposes={stats.purposes} />
       <div className={`${PANEL_CLASS} p-6`}>
         <div className="flex items-center gap-3">
           <TimerReset className="h-4 w-4 text-amber-500" strokeWidth={2} />

@@ -1,7 +1,9 @@
-/** @vitest-environment happy-dom */
+/**
+ * @vitest-environment jsdom
+ */
 import { describe, it, expect } from 'vitest';
 import { renderHook, act } from '@testing-library/preact';
-import { useUsageFilters } from '../../../../../dashboard/src/v2/pages/stats/hooks/useUsageFilters.js';
+import { useUsageFilters } from '../hooks/useUsageFilters.js';
 
 describe('useUsageFilters', () => {
   it('should initialize with filters closed', () => {

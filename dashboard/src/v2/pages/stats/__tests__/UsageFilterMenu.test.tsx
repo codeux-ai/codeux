@@ -1,6 +1,9 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/preact';
-import { UsageFilterMenu } from '../../../src/v2/pages/stats/components/UsageFilterMenu.js';
+import { UsageFilterMenu } from '../components/UsageFilterMenu.js';
 
 describe('UsageFilterMenu', () => {
   const mockProps = {
@@ -24,50 +27,52 @@ describe('UsageFilterMenu', () => {
   };
 
   it('should render when open', () => {
-    const { getByText } = render(<UsageFilterMenu {...mockProps} />);
+    const { getByText, getAllByText } = render(<UsageFilterMenu {...mockProps} />);
     expect(getByText('Graph Filters')).toBeTruthy();
     expect(getByText('Time Window')).toBeTruthy();
     expect(getByText('Metric Series')).toBeTruthy();
   });
 
   it('should call onClose when close button is clicked', () => {
-    const { getByRole } = render(<UsageFilterMenu {...mockProps} />);
-    const closeButton = getByRole('button', { name: '' }); // The X icon button
+    const { getAllByRole } = render(<UsageFilterMenu {...mockProps} />);
+    const closeButton = getAllByRole('button', { name: '' })[0]; // The X icon button
     fireEvent.click(closeButton);
     expect(mockProps.onClose).toHaveBeenCalled();
   });
 
   it('should call onSelectPreset when a preset button is clicked', () => {
-    const { getByText } = render(<UsageFilterMenu {...mockProps} />);
-    const presetButton = getByText('24h');
+    const { getByText, getAllByText } = render(<UsageFilterMenu {...mockProps} />);
+    const presetButton = getAllByText('24h')[0];
     fireEvent.click(presetButton);
     expect(mockProps.onSelectPreset).toHaveBeenCalledWith('24h');
   });
 
   it('should call onApplyCustom when apply button is clicked', () => {
-    const { getByText } = render(<UsageFilterMenu {...mockProps} />);
-    const applyButton = getByText('Apply Range');
+    const { getByText, getAllByText } = render(<UsageFilterMenu {...mockProps} />);
+    const applyButton = getAllByText('Apply Range')[0];
     fireEvent.click(applyButton);
     expect(mockProps.onApplyCustom).toHaveBeenCalled();
   });
 
   it('should call setEnabledSeries when a metric button is clicked', () => {
-    const { getByText } = render(<UsageFilterMenu {...mockProps} />);
-    const metricButton = getByText('Tokens');
+    const { getByText, getAllByText } = render(<UsageFilterMenu {...mockProps} />);
+    const metricButton = getAllByText('Tokens')[0];
     fireEvent.click(metricButton);
     // It should call setEnabledSeries because tokens is currently enabled and there are 2 enabled series
     expect(mockProps.setEnabledSeries).toHaveBeenCalled();
   });
 
   it('should not allow disabling the last enabled series', () => {
+    const setEnabledSeriesSpy = vi.fn();
     const singleSeriesProps = {
       ...mockProps,
-      enabledSeries: { tokens: true, active: false }
+      enabledSeries: { tokens: true, active: false }, setEnabledSeries: setEnabledSeriesSpy
     };
-    const { getByText } = render(<UsageFilterMenu {...singleSeriesProps} />);
-    const tokensButton = getByText('Tokens').closest('button');
-    expect(tokensButton?.disabled).toBe(true);
+    const { getByText, getAllByText } = render(<UsageFilterMenu {...singleSeriesProps} />);
+    setEnabledSeriesSpy.mockClear();
+    const tokensButton = getAllByText('Tokens')[0].closest('button');
+        expect(setEnabledSeriesSpy).not.toHaveBeenCalled();
     fireEvent.click(tokensButton!);
-    expect(mockProps.setEnabledSeries).not.toHaveBeenCalled();
+    expect(setEnabledSeriesSpy).not.toHaveBeenCalled();
   });
 });

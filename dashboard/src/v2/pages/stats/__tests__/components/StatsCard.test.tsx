@@ -3,15 +3,15 @@
 import { h } from "preact";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/preact";
-import { StatsCard } from "../../../../../../dashboard/src/v2/pages/stats/components/StatsCard.js";
+import { StatsCard } from "../../components/StatsCard.js";
 import { Activity } from "lucide-preact";
 
 // Mock animated foundations to avoid GSAP/DOM issues in jsdom
-vi.mock("../../../../../../dashboard/src/v2/components/ui/WaveFluid.js", () => ({
+vi.mock("../../../../components/ui/WaveFluid.js", () => ({
   WaveFluid: () => <div data-testid="wave-fluid" />,
 }));
 
-vi.mock("../../../../../../dashboard/src/v2/components/ui/BorderTrace.js", () => ({
+vi.mock("../../../../components/ui/BorderTrace.js", () => ({
   BorderTrace: () => <div data-testid="border-trace" />,
 }));
 
