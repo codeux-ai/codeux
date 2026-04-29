@@ -14,43 +14,61 @@ import {
 import type { RerunTaskOptions } from "../../lib/api/dashboard-api.js";
 import type { ConfirmDialogOptions } from "./use-confirm-dialog.js";
 
+import type { ActionFeedbackOptions } from "./use-action-feedback.js";
+
 export function useLiveSessionActions(
     refreshRuntimeStatus: () => Promise<void>,
     refreshGitStatus: () => Promise<void>,
     requestConfirm: (opts: ConfirmDialogOptions) => Promise<boolean>,
-    onError: (msg: string) => void,
+    feedbackHandlers: {
+        setPending: (msg: string, opts?: ActionFeedbackOptions) => void;
+        setSuccess: (msg: string, opts?: ActionFeedbackOptions) => void;
+        setError: (msg: string, opts?: ActionFeedbackOptions) => void;
+    },
 ) {
     const [rerunningIds, setRerunningIds] = useState<Set<string>>(new Set());
     const [pendingActionIds, setPendingActionIds] = useState<Set<string>>(new Set());
 
     const handleRerun = useCallback(async (taskId: string, options?: RerunTaskOptions) => {
         setRerunningIds(prev => new Set(prev).add(taskId));
+        feedbackHandlers.setPending("Requesting task rerun...");
         try {
             await rerunTask(taskId, options);
             await refreshRuntimeStatus();
             await refreshGitStatus();
+            feedbackHandlers.setSuccess("Task rerun dispatched successfully.");
         } catch (err) {
             const message = err instanceof Error ? err.message : "Failed to rerun task.";
-            onError(message);
+            feedbackHandlers.setError(message, {
+                retryAction: () => handleRerun(taskId, options),
+                retryLabel: "Retry Rerun",
+                autoDismiss: false
+            });
         } finally {
             setRerunningIds(prev => { const next = new Set(prev); next.delete(taskId); return next; });
         }
-    }, [refreshRuntimeStatus, refreshGitStatus, onError]);
+    }, [refreshRuntimeStatus, refreshGitStatus, feedbackHandlers]);
 
     const runControlAction = useCallback(async (actionId: string, operation: () => Promise<void>) => {
         setPendingActionIds(prev => new Set(prev).add(actionId));
+        feedbackHandlers.setPending("Executing action...");
         try {
             await operation();
             await new Promise((resolve) => setTimeout(resolve, 150));
             await refreshRuntimeStatus();
             await refreshGitStatus();
+            feedbackHandlers.setSuccess("Action executed successfully.");
         } catch (err) {
             const message = err instanceof Error ? err.message : "Failed to execute runtime control.";
-            onError(message);
+            feedbackHandlers.setError(message, {
+                retryAction: () => runControlAction(actionId, operation),
+                retryLabel: "Retry",
+                autoDismiss: false
+            });
         } finally {
             setPendingActionIds(prev => { const next = new Set(prev); next.delete(actionId); return next; });
         }
-    }, [refreshRuntimeStatus, refreshGitStatus, onError]);
+    }, [refreshRuntimeStatus, refreshGitStatus, feedbackHandlers]);
 
     const handleOrchestrateSprint = useCallback(async (projectId: string, sprintId: string) => {
         await runControlAction(`sprint-start:${sprintId}`, async () => {
