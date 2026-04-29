@@ -66,25 +66,22 @@ export class StructuredAgentRequestService {
         startedAt: new Date().toISOString(),
       });
       invocationId = invocation?.id;
-
-      if (invocationId && args.systemRoutingMessage) {
-        this.deps.executionRepository?.appendExecutionInvocationMessage(invocationId, {
-          role: "system",
-          contentMarkdown: args.systemRoutingMessage,
-          metadata: {
-            provider: args.provider,
-            model: args.model,
-            routeKind: "virtual",
-          },
-        });
-      }
     } else {
       this.deps.executionRepository?.updateExecutionInvocation(invocationId, {
         provider: args.provider,
         model: args.model,
       });
+    }
 
-      if (args.systemRoutingMessage) {
+    if (invocationId && args.systemRoutingMessage) {
+      const existingMessages = this.deps.executionRepository?.listExecutionInvocationMessages(invocationId) || [];
+      const hasRouteMessage = existingMessages.some(
+        msg => msg.role === "system" &&
+               msg.contentMarkdown === args.systemRoutingMessage &&
+               msg.metadata?.routeKind === "virtual"
+      );
+
+      if (!hasRouteMessage) {
         this.deps.executionRepository?.appendExecutionInvocationMessage(invocationId, {
           role: "system",
           contentMarkdown: args.systemRoutingMessage,
