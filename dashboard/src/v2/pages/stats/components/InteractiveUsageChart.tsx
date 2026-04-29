@@ -1,5 +1,5 @@
 import type { FunctionComponent } from 'preact';
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import gsap from 'gsap';
 import type {
   ProjectExecutionStatsSnapshot,
@@ -55,6 +55,7 @@ export const InteractiveUsageChart: FunctionComponent<{
   onApplyCustom,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
+  const svgContainerRef = useRef<HTMLDivElement>(null);
   const { isFiltersOpen, toggleFilters, closeFilters } = useUsageFilters();
 
   const {
@@ -72,8 +73,24 @@ export const InteractiveUsageChart: FunctionComponent<{
 
   const buckets = stats.buckets;
 
-  const width = 1200;
-  const height = 540;
+  const [dimensions, setDimensions] = useState({ width: 1200, height: 540 });
+
+  useLayoutEffect(() => {
+    if (!svgContainerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry && entry.contentRect.width > 0) {
+        setDimensions({
+          width: entry.contentRect.width,
+          height: Math.max(540, entry.contentRect.height) // maintain a minimum height
+        });
+      }
+    });
+    observer.observe(svgContainerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const { width, height } = dimensions;
   const padding = 34;
   const viewStart = zoomRange?.start ?? 0;
   const viewEnd = zoomRange?.end ?? Math.max(0, buckets.length - 1);
@@ -234,7 +251,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                 </button>
               ) : null}
             </div>
-            <div className="relative flex-1 min-h-[36rem] w-full">
+            <div ref={svgContainerRef} className="relative flex-1 min-h-[36rem] w-full">
               
               <UsageGraphTooltip 
                 visible={!!activeBucket}
@@ -252,7 +269,7 @@ export const InteractiveUsageChart: FunctionComponent<{
               {buckets.length === 0 ? (
                 <UsageGraphEmpty />
               ) : (
-                <svg viewBox={`0 0 ${width} ${height + 40}`} className="absolute inset-0 h-full w-full overflow-visible">
+                <svg viewBox={`0 0 ${width} ${height}`} className="absolute inset-0 h-full w-full overflow-visible">
                   <defs>
                     {chartData.map((series) => (
                       <linearGradient key={`fill-${series.id}`} id={`stats-area-${series.id}`} x1="0" x2="0" y1="0" y2="1">
@@ -380,7 +397,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                       <text
                         key={bucket.bucketStart}
                         x={xPositions[index] ?? padding}
-                        y={height + 24}
+                        y={height - 8}
                         textAnchor="middle"
                         className="fill-[var(--stats-label-color)] text-[9px] font-bold uppercase tracking-[0.25em]"
                       >
