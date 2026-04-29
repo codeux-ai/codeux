@@ -1,9 +1,11 @@
 import type { FunctionComponent, ComponentProps } from "preact";
 import { memo } from "preact/compat";
 import { useCallback, useRef } from "preact/hooks";
-import { Check, X } from "lucide-preact";
+import { Check, X, Loader2 } from "lucide-preact";
 import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { useMagnetic } from "../../hooks/use-magnetic.js";
+
+export const SHARED_INTERACTION_CLASSES = "transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:opacity-60 disabled:cursor-not-allowed motion-safe:hover:-translate-y-px disabled:hover:translate-y-0 motion-safe:active:scale-95 disabled:active:scale-100 touch-target";
 
 export interface ButtonProps extends ComponentProps<"button"> {
   pending?: boolean;
@@ -60,7 +62,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
     [onClick, setPending, setSuccess, setError]
   );
 
-  const baseClasses = "group/btn inline-flex items-center justify-center gap-2 font-bold transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-signal-500 disabled:opacity-60 disabled:cursor-not-allowed hover:-translate-y-px disabled:hover:translate-y-0 active:scale-95 disabled:active:scale-100 touch-target";
+  const baseClasses = `group/btn inline-flex items-center justify-center gap-2 font-bold ${SHARED_INTERACTION_CLASSES}`;
   const variantClasses = VARIANTS[variant];
   const sizeClasses = SIZES[size];
 
@@ -72,7 +74,7 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
   if (isSuccess) overrideClasses = "!bg-status-green !text-white !border-transparent";
   else if (isError) overrideClasses = "!bg-status-red !text-white !border-transparent";
 
-  const childrenOpacity = (isPending) ? "opacity-50" : (isSuccess || isError) ? "opacity-0" : "opacity-100";
+  const childrenOpacity = (isPending || isSuccess || isError) ? "opacity-0" : "opacity-100";
 
   return (
     <button
@@ -87,7 +89,9 @@ export const Button: FunctionComponent<ButtonProps> = memo(({
       </div>
 
       {isPending && (
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]" />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Loader2 className="w-5 h-5 animate-spin" />
+        </div>
       )}
 
       {isSuccess && (
