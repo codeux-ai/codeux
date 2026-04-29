@@ -83,11 +83,13 @@ export function extractJsonLikeBlock(bodyMarkdown: string): string {
   };
 
 
+  const MAX_CANDIDATES = 50;
+
   // Strategy 2: Find all balanced brace/bracket blocks.
   const findAllBalancedJson = (openChar: "{" | "[", closeChar: "}" | "]"): string[] => {
     const candidates: string[] = [];
     let searchFrom = 0;
-    while (searchFrom < trimmed.length) {
+    while (searchFrom < trimmed.length && candidates.length < MAX_CANDIDATES) {
       const start = trimmed.indexOf(openChar, searchFrom);
       if (start < 0) break;
 
@@ -126,30 +128,35 @@ export function extractJsonLikeBlock(bodyMarkdown: string): string {
   };
 
   const allCandidates = [
+    trimmed,
     ...fencedCandidates,
     ...findAllBalancedJson("{", "}"),
-    ...findAllBalancedJson("[", "]"),
-    trimmed
+    ...findAllBalancedJson("[", "]")
   ];
 
-  // Try to find an exact schema match recursively first
+  let bestCandidate: string = trimmed;
+  let bestScore = -1;
+
   for (const candidate of allCandidates) {
     try {
       const parsed = JSON.parse(candidate);
+
+      // Score 3: Direct Payload
+      if (isPlanningPayload(parsed)) {
+        return JSON.stringify(parsed);
+      }
+
+      // Score 2: Wrapped Payload
       const foundPayload = searchForPayload(parsed);
       if (foundPayload) {
-        return JSON.stringify(foundPayload);
+        if (bestScore < 2) {
+          bestCandidate = JSON.stringify(foundPayload);
+          bestScore = 2;
+        }
+        continue;
       }
-    } catch {
-      // Not valid JSON or parsing failed
-    }
-  }
 
-  // Fallback: If no strict schema match is found, just unwrap common envelopes
-  // from the first valid JSON candidate (legacy behavior)
-  for (const candidate of allCandidates) {
-    try {
-      const parsed = JSON.parse(candidate);
+      // Score 1: Fallback JSON
       if (
         parsed &&
         typeof parsed === "object" &&
@@ -160,19 +167,28 @@ export function extractJsonLikeBlock(bodyMarkdown: string): string {
         if (inner.startsWith("{") || inner.startsWith("[")) {
           try {
             JSON.parse(inner);
-            return inner;
+            if (bestScore < 1) {
+              bestCandidate = inner;
+              bestScore = 1;
+            }
+            continue;
           } catch {
             // inner response isn't valid JSON on its own — fall through
           }
         }
       }
-      return candidate;
+
+      // Score 0: Valid JSON, but not a recognized planning payload or fallback
+      if (bestScore < 0) {
+        bestCandidate = candidate;
+        bestScore = 0;
+      }
     } catch {
-      // Not valid JSON
+      // Not valid JSON or parsing failed
     }
   }
 
-  return trimmed;
+  return bestCandidate;
 }
 
 
