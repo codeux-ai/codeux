@@ -215,3 +215,18 @@ export interface SprintMarkdownExportBundle {
     markdown: string;
   }>;
 }
+
+export interface PlannedTaskDraft {
+  key: string;
+  title: string;
+  description: string;
+  promptMarkdown: string;
+  priority?: TaskPriority;
+  executorType?: TaskExecutorType;
+  dependsOn?: string[];
+}
+
+export interface PlannedSprintPayload {
+  goal: string;
+  tasks: PlannedTaskDraft[];
+}

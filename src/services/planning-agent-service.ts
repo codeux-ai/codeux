@@ -24,7 +24,7 @@ import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-mana
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
 import { extractJsonLikeBlock, parsePlannedSprintReply } from "./planning-json-extractor.js";
-import type { PlannedSprintPayload, PlannedTaskDraft } from "./planning-payload-validator.js";
+import type { PlannedSprintPayload, PlannedTaskDraft } from "../contracts/project-management-types.js";
 import { ProviderExecutionService } from "./provider-execution-service.js";
 import { StructuredAgentRequestService, type StructuredAgentRequestResult } from "./structured-agent-request-service.js";
 import { StructuredProviderResponseService } from "./structured-provider-response-service.js";

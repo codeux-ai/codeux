@@ -27,31 +27,55 @@ describe("PlanningPayloadValidator", () => {
     expect(result.tasks[0]?.key).toEqual("T1");
   });
 
-  it("should handle aliased input fields", () => {
-    const aliasedPayload = {
-      goal: "Alias Goal",
-      subtasks: [
-        {
-          id: "T2",
-          name: "Task 2",
-          instructions: validPromptMarkdown,
-          dependencies: []
-        },
-        {
-          key: "T3",
-          title: "Task 3",
-          prompt: validPromptMarkdown,
-          depends_on: ["T2"]
-        }
-      ]
-    };
-    const result = validator.validate(aliasedPayload);
-    expect(result.tasks.length).toEqual(2);
-    expect(result.tasks[0]?.key).toEqual("T2");
-    expect(result.tasks[0]?.title).toEqual("Task 2");
-    expect(result.tasks[0]?.promptMarkdown).toEqual(validPromptMarkdown);
-    expect(result.tasks[1]?.key).toEqual("T3");
-    expect(result.tasks[1]?.dependsOn).toEqual(["T2"]);
+  it("should reject payloads with aliased input fields", () => {
+    const payloadsWithAliases = [
+      { goal: "Goal", subtasks: [] },
+      { goal: "Goal", tasks: [{ id: "T1", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown }] },
+      { goal: "Goal", tasks: [{ key: "T1", name: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown }] },
+      { goal: "Goal", tasks: [{ key: "T1", title: "Task 1", description: "Desc", prompt: validPromptMarkdown }] },
+      { goal: "Goal", tasks: [{ key: "T1", title: "Task 1", description: "Desc", instructions: validPromptMarkdown }] },
+      { goal: "Goal", tasks: [{ key: "T1", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown, depends_on: [] }] },
+      { goal: "Goal", tasks: [{ key: "T1", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown, dependencies: [] }] }
+    ];
+
+    for (const payload of payloadsWithAliases) {
+      expect(() => validator.validate(payload)).toThrow(/legacy/i);
+    }
+  });
+
+  it("should reject missing or non-string required fields", () => {
+    const invalidTasks = [
+      { title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown }, // missing key
+      { key: 123, title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown }, // numeric key
+      { key: "T1", description: "Desc", promptMarkdown: validPromptMarkdown }, // missing title
+      { key: "T1", title: 123, description: "Desc", promptMarkdown: validPromptMarkdown }, // numeric title
+      { key: "T1", title: "Task 1", promptMarkdown: validPromptMarkdown }, // missing description
+      { key: "T1", title: "Task 1", description: 123, promptMarkdown: validPromptMarkdown }, // numeric description
+      { key: "T1", title: "Task 1", description: "Desc" }, // missing promptMarkdown
+      { key: "T1", title: "Task 1", description: "Desc", promptMarkdown: 123 }, // numeric promptMarkdown
+    ];
+
+    for (const task of invalidTasks) {
+      expect(() => validator.validate({ goal: "Goal", tasks: [task] })).toThrow(/(must have a|is missing a)/i);
+    }
+  });
+
+  it("should reject malformed dependsOn arrays", () => {
+    const invalidDependencies = [
+      "T1", // String instead of array
+      [123], // Number in array
+      [{ key: "T1" }] // Object in array
+    ];
+
+    for (const dependsOn of invalidDependencies) {
+      expect(() => validator.validate({
+        goal: "Goal",
+        tasks: [
+          { key: "T0", title: "Task 0", description: "Desc", promptMarkdown: validPromptMarkdown },
+          { key: "T1", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown, dependsOn }
+        ]
+      })).toThrow(/must be an array of strings/i);
+    }
   });
 
   it("should reject non-object payloads", () => {
@@ -73,6 +97,8 @@ describe("PlanningPayloadValidator", () => {
       tasks: [
         {
           key: "T1",
+          title: "Task 1",
+          description: "Desc",
           promptMarkdown: "## Objective\n1\n## Implementation Requirements\n2\n## Scope\n3\n## Constraints\n4\n## Verification\n5",
         }
       ]
@@ -85,6 +111,8 @@ describe("PlanningPayloadValidator", () => {
       tasks: [
         {
           key: "T1",
+          title: "Task 1",
+          description: "Desc",
           promptMarkdown: "## Objective\n1\n## Scope\n2",
         }
       ]
@@ -95,8 +123,8 @@ describe("PlanningPayloadValidator", () => {
   it("should reject duplicate task keys", () => {
     const duplicatePayload = {
       tasks: [
-        { key: "T1", promptMarkdown: validPromptMarkdown },
-        { key: "T1", promptMarkdown: validPromptMarkdown }
+        { key: "T1", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown },
+        { key: "T1", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown }
       ]
     };
     expect(() => validator.validate(duplicatePayload)).toThrow("Duplicate task key: T1");
@@ -105,8 +133,8 @@ describe("PlanningPayloadValidator", () => {
   it("should reject forward references", () => {
     const forwardPayload = {
       tasks: [
-        { key: "T1", promptMarkdown: validPromptMarkdown, dependsOn: ["T2"] },
-        { key: "T2", promptMarkdown: validPromptMarkdown }
+        { key: "T1", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown, dependsOn: ["T2"] },
+        { key: "T2", title: "Task 2", description: "Desc", promptMarkdown: validPromptMarkdown }
       ]
     };
     expect(() => validator.validate(forwardPayload)).toThrow('Task "T1" depends on "T2" which is missing or defined later. Forward references are not allowed.');
@@ -115,7 +143,7 @@ describe("PlanningPayloadValidator", () => {
   it("should reject self dependencies", () => {
     const selfPayload = {
       tasks: [
-        { key: "T1", promptMarkdown: validPromptMarkdown, dependsOn: ["T1"] }
+        { key: "T1", title: "Task 1", description: "Desc", promptMarkdown: validPromptMarkdown, dependsOn: ["T1"] }
       ]
     };
     expect(() => validator.validate(selfPayload)).toThrow('Task "T1" cannot depend on itself.');
@@ -126,6 +154,8 @@ describe("PlanningPayloadValidator", () => {
       tasks: [
         {
           key: "T1",
+          title: "Task 1",
+          description: "Desc",
           promptMarkdown: validPromptMarkdown,
           priority: "INVALID",
           executorType: "worker"

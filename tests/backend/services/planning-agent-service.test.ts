@@ -598,7 +598,7 @@ describe("PlanningAgentService", () => {
     expect(sleepSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("accepts loose virtual planning JSON with prose, subtasks, prompt, and dependencies fields", async () => {
+  it("accepts virtual planning JSON with prose but rejects legacy shape fields", async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-planning-loose-"));
     tempDirs.push(dir);
 
@@ -642,21 +642,22 @@ describe("PlanningAgentService", () => {
             "Planned sprint:",
             "{",
             '  "goal": "Loose improved prompt",',
-            '  "subtasks": [',
+            '  "tasks": [',
             "    {",
-            '      "id": "TASK-1",',
-            '      "name": "First task",',
+            '      "key": "TASK-1",',
+            '      "title": "First task",',
             '      "description": "Setup work",',
-            '      "prompt": "## Objective\\nPerform the setup work\\n\\n## Scope\\n- Setup\\n\\n## Implementation Requirements\\n1. Setup\\n\\n## Constraints\\n- None\\n\\n## Verification\\n- Done",',
+            '      "promptMarkdown": "## Objective\\nPerform the setup work\\n\\n## Scope\\n- Setup\\n\\n## Implementation Requirements\\n1. Setup\\n\\n## Constraints\\n- None\\n\\n## Verification\\n- Done",',
             '      "priority": "HIGH",',
-            '      "executorType": "AUTO"',
+            '      "executorType": "AUTO",',
+            '      "dependsOn": []',
             "    },",
             "    {",
-            '      "id": "TASK-2",',
-            '      "name": "Second task",',
+            '      "key": "TASK-2",',
+            '      "title": "Second task",',
             '      "description": "Follow-up",',
-            '      "instructions": "## Objective\\nFinish the follow-up work\\n\\n## Scope\\n- Follow-up\\n\\n## Implementation Requirements\\n1. Follow-up\\n\\n## Constraints\\n- None\\n\\n## Verification\\n- Done",',
-            '      "dependencies": ["TASK-1"],',
+            '      "promptMarkdown": "## Objective\\nFinish the follow-up work\\n\\n## Scope\\n- Follow-up\\n\\n## Implementation Requirements\\n1. Follow-up\\n\\n## Constraints\\n- None\\n\\n## Verification\\n- Done",',
+            '      "dependsOn": ["TASK-1"],',
             '      "executorType": "MCP_WORKER"',
             "    }",
             "  ]",
