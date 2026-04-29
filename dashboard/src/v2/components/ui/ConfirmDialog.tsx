@@ -77,12 +77,16 @@ function DestructiveConfirmButton({
 
   const handlePointerDown = (e: h.JSX.TargetedPointerEvent<HTMLButtonElement>) => {
     if (e.button !== 0) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    if (typeof e.currentTarget.setPointerCapture === "function") {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
     startHold();
   };
 
   const handlePointerUp = (e: h.JSX.TargetedPointerEvent<HTMLButtonElement>) => {
-    e.currentTarget.releasePointerCapture(e.pointerId);
+    if (typeof e.currentTarget.releasePointerCapture === "function") {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
     cancelHold();
   };
 

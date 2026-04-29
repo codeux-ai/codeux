@@ -46,7 +46,6 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
   onClose,
   onSubmit,
 }) => {
-  const backdropRef = useFocusTrap(true, { onClose: () => handleClose(), restoreFocus: true });
   const cardRef = useRef<HTMLDivElement>(null);
   const [sprintId, setSprintId] = useState(initialTask?.sprintId || defaultSprintId || initialSprintId || sprints[0]?.id || "");
   const [title, setTitle] = useState(initialTask?.title || "");
@@ -60,7 +59,11 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
 
   const reducedMotion = useReducedMotion();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const [touched, setTouched] = useState({ sprintId: false, title: false });
   const [dependencySearchQuery, setDependencySearchQuery] = useState("");
+
+  const backdropRef = useFocusTrap(!isClosing, { onClose: () => handleClose(), restoreFocus: true });
 
   const validationErrors = useMemo(() => {
     const errors: Record<string, string> = {};
@@ -81,6 +84,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
 
   const handleClose = () => {
     if (isSubmitting) return;
+    setIsClosing(true);
     const d = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
     gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration: d, ease: MODAL_MOTION.exit.ease });
     gsap.to(backdropRef.current, { opacity: 0, duration: d, delay: reducedMotion ? 0 : 0.05, onComplete: onClose });
@@ -109,7 +113,10 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
 
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
-    if (Object.keys(validationErrors).length > 0) return;
+    if (Object.keys(validationErrors).length > 0) {
+      setTouched({ sprintId: true, title: true });
+      return;
+    }
 
     setIsSubmitting(true);
     setError(null);
@@ -211,7 +218,9 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     setSprintId((event.target as HTMLSelectElement).value);
                     if (error) setError(null);
                   }}
-                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500" aria-invalid={!!validationErrors.sprintId}
+                  className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500" aria-invalid={!!validationErrors.sprintId && touched.sprintId}
+                  aria-describedby={validationErrors.sprintId && touched.sprintId ? "task-sprint-error" : undefined}
+                  onBlur={() => setTouched(prev => ({ ...prev, sprintId: true }))}
                   required
                 >
                   <option value="" disabled>Select sprint</option>
@@ -219,7 +228,7 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                     <option key={sprint.id} value={sprint.id}>{sprint.name}</option>
                   ))}
                 </select>
-                {validationErrors.sprintId && <div className="text-xs text-red-500 mt-1 font-medium">{validationErrors.sprintId}</div>}
+                {validationErrors.sprintId && touched.sprintId && <div id="task-sprint-error" className="text-xs text-red-500 mt-1 font-medium">{validationErrors.sprintId}</div>}
               </div>
 
               <div className="group/field">
@@ -235,10 +244,12 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
                   className="mt-2.5 w-full rounded-2xl bg-black/[0.03] dark:bg-white/[0.03] border border-black/[0.08] dark:border-white/[0.08] px-4 py-3 text-sm font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-signal-500 focus-visible:ring-2 focus-visible:ring-signal-500"
                   placeholder="Define the task scope"
                   required
-                  aria-invalid={!!validationErrors.title}
+                  aria-invalid={!!validationErrors.title && touched.title}
+                  aria-describedby={validationErrors.title && touched.title ? "task-title-error" : undefined}
+                  onBlur={() => setTouched(prev => ({ ...prev, title: true }))}
 
                 />
-                {validationErrors.title && <div className="text-xs text-red-500 mt-1 font-medium">{validationErrors.title}</div>}
+                {validationErrors.title && touched.title && <div id="task-title-error" className="text-xs text-red-500 mt-1 font-medium">{validationErrors.title}</div>}
               </div>
             </div>
 
@@ -393,7 +404,6 @@ export const AddTaskModal: FunctionComponent<AddTaskModalProps> = ({
               </button>
               <Button
                 type="submit"
-                disabled={Object.keys(validationErrors).length > 0}
                 pending={isSubmitting}
                 variant="signal"
                 size="lg"

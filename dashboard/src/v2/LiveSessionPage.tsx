@@ -122,7 +122,7 @@ export const LiveSessionPage: FunctionComponent = () => {
     const sprintScopeReady = Boolean(selectedSprintId || sprintScopeId || initialLoadComplete);
 
     const { isOpen: isConfirmOpen, options: confirmOptions, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
-    const { feedback, setError, clearFeedback } = useActionFeedback();
+    const { feedback, setPending, setSuccess, setError, clearFeedback } = useActionFeedback();
 
     const {
         rerunningIds,
@@ -138,7 +138,7 @@ export const LiveSessionPage: FunctionComponent = () => {
         handleClaimAttentionItem,
         handleResolveAttentionItem,
         handleDismissAttentionItem,
-    } = useLiveSessionActions(refreshRuntimeStatus, refreshGitStatus, requestConfirm, setError);
+    } = useLiveSessionActions(refreshRuntimeStatus, refreshGitStatus, requestConfirm, { setPending, setSuccess, setError });
 
     const [activeFilter, setFilter] = useState<TaskFilter>("All");
     const [headerView, setHeaderView] = useState<HeaderView>("dag");

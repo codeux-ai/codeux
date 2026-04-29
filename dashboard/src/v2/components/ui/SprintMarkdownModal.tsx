@@ -35,6 +35,9 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
     const d_backdrop = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
     const d_card = reducedMotion ? 0 : MODAL_MOTION.entry.duration;
 
+    if (backdropRef.current) gsap.killTweensOf(backdropRef.current);
+    if (cardRef.current) gsap.killTweensOf(cardRef.current);
+
     gsap.fromTo(backdropRef.current, { opacity: 0 }, { opacity: 1, duration: d_backdrop, ease: MODAL_MOTION.backdrop.ease });
     gsap.fromTo(cardRef.current,
       { y: reducedMotion ? 0 : MODAL_MOTION.entry.yStart, opacity: MODAL_MOTION.entry.opacityStart, scale: reducedMotion ? 1 : MODAL_MOTION.entry.scaleStart, filter: reducedMotion ? MODAL_MOTION.entry.filterEnd : MODAL_MOTION.entry.filterStart },
@@ -45,6 +48,9 @@ export const SprintMarkdownModal: FunctionComponent<SprintMarkdownModalProps> = 
   const handleClose = () => {
     if (isSubmitting.current) return;
     const d = reducedMotion ? 0 : MODAL_MOTION.exit.duration;
+
+    if (backdropRef.current) gsap.killTweensOf(backdropRef.current);
+    if (cardRef.current) gsap.killTweensOf(cardRef.current);
 
     if (cardRef.current) gsap.to(cardRef.current, { y: MODAL_MOTION.exit.yEnd, opacity: MODAL_MOTION.exit.opacityEnd, scale: MODAL_MOTION.exit.scaleEnd, filter: MODAL_MOTION.exit.filterEnd, duration: d, ease: MODAL_MOTION.exit.ease });
     if (backdropRef.current) gsap.to(backdropRef.current, { opacity: 0, duration: d, delay: reducedMotion ? 0 : 0.05, onComplete: onClose });

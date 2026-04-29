@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, useLayoutEffect } from "preact/hooks";
 import gsap from "gsap";
 import { Search, X, Layers, Activity, Cpu, Box, ArrowRight } from "lucide-preact";
 import { SearchResultRow } from "./SearchResultRow";
+import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
+import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
 
 export type SearchItem = { id: string; title?: string; name?: string; status?: string; sprint?: string };
@@ -36,9 +38,13 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
     ];
 
     const allItems = CATEGORIES.flatMap(c => c.items);
+    const reducedMotion = useReducedMotion();
 
     useLayoutEffect(() => {
         if (!overlayRef.current || !containerRef.current) return;
+
+        gsap.killTweensOf(overlayRef.current);
+        gsap.killTweensOf(containerRef.current);
 
         if (isOpen) {
             gsap.set(overlayRef.current, { display: 'flex' });
@@ -47,13 +53,13 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
 
             tl.fromTo(overlayRef.current,
                 { opacity: 0 },
-                { opacity: 1, duration: 0.3, ease: "power2.out" }
+                { opacity: 1, duration: reducedMotion ? 0 : MODAL_MOTION.overlay.entry, ease: MODAL_MOTION.overlay.entryEase }
             );
 
             tl.fromTo(containerRef.current,
-                { y: -20, opacity: 0 },
-                { y: 0, opacity: 1, duration: 0.6, ease: "power4.out" },
-                "-=0.2"
+                { y: reducedMotion ? 0 : -20, opacity: 0 },
+                { y: 0, opacity: 1, duration: reducedMotion ? 0 : MODAL_MOTION.overlay.cardEntry, ease: MODAL_MOTION.overlay.cardEntryEase },
+                reducedMotion ? 0 : "-=0.2"
             );
 
             // Focus input after animation
@@ -69,12 +75,12 @@ export const SearchOverlay: FunctionComponent<SearchOverlayProps> = ({ isOpen, o
                 }
             });
 
-            tl.to(containerRef.current, { y: -20, opacity: 0, duration: 0.3, ease: "power2.in" });
-            tl.to(overlayRef.current, { opacity: 0, duration: 0.2, ease: "power2.in" }, "-=0.1");
+            tl.to(containerRef.current, { y: reducedMotion ? 0 : -20, opacity: 0, duration: reducedMotion ? 0 : MODAL_MOTION.overlay.exit, ease: MODAL_MOTION.overlay.exitEase });
+            tl.to(overlayRef.current, { opacity: 0, duration: reducedMotion ? 0 : MODAL_MOTION.overlay.exit, ease: MODAL_MOTION.overlay.exitEase }, reducedMotion ? 0 : "-=0.1");
 
             setFocusedIndex(-1);
         }
-    }, [isOpen]);
+    }, [isOpen, reducedMotion]);
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {

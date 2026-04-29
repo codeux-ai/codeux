@@ -12,6 +12,7 @@ vi.mock("gsap", () => ({
   default: {
     fromTo: vi.fn(),
     set: vi.fn(),
+    killTweensOf: vi.fn(),
     context: (fn: () => void) => {
       fn();
       return { revert: vi.fn() };

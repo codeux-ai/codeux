@@ -23,6 +23,8 @@ import {
 import { getProviderModelOptions } from "../../lib/settings-view-models.js";
 import { getPlanningFeedback, type PlanningActionType, PLANNING_ACTION_LABELS } from "../../lib/sprint-planning-feedback.js";
 import { PlanningProgressOverlay } from "./PlanningProgressOverlay.js";
+import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
+import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import type { ImprovePromptInput, VirtualWorkerProvider } from "../../types.js";
 import { useExecutionTimeline } from "../../../hooks/ExecutionTimelineContext.js";
 
@@ -65,7 +67,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
   const isUnmountedRef = useRef(false);
   const [isImproving, setIsImproving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorState, setErrorState] = useState<{ type: 'improve' | 'submit'; message: string } | null>(null);
+  const { feedback: actionFeedback, setPending, setSuccess, setError, clearFeedback } = useActionFeedback();
   const [elapsedMs, setElapsedMs] = useState(0);
   const [isOverlayDismissed, setIsOverlayDismissed] = useState(false);
 
@@ -144,7 +146,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     }
     setIsImproving(false);
     setIsSubmitting(false);
-    setErrorState(null);
+    clearFeedback();
     if (previousFocusRef.current) {
       const el = previousFocusRef.current;
       setTimeout(() => el.focus(), 0);
@@ -160,7 +162,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     const controller = new AbortController();
     abortRef.current = controller;
     setIsImproving(true);
-    setErrorState(null);
+    clearFeedback();
     try {
       const improvedGoal = await onImprovePrompt({
         name: state.name.trim(),
@@ -173,7 +175,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       if (!isUnmountedRef.current) {
-        setErrorState({ type: 'improve', message: error instanceof Error ? error.message : String(error) });
+        setError(error instanceof Error ? error.message : String(error), { retryAction: handleImprovePrompt, retryLabel: "Retry Improve", autoDismiss: false });
       }
     } finally {
       abortRef.current = null;
@@ -202,7 +204,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     const controller = new AbortController();
     abortRef.current = controller;
     setIsSubmitting(true);
-    setErrorState(null);
+    clearFeedback();
     try {
       await onSubmit({
         name: state.name.trim(),
@@ -220,7 +222,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
       if (!isUnmountedRef.current) {
-        setErrorState({ type: 'submit', message: error instanceof Error ? error.message : String(error) });
+        setError(error instanceof Error ? error.message : String(error), { retryAction: () => fieldsRef.current?.requestSubmit(), retryLabel: "Retry Request", autoDismiss: false });
       }
     } finally {
       abortRef.current = null;
@@ -282,7 +284,7 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         aria-live="polite"
         className="sr-only"
       >
-        {isBusy ? PLANNING_ACTION_LABELS[busyAction!] || "Planning in progress" : errorState ? errorState.message : ""}
+        {isBusy ? PLANNING_ACTION_LABELS[busyAction!] || "Planning in progress" : actionFeedback.status === "error" ? actionFeedback.message : ""}
       </div>
 
       <form
@@ -292,20 +294,9 @@ export const SprintComposer: FunctionComponent<SprintComposerProps> = ({
         tabIndex={-1}
       >
         <div className="border-b border-black/[0.06] p-6 dark:border-white/[0.06] sm:p-8 lg:p-10 xl:border-b-0 xl:border-r">
-          {errorState?.type === 'improve' && (
-            <div data-composer-stagger className="mb-8 rounded-xl border border-status-red/20 bg-status-red/[0.06] px-4 py-3 text-sm leading-relaxed text-status-red transition-all">
-              <div className="font-bold">Prompt improvement failed</div>
-              <div className="mt-1 opacity-90">{errorState.message}</div>
-              <div className="mt-2 text-xs opacity-75">Your prompt is safely preserved. You can try again or proceed with the current definition.</div>
-            </div>
-          )}
-          {errorState?.type === 'submit' && (
-            <div data-composer-stagger className="mb-8 rounded-xl border border-status-red/20 bg-status-red/[0.06] px-4 py-3 text-sm leading-relaxed text-status-red transition-all">
-              <div className="font-bold">Execution request failed</div>
-              <div className="mt-1 opacity-90">{errorState.message}</div>
-              <div className="mt-2 text-xs opacity-75">Your sprint configuration is safely preserved. Adjust the details or try again.</div>
-            </div>
-          )}
+          <div data-composer-stagger className="mb-8">
+            <ActionFeedbackRegion status={actionFeedback.status} message={actionFeedback.message} onDismiss={clearFeedback} autoDismiss={actionFeedback.autoDismiss} retryAction={actionFeedback.retryAction} retryLabel={actionFeedback.retryLabel} />
+          </div>
           <div data-composer-stagger className="flex items-start justify-between gap-4">
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full border border-signal-500/15 bg-signal-500/[0.07] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-signal-600 dark:text-signal-300">

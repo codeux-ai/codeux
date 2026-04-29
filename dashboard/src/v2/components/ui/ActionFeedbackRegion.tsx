@@ -1,6 +1,6 @@
 import { h, type FunctionComponent } from "preact";
 import { useRef, useLayoutEffect, useEffect } from "preact/hooks";
-import { X, CheckCircle, AlertTriangle, XCircle, Loader2 } from "lucide-preact";
+import { X, CheckCircle, AlertTriangle, XCircle, Loader2, RotateCcw } from "lucide-preact";
 import gsap from "gsap";
 import type { ActionFeedbackStatus } from "../../hooks/use-action-feedback.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
@@ -11,6 +11,9 @@ interface ActionFeedbackRegionProps {
   onDismiss?: () => void;
   className?: string;
   autoDismissMs?: number;
+  autoDismiss?: boolean;
+  retryAction?: () => void;
+  retryLabel?: string;
 }
 
 const statusConfig: Record<Exclude<ActionFeedbackStatus, "idle">, { icon: FunctionComponent<any>, colors: string, progressColors: string }> = {
@@ -20,7 +23,7 @@ const statusConfig: Record<Exclude<ActionFeedbackStatus, "idle">, { icon: Functi
   error: { icon: XCircle, colors: "bg-status-red/10 text-status-red border-status-red/20", progressColors: "bg-status-red" },
 };
 
-export function ActionFeedbackRegion({ status, message, onDismiss, className = "", autoDismissMs = 5000 }: ActionFeedbackRegionProps) {
+export function ActionFeedbackRegion({ status, message, onDismiss, className = "", autoDismissMs = 5000, autoDismiss, retryAction, retryLabel }: ActionFeedbackRegionProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
@@ -41,6 +44,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
 
   useEffect(() => {
     if (status === "idle" || !message || status === "error" || status === "pending" || !progressRef.current) return;
+    if (autoDismiss === false || retryAction) return;
 
     const ctx = gsap.context(() => {
       gsap.fromTo(
@@ -51,7 +55,7 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
     });
 
     return () => ctx.revert();
-  }, [status, message, autoDismissMs]);
+  }, [status, message, autoDismissMs, autoDismiss, retryAction]);
 
   if (status === "idle" || !message) return null;
 
@@ -71,17 +75,29 @@ export function ActionFeedbackRegion({ status, message, onDismiss, className = "
       <div className="flex-1 text-sm font-medium mt-0.5">
         {message}
       </div>
-      {onDismiss && (
-        <button
-          type="button"
-          onClick={onDismiss}
-          className="shrink-0 p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
-          aria-label="Dismiss message"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      )}
-      {(status === "success" || status === "warning") && (
+      <div className="shrink-0 flex items-center gap-1">
+        {retryAction && (
+          <button
+            type="button"
+            onClick={retryAction}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-md bg-white/50 dark:bg-black/20 hover:bg-white/80 dark:hover:bg-black/40 border border-black/5 dark:border-white/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            {retryLabel || "Retry"}
+          </button>
+        )}
+        {onDismiss && (
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="p-1 rounded-md opacity-70 hover:opacity-100 hover:bg-black/5 dark:hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal-500/30 focus-visible:ring-offset-2"
+            aria-label="Dismiss message"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+      {(status === "success" || status === "warning") && autoDismiss !== false && !retryAction && (
         <div
           ref={progressRef}
           className={`absolute bottom-0 left-0 h-1 opacity-20 ${config.progressColors}`}

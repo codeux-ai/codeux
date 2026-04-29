@@ -38,4 +38,12 @@ describe("ActionFeedbackRegion", () => {
     fireEvent.click(dismissBtn);
     expect(handleDismiss).toHaveBeenCalledTimes(1);
   });
+
+  it("renders retry action and executes it on click", () => {
+    const handleRetry = vi.fn();
+    render(<ActionFeedbackRegion status="error" message="Failed to load" retryAction={handleRetry} retryLabel="Try Again" />);
+    const retryBtn = screen.getByRole("button", { name: "Try Again" });
+    fireEvent.click(retryBtn);
+    expect(handleRetry).toHaveBeenCalledTimes(1);
+  });
 });

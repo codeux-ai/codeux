@@ -1,11 +1,29 @@
 /** @jsx h */
 // @vitest-environment jsdom
 import { h } from "preact";
-import { render, screen, fireEvent } from "@testing-library/preact";
-import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent, cleanup, act } from "@testing-library/preact";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { ConfirmDialog } from "../../../src/v2/components/ui/ConfirmDialog.js";
 import * as matchers from "@testing-library/jest-dom/matchers";
 expect.extend(matchers);
+
+vi.mock("gsap", () => ({
+  default: {
+    fromTo: (_el: any, _from: any, to: any) => {
+      if (to.onComplete) to.onComplete();
+      return { revert: () => {} };
+    },
+    to: (_el: any, to: any) => {
+      if (to.onComplete) to.onComplete();
+      return { revert: () => {} };
+    },
+    context: (cb: any) => {
+      cb();
+      return { revert: () => {} };
+    },
+    set: () => {},
+  },
+}));
 
 describe("ConfirmDialog", () => {
   const defaultOptions = {
@@ -15,6 +33,11 @@ describe("ConfirmDialog", () => {
     cancelLabel: "Cancel",
     destructive: true,
   };
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
 
   it("renders nothing when closed", () => {
     const { container } = render(
@@ -32,10 +55,32 @@ describe("ConfirmDialog", () => {
     expect(screen.getByText("This action cannot be undone.")).toBeInTheDocument();
   });
 
-  it("calls onConfirm when confirm button is clicked", () => {
+  it("calls onConfirm when confirm button is held (destructive)", async () => {
+    vi.useFakeTimers();
     const handleConfirm = vi.fn();
     render(
       <ConfirmDialog isOpen={true} options={defaultOptions} onConfirm={handleConfirm} onCancel={vi.fn()} />
+    );
+    
+    const confirmBtn = screen.getByRole("button", { name: /Hold to Delete|Delete/ });
+    fireEvent.pointerDown(confirmBtn);
+    
+    act(() => {
+      vi.advanceTimersByTime(1100);
+    });
+    
+    expect(handleConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onConfirm when confirm button is clicked (non-destructive)", () => {
+    const handleConfirm = vi.fn();
+    render(
+      <ConfirmDialog 
+        isOpen={true} 
+        options={{...defaultOptions, destructive: false}} 
+        onConfirm={handleConfirm} 
+        onCancel={vi.fn()} 
+      />
     );
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     expect(handleConfirm).toHaveBeenCalledTimes(1);
@@ -55,7 +100,7 @@ describe("ConfirmDialog", () => {
     render(
       <ConfirmDialog isOpen={true} options={defaultOptions} onConfirm={vi.fn()} onCancel={handleCancel} />
     );
-    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     expect(handleCancel).toHaveBeenCalledTimes(1);
   });
 });

@@ -34,9 +34,22 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
         }, delay);
     };
 
+    const handleFocus = (e: FocusEvent) => {
+        // Only trigger on keyboard focus (focus-visible) to maintain parity
+        try {
+            if (!(e.target as Element).matches(":focus-visible")) return;
+        } catch {
+            // fallback for older browsers or test environments
+        }
+        handleMouseEnter();
+    };
+
     const handleMouseLeave = () => {
         if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-        setIsVisible(false);
+        // Add a small delay before hiding to prevent abrupt hide/show transitions
+        hoverTimeout.current = window.setTimeout(() => {
+            setIsVisible(false);
+        }, 150);
     };
 
     useLayoutEffect(() => {
@@ -117,7 +130,7 @@ export const Tooltip: FunctionComponent<TooltipProps> = ({
             className="inline-flex relative"
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
-            onFocusCapture={handleMouseEnter}
+            onFocusCapture={handleFocus}
             onBlurCapture={handleMouseLeave}
         >
             {children}

@@ -9,6 +9,8 @@ import {
 } from "lucide-preact";
 import { SkeletonRow } from "../ui/ListSkeletons.js";
 import { resolveListWindow, type ListWindowOption } from "../../lib/list-window.js";
+import { useConfirmDialog } from "../../hooks/use-confirm-dialog.js";
+import { ConfirmDialog } from "../ui/ConfirmDialog.js";
 import type { Sprint } from "../../types.js";
 import type { ExecutionHumanInterventionSummary } from "../../../../../src/contracts/app-types.js";
 import {
@@ -66,6 +68,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
   const [filters, setFilters] = useState<LedgerFilters>(DEFAULT_LEDGER_FILTERS);
   const [sort, setSort] = useState<LedgerSort>({ key: "createdAt", direction: "desc" });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const { isOpen, options, requestConfirm, handleConfirm, handleCancel } = useConfirmDialog();
 
   const filteredSprints = useMemo(
     () => filterSprints(sprints, filters),
@@ -96,19 +99,36 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
     [selectedIds, ledgerSprints],
   );
 
-  const isBulkPending = useMemo(() => {
-    return selectedFiltered.some((sprint) => {
+  const {
+    isBulkStartPending,
+    isBulkStopPending,
+    isBulkPinPending,
+    isBulkDeletePending,
+    isAnyBulkPending
+  } = useMemo(() => {
+    let start = false;
+    let stop = false;
+    let pin = false;
+    let del = false;
+
+    for (const sprint of selectedFiltered) {
       const activeRun = activeRunsBySprintId.get(sprint.id);
-      return (
-        pendingActionIds.has(`sprint-start:${sprint.id}`) ||
-        (activeRun && pendingActionIds.has(`sprint-stop:${activeRun.id}`)) ||
-        pendingActionIds.has(`sprint-showcase:${sprint.id}`) ||
-        pendingActionIds.has(`sprint-delete:${sprint.id}`)
-      );
-    });
+      if (pendingActionIds.has(`sprint-start:${sprint.id}`)) start = true;
+      if (activeRun && pendingActionIds.has(`sprint-stop:${activeRun.id}`)) stop = true;
+      if (pendingActionIds.has(`sprint-showcase:${sprint.id}`)) pin = true;
+      if (pendingActionIds.has(`sprint-delete:${sprint.id}`)) del = true;
+    }
+
+    return {
+      isBulkStartPending: start,
+      isBulkStopPending: stop,
+      isBulkPinPending: pin,
+      isBulkDeletePending: del,
+      isAnyBulkPending: start || stop || pin || del
+    };
   }, [selectedFiltered, activeRunsBySprintId, pendingActionIds]);
 
-  const allFilteredSelected = windowedSprints.length > 0 && windowedSprints.every((s) => selectedIds.has(s.id));
+  const allFilteredSelected = ledgerSprints.length > 0 && ledgerSprints.every((s) => selectedIds.has(s.id));
 
   const handleSort = (key: SprintTableSortKey) => {
     setSort((current) => nextSort(current, key));
@@ -116,14 +136,10 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
 
   const handleToggleSelectAll = () => {
     if (allFilteredSelected) {
-      const next = new Set(selectedIds);
-      for (const sprint of windowedSprints) {
-        next.delete(sprint.id);
-      }
-      setSelectedIds(next);
+      setSelectedIds(new Set());
     } else {
       const next = new Set(selectedIds);
-      for (const sprint of windowedSprints) {
+      for (const sprint of ledgerSprints) {
         next.add(sprint.id);
       }
       setSelectedIds(next);
@@ -142,10 +158,20 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
     onBulkStart(selectedFiltered.map((s) => s.id));
   }, [onBulkStart, selectedFiltered]);
 
-  const handleBulkDelete = useCallback(() => {
-    onBulkDelete(selectedFiltered.map((s) => s.id));
-    setSelectedIds(deselectAll());
-  }, [onBulkDelete, selectedFiltered]);
+  const handleBulkDelete = useCallback(async () => {
+    const confirmed = await requestConfirm({
+      title: "Delete Sprints?",
+      body: `Are you sure you want to delete ${selectedFiltered.length} selected sprint${selectedFiltered.length === 1 ? "" : "s"}? All associated tasks and execution history will be permanently removed.`,
+      confirmLabel: "Delete Sprints",
+      cancelLabel: "Cancel",
+      destructive: true,
+    });
+
+    if (confirmed) {
+      onBulkDelete(selectedFiltered.map((s) => s.id));
+      setSelectedIds(deselectAll());
+    }
+  }, [onBulkDelete, selectedFiltered, requestConfirm]);
 
   const handleBulkShowcaseEnable = useCallback(() => {
     onBulkShowcaseEnable(selectedFiltered.map((s) => s.id));
@@ -154,6 +180,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
   const handleBulkShowcaseDisable = useCallback(() => {
     onBulkShowcaseDisable(selectedFiltered.map((s) => s.id));
   }, [onBulkShowcaseDisable, selectedFiltered]);
+
 
   // Memoize stable handlers to pass to memoized SprintLedgerRow
   const stableOnToggleShowcase = useCallback(
@@ -191,12 +218,23 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
 
       <SprintLedgerBulkActions
         selectedCount={selectedFiltered.length}
-        isPending={isBulkPending}
+        totalCount={ledgerSprints.length}
+        isAnyPending={isAnyBulkPending}
+        isStartPending={isBulkStartPending}
+        isDeletePending={isBulkDeletePending}
+        isPinPending={isBulkPinPending}
         onBulkStart={handleBulkStart}
         onBulkDelete={handleBulkDelete}
         onBulkShowcaseEnable={handleBulkShowcaseEnable}
         onBulkShowcaseDisable={handleBulkShowcaseDisable}
         onClearSelection={handleClearSelection}
+      />
+
+      <ConfirmDialog
+        isOpen={isOpen}
+        options={options}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
       />
 
       {/* Table */}

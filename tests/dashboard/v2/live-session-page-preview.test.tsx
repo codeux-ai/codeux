@@ -2,9 +2,12 @@
 // @vitest-environment happy-dom
 import { h } from "preact";
 import { render, screen, cleanup } from "@testing-library/preact";
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import * as matchers from "@testing-library/jest-dom/matchers";
 import { LivePreviewLink } from "../../../dashboard/src/v2/components/ui/LivePreviewLink.js";
+import { SearchOverlay } from "../../../dashboard/src/v2/components/search/SearchOverlay.js";
+import { CollapsiblePanel } from "../../../dashboard/src/v2/components/ui/CollapsiblePanel.js";
+import { Search } from "lucide-preact";
 import type { SprintPreviewSession } from "../../../dashboard/src/types.js";
 
 expect.extend(matchers);
@@ -50,5 +53,51 @@ describe("LivePreviewLink CTA", () => {
     it("does not render when session status is error", () => {
         render(<LivePreviewLink session={makeSession({ status: "error" })} />);
         expect(screen.queryByRole("link", { name: /Live Preview/i })).not.toBeInTheDocument();
+    });
+});
+
+describe("Reduced Motion Support", () => {
+    let originalMatchMedia: typeof window.matchMedia;
+
+    beforeEach(() => {
+        cleanup();
+        originalMatchMedia = window.matchMedia;
+        Object.defineProperty(window, 'matchMedia', {
+            writable: true,
+            value: vi.fn().mockImplementation(query => ({
+                matches: query === '(prefers-reduced-motion: reduce)',
+                media: query,
+                onchange: null,
+                addListener: vi.fn(),
+                removeListener: vi.fn(),
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+                dispatchEvent: vi.fn(),
+            })),
+        });
+        window.HTMLElement.prototype.scrollIntoView = vi.fn();
+    });
+
+    afterEach(() => {
+        window.matchMedia = originalMatchMedia;
+    });
+
+    it("renders SearchOverlay cleanly under reduced motion", () => {
+        const results = { sprints: [], tasks: [], agents: [], containers: [] };
+        render(<SearchOverlay isOpen={true} onClose={() => {}} searchQuery="" onSearchChange={() => {}} results={results} />);
+
+        expect(screen.getByPlaceholderText(/Search sprints, tasks, agents/i)).toBeInTheDocument();
+        expect(screen.getByText(/Start typing to search/i)).toBeInTheDocument();
+    });
+
+    it("renders CollapsiblePanel cleanly under reduced motion", () => {
+        render(
+            <CollapsiblePanel title="Test Panel" icon={Search} accentHex="#ff0000" defaultOpen={true}>
+                <div>Panel Content</div>
+            </CollapsiblePanel>
+        );
+
+        expect(screen.getByText("Test Panel")).toBeInTheDocument();
+        expect(screen.getByText("Panel Content")).toBeInTheDocument();
     });
 });

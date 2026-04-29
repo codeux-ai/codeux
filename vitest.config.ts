@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   cacheDir: ".cache/vitest",
   test: {
-    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx", "dashboard/src/**/__tests__/*.test.ts", "dashboard/src/**/__tests__/*.test.tsx"],
+    include: ["tests/**/*.test.ts", "tests/**/*.test.tsx", "dashboard/tests/**/*.test.tsx", "dashboard/src/**/__tests__/*.test.ts", "dashboard/src/**/__tests__/*.test.tsx"],
     exclude: ["dist/**", "dashboard/dist/**", "node_modules/**"],
     setupFiles: ["tests/setup/runtime-warning-filter.ts"],
     testTimeout: 15000,

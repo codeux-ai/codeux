@@ -22,5 +22,17 @@ export const MODAL_MOTION = {
   backdrop: {
     duration: 0.3,
     ease: "power2.out"
+  },
+  collapse: {
+    duration: 0.4,
+    ease: "power4.inOut"
+  },
+  overlay: {
+    entry: 0.3,
+    entryEase: "power2.out",
+    exit: 0.2,
+    exitEase: "power2.in",
+    cardEntry: 0.6,
+    cardEntryEase: "power4.out"
   }
 };

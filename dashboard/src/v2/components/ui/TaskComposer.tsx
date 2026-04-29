@@ -5,6 +5,8 @@ import { Bot, Plus, Target, X, Save, AlertCircle } from "lucide-preact";
 import { Tooltip } from "./Tooltip.js";
 import type { Sprint, Task, TaskExecutorType, TaskPriority, TaskStatus } from "../../types.js";
 import { useTaskComposerState, type TaskDraft } from "../../lib/task-composer-state.js";
+import { ActionFeedbackRegion } from "./ActionFeedbackRegion.js";
+import { useActionFeedback } from "../../hooks/use-action-feedback.js";
 import { useReducedMotion } from "../../hooks/use-reduced-motion.js";
 import { MODAL_MOTION } from "../../lib/motion/modal-motion.js";
 
@@ -67,6 +69,8 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
     return () => ctx.revert();
   }, [initialTask?.recordId, reducedMotion]);
 
+  const { feedback, setPending, setSuccess, setError, clearFeedback } = useActionFeedback();
+
   const handleSubmit = async (event: Event) => {
     event.preventDefault();
     if (!state.isValid) {
@@ -76,14 +80,19 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
 
     state.setIsSubmitting(true);
     state.setSubmitError(null);
+    clearFeedback();
+    setPending("Submitting task...");
 
     try {
       await onSubmit(state.getPayload());
       state.setIsSubmitting(false);
+      setSuccess("Task submitted successfully.");
       onClose();
     } catch (err) {
       state.setIsSubmitting(false);
-      state.setSubmitError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      state.setSubmitError(msg);
+      setError(msg, { retryAction: () => fieldsRef.current?.requestSubmit(), retryLabel: "Retry Request", autoDismiss: false });
     }
   };
 
@@ -328,12 +337,7 @@ export const TaskComposer: FunctionComponent<TaskComposerProps> = ({
           </div>
 
           <div data-composer-stagger className="mt-auto flex flex-col gap-3 pt-2">
-            {state.submitError && (
-              <div className="flex items-start gap-3 rounded-2xl bg-red-500/[0.05] border border-red-500/20 p-4 text-sm text-red-600 dark:text-red-400">
-                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-                <div className="leading-relaxed font-medium">{state.submitError}</div>
-              </div>
-            )}
+            <ActionFeedbackRegion status={feedback.status} message={feedback.message} onDismiss={clearFeedback} autoDismiss={feedback.autoDismiss} retryAction={feedback.retryAction} retryLabel={feedback.retryLabel} />
             <Tooltip
               content={!state.isValid ? "Please fix the validation errors before submitting." : null}
               position="top"
