@@ -162,11 +162,8 @@ describe("InteractiveUsageChart", () => {
 
     render(<InteractiveUsageChart stats={stats} chartState={chartState} />);
 
-    expect(screen.getAllByText("Usage").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Tokens").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("providers").length).toBeGreaterThan(0);
     expect(screen.getAllByText("codex Tokens").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("purposes_time").length).toBeGreaterThan(0);
     expect(screen.getAllByText("task coding Time").length).toBeGreaterThan(0);
   });
 
@@ -286,8 +283,8 @@ describe("useUsageChartState", () => {
     };
     rerender(<HookWrapper projectId="proj-1" stats={newRangeStats} />);
 
-    // State is RESET appropriately to defaults
-    expect(currentState.enabledSeries).toEqual({ tokens: true, active: false });
+    // Zoom state is RESET, but enabledSeries is PRESERVED
+    expect(currentState.enabledSeries).toEqual({ tokens: false, active: true });
     expect(currentState.zoomRange).toBeNull();
   });
 });

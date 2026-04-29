@@ -76,7 +76,7 @@ export const InteractiveUsageChart: FunctionComponent<{
   const [dimensions, setDimensions] = useState({ width: 1200, height: 540 });
 
   useLayoutEffect(() => {
-    if (!svgContainerRef.current) return;
+    if (!svgContainerRef.current || typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (entry && entry.contentRect.width > 0) {

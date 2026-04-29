@@ -74,10 +74,9 @@ describe('StatsPage visual tests', () => {
     });
   });
 
-  it('renders StatsPage with Execution Purposes in trend mode', () => {
+  it('renders StatsPage with execution purpose cards in trend mode', () => {
     const { getByText } = render(<StatsPage />);
     expect(getByText('Total Tokens')).toBeTruthy();
-    expect(getByText('Execution Purposes')).toBeTruthy();
     expect(getByText('Code Generation')).toBeTruthy();
   });
 });

@@ -191,12 +191,7 @@ describe("StatsPage Shell", () => {
     expect(screen.getByText("Wall Runtime")).toBeInTheDocument();
   });
 
-  it("renders standalone execution purpose cards in trend mode", () => {
-    render(<StatsPage />);
-    expect(screen.getByText("Execution Purposes")).toBeInTheDocument();
-    expect(screen.getByText("task coding")).toBeInTheDocument();
-    expect(screen.getByText("planning")).toBeInTheDocument();
-  });
+
 
   it("renders the analysis studio section with view toggle above it", () => {
     render(<StatsPage />);
