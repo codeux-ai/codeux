@@ -1,4 +1,6 @@
-import { PlanningPayloadValidator, type PlannedSprintPayload } from "./planning-payload-validator.js";
+import { PlanningPayloadValidator } from "./planning-payload-validator.js";
+import type { PlannedSprintPayload } from "../contracts/project-management-types.js";
+
 export function extractJsonLikeBlock(bodyMarkdown: string): string {
   const trimmed = bodyMarkdown.trim();
 

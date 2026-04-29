@@ -1,19 +1,4 @@
-import type { TaskExecutorType, TaskPriority } from "../contracts/project-management-types.js";
-
-export interface PlannedTaskDraft {
-  key: string;
-  title: string;
-  description: string;
-  promptMarkdown: string;
-  priority?: TaskPriority;
-  executorType?: TaskExecutorType;
-  dependsOn?: string[];
-}
-
-export interface PlannedSprintPayload {
-  goal: string;
-  tasks: PlannedTaskDraft[];
-}
+import type { TaskExecutorType, TaskPriority, PlannedTaskDraft, PlannedSprintPayload } from "../contracts/project-management-types.js";
 
 export class PlanningPayloadValidator {
   private static readonly REQUIRED_PROMPT_SECTIONS = [
@@ -32,8 +17,11 @@ export class PlanningPayloadValidator {
       throw new Error("Planning payload must be an object.");
     }
 
-    // Support legacy 'subtasks' alias for 'tasks'
-    const rawTasks = payload.tasks || payload.subtasks;
+    if ("subtasks" in payload) {
+      throw new Error("Planning payload uses legacy 'subtasks' field. Must use 'tasks'.");
+    }
+
+    const rawTasks = payload.tasks;
     if (!Array.isArray(rawTasks)) {
       throw new Error("Planning payload 'tasks' must be an array.");
     }
@@ -80,16 +68,28 @@ export class PlanningPayloadValidator {
   }
 
   private normalizeTask(raw: any, index: number): PlannedTaskDraft {
-    // Support legacy aliases: id, name for key
-    const key = String(raw.key || raw.id || raw.name || `T${String(index + 1).padStart(2, "0")}`);
-    
-    // Support name for title
-    const title = String(raw.title || raw.name || `Task ${index + 1}`);
-    
-    const description = String(raw.description || title);
-    
-    // Support prompt, instructions for promptMarkdown
-    const promptMarkdown = String(raw.promptMarkdown || raw.prompt || raw.instructions || "");
+    const legacyAliases = ["id", "name", "prompt", "instructions", "depends_on", "dependencies"];
+    for (const alias of legacyAliases) {
+      if (alias in raw) {
+        throw new Error(`Task at index ${index} uses legacy field '${alias}'.`);
+      }
+    }
+
+    if (typeof raw.key !== "string") {
+      throw new Error(`Task at index ${index} must have a 'key' of type string.`);
+    }
+
+    if (typeof raw.title !== "string") {
+      throw new Error(`Task "${raw.key}" must have a 'title' of type string.`);
+    }
+
+    if (typeof raw.description !== "string") {
+      throw new Error(`Task "${raw.key}" must have a 'description' of type string.`);
+    }
+
+    if (typeof raw.promptMarkdown !== "string") {
+      throw new Error(`Task "${raw.key}" must have a 'promptMarkdown' of type string.`);
+    }
     
     let priority = raw.priority;
     if (priority) {
@@ -120,22 +120,25 @@ export class PlanningPayloadValidator {
       executorType = "auto";
     }
 
-    // Support depends_on, dependencies for dependsOn
-    const dependsOnRaw = raw.dependsOn || raw.depends_on || raw.dependencies || [];
-    const dependsOn: string[] = [];
-    if (Array.isArray(dependsOnRaw)) {
-      for (const k of dependsOnRaw) {
-        dependsOn.push(String(k));
+    const dependsOnRaw = raw.dependsOn;
+    if (dependsOnRaw !== undefined) {
+      if (!Array.isArray(dependsOnRaw)) {
+        throw new Error(`Task "${raw.key}" 'dependsOn' must be an array of strings.`);
       }
-    } else if (typeof dependsOnRaw === "string") {
-      dependsOn.push(dependsOnRaw);
+      for (const k of dependsOnRaw) {
+        if (typeof k !== "string") {
+          throw new Error(`Task "${raw.key}" 'dependsOn' must be an array of strings. Found non-string dependency.`);
+        }
+      }
     }
 
+    const dependsOn = dependsOnRaw || [];
+
     return {
-      key,
-      title,
-      description,
-      promptMarkdown,
+      key: raw.key,
+      title: raw.title,
+      description: raw.description,
+      promptMarkdown: raw.promptMarkdown,
       priority: priority as TaskPriority,
       executorType: executorType as TaskExecutorType,
       dependsOn
