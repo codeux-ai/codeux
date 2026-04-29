@@ -156,7 +156,7 @@ export const InteractiveUsageChart: FunctionComponent<{
     paths.forEach((path) => {
       const length = path.getTotalLength();
       gsap.set(path, { strokeDasharray: `${length} ${length}`, strokeDashoffset: length });
-      timeline.to(path, { strokeDashoffset: 0, duration: 1.05, ease: "power3.out" }, 0);
+      timeline.to(path, { strokeDashoffset: 0, duration: 1.05, ease: "power3.out", clearProps: "strokeDashoffset,strokeDasharray" }, 0);
     });
     timeline.to(areas, { opacity: (_index, target) => Number((target as SVGPathElement).dataset.areaOpacity || "0.3"), duration: 0.7, stagger: 0.08, ease: "power2.out" }, 0.18);
     timeline.to(pointsNodes, { opacity: 1, scale: 1, duration: 0.38, stagger: 0.012, ease: "back.out(1.8)" }, 0.3);
@@ -349,7 +349,7 @@ export const InteractiveUsageChart: FunctionComponent<{
                         stroke="white"
                         strokeWidth={hoveredIndex === index ? 2 : 0}
                         fillOpacity={hoveredIndex === null || hoveredIndex === index ? 1 : 0.4}
-                        className="transition-all duration-200"
+                        style={{ transition: 'r 0.2s, fill-opacity 0.2s, stroke-width 0.2s' }}
                       />
                     ))
                   ))}
