@@ -17,6 +17,20 @@ export interface StructuredProviderResult<T> {
   bodyMarkdown: string;
 }
 
+export class ProviderTransportError extends Error {
+  constructor(message: string, public readonly attempt: number) {
+    super(message);
+    this.name = "ProviderTransportError";
+  }
+}
+
+export class ProviderEmptyOutputError extends Error {
+  constructor(message: string, public readonly attempt: number) {
+    super(message);
+    this.name = "ProviderEmptyOutputError";
+  }
+}
+
 export interface StructuredProviderResponseServiceDeps {
   providerExecutionService: ProviderExecutionService;
   executionRepository?: ExecutionRepository;
@@ -56,12 +70,22 @@ export class StructuredProviderResponseService {
       });
 
       bodyMarkdown = result.text?.trim() || "";
-      if (!result.ok || !bodyMarkdown) {
-        if (attempt === 0) {
-          throw new Error(`Virtual ${args.providerLabel} worker failed: ${result.stderr || result.stdout}`);
-        } else {
-          throw new Error(`Virtual ${args.providerLabel} worker JSON retry returned no usable output.`);
-        }
+      if (!result.ok) {
+        throw new ProviderTransportError(
+          attempt === 0
+            ? `Virtual ${args.providerLabel} worker failed: ${result.stderr || result.stdout}`
+            : `Virtual ${args.providerLabel} worker JSON retry failed.`,
+          attempt
+        );
+      }
+
+      if (!bodyMarkdown) {
+         throw new ProviderEmptyOutputError(
+          attempt === 0
+            ? `Virtual ${args.providerLabel} worker returned empty output.`
+            : `Virtual ${args.providerLabel} worker JSON retry returned no usable output.`,
+          attempt
+        );
       }
 
       nativeSessionId = result.nativeSessionId || continueSessionId || null;
