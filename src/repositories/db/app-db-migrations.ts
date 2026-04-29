@@ -17,6 +17,30 @@ export function ensureUniqueIndex(db: DatabaseAdapter, indexName: string, tableN
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ${indexName} ON ${tableName} (${columns})`);
 }
 
+export function backfillEstimatedDockerCliUsage(db: DatabaseAdapter): void {
+  db.prepare(`
+    UPDATE provider_invocations
+    SET
+      input_tokens = CAST((prompt_chars + 3) / 4 AS INTEGER),
+      cached_input_tokens = 0,
+      output_tokens = CAST((transcript_chars + 3) / 4 AS INTEGER),
+      reasoning_output_tokens = 0,
+      total_tokens = CAST((prompt_chars + 3) / 4 AS INTEGER) + CAST((transcript_chars + 3) / 4 AS INTEGER),
+      usage_source = 'estimated',
+      raw_usage_json = COALESCE(raw_usage_json, ?),
+      updated_at = STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'now')
+    WHERE provider IN ('gemini', 'codex', 'claude-code')
+      AND execution_mode = 'DOCKER'
+      AND usage_source = 'unavailable'
+      AND status IN ('completed', 'failed')
+      AND total_tokens = 0
+      AND (prompt_chars > 0 OR transcript_chars > 0)
+  `).run(JSON.stringify({
+    source: "migration:estimated-docker-cli-usage",
+    heuristic: "ceil(chars/4)",
+  }));
+}
+
 export function runMigrations(db: DatabaseAdapter): void {
   // We can group future schema changes here.
   // The current phase 1 approach calls schema definitions directly, but these ensure*
@@ -108,4 +132,6 @@ export function runMigrations(db: DatabaseAdapter): void {
   ensureIndex(db, "idx_project_attention_items_dispatch_status", "project_attention_items", "dispatch_id, status, opened_at DESC");
   ensureIndex(db, "idx_sprint_preview_sessions_project_updated", "sprint_preview_sessions", "project_id, updated_at DESC");
   ensureIndex(db, "idx_sprint_preview_sessions_sprint", "sprint_preview_sessions", "sprint_id, updated_at DESC");
+
+  backfillEstimatedDockerCliUsage(db);
 }

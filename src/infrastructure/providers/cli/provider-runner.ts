@@ -10,6 +10,9 @@ import { randomUUID } from "crypto";
 import { getRepoSprintOsPath } from "../../../shared/config/sprint-os-paths.js";
 import { collectProviderUsageTelemetry, type ProviderUsageTelemetry } from "./provider-usage.js";
 
+const CONTAINER_WORKSPACE_ROOT = "/workspace";
+const CONTAINER_RUNTIME_HOME = pathPosix.join(CONTAINER_WORKSPACE_ROOT, ".sprint-os-home");
+
 export type ProviderCommandSpec = (model: string, prompt: string) => { command: string; args: string[] };
 
 export interface ProviderRunResult extends CommandResult {
@@ -198,8 +201,11 @@ export class ProviderRunner implements IProviderRunner {
         result = await runCmd();
       }
       const capturedText = input.codexOutputPath
-        ? (await fs.readFile(input.codexOutputPath, "utf8").catch(() => "")).trim()
+        ? await this.readProviderOutputPath(cwd, input.codexOutputPath, workflowSettings.executionMode)
         : "";
+      const claudeSessionJsonl = provider === "claude-code" && nativeSessionId
+        ? await this.readClaudeSessionJsonl(cwd, nativeSessionId, workflowSettings.executionMode)
+        : null;
       const usageTelemetry = await collectProviderUsageTelemetry({
         provider,
         model,
@@ -209,6 +215,7 @@ export class ProviderRunner implements IProviderRunner {
         stderr: result.stderr,
         capturedText,
         nativeSessionId,
+        claudeSessionJsonl,
       });
       return {
         ...result,
@@ -224,6 +231,37 @@ export class ProviderRunner implements IProviderRunner {
         }
       }
     }
+  }
+
+  private async readProviderOutputPath(
+    cwd: string,
+    outputPath: string,
+    executionMode: CliWorkflowSettings["executionMode"],
+  ): Promise<string> {
+    if (executionMode === "DOCKER" && outputPath.startsWith(`${CONTAINER_WORKSPACE_ROOT}/`)) {
+      return ((await this.dockerRunner.readWorkspaceFile?.(cwd, outputPath).catch(() => null)) || "").trim();
+    }
+
+    return (await fs.readFile(outputPath, "utf8").catch(() => "")).trim();
+  }
+
+  private async readClaudeSessionJsonl(
+    cwd: string,
+    nativeSessionId: string,
+    executionMode: CliWorkflowSettings["executionMode"],
+  ): Promise<string | null> {
+    if (executionMode !== "DOCKER") {
+      return null;
+    }
+
+    const sessionPath = pathPosix.join(
+      CONTAINER_RUNTIME_HOME,
+      ".claude",
+      "projects",
+      CONTAINER_WORKSPACE_ROOT.replaceAll(pathPosix.sep, "-"),
+      `${nativeSessionId}.jsonl`,
+    );
+    return (await this.dockerRunner.readWorkspaceFile?.(cwd, sessionPath).catch(() => null)) || null;
   }
 
   private buildCommandSpec(

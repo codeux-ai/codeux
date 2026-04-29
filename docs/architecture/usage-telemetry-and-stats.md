@@ -64,6 +64,7 @@ Rollups are exposed in:
 Gemini CLI runs with structured JSON output enabled.
 
 Sprint OS reads provider-reported token counts directly from the JSON response stats block and treats them as `reported`.
+When Gemini runs in native MCP mode, the CLI returns plain text instead of the structured stats envelope. Those invocations are still tracked by estimating input and output tokens from the prompt and transcript text, so Docker-backed MCP runs do not remain `unavailable`.
 
 ### Codex
 
@@ -76,6 +77,7 @@ Sprint OS first looks for `token_count` JSONL events. If those are missing, it f
 Claude Code runs with a generated native `--session-id`.
 
 Sprint OS reads usage from the persisted Claude session JSONL artifact under `~/.claude/projects/...`. If usage is absent, it falls back to token estimation using `@anthropic-ai/tokenizer` over the prompt plus recovered transcript text.
+For Docker-backed Claude Code runs, Sprint OS reads the same session JSONL from the isolated workspace runtime home (`/workspace/.sprint-os-home`) before the Docker volume is cleaned up.
 
 ### Jules
 
@@ -104,6 +106,8 @@ Usage data now appears in two read models:
   - task and sprint execution summaries now include usage rollups
 - `GET /api/projects/:projectId/stats?window=24h|7d|30d|all|custom&from=YYYY-MM-DD&to=YYYY-MM-DD`
   - project-scoped statistics snapshot for the Stats page
+
+Historical Docker-backed CLI invocations that were persisted as `unavailable` before container telemetry fallback support are backfilled at startup when they have prompt or transcript character counts. The backfill marks them as `estimated` using the same conservative character heuristic, preserving rows that already have provider-reported or provider-specific estimated usage.
 
 The stats snapshot includes:
 

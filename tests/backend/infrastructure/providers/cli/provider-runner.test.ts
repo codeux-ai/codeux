@@ -86,5 +86,51 @@ describe("ProviderRunner", () => {
       "/workspace/provider-last-message-session-1.txt",
     );
     expect(result.text).toBe("captured text");
+    expect(result.usageTelemetry.transcriptText).toBe("captured text");
+  });
+
+  it("collects Claude usage from the isolated workspace session artifact", async () => {
+    dockerRunner.readWorkspaceFile = vi.fn(async (_cwd: string, targetPath: string) => {
+      if (targetPath.includes("/.claude/projects/-workspace/native-123.jsonl")) {
+        return JSON.stringify({
+          message: {
+            usage: {
+              input_tokens: 12,
+              cache_creation_input_tokens: 3,
+              cache_read_input_tokens: 4,
+              output_tokens: 8,
+            },
+            content: [{ type: "text", text: "Finished in container." }],
+          },
+        });
+      }
+      return null;
+    });
+
+    const result = await runner.runProvider({
+      provider: "claude-code",
+      prompt: "continue",
+      cwd: "/repo",
+      model: "sonnet",
+      apiKey: "key",
+      sessionId: "session-1",
+      continueSessionId: "native-123",
+      workflowSettings: { executionMode: "DOCKER" } as any,
+      repoPath: "/repo",
+      onActivity: vi.fn(),
+    });
+
+    expect(dockerRunner.readWorkspaceFile).toHaveBeenCalledWith(
+      "docker-volume://workspace-1",
+      "/workspace/.sprint-os-home/.claude/projects/-workspace/native-123.jsonl",
+    );
+    expect(result.usageTelemetry).toMatchObject({
+      inputTokens: 12,
+      cachedInputTokens: 7,
+      outputTokens: 8,
+      totalTokens: 20,
+      usageSource: "reported",
+      transcriptText: "Finished in container.",
+    });
   });
 });

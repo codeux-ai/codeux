@@ -48,6 +48,27 @@ describe("collectProviderUsageTelemetry", () => {
     });
   });
 
+  it("estimates Gemini token usage when structured stats are unavailable", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "gemini",
+      model: "default",
+      prompt: "Summarize the diff.",
+      cwd: "/workspace/repo",
+      stdout: "Applied the edit without JSON stats.",
+      stderr: "",
+    });
+
+    expect(result).toMatchObject({
+      cachedInputTokens: 0,
+      reasoningOutputTokens: 0,
+      usageSource: "estimated",
+      transcriptText: "Applied the edit without JSON stats.",
+    });
+    expect(result.inputTokens).toBeGreaterThan(0);
+    expect(result.outputTokens).toBeGreaterThan(0);
+    expect(result.totalTokens).toBe(result.inputTokens + result.outputTokens);
+  });
+
   it("parses provider-reported Codex token usage from JSONL output", async () => {
     const result = await collectProviderUsageTelemetry({
       provider: "codex",
@@ -151,6 +172,41 @@ describe("collectProviderUsageTelemetry", () => {
       usageSource: "reported",
       transcriptText: "Implemented the requested fix.",
       nativeSessionId: sessionId,
+    });
+  });
+
+  it("parses Claude container session artifacts for reported usage", async () => {
+    const result = await collectProviderUsageTelemetry({
+      provider: "claude-code",
+      model: "claude-sonnet-4-6",
+      prompt: "Resolve the merge conflict.",
+      cwd: "docker-volume://workspace-1",
+      stdout: "",
+      stderr: "",
+      nativeSessionId: "container-native-1",
+      claudeSessionJsonl: [
+        JSON.stringify({
+          message: {
+            usage: {
+              input_tokens: 44,
+              cache_creation_input_tokens: 5,
+              cache_read_input_tokens: 6,
+              output_tokens: 22,
+            },
+            content: [{ type: "text", text: "Container fix complete." }],
+          },
+        }),
+      ].join("\n"),
+    });
+
+    expect(result).toMatchObject({
+      inputTokens: 44,
+      cachedInputTokens: 11,
+      outputTokens: 22,
+      totalTokens: 66,
+      usageSource: "reported",
+      transcriptText: "Container fix complete.",
+      nativeSessionId: "container-native-1",
     });
   });
 });
