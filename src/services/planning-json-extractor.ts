@@ -1,3 +1,4 @@
+import { PlanningPayloadValidator, type PlannedSprintPayload } from "./planning-payload-validator.js";
 export function extractJsonLikeBlock(bodyMarkdown: string): string {
   const trimmed = bodyMarkdown.trim();
 
@@ -170,4 +171,18 @@ export function extractJsonLikeBlock(bodyMarkdown: string): string {
   }
 
   return trimmed;
+}
+
+
+export function parsePlannedSprintReply(bodyMarkdown: string): PlannedSprintPayload {
+  const rawJson = extractJsonLikeBlock(bodyMarkdown);
+  let payload: any;
+  try {
+    payload = JSON.parse(rawJson);
+  } catch (error) {
+    throw new Error("Planning agent reply was not valid JSON.");
+  }
+
+  const validator = new PlanningPayloadValidator();
+  return validator.validate(payload);
 }

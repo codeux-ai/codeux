@@ -23,8 +23,8 @@ import { DockerRunner } from "../infrastructure/providers/cli/docker-runner.js";
 import { WorkspaceManager } from "../infrastructure/providers/cli/workspace-manager.js";
 import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
-import { extractJsonLikeBlock } from "./planning-json-extractor.js";
-import { PlanningPayloadValidator, type PlannedSprintPayload, type PlannedTaskDraft } from "./planning-payload-validator.js";
+import { extractJsonLikeBlock, parsePlannedSprintReply } from "./planning-json-extractor.js";
+import type { PlannedSprintPayload, PlannedTaskDraft } from "./planning-payload-validator.js";
 import { ProviderExecutionService } from "./provider-execution-service.js";
 import { StructuredAgentRequestService, type StructuredAgentRequestResult } from "./structured-agent-request-service.js";
 import { StructuredProviderResponseService } from "./structured-provider-response-service.js";
@@ -74,7 +74,6 @@ export class PlanningAgentService {
   private readonly providerExecutionService: ProviderExecutionService;
   private readonly structuredAgentRequestService: StructuredAgentRequestService;
   private readonly workspaceManager = new WorkspaceManager();
-  private readonly validator = new PlanningPayloadValidator();
 
   constructor(private readonly deps: PlanningAgentServiceDeps) {
     this.providerRunner = deps.providerRunner || new ProviderRunner(new DockerRunner());
@@ -278,7 +277,7 @@ export class PlanningAgentService {
         rawPrompt: prompt,
         overrides: options.overrides,
         signal,
-        parseFn: (bodyMarkdown) => this.parsePlannedSprintReply(bodyMarkdown),
+        parseFn: (bodyMarkdown) => parsePlannedSprintReply(bodyMarkdown),
         buildRetryPrompt: (lastError) => [
           "Your previous output could not be parsed as valid JSON.",
           `Parse error: ${lastError.message}`,
@@ -681,23 +680,6 @@ export class PlanningAgentService {
       "Return JSON only with this exact shape and no surrounding commentary:",
       '{"goal":"Optional refined sprint goal","tasks":[{"key":"T01","title":"Task title","description":"Short intent","promptMarkdown":"## Objective\\n...\\n\\n## Scope\\n- ...\\n\\n## Implementation Requirements\\n1. ...\\n\\n## Constraints\\n- ...\\n\\n## Verification\\n- ...","priority":"medium","executorType":"auto","dependsOn":[]}]}',
     ].join("\n");
-  }
-
-  private parsePlannedSprintReply(bodyMarkdown: string): PlannedSprintPayload {
-    const rawJson = extractJsonLikeBlock(bodyMarkdown);
-    let payload: any;
-    try {
-      payload = JSON.parse(rawJson);
-    } catch (error) {
-      this.deps.logger?.warn("Failed to parse Planning agent reply JSON", {
-        bodyMarkdown,
-        rawJson,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      throw new Error("Planning agent reply was not valid JSON.");
-    }
-
-    return this.validator.validate(payload);
   }
 
   private parseJsonReply<T>(bodyMarkdown: string): T {

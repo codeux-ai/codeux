@@ -33,7 +33,7 @@ export class PlanningPayloadValidator {
     }
 
     // Support legacy 'subtasks' alias for 'tasks'
-    const rawTasks = payload.tasks || payload.subtasks || [];
+    const rawTasks = payload.tasks || payload.subtasks;
     if (!Array.isArray(rawTasks)) {
       throw new Error("Planning payload 'tasks' must be an array.");
     }
@@ -62,6 +62,9 @@ export class PlanningPayloadValidator {
       // Validate dependsOn references only previously defined tasks (DAG order)
       if (normalizedTask.dependsOn) {
         for (const depKey of normalizedTask.dependsOn) {
+          if (depKey === normalizedTask.key) {
+            throw new Error(`Task "${normalizedTask.key}" cannot depend on itself.`);
+          }
           if (!seenKeys.has(depKey)) {
             throw new Error(`Task "${normalizedTask.key}" depends on "${depKey}" which is missing or defined later. Forward references are not allowed.`);
           }
