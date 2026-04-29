@@ -25,6 +25,7 @@ import { resolveAgentMemoryInstructions } from "./agent-memory-instructions.js";
 import { resolveProviderForInvocation } from "./provider-routing.js";
 import { extractJsonLikeBlock, parsePlannedSprintReply } from "./planning-json-extractor.js";
 import type { PlannedSprintPayload, PlannedTaskDraft } from "../contracts/project-management-types.js";
+import { persistPlannedTasks } from "./planning-task-persistence.js";
 import { ProviderExecutionService } from "./provider-execution-service.js";
 import { StructuredAgentRequestService, type StructuredAgentRequestResult } from "./structured-agent-request-service.js";
 import { StructuredProviderResponseService } from "./structured-provider-response-service.js";
@@ -323,35 +324,12 @@ export class PlanningAgentService {
       });
     }
 
-    const createdTaskIds: string[] = [];
-    const taskIdsByKey = new Map<string, string>();
-    for (let index = 0; index < payload.tasks.length; index += 1) {
-      const task = payload.tasks[index]!;
-      const dependsOnTaskIds: string[] = [];
-      for (const dependencyKey of (task.dependsOn || [])) {
-        const dependencyId = taskIdsByKey.get(dependencyKey);
-        if (!dependencyId) {
-          throw new Error(`Planning agent returned dependency "${dependencyKey}" before defining it.`);
-        }
-        dependsOnTaskIds.push(dependencyId);
-      }
-
-      const created = this.deps.projectManagementRepository.createTask(projectId, {
-        sprintId,
-        taskKey: task.key,
-        title: task.title,
-        description: task.description,
-        promptMarkdown: task.promptMarkdown,
-        priority: task.priority || "medium",
-        executorType: task.executorType || "auto",
-        dependsOnTaskIds,
-        sortOrder: index,
-        status: "pending",
-        isIndependent: dependsOnTaskIds.length === 0,
-      });
-      createdTaskIds.push(created.id);
-      taskIdsByKey.set(task.key, created.id);
-    }
+    const { createdTaskIds } = persistPlannedTasks(
+      projectId,
+      sprintId,
+      payload.tasks,
+      this.deps.projectManagementRepository,
+    );
 
     const titles: string[] = [];
     for (const t of payload.tasks) {
