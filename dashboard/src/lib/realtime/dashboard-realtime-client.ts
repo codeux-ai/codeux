@@ -23,6 +23,8 @@ class DashboardRealtimeClient {
   private lastSequence: number | null = null;
   private readonly subscriptions = new Map<number, RealtimeSubscription>();
   private nextSubscriptionId = 1;
+  private subscriptionSyncTimer: number | null = null;
+  private lastSentScopesKey = "";
   private snapshotRequiredLastDispatchedAt: number = 0;
   private readonly SNAPSHOT_REQUIRED_COOLDOWN_MS = 3000;
   private transportState: TransportState = "disconnected";
@@ -38,11 +40,11 @@ class DashboardRealtimeClient {
       transportListener(this.transportState);
     }
     this.ensureConnected();
-    this.syncSubscriptions();
+    this.scheduleSubscriptionSync();
 
     return () => {
       this.subscriptions.delete(subscriptionId);
-      this.syncSubscriptions();
+      this.scheduleSubscriptionSync();
       if (this.subscriptions.size === 0) {
         this.disconnect();
       }
@@ -62,7 +64,7 @@ class DashboardRealtimeClient {
     socket.addEventListener("open", () => {
       this.reconnectAttempt = 0;
       this.setTransportState("connected");
-      this.syncSubscriptions();
+      this.scheduleSubscriptionSync();
     });
 
     socket.addEventListener("message", (event) => {
@@ -82,6 +84,7 @@ class DashboardRealtimeClient {
     socket.addEventListener("close", () => {
       if (this.socket === socket) {
         this.socket = null;
+        this.lastSentScopesKey = "";
         if (this.subscriptions.size === 0) {
           this.setTransportState("disconnected");
         }
@@ -119,6 +122,16 @@ class DashboardRealtimeClient {
     }
   }
 
+  private scheduleSubscriptionSync(): void {
+    if (this.subscriptionSyncTimer !== null) {
+      window.clearTimeout(this.subscriptionSyncTimer);
+    }
+    this.subscriptionSyncTimer = window.setTimeout(() => {
+      this.subscriptionSyncTimer = null;
+      this.syncSubscriptions();
+    }, 25);
+  }
+
   private syncSubscriptions(): void {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       return;
@@ -127,6 +140,11 @@ class DashboardRealtimeClient {
     const scopes = [...new Set(
       [...this.subscriptions.values()].flatMap((subscription) => subscription.scopes),
     )];
+    const scopesKey = scopes.slice().sort().join("\u0000");
+    if (scopesKey === this.lastSentScopesKey) {
+      return;
+    }
+    this.lastSentScopesKey = scopesKey;
 
     this.socket.send(JSON.stringify({
       type: "set_subscriptions",
@@ -150,6 +168,11 @@ class DashboardRealtimeClient {
 
   private disconnect(): void {
     this.clearReconnectTimer();
+    if (this.subscriptionSyncTimer !== null) {
+      window.clearTimeout(this.subscriptionSyncTimer);
+      this.subscriptionSyncTimer = null;
+    }
+    this.lastSentScopesKey = "";
     if (this.socket) {
       this.socket.close();
       this.socket = null;

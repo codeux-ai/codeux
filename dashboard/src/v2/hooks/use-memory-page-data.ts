@@ -8,7 +8,8 @@ export function useMemoryPageData(
     activeScope: MemoryScope,
     activeTier: string,
     selectedSprintId?: string,
-    selectedAgentPresetId?: string
+    selectedAgentPresetId?: string,
+    enabled = true
 ) {
     const [loading, setLoading] = useState(true);
     const [records, setRecords] = useState<MemoryRecord[]>([]);
@@ -24,7 +25,7 @@ export function useMemoryPageData(
     const [graphData, setGraphData] = useState<{ graph: GraphMetadata; map: EmbeddingMapResult | null } | null>(null);
 
     const loadData = useCallback(async () => {
-        if (!pid) return;
+        if (!pid || !enabled) return;
         setLoading(true);
         try {
             const memoryParams: { projectId: string; scope: MemoryScope; sprintId?: string; agentPresetId?: string; limit: number } = {
@@ -58,7 +59,7 @@ export function useMemoryPageData(
             setGraphData({ graph, map: mapData });
         } catch { /* ignore */ }
         setLoading(false);
-    }, [pid, activeScope, activeTier, selectedSprintId, selectedAgentPresetId]);
+    }, [pid, activeScope, activeTier, selectedSprintId, selectedAgentPresetId, enabled]);
 
     useEffect(() => { loadData(); }, [loadData]);
 

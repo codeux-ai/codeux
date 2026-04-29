@@ -200,7 +200,7 @@ export const SprintLedger: FunctionComponent<SprintLedgerProps> = ({
       />
 
       {/* Table */}
-      <div className="overflow-x-auto min-h-[20rem]">
+      <div className="min-h-[20rem]">
         <table className="min-w-full text-left">
           <thead>
             <tr className="border-b border-black/[0.06] text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:border-white/[0.06]">

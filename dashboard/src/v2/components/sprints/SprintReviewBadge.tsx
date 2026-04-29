@@ -31,16 +31,38 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
     );
   }
 
-  const tooltipAlignment = align === "left"
+  const [dynamicAlign, setDynamicAlign] = useState<"left" | "center" | "right">(align);
+
+  const handleMouseEnter = (e: MouseEvent) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const tooltipWidth = summary.findings && summary.findings.length > 0 ? 680 : 320;
+
+    const spaceRight = window.innerWidth - rect.left;
+    const spaceLeft = rect.right;
+
+    if (spaceRight < tooltipWidth && spaceLeft >= tooltipWidth) {
+      setDynamicAlign("right");
+    } else if (spaceLeft < tooltipWidth && spaceRight >= tooltipWidth) {
+      setDynamicAlign("left");
+    } else {
+      setDynamicAlign(align);
+    }
+  };
+
+  const tooltipAlignment = dynamicAlign === "left"
     ? "left-0"
-    : align === "right"
+    : dynamicAlign === "right"
       ? "right-0"
       : "left-1/2 -translate-x-1/2";
 
   return (
     <div
       className="group/review relative inline-flex"
-      onMouseLeave={() => setFindingsOpen(false)}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => {
+        setFindingsOpen(false);
+        setDynamicAlign(align);
+      }}
     >
       <div
         className={`inline-flex items-center gap-1.5 rounded-full border border-signal-500/30 bg-gradient-to-r from-signal-500/15 via-signal-400/10 to-signal-500/15 backdrop-blur-md shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_0_12px_rgba(0,224,160,0.15)] text-signal-600 ${
@@ -52,10 +74,13 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
       </div>
 
       <div
-        className={`absolute bottom-full mb-3 hidden z-30 grid gap-4 rounded-[1.5rem] border border-black/[0.08] bg-white/92 backdrop-blur-2xl p-4 shadow-[0_20px_48px_rgba(15,23,42,0.16),0_0_0_1px_rgba(0,0,0,0.04)] opacity-0 translate-y-1 transition-all duration-300 ease-out group-hover/review:grid group-hover/review:opacity-100 group-hover/review:translate-y-0 dark:border-white/[0.08] dark:bg-void-800/92 before:absolute before:inset-x-0 before:top-0 before:h-[2px] before:bg-gradient-to-r before:from-signal-500 before:via-signal-400 before:to-signal-500 before:rounded-t-[1.5rem] ${
-          summary.findings && summary.findings.length > 0 ? "grid-cols-[20rem_18rem]" : "grid-cols-1 w-80"
-        } ${tooltipAlignment}`}
+        className={`absolute bottom-full pb-3 hidden z-[9999] opacity-0 translate-y-1 transition-all duration-300 ease-out group-hover/review:block group-hover/review:opacity-100 group-hover/review:translate-y-0 ${tooltipAlignment}`}
       >
+        <div
+          className={`relative grid gap-4 overflow-hidden rounded-[1.5rem] border border-black/[0.08] bg-white p-4 shadow-[0_20px_48px_rgba(15,23,42,0.16),0_0_0_1px_rgba(0,0,0,0.04)] before:absolute before:inset-x-0 before:top-0 before:h-[3px] before:bg-gradient-to-r before:from-signal-500 before:via-signal-400 before:to-signal-500 dark:border-white/[0.08] dark:bg-void-800 ${
+            summary.findings && summary.findings.length > 0 ? "grid-cols-[20rem_18rem]" : "grid-cols-1 w-80"
+          }`}
+        >
         <div className="flex flex-col gap-3 shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-signal-600 dark:text-signal-300">
@@ -108,6 +133,7 @@ export const SprintReviewBadge: FunctionComponent<SprintReviewBadgeProps> = ({
             </ul>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

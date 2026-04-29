@@ -200,8 +200,8 @@ export const TopNav: FunctionComponent<TopNavProps> = ({ isDark, toggleTheme, on
     const { data: sprints, selectedSprintId, selectedSprint, selectSprint, loading: sprintsLoading } = useSprints(selectedProject?.id || null);
     const projectId = selectedProject?.id || null;
 
-    const { tasks } = useProjectTasks(projectId, selectedProject ? [selectedProject] : [], sprints);
-    const { sessions } = usePreviewSessions({ projectId });
+    const { tasks } = useProjectTasks(projectId, selectedProject ? [selectedProject] : [], sprints, null, { enabled: isSearchOpen });
+    const { sessions } = usePreviewSessions({ projectId: isSearchOpen ? projectId : null, pollInterval: 0 });
 
     const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
 

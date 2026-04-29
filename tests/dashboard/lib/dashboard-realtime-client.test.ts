@@ -91,6 +91,7 @@ describe("dashboard-realtime-client", () => {
 
     firstSocket.emit("open");
     expect(transportSpy).toHaveBeenCalledWith("connected");
+    vi.advanceTimersByTime(25);
     expect(JSON.parse(firstSocket.sentMessages[0] || "{}")).toMatchObject({
       type: "set_subscriptions",
       scopes: ["overview"],
@@ -110,6 +111,7 @@ describe("dashboard-realtime-client", () => {
     const secondSocket = MockWebSocket.instances[1];
     expect(secondSocket).toBeDefined();
     secondSocket.emit("open");
+    vi.advanceTimersByTime(25);
 
     expect(JSON.parse(secondSocket.sentMessages[0] || "{}")).toMatchObject({
       type: "set_subscriptions",

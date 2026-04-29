@@ -97,7 +97,7 @@ export const LiveSessionPage: FunctionComponent = () => {
 
     const contentRef = useRef<HTMLDivElement>(null);
     const prefersReducedMotion = useReducedMotion();
-    const { selectedProjectId } = useProjectData();
+    const { selectedProjectId, loading: projectsLoading } = useProjectData();
     const {
         error,
         execution,
@@ -112,7 +112,7 @@ export const LiveSessionPage: FunctionComponent = () => {
         selectedSprintId,
         status,
         tasksWithLiveActivities,
-    } = useDashboardRuntimeData(selectedProjectId);
+    } = useDashboardRuntimeData(selectedProjectId, !projectsLoading && !!selectedProjectId);
     const realtimeProjectId = selectedProjectId || execution.projectId || status.project_id || null;
     const sprintScopeId = selectedSprintId || status.sprint_id || null;
     const { selectedSession } = usePreviewSessions({

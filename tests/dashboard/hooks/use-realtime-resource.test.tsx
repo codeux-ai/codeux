@@ -125,6 +125,30 @@ describe("useRealtimeResource", () => {
     expect(getByTestId("data-id").textContent).toBe("1");
   });
 
+  it("keeps the public refetch callback stable across data updates", async () => {
+    const seenRefetches: Array<ReturnType<typeof useRealtimeResource>["refetch"]> = [];
+    const fetchResource = vi.fn().mockResolvedValue({ id: "fetched" });
+    const initialData = { id: "initial" };
+
+    function RefetchIdentityComponent() {
+      const { data, refetch } = useRealtimeResource({
+        initialData,
+        fetchResource,
+      });
+      seenRefetches.push(refetch);
+      return h("div", { "data-testid": "data-id" }, data.id);
+    }
+
+    const { getByTestId } = render(h(RefetchIdentityComponent, null));
+
+    await waitFor(() => {
+      expect(getByTestId("data-id").textContent).toBe("fetched");
+    });
+
+    expect(seenRefetches.length).toBeGreaterThan(1);
+    expect(new Set(seenRefetches).size).toBe(1);
+  });
+
   it("composes external abort signals", async () => {
     let internalSignal: AbortSignal | undefined;
     const fetchResource = vi.fn().mockImplementation(async (signal) => {
