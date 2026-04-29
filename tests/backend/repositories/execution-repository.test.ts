@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
@@ -24,6 +24,21 @@ async function createRepositories(): Promise<{
     connectionRepository: new ConnectionChatRepository(storage),
     executionRepository: new ExecutionRepository(storage),
     projectAttentionRepository: new ProjectAttentionRepository(storage),
+  };
+}
+
+async function createRepositoriesWithRealtimeNotifier(realtimeNotifier: {
+  scheduleProjectExecutionRefresh: (projectId: string, options?: { includeOverview?: boolean; includeProjects?: boolean }) => void;
+}): Promise<{
+  projectRepository: ProjectManagementRepository;
+  executionRepository: ExecutionRepository;
+}> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sprint-os-execution-repo-"));
+  tempDirs.push(dir);
+  const storage = new AppDbStorage(path.join(dir, "app.db"));
+  return {
+    projectRepository: new ProjectManagementRepository(storage),
+    executionRepository: new ExecutionRepository(storage, realtimeNotifier as any),
   };
 }
 
@@ -155,6 +170,97 @@ describe("ExecutionRepository", () => {
     });
     expect(paginatedList.length).toBe(1);
     expect(paginatedList[0]!.id).toBe(invocation2.id);
+  });
+
+  it("coalesces burst invocation message refreshes per project and escalates overview when required", async () => {
+    vi.useFakeTimers();
+    try {
+      const notifier = {
+        scheduleProjectExecutionRefresh: vi.fn(),
+      };
+      const { projectRepository, executionRepository } = await createRepositoriesWithRealtimeNotifier(notifier);
+      const project = projectRepository.createProject({
+        name: "Realtime Burst Project",
+        sourceType: "local",
+        sourceRef: "/workspace/realtime-burst-project",
+      });
+
+      const invocation = executionRepository.createExecutionInvocation({
+        projectId: project.id,
+        type: "planning",
+        status: "running",
+      });
+
+      for (let index = 0; index < 20; index += 1) {
+        executionRepository.appendExecutionInvocationMessage(invocation.id, {
+          role: "assistant",
+          contentMarkdown: `message-${index}`,
+        });
+      }
+      executionRepository.updateExecutionInvocation(invocation.id, {
+        status: "completed",
+        finishedAt: "2026-03-30T10:00:00.000Z",
+      });
+
+      expect(notifier.scheduleProjectExecutionRefresh).not.toHaveBeenCalled();
+
+      vi.runOnlyPendingTimers();
+      await Promise.resolve();
+
+      expect(notifier.scheduleProjectExecutionRefresh).toHaveBeenCalledTimes(1);
+      expect(notifier.scheduleProjectExecutionRefresh).toHaveBeenLastCalledWith(
+        project.id,
+        expect.objectContaining({ includeOverview: true }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not drop coalesced refreshes across projects", async () => {
+    vi.useFakeTimers();
+    try {
+      const notifier = {
+        scheduleProjectExecutionRefresh: vi.fn(),
+      };
+      const { projectRepository, executionRepository } = await createRepositoriesWithRealtimeNotifier(notifier);
+      const projectA = projectRepository.createProject({
+        name: "Project A",
+        sourceType: "local",
+        sourceRef: "/workspace/project-a",
+      });
+      const projectB = projectRepository.createProject({
+        name: "Project B",
+        sourceType: "local",
+        sourceRef: "/workspace/project-b",
+      });
+
+      executionRepository.createExecutionInvocation({
+        projectId: projectA.id,
+        type: "planning",
+        status: "running",
+      });
+      executionRepository.createExecutionInvocation({
+        projectId: projectB.id,
+        type: "planning",
+        status: "running",
+      });
+
+      vi.runOnlyPendingTimers();
+      await Promise.resolve();
+
+      expect(notifier.scheduleProjectExecutionRefresh).toHaveBeenCalledTimes(2);
+      expect(notifier.scheduleProjectExecutionRefresh).toHaveBeenCalledWith(
+        projectA.id,
+        expect.objectContaining({ includeOverview: true }),
+      );
+      expect(notifier.scheduleProjectExecutionRefresh).toHaveBeenCalledWith(
+        projectB.id,
+        expect.objectContaining({ includeOverview: true }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("filters task dispatches by complex options combinations", async () => {

@@ -289,3 +289,71 @@ describe("StructuredAgentRequestService", () => {
     expect(calls[1]?.[0].continueSessionId).toMatch(/test-claude-code-/); // Uses fallback generated session ID if no native session
   });
 });
+
+  it("re-throws ProviderTransportError correctly", async () => {
+    const mockProviderExecutionService = {
+      executeProvider: vi.fn().mockResolvedValue({
+        ok: false,
+        stderr: "network error",
+      }),
+    } as unknown as ProviderExecutionService;
+
+    const structuredProviderResponseService = new StructuredProviderResponseService({
+      providerExecutionService: mockProviderExecutionService,
+    });
+    const service = new StructuredAgentRequestService({
+      structuredProviderResponseService,
+    });
+
+    await expect(service.executeRequest({
+      projectId: "proj-1",
+      purpose: "planning",
+      type: "planning",
+      provider: "claude-code",
+      prompt: "initial prompt",
+      model: "model-1",
+      apiKey: "test-key",
+      sessionId: "session-1",
+      settings: {} as any,
+      maxRetries: 1,
+      providerPrompt: "initial prompt",
+      parseFn: (text) => JSON.parse(text),
+      buildRetryPrompt: () => "retry",
+      providerLabel: "Claude",
+      sessionIdPrefix: "test",
+    })).rejects.toThrow("Virtual Claude worker failed: network error");
+  });
+
+  it("re-throws ProviderEmptyOutputError correctly", async () => {
+    const mockProviderExecutionService = {
+      executeProvider: vi.fn().mockResolvedValue({
+        ok: true,
+        text: "",
+      }),
+    } as unknown as ProviderExecutionService;
+
+    const structuredProviderResponseService = new StructuredProviderResponseService({
+      providerExecutionService: mockProviderExecutionService,
+    });
+    const service = new StructuredAgentRequestService({
+      structuredProviderResponseService,
+    });
+
+    await expect(service.executeRequest({
+      projectId: "proj-1",
+      purpose: "planning",
+      type: "planning",
+      provider: "claude-code",
+      prompt: "initial prompt",
+      model: "model-1",
+      apiKey: "test-key",
+      sessionId: "session-1",
+      settings: {} as any,
+      maxRetries: 1,
+      providerPrompt: "initial prompt",
+      parseFn: (text) => JSON.parse(text),
+      buildRetryPrompt: () => "retry",
+      providerLabel: "Claude",
+      sessionIdPrefix: "test",
+    })).rejects.toThrow("Virtual Claude worker returned empty output.");
+  });

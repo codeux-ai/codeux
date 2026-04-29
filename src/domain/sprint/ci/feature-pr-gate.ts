@@ -24,7 +24,7 @@ import type {
 } from "../../../contracts/app-types.js";
 import type { ExecutionRepository } from "../../../repositories/execution-repository.js";
 import type { WorkerCiFixPayload } from "./feature-pr/ci-autofix-policy.js";
-import { isCompletedTaskAwaitingMerge, isCompletedTaskSettled, taskHasMergeEvidence, isTaskCodeComplete } from "../task-merge-state.js";
+import { evaluatePreCiGateTransition, isCompletedTaskAwaitingMerge, isTaskCodeComplete } from "../task-merge-state.js";
 import type { TaskQaMergeGateStatus } from "../../../services/quality-assurance-service.js";
 
 export interface CiGateContext {
@@ -58,26 +58,19 @@ export class FeaturePrGateService {
   async evaluateCiGate(subtasks: Subtask[], context: CiGateContext): Promise<CiGateResult> {
     const updatedSubtasks = [...subtasks];
     const tasksToPersist: Subtask[] = [];
-    for (const task of updatedSubtasks) {
-      const previousStatus = task.status;
-      const previousMergeIndicator = task.merge_indicator;
-      task.merge_indicator = task.is_merged
-        ? (task.merge_indicator === "AUTOMERGE" ? "AUTOMERGE" : "MERGED")
-        : task.merge_indicator === "MERGE_CONFLICT"
-          ? "MERGE_CONFLICT"
-          : taskHasMergeEvidence(task)
-            ? task.merge_indicator
-            : undefined;
-      if (task.status === "COMPLETED" && taskHasMergeEvidence(task) && !task.is_merged) {
-        task.status = "CODING_COMPLETED";
-      }
-      if (task.status === "CODING_COMPLETED" && isCompletedTaskSettled(task)) {
-        task.status = "COMPLETED";
-      }
-      if (task.status === "CODING_COMPLETED" || task.status === "COMPLETED") {
-        task.intervention_owner = undefined;
-        task.intervention_hint = undefined;
-      }
+    const transitionResults = updatedSubtasks.map((task) => ({
+      task,
+      previousStatus: task.status,
+      previousMergeIndicator: task.merge_indicator,
+      transition: evaluatePreCiGateTransition(task),
+    }));
+
+    for (const { task, previousStatus, previousMergeIndicator, transition } of transitionResults) {
+      task.status = transition.status;
+      task.merge_indicator = transition.merge_indicator;
+      task.intervention_owner = transition.intervention_owner;
+      task.intervention_hint = transition.intervention_hint;
+
       if (task.record_id && (task.status !== previousStatus || task.merge_indicator !== previousMergeIndicator)) {
         tasksToPersist.push(task);
       }

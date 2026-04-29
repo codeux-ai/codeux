@@ -30,6 +30,7 @@ User-facing chat threads show up with `scope === "project"`, while agent backgro
 When an invocation or its messages are created/updated, the server emits a project-scoped realtime event.
 - \`scheduleProjectExecutionRefresh(projectId, { includeOverview: true })\`: Triggered on major state changes like creation and status updates.
 - \`scheduleProjectExecutionRefresh(projectId, { includeOverview: false })\`: Triggered when appending messages to avoid heavy recalculations if only appending content.
+- Burst writes are coalesced in \`ExecutionRepository\` per project on the next tick. If any write in the burst requires overview refresh, the coalesced dispatch escalates to \`includeOverview: true\`.
 
 ## Startup Recovery
 

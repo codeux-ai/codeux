@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { WatchLoopRunner, evaluateSprintRunState } from "../../../src/domain/sprint/orchestrator/watch-loop-runner.js";
+import { decideMainMergeWaitOrPause, decideTerminalCompletion } from "../../../src/domain/sprint/orchestrator/watch-loop-policies.js";
 import { buildMockSettings } from "../../builders/settings-builder.js";
 import { buildMockSubtask } from "../../builders/subtask-builder.js";
 
@@ -1426,6 +1427,156 @@ describe("WatchLoopRunner", () => {
     expect(renderMainMergeFeedback).not.toHaveBeenCalled();
     expect(result.status).toBe("wait");
     expect(result.report).toContain("Sprint QA is still running");
+  });
+});
+
+describe("Watch Loop Policies", () => {
+  describe("decideMainMergeWaitOrPause", () => {
+    it("returns pause exit decision if main merge is blocked", () => {
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "Conflict",
+          state: "merge_conflict",
+          prNumber: 1,
+          prUrl: "url",
+          hasMergeConflict: true,
+          mergeStateStatus: "DIRTY",
+          hasFailedChecks: false,
+          hasPendingChecks: false,
+          hasReviewBlockers: false,
+          failedChecks: [],
+        },
+        attentionItems: [],
+        mainMergeMode: "WHEN_GREEN",
+        sprintNumber: 5,
+      });
+
+      expect(decision).toEqual({
+        status: "exit",
+        reportModifier: expect.stringContaining("Sprint Paused"),
+        terminalState: "paused",
+        pauseReason: "main_merge_blocked",
+        pausePayload: {
+          sprintNumber: 5,
+          mainMergeState: "merge_conflict",
+          prNumber: 1,
+          prUrl: "url",
+          hasMergeConflict: true,
+          attentionItemIds: [],
+          attentionTypes: [],
+        },
+      });
+    });
+
+    it("returns wait decision if main merge mode is WHEN_GREEN and state is pending_checks", () => {
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "",
+          state: "pending_checks",
+          prNumber: 1,
+          prUrl: "url",
+          hasMergeConflict: false,
+          mergeStateStatus: "CLEAN",
+          hasFailedChecks: false,
+          hasPendingChecks: true,
+          hasReviewBlockers: false,
+          failedChecks: [],
+        },
+        attentionItems: [],
+        mainMergeMode: "WHEN_GREEN",
+        sprintNumber: 5,
+      });
+
+      expect(decision).toEqual({
+        status: "wait",
+        reportModifier: expect.stringContaining("Sprint Still Active"),
+      });
+    });
+
+    it("returns null if not blocked and mainMergeMode is OFF", () => {
+      const decision = decideMainMergeWaitOrPause({
+        mergeFeedback: {
+          text: "",
+          state: "ready_for_merge",
+          prNumber: 1,
+          prUrl: "url",
+          hasMergeConflict: false,
+          mergeStateStatus: "CLEAN",
+          hasFailedChecks: false,
+          hasPendingChecks: false,
+          hasReviewBlockers: false,
+          failedChecks: [],
+        },
+        attentionItems: [],
+        mainMergeMode: "OFF",
+        sprintNumber: 5,
+      });
+
+      expect(decision).toBeNull();
+    });
+  });
+
+  describe("decideTerminalCompletion", () => {
+    it("returns failed decision if there are failed tasks", () => {
+      const decision = decideTerminalCompletion({
+        subtasks: [buildMockSubtask({ status: "FAILED" })],
+        manualMergeTasks: [],
+      });
+
+      expect(decision).toEqual({
+        status: "continue",
+        terminalState: "failed",
+        failedTaskCount: 1,
+      });
+    });
+
+    it("returns paused decision if there are manual merge tasks", () => {
+      const decision = decideTerminalCompletion({
+        subtasks: [buildMockSubtask({ status: "COMPLETED" })],
+        manualMergeTasks: [buildMockSubtask({ status: "COMPLETED" })],
+      });
+
+      expect(decision).toEqual({
+        status: "continue",
+        terminalState: "paused",
+        pauseReason: "awaiting_merge",
+        pausePayload: {
+          awaitingMergeCount: 1,
+        },
+      });
+    });
+
+    it("returns cancelled decision if subtasks list is empty", () => {
+      const decision = decideTerminalCompletion({
+        subtasks: [],
+        manualMergeTasks: [],
+      });
+
+      expect(decision).toEqual({
+        status: "continue",
+        terminalState: "cancelled",
+        pauseReason: "empty",
+      });
+    });
+
+    it("returns manual attention pause if no other state applies", () => {
+      const subtask = buildMockSubtask({ status: "RUNNING" });
+      const decision = decideTerminalCompletion({
+        subtasks: [subtask],
+        manualMergeTasks: [],
+      });
+
+      expect(decision).toEqual({
+        status: "continue",
+        terminalState: "paused",
+        pauseReason: "manual_attention",
+        pausePayload: {
+          runningTaskIds: [subtask.id],
+          readyTaskIds: [],
+          blockedTaskIds: [],
+        },
+      });
+    });
   });
 });
 

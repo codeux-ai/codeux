@@ -363,6 +363,33 @@ jobs:
     expect(context.executionRepository?.appendTaskRunEvent).not.toHaveBeenCalled();
   });
 
+  it("normalizes pre-processing state before PR/CI processing", async () => {
+    subtasks[0].status = "CODING_COMPLETED";
+    subtasks[0].is_merged = true;
+    subtasks[0].merge_indicator = "CI" as any;
+    subtasks[0].intervention_owner = "AGENT";
+    subtasks[0].intervention_hint = "pending";
+    context.ciIntelligence.enabled = false;
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("COMPLETED");
+    expect(result.subtasks[0].merge_indicator).toBe("MERGED");
+    expect(result.subtasks[0].intervention_owner).toBeUndefined();
+    expect(result.subtasks[0].intervention_hint).toBeUndefined();
+  });
+
+  it("preserves MERGE_CONFLICT during pre-processing when merge evidence exists", async () => {
+    subtasks[0].status = "COMPLETED";
+    subtasks[0].merge_indicator = "MERGE_CONFLICT";
+    context.ciIntelligence.enabled = false;
+
+    const result = await service.evaluateCiGate(subtasks, context);
+
+    expect(result.subtasks[0].status).toBe("CODING_COMPLETED");
+    expect(result.subtasks[0].merge_indicator).toBe("MERGE_CONFLICT");
+  });
+
   it("calls openCiFixAttention for non-Jules tasks with failed CI", async () => {
     subtasks[0].session_id = undefined;
     subtasks[0].provider = "gemini" as any;

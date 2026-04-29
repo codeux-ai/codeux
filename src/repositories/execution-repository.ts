@@ -242,6 +242,8 @@ export class ExecutionRepository {
   private readonly db: DatabaseAdapter;
   private readonly taskWallTimeCache = new Map<string, { finishedMs: number, hasActive: boolean }>();
   private readonly sprintRunWallTimeCache = new Map<string, { finishedMs: number, hasActive: boolean }>();
+  private readonly pendingRealtimeProjectRefreshes = new Map<string, { includeOverview: boolean }>();
+  private realtimeProjectRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly storage: AppDbStorage = new AppDbStorage(),
@@ -337,7 +339,7 @@ export class ExecutionRepository {
         record.updatedAt
     );
 
-    this.realtimeNotifier?.scheduleProjectExecutionRefresh(record.projectId, { includeOverview: true });
+    this.notifyRealtime(record.projectId, true);
     return record;
   }
 
@@ -407,7 +409,7 @@ export class ExecutionRepository {
       const stmt = this.db.prepare(sql);
       stmt.run(...values);
 
-      this.realtimeNotifier?.scheduleProjectExecutionRefresh(existing.projectId, { includeOverview: true });
+      this.notifyRealtime(existing.projectId, true);
     }
 
     return existing;
@@ -476,7 +478,7 @@ export class ExecutionRepository {
     `);
     updateStmt.run(now, now, invocationId);
 
-    this.realtimeNotifier?.scheduleProjectExecutionRefresh(invocation.projectId, { includeOverview: false });
+    this.notifyRealtime(invocation.projectId, false);
     return record;
   }
 
@@ -1884,7 +1886,40 @@ export class ExecutionRepository {
   }
 
   private notifyRealtime(projectId: string, includeOverview: boolean): void {
-    this.realtimeNotifier?.scheduleProjectExecutionRefresh(projectId, { includeOverview });
+    const normalizedProjectId = String(projectId || "").trim();
+    if (!normalizedProjectId || !this.realtimeNotifier) {
+      return;
+    }
+
+    const existing = this.pendingRealtimeProjectRefreshes.get(normalizedProjectId);
+    this.pendingRealtimeProjectRefreshes.set(normalizedProjectId, {
+      includeOverview: Boolean(existing?.includeOverview) || includeOverview,
+    });
+
+    if (this.realtimeProjectRefreshTimer) {
+      return;
+    }
+
+    this.realtimeProjectRefreshTimer = setTimeout(() => {
+      this.realtimeProjectRefreshTimer = null;
+      this.flushPendingRealtimeProjectRefreshes();
+    }, 0);
+  }
+
+  private flushPendingRealtimeProjectRefreshes(): void {
+    if (!this.realtimeNotifier || this.pendingRealtimeProjectRefreshes.size === 0) {
+      this.pendingRealtimeProjectRefreshes.clear();
+      return;
+    }
+
+    const pendingEntries = [...this.pendingRealtimeProjectRefreshes.entries()];
+    this.pendingRealtimeProjectRefreshes.clear();
+
+    for (const [projectId, options] of pendingEntries) {
+      this.realtimeNotifier.scheduleProjectExecutionRefresh(projectId, {
+        includeOverview: options.includeOverview,
+      });
+    }
   }
 
   private shouldPublishSprintRunUpdate(input: UpdateSprintRunInput): boolean {

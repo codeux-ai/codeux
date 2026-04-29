@@ -186,6 +186,14 @@ Feature PR merge waiting now only applies to code-complete tasks that have merge
 - `task.worker_branch`
 - `task.pr_url`
 
+Feature PR gate pre-processing now runs through pure transition helpers before any async PR/CI checks:
+
+- merge-indicator normalization (`MERGED` / `AUTOMERGE` / conflict preservation)
+- `COMPLETED` <-> `CODING_COMPLETED` merge-wait adjustments
+- intervention-field clearing for code-complete states
+
+The gate applies these transition snapshots first, persists changed merge/status state, and only then executes PR/CI policy checks. This removes implicit in-loop mutation ordering from merge readiness decisions while preserving existing CI gate events and report semantics.
+
 This keeps no-output tasks, such as validation-only or test-only runs, moving from `CODING_COMPLETED` to final `COMPLETED` instead of pushing them into the CI/PR wait path.
 The same merge-evidence rule is now used by dependency unlocking, the merge protocol, live dashboard status projection, and the final watch-loop completion check so a sprint can finish cleanly when a successful task never opened a branch or PR.
 

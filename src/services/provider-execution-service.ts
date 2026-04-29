@@ -189,26 +189,6 @@ export class ProviderExecutionService {
         }
       }
 
-      if (execInvocationId) {
-        this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
-          status: result.ok ? "completed" : "failed",
-          provider: args.provider,
-          model: args.model,
-          finishedAt: new Date().toISOString(),
-        });
-        if (!result.ok) {
-          this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
-            role: "tool",
-            contentMarkdown: result.stderr || result.stdout || "Provider failed without output.",
-          });
-        } else {
-          this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
-            role: "assistant",
-            contentMarkdown: args.expectTextOutput ? (result as any).text : result.usageTelemetry.transcriptText,
-          });
-        }
-      }
-
       return result;
     };
 
@@ -240,6 +220,18 @@ export class ProviderExecutionService {
       }
 
       if (providerResult.ok) {
+        if (execInvocationId) {
+          this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
+            status: "completed",
+            provider: args.provider,
+            model: args.model,
+            finishedAt: new Date().toISOString(),
+          });
+          this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
+            role: "assistant",
+            contentMarkdown: args.expectTextOutput ? (providerResult as any).text : providerResult.usageTelemetry.transcriptText,
+          });
+        }
         return providerResult;
       }
 
@@ -306,6 +298,18 @@ export class ProviderExecutionService {
       }
 
       // If no retry policy handles the failure, propagate it to the caller if not OK
+      if (execInvocationId) {
+        this.deps.executionRepository?.updateExecutionInvocation(execInvocationId, {
+          status: "failed",
+          provider: args.provider,
+          model: args.model,
+          finishedAt: new Date().toISOString(),
+        });
+        this.deps.executionRepository?.appendExecutionInvocationMessage(execInvocationId, {
+          role: "tool",
+          contentMarkdown: providerResult.stderr || providerResult.stdout || "Provider failed without output.",
+        });
+      }
       return providerResult;
     }
   }

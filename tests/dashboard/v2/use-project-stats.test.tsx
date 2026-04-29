@@ -188,4 +188,62 @@ describe("useProjectStats cancellation", () => {
     // Check loading remains idle
     expect(getByTestId("loading").textContent).toBe("idle");
   });
+
+  it("deduplicates rapid overlapping poll and realtime fetches", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+
+    const { getByTestId } = render(h(TestComponent, { projectId: "p1", query: "7d", pollIntervalMs: 10000 }));
+
+    // Wait for initial load
+    await waitFor(() => {
+      expect(getByTestId("loading").textContent).toBe("idle");
+    });
+
+    expect(fetchProjectStats).toHaveBeenCalledTimes(1);
+
+    // Prepare to trigger a realtime event
+    if (mockRealtimeCallback) {
+      mockRealtimeCallback({
+        type: "event",
+        event: { eventType: "project.execution.updated", payload: {} }
+      });
+    }
+
+    // Almost simultaneously, advance timers to trigger poll
+    vi.advanceTimersByTime(10500);
+    vi.runOnlyPendingTimers();
+
+    // Since useRealtimeResource now dedupes silent fetches, fetchProjectStats should only be called ONE additional time
+    // instead of twice.
+    await waitFor(() => {
+      expect(fetchProjectStats).toHaveBeenCalledTimes(2);
+    });
+
+    // Wait a bit to ensure no further calls are made
+    vi.advanceTimersByTime(500);
+    expect(fetchProjectStats).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves foreground loading reset on project change", async () => {
+    const { getByTestId, rerender } = render(h(TestComponent, { projectId: "p1", query: "7d" }));
+
+    // Should be loading initially
+    expect(getByTestId("loading").textContent).toBe("loading");
+
+    // Wait for initial load
+    await waitFor(() => {
+      expect(getByTestId("loading").textContent).toBe("idle");
+    });
+
+    // Change project id
+    rerender(h(TestComponent, { projectId: "p2", query: "7d" }));
+
+    // Should reset to foreground loading
+    expect(getByTestId("loading").textContent).toBe("loading");
+
+    // Wait for new project load
+    await waitFor(() => {
+      expect(getByTestId("loading").textContent).toBe("idle");
+    });
+  });
 });

@@ -123,12 +123,18 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const fetchIdRef = useRef<number>(0);
+  const activeSilentFetchPromiseRef = useRef<Promise<void> | null>(null);
 
-  const refreshInternal = useCallback(async (refreshOptions?: { silent?: boolean; signal?: AbortSignal }): Promise<void> => {
+const refreshInternal = useCallback((refreshOptions?: { silent?: boolean; signal?: AbortSignal }): Promise<void> => {
     // Determine if we show a foreground loading spinner.
     // Only show on the very first fetch if not suppressed.
     // Subsequent polls/realtime refreshes update data silently.
     const isForeground = !refreshOptions?.silent && !hasLoadedRef.current;
+
+    // Dedupe silent fetches
+    if (refreshOptions?.silent && !refreshOptions?.signal && activeSilentFetchPromiseRef.current) {
+      return activeSilentFetchPromiseRef.current;
+    }
 
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -161,32 +167,43 @@ export function useRealtimeResource<T>(options: RealtimeResourceOptions<T>): Rea
       isRecoveringRef.current = true;
     }
 
-    try {
-      // If the caller provided a signal, respect its abort state alongside our internal one
-      // Since fetchResource takes only one signal, we'll pass our internal one,
-      // but we will also check the caller's signal for abort conditions.
-      const nextData = await optionsRef.current.fetchResource(abortController.signal);
+    const fetchPromise = (async () => {
+      try {
+        // If the caller provided a signal, respect its abort state alongside our internal one
+        // Since fetchResource takes only one signal, we'll pass our internal one,
+        // but we will also check the caller's signal for abort conditions.
+        const nextData = await optionsRef.current.fetchResource(abortController.signal);
 
-      if (!abortController.signal.aborted && fetchIdRef.current === currentFetchId) {
-        setData((prev) => {
-          const stabilized = optionsRef.current.stabilizeNext ? optionsRef.current.stabilizeNext(prev, nextData) : nextData;
-          const checkEqual = optionsRef.current.isEqual ?? isDeepEqual;
-          return checkEqual(prev, stabilized) ? prev : stabilized;
-        });
-        hasLoadedRef.current = true;
-        setError(null);
+        if (!abortController.signal.aborted && fetchIdRef.current === currentFetchId) {
+          setData((prev) => {
+            const stabilized = optionsRef.current.stabilizeNext ? optionsRef.current.stabilizeNext(prev, nextData) : nextData;
+            const checkEqual = optionsRef.current.isEqual ?? isDeepEqual;
+            return checkEqual(prev, stabilized) ? prev : stabilized;
+          });
+          hasLoadedRef.current = true;
+          setError(null);
+        }
+      } catch (fetchError: any) {
+        if (fetchError.name === "AbortError" || abortController.signal.aborted) return;
+        if (fetchIdRef.current !== currentFetchId) return;
+        setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
+      } finally {
+        if (!abortController.signal.aborted && fetchIdRef.current === currentFetchId) {
+          setLoading((prev) => (prev !== false ? false : prev));
+          setIsRecovering((prev) => (prev !== false ? false : prev));
+          isRecoveringRef.current = false;
+        }
+        if (fetchIdRef.current === currentFetchId) {
+          activeSilentFetchPromiseRef.current = null;
+        }
       }
-    } catch (fetchError: any) {
-      if (fetchError.name === "AbortError" || abortController.signal.aborted) return;
-      if (fetchIdRef.current !== currentFetchId) return;
-      setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
-    } finally {
-      if (!abortController.signal.aborted && fetchIdRef.current === currentFetchId) {
-        setLoading((prev) => (prev !== false ? false : prev));
-        setIsRecovering((prev) => (prev !== false ? false : prev));
-        isRecoveringRef.current = false;
-      }
+    })();
+
+    if (refreshOptions?.silent && !refreshOptions?.signal) {
+      activeSilentFetchPromiseRef.current = fetchPromise;
     }
+
+    return fetchPromise;
   }, []);
 
   // 1. Initial Load & Abortable Fetch Effect

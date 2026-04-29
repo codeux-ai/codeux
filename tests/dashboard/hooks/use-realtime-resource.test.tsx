@@ -20,6 +20,7 @@ function TestComponent({ initialData, fetchResource }: any) {
     h("div", { "data-testid": "loading" }, loading ? "true" : "false"),
     h("div", { "data-testid": "data-id" }, data.id),
     h("button", { "data-testid": "refetch", onClick: () => refetch() }, "Refetch"),
+    h("button", { "data-testid": "refetch-silent", onClick: () => refetch({ silent: true }) }, "Refetch Silent"),
     h("button", { "data-testid": "refetch-abort", onClick: () => {
       const controller = new AbortController();
       refetch({ signal: controller.signal });
@@ -168,5 +169,69 @@ describe("useRealtimeResource", () => {
 
     expect(fetchResource).toHaveBeenCalledTimes(2);
     expect(internalSignal?.aborted).toBe(true);
+  });
+
+  it("deduplicates concurrent silent fetches", async () => {
+    let resolve1: any;
+    const promise1 = new Promise((r) => resolve1 = r);
+    const fetchResource = vi.fn().mockReturnValue(promise1);
+
+    const { getByTestId } = render(h(TestComponent, { initialData: { id: "1" }, fetchResource }));
+
+    // Mount triggers fetch 1
+    expect(fetchResource).toHaveBeenCalledTimes(1);
+
+    resolve1({ id: "1" });
+    await new Promise(r => setTimeout(r, 10));
+
+    // Clear mock to track silent fetches
+    vi.mocked(fetchResource).mockClear();
+
+    let resolveSilent: any;
+    const promiseSilent = new Promise((r) => resolveSilent = r);
+    fetchResource.mockReturnValue(promiseSilent);
+
+    // Trigger silent refetch multiple times synchronously
+    getByTestId("refetch-silent").click();
+    getByTestId("refetch-silent").click();
+    getByTestId("refetch-silent").click();
+
+    // It should only result in 1 call to fetchResource
+    expect(fetchResource).toHaveBeenCalledTimes(1);
+  });
+
+  it("aborts a silent fetch when a foreground fetch triggers", async () => {
+    let resolve1: any;
+    const promise1 = new Promise((r) => resolve1 = r);
+    const fetchResource = vi.fn().mockReturnValue(promise1);
+
+    const { getByTestId } = render(h(TestComponent, { initialData: { id: "1" }, fetchResource }));
+
+    resolve1({ id: "1" });
+    await new Promise(r => setTimeout(r, 10));
+    vi.mocked(fetchResource).mockClear();
+
+    let resolveSilent: any;
+    const promiseSilent = new Promise((r) => resolveSilent = r);
+
+    let resolveForeground: any;
+    const promiseForeground = new Promise((r) => resolveForeground = r);
+
+    // Mock first call (silent)
+    fetchResource.mockReturnValueOnce(promiseSilent);
+    // Mock second call (foreground)
+    fetchResource.mockImplementationOnce(async () => {
+      return promiseForeground;
+    });
+
+    getByTestId("refetch-silent").click();
+
+    // First call (silent) was initiated
+    expect(fetchResource).toHaveBeenCalledTimes(1);
+
+    // Now trigger a foreground refetch while silent is ongoing
+    getByTestId("refetch").click();
+
+    expect(fetchResource).toHaveBeenCalledTimes(2);
   });
 });

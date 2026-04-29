@@ -238,4 +238,35 @@ describe("DashboardRealtimeService observability", () => {
       expect.objectContaining({ type: "projects" })
     );
   });
+
+  it("coalesces burst execution refresh scheduling and preserves includeOverview escalation", async () => {
+    const loggerMock = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() };
+    const eventRepoMock = {
+      getLatestSequence: () => 1,
+      appendEvent: vi.fn().mockReturnValue({ sequence: 2 }),
+    };
+    const getProjectExecutionSnapshot = vi.fn(() => ({ projectId: "proj-1", updatedAt: "2026-03-30T09:00:00.000Z" }));
+    const getOverviewTelemetrySnapshot = vi.fn(() => ({ updatedAt: "2026-03-30T09:00:00.000Z" }));
+
+    const service = new DashboardRealtimeService(eventRepoMock as any, loggerMock as any);
+    service.setSnapshotLoaders({
+      getProjectLiveSnapshot: () => ({ selectedSprintId: "sprint-1" } as any),
+      getProjectsSnapshot: () => ({} as any),
+      getProjectExecutionSnapshot: getProjectExecutionSnapshot as any,
+      getProjectStatusSnapshot: () => ({} as any),
+      getOverviewTelemetrySnapshot: getOverviewTelemetrySnapshot as any,
+    });
+
+    for (let index = 0; index < 25; index += 1) {
+      service.scheduleProjectExecutionRefresh("proj-1", { includeOverview: false });
+    }
+    service.scheduleProjectExecutionRefresh("proj-1", { includeOverview: true });
+
+    vi.advanceTimersByTime(100);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(getProjectExecutionSnapshot).toHaveBeenCalledTimes(1);
+    expect(getOverviewTelemetrySnapshot).toHaveBeenCalledTimes(1);
+  });
 });

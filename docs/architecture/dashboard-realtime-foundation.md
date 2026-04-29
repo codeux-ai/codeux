@@ -132,6 +132,12 @@ Additional March 15, 2026 tuning:
 - lease updates still refresh the project execution surface, but they no longer churn overview telemetry
 - attention queue open/claim/resolve mutations now notify the live execution snapshot directly instead of waiting for a nearby side-effect refresh
 
+April 29, 2026 refinement:
+
+- `ExecutionRepository` now coalesces burst `scheduleProjectExecutionRefresh` notifications per project into a single next-tick dispatch before handing off to `DashboardRealtimeService`
+- coalescing preserves escalation semantics: if any write in the burst requests `includeOverview`, the flushed notification for that project includes `includeOverview: true`
+- refreshes remain isolated per project, so burst activity in one project does not suppress another project's refresh
+
 Production refinement shipped on March 15, 2026:
 
 - project execution, runtime-status, and structure refresh scheduling now also fan into `project.live.updated`, so the Live page always receives a fresh combined snapshot after any committed runtime mutation
