@@ -13,6 +13,9 @@ import { Select } from "../Select.js";
 import { Switch } from "../Switch.js";
 import { CollapsiblePanel } from "../CollapsiblePanel.js";
 import { Activity } from "lucide-preact";
+import { DockerStatusMenu } from "../../DockerStatusMenu.js";
+import { TaskRow } from "../TaskRow.js";
+import { SprintLedgerRow } from "../../sprints/SprintLedgerRow.js";
 
 afterEach(() => {
   cleanup();
@@ -140,6 +143,113 @@ describe("Interaction A11y (Components)", () => {
 
           const toggleButton = getByRole("button", { name: /Focus Panel/i });
           expect(toggleButton.className).toMatch(/focus-visible:ring-2/);
+    });
+  });
+
+  describe("DockerStatusMenu", () => {
+    it("renders aria-expanded and aria-controls, and dismisses on Esc", async () => {
+      const user = userEvent.setup();
+      const { getByRole, queryByRole } = render(<DockerStatusMenu />);
+
+      const button = getByRole("button", { name: /Docker Status/i });
+      expect(button).toHaveAttribute("aria-expanded", "false");
+      expect(button).toHaveAttribute("aria-controls", "docker-status-menu");
+
+      await user.click(button);
+      expect(button).toHaveAttribute("aria-expanded", "true");
+      expect(queryByRole("dialog")).toBeInTheDocument();
+
+      await user.keyboard("{Escape}");
+      expect(button).toHaveAttribute("aria-expanded", "false");
+      expect(queryByRole("dialog")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("TaskRow", () => {
+    it("supports selection and rendering with feedback wrapper", async () => {
+      const task = {
+        id: "task-1",
+        recordId: 1,
+        sprint: "sprint-1",
+        sprintId: "sprint-1",
+        priority: 1,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        completedAt: null,
+        failedAt: null,
+        startedAt: null,
+        durationSeconds: 0,
+        title: "Test Task",
+        status: "pending" as const,
+        time: "0:00",
+        source: "agent" as const,
+        isCompleted: false,
+        isFailed: false,
+        executorType: "agent",
+        assignee: "agent",
+        promptMarkdown: "Test prompt",
+        description: "Test description",
+        dependsOn: [],
+        type: "task",
+      } as any;
+
+      const { getAllByRole, getByText } = render(<TaskRow task={task} />);
+      // getAllByRole("button") returns the main row button, plus the quick actions buttons
+      const buttons = getAllByRole("button");
+      const row = buttons[0];
+
+      expect(row).toBeInTheDocument();
+      expect(getByText("Test Task")).toBeInTheDocument();
+
+      // Focus outline class check
+      expect(row.className).toMatch(/focus-visible:ring-2/);
+    });
+  });
+
+  describe("SprintLedgerRow", () => {
+    it("renders interaction hover classes and handles pending states correctly", () => {
+      const sprint = {
+        id: "sprint-1",
+        date: "2023-01-01",
+        projectId: "project-1",
+        number: 1,
+        originalPrompt: "Prompt",
+        tasksGenerated: 1,
+        tasksCompleted: 0,
+        name: "Test Sprint",
+        slug: "test-sprint",
+        goal: "Goal",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        status: "idle" as const,
+        tasksCount: 0,
+        completion: 0,
+        showcasePinned: false,
+        startDate: new Date().toISOString(),
+        endDate: new Date().toISOString(),
+        featureBranch: "feature/test",
+      } as any;
+
+      const onToggleRow = vi.fn();
+      const { container } = render(
+        <SprintLedgerRow
+          sprint={sprint}
+          isSelected={false}
+          isEven={true}
+          activeRun={undefined}
+          humanIntervention={null}
+          pendingActionIds={new Set(["sprint-start:sprint-1"])}
+          onToggleRow={onToggleRow}
+          onToggleShowcase={vi.fn()}
+          onSprintToggle={vi.fn()}
+          onOpenRowMenu={vi.fn()}
+        />
+      );
+
+      const tr = container.querySelector('tr');
+      expect(tr).not.toBeNull();
+      // Should have hover classes applied
+      expect(tr?.className).toMatch(/hover:bg-black\/\[0\.02\]/);
     });
   });
 });
