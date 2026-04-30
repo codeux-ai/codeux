@@ -42,11 +42,19 @@ export const DockerStatusMenu: FunctionComponent = () => {
             }
         };
 
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setInteractionState('closed');
+            }
+        };
+
         if (interactionState === 'open') {
             document.addEventListener("mousedown", handleClickOutside);
+            document.addEventListener("keydown", handleEscape);
         }
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
+            document.removeEventListener("keydown", handleEscape);
         };
     }, [interactionState, trapRef]);
 
@@ -109,6 +117,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
                 aria-label="Docker Status"
                 aria-haspopup="dialog"
                 aria-expanded={interactionState !== 'closed'}
+                aria-controls="docker-status-menu"
                 onClick={() => {
                     setInteractionState(prev => {
                         if (prev === 'open') return 'closed';
@@ -153,6 +162,7 @@ export const DockerStatusMenu: FunctionComponent = () => {
             {(interactionState !== 'closed') && (
                 <div
                     ref={trapRef}
+                    id="docker-status-menu"
                     role="dialog"
                     aria-modal="true"
                     aria-label="Active Docker Containers"

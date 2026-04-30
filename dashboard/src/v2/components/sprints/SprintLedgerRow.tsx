@@ -16,6 +16,7 @@ import { SprintReviewBadge } from "./SprintReviewBadge.js";
 import type { Sprint, SprintStatus } from "../../types.js";
 import type { ExecutionHumanInterventionSummary } from "../../../../../src/contracts/app-types.js";
 import { formatSprintKey, STATUS_LABELS } from "../../lib/sprint-ledger-state.js";
+import { InteractionMessages } from "../../lib/copy/interaction-messages.js";
 
 // Polished badge tones: increased contrast for backgrounds and borders where appropriate
 const STATUS_BADGE_TONES: Record<SprintStatus, string> = {
@@ -85,7 +86,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
 
   return (
     <tr
-      className={`group relative border-b border-black/[0.06] transition-colors duration-150 hover:bg-gradient-to-r hover:from-transparent hover:to-transparent focus-within:bg-white/[0.03] focus-within:z-10 dark:border-white/[0.06] ${rowBg} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""}`}
+      className={`group relative border-b border-black/[0.06] transition-colors duration-150 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] active:bg-black/[0.04] dark:active:bg-white/[0.04] focus-within:bg-white/[0.03] focus-within:z-10 dark:border-white/[0.06] ${rowBg} ${isCompleted ? "text-slate-500 dark:text-slate-400" : ""}`}
     >
       <td className="px-4 py-3 pl-6 align-middle">
         <button
@@ -212,7 +213,7 @@ const SprintLedgerRowComponent: FunctionComponent<SprintLedgerRowProps> = ({
             ) : (
               <Play className="h-3.5 w-3.5" fill="currentColor" />
             )}
-            {isTogglePending ? (activeRun ? "Stopping" : "Starting") : activeRun ? "Stop" : "Start"}
+            {isTogglePending ? (activeRun ? InteractionMessages.actionPending.replace('Executing action...', 'Stopping') : InteractionMessages.actionPending.replace('Executing action...', 'Starting')) : activeRun ? "Stop" : "Start"}
           </button>
           <a
             href={`/tasks?sprint=${encodeURIComponent(sprint.id)}`}
